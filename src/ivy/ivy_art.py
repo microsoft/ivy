@@ -1,0 +1,315 @@
+#
+# Copyright (c) Microsoft Corporation. All Rights Reserved.
+#
+import ivy_actions
+from ivy_interp import *
+from ivy_graph import standard_graph
+from string import *
+import copy
+import functools
+import pickle
+
+
+class AC(ivy_actions.ActionContext):
+    def __init__(self,ag,no_add=False):
+        self.assertions = {}
+        self.actions,self.domain,self.add = ag.actions,ag.domain,ag.add
+        self.no_add = no_add
+    def get(self,sym):
+        return self.actions.get(sym,None)
+    def new_state(self,clauses, exact = False, domain = None, expr = None):
+        res = self.domain.new_state(clauses)
+        if not self.no_add:
+            self.add(res,expr)
+        if exact:
+            res.unders = [self.domain.new_state(clauses)]
+        return res
+
+class Counterexample(object):
+    def __init__(self,clauses,state,msg):
+        self.clauses, self.state, self.msg = clauses, state, msg
+    def __nonzero__(self):
+        return False
+
+class AnalysisGraph(object):
+    def __init__(self,domain,pvars):
+        self.domain = domain
+        self.states = []
+        self.transitions = []
+        self.covering = []
+        self.pvars = pvars
+        self.state_graphs = []
+
+    @property
+    def context(self):
+        return AC(self)
+
+    def state_actions(self,state):
+        if hasattr(state,'label') and state.label != None:
+            return [state_equation(post,expr) for post,e in self.predicates.iteritems() for expr in eval_state_actions(e,state)]
+        return [state_equation(None,action_app(a,state)) for a in self.actions if a in self.public_actions]
+
+    def do_state_action(self,equation,abstractor):
+        with self.context:
+            s = eval_state(equation.args[1])
+            s.label = equation.args[0]
+        if abstractor:
+            abstractor(s)
+        return s
+
+    def recalculate(self,transition,abstractor = None):
+        prestate,op,label,poststate = transition
+        if not op and label == 'join':
+            ps = self.join_states(poststate.join_of[0],poststate.join_of[1],abstractor)
+        else:
+            if label in self.actions:
+                op = self.actions[label]
+            ps = self.post_state(op,prestate,abstractor)
+        self.replace_state(poststate,ps)
+        return poststate
+
+    def post_state(self,op,pre_state,abstractor):
+        s = concrete_post(op.update(pre_state.domain,pre_state.in_scope),pre_state)
+        s.action = op
+        if abstractor:
+            abstractor(s)
+        return s
+
+    def replace_state(self,poststate,ps):
+        ps.id = poststate.id
+        ps.label = poststate.label
+        poststate.__dict__ = ps.__dict__.copy()    # yikes!
+        for c in list(self.covering):
+            covered,covering = c
+            if covered.id == poststate.id:
+                self.covering.remove(c)
+                self.cover(poststate,covering)
+        print "recalculated state %s: %s" % (poststate.id,poststate.clauses)
+
+    def recalculate_state(self,state,abstractor=None):
+        if hasattr(state,'pred') and state.pred:
+            ps = concrete_post(state.update,state.pred)
+            if abstractor:
+                abstractor(ps)
+            self.replace_state(state,ps)
+        elif hasattr(state,'join_of') and state.join_of:
+            ps = self.join_states(state.join_of[0],state.join_of[1],abstractor)
+            self.replace_state(state,ps)
+
+    def execute(self,op,prestate = None, abstractor = None, label=None):
+#        print "exec: %s" % op
+        if prestate == None:
+            prestate = self.states[len(self.states)-1]
+        poststate = self.post_state(op,prestate,abstractor)
+        label = label if label else repr(op)
+        self.add(poststate,action_app(label,prestate))
+        print "post state %s: %s" % (poststate.id,poststate.clauses)
+        return poststate
+
+    def execute_action(self,name,prestate = None, abstractor = None):
+        return self.execute(self.actions[name],prestate, abstractor, name)
+
+    def join_states(self,state1,state2,abstractor = None):
+#        if state1.label != state2.label:
+#            raise IvyError(None,"Cannot join instances of different states")
+        joined_state = concrete_join(state1,state2)
+        if abstractor:
+            abstractor(joined_state)
+        joined_state.label = state1.label
+        return joined_state
+
+    def join(self,state1,state2 = None, abstractor = None):
+        if state2 == None:
+            state2 = self.states[len(self.states)-1]
+        joined_state = self.join_states(state1,state2,abstractor)
+        self.add(joined_state,state_join(state1,state2))
+        print "joined state: %s" % joined_state.clauses
+        return joined_state
+
+    def cover(self,covered_node,covering_node):
+        if covered_node.domain.order(covered_node,covering_node):
+            print "Covering succeeded: %s %s" % (covered_node.id, covering_node.id)
+            self.covering.append((covered_node,covering_node))
+            return True
+        else:
+            print "Covering failed"
+            return False
+
+    def is_covered(self,node):
+        return any(x.id == node.id for x,y in self.covering)
+
+    def unreachable(self,covered_node):
+        covering_node = State(covered_node.domain,[[]])
+        if covered_node.domain.order(covered_node,covering_node):
+            print "Unreachable: %s" % covered_node.id
+            covered_node.clauses = [[]]
+            return True
+        else:
+            print "Unreachability check failed"
+            return False
+
+    def show_core(self,clause_str,state = None):
+        clause = to_clause(clause_str)
+        if state == None:
+            state = self.states[len(self.states)-1]
+        print state.domain.get_core(state,clause)
+
+    def add(self,state,expr=None):
+        state.id = len(self.states)
+        self.states.append(state)
+        if expr is not None:
+            state.expr = expr
+            if is_action_app(expr):
+                assert len(expr.args) == 1
+                assert isinstance(expr.args[0],State)
+                self.transitions.append((expr.args[0],self.actions[expr.rep],expr.rep,state))
+            elif is_state_join(expr):
+                for js in expr.args:
+                    assert isinstance(js,State)
+                    self.transitions.append((js,None,"join",state))
+
+    # execute action in a sub-graph
+
+    def call_action(self,name,op,prestate):
+        ag = AnalysisGraph(self.domain,self.pvars)
+        ag.apply_update = self.apply_update
+        ag.add(copy.copy(prestate))
+        op(ag)
+        op = AnalysisSubgraph(name,ag)
+        poststate = ag.states[len(ag.states)-1]
+        poststate = copy.copy(poststate)
+        return poststate
+
+    def call(self,name,op,prestate = None):
+        if prestate == None:
+            prestate = self.states[len(self.states)-1]
+        op,poststate = self.call_action(name,prestate)
+        self.add(poststate)
+        self.transitions.append((prestate,op,name,poststate))
+        return poststate
+
+    def dependencies(self,s):
+        if hasattr(s,'pred'): return [s.pred]
+        elif hasattr(s,'join_of'): return s.join_of
+        return []
+
+    def delete(self,state):
+        id = state.id
+        state.id = -1
+        for i in range(id+1,len(self.states)):
+            s = self.states[i]
+            if any(t.id == -1 for s in self.dependencies(s)):
+                s.id = -1
+        self.remove_marked_states()
+
+    def remove_marked_states(self):
+        self.states = [s for s in self.states if s.id != -1]
+        for i,s in enumerate(self.states):
+            s.id = i
+        self.transitions = [t for t in self.transitions if t[0].id != -1 and t[-1].id != -1]
+        self.covering = [t for t in self.covering if t[0].id != -1 and t[-1].id != -1]
+
+    def concept_graph(self,state,clauses=None):
+        if clauses == None:
+            clauses = state.clauses
+        bg = self.domain.background_theory(state.in_scope)
+        print "bg: {}".format(bg)
+        sg = standard_graph(state)
+        sg.set_state(and_clauses(clauses,bg))
+        sg.set_concrete([])  # TODO: get rid of this
+        self.state_graphs.append(sg)
+        return sg
+
+    def transition_to(self,state):
+        for t in self.transitions:
+            if t[-1] is state:
+                return t
+        return None
+
+    def get_history(self,state,bound=None):
+        if hasattr(state,'pred') and state.pred != None and bound != 0:
+            next_bound = None if bound is None else bound - 1
+            return history_forward_step(self.get_history(state.pred, next_bound), state)
+        else:
+            return new_history(state)
+
+    def bmc(self,state,error_cond,other_art=None,bound=None,_get_model_clauses=None):
+        history = self.get_history(state, bound)
+        history = history.assume(error_cond)
+        bmc_res = history_satisfy(history,state,_get_model_clauses)
+        if bmc_res == None:
+            return None
+        universe,path = bmc_res
+        if other_art is None:
+            other_art = AnalysisGraph(self.domain,self.pvars)
+            other_art.actions = self.actions
+        self.copy_path(state,other_art,bound)
+        for state,value in zip(other_art.states[-len(path):],path):
+            state.value = value
+            state.universe = universe
+        return other_art
+
+    def copy_path(self,state,other,bound=None):
+        other_state = State(other.domain)
+        other_state.arg_node = state
+        if hasattr(state,'pred') and state.pred != None and bound != 0:
+            next_bound = None if bound is None else bound - 1
+            pred = self.copy_path(state.pred,other,next_bound)
+            prestate,op,label,poststate = self.transition_to(state)
+            expr = state.expr
+            other.add(other_state,action_app(expr.rep,pred))
+        else:
+            other.add(other_state)
+        return other_state
+
+    def check_safety(self,state):
+        for asn in self.assertions:
+            cex = check_state_assertion(state,asn)
+            if not cex:
+                return Counterexample(cex.clauses,state,"assertion failure") # safety property failed
+        if hasattr(state,'expr') and state.expr != None:
+            with AC(self,no_add=True):
+                try:
+                    eval_state(state.expr)
+                except IvyActionFailedError as err:
+                    return Counterexample(err.error_state.clauses,err.error_state.pred,repr(err))
+        return True
+
+    @property
+    def uncovered_states(self):
+        covered = set(x for x,y in self.covering)
+        joined = set()
+        for state in self.states:
+            if hasattr(state,'expr'):
+                if any(s.id in covered
+                       for s in states_state_expr(state.expr)):
+                    covered.add(state)
+                if is_state_join(state.expr):
+                    for s in state.expr.args:
+                        joined.add(s)
+        return [s for s in self.states if s not in covered and s not in joined]
+
+    def fixedpoint_candidate(self, join = state_join):
+        fpc = defaultdict(lambda:[])
+        for state in self.uncovered_states:
+            if hasattr(state,'label'):
+                fpc[state.label].append(state)
+        print "fpc = {}".format(fpc)
+        return defaultdict(bottom_state,((x,join(*y)) for x,y in fpc.iteritems()))
+
+    def state_extensions(self,state, join = state_join):
+        sas = self.state_actions(state)
+        fpc = self.fixedpoint_candidate(join)
+        for equation in sas:
+            with AC(self,no_add=True):
+                if not eval_state_order(equation.args[1],fpc[equation.args[0]]):
+                    yield equation
+
+
+class AnalysisSubgraph(object):
+    def __init__(self,op,graph):
+        self.op = op
+        self.graph = graph
+    def __str__(self):
+        return self.op
+    __repr__ = __str__
