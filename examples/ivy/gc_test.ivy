@@ -1,0 +1,240 @@
+#lang ivy1.1
+
+#
+# Theory of partial functions. 
+#
+#
+module partial_function(f,D,R) = {
+
+# 1) for any x there is at most one y such that f(x,y),
+    axiom ~f(X:D,Y:R) | ~f(X:D,Z:R) | Y:R = Z:R
+
+# 2) dom[f] is the domain of f,
+    relation dom[f](X:D)
+    axiom ~f(X:D,Y:R) | dom[f](X:D)
+
+# 3) for any x in dom[f], we have f(x,f[x]).
+    schema img[f](x) = ~dom[f](x) | f(x,f[x])
+
+# 4) This defines how dom[f] updates as we update f:
+     update dom[f] from f
+       params v:D,w:D in v.f := w -> 
+     	ensures ((~old dom[f](X:D) | dom[f](X:D)) & dom[f](v))
+       params v:D in v.f := null -> 
+     	ensures (~old dom[f](X:D) | X:D = v | dom[f](X:D))
+       params v:D,w:D in v.f := w.f ->
+         ensures (old dom[f](Y:D) & Y:D ~= v | old dom[f](w) & Y:D = v) ->
+                      dom[f](Y:D)
+}
+
+# Type of abstract heap objects
+type Object
+
+# Type of machine addresses
+type Addr
+
+module hack(f,x,D) = {
+    individual f[x] : D
+}
+
+instantiate hack(m0,ae1,Addr)
+instantiate hack(m1,ae1,Addr)
+
+relation (X:Addr < Y:Addr)
+relation (X:Addr <= Y:Addr)
+
+#bug 6: forgot to say this:
+axiom ~(X < X)
+axiom (X < Y & Y < Z) -> (X < Z)
+axiom X <= Y <-> (X < Y | X = Y)
+#bug 10: forgot to say this:
+axiom X < Y | X = Y | Y < X
+
+# boundaries of from and to regions
+individual flo:Addr,fhi:Addr,tlo:Addr,thi:Addr
+
+# definitions of from and to regions
+derived faddr(X:Addr) = flo <= X & X < fhi
+derived taddr(X:Addr) = tlo <= X & X < thi
+
+# from and to regions are disjoint
+axiom ~(faddr(X) & taddr(X))
+# bug 5: forgot to say from and to regions can't be empty
+#axiom faddr(flo)
+axiom taddr(tlo)
+
+individual temp_addr:Addr # TODO: this should be in macro below
+
+macro incr_addr(x) = {
+   temp_addr := x;
+   x := *;
+   assume temp_addr < x;
+   assume ~(temp_addr < X & X < x);
+   temp_addr := *
+}
+
+# representation relation between objects and addresses
+
+relation repr(X:Object,Y:Addr)
+instantiate partial_function(repr,Object,Addr)
+
+# the abstract heap
+
+individual hroot:Object #root of the abstract heap
+
+# each abstract heap cell has two pointer fields
+
+relation h0(X:Object,Y:Object), h1(X:Object,Y:Object) 
+instantiate partial_function(h0,Object,Object)
+instantiate partial_function(h1,Object,Object)
+
+# the machine memory
+
+individual mroot:Addr #address of root in machine memory
+
+# each machine memory cell has two pointer fields
+relation m0(X:Addr,Y:Addr), m1(X:Addr,Y:Addr) 
+instantiate partial_function(m0,Addr,Addr)
+instantiate partial_function(m1,Addr,Addr)
+
+# copied map
+
+relation copied_to(A1:Addr,A2:Addr)
+
+# the representation invariant
+
+# macro rep_inv = forall [O1,O2,A1,A2] (
+#   repr(hroot,mroot)
+#   & (repr(O1,A1) & h0(O1,O2) -> dom[m0](A1))
+#   & (repr(O1,A1) & h0(O1,O2) & m0(A1,A2) -> repr(O2,A2))
+#   & (repr(O1,A1) & h1(O1,O2) -> dom[m1](A1))
+#   & (repr(O1,A1) & h1(O1,O2) & m1(A1,A2) -> repr(O2,A2)))
+
+init
+	
+  # representation invariant holds initially
+  repr(hroot,mroot)
+  & (repr(O1,A1) & h0(O1,O2) -> dom[m0](A1))
+  & (repr(O1,A1) & h0(O1,O2) & m0(A1,A2) -> repr(O2,A2))
+  & (repr(O1,A1) & h1(O1,O2) -> dom[m1](A1))
+  & (repr(O1,A1) & h1(O1,O2) & m1(A1,A2) -> repr(O2,A2))
+  # bug 7: repr should be an injection
+  & (repr(O1,A1) & repr(O2,A1) -> O1 = O2)
+
+  # bug 8: initially, repr points only into from region
+  & (repr(O1,A1) -> faddr(A1))
+
+  & faddr(mroot)  # root is in "from" region
+  # "from" region is closed
+  & ~(m0(A1,A2) & faddr(A1) & ~faddr(A2)) 
+  & ~(m1(A1,A2) & faddr(A1) & ~faddr(A2))
+  & ~copied_to(A1,A2)
+  # represenation invarianr
+
+
+individual a : Addr
+init tnext < a
+
+# algorithm state variables
+individual tnext:Addr,talloc:Addr
+
+# aux variables: TODO: should be local
+individual oe1:Object,oe2:Object,ae1:Addr,ae2:Addr,a:Addr,obj:Object,a2:Addr
+
+macro copy_obj(fr,to) = {
+    to.m0 := fr.m0;
+    to.m1 := fr.m1;
+    fr.copied_to := to;
+# bug 4: forgot next lines
+#   TODO: need this assertion
+#   assert rng[repr](fr);
+    obj := *;
+    assume repr(obj,fr);
+    obj.repr := to;
+    instantiate incr_addr(to)
+}
+
+macro sweep(field) = {
+  a := *;  # TODO: should be a := tnext.field
+  a2 := *;
+  if (dom[field](tnext)) {
+     assume field(tnext,a);
+#bug 1: had tnext instead of talloc
+     if * {
+        assume ~copied_to(a,X);
+# bug 9: was a.field, should have been tnext.field
+	tnext.field := talloc;
+        instantiate copy_obj(a,talloc)
+     }
+     else {
+        assume copied_to(a,a2);
+	tnext.field := a2
+     }
+  }
+}
+
+action initialize = {
+  talloc := tlo;  # allocation pointer
+  tnext := tlo; # next object to sweep
+  instantiate copy_obj(mroot,talloc);
+#bug 3: forgot next line:
+  mroot := tlo;
+  hroot.repr := mroot
+}
+
+action step = {
+  assume tnext < talloc & talloc < thi;
+  instantiate sweep(m0);
+  instantiate sweep(m1);
+#bug 2: forgot next line
+  instantiate incr_addr(tnext)
+}
+
+
+action error = {
+  assume tnext = talloc;
+  # representation invariant does not hold
+  # TODO: this should be a macro
+  instantiate img[m0](ae1);
+  instantiate img[m1](ae1);
+  assume ~(  
+   repr(hroot,mroot)
+   & taddr(mroot)
+   & (repr(oe1,ae1) & h0(oe1,oe2) & taddr(ae1) -> dom[m0](ae1))
+   & (repr(oe1,ae1) & h0(oe1,oe2) & taddr(ae1) & m0(ae1,ae2) -> repr(oe2,ae2) & taddr(ae2))
+   & (repr(oe1,ae1) & h1(oe1,oe2) & taddr(ae1) -> dom[m1](ae1))
+   & (repr(oe1,ae1) & h1(oe1,oe2) & taddr(ae1) & m1(ae1,ae2) -> repr(oe2,ae2) & taddr(ae2))
+   & (repr(oe1,ae1) & repr(oe2,ae1) -> oe1 = oe2)
+  )
+}
+
+# concept spaces from interpolants
+
+concept itp_a = ~dom[repr](hroot)
+concept itp_b = ~repr(hroot, mroot)
+concept itp_d = ~taddr(mroot)
+concept itp_c = (tnext = talloc)
+concept itp_e = (talloc = fhi * tnext = fhi * ~repr(hroot, mroot))
+concept itp_f = (tnext = talloc * ~repr(hroot, mroot))
+concept itp_g = (thi = temp_addr)
+concept itp_h = (~taddr(talloc) * talloc < thi)
+concept itp_i = (tnext = talloc * ~taddr(talloc))
+concept itp_j = (~taddr(tnext))
+concept itp_k(V0) = (~dom[m1](tnext) * h1(hroot, V0))
+concept itp_l(V1) = (tnext = talloc * h1(hroot, V1))
+concept itp_m(V0, V1, V2) = (~repr(V1, V0) * h1(V2, V1) * m1(V0, V0) * repr(V2, V0) * taddr(V0))
+concept itp_n(V0, V1) = (talloc = fhi * tnext = fhi * ~repr(hroot, V0) * h1(V1, hroot) * m1(V0, V0) * repr(V1, V0) * taddr(V0))
+concept itp_o(V0, V1) = (~dom[m0](V0) * tnext < V0 * h0(V1, V1) * repr(V1, V0))
+concept itp_p(V1) = (~dom[m0](talloc) * h0(V1, V1) * repr(V1, talloc))
+concept itp_q = (tnext < mroot)
+concept itp_r = (tnext = mroot)
+concept itp_s(V2) = (talloc < flo * h0(V2, obj) * m0(talloc, talloc) * repr(V2, talloc))
+concept itp_t(V3) = (talloc < thi * h0(V3, obj) * m0(thi, talloc) * repr(V3, thi))
+concept itp_u(V3) = (talloc < thi * h0(V3, hroot) * m0(thi, talloc) * repr(V3, thi))
+concept itp_v(V0, V2) = (thi = flo * V0 < flo * h0(V2, hroot) * m0(V0, V0) * repr(V2, V0))
+concept itp_w(V2) = (talloc < flo * h0(V2, hroot) * m0(talloc, talloc) * repr(V2, talloc))
+concept itp_x(V3) = (talloc < thi * h0(V3, hroot) * m0(talloc, talloc) * repr(V3, talloc))
+concept itp_y(V1, V4, V2) = (V2 < thi * tnext < V2 * h0(V4, hroot) * m0(V1, V2) * repr(V4, V1))
+concept itp_z(V2, V0) = (tnext = talloc * h0(V2, hroot) * m0(V0, talloc) * repr(V2, V0))
+concept itp_a0 = (tnext < temp_addr)
+concept itp_b0(V0, V1) = (~dom[m1](V0) * tnext < V0 * h1(V1, V1) * repr(V1, V0))

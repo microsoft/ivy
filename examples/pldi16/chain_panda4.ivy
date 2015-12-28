@@ -1,0 +1,226 @@
+#lang ivy1.1
+#Panda's synchronization protocol
+
+# General modules & macros
+#Functional dependencies
+module lone(f) = {
+    axiom (f(X, Y1) & f(X, Y2)) -> Y1 = Y2
+}
+
+module injective(f) = {
+    axiom (f(X1, Y) & f(X2, Y)) -> X1 = X2
+}
+
+macro assign_empty(f, a) = { # f(a) := {}
+    f(a, X) := false
+}
+
+macro assign_value(f, a, v ) = { # f(a) := {v}
+    f(a, X) :=  X = v
+}
+
+
+type transaction
+type node
+#type time
+type key
+type operation
+
+
+relation before(X:transaction, Y:transaction)
+axiom before(X, X) # Reflexive
+axiom before(X, Y) & before(Y, Z) -> before(X, Z) # Transitive
+axiom before(X, Y) & before(Y, X) -> X = Y # Anti-symmetric
+axiom before(X, Y) | before(Y, X) # total
+individual zero:transaction
+axiom before(zero, X)
+
+# Each operation reads and writes one key
+relation op_reads_key(Op: operation, K: key) # OP reads k
+instantiate lone(op_reads_key) # See if we can remove this.
+relation op_writes_key(Op : operation, K: key) # OP writes k
+instantiate lone(op_reads_key) # See if we can remove this
+
+# Do not read and write the same key.
+axiom op_reads_key(Op, K) & op_writes_key(Op, K2) -> K1 ~= K2
+
+# The operation in each node
+relation op_node(Op: operation, N : node) # The node on which an operation is applied
+instantiate lone(op_node)
+
+# The relation between operations and transactions and an order on operations
+
+relation op_in_tx(Tx : transaction, Op: operation) # An operation of transaction is op
+
+# Each op is in a single Tx.
+instantiate injective(op_in_tx)
+
+relation oporder(X:operation, Y:operation)
+axiom oporder(X, X) # Reflexive
+axiom oporder(X, Y) & oporder(Y, Z) -> oporder(X, Z) # Transitive
+axiom oporder(X, Y) & oporder(Y, X) -> X = Y # Anti-symmetric
+axiom (op_in_tx(T, X) & op_in_tx(T, Y)) -> (oporder(X, Y) | oporder(Y, X)) # total for operations in the same transaction
+axiom (op_in_tx(T, X) & (oporder(X, Y) | oporder(Y, X))) -> op_in_tx(T, Y) # op_in_tx is closed under the order
+
+macro get_next_op(current, next) = {
+    next := *;    
+    assume oporder(current, next) & current ~= next & ((oporder(current, X) & current ~= X) -> oporder(next, X))
+}
+
+# different operations in the same transaction are in different nodes
+axiom op_in_tx(T, O1) & op_in_tx(T, O2) & O1 ~= O2 & op_node(O1, N1) & op_node(O2, N2) -> N1 ~= N2
+
+relation precommit_tx(Tx : transaction, N: node) # Is transaction tx precommitted at n
+init precommit_tx(T, N) <-> T = zero
+
+relation abort_tx(Tx : transaction)
+init ~abort_tx(T)
+
+relation commit_tx(Tx: transaction) # Is tx committed
+init commit_tx(T) <-> T = zero
+
+relation depends_tx(Tx: transaction, K: key, Tr : transaction) #Flow values between commited transactions
+init depends_tx(T1, K, T2) <-> (T1 = zero & T2 = zero)
+
+relation read_tx(Tx: transaction, K: key)
+init read_tx(Tx, K) <-> Tx = zero
+
+relation write_tx(Tx: transaction, K: key)
+init write_tx(Tx, K) <-> Tx = zero
+
+relation node_for_key(K: key,  N : node) # Key is at node n
+instantiate lone(node_for_key)
+
+# Constraints
+
+axiom op_reads_key(Op, K) & node_for_key(K, N1)  & op_node(Op, N2) -> N1 = N2  #Operations must be local
+axiom op_writes_key(Op, K) & node_for_key(K, N1) &  op_node(Op, N2) -> N1 = N2 #Operations must be local
+
+# last_XXX macros
+
+macro get_last_write(km, t) = {
+    t := *;
+    assume write_tx(t, km) & (~abort_tx(t)) & (write_tx(T, km) -> (before(T, t) | abort_tx(T)))
+}
+
+macro get_last_committed_write(km, t) = {
+    t := *;
+    assume commit_tx(t) & write_tx(t, km) & ((commit_tx(T) & write_tx(T, km)) -> before(T, t))
+}
+
+individual macro_helper_t: transaction
+
+macro get_last_read(km, t) = {
+    t := *;
+    macro_helper_t := *;
+    assume depends_tx(t, km, macro_helper_t) & (~abort_tx(t)) & (read_tx(T, km) -> before(T, t) | abort_tx(T))
+}
+
+macro get_last_committed_read(km, t) = {
+    t := *;
+    macro_helper_t := *;
+    assume commit_tx(t) & depends_tx(t, km, macro_helper_t) & ((commit_tx(T) & read_tx(T, km)) -> before(T, t))
+}
+
+macro get_previous_write(km, t, tr) = {
+    t := *;
+    assume write_tx(t, km) & before(t, tr) & (~abort_tx(t)) & (write_tx(T, km) -> (before(T, t) | before(tr, T) | abort_tx(T)))
+}
+
+macro get_previous_committed_write(km, t, tr) = {
+    t := *;
+    assume commit_tx(t) & write_tx(t, km) & before(t, tr) & ((commit_tx(T) & write_tx(T, km)) -> (before(T, t) | before(tr, T)))
+}
+
+# Transaction protocol
+
+individual tx: transaction
+individual op: operation, op1: operation, op2: operation
+individual n : node, np: node
+individual t1: transaction, t2: transaction, t3: transaction, t4: transaction
+individual kw: key, kr: key
+individual k: key
+individual luwkw: transaction
+individual lurkw: transaction
+individual luwkr: transaction
+individual lurkr: transaction
+individual lcwkr: transaction
+individual lcrkr: transaction
+
+action step = {
+    tx := *;
+    op := *;
+    op1 := *;
+    op2 := *;
+    n := *;
+    np := *;
+    t1 := *;
+    t2 := *;
+    t3 := *;
+    t3 := *;
+    t4 := *;
+    kw := *;
+    kr := *;
+
+    assume op_in_tx(tx, op) ; # Grab an operation
+    assume ~abort_tx(tx) & ~commit_tx(tx); # Ensures that the transaction is not already aborted or committed
+
+    assume (oporder(X, op) & X ~= op & op_node(X, N)) -> precommit_tx(tx, N);
+                   # Ensures that the previous operation was successfully precommitted
+    assume op_node(op, n) ; # Assume operation is in node n
+    assume ~precommit_tx(tx, n);
+    assume ~op_writes_key(op, K) | op_writes_key(op, kw);
+    assume op_writes_key(op, kw) -> node_for_key(kw, n);
+
+
+    assume ~op_reads_key(op, K) | op_reads_key(op, kr);
+    assume op_reads_key(op, kr) -> node_for_key(kr, n);
+
+    instantiate get_last_write(kw, luwkw); # Write fails because of any future read or write.
+    instantiate get_last_read (kw, lurkw);
+
+    instantiate get_previous_write(kr, luwkr, tx); # Read fails because of uncommited previous reads or writes
+    instantiate get_previous_committed_write(kr, lcwkr, tx);
+
+    if ((op_writes_key(op, kw) &
+         (before(tx, luwkw) | before(tx, lurkw))) |
+        (op_reads_key(op, kr) &
+         luwkr ~= lcwkr &
+         before(luwkr, tx))) {
+             abort_tx(tx) := true
+    } else {
+        if (op_writes_key(op, kw)) {
+            write_tx(tx, kw) := true
+        };
+        if (op_reads_key(op, kr)) {
+            depends_tx(tx, kr, lcwkr) := true;
+            read_tx(tx, kr) := true
+        };
+        precommit_tx(tx, n) := true;
+        if ((oporder(op, O:operation) -> O:operation = op)) {
+            commit_tx(tx) := true
+        }
+    }
+}
+
+
+conjecture ~(TX1 ~= TX2 &
+	    commit_tx(TX1) &
+	    commit_tx(TX2)  &
+	    before(TX1,TX2) & # TX1 was before TX2
+	    write_tx(TX1, K) & # TX1 wrote K
+	    depends_tx(TX2, K, T3) & # TX2 read K
+	    ~before(TX1, T3))
+
+conjecture depends_tx(T1, K, T2) -> (before(T2, T1) & (T1 ~= T2 | T1 = zero))
+
+conjecture ~abort_tx(Tx) | ~commit_tx(Tx) # Abort and commit are disjoint
+
+conjecture (~precommit_tx(T, N) & ~abort_tx(T) & node_for_key(K, N)) -> ~write_tx(T, K)
+conjecture (~precommit_tx(T, N) & ~abort_tx(T) & node_for_key(K, N)) -> ~depends_tx(T, K, T2)
+
+conjecture commit_tx(zero)
+conjecture ~(~read_tx(T1, K0) & depends_tx(T1, K0, T0))
+conjecture ~(T0 ~= T2 & before(T0, T1) & before(T2, T0) & (~abort_tx(T0)) & (~abort_tx(T1))& depends_tx(T1, K0, T2) & write_tx(T0, K0))
+conjecture commit_tx(T) & op_in_tx(T, O) & op_node(O, N) -> precommit_tx(T, N)
+conjecture ~(T1 ~= zero & T2 ~= zero & T1 ~= T2 & commit_tx(T1) & commit_tx(T2) & write_tx(T1, K) & read_tx(T2, K))

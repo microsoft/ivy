@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Copyright (c) Microsoft Corporation. All Rights Reserved.
+
+# Set PYTHONPATH and start IPython notebook server
+
+# Use start_notebook_server --no-browser to not open the default browser
+
+env PYTHONPATH=`pwd`/../ivy:`pwd`/../src/ivy:$PYTHONPATH ipython notebook "$@"

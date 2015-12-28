@@ -1,0 +1,258 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is an abstract model of a store buffer using TileLink
+#
+################################################################################
+
+include tilelink_abstract_spec
+
+########################################
+# type of message ID
+type msg_id
+
+
+################################################################################
+#
+# Message format for the store buffer 
+#
+################################################################################
+
+module message = {
+    individual type_ : mtype
+    relation addr_(A : addr)
+    relation data_(D : data)
+    relation sent(T : time)
+    relation received(T : time)
+    individual own : ownership
+    relation ltime_(T : ltime)
+    individual op : otype
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom sent(T) & sent(U) -> T = U
+    axiom received(T) & received(U) -> T = U
+    axiom sent(T) & received(U) -> T < U
+    axiom ltime_(T) & ltime_(U) -> T = U
+}
+
+################################################################################
+#
+# This is a model of a store buffer. It is basically a bi-directional
+# FIFO channel, but it allows read requests to bypass write requests
+# to other addresses, and it allows forwarding of data from writes to
+# reads in the queue.
+#
+################################################################################
+
+
+module snoopy(id,clnt,mngr,ref) = {
+
+    ########################################
+    # The message heap
+
+    instantiate msg(I:msg_id) : message
+
+    ########################################
+    # set of messages in queue
+
+    relation mrec(I:msg_id)
+
+    ########################################
+    # message time stamp (allows us to enforce order)
+
+    individual t : time
+
+    ########################################
+    # initially the queue is empty
+
+    init ~mrec(I:msg_id)
+
+    ########################################
+    # advance the time stamp
+
+    action advance = {
+       local nt :time {
+          assume t < nt;
+          t := nt
+       }
+    }
+
+    ########################################
+    # no two messages received at same time
+
+    axiom msg(I).received(T) & msg(J).received(U) & T = U -> I = J
+
+    ########################################
+    # messages ordering axiom
+    #
+    # TODO: here, messages are FIFO, but we could relax this ordering.
+
+    axiom msg(I).sent(T1) & msg(J).sent(U1) & T1 < U1 & msg(J).received(t) -> ~mrec(I)
+
+    ########################################
+    # enqueue a message
+    #
+    # This may seems a little strange. Rather than setting the fields of
+    # the message, we non-deterministically choose an existing message
+    # that has the right field values. 
+    #
+    # TODO: should be marked private
+
+    action send_msg(mt:mtype, a:addr, d:data, lt:ltime, o:ownership, mo:otype) = {
+	local mid:msg_id {
+	    assume ~mrec(mid) & msg(mid).sent(t);
+	    assume msg(mid).type_ = mt;
+	    assume msg(mid).addr_(a);
+	    assume msg(mid).data_(d);
+	    assume msg(mid).ltime_(lt);
+	    assume msg(mid).own = o;
+	    assume msg(mid).op = mo;
+	    mrec(mid) := true
+	};
+	call advance
+    }
+
+    ########################################
+    # dequeue a message
+    #
+    # Receive a message whose received time is the current time.
+    #
+    # TODO: should be marked private
+
+    action receive_msg returns(mid:msg_id) = {
+	assume mrec(mid) & msg(mid).received(t);
+	mrec(mid) := false;
+	call advance
+    }
+
+
+    ########################################
+    # release action called by the client side
+    #
+    # this just enqueues a release message
+
+    action release(a:addr, d:data) = {
+	local lt:ltime, o:ownership, mo:otype {
+	    call send_msg(release_t,a,d,lt,o,mo)
+	}
+    }
+
+    ########################################
+    # grant action called by the client side
+    #
+    # this just enqueues a grant message
+
+    action grant(a:addr, d:data, o:ownership) = {
+	local lt:ltime, mo:otype {
+	    call send_msg(grant_t,a,d,lt,o,mo)
+	}
+    }
+
+    ########################################
+    # request action called by the client side
+    #
+    # this just enqueues a request message
+
+    action request(a:addr, d:data, mo:otype, lt:ltime) = {
+	local o:ownership {
+	    call send_msg(request_t,a,d,lt,o,mo)
+        }
+    }
+
+    ########################################
+    # response action called by the client side
+    #
+    # this just enqueues a response message
+
+    action response(a:addr, d:data, mo:otype, lt:ltime) = {
+	local o:ownership {
+	    call send_msg(response_t,a,d,lt,o,mo)
+        }
+    }
+
+    ########################################
+    # internal action (step)
+    #
+    # this can be either transmission of an
+    # enqueued message, or forwarding from
+    # a write request to a read request
+
+    action step = {
+
+        # dequeue case
+
+	if * {
+	    local mid:msg_id, mt:mtype {
+	       call mid := receive_msg();
+	       local a:addr,d:data,lt:ltime,mt:mtype {
+		  assume msg(mid).addr_(a);
+		  assume msg(mid).data_(d);
+		  assume msg(mid).ltime_(lt);
+		  mt := msg(mid).type_;
+		  if mt = grant_t {
+		      call clnt.grant(a,d,msg(mid).own)
+		  } else if mt = response_t {
+		      call clnt.response(a,d,msg(mid).op,lt)
+		  } else if mt = release_t {
+		      call mngr.release(a,d)
+		  } else if mt = request_t {
+		      call mngr.request(a,d,msg(mid).op,lt)
+		  }
+               }
+	    }
+        }
+
+	# forward case
+
+	else {
+	  local mid:msg_id, mid1:msg_id, st:time, st1:time, a:addr, d:data, lt:ltime, lt1:ltime {
+
+	      # two distinct enqueued messages, both requests, same address, one read, one write
+	      assume mrec(mid) & mrec(mid1) & mid1 ~= mid; 
+	      assume msg(mid).type_ = request_t & msg(mid1).type_ = request_t;
+	      assume msg(mid).addr_(a) & msg(mid1).addr_(a);
+	      assume msg(mid).op = read;
+	      assume msg(mid1).op = write;
+
+	      # sent time of the read is after the send time of the write
+	      assume msg(mid).sent(st) & msg(mid1).sent(st1);
+	      assume st1 < st;
+
+	      # there is no intervening message M that does not commute with these
+	      assume ~(mrec(M) & msg(M).sent(T) & st1 < T & T < st & (msg(M).addr_(a) | msg(M).op = cas));
+
+	      # dequeue the read request
+	      mrec(mid) := false;
+
+	      # fuse the read op into the write op
+	      assume msg(mid).ltime_(lt);
+	      assume msg(mid1).ltime_(lt1);
+	      call ref.fuse(lt1,lt,id); # this is ghost. TODO: make this a mixin after
+
+	      # generate a response to the client
+	      assume msg(mid1).data_(d);  # note we get data from *write* request
+	      call clnt.response(a,d,msg(mid).op,lt)
+          }
+       }
+    } 
+}
+
+################################################################################
+#
+# Verify the module using the standard testbench
+#
+################################################################################
+
+include tilelink_two_port_test_bench
+
+# The buffer makes two assumptions about the system configuration:
+
+# 1) supports only one client
+axiom fside(I) = client & fside(J) = client -> I = J  
+
+# 2) The cached address set on front and back is the same.
+axiom front.cached(A) <-> back.cached(A)
+
+

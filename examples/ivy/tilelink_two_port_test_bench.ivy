@@ -1,0 +1,71 @@
+#lang ivy1.3
+
+################################################################################
+# 
+# Test bench for a two-port TileLink component that acts like a manager
+# on its front port and a client on its back port.
+#
+################################################################################
+
+
+################################################################################
+# 
+# The system we want to verify. Somewhat arbitrarily, the DUT is called "b".
+#
+################################################################################
+
+individual buf_id : id   # arbitrary process id for the buffer
+
+instantiate c : generic_client(b,ref,fside)
+instantiate b : snoopy(buf_id,c,m,ref)
+instantiate m : generic_manager(b,ref,bside)
+
+export c.step()
+export b.step()
+export m.step()
+
+################################################################################
+# 
+# Instantiate the reference specification
+#
+################################################################################
+
+instantiate ref : reference
+
+################################################################################
+# 
+# Specify the two interfaces of the buffer
+#
+# To do this, we arbitrarily distribute the process id's on the client and
+# manager side. The axioms guarantee the side assignments for the front
+# and back interfaces of the buffer are consistent.
+#
+################################################################################
+
+individual fside(I:id) : side
+individual bside(I:id) : side
+axiom fside(buf_id) = manager
+axiom bside(buf_id) = client
+axiom I ~= buf_id -> fside(I) = bside(I)
+
+instantiate front : interface(ref,c,b,fside)
+instantiate back : interface(ref,b,m,bside)
+
+################################################################################
+#
+# Localize the proof
+#
+################################################################################
+
+isolate iso_b = b with ref,front,back,c,m
+
+
+# Note: an alternative here would be to create an environment model by exporting
+# some delegating actions, e.g:
+
+# delegating action perform(...) = {
+#    assert sid ~= buf_id;
+#    ref.perform(...)
+# }
+# export perform
+

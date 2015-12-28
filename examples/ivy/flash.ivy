@@ -1,0 +1,537 @@
+#lang ivy1.1
+
+type cache_state_ = { invalid, shared, exclusive }
+type wait_type = { none, get, getX }
+
+module cache_line = {
+   individual wait : wait_type
+   relation invmarked
+   individual state_ : cache_state_
+}
+
+module header = {
+  relation pending
+  relation local_
+  relation dirty
+  relation head
+  individual hptr
+  relation list
+  relation real(X)
+  relation upgrade
+  relation shlist(X)
+}
+
+module network = {
+  relation get(Src,Dst)
+  relation put(Src,Dst)
+  relation getX(Src,Dst)
+  relation putX(Src,Dst)
+  relation nak(Src,Dst)
+  relation fack(Src,Dst)
+  relation shwb(Src,Dst)
+}
+
+module wb_network = {
+  individual proc
+  relation wb
+}
+
+individual home
+instantiate cache(X) : cache_line
+instantiate dir : header
+relation collecting
+individual requester
+instantiate net : network
+relation rp_net(X)
+individual real_owner
+individual fwd_get : wait_type
+instantiate wbnet : wb_network
+individual last_WB
+relation nakc
+relation invnet(X)
+relation invack(X)
+
+# locals used in actions
+
+individual src,dst
+
+action init_ = {
+    cache(X):state_ := invalid;
+    cache(X):wait := none;
+    cache(X):invmarked := false;
+    dir:pending := false;
+    dir:dirty := false;
+    collecting := false;
+    net:get(X,Y) := false;
+    net:put(X,Y) := false;
+    net:getX(X,Y) := false;
+    net:putX(X,Y) := false;
+    net:fack(X,Y) := false;
+    net:shwb(X,Y) := false;
+    net:nak(X,Y) := false;
+    dir:list := false;
+    dir:head := false;
+    dir:shlist(X) := false;
+    rp_net(X) := false;
+    fwd_get := none;
+    wbnet:wb := false;
+    real_owner := home;
+    invnet(X) := false;
+    invack(X) := false;
+    nakc := false
+}
+
+action pi_Local_Get_dirty = {
+    assume cache(home):state_ = invalid;
+    assume cache(home):wait = none;
+    assume ~dir:pending;
+    assume dir:dirty;
+    dir:pending := true;
+    collecting := false;
+    cache(home):wait := get;
+    net:get(home,dir:hptr) := true;
+    requester := home
+}
+
+action pi_Local_Get = {
+    assume cache(home):state_ = invalid;
+    assume cache(home):wait = none;
+    assume ~dir:pending;
+    assume ~dir:dirty;
+    assume ~cache(home):invmarked;
+    dir:local_ := true;
+    cache(home):state_ := shared
+}
+
+# TODO: can this ever happen?
+
+action pi_Local_Get_im = {
+    assume cache(home):state_ = invalid;
+    assume cache(home):wait = none;
+    assume ~dir:pending;
+    assume ~dir:dirty;
+    assume cache(home):invmarked;
+    cache(home):invmarked := false
+}
+
+action pi_Remote_Get = {
+    assume src ~= home;
+    assume cache(src):state_ = invalid;
+    assume cache(src):wait = none;
+    cache(src):wait := get;
+    net:get(src,home) := true;
+    src := *
+}
+
+# action ni_Local_Get_nak = {
+#     assume net:get(src,home);
+#     assume home ~= src;
+#     assume ~rp_net(src);
+#     assume dir:pending | (dir:dirty & dir:local_ & cache(home):state_~=exclusive) | (dir:dirty & ~dir:local_ & src = dir:hptr);
+#     net:get(src,home) := false;
+#     net:nak(home,src) := true
+# }
+
+# action ni_Local_Get = {
+#     assume net:get(src,home);
+#     assume home ~= src;
+#     assume ~dir:pending & ~dir:dirty & ~ rp_net(src) & ~cache(src):invmarked;
+#     net:get(src,home) := false;
+#     net:put(home,src) := true;
+#     if (dir:head) {
+#         dir:list := true;
+# 	dir:shlist(src) := true;
+# 	dir:real := dir:shlist # what is this?
+#     }
+#     else { 
+# 	dir:head := true;
+# 	dir:hptr := src
+#     }
+# }
+
+action ni_Local_Get = {
+    assume net:get(src,home);
+    assume home ~= src;
+    assume ~dir:pending & ~dir:dirty & ~ rp_net(src) & ~cache(src):invmarked;
+    net:get(src,home) := false;
+    net:put(home,src) := true;
+    dir:head := true;
+    dir:hptr := src;
+    dir:shlist(src) := true;
+    src := *
+}
+
+action ni_Local_Get_fwd = {
+    assume net:get(src,home);
+    assume home ~= src;
+    assume ~dir:pending & dir:dirty & ~dir:local_ & src ~= dir:hptr;
+    net:get(src,home) := false;
+    dir:pending := true;
+    net:get(src,dir:hptr) := true;
+    src := *
+}
+
+action ni_Remote_Put = {
+    assume dst ~= home;
+    assume net:put(src,dst);
+    net:put(src,dst) := false;
+    cache(dst):wait := none;
+    cache(dst):state_ := shared;
+    src := *;
+    dst := *
+}
+
+# Non-deterministically drop a shared line from the cache. Send an rp message.
+# informing the directory.
+
+action pi_Remote_Replace = {
+    assume cache(src):state_=shared & cache(src):wait=none & src ~= home;
+    cache(src):state_ := invalid;
+    rp_net(src) := true;
+    src := *
+}
+
+# Directory receives a replace message, removes sender from sharing list, assuming it is not head.
+
+action ni_Replace_list = {
+    assume rp_net(src);
+    assume dir:hptr ~= src;
+    rp_net(src) := false;
+    dir:shlist(src) := false;
+    dir:real(src) := false;
+    src := *
+}
+
+# Remote is invalid and wants an exclusive copy
+
+action pi_Remote_GetX = {
+    assume cache(src):state_=invalid & cache(src):wait=none & src ~= home;
+    cache(src):wait := getX;
+    net:getX(src,home) := true;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when no invalidation is needed, that is, there is no exclusive
+# copy and either the sharing list is empty or it contains only the
+# source.
+
+action ni_Local_GetX = {
+    assume net:getX(src,home);
+    assume home ~= src;
+    assume ~dir:pending & ~dir:dirty;
+    assume ~dir:head | src = dir:hptr;
+    assume ~dir:head | ~dir:shlist(X) | X = src;
+    net:getX(src,home) := false;
+    dir:dirty := true;
+    dir:head := true;
+    dir:hptr := src;
+    dir:real(X) := X = src;
+    dir:shlist(X) := X = src;
+    net:putX(home,src) := true;
+    real_owner := src; # ghost
+    cache(home):state_ := invalid;
+    cache(home):invmarked := (cache(home):wait = get & dir:local_) | cache(home):invmarked;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when the request is nak'd
+
+action ni_Local_GetX_nak = {
+    assume net:getX(src,home);
+    assume home ~= src;
+    assume dir:pending | dir:dirty & cache(home):state_ ~= exclusive | src = dir:hptr; 
+    net:getX(src,home) := false;
+    net:nak(home,src) := true;
+    src := *
+}
+
+
+# Directory receives an exclusive request. This action handles the
+# case when the request is pended.
+
+action ni_Local_GetX_pend = {
+    assume net:getX(src,home);
+    assume home ~= src;
+    assume ~dir:pending & dir:dirty & ~dir:local_ & src ~= dir:hptr; 
+    net:getX(src,home) := false;
+    dir:pending :=  true;
+    collecting := false;
+    net:getX(src,dir:hptr) := true;
+    fwd_get := getX;
+    requester := src;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when invalidations are sent out.
+ 
+action ni_localGetX_inv = {
+    assume net:getX(src,home);
+    assume home ~= src;
+    assume ~dir:pending & ~dir:dirty & ~dir:local_; 
+    assume dir:head;
+    assume src ~= dir:hptr | (dir:shlist(dst) & dst~=src);
+    net:getX(src,home) := false;
+    invnet(X) := X ~= home & X ~= src & dir:shlist(X);
+    collecting := true;
+    #   m1 := m;
+    #   last_other_invack := (dir:hptr ~= src) ? dir:hptr : {i  : i in Proc, dir:shlist(i) & i~=src}; 
+    cache(home):invmarked := (cache(home):wait = get & dir:local_) | cache(home):invmarked;
+    dir:local_ := false;
+    dir:dirty := true;
+    dir:head := true; 
+    dir:hptr := src;
+    dir:pending := true;
+    dir:real(X) := X ~= home & X ~= src & dir:shlist(X);
+    dir:shlist(X) := X = src;
+    net:putX(home,src) := true;
+    real_owner := src;
+    cache(home):state_ := invalid;
+    src := *;
+    dst := *
+}
+
+action ni_Remote_PutX = {
+    assume net:putX(src,dst);
+    assume dst~=home & cache(dst):wait = getX;
+    net:putX(src,dst) := false;
+    cache(dst):wait :=none;
+    cache(dst):invmarked := false;
+    cache(dst):state_ :=exclusive;
+    src := *;
+    dst := *
+}
+
+action pi_Remote_PutX = {
+    assume cache(src):state_ = exclusive & src ~= home; # cache(src):wait=none ???
+    cache(src):state_ := invalid;
+    wbnet:proc := src;
+    wbnet:wb := true;
+    src := *
+}
+
+action ni_Inv = {
+    assume invnet(dst) & dst~=home;
+    invnet(dst) := false;
+    invack(dst) := true;
+    cache(dst):invmarked := (cache(dst):wait = get) | cache(dst):invmarked;
+    cache(dst):state_ := invalid;
+    dst := *
+}
+
+action ni_InvAck = {
+      assume dir:pending & invack(src) & src~=home;
+      assume dir:real(dst) & dst ~= src;
+      invack(src) := false;
+      dir:real(src) := false;
+      # last_invack := src;
+      # last_other_invack := {i : i in Proc, dir:real(i) & i ~= src};
+      src := *;
+      dst := *
+}
+
+action ni_InvAck_last = {
+    assume dir:pending & invack(src) & src~=home;
+    assume ~dir:real(X) | X = src;
+    dir:pending := false;
+    collecting := false;
+    #	m1 := undefined; ???
+    invack(src) := false;
+    dir:real(src) := false;
+    #	last_invack := src;
+    if ( dir:local_ & ~ dir:dirty)  {
+       dir:local_ := false
+    }
+}
+
+
+action ni_WB = {
+    assume wbnet:wb;
+    wbnet:wb := false;
+    dir:dirty := false;
+    dir:head := false;
+    dir:shlist(X) := false; 
+    last_WB := wbnet:proc
+}
+
+action ni_Remote_GetX_nak = {
+  assume net:getX(src,dst);
+  assume dst ~=src & dst ~= home & cache(dst):state_ ~= exclusive;
+  net:getX(src,dst) := false;
+  fwd_get := none;
+#  fwd_src := src;
+  nakc := true;
+  net:nak(dst,src) := true;
+  src := *;
+  dst := *
+}
+
+action ni_Remote_GetX_fwd = {
+  assume net:getX(src,dst);
+  assume dst ~=src & dst ~= home & cache(dst):state_ = exclusive;
+  net:getX(src,dst) := false;
+  cache(dst):state_ := invalid;
+  fwd_get := none;
+#  fwd_src := src;
+  net:putX(dst,src) := true;
+  real_owner := src;
+  if src~=home {
+    net:fack(src,home) := true
+  };
+  src := *;
+  dst := *
+}
+
+action ni_FAck = {
+  assume net:fack(src,home);
+  net:fack(src,home) := false;
+  dir:pending := false;
+  if dir:dirty {
+    dir:hptr := src;
+    dir:shlist(X) := X = src
+ };
+ src := *
+}
+
+action ni_Remote_Get_nak = {
+  assume net:get(src,dst);
+  assume dst ~=src & dst ~= home & cache(dst):state_ ~= exclusive;
+  net:get(src,dst) := false;
+  fwd_get := none;
+#  fwd_src := src;
+  nakc := true;
+  net:nak(dst,src) := true;
+  src := *;
+  dst := *
+}
+
+action ni_Remote_Get_fwd = {
+  assume net:get(src,dst);
+  assume dst ~=src & dst ~= home & cache(dst):state_ = exclusive;
+  net:get(src,dst) := false;
+#  assume ~cache(src):invmarked; TODO: ???
+  cache(dst):state_ := shared;
+  fwd_get := none;
+#  fwd_src := src;
+  net:put(dst,src) := true;
+  if src~=home {
+    real_owner := home;
+    net:shwb(src,home) := true
+  };
+# shwb_src := dst;
+  src := *;
+  dst := *
+}
+
+action ni_ShWB = {
+  assume net:shwb(src,home);
+  net:shwb(src,home) := false;
+  dir:pending := false;
+  dir:dirty := false;
+  dir:shlist(src) := true;
+  dir:real(X) := dir:shlist(X);
+# last_WB := shwb_src;
+  src := *
+}
+
+action ni_NAK_Clear = {
+  assume nakc;
+  dir:pending := false;
+  nakc := false
+}
+
+state reached = 
+  init_(true)
+  | pi_Local_Get_dirty(reached)
+  | pi_Local_Get(reached)
+  | pi_Local_Get_im(reached)
+  | pi_Remote_Get(reached)
+#   | ni_Local_Get_nak(reached)
+#   | ni_Local_Get(reached)
+  | ni_Local_Get(reached)
+  | ni_Local_Get_fwd(reached)
+  | ni_Remote_Put(reached)
+  | pi_Remote_Replace(reached)
+  | ni_Replace_list(reached)
+  | pi_Remote_GetX(reached)
+  | ni_Local_GetX(reached)
+  | ni_Local_GetX_nak(reached)
+  | ni_Local_GetX_pend(reached)
+  | ni_localGetX_inv(reached)
+  | ni_Remote_PutX(reached)
+  | pi_Remote_PutX(reached)
+  | ni_Inv(reached)
+  | ni_InvAck(reached)
+  | ni_InvAck_last(reached)
+  | ni_WB(reached)
+  | ni_Remote_GetX_nak(reached)
+  | ni_Remote_GetX_fwd(reached)
+  | ni_FAck(reached)
+  | ni_Remote_Get_nak(reached)
+  | ni_Remote_Get_fwd(reached)
+  | ni_ShWB(reached)
+  | ni_NAK_Clear(reached)
+
+assert reached ->
+        ~(cache(X):state_ = exclusive & cache(X):wait = none &
+	  cache(Y):state_ = exclusive & cache(Y):wait = none &
+          X ~= Y)
+
+concept c1(X) = (cache(X):state_ = invalid + cache(X):state_ = shared + cache(X):state_ = exclusive)
+concept net1(X,Y,Z)  = (net:put(Y,X) * net:put(Z,X) * Y ~= Z)
+concept net2(X,Y,Z)  = (net:get(X,Y) * net:get(X,Z) * Y ~= Z)
+concept net3(X,Y,Z)  = (net:putX(Y,X) * net:putX(Z,X) * Y ~= Z)
+concept net4(X,Y,Z)  = (net:getX(X,Y) * net:getX(X,Z) * Y ~= Z)
+concept net5(X,Y,Z)  = (net:put(Y,X) * net:get(X,Z))
+concept net6(X,Y,Z)  = (net:putX(Y,X) * net:getX(X,Z))
+concept nh(Y) = (Y ~= real_owner + ~dir:head + ~dir:dirty)
+concept n1(X,Y) = ((net:get(X,Y) + net:put(Y,X)) * nh(Y) * Y ~= home)
+concept n2(X,Y) = ((net:getX(X,Y) + net:putX(Y,X))  * nh(Y) * Y ~= home)
+concept n3(Y) = (net:get(home,Y) + net:getX(home,Y))
+concept l1(X) = ((~dir:head * dir:shlist(X)) + (dir:head * ~dir:shlist(dir:hptr)))
+concept c2(X) = (cache(X):wait = get * cache(X):state_ = shared)
+concept c3(X) = ((cache(X):wait ~= get + dir:shlist(X)) * net:get(X,home))
+concept c4(X) = ((cache(X):wait ~= get + ~dir:shlist(X)) * net:put(home,X))
+concept c5(X) = ((cache(X):wait = get + ~dir:shlist(X)) * cache(X):state_ = shared)
+concept c6(X) = ((cache(X):state_ = shared + ~dir:shlist(X)) * rp_net(X))
+concept r1(X) = (net:put(home,X) * rp_net(X))
+concept c2x(X) = (cache(X):wait = getX * cache(X):state_ = exclusive)
+concept c3x(X) = ((cache(X):wait ~= getX + dir:shlist(X)) * net:getX(X,home))
+concept c4x(X) = ((cache(X):wait ~= getX + ~dir:shlist(X) + X ~= dir:hptr + dir:hptr ~= real_owner) * net:putX(home,X))
+concept c5x(X) = ((cache(X):wait = getX + ~dir:shlist(X) + X ~= real_owner) * cache(X):state_ = exclusive)
+concept pe(X) = ((net:putX(home,X) + cache(X):state_ = exclusive)  * (~dir:head + X ~= dir:hptr))
+concept c6x(X) = ((cache(X):state_ = exclusive + ~dir:shlist(wbnet:proc)) * wbnet:wb)
+concept r1x(X) = ((net:putX(home,X) + wbnet:proc ~= dir:hptr + cache(real_owner):state_ ~= invalid) * wbnet:wb)
+concept itp_a(V0, V1) = (cache:wait(V1) = none * net:getX(V1, V0))
+concept fa1(X,Y) = (net:fack(X,Y) * (X ~= real_owner + X ~= requester))
+concept itp_b(V0,V1) = (V0 ~= home * net:putX(V0,V1) * ~dir:pending)
+concept ro1(X,Y) = (net:putX(X,Y) * real_owner ~= Y)
+concept itp_c(X) = net:putX(real_owner,X)
+concept misc() = (~dir:pending + dir:pending + ~dir:dirty + dir:dirty)
+concept p1() = (~dir:pending * dir:dirty * dir:hptr ~= real_owner)
+concept shwb1(X,Y) = (net:shwb(X,Y) * Y ~= home)
+concept shwb2(X,Y) = ((net:put(X,Y) + cache(Y):state_ = shared) * ~dir:shlist(Y) * (~net:shwb(Y,home) + ~dir:dirty + ~dir:pending))
+concept itp_d(V0) = (~V0 = home * net:put(dir:hptr, V0) * ~net:shwb(V0, home))
+concept itp_e(V0, V1) = (~V1 = home * net:put(V0, V1) * ~net:shwb(V1, home))
+concept itp_f(V0, V1) = (~V1 = V0 * net:shwb(V0, home) * net:shwb(V1, home))
+concept itp_g(V0, V1) = (~V1 = home * ~dir:shlist(V1) * net:put(V0, V1))
+concept itp_h(V0,V1) =  (cache:state_(V0) ~= invalid * (net:get(V0, V1) + net:put(V1,V0)))
+concept ro2(X,Y) = ((net:get(Y,X) + net:put(X,Y) + net:getX(Y,X)) * real_owner = Y)
+concept ro3(Y) = (cache(Y):state_ ~= exclusive * cache(Y):wait ~= getX * real_owner = Y)
+concept itp_i(V0, V1) = (rp_net(V0) * net:put(V1, V0))
+concept itp_j(V0, V1) = (cache:wait(V0) ~= get * (net:get(V0, V1) + net:put(V1, V0)))
+concept itp_j2(V0, V1) = (cache:wait(V0) ~= getX * (net:getX(V0, V1)+ net:putX(V1, V0)))
+concept iv1(X) = (invack(X) * (invnet(X)  + cache(X):state_ ~= invalid + X = real_owner))
+concept iv2(X) =  (~dir:real(X) * X ~= real_owner * cache(X):state_ ~= invalid)
+concept itp_k(V0) = (~V0 = real_owner * cache:state_(V0) = shared)
+concept itp_l(V0) = (invack(V0) * cache:state_(V0) = shared)
+concept itp_m(V0, V1) = (~V1 = home * net:fack(V0, V1))
+concept itp_n = cache:wait(real_owner) = get
+concept nakc1(X,Y) = ((nakc + net:fack(requester, home)) * net:getX(X,Y) * Y ~= home)
+concept getx1(X,Y) = ((net:getX(X,Y) + net:putX(Y,X)) * Y ~= home * X ~= requester)
+concept shwb3(X,Y) = (net:shwb(X,home) * cache(Y):state_ = exclusive)
+concept shwb4(X,Y,Z) = (net:shwb(X,home) * net:putX(Y,Z))
+concept itp_o(V0) = ((nakc + ~V0 = requester) * ~dir:shlist(V0) * cache:state_(V0) = exclusive)
+concept nf1 = (nakc * net:fack(requester,home))

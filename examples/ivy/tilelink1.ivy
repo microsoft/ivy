@@ -1,0 +1,284 @@
+#lang ivy1.1
+
+# type of protocol time
+type time
+
+relation (T:time < U:time)
+axiom (T < U & U < V) -> (T < V)
+axiom ~(T < T)
+axiom ~(T < U & U < T)
+axiom T < U | T = U | U < T
+
+# type of logical time
+type ltime
+
+relation lleq(T1:ltime,T2:ltime)
+axiom (lleq(T,U) & lleq(U,V)) -> lleq(T,V)
+axiom lleq(T,T)
+axiom (lleq(T,U) & lleq(U,T)) -> U = T
+axiom lleq(T,U) | lleq(U,T)
+
+individual lzero : ltime
+axiom lleq(lzero,T)
+
+# type of memory data
+type data
+
+# type of memory addresses
+type addr
+
+# type of message types
+type mtype = { grant, release }
+
+# type of ownership state
+type ownership = { none, shrd, excl }
+
+# type of message ID
+type msg_id
+
+# memory history
+relation mem(T:ltime, A:addr, D:data)
+
+axiom (mem(T,A,D1) & mem(T,A,D2)) -> D1 = D2
+
+# message records: set of messages sent
+relation mrec(I:msg_id)
+init ~mrec(I:msg_id)
+
+module message = {
+    individual type_ : mtype
+    relation addr_(A : addr)
+    relation data_(D : data)
+    relation sent(T : time)
+    relation received(T : time)
+    individual own : ownership
+    relation ltime_(T : ltime)
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom sent(T) & sent(U) -> T = U
+    axiom received(T) & received(U) -> T = U
+    axiom sent(T) & received(U) -> T < U
+    axiom ltime_(T) & ltime_(U) -> T = U
+}
+
+instantiate msg(I:msg_id) : message
+
+# no two messages received at same time
+axiom msg(I):received(T) & msg(J):received(U) & T = U -> I = J
+
+individual a : addr
+individual lt : ltime
+individual nlt : ltime
+individual d : data
+individual o : ownership
+individual mid : msg_id
+individual t : time
+individual nt : time
+
+macro send_msg(t,mt,a,d,nlt,o) = {
+      mid := *;
+      assume ~mrec(mid) & msg(mid):sent(t);
+      assume msg(mid):type_ = mt;
+      assume msg(mid):addr_(a);
+      assume msg(mid):data_(d);
+      assume msg(mid):ltime_(nlt);
+      assume msg(mid):own = o;
+      mrec(mid) := true
+}
+
+macro receive_msg(t,mt) = {
+      mid := *;
+      a := *;
+      d := *;
+      nlt := *;
+      o := *;
+      assume mrec(mid) & msg(mid):received(t);
+      assume mt = msg(mid):type_;
+      assume msg(mid):addr_(a);
+      assume msg(mid):data_(d);
+      assume msg(mid):ltime_(nlt);
+      assume msg(mid):own = o;
+      mrec(mid) := false
+}
+
+module interface = {
+     individual own(A:addr) : ownership
+     relation mem_clock(A:addr,T:ltime)
+     individual local_clock : ltime
+
+     axiom (mem_clock(A,T) & mem_clock(A,U)) -> T = U
+     init mem_clock(A,lzero) & local_clock = lzero & own(A) = none
+
+     macro release() = {
+        a := *;
+	nlt := *;
+	d := *;
+	lt := *;
+	assume mem_clock(a,lt);
+	assume own(a) ~= none & lleq(lt,nlt);
+	mem_clock(a,X) := X=nlt;
+        if lleq(local_clock,nlt) {
+	    local_clock := nlt
+        };
+	if own(a) = excl {
+	    assume mem(nlt,a,d)
+        };
+	own(a) := none; 
+	o := none
+     }
+     
+     macro release_check(a,nlt,d) = {
+	lt := *;
+	assume mem_clock(a,lt);
+	assert own(a) ~= none & lleq(lt,nlt);
+	mem_clock(a,X) := X=nlt;
+        if lleq(local_clock,nlt) {
+	    local_clock := nlt
+        };
+	if own(a) = excl {
+	    assert mem(nlt,a,d)
+        };
+	own(a) := none; 
+	o := none
+     }
+
+     macro grant() = {
+        a := *;
+	lt := *;
+	nlt := *;
+	d := *;
+	o := *;
+	assume o ~= none;
+	assume own(a) = none & mem_clock(a,lt) & lleq(lt,nlt);
+	mem_clock(a,X) := X=nlt;
+        if lleq(local_clock,nlt) {
+	    local_clock := nlt
+        };
+        assume mem(nlt,a,d);
+	own(a) := o
+     }
+
+     macro grant_check(a,nlt,d,o) = {
+	lt := *;
+	assume o ~= none;
+	assume mem_clock(a,lt);
+	assert own(a) = none & lleq(lt,nlt);
+	mem_clock(a,X) := X = nlt;
+        if lleq(local_clock,nlt) {
+	    local_clock := nlt
+        };
+        assert mem(nlt,a,d);
+	own(a) := o 
+     }
+
+
+}
+
+instantiate front : interface
+instantiate back : interface
+
+macro front_client() = {
+     nt := *;
+     assume t < nt;
+     instantiate front:release();
+     instantiate send_msg(t,release,a,d,nlt,o);
+     t := nt
+}
+
+macro front_manager() = {
+     nt := *;
+     assume t < nt;
+     instantiate receive_msg(t,grant);
+     instantiate front:grant_check(a,nlt,d,o);
+     t := nt
+}
+
+macro back_manager() = {
+     nt := *;
+     assume t < nt;
+     instantiate back:grant();
+     instantiate send_msg(t,grant,a,d,nlt,o);
+     t := nt
+}
+
+macro back_client() = {
+     nt := *;
+     assume t < nt;
+     instantiate receive_msg(t,release);
+     instantiate back:release_check(a,nlt,d);
+     t := nt
+}
+
+action fc = {
+    instantiate front_client()
+}
+
+action fm = {
+    instantiate front_manager()
+}
+
+action bc = {
+    instantiate back_client()
+}
+
+action bm = {
+    instantiate back_manager()
+}
+
+action step = {
+  if * {
+      if * {
+          instantiate front_client()
+      }
+      else {
+          instantiate front_manager()
+      }
+  }
+  else {
+      if * {
+          instantiate back_client()
+      }
+      else {
+          instantiate back_manager()
+      }
+  }
+  
+}
+
+# no two distinct active grant messages with same address
+concept lone_grant(M1,M2,A) = msg(M1):type_ = grant * msg(M2):type_ = grant * M1 ~= M2 * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+# grant in channel means address owned at back side
+concept grant_back_own(M,A) = msg(M):addr_(A) * mrec(M) * back:own(A) = none
+# grant in channel means address not owned at front side
+concept grant_front_own(M,A) = msg(M):addr_(A) * mrec(M) * front:own(A) ~= none
+# no two distinct active release messages with same address
+concept lone_release(M1,M2,A) = msg(M1):type_ = release * msg(M2):type_ = release * M1 ~= M2 * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+# release in channel means address owned at back side
+concept release_back_own(M,A) = msg(M):addr_(A) * mrec(M) * back:own(A) = none
+# release in channel means address not owned at front side
+concept release_front_own(M,A) = msg(M):addr_(A) * mrec(M) * front:own(A) ~= none
+# no grant and release messages with same address
+concept grant_release(M1,M2,A) = msg(M1):type_ = grant * msg(M2):type_ = release * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+# exlusive owned on fron side implies exclusive owned on back side
+concept excl_front_back(A) = front:own(A) = excl * back:own(A) ~= excl
+# shared owned on fron side implies shared owned on back side
+concept shrd_front_back(A) = front:own(A) = shrd * back:own(A) ~= shrd
+# grant messages have correct data
+concept grant_data(A,M,L,D) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):ltime_(L) * msg(M):data_(D) * ~mem(L,A,D) 
+# release messages have correct data
+concept release_data(A,M,L,D) = mrec(M) * msg(M):type_ = release * msg(M):addr_(A) * msg(M):ltime_(L) * msg(M):data_(D) * ~mem(L,A,D) * back:own(A) = excl
+# a grant message has the same clock as back side
+concept grant_clock_back(A,M,L1,L2) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):ltime_(L1) * back:mem_clock(A,L2) * L1 ~= L2 
+# a grant message has the same clock >= front side
+concept grant_clock_front(A,M,L1,L2) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):ltime_(L1) * front:mem_clock(A,L2) * ~lleq(L2,L1)
+# a release message has the same clock as front side
+concept release_clock_front(A,M,L1,L2) = mrec(M) * msg(M):type_ = release * msg(M):addr_(A) * msg(M):ltime_(L1) * front:mem_clock(A,L2) * L1 ~= L2 
+# a release message has the same clock >= front side
+concept release_clock_back(A,M,L1,L2) = mrec(M) * msg(M):type_ = release * msg(M):addr_(A) * msg(M):ltime_(L1) * back:mem_clock(A,L2) * ~lleq(L2,L1)
+# owned front has clock >= back 
+concept clock_front_back(A,L1,L2) = front:own(A) ~= none * front:mem_clock(A,L1) * back:mem_clock(A,L2) * ~lleq(L2,L1)
+# non-owned back has clock >= front
+concept clock_back_front(A,L1,L2) = back:own(A) = none * back:mem_clock(A,L1) * front:mem_clock(A,L2) * ~lleq(L2,L1)
+# grant messages have correct ownership
+concept grant_own(A,M) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):own ~= back:own(A)

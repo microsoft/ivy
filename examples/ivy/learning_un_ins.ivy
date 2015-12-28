@@ -1,0 +1,103 @@
+#lang ivy1
+
+
+
+
+relation pending(P, S, T) 
+relation rp(H, S, D) # There is a forwarding path from S to t for P
+relation src(P, H)
+relation dst(P, H)
+relation link(S, T)
+
+axiom rp(H, X,X)  # Reflexivity
+axiom ~rp(H, X, Y) | ~rp(H, Y, Z) | rp(H, X, Z) # transitivity
+axiom ~rp(H, X, Y) | ~rp(H, Y, X) | X = Y # anti-symmetric
+axiom ~rp(H, X, Y) | ~rp(H, X, Z) | rp(H, Y, Z) | rp(H, Z, Y) # linearity
+
+axiom ~link(X, X) # no self-loops
+axiom ~link(X, Y) | link(Y, X) # symmetric
+
+module partial_function(f) = {
+
+# 1) for any x there is at most one y such that f(x,y),
+    axiom ~f(X,Y) | ~f(X,Z) | Y = Z
+}
+
+instantiate partial_function(src)
+instantiate partial_function(dst)
+
+module extra(c) = {
+   derived pend[c](X,Y) = pending(c,X,Y)
+   derived route[c](X,Y) = rp(c,X,Y)
+}
+
+#e is really a derived relation defined by e(H, X) = exists Y: rp(H, X, Y) /\ X ~=Y
+relation e(H, X)
+
+
+individual n0,n1,n2
+
+instantiate extra(n0)
+instantiate extra(n1)
+instantiate extra(n2)
+
+axiom n0 ~= n1
+axiom n0 ~= n2
+axiom n1 ~= n2
+axiom (X = n0 | X = n1 | X = n2)
+
+init ~pending(P,S,T)
+     & rp(H,X,X)
+     & (X = Y | ~rp(H,X,Y))
+     
+     
+individual p0, sw0, sw1,sw2, s0, t0
+
+
+action receive = {
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1) | s0 = sw1 & sw0 = sw1;
+
+  # Abstract the number of times that the same packet recieved
+  if (pending(p0,sw0, sw1)) {
+    pending(p0, sw0, sw1) := *
+  };
+  
+  if ((~rp(s0, sw1, X) | X = sw1) & sw0 ~= sw1) {
+    # assert ~rp(s0,sw0,sw1)
+    rp(s0, S, D) := rp(s0, S, D) | rp(s0, S, sw1) &  rp(s0, sw0, D) ;
+    e(s0,sw1) := true
+  };
+   
+  if (t0 ~= sw1) {
+      if (~rp(t0, sw1, X) | X = sw1)  {
+	 pending(p0, sw1, Y) := link(sw1, Y) & Y ~= sw0 # flood
+      }
+      else {
+	 sw2 := *;
+	 assume sw2 ~= sw1 & rp(t0, sw1, sw2) & (~rp(t0, sw1, X) | X = sw1 | rp(t0, sw2, X)) ;
+	 pending(p0, sw1, sw2) := true 
+      }
+  }
+}
+ 
+
+action error = {       
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1) | s0 = sw1 & sw0 = sw1;  
+  assume ((~rp(s0, sw1, X) | X = sw1) & sw0 ~= sw1) & rp(s0,sw0,sw1)
+}
+
+

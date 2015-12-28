@@ -1,0 +1,301 @@
+#lang ivy1.1
+
+#
+# A model of Lamport's bakery algorithm:
+#
+# Lamport, Leslie. A new solution of Dijkstra's concurrent programming
+# problem. Communications of the ACM 17.8 (1974): 453-455.
+#
+# The pseudocode with pc values used is:
+#
+# 1: c[i] := true
+# 2: n[i] := 1 + max(n[1],...,n[N])
+# 3: c[i] := false
+# 4: for j := 1..N:
+# 5:     while c[j] do skip
+# 6:     while n[j] > 0 and (n[j], j) < (n[i], i) do skip
+# 7: critical section
+# 8: n[i] := 0
+# 9: goto 1
+#
+#
+
+
+#
+# Theory of partial functions.
+#
+#
+module functional(f) = {
+    # 1) for any x there is at most one y such that f(x,y),
+    axiom ~f(X,Y) | ~f(X,Z) | Y = Z
+}
+
+
+type number
+type node
+
+relation (X:number < Y:number)
+relation (X:number <= Y:number)
+individual zero:number
+
+axiom X <= X # Reflexive
+axiom (X <= Y & Y <= Z) -> (X <= Z) # Transitive
+axiom (X <= Y & Y <= Z) -> (X = Y) # Anti Symmetric
+axiom X <= Y | Y <= X # Total
+axiom X < Y <-> (X <= Y & X ~= Y) # "derived"
+axiom zero <= X
+
+macro assume_succ(x, y) = {
+    assume x < y;
+    assume x < Z -> y <= Z
+}
+
+relation le(N:node, M:node)
+
+axiom le(X, X) # Reflexive
+axiom ~le(X, Y) | ~le(Y, Z) | le(X, Z) # Transitive
+axiom ~le(X, Y) | ~le(Y, X) | X = Y # Anti symmetric
+axiom le(X, Y) | le(Y, X) # Total
+
+relation private_c(N:node)
+relation public_c(N:node)
+
+relation private_n(N:node, X:number)
+relation public_n(N:node, X:number)
+
+instantiate functional(private_n)
+instantiate functional(public_n)
+
+# TODO: change this to enumerated type
+relation pc1(N:node)
+relation pc2(N:node)
+relation pc3(N:node)
+relation pc4(N:node)
+relation pc5(N:node)
+relation pc6(N:node)
+relation pc7(N:node)
+relation pc8(N:node)
+relation pc9(N:node)
+
+# Each node is in exactly one state
+# axiom pc1(N) | pc2(N) | pc3(N) | pc4(N) | pc5(N) | pc6(N) | pc7(N) | pc8(N) | pc9(N) # this might be violated during an action
+axiom ~pc1(N) | ~pc2(N)
+axiom ~pc1(N) | ~pc3(N)
+axiom ~pc1(N) | ~pc4(N)
+axiom ~pc1(N) | ~pc5(N)
+axiom ~pc1(N) | ~pc6(N)
+axiom ~pc1(N) | ~pc7(N)
+axiom ~pc1(N) | ~pc8(N)
+axiom ~pc1(N) | ~pc9(N)
+axiom ~pc2(N) | ~pc3(N)
+axiom ~pc2(N) | ~pc4(N)
+axiom ~pc2(N) | ~pc5(N)
+axiom ~pc2(N) | ~pc6(N)
+axiom ~pc2(N) | ~pc7(N)
+axiom ~pc2(N) | ~pc8(N)
+axiom ~pc2(N) | ~pc9(N)
+axiom ~pc3(N) | ~pc4(N)
+axiom ~pc3(N) | ~pc5(N)
+axiom ~pc3(N) | ~pc6(N)
+axiom ~pc3(N) | ~pc7(N)
+axiom ~pc3(N) | ~pc8(N)
+axiom ~pc3(N) | ~pc9(N)
+axiom ~pc4(N) | ~pc5(N)
+axiom ~pc4(N) | ~pc6(N)
+axiom ~pc4(N) | ~pc7(N)
+axiom ~pc4(N) | ~pc8(N)
+axiom ~pc4(N) | ~pc9(N)
+axiom ~pc5(N) | ~pc6(N)
+axiom ~pc5(N) | ~pc7(N)
+axiom ~pc5(N) | ~pc8(N)
+axiom ~pc5(N) | ~pc9(N)
+axiom ~pc6(N) | ~pc7(N)
+axiom ~pc6(N) | ~pc8(N)
+axiom ~pc6(N) | ~pc9(N)
+axiom ~pc7(N) | ~pc8(N)
+axiom ~pc7(N) | ~pc9(N)
+axiom ~pc8(N) | ~pc9(N)
+
+
+relation loop_j(N:node, M:node) # the value of j in the inner loop
+instantiate functional(loop_j)
+
+relation looped(N:node, M:node) # marker for the nodes that were iterated
+
+relation stepped(N:node) # flag if the node took a step already, to
+			 # make sure no node takes 2 steps at the same
+			 # time
+
+# local variables
+individual i:node
+individual j:node
+individual x:number
+individual y:number
+
+init pc1(N)
+init ~stepped(N)
+init ~public_c(N)
+init ~private_c(N)
+init public_n(N, zero)
+init private_n(N, zero)
+
+action global_step = {
+    # advance the "time"
+    public_c(N) := private_c(N);
+    public_n(N, X) := private_n(N, X);
+    stepped(N) := false
+}
+
+action step_1_2 = {
+    i := *;
+    assume pc1(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    if * {
+        public_c(i) := true
+    } else {
+        public_c(i) := false
+    };
+    private_c(i) := true;
+    pc1(i) := false;
+    pc2(i) := true
+
+}
+
+action step_2_3 = {
+    i := *;
+    assume pc2(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    x := *;
+    assume public_n(J, Y) -> Y < x;
+    i.private_n := x;
+    x := *;
+    i.public_n := x;
+    pc2(i) := false;
+    pc3(i) := true
+}
+
+action step_3_4 = {
+    i := *;
+    assume pc3(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    if * {
+        public_c(i) := true
+    } else {
+        public_c(i) := false
+    };
+    private_c(i) := false;
+    pc3(i) := false;
+    pc4(i) := true;
+
+    looped(i, N) := false
+}
+
+action step_4_7 = {
+    i := *;
+    assume pc4(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    assume looped(i, N); # loop has processed everyone
+    pc4(i) := false;
+    pc7(i) := true
+}
+
+action step_4_5 = {
+    i := *;
+    assume pc4(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+
+    # choose someone to process that hasn't been processed
+    j := *;
+    assume ~looped(i, j);
+    i.loop_j := j;
+
+    pc4(i) := false;
+    pc5(i) := true
+}
+
+action step_5_6 = {
+    i := *;
+    assume pc5(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    j := *;
+    assume loop_j(i,j);
+    if ~public_c(j) {
+        pc5(i) := false;
+        pc6(i) := true
+    }
+}
+
+action step_6_4 = {
+    i := *;
+    assume pc6(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    j := *;
+    assume loop_j(i, j);
+    x := *;
+    assume public_n(i, x);
+    y := *;
+    assume public_n(j, y);
+    if ~(y ~= zero & (y < x | (y = x & le(j, i) & i ~= j))) {
+        looped(i, j) := true;
+        pc6(i) := false;
+        pc4(i) := true
+    }
+}
+
+action step_7_8 = {
+    i := *;
+    assume pc7(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    pc7(i) := false;
+    pc8(i) := true
+}
+
+action step_8_9 = {
+    i := *;
+    assume pc8(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    i.private_n := zero;
+    x := *;
+    i.public_n := x;
+    pc8(i) := false;
+    pc9(i) := true
+}
+
+action step_9_1 = {
+    i := *;
+    assume pc9(i);
+    assume ~stepped(i);
+    stepped(i) := true;
+    pc9(i) := false;
+    pc1(i) := true
+}
+
+action error = {
+    i := *;
+    j := *;
+    x := *;
+    y := *;
+    assume public_n(i, x);
+    assume public_n(j, y);
+    assume i ~= j;
+    assume pc7(i);
+    assume pc7(j)
+}
+
+conjecture (pc7(I) & pc7(J) & public_n(I,X) & public_n(J, X)) -> I = J # the safety property
+
+concept pc_(N) = (pc1(N) + pc2(N) + pc3(N) + pc4(N) + pc5(N) + pc6(N) + pc7(N) + pc8(N) + pc9(N))
+concept pc(N) = (pc_(N) + ~pc_(N))
+concept pn(N, X) = public_n(N, X)
+concept cmp_number(X, Y) = ((X = Y + X ~= Y) * (X <= Y + Y <= X))
+concept cmp_node(X, Y) = ((X = Y + X ~= Y) * (le(X,Y) + le(Y,X)))
+concept c1(I, J, X, Y) = (pn(I,X) * pn(J,Y) * pc(I) * pc(J) * cmp_number(X,Y) * cmp_node(I,J) * looped(I,J) * loop_j(I,J))

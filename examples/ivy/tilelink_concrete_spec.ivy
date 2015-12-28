@@ -1,0 +1,24 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is a (more) concrete specification of the tilelink protocol. It specifies
+# the low-level messages with reference to the abstract spec. 
+#
+# The concrete model introduces Acquire and Finish messages, requester ID's,
+# and other fields that indicate the address range to operate on, and so on.
+#
+################################################################################
+
+
+include tilelink_abstract_spec
+
+########################################
+# type of TileLink ID
+
+type tl_id
+
+
+module tl_interface(abs,clnt,mngr) = {
+
+}

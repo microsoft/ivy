@@ -1,0 +1,687 @@
+#lang ivy1.1
+
+# Same as tilelink1.ivy, but with relase consistency rather than
+# sequential consistency
+
+# type of protocol time
+type time
+
+relation (T:time < U:time)
+axiom (T < U & U < V) -> (T < V)
+axiom ~(T < T)
+axiom ~(T < U & U < T)
+axiom T < U | T = U | U < T
+
+# type of logical time
+type ltime
+
+relation lleq(T1:ltime,T2:ltime)
+axiom (lleq(T,U) & lleq(U,V)) -> lleq(T,V)
+axiom lleq(T,T)
+axiom (lleq(T,U) & lleq(U,T)) -> U = T
+axiom lleq(T,U) | lleq(U,T)
+
+individual lzero : ltime
+axiom lleq(lzero,T)
+
+# type of memory data
+type data
+
+# type of memory addresses
+type addr
+
+# type of message types
+type mtype = { grant, release, request, response}
+
+# type of ownership state
+type ownership = { none, shrd, excl }
+
+# type of message ID
+type msg_id
+
+# describe sides of interface
+type side = {client,manager}
+
+# memory history
+relation mem(A:addr, D:data)
+
+# memory ops
+
+type otype = {read, write, cas}
+
+# memory events to serialize
+
+module memev = {
+    individual type_ : otype
+    relation addr_(A:addr)
+    relation data_(D:data) # data for write and cas
+    relation result(D:data) # value for read and cas 
+    individual side_ : side # node ID on client side?
+    relation serialized
+    relation fused
+    relation time_(T:time) # serialized time if any
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom result(T) & result(U) -> T = U
+    axiom time_(T) & time_(U) -> T = U
+
+    init ~serialized & ~fused
+}
+
+instantiate evs(T:ltime) : memev # memory events
+
+axiom (mem(A,D1) & mem(A,D2)) -> D1 = D2
+
+# message records: set of messages sent
+relation mrec(I:msg_id)
+init ~mrec(I:msg_id)
+
+module message = {
+    individual type_ : mtype
+    relation addr_(A : addr)
+    relation data_(D : data)
+    relation sent(T : time)
+    relation received(T : time)
+    individual own : ownership
+    relation ltime_(T : ltime)
+    individual op : otype
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom sent(T) & sent(U) -> T = U
+    axiom received(T) & received(U) -> T = U
+    axiom sent(T) & received(U) -> T < U
+    axiom ltime_(T) & ltime_(U) -> T = U
+}
+
+instantiate msg(I:msg_id) : message
+
+
+individual a : addr
+individual lt : ltime
+individual nlt : ltime
+individual d : data
+individual o : ownership
+individual mid : msg_id
+individual mid1 : msg_id
+individual t : time
+individual nt : time
+individual gt : time
+individual ngt : time
+individual eside : side
+individual mo : otype
+individual e1 : ltime
+individual e2 : ltime
+individual st : time
+individual st1 : time
+
+# store buffer operations
+
+macro send_msg(t,mt,a,d,lt,o) = {
+      mid := *;
+      assume ~mrec(mid) & msg(mid):sent(t);
+      assume msg(mid):type_ = mt;
+      assume msg(mid):addr_(a);
+      assume msg(mid):data_(d);
+      assume msg(mid):ltime_(lt);
+      assume msg(mid):own = o;
+      assume msg(mid):op = mo;
+      mrec(mid) := true
+}
+
+macro receive_msg(t,mt) = {
+      mid := *;
+      a := *;
+      d := *;
+      lt := *;
+      o := *;
+      mo := *;
+      assume mrec(mid) & msg(mid):received(t);
+      assume mt = msg(mid):type_;
+      assume msg(mid):addr_(a);
+      assume msg(mid):data_(d);
+      assume msg(mid):ltime_(lt);
+      assume msg(mid):own = o;
+      assume msg(mid):op = mo;
+      mrec(mid) := false
+}
+
+macro forward() = {
+      mid := *;
+      mid1 := *;
+      e1 := *;
+      e2 := *;
+      a := *;
+      d := *;
+      lt := *;
+      o := *;
+      mo := *;
+      st := *;
+      st1 := *;
+      assume mrec(mid) & mrec(mid1) & mid1 ~= mid; 
+      assume msg(mid):type_ = request & msg(mid1):type_ = request;
+      assume msg(mid):addr_(a) & msg(mid1):addr_(a);
+      assume msg(mid):op = read;
+      assume msg(mid1):op = write;
+      assume msg(mid):sent(st) & msg(mid1):sent(st1);
+      assume st1 < st;
+      assume ~(mrec(M) & msg(M):sent(T) & st1 < T & T < st & (msg(M):addr_(a) | msg(M):op = cas));
+
+      # kill the request message
+      mrec(mid) := false;
+
+      # build a response message
+      assume msg(mid1):data_(d);  # note we get data from previous write
+      assume msg(mid):ltime_(lt);
+      assume msg(mid):own = o;
+      assume msg(mid):op = mo;
+
+      # tell us what to fuse
+      assume msg(mid1):ltime_(e1) & msg(mid):ltime_(e2)       
+}
+
+
+# no two messages received at same time
+axiom msg(I):received(T) & msg(J):received(U) & T = U -> I = J
+
+# messages are ordered
+axiom msg(I):sent(T1) & msg(J):sent(U1) & T1 < U1 & msg(J):received(t) -> ~mrec(I)
+
+derived prevents(T1,A1,T2,A2) =
+    ~evs(T1):serialized 
+    & T1 ~= T2 & lleq(T1,T2)
+    & evs(T1):side_ = evs(T2):side_
+    & evs(T1):addr_(A1) & evs(T2):addr_(A2)
+    & (A1 = A2 | evs(T1):type_ = cas | evs(T2):type_ = cas)
+  
+
+module interface = {
+     individual own(A:addr) : ownership # client side ownership state of address
+     relation to_ser(T:ltime) # client side events to serialize on manager side
+     relation cached(A:addr)
+
+     init own(A) = none & ~to_ser(T)
+
+     macro release() = {
+        a := *;
+	d := *;
+	assume cached(a);
+	assume own(a) ~= none;
+	if own(a) = excl {
+	    assume mem(a,d)
+        };
+	own(a) := none; 
+	o := none
+     }
+
+     macro release_check() = {
+	assert cached(a);
+     	assert own(a) ~= none;
+	if own(a) = excl {
+	    assert mem(a,d)
+        };
+	own(a) := none; 
+	o := none
+     }
+
+     macro grant() = {
+        a := *;
+	d := *;
+	o := *;
+	assume cached(a);
+	assume o ~= none;
+	assume own(a) = none;
+        assume mem(a,d);
+	own(a) := o
+     }
+
+     macro grant_check() = {
+	assert cached(a);
+	assert o ~= none;
+	assert own(a) = none;
+        assert mem(a,d);
+	own(a) := o 
+     }
+
+     macro request() = {
+        a := *;
+	d := *;
+	lt := *;
+	mo := *;
+	assume ~cached(a);
+	assume ~evs(lt):serialized & ~to_ser(lt);
+	assume evs(lt):side_ = client;
+	assume evs(lt):addr_(a);
+	assume evs(lt):data_(d);
+	assume mo = evs(lt):type_;
+	assume own(a) = none;
+	assume ~(prevents(T1,A1,lt,A2) & ~to_ser(T1));
+	to_ser(lt) := true
+     }
+
+     macro request_check() = {
+	assert ~cached(a);
+	assert ~evs(lt):serialized & ~to_ser(lt);
+	assert evs(lt):side_ = client;
+	assert evs(lt):addr_(a);
+	assert evs(lt):data_(d);
+	assert mo = evs(lt):type_;
+	assert own(a) = none;
+	assert ~(prevents(T1,A1,lt,A2) & ~to_ser(T1));
+	to_ser(lt) := true
+     }
+
+     macro response() = {
+        a := *;
+	d := *;
+	lt := *;
+	mo := *;
+	assume ~cached(a);
+	assume evs(lt):side_ = client;
+	assume evs(lt):type_ = write;
+	assume evs(lt):addr_(a);
+	assume evs(lt):data_(d);
+	assume mo = evs(lt):type_;
+	assume own(a) = none;
+	assume to_ser(lt);
+	assume evs(lt):serialized
+     }
+
+     macro response_check() = {
+	assert ~cached(a);
+	assert evs(lt):side_ = client;
+	assert evs(lt):type_ = write;
+	assert evs(lt):addr_(a);
+	assert evs(lt):data_(d);
+	assert mo = evs(lt):type_;
+	assert own(a) = none;
+	assert to_ser(lt);
+	assert evs(lt):serialized
+     }
+
+     # Describes the guarantees made about serialization events on
+     # client and manager side of the interface.
+
+     macro serialize(side_) = { # side_ = "serialize on client side"
+	lt := *;   # local time of event
+	a := *; # event address
+        d := *; # event data
+	eside := evs(lt):side_;  # eside = "event side"
+	assume evs(lt):addr_(a);
+	assume evs(lt):data_(d);
+	assume ~evs(lt):serialized;
+	mo := evs(lt):type_;
+	if eside = client {
+	   if side_ = client {
+	       assume mo = read -> own(a) ~= none;
+	       assume mo = write -> own(a) = excl;
+	       assume mo = cas -> own(a) = excl;
+	       assume ~prevents(T1,A1,lt,A2)
+	   }	       
+	   else {
+	      assume to_ser(lt);
+	      assume ~(to_ser(T1) & prevents(T1,A1,lt,A2))
+	   }
+        }
+        else {
+	   assume side_ = manager; # can't serialize a manager side event on client side
+	   assume mo = read -> own(a) ~= excl;
+           assume mo = write -> own(a) = none;
+           assume mo = cas -> own(a) = none;
+	   assume ~prevents(T1,A1,lt,A2)
+        }
+     }
+
+     # Same as above, but asserts the guarantee rather than assuming
+
+     macro serialize_check(side_) = { # side_ = "serialize on client side"
+	eside := evs(lt):side_;  # eside = "event on client side"
+	assert evs(lt):addr_(a);
+	assert evs(lt):data_(d);
+	assert ~evs(lt):serialized;
+	mo := evs(lt):type_;
+	if eside = client {
+	   if side_ = client {
+	       assert mo = read -> own(a) ~= none;
+	       assert mo = write -> own(a) = excl;
+	       assert mo = cas -> own(a) = excl;
+	       assert ~prevents(T1,A1,lt,A2)
+	   }	       
+	   else {
+	      assert to_ser(lt);
+	      assert ~(to_ser(T1) & prevents(T1,A1,lt,A2))
+	   }
+        }
+        else {
+	   assert side_ = manager; # can't serialize a manager side event on client side
+	   assert mo = read -> own(a) ~= excl;
+           assert mo = write -> own(a) = none;
+           assert mo = cas -> own(a) = none;
+	   assert ~prevents(T1,A1,lt,A2)
+        }
+     }
+
+     macro coalesce(side_) = { # side_ = "side on which coalesce occurs"
+	e1 := *;   # local time of later event
+	e2 := *;  # local time of earlier event
+	a := *; # event address
+        d := *; # event data
+
+	assume evs(e1):side_ = client & evs(e2):side_ = client;
+        assume e1 ~= e2 & lleq(e1,e2) & evs(e1):type_ = write & evs(e2):type_ = read;
+	assume evs(e1):addr_(a);
+        assume evs(e2):addr_(a);
+        assume ~(T ~= e1 & T ~= e2 & lleq(e1,T) & lleq(T,e2) & evs(T):side_ = evs(e2):side_ &
+	         evs(T):addr_(A) & (A = a | evs(T):type_ = cas) & ~evs(T):fused);
+        assume ~evs(e2):serialized;
+	assume side_ = manager <-> to_ser(e2)
+     }
+
+     macro coalesce_check(side_) = { # side_ = "side on which coalesce occurs"
+	assert evs(e1):side_ = client & evs(e2):side_ = client;
+        assert e1 ~= e2 & lleq(e1,e2) & evs(e1):type_ = write & evs(e2):type_ = read;
+	assert evs(e1):addr_(a);
+        assert evs(e2):addr_(a);
+        assert ~(T ~= e1 & T ~= e2 & lleq(e1,T) & lleq(T,e2) & evs(T):side_ = evs(e2):side_ &
+	         evs(T):addr_(A) & (A = a | evs(T):type_ = cas) & ~evs(T):fused);
+        assert ~evs(e2):serialized;
+	assert side_ = manager <-> to_ser(e2)
+     }
+
+    
+}
+
+ # perform a serialization event at current global time
+
+macro perform() = {
+
+   # this needed to prove release consistency, but we don't prove
+   # it here.
+   # assert ~prevents(T1,A1,lt,A2)
+
+   # serialize at current global time
+   evs(lt):serialized := true;
+   evs(lt):time_(X) := X = gt;
+
+   # perform memory operation, advancing global time
+
+   ngt := *;
+   assume gt < ngt; # advance global time
+
+   if mo = read {
+      evs(lt):result(D) := mem(a,D)
+   }
+   else {
+      if mo = write {
+	 mem(a,D) := D = d
+#	 to_ser(lt):= false # no response required
+      }			
+      else {  # mo = cas
+	 evs(lt):result(D) := mem(a,D);
+	 mem(a,D) := D = d
+      }
+   }
+}        
+
+# this serializes an event by combining it with another event at the
+# same location into an atomic event
+
+macro fuse() = {
+# these need to be proved saparately
+#   assert e1 ~= e2 & lleq(e1,e2) & evs(e1):type_ = write & evs(e2):type_ = read;
+#   assert evs(e1):addr_ = a;
+#   assert evs(e2):addr_(a);
+#   assert ~(T ~= e1 & T ~= e2 & lleq(e1,T) & lleq(T,e2) &
+#             (evs(T):addr_(a) | evs(T):type_ = cas));
+#   assert ~evs(e2):serialized;
+   evs(e2):serialized := true;
+   evs(e2):fused := true;
+   evs(e2):data_(X) := evs(e1):data_(X)
+}
+
+instantiate front : interface
+instantiate back : interface
+
+axiom front:cached(A) <-> back:cached(A)
+
+macro front_client() = {
+     nt := *;
+     assume t < nt;
+     if * {
+         instantiate front:release();
+         instantiate send_msg(t,release,a,d,lt,o)
+     }
+     else {
+         instantiate front:request();
+         instantiate send_msg(t,request,a,d,lt,o)
+     };
+     t := nt
+}
+
+macro front_manager() = {
+     nt := *;
+     assume t < nt;
+     if * {
+         instantiate receive_msg(t,grant);
+         instantiate front:grant_check()
+     }
+     else {
+         instantiate receive_msg(t,response);
+         instantiate front:response_check()
+     };
+     t := nt
+}
+
+macro back_manager() = {
+     nt := *;
+     assume t < nt;
+     if * {
+         instantiate back:grant();
+         instantiate send_msg(t,grant,a,d,lt,o)
+     }
+     else {
+         instantiate back:response();
+         instantiate send_msg(t,response,a,d,lt,o)
+     };
+     t := nt
+}
+
+macro back_client() = {
+     nt := *;
+     assume t < nt;
+     if * {
+         instantiate receive_msg(t,release);
+         instantiate back:release_check()
+     }
+     else {
+         instantiate receive_msg(t,request);
+         instantiate back:request_check()
+     };
+     t := nt
+}
+
+action fc = {
+    instantiate front_client()
+}
+
+action fm = {
+    instantiate front_manager()
+}
+
+action bc = {
+    instantiate back_client()
+}
+
+action bm = {
+    instantiate back_manager()
+}
+
+# serialization happens on front or back side, but never in the channel
+
+macro front_serialize = {
+    instantiate front:serialize(client);
+    instantiate back:serialize_check(client);
+    instantiate perform()    
+}
+
+action fs = {
+    instantiate front_serialize
+}
+
+macro back_serialize = {
+    instantiate back:serialize(manager);
+    instantiate front:serialize_check(manager);
+    instantiate perform()    
+}
+
+action bs = {
+    instantiate back_serialize
+}
+
+# coalescing happens on front or back side, but never in the channel
+
+macro front_coalesce = {
+    instantiate front:coalesce(client);
+    instantiate back:coalesce_check(client);
+    instantiate fuse()    
+}
+
+action ff = {
+    instantiate front_coalesce
+}
+
+macro back_coalesce = {
+    instantiate back:coalesce(manager);
+    instantiate front:coalesce_check(manager);
+    instantiate fuse()    
+}
+
+action bf = {
+    instantiate back_coalesce
+}
+
+# this action cause a read in the chanel to have its value forwarded
+# from a write. As a side effect it coalesces the write and the read
+
+
+macro channel_internal() = {
+     nt := *;
+     assume t < nt;
+     instantiate forward();
+     instantiate front:coalesce_check(manager);
+     instantiate back:coalesce_check(client);
+     instantiate fuse()    
+}
+
+action fw = {
+    instantiate channel_internal
+}
+
+
+action step = {
+  if * {
+      if * {
+	  if * {
+	      if * {
+		  instantiate front_client()
+	      }
+	      else {
+		  instantiate front_manager()
+	      }
+	  }
+	  else {
+	      if * {
+		  instantiate back_client()
+	      }
+	      else {
+		  instantiate back_manager()
+	      }
+	  }
+      }
+      else {
+	  if * {
+	      if * {
+		  instantiate front_serialize()
+	      }
+	      else {
+		  instantiate back_serialize()
+	      }
+	  }
+	  else {
+	      if * {
+		  instantiate front_coalesce()
+	      }
+	      else {
+		  instantiate back_coalesce()
+	      }
+	  }
+      }
+  }
+  else {
+    instantiate channel_internal()
+  }
+}
+
+# no two distinct active grant messages with same address
+concept lone_grant(M1,M2,A) = msg(M1):type_ = grant * msg(M2):type_ = grant * M1 ~= M2 * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+
+# grant in channel means address owned at back side
+concept grant_back_own(M,A) = msg(M):addr_(A) * mrec(M) * back:own(A) = none
+
+# grant in channel means address not owned at front side
+concept grant_front_own(M,A) = msg(M):addr_(A) * mrec(M) * front:own(A) ~= none
+
+# no two distinct active release messages with same address
+concept lone_release(M1,M2,A) = msg(M1):type_ = release * msg(M2):type_ = release * M1 ~= M2 * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+
+# release in channel means address owned at back side
+concept release_back_own(M,A) = msg(M):addr_(A) * mrec(M) * back:own(A) = none
+
+# release in channel means address not owned at front side
+concept release_front_own(M,A) = msg(M):addr_(A) * mrec(M) * front:own(A) ~= none
+
+# no grant and release messages with same address
+concept grant_release(M1,M2,A) = msg(M1):type_ = grant * msg(M2):type_ = release * mrec(M1) * mrec(M2) * msg(M1):addr_(A) * msg(M2):addr_(A)
+
+# exlusive owned on front side implies exclusive owned on back side
+concept excl_front_back(A) = front:own(A) = excl * back:own(A) ~= excl
+
+# shared owned on fron side implies shared owned on back side
+concept shrd_front_back(A) = front:own(A) = shrd * back:own(A) ~= shrd
+
+# grant messages have correct data
+concept grant_data(A,M,D) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):data_(D) * ~mem(A,D) 
+
+# release messages have correct data
+concept release_data(A,M,D) = mrec(M) * msg(M):type_ = release * msg(M):addr_(A) * msg(M):data_(D) * ~mem(A,D) * back:own(A) = excl
+
+# grant messages have correct ownership
+concept grant_own(A,M) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * msg(M):own ~= back:own(A)
+
+# on back interface, to_ser only if uncached
+concept to_ser_uncached_back(T,A) = back:to_ser(T) * evs(T):addr_(A) * back:cached(A)
+
+# on front interface, to_ser only if uncached
+concept to_ser_uncached_front(T,A) = front:to_ser(T) * evs(T):addr_(A) * front:cached(A)
+
+# on back interface, nothing to serialize that is prevented by something not to serialize
+concept to_ser_back(T1,A1,T2,A2) = prevents(T1,A1,T2,A2) * ~back:to_ser(T1) * back:to_ser(T2)
+
+# on front interface, nothing to serialize that is prevented by something not to serialize
+concept to_ser_front(T1,A1,T2,A2) = prevents(T1,A1,T2,A2) * ~front:to_ser(T1) * front:to_ser(T2)
+
+# request message only if to_ser on front
+concept request_to_ser(M,T) = mrec(M) * msg(M):type_ = request * msg(M):ltime_(T) * ~front:to_ser(T)
+
+# grant message only if cached on back
+concept grant_cached(M,A) = mrec(M) * msg(M):type_ = grant * msg(M):addr_(A) * ~back:cached(A)
+
+# release message only if cached on front
+concept release_cached(M,A) = mrec(M) * msg(M):type_ = release * msg(M):addr_(A) * ~front:cached(A)
+
+# only client side events are to_ser on back interface
+concept client_side_to_ser_back(T) = back:to_ser(T) * evs(T):side_=manager
+
+# only client side events are to_ser on front interface
+concept client_side_to_ser_front(T) = front:to_ser(T) * evs(T):side_=manager

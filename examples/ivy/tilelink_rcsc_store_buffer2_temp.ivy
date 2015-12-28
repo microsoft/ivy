@@ -1,0 +1,733 @@
+#lang ivy1.2
+
+# Same as tilelink1.ivy, but with relase consistency rather than
+# sequential consistency
+
+################################################################################
+#
+# Global type declarations
+#
+################################################################################
+
+########################################
+# type of global time
+type time
+
+# ordering relation on global time
+# obeys axioms of a total strict order
+relation (T:time < U:time)
+axiom (T < U & U < V) -> (T < V)
+axiom ~(T < T)
+axiom ~(T < U & U < T)
+axiom T < U | T = U | U < T
+
+########################################
+# type of local time
+type ltime
+
+# ordering relation on local time
+# obeys axioms of a total non-strict order
+# TODO: can we make < polymorphic?
+relation lleq(T1:ltime,T2:ltime)
+axiom (lleq(T,U) & lleq(U,V)) -> lleq(T,V)
+axiom lleq(T,T)
+axiom (lleq(T,U) & lleq(U,T)) -> U = T
+axiom lleq(T,U) | lleq(U,T)
+
+########################################
+# type of memory data
+type data
+
+########################################
+# type of memory addresses
+type addr
+
+########################################
+# type of message types
+type mtype = { grant_t, release_t, request_t, response_t}
+
+########################################
+# type of ownership state
+type ownership = { none, shrd, excl }
+
+########################################
+# type of message ID
+type msg_id
+
+########################################
+# describe sides of interface
+type side = {client,manager}
+
+########################################
+# type of memory ops
+type otype = {read, write, cas}
+
+########################################
+# id's of protocol agents
+type id
+
+########################################
+# structure of memory events to serialize
+module memev = {
+    individual type_ : otype
+    relation addr_(A:addr)
+    relation data_(D:data) # data for write and cas
+    relation result(D:data) # value for read and cas 
+    relation id_(I:id) # process id of op
+    relation serialized
+    relation fused
+    relation time_(T:time) # serialized time if any
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom result(T) & result(U) -> T = U
+    axiom time_(T) & time_(U) -> T = U
+    axiom id_(I) & id_(J) -> I = J
+
+    init ~serialized & ~fused
+}
+
+################################################################################
+#
+# Reference specification
+#
+# This module describes a set of memory events ordered by local
+# time. It provides actions that assign global time to events in
+# increasing order. The pre-conditions of these actions enforce the
+# consistency model (that is, what orderings in local time must be
+# preserved in global time). This ordering condition is determined by
+# the relation "prevents" (see below).
+#
+################################################################################
+
+module reference = {
+
+    ########################################
+    # memory events by local time
+    # TODO: can we export this read-only?
+
+    instantiate evs(T:ltime) : memev 
+
+    ########################################
+    # current global time
+
+    individual gt : time
+
+    ########################################
+    # global memory state 
+    # obeys partial function axiom
+
+    relation mem(A:addr, D:data)
+    axiom (mem(A,D1) & mem(A,D2)) -> D1 = D2
+
+    ########################################
+    # event T1 prevents T2 if it must come before T2 according to the
+    # ordering conditions but is not yet serialized. The definition
+    # here is strong enough to imply release consistency (reads and
+    # writes to different addresses commute, but nothing commutes with
+    # cas)
+    #
+    # TODO: spurious address parameteres A1 and A2 are to avoid
+    # existential quantifier
+
+    derived prevents(I,T1,A1,T2,A2) =
+	~evs(T1):serialized 
+	& T1 ~= T2 & lleq(T1,T2)
+	& evs(T1):id_(I) & evs(T2):id_(I)
+	& evs(T1):addr_(A1) & evs(T2):addr_(A2)
+	& (A1 = A2 | evs(T1):type_ = cas | evs(T2):type_ = cas)
+  
+    
+    ########################################
+    # serialize an event lt at current global time. The "id"
+    # parameter tells us what process is serializing the event.
+    # 
+
+    action perform(lt:ltime, id_:id) = {
+
+       # serialization must be appropriately ordered
+       # assert ~prevents(I,T1,A1,lt,A2)
+
+       # serialize at current global time
+       evs(lt):serialized := true;
+       evs(lt):time_(X) := X = gt;
+
+       # advance global time
+       local ngt : time {
+           ngt := *;
+           assume gt < ngt; # TODO: without "assume?"
+           gt := ngt
+       };
+
+       # update the global memory state
+       local a : addr, d : data {
+           assume evs(lt):addr_(a);
+           assume evs(lt):data_(d);
+	   if evs(lt):type_ = read {
+	      evs(lt):result(D) := mem(a,D)
+	   }
+	   else {
+	      if evs(lt):type_ = write {
+		 mem(a,D) := D = d
+	      }			
+	      else {  # cas operation
+		 evs(lt):result(D) := mem(a,D);
+		 mem(a,D) := D = d
+	      }
+	   }
+       }
+    }        
+
+    ########################################
+    # this serializes an event by combining it with another event at
+    # the same location into an atomic event. For now, we assume first
+    # event is a write and second event a read.
+
+    action fuse(e1:ltime, e2:ltime, s:id) = {
+
+       ########################################
+       # pre-conditions: (TODO: check these)
+
+       local eid:id, a:addr {
+	   assume evs(e1):id_(eid);
+	   assume evs(e1):addr_(a);
+
+	   # to fuse, events must have same id and address, e1 must be a write
+	   # and e2 a read with e1 < e2
+
+	   assert evs(e2):id_(eid);
+	   assert e1 ~= e2 & lleq(e1,e2) & evs(e1):type_ = write & evs(e2):type_ = read;
+	   assert evs(e2):addr_(a);
+
+	   # This mess says there are no unfused events that must be ordered between e1 and e2
+
+	   assert ~(T ~= e1 & T ~= e2 & lleq(e1,T) & lleq(T,e2) & evs(T):id_(eid) &
+		    evs(T):addr_(A) & (A = a | evs(T):type_ = cas) & ~evs(T):fused);
+
+	   # event must not already be serialized
+
+	   assert ~evs(e2):serialized
+       };
+
+       # the effect of fusing
+
+       evs(e2):serialized := true;
+       evs(e2):fused := true;
+       evs(e2):data_(X) := evs(e1):data_(X)  # copy the data from write to read
+    }
+}
+
+################################################################################
+#
+# TileLink interface specification
+#
+# This describes the semantics of the interface in relation to the reference
+# specification. The function "side" tells us whether a given process id is on
+# the client or the manager side of this interface.
+#
+################################################################################
+
+module interface(ref,clnt,mngr,side) = {
+
+    ########################################
+    # client side ownership state of address
+
+    individual own(A:addr) : ownership 
+
+    ########################################
+    # client side events to serialize on manager side
+
+    relation to_ser(T:ltime) 
+
+    ########################################
+    # set of cached addresses at this interface
+
+    relation cached(A:addr)
+
+    ########################################
+    # initial state of interface. nothing owned, nothing to serialize
+
+    init own(A) = none & ~to_ser(T)
+
+    
+    ########################################
+    # specification of release messages
+
+    action release(a:addr, d:data) = {
+       assert cached(a);
+       assert own(a) ~= none;
+       if own(a) = excl {
+	   assert ref:mem(a,d)  # exclusive release transfers correct data
+       };
+       own(a) := none 
+    }
+    mixin release before mngr:release
+
+    ########################################
+    # specification of grant messages
+
+    action grant(a:addr, d:data, o:ownership) = {
+       assert cached(a);
+       assert o ~= none;
+       assert own(a) = none;
+       assert ref:mem(a,d);   # any grant transfers correct data
+       own(a) := o 
+    }
+    mixin grant before clnt:grant
+
+    ########################################
+    # specification of request messages
+    # 
+    # these model acquire/op. note they have ghost parameter "lt"
+    # representing the local time of the event. a request has the
+    # effect of marking an event to serialize on the manager side.
+    # note the last assert says we must order the events on the
+    # interface.
+
+    action request(a:addr, d:data, mo:otype, lt:ltime) = {
+       local rid:id {
+           assume ref:evs(lt):id_(rid);
+	   assert ~cached(a);
+	   assert ~ref:evs(lt):serialized & ~to_ser(lt);
+	   assert side(rid) = client;
+	   assert ref:evs(lt):addr_(a);
+	   assert ref:evs(lt):data_(d);
+	   assert mo = ref:evs(lt):type_;
+	   assert own(a) = none;
+	   assert ~(ref:prevents(I,T1,A1,lt,A2) & ~to_ser(T1));
+	   to_ser(lt) := true
+       }
+    }
+    mixin request before mngr:request
+
+    ########################################
+    # specification of request messages
+    # 
+    # these model grants that respond to acquire/op. they also have
+    # ghost parameter "lt" representing the local time of the event. a
+    # response indicates the given event has been serialized and returns
+    # the result of the operation if any.
+
+    action response(a:addr, d:data, mo:otype, lt:ltime) = {
+       local rid:id {
+           assume ref:evs(lt):id_(rid);
+	   assert ~cached(a);
+	   assert side(rid) = client;
+	   assert ref:evs(lt):type_ = write;
+	   assert ref:evs(lt):addr_(a);
+	   assert ref:evs(lt):data_(d);
+	   assert mo = ref:evs(lt):type_;
+	   assert own(a) = none;
+	   assert to_ser(lt);
+	   assert ref:evs(lt):serialized
+       }
+    }
+    mixin response before clnt:response
+
+    ########################################
+    # Guarantees made on "perform" actions.
+    #
+    # The client side promises to serialize only events for which it
+    # has the appropriate ownership state. The manager side promises to serialize
+    # only events that have been passed by "request".
+
+    action perform(lt:ltime, sid:id) = { 
+       local a:addr,d:data,mo:otype,eid:id {
+           assume ref:evs(lt):addr_(a);
+           assume ref:evs(lt):data_(d);
+	   mo := ref:evs(lt):type_;
+           assume ref:evs(lt):id_(eid);
+
+	   assert ~ref:evs(lt):serialized;
+	   if side(eid) = client {
+
+	      ########################################
+	      # client event serialized on client side. client
+	      # promises to serialize only with appropriate ownership
+	      # and in order
+
+	      if side(sid) = client {  
+		  assert mo = read -> own(a) ~= none;
+		  assert mo = write -> own(a) = excl;
+		  assert mo = cas -> own(a) = excl;
+		  assert ~ref:prevents(I,T1,A1,lt,A2)
+	      }	       
+
+	      ########################################
+	      # client event serialized on manager side. manager
+	      # promises to serialize only requested events in order
+
+	      else {  
+		 assert to_ser(lt);
+		 assert ~(to_ser(T1) & ref:prevents(I,T1,A1,lt,A2))
+	      }
+	   }
+
+	   ########################################
+	   # manager event serialized on manager side. manager
+	   # promises to serialize only events for which client does
+	   # not have conflicting ownership (and in order)
+
+	   else {
+	      assert side(sid) = manager; # can't serialize a manager side event on client side
+	      assert mo = read -> own(a) ~= excl;
+	      assert mo = write -> own(a) = none;
+	      assert mo = cas -> own(a) = none;
+	      assert ~ref:prevents(I,T1,A1,lt,A2)
+	   }
+        }
+    }
+
+    mixin perform before ref:perform
+
+    ########################################
+    # Guarantees made on "fuse" actions.
+    #
+    # Fusing of a client side message is done on manager side iff
+    # the read has been requested.
+
+    action fuse(e1:ltime, e2:ltime, sid:id) = {
+       local eid : id {
+          assume ref:evs(e2):id_(eid);
+	  assert side(sid) = manager <-> (to_ser(e2) |  side(eid) = manager)
+       }
+    }
+    mixin fuse before ref:fuse
+}
+
+################################################################################
+#
+# Message format for the store buffer 
+#
+################################################################################
+
+module message = {
+    individual type_ : mtype
+    relation addr_(A : addr)
+    relation data_(D : data)
+    relation sent(T : time)
+    relation received(T : time)
+    individual own : ownership
+    relation ltime_(T : ltime)
+    individual op : otype
+
+    axiom addr_(T) & addr_(U) -> T = U
+    axiom data_(T) & data_(U) -> T = U
+    axiom sent(T) & sent(U) -> T = U
+    axiom received(T) & received(U) -> T = U
+    axiom sent(T) & received(U) -> T < U
+    axiom ltime_(T) & ltime_(U) -> T = U
+}
+
+################################################################################
+#
+# This is a model of a store buffer. It is basically a bi-directional
+# FIFO channel, but it allows read requests to bypass write requests
+# to other addresses, and it allows forwarding of data from writes to
+# reads in the queue.
+#
+################################################################################
+
+
+module store_buffer(id,clnt,mngr,ref) = {
+
+    ########################################
+    # The message heap
+
+    instantiate msg(I:msg_id) : message
+
+    ########################################
+    # set of messages in queue
+
+    relation mrec(I:msg_id)
+
+    ########################################
+    # message time stamp (allows us to enforce order)
+
+    individual t : time
+
+    ########################################
+    # initially the queue is empty
+
+    init ~mrec(I:msg_id)
+
+    ########################################
+    # advance the time stamp
+
+    action advance = {
+       local nt :time {
+          assume t < nt;
+          t := nt
+       }
+    }
+
+    ########################################
+    # no two messages received at same time
+
+    axiom msg(I):received(T) & msg(J):received(U) & T = U -> I = J
+
+    ########################################
+    # messages ordering axiom
+    #
+    # TODO: here, messages are FIFO, but we could relax this ordering.
+
+    axiom msg(I):sent(T1) & msg(J):sent(U1) & T1 < U1 & msg(J):received(t) -> ~mrec(I)
+
+    ########################################
+    # enqueue a message
+    #
+    # This may seems a little strange. Rather than setting the fields of
+    # the message, we non-deterministically choose an existing message
+    # that has the right field values. 
+    #
+    # TODO: should be marked private
+
+    action send_msg(mt:mtype, a:addr, d:data, lt:ltime, o:ownership, mo:otype) = {
+	local mid:msg_id {
+	    assume ~mrec(mid) & msg(mid):sent(t);
+	    assume msg(mid):type_ = mt;
+	    assume msg(mid):addr_(a);
+	    assume msg(mid):data_(d);
+	    assume msg(mid):ltime_(lt);
+	    assume msg(mid):own = o;
+	    assume msg(mid):op = mo;
+	    mrec(mid) := true
+	};
+	call advance
+    }
+
+    ########################################
+    # dequeue a message
+    #
+    # Receive a message whose received time is the current time.
+    #
+    # TODO: should be marked private
+
+    action receive_msg returns(mid:msg_id) = {
+	assume mrec(mid) & msg(mid):received(t);
+	mrec(mid) := false;
+	call advance
+    }
+
+
+    ########################################
+    # release action called by the client side
+    #
+    # this just enqueues a release message
+
+    action release(a:addr, d:data) = {
+	local lt:ltime, o:ownership, mo:otype {
+	    call send_msg(release_t,a,d,lt,o,mo)
+	}
+    }
+
+    ########################################
+    # grant action called by the client side
+    #
+    # this just enqueues a grant message
+
+    action grant(a:addr, d:data, o:ownership) = {
+	local lt:ltime, mo:otype {
+	    call send_msg(grant_t,a,d,lt,o,mo)
+	}
+    }
+
+    ########################################
+    # request action called by the client side
+    #
+    # this just enqueues a request message
+
+    action request(a:addr, d:data, mo:otype, lt:ltime) = {
+	local o:ownership {
+	    call send_msg(request_t,a,d,lt,o,mo)
+        }
+    }
+
+    ########################################
+    # response action called by the client side
+    #
+    # this just enqueues a response message
+
+    action response(a:addr, d:data, mo:otype, lt:ltime) = {
+	local o:ownership {
+	    call send_msg(response_t,a,d,lt,o,mo)
+        }
+    }
+
+    ########################################
+    # internal action (step)
+    #
+    # this can be either transmission of an
+    # enqueued message, or forwarding from
+    # a write request to a read request
+
+    action step_dq = {
+
+        # dequeue case
+
+        assert false;
+	    local mid:msg_id {
+	       call mid := receive_msg();
+	       local a:addr,d:data,lt:ltime,mt:mtype {
+		  assume msg(mid):addr_(a);
+		  assume msg(mid):data_(d);
+		  assume msg(mid):ltime_(lt);
+		  mt := msg(mid):type_;
+		  if mt = grant_t {
+		      call clnt:grant(a,d,msg(mid):own)
+		  } else if mt = response_t {
+		      call clnt:response(a,d,msg(mid):op,lt)
+		  } else if mt = release_t {
+		      call mngr:release(a,d)
+		  } else if mt = request_t {
+		      call mngr:request(a,d,msg(mid):op,lt)
+		  }
+               }
+	    }
+        }
+
+	# forward case
+
+    action step_fwd = {
+          assert false;
+ 	  local mid:msg_id, mid1:msg_id, st:time, st1:time, a:addr, d:data, lt:ltime, lt1:ltime {
+ 	      assume mrec(mid) & mrec(mid1) & mid1 ~= mid; 
+	      assume msg(mid):type_ = request_t & msg(mid1):type_ = request_t;
+
+	      assume msg(mid):addr_(a) & msg(mid1):addr_(a);
+
+	      assume msg(mid):op = read;
+	      assume msg(mid1):op = write;
+
+	      # sent time of the read is after the send time of the write
+	      assume msg(mid):sent(st) & msg(mid1):sent(st1);
+	      assume st1 < st;
+
+	      # there is no intervening message M that does not commute with these
+	      assume ~(mrec(M) & msg(M):sent(T) & st1 < T & T < st & (msg(M):addr_(a) | msg(M):op = cas));
+
+	      # dequeue the read request
+	      mrec(mid) := false;
+
+ 	      # fuse the read op into the write op
+ 	      assume msg(mid):ltime_(lt);
+ 	      assume msg(mid1):ltime_(lt1);
+ 	      call ref:fuse(lt1,lt,id) # this is ghost. TODO: make this a mixin after
+
+          }
+        
+    } 
+}
+
+# TODO: should be able to generate this
+module generic_client(mngr,ref,side) = {
+   action response(a:addr, d:data, mo:otype, lt:ltime) = {
+   }
+   action grant(a:addr, d:data, o:ownership) = {
+   }
+   action step = {
+     local a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime  {
+        assume side(sid) = client;
+        if * {
+           call mngr:release(a, d)
+        } else if * {
+	   call mngr:request(a, d, mo, lt)
+        } else if * {
+	   call ref:perform(lt,sid)
+        } else {
+	   call ref:fuse(lt,lt1,sid)
+        }
+     }
+   }
+}
+
+# TODO: should be able to generate this
+module generic_manager(clnt,ref,side) = {
+   action request(a:addr, d:data, mo:otype, lt:ltime) = {
+   }
+   action release(a:addr, d:data) = {
+   }
+   action step = {
+     local a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime {
+        assume side(sid) = manager;
+        if * {
+           call clnt:grant(a, d, o)
+        } else if * {
+	   call clnt:response(a, d, mo, lt)
+        } else if * {
+	   call ref:perform(lt,sid)
+        } else {
+	   call ref:fuse(lt,lt1,sid)
+        }
+     }
+   }
+}
+
+################################################################################
+# 
+# The system we want to verify
+#
+################################################################################
+
+individual buf_id : id   # arbitrary process id for the buffer
+
+instantiate c : generic_client(b,ref,fside)
+instantiate b : store_buffer(buf_id,c,m,ref)
+instantiate m : generic_manager(b,ref,bside)
+
+export c:step()
+export b:step_dq()
+export b:step_fwd()
+
+export m:step()
+
+################################################################################
+# 
+# Instantiate the reference specification
+#
+################################################################################
+
+instantiate ref : reference
+
+################################################################################
+# 
+# Specify the two interfaces of the buffer
+#
+# To do this, we arbitrarily distribute the process id's on the client and
+# manager side. The axioms guarantee the side assignments for the front
+# and back interfaces of the buffer are consistent.
+#
+################################################################################
+
+individual fside(I:id) : side
+individual bside(I:id) : side
+axiom fside(buf_id) = manager
+axiom bside(buf_id) = client
+axiom I ~= buf_id -> fside(I) = bside(I)
+
+instantiate front : interface(ref,c,b,fside)
+instantiate back : interface(ref,b,m,bside)
+
+# The buffer assumes that the cached address set on front and back is the
+# same. TODO: do we need this or can we infer it?
+
+axiom front:cached(A) <-> back:cached(A)
+
+################################################################################
+#
+# Localize the proof
+#
+################################################################################
+
+isolate iso_b = b with ref,front,back,c,m
+
+
+# Note: an alternative here would be to create an environment model by exporting
+# some delegating actions, e.g:
+
+# delegating action perform(...) = {
+#    assert sid ~= buf_id;
+#    ref:perform(...)
+# }
+# export perform
+

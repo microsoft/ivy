@@ -1,0 +1,45 @@
+#lang ivy1
+
+relation pending(X,Y)
+relation link(X,Y)
+relation tree(X,Y)
+relation treestar(X,Y)
+relation marked(X)
+individual root
+
+axiom ~link(X,X)
+axiom ~link(X,Y) | link(Y,X)
+
+
+init ((X = root | ~pending(X,Y))
+      & (~link(root,X) | pending(root,X))
+      & (link(X,Y) | ~pending(X,Y))
+      & marked(root) & (X = root | ~marked(X))
+      & ~tree(X,Y)
+      & (~treestar(X,Y) | X = Y)
+      & (treestar(X,Y) | X ~= Y))
+
+individual a,b,u,v,w,x
+
+action act1 = {
+  assume pending(a,b);
+  marked(b) := true;
+  tree(a,b) := true;
+  treestar(X,Y) := treestar(X,Y) | treestar(X,a) & treestar(b,Y);
+  pending(X,b) := false;
+  pending(b,Y) := pending(b,Y) | link(b,Y) & ~marked(Y);
+  a := *;
+  b := *
+}
+
+action error = {       
+#  assume (treestar(u,v) & treestar(v,w) & ~treestar(u,w) | tree(u,v) & ~treestar(u,v))
+#  assume tree(u,v) & ~treestar(u,v)
+
+  assume (tree(u,v) & tree(u,w) & v ~= w & treestar(v,x) & treestar(w,x) |
+         tree(u,v) & ~treestar(u,v)
+         | treestar(u,v) & treestar(v,w) & ~treestar(u,w)
+ 	 | treestar(u,v) & treestar(v,u) & u ~= v)
+}
+
+

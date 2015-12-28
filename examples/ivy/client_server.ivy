@@ -1,0 +1,33 @@
+#lang ivy1
+
+relation conn(X,Y)
+relation s(X)
+
+init (s(X) & ~conn(X,Y))
+individual x,y,z
+
+action connect = {
+  x := *;
+  y := *;
+  assume s(y) & ~conn(x,Z);
+  conn(x,y) := true;
+  s(y) := false
+}
+
+action disconnect = {
+  x := *;
+  y := *;
+  assume conn(x,y);
+  conn(x,y) := false;
+  s(y) := true
+}
+
+action error = {       
+  x := *;
+  y := *;
+  z := *;
+  assume x ~= y & conn(x,z) & conn(y,z)
+}
+
+concept c1(X,Y,Z) = (conn(X,Z) * ~X = Y * conn(Y,Z))
+

@@ -1,0 +1,115 @@
+#lang ivy1.2
+
+type bit = {zero,one}
+
+type univ
+
+module intf(sndr,rcvr) = {
+       
+  individual state : bit
+  relation pending
+
+  init state = one & ~pending
+
+  action put(v : bit) = {
+      assert ~pending & v ~= state;
+      state := v;
+      pending := true
+  }
+  mixin put before rcvr:put
+
+  action get(v : bit) = {
+      assert pending & v = state;
+      pending := false
+  }
+  mixin get before sndr:get
+}
+
+module channel(sndr,rcvr) = {
+  individual state : bit
+  relation put_pending
+  relation get_pending
+
+  init ~put_pending & ~get_pending & state = one
+
+  action get(v : bit) = {
+    get_pending := true;
+    state := v
+  }
+
+  action put(v : bit) = {
+    put_pending := true;      
+    state := v
+  }
+
+  action step = {
+    if * {
+        assume get_pending;
+        get_pending := false;
+        call sndr:get(state)
+    }
+    else {
+        assume put_pending;
+        put_pending := false;
+        call rcvr:put(state)
+    }
+  }
+}
+
+module sender(rcvr) = {
+
+  individual state : bit
+  relation pending
+
+  init ~pending & state = one
+
+  action get(v : bit) = {
+    pending := false
+  }
+
+  action step(v : bit) = {
+    assume ~pending;
+    assume v ~= state;
+    pending := true;
+    state := v;
+    call rcvr:put(v)
+  }
+
+}
+
+module receiver(sndr) = {
+
+  individual state : bit
+  relation pending
+
+  init ~pending
+
+  action put(v : bit) = {
+    pending := true;      
+    state := v
+  }
+
+  action step = {
+    assume pending;
+#    call sndr:get(state);
+    call sndr:get(zero);
+    pending := false
+  }
+
+}
+
+instantiate s : sender(c)
+instantiate c : channel(s,r)
+instantiate r : receiver(c)
+
+export s:step
+export c:step
+export r:step
+
+instantiate sc : intf(s,c)
+instantiate sr : intf(c,r)
+
+isolate iso_s = s with sc
+isolate iso_c = c with sc,sr
+isolate iso_r = r with sr
+

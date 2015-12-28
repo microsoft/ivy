@@ -1,0 +1,37 @@
+#lang ivy1.1
+
+type client
+type server
+
+relation c(X : client,Y : server)
+relation s(X : server)
+
+individual x : client,y : server,z : client
+
+action initialize = {
+  assume s(W) & ~c(X,Y)
+}
+
+action connect = {
+  x := *;
+  y := *;
+  assume s(y) & ~c(x,Z);
+  c(x,y) := true;
+  s(y) := false
+}
+
+action disconnect = {
+  x := *;
+  y := *;
+  assume c(x,y);
+  c(x,y) := false;
+  s(y) := true
+}
+
+state reached = initialize(true) | connect(reached) | disconnect(reached)
+
+assert reached -> ~(c(X,Y) & c(Z,Y) & X ~= Z)
+
+concept c1(X,Y,Z) = (c(X,Z) * ~X = Y * c(Y,Z))
+
+conjecture (X = Z | ~c(X,Y) | ~c(Z,Y))

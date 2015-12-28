@@ -1,0 +1,241 @@
+#lang ivy1
+
+# This is a model of the Chord ring maintenance protocol based on
+# Pamela Zave's version. As in Pamela's paper, it handles on successor
+# lists up to length two.
+
+# We prove that there is only one cycle and that all active nodes are
+# connected to the cycle.
+
+# We assume that there is one permanent node in the ring, which we
+# call "q", the origin.
+
+#
+# Theory of partial functions. 
+#
+#
+module partial_function(f) = {
+
+# 1) for any x there is at most one y such that f(x,y),
+    axiom ~f(X,Y) | ~f(X,Z) | Y = Z
+
+# 2) dom[f] is the domain of f,
+    relation dom[f](X)
+    axiom ~f(X,Y) | dom[f](X)
+
+# 3) for any x in dom[f], we have f(x,f[x]).
+    schema img[f](x) = ~dom[f](x) | f(x,f[x])
+
+# 4) This defines how dom[f] updates as we update f:
+    update dom[f] from f
+      params v,w in v.f := w -> 
+	ensures ((~old dom[f](X) | dom[f](X)) & dom[f](v))
+      params v in v.f := null -> 
+	ensures (~old dom[f](X) | X = v | dom[f](X))
+}
+
+# Modeling relations
+#
+relation a(X)     # a(x) holds when node x is active
+relation s1(X,Y)  # s1(x,y) holds when y is the first successor of x
+relation s2(X,Y)  # s2(x,y) holds when y is the first successor of x
+relation p(X,Y)   # p(x,y) holds when y is the predessor of p.
+
+# The relations s1,s2 and p are partial functions
+instantiate partial_function(s1)
+instantiate partial_function(s2)
+instantiate partial_function(p)
+
+# This is the origin (non-failing) node
+individual q
+
+# Derived relations
+
+# Best successor relation. We have bs(x,y) if y is active and
+# either it is the first successor of x or it is the second
+# successor of x and the first successor is inactive. We define bs
+# by Horn clauses, as follows:
+#
+relation bs(X,Y)
+axiom ~s1(X,Y) | ~a(Y) | bs(X,Y)
+axiom ~s1(X,Y) | a(Y) | ~s2(X, Z) | ~a(Z) | bs(X,Z)
+
+#
+# Theory of "reaches" predicate. rch[y](x) holds if x can reach
+# y by a non-empty sequence of "best successor" arcs. We define rch
+# by a set of horn clauses, as follows. 
+#
+schema rch(y) =
+    (~bs(X,y) | rch[y](X))   # base case: reach y in one step
+    & (~bs(X,Y) | ~rch[y](Y) | rch[y](X)) # inductive case
+
+
+# The relation btw abstracts the node ids. We have
+# btw(x,y,z) when dist(x,y) < dist(x,z) where
+# dist(x,y) = N if x = y else (y.id - x.id mod N)
+#
+relation btw(X,Y,Z)
+
+# Axioms of btw TODO: are these redundant?
+#
+axiom (~btw(W, Y, Z) | ~btw(W, X, Y) | btw(X, Y, Z))
+axiom (~btw(W, X, Z) | ~btw(X, Y, Z) | btw(W, X, Y))
+axiom (~btw(W, X, Z) | ~btw(X, Y, Z) | btw(W, Y, Z))
+axiom (~btw(W, Y, Z) | ~btw(W, X, Y) | btw(W, X, Z))
+axiom (W = X | btw(W, X, W))
+axiom ~btw(X, X, Y)
+axiom ~btw(X, Y, Y)
+axiom (btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y))
+axiom (btw(X,Y,Z) |  Y = X |  btw(Y,X,Z))
+
+# We do the proof by induction on this well-founded order, which
+# decreases as node id's get closer to the origin. Notive the q itself
+# is the *top* element if this order, which is convenient.  derived
+#
+derived down(X, Y) = (~btw(X, q, Y) & X ~= q) | X = Y
+
+# Least element principle nodes ordered by distance to q. If p is not
+# empty, then it contains a minimal element le[p].
+#
+schema lep(p) =
+    (p(le[p]) | ~p(X)) 
+    & (~btw(le[p],X,q) | ~p(X))
+
+
+#
+#  Error condition. A node becomes disconnected if it is active
+#  and no longer has a path to the origin via best successors.
+#
+#
+relation rch[q](X)
+derived err(X) = a(X) & ~rch[q](X) 
+
+# TODO: we need to declare the types of these in the img schema, not here
+
+module witness(f,x) = {
+   individual f[x]
+}
+instantiate witness(le,err)
+instantiate witness(s1,le[err])
+instantiate witness(s2,le[err])
+
+
+###################################################################
+#
+# Protocol actions
+#
+###################################################################
+
+# Temporary variables used in actions
+individual x,y,z,qs
+
+
+# In the initial state, we have two nodes, q and qs, each of which is the unique successor and
+# predecessor of the other. TODO: does one initial node also work?
+init (q ~= qs & a(q) & a(qs) & (~a(V1) | V1 = q | V1 = qs)
+      & s1(q, qs) & s1(qs, q) & (~s1(X, Y) | X = q | X = qs) & ~s2(X, Y)
+      & p(q, qs) & p(qs, q) & (~p(X, Y) | X = q | X = qs))
+
+# The protocol actions
+
+action join = {
+    x := *;
+    y := *;
+    assume ~a(x);
+    assume a(y);
+    assume ~btw(x, q, y);
+    a(x) := true;
+    x.s1 := y;
+    x.s2 := false;
+    x.p := false
+}
+action stabilize = {
+    x := *;
+    y := *;
+    z := *;
+    assume a(x);
+    assume s1(x, y);
+    assume a(y);
+    assume p(y, z);
+    assume a(z);
+    assume btw(x, z, y);
+    x.s1 := z;
+    x.s2 := y
+}
+action inherit = {
+    x := *;
+    y := *;
+    z := *;
+    assume a(x);
+    assume s1(x, y);
+    assume a(y);
+    assume s1(y, z);
+    x.s2 := z
+}
+action remove = {
+    x := *;
+    y := *;
+    z := *;
+    assume a(x);
+    assume s1(x, y);
+    assume ~a(y);
+    assume s2(x, z);
+    x.s1 := z;
+    x.s2 := false
+}
+action notify = {
+    x := *;
+    y := *;
+    z := *;
+    assume a(x);
+    assume s1(x, y);
+    assume a(y);
+    assume p(y, z) | ~p(y, X);
+    assume btw(z, x, y);
+    y.p := x
+}
+action fail = {
+    x := *;
+    assume a(x);
+    assume x ~= q; # assume origin node cannot fail
+    a(x) := false;
+    x.p := false;
+    x.s1 := false;
+    x.s2 := false;
+    # assume the last active successor of any does not fail
+    assume (~s1(X, Y) | a(Y) | dom[s2](X));
+    assume (~s1(X, Y) | a(Y) | ~s2(X, Z) | a(Z))
+}
+
+# Error action, indicating that some node is not connected to the origin
+# via best successors.
+
+action error = {
+    assume err(x);                        # there is some error
+
+    # instantiate some theories
+    instantiate rch(q);
+    instantiate lep(err); # find least error node
+    instantiate img[s1](le[err]);
+    instantiate img[s2](le[err])
+} 
+
+
+# This is our guessed abstract domain
+
+concept act(X) = (a(X) + ~a(X))
+concept loc(X) = (X = q + ~X = q)
+concept node(X) = (loc(X) * act(X))
+concept succ(X, Y) = (s1(X, Y) + ~s1(X, Y))
+concept pred(X, Y) = (p(X, Y) + ~p(X, Y))
+concept spact(X, Y) = (succ(X, Y) * pred(Y, X) * act(X) * act(Y))
+concept s2act(X,Y) = (s2(X,Y) * act(X) * act(Y))
+concept s1down(X, Y) = (btw(X, q, Y) * s1(X, Y))
+concept s2down(X, Z) = (btw(X, q, Z) * s2(X, Z))
+
+concept some_act(X, Y, Z) = (s1(X, Y) * s2(X, Z) * ~a(Y) * ~a(Z))
+concept has_s1(X) = (a(X) * ~dom[s1](X))
+concept has_s2(X,Y) = (a(X) * s1(X,Y) * ~a(Y) * ~dom[s2](X))
+
+# This one is needed, but drop it so proof fails
+# concept itp_a(V0, V1, V2) = (~V1 = q * s2(V0, V2) * s1(V0, V1) * ~down(V0, V2))

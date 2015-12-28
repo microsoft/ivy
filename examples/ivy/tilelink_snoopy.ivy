@@ -1,0 +1,115 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is an abstract model of simple snoopy cache using TileLink
+#
+################################################################################
+
+include tilelink_abstract_spec
+
+################################################################################
+#
+# Cache line format
+#
+################################################################################
+
+module cache_line = {
+    individual own : ownership
+    individual data_ : data
+
+    init own = none
+}
+
+################################################################################
+#
+# The snoopy cache model
+#
+################################################################################
+
+
+module snoopy(id,clnt,mngr,ref) = {
+
+    ########################################
+    # The cache
+
+    instantiate cache(A:addr) : cache_line
+
+
+    ########################################
+    # release action called by the client side
+    # not supported
+
+    action release(a:addr, d:data) = {
+        assert false  # block it
+    }
+
+    ########################################
+    # grant action called by the manager side
+
+    action grant(a:addr, d:data, o:ownership) = {
+        cache(a).own := o;
+	cache(a).data_ := d
+    }
+
+    ########################################
+    # request action called by the client side
+    #
+    # this just enqueues a request message
+
+    action request(a:addr, d:data, mo:otype, lt:ltime) = {
+        assume mo ~= cas;  # don't support for now
+        if mo = read {
+	    assume cache(a).own ~= none; # models channel blocking
+	    local d:data {
+	        d := cache(a).data_;
+   	        call ref.perform(lt,id); # ghost
+	        call clnt.response(a,d,mo,lt)
+            }
+        } else { # mo = write	    
+	    assume cache(a).own = excl; # models channel blocking
+	    cache(a).data_ := d;
+	    call ref.perform(lt,id); # ghost
+            call clnt.response(a,d,mo,lt)
+        }
+    }
+
+    ########################################
+    # response action called by the client side
+    #
+    # not supported
+
+    action response(a:addr, d:data, mo:otype, lt:ltime) = {
+        assume false
+    }
+
+    ########################################
+    # internal action (step)
+    #
+    # this models a release (voluntary pr otherwise
+
+    action step = {
+        local a:addr, d:data {
+            assume cache(a).own ~= none;
+	    d := cache(a).data_;
+	    cache(a).own := none;
+	    call mngr.release(a,d)
+        }
+    }
+}
+
+################################################################################
+#
+# Verify the module using the standard testbench
+#
+################################################################################
+
+include tilelink_two_port_test_bench
+
+# The cache makes two assumptions about the system configuration:
+
+# 1) supports only one client
+axiom fside(I) = client & fside(J) = client -> I = J  
+
+# 2) everything uncached on front side and cached on back side
+axiom ~front.cached(A) & back.cached(A)

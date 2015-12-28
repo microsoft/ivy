@@ -1,0 +1,177 @@
+#lang ivy1
+
+
+
+
+relation pending(P, S, T, Di) # A pednding packet P at on the link from S to T oof distance Di 
+relation rp(H, S, D) # There is a path from S to D for H
+relation dist(H, S, Di) # There is a path from S to H of length Di
+relation src(P, H)
+relation dst(P, H)
+relation link(S, T)
+
+relation le(X, Y)
+
+axiom rp(H, X,X)  # Reflexivity
+axiom ~rp(H, X, Y) | ~rp(H, Y, Z) | rp(H, X, Z) # transitivity
+axiom ~rp(H, X, Y) | ~rp(H, Y, X) | X = Y # anti-symmetric
+axiom ~rp(H, X, Y) | ~rp(H, X, Z) | rp(H, Y, Z) | rp(H, Z, Y) # linearity
+
+axiom ~link(X, X) # no self-loops
+axiom ~link(X, Y) | link(Y, X) # symmetric
+
+individual zero
+
+axiom le(zero, X)
+axiom le(X, X) # Reflexivity
+axiom ~le(X, Y) | ~le(Y, Z) | le(X, Z) # transitivity
+axiom ~le(X, Y) | ~le(Y, X) | X = Y # anti-symmetric
+axiom le(X, Y) | le(Y, X) # totality
+
+derived lt(X,Y) = le(X,Y) & X ~= Y
+
+module partial_function(f) = {
+
+# 1) for any x there is at most one y such that f(x,y),
+    axiom ~f(X,Y) | ~f(X,Z) | Y = Z
+}
+
+instantiate partial_function(src)
+instantiate partial_function(dst)
+
+# Partial function on pairs
+axiom ~dist(X, Y, Dist1) | ~dist(X, Y, Dist2) |  Dist1 = Dist2
+
+
+individual n0,n1,n2
+
+module extra(c) = {
+   derived pend0[c](X,Y) = pending(c,X,Y,n0)
+   derived pend1[c](X,Y) = pending(c,X,Y,n1)
+   derived pend2[c](X,Y) = pending(c,X,Y,n2)
+   derived route[c](X,Y) = rp(c,X,Y)
+}
+instantiate extra(n0)
+instantiate extra(n1)
+instantiate extra(n2)
+
+axiom n0 ~= n1
+axiom n0 ~= n2
+axiom n1 ~= n2
+axiom (X = n0 | X = n1 | X = n2)
+
+init ~pending(P,S,T, Di)
+     & rp(H,X,X)
+     & (X = Y | ~rp(H,X,Y))
+     & ~dist(X,Y,Z)
+     
+     
+individual p0, sw0, sw1,sw2, s0, t0, di, cdi, ndi
+
+
+action easy = {
+  p0 := *
+}
+
+action receive = {
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  di := *;
+  cdi := *;
+  ndi := *;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1, cdi) | (s0 = sw1 & sw0 = sw1 & cdi=zero);
+
+  # Abstract the number of received packets
+  if (pending(p0,sw0, sw1, cdi)) {
+    pending(p0, sw0, sw1, cdi) := *
+  };
+
+  if (sw0 ~= sw1) {
+
+      if ((~rp(s0, sw1, X) | X = sw1)) # First entry
+	  {
+	# assert ~rp(s0,sw0,sw1)  // error 1
+	rp(s0, S, D) := rp(s0, S, D) | rp(s0, S, sw1) &  rp(s0, sw0, D) ;
+	dist(s0, sw1, cdi) := true }
+      else {
+	 # assert dist(s0, sw1, X) // error 2
+	  assume dist(s0, sw1, di) ;
+	  if (lt(cdi, di)) { # Shorter path
+	       # assert ~rp(s0,sw0,sw1) // error 3
+	       rp(s0, S, D) := rp(s0, S, D) & (S = D |  ~ (rp(s0, S, sw1) &  rp(s0, sw0, D))) ;  # Remove deleted entries 
+	       rp(s0, S, D) := rp(s0, S, D) | rp(s0, S, sw1) &  rp(s0, sw0, D) ;
+	       dist(s0, sw1, di) := false;
+	       dist(s0, sw1, cdi) := true
+	       }
+	  }
+  };
+         
+
+  assume(lt(cdi, ndi) & (~lt(cdi, X) | le(ndi, X))); # ndi is the immedidate successor of cdi
+  if (t0 ~= sw1) {
+      if (~rp(t0, sw1, X) | X = sw1)  {
+         pending(p0, sw1, Y, ndi) := link(sw1, Y) & Y ~= sw0 # flood
+      }
+      else {
+	 sw2 := *;
+	 assume sw2 ~= sw1 & rp(t0, sw1, sw2) & (~rp(t0, sw1, X) | X = sw1 | rp(t0, sw2, X)) ;
+	 pending(p0, sw1, sw2, ndi) := true 
+      }
+  }
+}
+ 
+
+action error1 = {       
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  cdi := * ;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1, cdi) | (s0 = sw1 & sw0 = sw1 & cdi=zero) ;  
+  assume (~rp(s0, sw1, X) | X = sw1) & sw0 ~= sw1 ;
+  assume rp(s0,sw0,sw1)
+}
+
+
+action error2 = {       
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  cdi := * ;
+  sw2 := * ;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1, cdi) | (s0 = sw1 & sw0 = sw1 & cdi =zero);  
+  assume (rp(s0, sw1, sw2) & sw2 ~= sw1) | sw0 = sw1 ;
+  assume ~dist(s0, sw1, X)
+}
+
+action error3 = {       
+  p0 := *;
+  sw0 := *;
+  sw1 := *;
+  s0 := *;
+  t0 := *;
+  cdi := * ;
+  sw2 := * ;
+  di := * ;
+  assume dst(p0, t0);
+  assume src(p0, s0);
+  assume pending(p0,sw0, sw1, cdi) | (s0 = sw1 & sw0 = sw1 & cdi =zero);  
+  assume (rp(s0, sw1, sw2) & sw2 ~= sw1) | sw0 = sw1 ;
+  assume dist(s0, sw1, di) ;
+  assume lt(cdi, di) ;
+  assume rp(s0, sw0, sw1)      
+}
+
+
