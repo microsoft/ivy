@@ -19,6 +19,190 @@ include tilelink_abstract_spec
 type tl_id
 
 
-module tl_interface(abs,clnt,mngr) = {
+########################################
+# set of addresses that can be requested (high-order bits)
 
+type tl_addrset
+
+########################################
+# identifier of address set member (low-order bits)
+
+type tl_addrmem
+
+########################################
+# construct adresses from high- and low-order bits
+
+individual addr_cons(X:tl_addrset,Y:tl_addrmem) : addr
+
+# address constructor is an injection
+axiom addr_cons(X1,Y1) = addr_cons(X2,Y2) -> X1=X2 & Y1=Y2
+
+########################################
+# semantics of address sets
+
+relation addrset_contains(X:tl_addrset, Y:addr)
+
+axiom addrset_contains(X,addr_cons(X,Y))
+axiom addrset_contains(X,Y) & addreset_contains(Z,Y) -> X = Z
+
+########################################
+# type of message status
+
+type tl_status = {accepted,blocked}
+
+########################################
+# structure representing Acquire message
+
+module acq = {
+    individual id : tl_id             # id of requester
+    individual addrs : tl_addrset     # set of requested address
+    individual own:ownership          # what ownership type? (none=uncached)
+    individual op : otype             # what operation?
+    individual ltime_ : ltime         # logical time (ghost)
+}
+
+########################################
+# Heap of acquire messages
+
+type acq_id
+instantiate acqs(X:acq_id) : acq
+
+########################################
+# structure representing Grant message
+
+module gnt = {
+    individual id : tl_id             # id of requester
+    individual addr_ : tl_addrmem     # low-order bits of this response
+    individual own:ownership          # what ownership type? (none=uncached)
+    individual data_ : tl_data        # return value, if any
+    individual ltime_ : ltime         # logical time (ghost)
+}
+
+########################################
+# Heap of grant messages
+
+type gnt_id
+instantiate gnts(X:gnt_id) : gnt
+
+########################################
+# structure representing Finish message
+
+module fns = {
+    individual id : tl_id             # id of requester
+}
+
+########################################
+# Heap of finish messages
+
+type fns_id
+instantiate fnss(X:fns_id) : fns
+
+
+module tl_interface(ref,clnt,mngr) = {
+
+
+    ########################################
+    # time stamp generator
+
+    individual gt : time
+
+    action advance = {
+       local ngt : time {
+	   ngt := *;
+	   assume gt < ngt; # TODO: without "assume?"
+	   gt := ngt
+       }
+    }
+
+    ########################################
+    # timestamped acquire messages
+
+    relation pend_acq(M:acq_id, T:time)
+    relation pend_addr(A:addr, T:time)   # individual grants pending
+
+    ########################################
+    # Find earliest pending message matching ID
+
+    action match(id:ti_id) returns(req:acq_id,reqt:time) = {
+        assert exists M. exists T. pend_acq(M,T) & acqs(M).id = id;
+        assume pend_acq(req,reqt) & acqs(req).id = gnts(msg).id;
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id = gnts(msg).id)
+    }
+
+    ########################################
+    # specification of Acquire message
+
+    action tl_Acquire(msg:acq_id) = {
+        pend_acq(msg,gt) := true;  # mark message pending
+	pend_addr(X,gt) := addrset_contains(acqs(msg).addrs,X);
+	call advance();       
+
+	if acqs(msg).own = none { # an uncached request
+	    # get the address (TODO: we assume there is only one in the set)
+	    local addr_:addr {
+  	        assume addrset_contains(acqs(msg).addrs,addr_);
+		assume ~(addrset_contains(acqs(msg).addrs,X) & X ~= addr_);
+
+		# perform the abstract request
+		call abs.request(addr_,acqs(msg).data,acqs(req).op,acqs(req).ltime_)
+            }
+	}
+	# (cached acquires don't correspond to any abstract action) 
+
+    }
+    mixin tl_Acquire before mngr.tl_Acquire    
+
+    ########################################
+    # specification of Grant message
+
+    action tl_Grant(msg:gnt_id) = {
+        local req:acq_id, reqt:time, addr_:addr {
+	
+	    (req,reqt) := match(gnts(msg).id); # find matching request
+	    addr_ := addr_con(acqs(req).addrs,gnts(msg).addr_);  #construct address
+	    assert pend_addr(addr_,reqt);      # the address must be pending
+	    pend_addr(addr_,req_t) := false    # mark it no longer pending
+
+	    if acqs(req).own ~= none {    	        # cached: perform an abstract grant
+		call abs.grant(addr_,gnts(msg).data,acqs(req).own)
+	    }
+	    else {		                        # uncached: perform an abstract response
+		call abs.response(addr_,gnts(msg).data,acqs(req).op,acqs(req).ltime_)
+            }
+        }
+    }
+    mixin tl_Grant before mngr.tl_Grant
+
+    ########################################
+    # specification of Finish message
+
+    action tl_Finish(msg:fns_id) = {
+        local req:acq_id, reqt:time, addr_:addr {
+	
+	    (req,reqt) := match(gnts(msg).id); # find matching request
+	    assert ~pend_addr(X,reqt);         # must be no addresses pending
+	    pend_acq(req,reqt) := false;       # mark request completed
+    }   
+    mixin tl_Finish before mngr.tl_Finish    
+
+    ########################################
+    # 
+    # Instantiate the abstract interface specification
+    #
+    ########################################
+
+
+    module abs_intf = {
+
+        ########################################
+    	# Stub actions for mixins
+
+	action release(a:addr, d:data) = {}
+	action grant(a:addr, d:data, o:ownership) = {}
+	action request(a:addr, d:data, mo:otype, lt:ltime) = {}
+	action response(a:addr, d:data, mo:otype, lt:ltime) = {}
+    }
+
+    instantiate abs : abs_intf
+    instantiate interface(ref,abs,abs,side)
 }

@@ -668,6 +668,8 @@ def ast_rewrite(x,rewrite):
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
         return Literal(x.polarity,ast_rewrite(x.atom,rewrite))
+    if isinstance(x,Quantifier):
+        return type(x)(ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
     if hasattr(x,'rewrite'):
         return x.rewrite(rewrite)
     if hasattr(x,'args'):

@@ -153,7 +153,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         else:
-            for s in ['state','set','null']:
+            for s in ['state','set','null','match']:
                 if s in reserved:
                     del reserved[s]
         return self
