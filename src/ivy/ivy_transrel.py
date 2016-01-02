@@ -479,7 +479,7 @@ class History(object):
         # A model of the post-state embeds a valuation for each time
         # in the history.
         post = and_clauses(self.post,axioms)
-#        print "post: {}".format(post)
+        print "post: {}".format(post)
         print "bounded check {"
         model = _get_model_clauses(post)
         print "} bounded check"

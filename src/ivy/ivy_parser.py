@@ -551,9 +551,24 @@ def p_action_set_lit(p):
     p[0] = SetAction(p[2])
     p[0].lineno = p.lineno(1)
 
+def p_termtuple_lp_term_comma_terms_rp(p):
+    'termtuple : LPAREN term COMMA terms RPAREN'
+    p[0] = Tuple(*([p[3]]+p[5]))
+    p[0].lineno = p.lineno(1)
+    
 def p_action_term_assign_fmla(p):
     'action : term ASSIGN fmla'
     p[0] = AssignAction(p[1],p[3])
+    p[0].lineno = p.lineno(2)
+
+def p_termtuple_lp_term_comma_terms_rp(p):
+    'termtuple : LPAREN term COMMA terms RPAREN'
+    p[0] = Tuple(*([p[2]]+p[4]))
+    p[0].lineno = p.lineno(1)
+
+def p_action_termtuple_assign_fmla(p):
+    'action : termtuple ASSIGN callatom'
+    p[0] = CallAction(*([p[3]]+list(p[1].args)))
     p[0].lineno = p.lineno(2)
 
 def p_action_term_assign_times(p):

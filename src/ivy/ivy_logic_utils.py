@@ -161,7 +161,7 @@ def substitute_ast(ast,subs):
         return subs.get(ast.rep,ast)
     if is_quantifier(ast):
         bounds = set(quantifier_vars(ast))
-        subs = {(x,y) for x,y in subs.iteritems() if x not in bounds}
+        subs = dict((x,y) for x,y in subs.iteritems() if x not in bounds)
     return ast.clone(substitute_ast(x,subs) for x in ast.args)
 
 def substitute_constants_ast(ast,subs):

@@ -43,7 +43,7 @@ axiom addr_cons(X1,Y1) = addr_cons(X2,Y2) -> X1=X2 & Y1=Y2
 relation addrset_contains(X:tl_addrset, Y:addr)
 
 axiom addrset_contains(X,addr_cons(X,Y))
-axiom addrset_contains(X,Y) & addreset_contains(Z,Y) -> X = Z
+axiom addrset_contains(X,Y) & addrset_contains(Z,Y) -> X = Z
 
 ########################################
 # type of message status
@@ -58,6 +58,7 @@ module acq = {
     individual addrs : tl_addrset     # set of requested address
     individual own:ownership          # what ownership type? (none=uncached)
     individual op : otype             # what operation?
+    individual data_ : data           # what data, if any?
     individual ltime_ : ltime         # logical time (ghost)
 }
 
@@ -74,7 +75,7 @@ module gnt = {
     individual id : tl_id             # id of requester
     individual addr_ : tl_addrmem     # low-order bits of this response
     individual own:ownership          # what ownership type? (none=uncached)
-    individual data_ : tl_data        # return value, if any
+    individual data_ : data        # return value, if any
     individual ltime_ : ltime         # logical time (ghost)
 }
 
@@ -97,8 +98,32 @@ module fns = {
 type fns_id
 instantiate fnss(X:fns_id) : fns
 
+########################################
+# structure representing Release message
 
-module tl_interface(ref,clnt,mngr) = {
+module rls = {
+    individual id : tl_id             # id of requester
+}
+
+########################################
+# Heap of release messages
+
+type rls_id
+instantiate rlss(X:rls_id) : rls
+
+
+########################################
+# Stub actions for mixins
+
+module interface_stubs = {
+    action release(a:addr, d:data) = {}
+    action grant(a:addr, d:data, o:ownership) = {}
+    action request(a:addr, d:data, mo:otype, lt:ltime) = {}
+    action response(a:addr, d:data, mo:otype, lt:ltime) = {}
+}
+
+
+module tl_interface(ref,clnt,mngr,side) = {
 
 
     ########################################
@@ -120,13 +145,15 @@ module tl_interface(ref,clnt,mngr) = {
     relation pend_acq(M:acq_id, T:time)
     relation pend_addr(A:addr, T:time)   # individual grants pending
 
+    init ~pend_acq(M,T) & ~pend_addr(A,T)
+
     ########################################
     # Find earliest pending message matching ID
 
-    action match(id:ti_id) returns(req:acq_id,reqt:time) = {
-        assert exists M. exists T. pend_acq(M,T) & acqs(M).id = id;
-        assume pend_acq(req,reqt) & acqs(req).id = gnts(msg).id;
-        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id = gnts(msg).id)
+    action match(mid:tl_id) returns(req:acq_id,reqt:time) = {
+#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id = mid;
+        assume pend_acq(req,reqt) & acqs(req).id = mid;
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id = mid)
     }
 
     ########################################
@@ -144,7 +171,7 @@ module tl_interface(ref,clnt,mngr) = {
 		assume ~(addrset_contains(acqs(msg).addrs,X) & X ~= addr_);
 
 		# perform the abstract request
-		call abs.request(addr_,acqs(msg).data,acqs(req).op,acqs(req).ltime_)
+		call abs.request(addr_,acqs(msg).data_,acqs(msg).op,acqs(msg).ltime_)
             }
 	}
 	# (cached acquires don't correspond to any abstract action) 
@@ -156,18 +183,18 @@ module tl_interface(ref,clnt,mngr) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local req:acq_id, reqt:time, addr_:addr {
+        local req:acq_id, reqt:time, maddr:addr {
 	
 	    (req,reqt) := match(gnts(msg).id); # find matching request
-	    addr_ := addr_con(acqs(req).addrs,gnts(msg).addr_);  #construct address
-	    assert pend_addr(addr_,reqt);      # the address must be pending
-	    pend_addr(addr_,req_t) := false    # mark it no longer pending
+	    maddr := addr_cons(acqs(req).addrs,gnts(msg).addr_);  #construct address
+	    assert pend_addr(maddr,reqt);      # the address must be pending
+	    pend_addr(maddr,reqt) := false;    # mark it no longer pending
 
 	    if acqs(req).own ~= none {    	        # cached: perform an abstract grant
-		call abs.grant(addr_,gnts(msg).data,acqs(req).own)
+		call abs.grant(maddr,gnts(msg).data_,acqs(req).own)
 	    }
 	    else {		                        # uncached: perform an abstract response
-		call abs.response(addr_,gnts(msg).data,acqs(req).op,acqs(req).ltime_)
+		call abs.response(maddr,gnts(msg).data_,acqs(req).op,acqs(req).ltime_)
             }
         }
     }
@@ -177,11 +204,12 @@ module tl_interface(ref,clnt,mngr) = {
     # specification of Finish message
 
     action tl_Finish(msg:fns_id) = {
-        local req:acq_id, reqt:time, addr_:addr {
+        local req:acq_id, reqt:time {
 	
-	    (req,reqt) := match(gnts(msg).id); # find matching request
+	    (req,reqt) := match(fnss(msg).id); # find matching request
 	    assert ~pend_addr(X,reqt);         # must be no addresses pending
-	    pend_acq(req,reqt) := false;       # mark request completed
+	    pend_acq(req,reqt) := false       # mark request completed
+        }
     }   
     mixin tl_Finish before mngr.tl_Finish    
 
@@ -192,17 +220,82 @@ module tl_interface(ref,clnt,mngr) = {
     ########################################
 
 
-    module abs_intf = {
-
-        ########################################
-    	# Stub actions for mixins
-
-	action release(a:addr, d:data) = {}
-	action grant(a:addr, d:data, o:ownership) = {}
-	action request(a:addr, d:data, mo:otype, lt:ltime) = {}
-	action response(a:addr, d:data, mo:otype, lt:ltime) = {}
-    }
-
-    instantiate abs : abs_intf
+    instantiate abs : interface_stubs
     instantiate interface(ref,abs,abs,side)
 }
+
+
+################################################################################
+#
+# Generic model of a client. This performs arbitrary client actions, except
+# the it guarantees to use only ID's from the "client" side of the interface
+# as defined by its parameter "side".
+#
+# TODO: should be able to generate this
+#
+################################################################################
+
+module tl_generic_client(mngr,ref,side) = {
+   action tl_Grant(msg:gnt_id) = {
+   }
+
+   action step = {
+     local lt:ltime, lt1:ltime, sid:id {
+        assume side(sid) = client;
+        if * {
+	   local a:acq_id {call mngr.tl_Acquire(a)}
+        } else if * {
+	   local f:fns_id {call mngr.tl_Finish(f)}
+        } else if * {
+	   call ref.perform(lt,sid)
+        } else {
+	   call ref.fuse(lt,lt1,sid)
+        }
+     }
+   }
+}
+
+################################################################################
+#
+# Generic model of a manager. This performs arbitrary manager actions, except
+# the it guarantees to use only ID's from the "manager" side of the interface
+# as defined by its parameter "side".
+#
+# TODO: should be able to generate this
+#
+################################################################################
+
+module tl_generic_manager(clnt,ref,side) = {
+   action tl_Acquire(msg:acq_id) = {}
+   action tl_Finish(msg:fns_id) = {}
+   action step = {
+     local lt:ltime, lt1:ltime, sid:id {
+        assume side(sid) = manager;
+        if * {
+	   local g:gnt_id {call clnt.tl_Grant(g)}
+        } else if * {
+	   call ref.perform(lt,sid)
+        } else {
+	   call ref.fuse(lt,lt1,sid)
+        }
+     }
+   }
+}
+
+
+# ## just for a test
+
+# module stubs = {
+#     action tl_Acquire(msg:acq_id) = {}
+#     action tl_Grant(msg:gnt_id) = {}
+#     action tl_Finish(msg:fns_id) = {}
+# }
+# instantiate sys : stubs
+# instantiate ref : reference
+# individual side_(I:id) : side
+# instantiate intf : tl_interface(ref,sys,sys,side_)
+
+# export sys.tl_Acquire
+# export sys.tl_Grant
+# export sys.tl_Finish
+

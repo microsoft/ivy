@@ -347,6 +347,10 @@ class RelationSort(Sort):
     def defines(self):
         return []
     
+class Tuple(AST):
+    def __repr__(self):
+        return '(' + ','.join(repr(s) for s in self.args) + ')' 
+
 def lineno(c):
     try:
         return c.lineno

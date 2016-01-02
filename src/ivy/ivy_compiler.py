@@ -114,8 +114,16 @@ def compile_app(self):
     if expr_context and top_context and self.rep in top_context.actions:
         returns = top_context.actions[self.rep]
         if len(returns) != 1:
-            raise IvyError(self,"wrong number of return values from action {}".format(self.rep))
-#        print type(returns[0].sort)
+            raise IvyError(self,"wrong number of return values")
+            # TODO: right now we can't do anything with multiple returns
+            sorts = [find_sort(r.sort) for r in returns]
+            ress = []
+            for sort in sorts:
+                res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
+                expr_context.local_syms.append(res)
+                ress.append(res)
+            expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
+            return ivy_ast.Tuple(*ress)
         sort = find_sort(returns[0].sort)
         res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
         expr_context.local_syms.append(res)
@@ -204,7 +212,15 @@ def compile_assign(self):
     local_syms = []
     with ExprContext(code,local_syms):
         args = [sortify_with_inference(a) for a in self.args]
-        code.append(AssignAction(*args))
+        if isinstance(args[0],ivy_ast.Tuple):
+            if not isinstance(args[1],ivy_ast.Tuple) or len(args[0].args) != len(args[1].args):
+                raise IvyError(self,"wrong number of values in assignment");
+            for lhs,rhs in zip(args[0].args,args[1].args):
+                code.append(AssignAction(lhs,rhs))
+        elif isinstance(args[1],ivy_ast.Tuple):
+            raise IvyError(self,"wrong number of values in assignment");
+        else:
+            code.append(AssignAction(*args))
         if len(code) == 1:
             return code[0]
         return LocalAction(*(local_syms + [Sequence(*code)]))
@@ -608,9 +624,9 @@ def ivy_compile(ag,decls):
                 for a in ag.actions:
                     ag.public_actions.add(a)
 
-#            print "actions:"
-#            for x,y in ag.actions.iteritems():
-#                print iu.pretty("action {} = {}".format(x,y))
+            print "actions:"
+            for x,y in ag.actions.iteritems():
+                print iu.pretty("action {} = {}".format(x,y))
 
 
     ivy_logic.sig = ag.domain.sig # TODO: make this an environment

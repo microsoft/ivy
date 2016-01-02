@@ -398,8 +398,8 @@ class HerbrandModel(object):
         for tup in itertools.product(*ranges):
             interp = zip(z3_vs,tup)
             fact = substitute(z3_fmla,*interp)
-            fact_val = m.eval(fact)
-##            print "%s = %s" % (fact,fact_val)
+            fact_val = m.eval(fact,model_completion=True)
+#            print "%s = %s" % (fact,fact_val)
             if z3.is_true(fact_val):
                 args = [constant_from_z3(y) for y in tup]
                 insts.append(args)
@@ -776,7 +776,7 @@ def function_model_to_clauses(h,f):
     if isinstance(rng,ivy_logic.EnumeratedSort):
         for c in rng.defines():
             eq = ivy_logic._eq_lit(fterm,ivy_logic.Constant(ivy_logic.Symbol(c,rng)))
-#            print eq
+#            print "function_model_to_clauses: {}".format(eq)
             get_lit_facts(h,eq,res) 
     # non-enumerated function types
     else:

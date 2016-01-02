@@ -1,0 +1,115 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is a model of an unordered channel using TileLink concrete interface
+#
+################################################################################
+
+include tilelink_concrete_spec
+
+########################################
+# type of message ID
+type msg_id
+
+################################################################################
+#
+# This is the channel model. It is a bi-directional
+# unordered, non-duplicating channel.
+#
+################################################################################
+
+
+module dut(id,clnt,mngr,ref) = {
+
+    ########################################
+    # The message heap
+
+    relation acqs(I:msg_id,M:acq_id)
+    relation gnts(I:msg_id,M:gnt_id)
+    relation fnss(I:msg_id,M:fns_id)
+
+    ########################################
+    # initially the channels are empty
+
+    init ~acqs(I,A) & ~gnts(I,G) & ~fnss(I,F)
+
+    ########################################
+    # acquire action called by the client side
+    #
+    # this just enqueues a acquire message
+
+    action tl_Acquire(msg:acq_id) = {
+        local mid:msg_id {
+	    assume ~acqs(mid,msg);
+	    acqs(mid,msg) := true
+        }
+    }
+
+    ########################################
+    # grant action called by the manager side
+    #
+    # this just enqueues a grant message
+
+    action tl_Grant(msg:gnt_id) = {
+        local mid:msg_id {
+	    assume ~gnts(mid,msg);
+	    gnts(mid,msg) := true
+        }
+    }
+
+    ########################################
+    # finish action called by the client side
+    #
+    # this just enqueues a finish message
+
+    action tl_Finish(msg:fns_id) = {
+        local mid:msg_id {
+	    assume ~fnss(mid,msg);
+	    fnss(mid,msg) := true
+        }
+    }
+
+
+    ########################################
+    # internal action (step)
+    #
+    # pick an arbitary message and deliver it.
+
+    action step = {
+	local mid:msg_id {
+            if * {
+     	        local a:acq_id {
+		    assume acqs(mid,a);
+		    acqs(mid,a) := false; # remove from channel
+		    call mngr.tl_Acquire(a)
+                }
+            } else if * {
+     	        local a:gnt_id {
+		    assume gnts(mid,a);
+		    gnts(mid,a) := false; # remove from channel
+		    call clnt.tl_Grant(a)
+                }
+	    } else {
+     	        local a:fns_id {
+		    assume fnss(mid,a);
+		    fnss(mid,a) := false; # remove from channel
+		    call mngr.tl_Finish(a)
+                }
+	    }
+	}
+    }
+}
+
+################################################################################
+#
+# Verify the module using the standard testbench
+#
+################################################################################
+
+include tilelink_concrete_two_port_testbench
+
+# The channel makes these assumptions about the system configuration:
+
+# 1) The cached address set on front and back is the same.
+axiom front.cached(A) <-> back.cached(A)

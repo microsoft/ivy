@@ -305,11 +305,29 @@ def is_qf(term):
 def is_prenex_universal(term):
     if isinstance(term,lg.ForAll):
         return is_prenex_universal(term.body)
+    if isinstance(term,lg.Not):
+        return is_prenex_existential(term.args[0])
+    return is_qf(term)
+
+def is_prenex_existential(term):
+    if isinstance(term,lg.Exists):
+        return is_prenex_existential(term.body)
+    if isinstance(term,lg.Not):
+        return is_prenex_universal(term.args[0])
     return is_qf(term)
 
 def drop_universals(term):
     if isinstance(term,lg.ForAll):
         return drop_universals(term.body)
+    if isinstance(term,lg.Not):
+        return lg.Not(drop_existentials(term.args[0]))
+    return term
+
+def drop_existentials(term):
+    if isinstance(term,lg.Exists):
+        return drop_existentials(term.body)
+    if isinstance(term,lg.Not):
+        return lg.Not(drop_universals(term.args[0]))
     return term
 
 def Constant(sym):
