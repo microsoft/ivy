@@ -642,7 +642,10 @@ def show_graph(g,tk=None,frame=None,parent=None):
     elif frame == None:
         frame = Toplevel(tk)
     legend = Frame(frame)
+#    legend = Tix.ScrolledWindow(frame, scrollbar=Y) # just the vertical scrollbar
     legend.pack(side=RIGHT)
+    menubar = uu.MenuBar(frame)
+    menubar.pack(side=TOP,fill=X)
     hbar=Scrollbar(frame,orient=HORIZONTAL)
     hbar.pack(side=BOTTOM,fill=X)
     vbar=Scrollbar(frame,orient=VERTICAL)
@@ -659,8 +662,9 @@ def show_graph(g,tk=None,frame=None,parent=None):
     update_relbuttons(gw,relbuttons)
     gw.set_update_callback(functools.partial(update_relbuttons,gw,relbuttons))
 
-    menubar = Menu(frame)
-    actionmenu = Menu(menubar, tearoff=0)
+#    menubar = Menu(frame)
+    actionmenu = menubar.add("Action")
+#    actionmenu = Menu(menubar, tearoff=0)
     actionmenu.add_command(label="Undo",command=gw.undo)
     actionmenu.add_command(label="Redo",command=gw.redo)
     actionmenu.add_command(label="Concrete",command=gw.concrete)
@@ -674,11 +678,11 @@ def show_graph(g,tk=None,frame=None,parent=None):
     actionmenu.add_command(label="Diagram",command=gw.diagram)
     actionmenu.add_command(label="Remember",command=gw.remember)
     actionmenu.add_command(label="Export",command=gw.export)
-    menubar.add_cascade(label="Action", menu=actionmenu)
-    viewmenu = Menu(menubar, tearoff=0)
+#    menubar.add_cascade(label="Action", menu=actionmenu)
+    viewmenu = menubar.add("View")
     viewmenu.add_command(label="Add relation",command=gw.add_relation)
-    menubar.add_cascade(label="View", menu=viewmenu)
-    frame.config(menu=menubar)
+#    menubar.add_cascade(label="View", menu=viewmenu)
+#    frame.config(menu=menubar)
     return gw
 
     # undo = Button(legend,text="Undo",command=gw.undo)

@@ -7,6 +7,18 @@ import Tix
 import ivy_utils as iu
 import functools
 
+class MenuBar(Frame):
+    def __init__(self,root):
+        Frame.__init__(self,root)
+        foo = Frame(self)
+        foo.pack(side=RIGHT,expand=1)
+    def add(self,label):
+        w = Menubutton(self,text=label)
+        w.pack(side=LEFT)
+        m = Menu(w, tearoff=0)
+        w.config(menu=m)
+        return m
+
 def center_window(toplevel):
     toplevel.update_idletasks()
     w = toplevel.winfo_screenwidth()

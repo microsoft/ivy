@@ -8,6 +8,7 @@ import copy
 import functools
 from Tkinter import *
 import Tkconstants, tkFileDialog
+import Tix
 import pickle
 from ivy_concept_space import clauses_to_concept
 import ivy_actions
@@ -47,27 +48,39 @@ modes = ["abstract","concrete","bounded"]
 default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
 class AnalysisGraphWidget(Canvas):
-    def __init__(self,tk,g,root=None):
+    def __init__(self,tk,g,root=None,toplevel=None):
         if root == None:
             root = tk
-        menubar = Menu(root)
-        filemenu = Menu(menubar, tearoff=0)
+        if toplevel==None:
+            toplevel=root
+#        menubar = Menu(toplevel)
+        menubar = uu.MenuBar(root)
+        menubar.pack(side=TOP,fill=X)
+#        filemenu = Menu(menubar, tearoff=0)
+        filemenu = menubar.add("File")
         filemenu.add_command(label="Save",command=self.save)
         filemenu.add_command(label="Save abstraction",command=self.save_abstraction)
         filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=root.quit)
-        menubar.add_cascade(label="File", menu=filemenu)
-        modemenu = Menu(menubar, tearoff=0)
+        filemenu.add_command(label="Remove tab", command=lambda self=self: self.ui_parent.remove(self))
+        filemenu.add_command(label="Exit", command=tk.quit)
+#        menubar.add_cascade(label="File", menu=filemenu)
+#        modemenu = Menu(menubar, tearoff=0)
+        modemenu = menubar.add("Mode")
         self.mode = StringVar(root,default_mode.get())
         modemenu.add("radiobutton",label="Concrete",variable=self.mode,value="concrete")
         modemenu.add("radiobutton",label="Abstract",variable=self.mode,value="abstract")
         modemenu.add("radiobutton",label="Bounded",variable=self.mode,value="bounded")
-        menubar.add_cascade(label="Mode", menu=modemenu)
-        actionmenu = Menu(menubar, tearoff=0)
+#        menubar.add_cascade(label="Mode", menu=modemenu)
+#        actionmenu = Menu(menubar, tearoff=0)
+        actionmenu = menubar.add("Action")
         actionmenu.add_command(label="Recalculate all",command=self.recalculate_all)
         actionmenu.add_command(label="Show reachable states",command=self.show_reachable_states)
-        menubar.add_cascade(label="Action", menu=actionmenu)
-        root.config(menu=menubar)
+#        menubar.add_cascade(label="Action", menu=actionmenu)
+#        toplevel.config(menu=menubar)
+
+#        sw= Tix.ScrolledWindow(root, scrollbar=BOTH) # just the vertical scrollbar
+#        sw.pack(fill=BOTH, expand=1)
+
         Canvas.__init__(self,root)
         self.g = g
         self.tk = tk
@@ -155,7 +168,7 @@ class AnalysisGraphWidget(Canvas):
             self.current_concept_graph.set_parent_state(n,clauses)
             return
         sg = self.g.concept_graph(n,clauses)
-        self.current_concept_graph = ivy_graph_ui.show_graph(sg,self.tk,parent=self)
+        self.current_concept_graph = ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
     def left_click_node(self,event,n):
         if n.clauses != None:
             self.view_state(n,n.clauses)
@@ -241,7 +254,7 @@ class AnalysisGraphWidget(Canvas):
         self.rebuild()
 
     def show_reachable_states(self):
-        ui_create(self.reachable_tree,self.tk,Toplevel(self.tk))
+        ui_create(self.reachable_tree)
 
     def recalculate_all(self):
         done = set()
@@ -313,7 +326,7 @@ class AnalysisGraphWidget(Canvas):
                                         command=functools.partial(self.view_ag,res))
 
     def view_ag(self,res):
-        ui_create(res,self.tk,Toplevel(self.tk))
+        ui_create(res)
             
     def find_extension(self,node):
         try:
@@ -462,7 +475,7 @@ class AnalysisGraphWidget(Canvas):
             uu.center_window_on_window(dlg,self.root)
             self.tk.wait_window(dlg)
             return
-        ui_create(res,self.tk,Toplevel(self.tk))
+        ui_create(res)
 
 
 def state_equation_label(se):
@@ -470,30 +483,72 @@ def state_equation_label(se):
     al = str(se.args[1].rep)
     return al if ac is None else al + ' -> ' + str(se.args[0])
 
-def ui_create(art,tk,frame):
-    if not hasattr(art,'state_graphs'):
-        art.state_graphs = []
-    hbar=Scrollbar(frame,orient=HORIZONTAL)
-    hbar.pack(side=BOTTOM,fill=X)
-    vbar=Scrollbar(frame,orient=VERTICAL)
-    vbar.pack(side=RIGHT,fill=Y)
-    gw = AnalysisGraphWidget(tk,art,frame)
-    hbar.config(command=gw.xview)
-    vbar.config(command=gw.yview)
-    gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-    for sg in art.state_graphs:
-        ivy_graph_ui.show_graph(sg,tk,parent=gw)
+class IvyUI(object):
+    def __init__(self,tk=None,frame=None):
+        if tk == None:
+            tk = Tix.Tk()
+            tk.tk_setPalette(background='white')
+            tk.wm_title("ivy")
+            frame = tk
+        elif frame == None:
+            frame = Toplevel(tk)
+        self.tk = tk
+        self.frame = frame
+        self.notebook = Tix.NoteBook(frame)
+        self.notebook.pack(fill=BOTH,expand=1)
+        self.tab_counter = 0
+        self.tabs = 0
+        
+    def add(self,art,name=None,label=None):
+        self.tab_counter += 1
+        self.tabs += 1
+        if name == None:
+            name = "sheet_{}".format(self.tab_counter)
+        if label == None:
+            label = "Sheet {}".format(self.tab_counter)
+        tk = self.tk
+        nb = self.notebook
+        if not hasattr(art,'state_graphs'):
+            art.state_graphs = []
+        tab = nb.add(name,label=label) 
+        pw=Tix.PanedWindow(tab,orientation='horizontal')
+        pw.pack(fill=BOTH,expand=1)
+        frame=pw.add('f1')
+        state_frame=pw.add('f2')
+        hbar=Scrollbar(frame,orient=HORIZONTAL)
+        hbar.pack(side=BOTTOM,fill=X)
+        vbar=Scrollbar(frame,orient=VERTICAL)
+        vbar.pack(side=RIGHT,fill=Y)
+        gw = AnalysisGraphWidget(tk,art,frame)
+        gw.state_frame=state_frame
+        gw.ui_parent = self
+        gw.ui_tab_name = name
+        hbar.config(command=gw.xview)
+        vbar.config(command=gw.yview)
+        gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+        for sg in art.state_graphs:
+            ivy_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame)
+        nb.raise_page(name)
+
+    def remove(self,art):
+        self.notebook.delete(art.ui_tab_name)
+        self.tabs -= 1
+        if self.tabs == 0:
+            self.tk.quit()
+
+ui = None
+
+def ui_create(art,tk=None,frame=None):
+    # if ui exists, ignore the requested frame and put the art in a
+    # tab of the global ui
+    global ui
+    if ui == None:
+        ui = IvyUI(tk,frame)
+    ui.add(art)
 
 def ui_main_loop(art, tk = None, frame = None):
-    if tk == None:
-        tk = Tk()
-        tk.tk_setPalette(background='white')
-        tk.wm_title("ivy")
-        frame = tk
-    elif frame == None:
-        frame = Toplevel(tk)
     ui_create(art,tk,frame)
-    tk.mainloop()
+    ui.tk.mainloop()
 
 
 if __name__ == '__main__':
