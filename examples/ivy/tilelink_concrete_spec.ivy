@@ -198,7 +198,7 @@ module tl_interface(ref,clnt,mngr,side) = {
             }
         }
     }
-    mixin tl_Grant before mngr.tl_Grant
+    mixin tl_Grant before clnt.tl_Grant
 
     ########################################
     # specification of Finish message
