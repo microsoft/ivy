@@ -34,10 +34,13 @@ class ParseError(Exception):
     def __init__(self,lineno,token,message):
 #        print "initializing"
         self.lineno, self.token,self.message = lineno,token,message
+        if iu.filename:
+            self.filename = iu.filename
     def __repr__(self):
-        return (("line {}: ".format(self.lineno) if self.lineno != None else '')
+        return ( ("{}: ".format(self.filename) if hasattr(self,'filename') else '')
+                 + ("line {}: ".format(self.lineno) if self.lineno != None else '')
                  + ("token '{}': ".format(self.token) if self.token != None else '')
-                + self.message )
+                 + self.message )
     
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
@@ -49,6 +52,9 @@ class Redefining(ParseError):
 error_list = []
 
 stack = []
+
+def get_lineno(p,n):
+    return (iu.filename,p.lineno(n))
 
 def report_error(error):
     error_list.append(error)
@@ -132,7 +138,7 @@ def p_top_axiom_fmla(p):
     'top : top AXIOM fmla'
     p[0] = p[1]
     d = AxiomDecl(p[3])
-    d.lineno = p.lineno(2)
+    d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
 def p_top_conjecture_fmla(p):
@@ -214,17 +220,17 @@ def p_tatoms_tatoms_comma_tatom(p):
 def p_tatom_symbol(p):
     'tatom : SYMBOL'
     p[0] = Atom(p[1],[])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_tatom_symbol_targs(p):
     'tatom : SYMBOL targs'
     p[0] = Atom(p[1],p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_tatom_lp_symbol_relop_symbol_rp(p):
     'tatom : LPAREN var relop var RPAREN'
     p[0] = Atom(p[3],[p[2],p[4]])
-    p[0].lineno = p.lineno(3)
+    p[0].lineno = get_lineno(p,3)
 
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
@@ -240,7 +246,7 @@ def p_top_init_fmla(p):
     'top : top INIT fmla'
     p[0] = p[1]
     d = InitDecl(p[3])
-    d.lineno = p.lineno(2)
+    d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
 def p_top_update_terms_from_terms_upaxes(p):
@@ -256,14 +262,14 @@ def p_top_type_symbol(p):
     'top : top TYPE SYMBOL'
     p[0] = p[1]
     tdfn = TypeDef(p[3],UninterpretedSort(p[3]))
-    tdfn.lineno = p.lineno(3)
+    tdfn.lineno = get_lineno(p,3)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
     'top : top TYPE SYMBOL EQ sort'
     p[0] = p[1]
     tdfn = TypeDef(p[3],p[5])
-    tdfn.lineno = p.lineno(4)
+    tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))
 
 def p_tsyms_tsym(p):
@@ -286,7 +292,7 @@ def p_targs_lparen_tsyms_rparen(p):
 def p_param_term_colon_symbol(p):
     'param : SYMBOL COLON SYMBOL'
     p[0] = App(p[1])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
     p[0].sort = p[3]
 
 def p_params_param(p):
@@ -325,17 +331,17 @@ def p_optactualreturns(p):
 def p_tapp_symbol(p):
     'tapp : SYMBOL'
     p[0] = App(p[1])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_tapp_symbol_targs(p):
     'tapp : SYMBOL targs'
     p[0] = App(p[1],*p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_tapp_lp_symbol_infix_symbol_rp(p):
     'tapp : LPAREN var infix var RPAREN'
     p[0] = App(p[3],p[2],p[4])
-    p[0].lineno = p.lineno(3)
+    p[0].lineno = get_lineno(p,3)
 
 
 def p_tterm_term(p):
@@ -443,39 +449,39 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):
         'top : top MIXIN callatom BEFORE callatom'
         d = MixinDecl(MixinBeforeDef(p[3],p[5]))
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_mixin_callatom_after_callatom(p):
         'top : top MIXIN callatom AFTER callatom'
         d = MixinDecl(MixinAfterDef(p[3],p[5]))
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_isolate_callatom_eq_callatoms(p):
         'top : top ISOLATE callatom EQ callatoms'
         d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
         d.args[0].with_args = 0
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_isolate_callatom_eq_callatoms_with_callatoms(p):
         'top : top ISOLATE callatom EQ callatoms WITH callatoms'
         d = IsolateDecl(IsolateDef(*([p[3]] + p[5] + p[7])))
         d.args[0].with_args = len(p[7])
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_export_callatom(p):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_delegate_callatom(p):
         'top : top DELEGATE callatoms'
         d = DelegateDecl(*[DelegateDef(s) for s in p[3]])
-        d.lineno = p.lineno(2)
+        d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
 
@@ -496,7 +502,7 @@ def p_top_assert_symbol_arrow_assert_rhs(p):
     'top : top ASSERT SYMBOL ARROW assert_rhs'
     p[0] = p[1]
     thing = Implies(Atom(p[3],[]),p[5])
-    thing.lineno = p.lineno(4)
+    thing.lineno = get_lineno(p,4)
     p[0].declare(AssertDecl(thing))
 
 def p_oper_symbol(p):
@@ -515,7 +521,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
     'top : top INTERPRET oper ARROW oper'
     p[0] = p[1]
     thing = InterpretDecl(Implies(Atom(p[3],[]),Atom(p[5],[])))
-    thing.lineno = p.lineno(4)
+    thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
 
@@ -530,7 +536,7 @@ def p_loc_symbol(p):
 def p_action_lcb_rcb(p):
     'action : LCB RCB'
     p[0] = Sequence()
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_lcb_action_rcb(p):
     'action : LCB action RCB'
@@ -539,85 +545,85 @@ def p_action_lcb_action_rcb(p):
 def p_action_assume(p):
     'action : ASSUME fmla'
     p[0] = AssumeAction(p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_assert(p):
     'action : ASSERT fmla'
     p[0] = AssertAction(p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_set_lit(p):
     'action : SET lit'
     p[0] = SetAction(p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_termtuple_lp_term_comma_terms_rp(p):
     'termtuple : LPAREN term COMMA terms RPAREN'
     p[0] = Tuple(*([p[3]]+p[5]))
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
     
 def p_action_term_assign_fmla(p):
     'action : term ASSIGN fmla'
     p[0] = AssignAction(p[1],p[3])
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_termtuple_lp_term_comma_terms_rp(p):
     'termtuple : LPAREN term COMMA terms RPAREN'
     p[0] = Tuple(*([p[2]]+p[4]))
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_termtuple_assign_fmla(p):
     'action : termtuple ASSIGN callatom'
     p[0] = CallAction(*([p[3]]+list(p[1].args)))
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_action_term_assign_times(p):
     'action : term ASSIGN TIMES'
     p[0] = HavocAction(p[1])
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_action_if_fmla_lcb_action_rcb(p):
     'action : IF fmla LCB action RCB'
     p[0] = IfAction(p[2],p[4])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
     'action : IF fmla LCB action RCB ELSE action'
     p[0] = IfAction(p[2],p[4],p[7])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
     'action : IF TIMES LCB action RCB ELSE action'
     p[0] = ChoiceAction(p[4],p[7])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,2]:
     def p_action_field_assign_term(p):
         'action : term DOT SYMBOL ASSIGN term'
         p[0] = AssignFieldAction(p[1],p[3],p[5])
-        p[0].lineno = p.lineno(4)
+        p[0].lineno = get_lineno(p,4)
 
 
     def p_action_field_assign_null(p):
         'action : term DOT SYMBOL ASSIGN NULL'
         p[0] = NullFieldAction(p[1],p[3])
-        p[0].lineno = p.lineno(4)
+        p[0].lineno = get_lineno(p,4)
 
     def p_action_field_assign_field(p):
         'action : term DOT SYMBOL ASSIGN term DOT SYMBOL'
         p[0] = CopyFieldAction(p[1],p[3],p[5],p[7])
-        p[0].lineno = p.lineno(4)
+        p[0].lineno = get_lineno(p,4)
 
     def p_action_field_assign_false(p):
         'action : term DOT SYMBOL ASSIGN FALSE'
         p[0] = NullFieldAction(p[1],p[3])
-        p[0].lineno = p.lineno(4)
+        p[0].lineno = get_lineno(p,4)
 
 def p_action_instantiate_atom(p):
     'action : INSTANTIATE callatom'
 #    p[0] = InstantiateAction(app_to_atom(p[2]))
     p[0] = InstantiateAction(p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_callatom_atom(p):
     'callatom : atom'
@@ -628,14 +634,14 @@ if iu.get_numeric_version() <= [1,2]:
     def p_callatom_callatom_colon_callatom(p):
         'callatom : callatom COLON callatom'
         p[0] = compose_atoms(p[1],p[3])
-        p[0].lineno = p.lineno(1)
+        p[0].lineno = get_lineno(p,1)
 
 else:
 
     def p_callatom_callatom_dot_callatom(p):
         'callatom : callatom DOT callatom'
         p[0] = compose_atoms(p[1],p[3])
-        p[0].lineno = p.lineno(1)
+        p[0].lineno = get_lineno(p,1)
 
 
 def p_callatoms_callatom(p):
@@ -650,17 +656,17 @@ def p_callatoms_callatoms_callatom(p):
 # def p_action_call_optreturns_callatom(p):
 #     'action : CALL optactualreturns callatom'
 #     p[0] = CallAction(*([p[3]] + p[2]))
-#     p[0].lineno = p.lineno(1)
+#     p[0].lineno = get_lineno(p,1)
 
 def p_action_call_callatom(p):
     'action : CALL callatom'
     p[0] = CallAction(p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_call_callatom_assign_callatom(p):
     'action : CALL callatom ASSIGN callatom'
     p[0] = CallAction(p[4],p[2])
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_action_semi_action(p):
     'action : action SEMI action'
@@ -678,7 +684,7 @@ def p_action_local_params_lcb_action_rcb(p):
     subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
     action = subst_prefix_atoms_ast(p[4],subst,None,None)
     p[0] = LocalAction(*(lsyms+[action]))
-    p[0].lineno = p.lineno(1)
+    p[0].lineno = get_lineno(p,1)
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'
@@ -718,7 +724,7 @@ def p_cdefns_cdefns_comma_cdefn(p):
 def p_cdefn_atom_expr(p):
     'cdefn : atom EQ expr'
     p[0] = Definition(app_to_atom(p[1]),p[3])
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_defns_defn(p):
     'defns : defn'
@@ -732,7 +738,7 @@ def p_defns_defns_comma_defn(p):
 def p_defn_atom_fmla(p):
     'defn : atom EQ fmla'
     p[0] = Definition(app_to_atom(p[1]),p[3])
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_expr_fmla(p):
     'expr : LCB fmla RCB'
@@ -753,12 +759,12 @@ def p_expr_exprterm(p):
 def p_expr_exprterm_relop_exprterm(p):
     'expr : exprterm relop exprterm'
     p[0] = NamedSpace(Literal(1,Atom(p[2],[p[1],p[3]])))
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_expr_exprterm_tildaeq_exprterm(p):
     'expr : exprterm TILDAEQ exprterm'
     p[0] = NamedSpace(Literal(0,Atom('=',[p[1],p[3]])))
-    p[0].lineno = p.lineno(2)
+    p[0].lineno = get_lineno(p,2)
 
 def p_expr_tilda_atom(p):
     'expr : TILDA expr'

@@ -160,9 +160,32 @@ def distinct_obj_renaming(names1,names2):
     rn = UniqueRenamer('',names2)
     return dict((s,s.rename(rn)) for s in names1)
 
+class SourceFile(object):
+    """ Context Manager that temporarily sets values of parameters by
+    name.  See class "Parameter".
+    """
+
+    def __init__(self,fname):
+        self.fname = fname
+
+    def __enter__(self):
+        global filename
+        self.oldf = filename
+        filename = self.fname
+        return self
+
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global filename
+        filename = self.oldf
+        return False # don't block any exceptions
+
+filename = None
+
 class IvyError(Exception):
     def __init__(self,ast,msg):
         self.lineno = ast.lineno if hasattr(ast,'lineno') else None
+        if isinstance(self.lineno,tuple):
+            self.filename,self.lineno = self.lineno
         self.msg = msg
 #        print repr(self)
 #        assert False
@@ -325,7 +348,7 @@ class ErrorList(IvyError):
         self.errors = errors
     def __repr__(self):
         pre = (self.filename + ': ') if hasattr(self,'filename') else ''
-        return '\n'.join((pre + repr(e)) for e in self.errors)
+        return '\n'.join((repr(e) if hasattr(e,'filename') else pre + repr(e)) for e in self.errors)
     __str__ = __repr__
 
 

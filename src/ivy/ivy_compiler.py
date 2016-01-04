@@ -43,7 +43,10 @@ class ASTContext(object):
 #            assert False
             raise IvyError(self.ast,str(exc_val))
         if exc_type == IvyError and exc_val.lineno == None and hasattr(self.ast,'lineno'):
-            exc_val.lineno = self.ast.lineno
+            if isinstance(self.ast.lineno,tuple):
+                exc_val.filename, exc_val.lineno = self.ast.lineno
+            else:
+                exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
 
 ivy_ast.Variable.get_sort = lambda self: ivy_logic.find_sort(self.sort.rep)
@@ -661,14 +664,21 @@ def read_module(f,nested=False):
     elif header == '//lang dafny1':
         decls = dc.parse_to_ivy(s)
     else:
-        raise IvyError(None,'file must begin with "#lang ivyN.N" or "//lang dafnyN.N"') 
+        err = IvyError(None,'file must begin with "#lang ivyN.N"')
+        err.lineno = 1
+        if iu.filename:
+            err.filename = iu.filename
+        raise err
     return decls
 
 def import_module(name):
-    f = open(name + '.ivy','r')
+    fname = name + '.ivy'
+    f = open(fname,'r')
     if not f:
         raise IvyError(None,"module {} not found in current directory".format(name))
-    return read_module(f,nested=True)
+    with iu.SourceFile(fname):
+        mod = read_module(f,nested=True)
+    return mod
 
 def ivy_load_file(f,ag):
     decls = read_module(f)

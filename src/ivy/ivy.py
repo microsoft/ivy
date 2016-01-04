@@ -10,6 +10,7 @@ from ivy_ui import ui_main_loop
 from ivy_utils import Parameter, set_parameters
 import ivy_logic
 import proof as pf
+import ivy_utils as iu
 #import tactics_api as ta
 
 # mode = Parameter("mode",None)
@@ -91,9 +92,11 @@ def ivy_init():
             usage()
         try:
 #            print "loading file %s" % fn
-            ivy_load_file(f,ag)
+            with iu.SourceFile(fn):
+                ivy_load_file(f,ag)
         except IvyError as e:
-            e.filename = fn
+            if not hasattr(e,'filename'):
+                e.filename = fn
             print repr(e)
             sys.exit(1)
     return ag
