@@ -4,6 +4,7 @@
 import ivy_actions
 from ivy_interp import *
 from ivy_graph import standard_graph
+import ivy_utils as iu
 from string import *
 import copy
 import functools
@@ -279,7 +280,7 @@ class AnalysisGraph(object):
         for state in self.states:
             if hasattr(state,'expr') and is_action_app(state.expr):
                 expr = state.expr
-                prestate,op,label,poststate = expr.args[0],expr.rep,str(expr.rep),state
+                prestate,op,label,poststate = expr.args[0],expr.rep,iu.pretty(str(expr.rep),max_lines=4),state
                 self.transitions.append((prestate,op,label,poststate))
 
     def decompose_state(self,state):

@@ -128,10 +128,18 @@ class AnalysisGraphWidget(Canvas):
                 self.node_to_handle[i] = handle
                 handle_to_node[handle] = s
         i = 0
+        edge_handles = []
         for transition in g.transitions:
                 x,op,label,y = transition
+                # Curly braces don't survive tcldot (even if they balance). We work around this by replacing them with digraphs
+                # and then fixing it below by modding the text of the canvas items. Also, we want our code labels to be left 
+                # justified, so we end the lines with \l, which dot recognizes. Note the backslashes are escaped, since this
+                # is *not* a special character, it is a two-character sequence.
+                label = label.replace('}',']-').replace('{','-[')
+                label = label.replace('\n','\\l')+'\\l'
                 handle = tk.eval('$graph addedge "' + ("%d" % x.id) + '" "' + ("%d" % y.id) + '" label {' + label + '} fontsize 10 penwidth 2.0')
                 handle = 'edge' + str(i+1)  if handle.startswith('edge0x') else handle
+                edge_handles.append(handle)
                 i += 1
                 if isinstance(op,AnalysisSubgraph):
                     self.tag_bind("0" + handle, "<Button-1>", lambda y, op=op: op.display(tk))
@@ -152,6 +160,13 @@ class AnalysisGraphWidget(Canvas):
             self.tag_bind("1" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
             self.tag_bind("0" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
             self.tag_bind("1" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
+        for x in edge_handles:
+            items = self.find_withtag("0" + x)
+            print 'items:{}'.format(items)
+            for item in items:
+                text = self.itemcget(item,'text')
+                text = text.replace('-[','{').replace(']-','}')
+                self.itemconfig(item,text=text)
         self.show_mark(True)
 
     def update_node_color(self,node):
@@ -554,7 +569,7 @@ class IvyUI(object):
             self.tk.quit()
 
     def browse(self,filename,lineno):
-        if not hasattr(self,'browser'):
+        if not (hasattr(self,'browser') and self.browser.winfo_exists()):
             self.browser = uu.new_file_browser(self.tk)
         self.browser.set(filename,lineno)
 

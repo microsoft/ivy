@@ -392,9 +392,12 @@ def compose_names(*names):
 def split_name(name):
     return name.split(ivy_compose_character)
 
-def pretty(s):
+def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')
     lines = [s.strip() for s in lines]
+    if max_lines != None and len(lines) > max_lines:
+        lines = lines[0:max_lines-1]
+        lines.append('...')
     indent = 0
     res = []
     for line in lines:
@@ -403,7 +406,7 @@ def pretty(s):
         res.append(indent * '    ' + line)
         if '{' in line:
             indent += 1
-    return '\n'.join(res)
+    return '\n'.join(res) + indent * '}'
 
 polymorphic_symbols = set(
     ['<',
