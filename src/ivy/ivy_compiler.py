@@ -206,6 +206,7 @@ def compile_local(self):
         ls = self.args[0:-1]
         cls = [compile_const(v,sig) for v in ls]
         res = LocalAction(*(cls+[sortify(self.args[-1])]))
+        res.lineno = self.lineno
         return res
 
 LocalAction.cmpl = compile_local
@@ -228,8 +229,9 @@ def compile_assign(self):
             c.lineno = self.lineno
         if len(code) == 1:
             return code[0]
-        return LocalAction(*(local_syms + [Sequence(*code)]))
-
+        res = LocalAction(*(local_syms + [Sequence(*code)]))
+        res.lineno = self.lineno
+        return res
 
 AssignAction.cmpl = compile_assign
 
