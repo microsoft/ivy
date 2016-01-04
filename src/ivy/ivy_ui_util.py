@@ -19,6 +19,41 @@ class MenuBar(Frame):
         w.config(menu=m)
         return m
 
+class FileBrowser(Frame):
+    def __init__(self,root):
+        Frame.__init__(self,root)
+        S = Scrollbar(self)
+        T = Text(self, height=20, width=100)
+        S.pack(side=RIGHT, fill=Y)
+        T.pack(side=LEFT, fill=BOTH, expand=1)
+        S.config(command=T.yview)
+        T.config(yscrollcommand=S.set)
+        self.text = T
+        self.filename = None
+        self.lineno = None
+    def set(self,filename,lineno):
+        print "set: {} {}".format(filename,lineno)
+        if filename != self.filename:
+            f = open(filename,'r')
+            if not f:
+                raise IvyError(None,"file {} not found".format(filename))
+            self.filename = filename
+            self.text.delete("1.0","end")
+            self.text.insert(END,f.read())
+        self.text.tag_config('highlight', background='red')
+        self.text.tag_remove('highlight', "1.0", "end")
+        self.text.tag_add('highlight', "{}.0".format(lineno), "{}.0 lineend".format(lineno))
+        self.text.see("{}.0".format(lineno))
+        self.winfo_toplevel().lift()
+#        self.text.iconify()
+#        self.text.deiconify()
+
+def new_file_browser(tk):
+    tl = Toplevel(tk)
+    fb = FileBrowser(tl)
+    fb.pack(fill=BOTH,expand=1)
+    return fb
+
 def center_window(toplevel):
     toplevel.update_idletasks()
     w = toplevel.winfo_screenwidth()

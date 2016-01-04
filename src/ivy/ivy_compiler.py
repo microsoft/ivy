@@ -224,6 +224,8 @@ def compile_assign(self):
             raise IvyError(self,"wrong number of values in assignment");
         else:
             code.append(AssignAction(*args))
+        for c in code:
+            c.lineno = self.lineno
         if len(code) == 1:
             return code[0]
         return LocalAction(*(local_syms + [Sequence(*code)]))

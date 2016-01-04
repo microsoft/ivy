@@ -228,6 +228,7 @@ class AnalysisGraphWidget(Canvas):
         self.popup.add_command(label="Dismiss")
         self.popup.add_command(label="Recalculate",command = lambda transition=transition: self.recalculate_edge(transition))
         self.popup.add_command(label="Decompose",command = lambda transition=transition: self.decompose_edge(transition))
+        self.popup.add_command(label="View Source",command = lambda transition=transition: self.view_source_edge(transition))
         self.popup.tk_popup(event.x_root, event.y_root, 0)
 
     def set_state(self,state,clauses):
@@ -275,6 +276,14 @@ class AnalysisGraphWidget(Canvas):
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
             ui_create(art)
+
+    def view_source_edge(self,transition):
+        with RunContext(self):
+            act = transition[1]
+            assert isinstance(act,Action)
+            if hasattr(act,'lineno'):
+                filename,lineno = act.lineno
+                self.ui_parent.browse(filename,lineno)
 
     def recalculate_state(self,state):
         with RunContext(self):
@@ -543,6 +552,11 @@ class IvyUI(object):
         self.tabs -= 1
         if self.tabs == 0:
             self.tk.quit()
+
+    def browse(self,filename,lineno):
+        if not hasattr(self,'browser'):
+            self.browser = uu.new_file_browser(self.tk)
+        self.browser.set(filename,lineno)
 
 ui = None
 
