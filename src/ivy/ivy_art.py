@@ -275,6 +275,28 @@ class AnalysisGraph(object):
                     return Counterexample(err.error_state.clauses,err.error_state.pred,repr(err))
         return True
 
+    def construct_transitions_from_expressions(self):
+        for state in self.states:
+            if hasattr(state,'expr') and is_action_app(state.expr):
+                expr = state.expr
+                prestate,op,label,poststate = expr.args[0],expr.rep,str(expr.rep),state
+                self.transitions.append((prestate,op,label,poststate))
+
+    def decompose_state(self,state):
+        if hasattr(state,'expr') and state.expr != None:
+            other_art = AnalysisGraph(self.domain,self.pvars)
+            other_art.actions = self.actions
+            with AC(other_art):
+                res = decompose_action_app(state,state.expr)
+                if res != None:
+                    other_art.construct_transitions_from_expressions()
+                    return other_art
+        return None
+
+    def decompose_edge(self,transition):
+        prestate,op,label,poststate = transition
+        return self.decompose_state(poststate)
+
     @property
     def uncovered_states(self):
         covered = set(x for x,y in self.covering)

@@ -6,9 +6,9 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
-    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast
+    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
-    subst_action, null_update
+    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
 import ivy_ast
 from ivy_ast import AST, compose_atoms
@@ -196,6 +196,8 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_calls():
                     yield c
+    def decompose(self,pre,post):
+        return [(pre,[self],post)]
 
 class AssumeAction(Action):
     def __init__(self,*args):
@@ -474,6 +476,8 @@ class Sequence(Action):
     def __call__(self,interpreter):
         for op in self.args:
             interpreter.execute(op)
+    def decompose(self,pre,post):
+        return [(pre,self.args,post)]
 
 
 class ChoiceAction(Action):
@@ -491,7 +495,8 @@ class ChoiceAction(Action):
             return self.label
         else:
             return super(ChoiceAction, self).__repr__()
-
+    def decompose(self,pre,post):
+        return [(pre,[a],post) for a in self.args]
 
 class IfAction(Action):
     def name(self):
@@ -500,13 +505,19 @@ class IfAction(Action):
         if_part  = 'if ' + str(self.args[0]) + ' {' + str(self.args[1]) + '}'
         else_part = ('\nelse {' + str(self.args[2]) + '}') if len(self.args) >= 3 else ''
         return if_part + else_part
+    def subactions(self) :
+        if_part = Sequence(AssumeAction(self.args[0]),self.args[1])
+        else_action = self.args[2] if len(self.args) >= 3 else Sequence()
+        else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
+        return if_part,else_part
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
-        if_part = Sequence(AssumeAction(self.args[0]),self.args[1]).int_update(domain,pvars)
-        else_action = self.args[2] if len(self.args) >= 3 else Sequence()
-        else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action).int_update(domain,pvars)
+        if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
+    def decompose(self,pre,post):
+        return [(pre,[a],post) for a in self.subactions()]
+
 
 class LocalAction(Action):
     """ Hide some symbols in an action """
@@ -522,6 +533,10 @@ class LocalAction(Action):
         res =  hide(syms,update)
 #        print "local res: {}".format(res)
         return res
+    def decompose(self,pre,post):
+        syms = self.args[0:-1]
+        pre,post = (hide_state(syms,p) for p in (pre,post))
+        return self.args[-1].decompose(pre,post)
 
 
 class LetAction(Action):
@@ -545,14 +560,17 @@ class CallAction(Action):
     def __str__(self):
         actual_returns = self.args[1:]
         return 'call ' + (','.join(str(a) for a in actual_returns) + ':= ' if actual_returns else '') + str(self.args[0])
-    def int_update(self,domain,pvars):
-#        print "got here!"
+    def get_callee(self):
         global context
         name = self.args[0].rep
         v = context.get(name)
 #        print "v: {}".format(v)
         if not v:
             raise IvyError(self.args[0],"no value for {}".format(name))
+        return v
+    def int_update(self,domain,pvars):
+#        print "got here!"
+        v = self.get_callee()
         if not isinstance(v,tuple):
             if isinstance(v,Action):
                 v = self.apply_actuals(domain,pvars,v)
@@ -609,6 +627,25 @@ class CallAction(Action):
         return res        
     def iter_calls(self):
         yield self.args[0].relname
+    def decompose(self,pre,post):
+        v = self.get_callee()
+        if not isinstance(v,Action):
+            return []
+        actual_params = self.args[0].args
+        actual_returns = self.args[1:]
+        vocab = list(symbols_asts(actual_params+actual_returns))
+        formals = v.formal_params+v.formal_returns
+        premap,pre = hide_state_map(formals,pre)
+        postmap,post = hide_state_map(formals,post)
+        actual_params = [rename_ast(p,premap) for p in actual_params]
+        actual_returns = [rename_ast(p,postmap) for p in actual_returns]
+        pre = constrain_state(pre,And(*[Equals(x,y) for x,y in zip(actual_params,v.formal_params)]))
+        post = constrain_state(post,And(*[Equals(x,y) for x,y in zip(actual_returns,v.formal_returns)]))
+        ren = dict((x,x.prefix('__hide:')) for x in actual_returns)
+        post = (post[0],rename_clauses(post[1],ren),post[2])
+        callee = v.clone(v.args) # drop the formals
+        return [(pre,[callee],post)]
+        
 
 class RME(AST):
     """ A requires-modifies-ensures clause """

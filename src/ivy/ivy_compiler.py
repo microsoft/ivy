@@ -556,9 +556,9 @@ def isolate_component(ag,isolate_name):
     exported.add('ext');
     ag.actions['ext'] = ext_act;
 
-#    print "actions:"
-#    for x,y in ag.actions.iteritems():
-#        print iu.pretty("action {} = {}".format(x,y))
+    print "actions:"
+    for x,y in ag.actions.iteritems():
+        print iu.pretty("action {} = {}".format(x,y))
     
 # collect actions in case of forward reference
 def collect_actions(decls):

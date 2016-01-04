@@ -295,6 +295,9 @@ def conjoin(clauses1,clauses2):
     """ Conjoin clause sets, taking into account skolems """
     return and_clauses(clauses1,rename_distinct(clauses2,clauses1))
 
+def constrain_state(upd,fmla):
+    return (upd[0],and_clauses(upd[1],formula_to_clauses(fmla)),upd[2])
+
 def hide(syms,update):
     syms = set(syms)
     syms.update(new(s) for s in update[0] if s in syms)
@@ -302,6 +305,28 @@ def hide(syms,update):
     new_tr = exist_quant(syms,update[1])
     new_pre = exist_quant(syms,update[2])
     return (new_updated,new_tr,new_pre)
+
+def hide_state(syms,update):
+    syms = set(syms)
+    if update[0] != None:
+        syms.update(old(s) for s in update[0] if s in syms)
+        new_updated = [s for s in update[0] if s not in syms]
+    else:
+        new_updated = None
+    new_tr = exist_quant(syms,update[1])
+    new_pre = exist_quant(syms,update[2])
+    return (new_updated,new_tr,new_pre)
+
+def hide_state_map(syms,update):
+    syms = set(syms)
+    if update[0] != None:
+        syms.update(old(s) for s in update[0] if s in syms)
+        new_updated = [s for s in update[0] if s not in syms]
+    else:
+        new_updated = None
+    trmap,new_tr = exist_quant_map(syms,update[1])
+    new_pre = exist_quant(syms,update[2])
+    return trmap, (new_updated,new_tr,new_pre)
 
 def subst_action(update,subst):
     print subst
@@ -460,6 +485,9 @@ class History(object):
         satisfy "clauses"."""
 #        print "assume post: {}".format(self.post)
 #        print "assume: {}".format(clauses)
+        if isinstance(clauses,tuple):  # a pure state
+            assert is_pure_state(clauses)
+            clauses = clauses[1]
         clauses = rename_distinct(clauses,self.post) # TODO: shouldn't be needed
         return History(pure_state(and_clauses(self.post,clauses)),self.maps)
 
@@ -479,7 +507,7 @@ class History(object):
         # A model of the post-state embeds a valuation for each time
         # in the history.
         post = and_clauses(self.post,axioms)
-        print "post: {}".format(post)
+#        print "post: {}".format(post)
         print "bounded check {"
         model = _get_model_clauses(post)
         print "} bounded check"

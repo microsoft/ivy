@@ -39,7 +39,7 @@ class RunContext(object):
             Label(dlg, text=repr(exc_val)).pack(side=TOP)
             b = Button(dlg, text="OK", command=dlg.destroy)
             b.pack(padx=5,side=TOP)
-            uu.center_window_on_window(dlg,self.parent.root)
+#            uu.center_window_on_window(dlg,self.parent.root)
             self.parent.tk.wait_window(dlg)
             return True
         return False # don't block any exceptions
@@ -227,6 +227,7 @@ class AnalysisGraphWidget(Canvas):
         self.popup = Menu(tk, tearoff=0)
         self.popup.add_command(label="Dismiss")
         self.popup.add_command(label="Recalculate",command = lambda transition=transition: self.recalculate_edge(transition))
+        self.popup.add_command(label="Decompose",command = lambda transition=transition: self.decompose_edge(transition))
         self.popup.tk_popup(event.x_root, event.y_root, 0)
 
     def set_state(self,state,clauses):
@@ -267,6 +268,13 @@ class AnalysisGraphWidget(Canvas):
         with RunContext(self):
             self.g.recalculate(transition,self.get_alpha())
         self.rebuild()
+
+    def decompose_edge(self,transition):
+        with RunContext(self):
+            art = self.g.decompose_edge(transition)
+            if art == None:
+                raise IvyError(None,'Cannot decompose action')
+            ui_create(art)
 
     def recalculate_state(self,state):
         with RunContext(self):

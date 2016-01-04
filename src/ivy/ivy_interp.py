@@ -439,6 +439,40 @@ def eval_state(expr):
         return apply_action(expr,expr.rep,v,s)
     return eval_state_atom(expr)
 
+def decompose_action_app(state2,expr):
+    assert is_action_app(expr)
+    action = eval_action(expr.rep)
+    state1 = eval_state(expr.args[0])
+    comps = action.decompose(state1.value,state2.value)
+    bg = state1.domain.background_theory(state1.in_scope)
+    for pre,acts,post in comps:
+        upds = [act.update(state1.domain,state1.in_scope) for act in acts]
+        h = History(pre)
+#        print "h.post: {}".format(h.post)
+        for upd in upds:
+#            print "upd: {}".format(upd)
+            h = h.forward_step(bg,upd)
+#            print "h.post: {}".format(h.post)
+        h = h.assume(post)
+#        print "h.post: {}".format(h.post)
+        bmc_res = h.satisfy(bg)
+        if bmc_res == None:
+            continue
+        universe,path = bmc_res
+        states = []
+        for i,value in enumerate(path):
+            state = new_state(value)
+            if i != 0:
+                state.expr = action_app(acts[i-1],states[-1])
+                state.update = upds[i-1]
+                state.pred = states[-1]
+            state.label = None
+            state.universe = universe
+            states.append(state)
+        return state
+    return None
+
+
 def eval_state_facts(expr):
     if is_state_join(expr):
         args = [eval_state_facts(e) for e in expr.args]
