@@ -162,7 +162,7 @@ class AnalysisGraphWidget(Canvas):
             self.tag_bind("1" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
         for x in edge_handles:
             items = self.find_withtag("0" + x)
-            print 'items:{}'.format(items)
+#            print 'items:{}'.format(items)
             for item in items:
                 text = self.itemcget(item,'text')
                 text = text.replace('-[','{').replace(']-','}')
