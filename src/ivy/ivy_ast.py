@@ -706,7 +706,9 @@ def substitute_ast(ast,subs):
     if isinstance(ast, Variable):
         return subs.get(ast.rep,ast)
     else:
-        return ast.clone([substitute_ast(x,subs) for x in ast.args])
+        res = ast.clone([substitute_ast(x,subs) for x in ast.args])
+        copy_attributes_ast(ast,res)
+        return res
 
 def variables_distinct_ast(ast1,ast2):
     """ rename variables in ast1 so they don't occur in ast2. 

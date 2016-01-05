@@ -223,7 +223,9 @@ class AssertAction(Action):
         cl = formula_to_clauses(dual_formula(self.args[0]))
         return ([],true_clauses(),cl)
     def assert_to_assume(self):
-        return AssumeAction(*self.args)
+        res = AssumeAction(*self.args)
+        ivy_ast.copy_attributes_ast(self,res)
+        return res
     
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
@@ -670,6 +672,8 @@ def type_check_action(action,domain,pvars):
         action.int_update(domain,pvars)
 
 def mixin_before(decl,action1,action2):
+    assert hasattr(action1,'lineno')
+    assert  hasattr(action2,'lineno')
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):
         raise IvyError(decl,"mixin {} has wrong number of input parameters for {}".format(name1,name2))
@@ -682,6 +686,7 @@ def mixin_before(decl,action1,action2):
     action1_renamed = substitute_constants_ast(action1,subst)
 #    print "action1_renamed: {}".format(action1_renamed)
     res = Sequence(action1_renamed,action2)
+    res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns
     return res

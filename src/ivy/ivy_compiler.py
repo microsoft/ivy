@@ -195,8 +195,8 @@ def sortify_with_inference(ast):
 ivy_ast.AST.compile_with_sort_inference = sortify_with_inference
 
 def compile_const(v,sig):
-    rng = find_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
     with ASTContext(v):
+      rng = find_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
       return add_symbol(v.rep,get_function_sort(sig,v.args,rng))
     
 
@@ -237,6 +237,9 @@ AssignAction.cmpl = compile_assign
 
 def compile_action_def(a,sig):
     sig = sig.copy()
+    if not hasattr(a.args[1],'lineno'):
+        print a
+    assert hasattr(a.args[1],'lineno')
     with sig:
         params = a.args[0].args
         pformals = [v.to_const('prm:') for v in params] 
@@ -244,6 +247,7 @@ def compile_action_def(a,sig):
             subst = dict((x.rep,y) for x,y in zip(params,pformals))
 #            print subst
             a = ivy_ast.substitute_ast(a,subst)
+            assert hasattr(a.args[1],'lineno')
 #            a = ivy_ast.subst_prefix_atoms_ast(a,subst,None,None)
 #            print "after: %s" % (a)
         # convert object paramaters to arguments (object-orientation!)
@@ -251,6 +255,7 @@ def compile_action_def(a,sig):
         returns = [compile_const(v,sig) for v in a.formal_returns]
 #        print returns
         res = sortify(a.args[1])
+        assert hasattr(res,'lineno')
         res.formal_params = formals
         res.formal_returns = returns
         return res
@@ -397,14 +402,18 @@ isolate = iu.Parameter("isolate")
 
 def add_mixins(ag,actname,action2,assert_to_assume=False,use_mixin=lambda:True,mod_mixin=lambda m:m):
     # TODO: mixins need to be in a fixed order
+    assert hasattr(action2,'lineno')
     res = action2
     for mixin in ag.mixins[actname]:
         mixin_name = mixin.args[0].relname
         action1 = lookup_action(mixin,ag,mixin_name)
+        assert hasattr(action1,'lineno')
         if use_mixin(mixin_name):
             if assert_to_assume:
                 action1 = action1.assert_to_assume()
+                assert hasattr(action1,'lineno')
             action1 = mod_mixin(action1)
+            assert hasattr(action1,'lineno')
         res = ivy_actions.mixin_before(mixin,action1,res)
     return res
 
@@ -522,13 +531,18 @@ def isolate_component(ag,isolate_name):
         pre = startswith_some(actname,present)
         if pre: 
             if not ver:
+                assert hasattr(action,'lineno')
                 ext_action = action.assert_to_assume().prefix_calls('ext:')
+                assert hasattr(ext_action,'lineno')
                 if actname in delegates:
                     int_action = action.prefix_calls('ext:')
+                    assert hasattr(int_action,'lineno')
                 else:
                     int_action = ext_action
+                    assert hasattr(int_action,'lineno')
             else:
                 int_action = ext_action = action
+                assert hasattr(int_action,'lineno')
             # internal version of the action has mixins checked
             new_actions[actname] = add_mixins(ag,actname,int_action,False,use_mixin,mod_mixin)
             # external version of the action assumes mixins are ok
@@ -611,6 +625,8 @@ def ivy_compile(ag,decls):
         for name,action in ag.actions.iteritems():
 #            print "checking: {} = {}".format(name,action)
             type_check_action(action,ag.domain,ag.states[0].in_scope)
+            if not hasattr(action,'lineno'):
+                print "no lineno: {}".format(name)
         iso = isolate.get()
         if iso:
             isolate_component(ag,iso)

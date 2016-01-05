@@ -231,7 +231,10 @@ def _find_sort(type_name):
     try:
         return sig.sorts[type_name]
     except KeyError:
-        if type_name == 'S': return default_sort()
+        if type_name == 'S':
+            if iu.get_numeric_version() <= [1,2]:
+                return default_sort()
+            raise IvyError(None,"unspecified type")
         raise IvyError(None,"unknown type: {}".format(type_name))
 
 def find_sort(type_name):
@@ -492,6 +495,8 @@ polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymo
 def default_sort():
     ds = sig._default_sort
     if ds != None: return ds
+    if not iu.get_numeric_version() <= [1,2]:
+        raise IvyError(None,'unspecified type')
     ds = lg.UninterpretedSort('S')
     add_sort(ds)
     sig._default_sort = ds
