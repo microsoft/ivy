@@ -76,28 +76,39 @@ module dut(id,clnt,mngr,ref) = {
     #
     # pick an arbitary message and deliver it.
 
+    
+    action acquire(a:acq_id) = {
+       local mid:msg_id { 
+	    assume acqs(mid,a);
+	    acqs(mid,a) := false; # remove from channel
+	    call mngr.tl_Acquire(a)
+       }
+    }
+
+    action grant(a:gnt_id) = {
+       local mid:msg_id { 
+            assume gnts(mid,a);
+            gnts(mid,a) := false; # remove from channel
+	    call clnt.tl_Grant(a)
+       }
+    }
+
+    action finish(a:fns_id) = {
+       local mid:msg_id { 
+	   assume fnss(mid,a);
+	   fnss(mid,a) := false; # remove from channel
+	   call mngr.tl_Finish(a)
+       }
+    }
+
     action step = {
-	local mid:msg_id {
-            if * {
-     	        local a:acq_id {
-		    assume acqs(mid,a);
-		    acqs(mid,a) := false; # remove from channel
-		    call mngr.tl_Acquire(a)
-                }
-            } else if * {
-     	        local a:gnt_id {
-		    assume gnts(mid,a);
-		    gnts(mid,a) := false; # remove from channel
-		    call clnt.tl_Grant(a)
-                }
-	    } else {
-     	        local a:fns_id {
-		    assume fnss(mid,a);
-		    fnss(mid,a) := false; # remove from channel
-		    call mngr.tl_Finish(a)
-                }
-	    }
-	}
+       if * {
+           local a:acq_id {call acquire(a)}
+       } else if * {
+           local a:gnt_id {call grant(a)}
+       } else {
+     	   local a:fns_id {call finish(a)}
+       }
     }
 }
 
@@ -113,3 +124,34 @@ include tilelink_concrete_two_port_testbench
 
 # 1) The cached address set on front and back is the same.
 axiom front.cached(A) <-> back.cached(A)
+
+################################################################################
+#
+# Some tests
+#
+################################################################################
+
+module tests = {
+
+    individual acq1 : acq_id, acq2 : acq_id
+    individual aset1 : tl_addrset
+
+    # put in two acquires for same address set
+
+
+    action test1 = {
+	assume acqs(acq1).own = none;
+	assume acqs(acq1).addrs = aset1;
+	call c.acquire(acq1);
+	assume acqs(acq2).own = none;
+	assume acqs(acq2).addrs = aset1;
+	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
+	call c.acquire(acq2);
+	call b.acquire(acq2)
+    }
+}
+
+instantiate t : tests
+export t.test1
+
+isolate iso_t = b with ref,front,back,c,m,t

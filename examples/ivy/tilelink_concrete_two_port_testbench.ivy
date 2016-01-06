@@ -20,9 +20,9 @@ instantiate c : tl_generic_client(b,ref,fside)
 instantiate b : dut(buf_id,c,m,ref)
 instantiate m : tl_generic_manager(b,ref,bside)
 
-export c.step()
-export b.step()
-export m.step()
+export c.step
+export b.step
+export m.step
 
 ################################################################################
 # 
@@ -60,12 +60,8 @@ instantiate back : tl_interface(ref,b,m,bside)
 isolate iso_b = b with ref,front,back,c,m
 
 
-# Note: an alternative here would be to create an environment model by exporting
-# some delegating actions, e.g:
 
-# delegating action perform(...) = {
-#    assert sid ~= buf_id;
-#    ref.perform(...)
-# }
-# export perform
+
+
+
 

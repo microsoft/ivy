@@ -7,6 +7,7 @@ import encodings.latin_1
 
 import itertools
 from itertools import chain
+from collections import defaultdict
 
 import z3
 import ivy_logic
@@ -410,6 +411,9 @@ class HerbrandModel(object):
         vs,tups = self.check(ivy_logic.Literal(0,fmla))
         return not tups
 
+    def eval_constant(self,c):
+        return get_model_constant(self.model,c)
+
 # TODO: need to map Z3 sorts back to ivy sorts
 def sort_from_z3(s):
     return z3_sorts_inv[get_id(s)]
@@ -673,6 +677,42 @@ def model_facts(h,ignore,clauses1,upclose=False):
     res = uc + vc + vr + vf
     return Clauses(res)
 
+#def numeral_assign(h):
+#    return m = dict((c.rep,ivy_logic.Constant(c.rep.rename(lambda s:str(i))))
+#             for s in h.sorts() for i,c in enumerate(h.sorted_sort_universe(s)))
+
+def numeral_assign(clauses,h):
+    num_by_sort = defaultdict(list)
+    numerals = [c for c in used_constants_clauses(clauses) if c.is_numeral()]
+    for num in numerals:
+        num_by_sort[num.sort].append(num)
+#    print "num_by_sort: {}".format(numerals)
+    foom = dict()
+    used = set()
+#    print "starting: foom = {}".format(foom)
+    for s in h.sorts():
+#        print "sort loop: sort = {}, foom = {}".format(s,foom)
+        for num in num_by_sort[s]:
+#            print "foom = {}".format(foom)
+            numv = h.eval_constant(num)
+#            print "eval: {}:{} = {}".format(num,num.sort,numv)
+            if numv in foom:
+                print "two numerals assigned same value!: {} = {}".format(num,foom[numv])
+            else:
+#                print "assigning {} to {}".format(num,numv)
+                foom[numv] = num
+            used.add(num)
+        i = 0
+        for c in h.sorted_sort_universe(s):
+            if c not in foom:
+                while True:
+                    num = ivy_logic.Constant(c.rep.rename(lambda s:str(i)))
+                    i = i + 1
+                    if num not in used:
+                        foom[c.rep] = num
+                        break
+    return foom
+
 def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None, numerals=False):
     """ Return a model of clauses1 or None. Model is represented by a
     clause set that uniquely characterizes it. The function "ignore", if
@@ -683,15 +723,17 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
     h = model_if_none(clauses1,implied,model)
     ignore = ignore if ignore != None else lambda x: False
     res = model_facts(h,ignore,clauses1)
+#    print "core after mode_facts: {} ".format(unsat_core(res,true_clauses()))
     # if using numerals, replace the universe elements with them
     if numerals:
-        m = dict((c.rep,ivy_logic.Constant(c.rep.rename(lambda s:str(i))))
-             for s in h.sorts() for i,c in enumerate(h.sorted_sort_universe(s)))
+        m = numeral_assign(res,h)
+#        print "dict: {}".format([(str(x),str(y)) for x,y in m.iteritems()])
     # else, existentially quantify the names of the universe elements
     else:
         m = dict((c.rep,ivy_logic.Constant(c.rep.prefix('__')))
                  for s in h.sorts() for c in h.sort_universe(s))
     res = substitute_constants_clauses(res,m)
+#    print "core after rename: {} ".format(unsat_core(res,true_clauses()))
 #    print "clauses_model_to_clauses res = {}".format(res)
     return res
 

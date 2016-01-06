@@ -461,6 +461,7 @@ def decompose_action_app(state2,expr):
         universe,path = bmc_res
         states = []
         for i,value in enumerate(path):
+#            print "core: {} ".format(unsat_core(and_clauses(value[1],bg),true_clauses()))
             state = new_state(value)
             if i != 0:
                 state.expr = action_app(acts[i-1],states[-1])

@@ -235,17 +235,36 @@ module tl_interface(ref,clnt,mngr,side) = {
 #
 ################################################################################
 
+type client_action = {ca_acquire,ca_finish,ca_perform,ca_fuse}
+
 module tl_generic_client(mngr,ref,side) = {
-   action tl_Grant(msg:gnt_id) = {
+
+   action tl_Grant(msg:gnt_id) = {}
+
+   action acquire(a:acq_id) = {
+       call mngr.tl_Acquire(a)
+   }
+
+   action finish(f:fns_id) = {
+       call mngr.tl_Finish(f)
+   }
+
+   action perform(lt:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.perform(lt,sid)
+   }
+
+   action fuse(lt:ltime, lt1:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.fuse(lt,lt1,sid)
    }
 
    action step = {
-     local lt:ltime, lt1:ltime, sid:id {
-        assume side(sid) = client;
+     local op:client_action, lt:ltime, lt1:ltime, sid:id, a:acq_id, f:fns_id {
         if * {
-	   local a:acq_id {call mngr.tl_Acquire(a)}
+	   call acquire(a)
         } else if * {
-	   local f:fns_id {call mngr.tl_Finish(f)}
+	   call finish(f)
         } else if * {
 	   call ref.perform(lt,sid)
         } else {
@@ -266,13 +285,29 @@ module tl_generic_client(mngr,ref,side) = {
 ################################################################################
 
 module tl_generic_manager(clnt,ref,side) = {
+ 
    action tl_Acquire(msg:acq_id) = {}
+
    action tl_Finish(msg:fns_id) = {}
+
+   action grant(g:gnt_id) = {
+      call clnt.tl_Grant(g)
+   }
+
+   action perform(lt:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.perform(lt,sid)
+   }
+
+   action fuse(lt:ltime, lt1:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.fuse(lt,lt1,sid)
+   }
+
    action step = {
-     local lt:ltime, lt1:ltime, sid:id {
-        assume side(sid) = manager;
+     local lt:ltime, lt1:ltime, sid:id, g:gnt_id {
         if * {
-	   local g:gnt_id {call clnt.tl_Grant(g)}
+	   call grant(g)
         } else if * {
 	   call ref.perform(lt,sid)
         } else {

@@ -402,23 +402,28 @@ isolate = iu.Parameter("isolate")
 
 def add_mixins(ag,actname,action2,assert_to_assume=False,use_mixin=lambda:True,mod_mixin=lambda m:m):
     # TODO: mixins need to be in a fixed order
-    assert hasattr(action2,'lineno')
+    assert hasattr(action2,'lineno'), action2
+    assert hasattr(action2,'formal_params'), action2
     res = action2
     for mixin in ag.mixins[actname]:
         mixin_name = mixin.args[0].relname
         action1 = lookup_action(mixin,ag,mixin_name)
         assert hasattr(action1,'lineno')
+        assert hasattr(action1,'formal_params'), action1
         if use_mixin(mixin_name):
             if assert_to_assume:
                 action1 = action1.assert_to_assume()
                 assert hasattr(action1,'lineno')
+                assert hasattr(action1,'formal_params'), action1
             action1 = mod_mixin(action1)
             assert hasattr(action1,'lineno')
+            assert hasattr(action1,'formal_params'), action1
         res = ivy_actions.mixin_before(mixin,action1,res)
     return res
 
 def summarize_action(action):
     res = ivy_actions.Sequence()
+    res.lineno = action.lineno
     res.formal_params = action.formal_params
     res.formal_returns = action.formal_returns
     return res
@@ -532,19 +537,24 @@ def isolate_component(ag,isolate_name):
         if pre: 
             if not ver:
                 assert hasattr(action,'lineno')
+                assert hasattr(action,'formal_params'), action
                 ext_action = action.assert_to_assume().prefix_calls('ext:')
                 assert hasattr(ext_action,'lineno')
+                assert hasattr(ext_action,'formal_params'), ext_action
                 if actname in delegates:
                     int_action = action.prefix_calls('ext:')
                     assert hasattr(int_action,'lineno')
+                    assert hasattr(int_action,'formal_params'), int_action
                 else:
                     int_action = ext_action
                     assert hasattr(int_action,'lineno')
+                    assert hasattr(int_action,'formal_params'), int_action
             else:
                 int_action = ext_action = action
                 assert hasattr(int_action,'lineno')
+                assert hasattr(int_action,'formal_params'), int_action
             # internal version of the action has mixins checked
-            new_actions[actname] = add_mixins(ag,actname,int_action,False,use_mixin,mod_mixin)
+            new_actions[actname] = add_mixins(ag,actname,int_action,False,use_mixin,lambda m:m)
             # external version of the action assumes mixins are ok
             new_action = add_mixins(ag,actname,ext_action,True,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = new_action
@@ -627,6 +637,7 @@ def ivy_compile(ag,decls):
             type_check_action(action,ag.domain,ag.states[0].in_scope)
             if not hasattr(action,'lineno'):
                 print "no lineno: {}".format(name)
+            assert hasattr(action,'formal_params'), action
         iso = isolate.get()
         if iso:
             isolate_component(ag,iso)

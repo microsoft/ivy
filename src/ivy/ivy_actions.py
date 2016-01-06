@@ -582,6 +582,7 @@ class CallAction(Action):
 ##                print "called state: {}".format(v)
         return v
     def apply_actuals(self,domain,pvars,v):
+        assert hasattr(v,'formal_params'), v
         actual_params = self.args[0].args
         actual_returns = self.args[1:]
 #        formal_params = [s.prefix('_') for s in v.formal_params] # rename to prevent capture
@@ -626,6 +627,10 @@ class CallAction(Action):
     def prefix_calls(self,pref):
         res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
         res.lineno = self.lineno
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
         return res        
     def iter_calls(self):
         yield self.args[0].relname

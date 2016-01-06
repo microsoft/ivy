@@ -81,6 +81,10 @@ def do_insts(ivy,insts):
             for decl in module.decls:
 #                print "before: %s" % (decl)
                 idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+                if isinstance(idecl,ActionDecl):
+                    for foo in idecl.args:
+                        if not hasattr(foo.args[1],'lineno'):
+                            print 'no lineno: {}'.format(foo)
 #                print "after: %s" % (idecl)
                 ivy.declare(idecl)
         else:
@@ -438,11 +442,15 @@ if iu.get_numeric_version() <= [1,1]:
   def p_top_action_symbol_eq_loc_action_loc(p):
     'top : top ACTION SYMBOL loc EQ LCB optaction RCB loc'
     p[0] = p[1]
+    if not hasattr(p[7],'lineno'):
+        p[7].lineno = get_lineno(p,6)
     p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[7])))
 else:
   def p_top_action_symbol_optargs_optreturns_eq_action(p):
     'top : top ACTION SYMBOL optargs optreturns EQ LCB optaction RCB'
     p[0] = p[1]
+    if not hasattr(p[8],'lineno'):
+        p[8].lineno = get_lineno(p,7)
     p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[8],formals=p[4],returns=p[5])))
 
 if not (iu.get_numeric_version() <= [1,1]):
