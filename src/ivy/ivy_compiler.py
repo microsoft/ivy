@@ -383,8 +383,8 @@ class IvyARGSetup(IvyDeclInterp):
         
         
 def ivy_new(filename = None):
-    d = Interp()
-    ag = AnalysisGraph(d,[])
+#    d = Interp()
+    ag = AnalysisGraph()
     if filename:
         f = open(filename,'r')
         if not f:
@@ -580,8 +580,10 @@ def isolate_component(ag,isolate_name):
                     exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
-    ag.public_actions = exported
-    ag.actions = new_actions
+    ag.public_actions.clear()
+    ag.public_actions.update(exported)
+    ag.actions.clear()
+    ag.actions.update(new_actions)
 
     ext_act = ia.ChoiceAction(*[ag.actions[x] for x in sorted(exported)])
     exported.add('ext');
@@ -601,15 +603,6 @@ def collect_actions(decls):
     return res
 
 def ivy_compile(ag,decls):
-    ag.actions = {}
-    ag.predicates = {}
-    ag.assertions = []
-    ag.mixins = defaultdict(list)
-    ag.domain.clear()
-    ag.public_actions = set()
-    ag.isolates = {}
-    ag.exports = []
-    ag.delegates = []
     with ag.domain.sig:
         ag.init_cond = true_clauses()
         for name in decls.defined:

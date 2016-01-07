@@ -15,12 +15,13 @@ from ivy_logic_utils import *
 from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_model_to_clauses, clauses_model_to_diagram, get_model_clauses
 from ivy_transrel import compose_state_action, forward_interpolant, reverse_image, interpolant, \
     join_state, implies_state, ActionFailed, null_update, forward_image, reverse_interpolant_case, \
-    is_skolem, interpolant_case, History, top_state
+    is_skolem, interpolant_case, History, top_state, action_failure
 from ivy_actions import type_check,Action,RME
 import ivy_ast as ia
 import ivy_actions
 import ivy_transrel as tr
 import ivy_utils as iu
+import ivy_module as im
   
 def type_check_list(domain,l):
     for x in l:
@@ -29,98 +30,66 @@ def type_check_list(domain,l):
         else:
             type_check(domain,x)
 
-class Interp(object):
-    def __init__(self):
-        """
-        Class representing a symbolic interpreter
-        """
-        self.clear()
+Interp = im.Module
 
-    def clear(self):
-        self.all_relations = [] # this includes both base and derived relations in declaration order
-        self.concepts = []
-        self.axioms = []
-        self.relations = dict()
-        self.functions = dict()
-        self.updates = []
-        self.schemata = dict()
-        self.instantiations = []
-        self.concept_spaces = []
-        self.conjs = []
-        self.hierarchy = defaultdict(set)
-        self.sig = sig # TODO: make signature a context
-
-
-    def type_check_concepts(self):
-        # tricky because we must consider concepts as relations
-        relations = self.relations
-        self.relations = dict(relations.iteritems())
-        self.relations.update((x.rep,len(x.args)) for x,y in self.concept_spaces)
-        type_check_list(self,[y for x,y in self.concept_spaces])
-        self.relations = relations
-
-    def type_check(self):
+def module_type_check(self):
 #        type_check_list(self,[y for x,y in self.concepts]) 
 #        for a in self.axioms:
 #            print "axiom: {}".format(a)
-        type_check_list(self,self.axioms)
+    type_check_list(self,self.axioms)
 #        type_check_list(self,self.updates)
 #        type_check_list(self,[y for x,y in self.schemata.iteritems()])
-        self.type_check_concepts()
+    self.type_check_concepts()
 
-    def get_axioms(self):
-        res = self.axioms
-        for n,sch in self.schemata.iteritems():
-            res += sch.instances
-        return res
 
-    def background_theory(self, symbols=None):
-        """ Return a set of clauses which represent the background theory
-        restricted to the given symbols (should be like the result of used_symbols).
-        """
-        theory = list(self.get_axioms())
-        # axioms of the derived relations TODO: used only the
-        # referenced ones, but we need to know abstract domain for
-        # this
-        for df in self.concepts:
-            theory.append(df.to_constraint()) # TODO: make this a def?
-        return Clauses(theory)
 
-    def new_state(self, clauses):
-        return State(self, clauses)
+def module_type_check_concepts(self):
+    # tricky because we must consider concepts as relations
+    relations = self.relations
+    self.relations = dict(relations.iteritems())
+    self.relations.update((x.rep,len(x.args)) for x,y in self.concept_spaces)
+    type_check_list(self,[y for x,y in self.concept_spaces])
+    self.relations = relations
 
-    def new_state_with_value(self, value):
-        res = State(self)
-        res.value = value
-        return res
+def module_new_state(self, clauses):
+    return State(self, clauses)
 
-    def order(self,state1, state2):
-        """True if state1 is a subset of state2 """
-        axioms = self.background_theory(state1.in_scope) 
-        return implies_state(state1.value,state2.value,axioms,self.relations)
+def module_new_state_with_value(self, value):
+    res = State(self)
+    res.value = value
+    return res
 
-    def add_to_hierarchy(self,name):
-        if iu.ivy_compose_character in name:
-            pref,suff = string.rsplit(name,iu.ivy_compose_character,1)
-            self.add_to_hierarchy(pref)
-            self.hierarchy[pref].add(suff)
+def module_order(self,state1, state2):
+    """True if state1 is a subset of state2 """
+    axioms = self.background_theory(state1.in_scope) 
+    return implies_state(state1.value,state2.value,axioms,self.relations)
 
-    def skolemizer(self):
-        rn = UniqueRenamer('',self.functions)
-        return lambda v, rn=rn: var_to_constant(v,rn())
+def module_skolemizer(self):
+    rn = UniqueRenamer('',self.functions)
+    return lambda v, rn=rn: var_to_constant(v,rn())
 
+im.Module.type_check = module_type_check
+im.Module.type_check_concepts = module_type_check_concepts
+im.Module.new_state = module_new_state
+im.Module.new_state_with_value = module_new_state_with_value
+im.Module.skolemizer = module_skolemizer
+im.Module.order = module_order
 
 class State(object):
-    def __init__(self, domain, value = None):
+    def __init__(self, domain = None, value = None, expr = None, label = None):
         """An abstract state.
         """
         if value == None:
             value = top_state()
-        self.in_scope = {}        # symbols in scope in this state
-        self.domain = domain      # interpreter it belongs to
+        if domain == None:
+            domain = im.module
+        self.in_scope = {}        # symbols in scope in this state TODO: obsolete
+        self.domain = domain      # interpreter it belongs to (now this is the module)
         self.moded, self.clauses, self.precond = value if isinstance(value,tuple) else (None,value,false_clauses())
-        self.pred = None          # predecessor state
-        self.label = None
+        self.expr = expr
+        self.label = label
+        self.cached_update = None
+        self.cached_pred = None
 
     @property
     def value(self):
@@ -159,6 +128,26 @@ class State(object):
         return repr(clauses_to_formula(self.clauses)) if isinstance(self.clauses,list) else repr(self.clauses)
 
     __str__ = __repr__
+
+    @property
+    def update(self):
+        if self.cached_update == None and self.expr != None and is_action_app(self.expr):
+            self.cached_update = eval_action(self.expr.rep).update(self.domain,self.in_scope)
+        return self.cached_update
+
+    @update.setter
+    def update(self,value):
+        self.cached_update = value
+            
+    @property
+    def pred(self):
+        if self.cached_pred == None and self.expr != None and is_action_app(self.expr):
+            self.cached_pred = self.expr.args[0]
+        return self.cached_pred
+
+    @pred.setter
+    def pred(self,value):
+        self.cached_pred = value
 
     def is_bottom(self):
         return (self.clauses.is_false())
@@ -355,7 +344,7 @@ def apply_action(ast,action_name,action,state):
     try:
         res = concrete_post(upd,state,action_app(action_name,state))
     except ActionFailed as af:
-        raise IvyActionFailedError(ast,action_name,action,state,af.clauses)
+        raise IvyActionFailedError(ast,action_name,action,state,af.clauses,af.trans)
     res.action = action
     res.action_name = action_name
     return res
@@ -368,6 +357,27 @@ def is_state_join(expr):
 
 def action_app(action,arg):
     return ia.Atom(action,[arg])
+
+class fail_action(object):
+    def __init__(self,action):
+        self.action = action
+    def __str__(self):
+        return "fail " + str(self.action)
+    def update(self,domain,in_scope):
+        return action_failure(self.action.update(domain,in_scope))
+    def decompose(self,pre,post):
+        cases = self.action.decompose(pre,post)
+        res = []
+        for pre,acts,post in cases:
+            for i in range(len(acts)):
+                pref = acts[0:i+1]
+                pref[-1] = fail_action(pref[-1])
+                res.append((pre,pref,post))
+        return res
+
+
+def fail_expr(expr):
+    return action_app(fail_action(expr.rep),expr.args[0])
 
 def state_join(*args):
     return ia.Or(*args)
@@ -387,7 +397,7 @@ def states_state_expr(expr):
                 yield b
 
 class IvyActionFailedError(IvyError):
-    def __init__(self,ast,action_name,action,state,clauses):
+    def __init__(self,ast,action_name,action,state,clauses,trans):
         super(IvyActionFailedError,self).__init__(ast,'precondition of "{}" failed'.format(action_name))
         err_state = state.domain.new_state(clauses)
         err_state.pred = state
@@ -396,11 +406,14 @@ class IvyActionFailedError(IvyError):
         err_state.update = null_update()
 #        print "err_state.clauses: {}".format(err_state.clauses)
         self.error_state = err_state
+        self.conc = (trans[0],action_name,action,trans[1])
 
 def eval_action(expr):
     if isinstance(expr,Action):
         return expr
-    res = ivy_actions.context.get(expr)
+    if isinstance(expr,fail_action):
+        return fail_action(eval_action(expr.action))
+    res = im.module.actions.get(expr,None)
     if res is None:
         raise IvyError(expr,'{} has no value'.format(expr))
     if not isinstance(res,Action):
@@ -553,6 +566,18 @@ def check_state_assertion(state,assertion):
 #    print "state: %s" %  state.clauses
 #    print "rhs_fmla: {}".format(rhs_state.value)
     return state.domain.order(state,rhs_state)
+
+def get_state_assertions(state):
+    res = true_clauses()
+    if not hasattr(state,'label'): return res
+    for assertion in im.module.assertions:
+        if state.label == assertion.args[0].rep:
+            rhs = assertion.args[1]
+            rhs_state = eval_assert_rhs(rhs,state.domain)
+            res = and_clauses(res,rhs_state[1])
+#    print "state: %s" %  state.clauses
+#    print "rhs_fmla: {}".format(rhs_state.value)
+    return None if res.is_true() else res
 
 def top_alpha(state):
     state.clauses = true_clauses()

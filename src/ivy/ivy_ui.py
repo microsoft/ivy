@@ -184,6 +184,9 @@ class AnalysisGraphWidget(Canvas):
             return
         sg = self.g.concept_graph(n,clauses)
         self.current_concept_graph = ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
+    def view_concrete_trace(self,n,conc):
+        pass
+#        ui_create(self.g.make_concrete_trace(n,conc))
     def left_click_node(self,event,n):
         if n.clauses != None:
             self.view_state(n,n.clauses)
@@ -341,20 +344,25 @@ class AnalysisGraphWidget(Canvas):
             return rs
 
     def check_safety_node(self,node):
-        node.safe = self.g.check_safety(node)
-        self.update_node_color(node)
-        if not node.safe:
-            if self.mode.get() != "bounded":
-                uu.ok_cancel_dialog(self.tk,self.root,"The node is not proved safe: {}. View unsafe states?".format(node.safe.msg),
-                                    command=functools.partial(self.view_state,node.safe.state,node.safe.clauses))
-            else:
+        if self.mode.get() != "bounded":
+            node.safe = self.g.check_safety(node)
+            self.update_node_color(node)
+            if not node.safe:
+                bcs = []
+                if node.safe.clauses != None:
+                    bcs.append(("View unsafe states",functools.partial(self.view_state,node.safe.state,node.safe.clauses)))
+                if node.safe.conc != None:
+                    bcs.append(("View concrete trace",functools.partial(self.view_concrete_trace,node.safe.state,node.safe.conc)))
+                uu.buttons_dialog_cancel(self.tk,self.root,"The node is not proved safe: {}".format(node.safe.msg),bcs)
+        else:
 #                print "bounded check: node.safe.clauses={}".format(node.safe.clauses)
-                res = self.g.bmc(node.safe.state,node.safe.clauses)
-                if res == None:
-                    node.safe = True
-                    self.update_node_color(node)
-                else:
-                    uu.ok_cancel_dialog(self.tk,self.root,"The node is unsafe: {}. View error trace?".format(node.safe.msg),
+            res = self.g.check_bounded_safety(node)
+            if res == None:
+                node.safe = True
+                self.update_node_color(node)
+            else:
+                node.safe = False
+                uu.ok_cancel_dialog(self.tk,self.root,"The node is unsafe: View error trace?",
                                         command=functools.partial(self.view_ag,res))
 
     def view_ag(self,res):

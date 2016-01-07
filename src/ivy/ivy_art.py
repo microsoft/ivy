@@ -5,11 +5,30 @@ import ivy_actions
 from ivy_interp import *
 from ivy_graph import standard_graph
 import ivy_utils as iu
+import ivy_module as im
 from string import *
 import copy
 import functools
 import pickle
 
+
+################################################################################
+#
+#  Class of Abstract Reachability Graphs
+#
+#
+# An ARG is a set of nodes, which may be derived from other nodes by
+# node expressions. Each node has an associated value, which may be
+# concrete or abstract state. In addition, there is a covering
+# relation between nodes.
+#
+################################################################################
+
+
+########################################
+#
+# The context object AC sets an ARG as the context for evaluating node
+# expressions
 
 class AC(ivy_actions.ActionContext):
     def __init__(self,ag,no_add=False):
@@ -26,21 +45,43 @@ class AC(ivy_actions.ActionContext):
             res.unders = [self.domain.new_state(clauses)]
         return res
 
+########################################
+#
+# A counterexample is a thing that evaluates to false and contains
+# information on why a property is false.
+
 class Counterexample(object):
-    def __init__(self,clauses,state,msg):
-        self.clauses, self.state, self.msg = clauses, state, msg
+    def __init__(self,clauses,state,conc,msg):
+        self.clauses, self.state, self.msg, self.conc = clauses, state, msg, conc
     def __nonzero__(self):
         return False
 
+########################################
+#
+# The class of ARG's
+
 class AnalysisGraph(object):
-    def __init__(self,domain,pvars):
-        self.domain = domain
+    def __init__(self,module = None,pvars = []):
+        if module == None:
+            module = im.module  # use the current module if not specified
+        self.domain = module
         self.states = []
-        self.transitions = []
+        self.transitions = [] # TODO: redundant, remove
         self.covering = []
-        self.pvars = pvars
+        self.pvars = pvars  # TODO: remove this field
         self.state_graphs = []
 
+        # delegate some former fields to Module for compat
+
+        self.actions = module.actions
+        self.predicates = module.predicates
+        self.assertions = module.assertions
+        self.mixins = module.mixins
+        self.isolates = module.isolates
+        self.exports = module.exports
+        self.delegates = module.delegates
+        self.public_actions = module.public_actions
+        
     @property
     def context(self):
         return AC(self)
@@ -163,7 +204,14 @@ class AnalysisGraph(object):
             if is_action_app(expr):
                 assert len(expr.args) == 1
                 assert isinstance(expr.args[0],State)
-                self.transitions.append((expr.args[0],self.actions[expr.rep],expr.rep,state))
+                if not isinstance(expr.rep,str):
+                    action = expr.rep
+                    label = label_from_action(action)
+                else:
+                    assert expr.rep in self.actions, expr.rep
+                    action = self.actions[expr.rep]
+                    label = expr.rep
+                self.transitions.append((expr.args[0],action,label,state))
             elif is_state_join(expr):
                 for js in expr.args:
                     assert isinstance(js,State)
@@ -250,13 +298,23 @@ class AnalysisGraph(object):
             state.universe = universe
         return other_art
 
+    def check_bounded_safety(self,state):
+        postcond = get_state_assertions(state)
+        if postcond != None:
+            res = self.bmc(state,postcond)
+            if res != None:
+                return res
+        # currently checks failure only in last action
+        fail = State(expr = fail_expr(state.expr))
+        res = self.bmc(fail,true_clauses())
+        return res
+
     def copy_path(self,state,other,bound=None):
         other_state = State(other.domain)
         other_state.arg_node = state
         if hasattr(state,'pred') and state.pred != None and bound != 0:
             next_bound = None if bound is None else bound - 1
             pred = self.copy_path(state.pred,other,next_bound)
-            prestate,op,label,poststate = self.transition_to(state)
             expr = state.expr
             other.add(other_state,action_app(expr.rep,pred))
         else:
@@ -267,26 +325,26 @@ class AnalysisGraph(object):
         for asn in self.assertions:
             cex = check_state_assertion(state,asn)
             if not cex:
-                return Counterexample(cex.clauses,state,"assertion failure") # safety property failed
+                return Counterexample(cex.clauses,state,None,"assertion failure") # safety property failed
         if hasattr(state,'expr') and state.expr != None:
             with AC(self,no_add=True):
                 try:
                     eval_state(state.expr)
                 except IvyActionFailedError as err:
-                    return Counterexample(err.error_state.clauses,err.error_state.pred,repr(err))
+                    return Counterexample(err.error_state.clauses,err.error_state.pred,err.conc,repr(err))
         return True
 
     def construct_transitions_from_expressions(self):
         for state in self.states:
             if hasattr(state,'expr') and is_action_app(state.expr):
                 expr = state.expr
-                prestate,op,label,poststate = expr.args[0],expr.rep,iu.pretty(str(expr.rep),max_lines=4),state
+                prestate,op,label,poststate = expr.args[0],expr.rep,label_from_action(expr.rep),state
                 self.transitions.append((prestate,op,label,poststate))
 
     def decompose_state(self,state):
         if hasattr(state,'expr') and state.expr != None:
-            other_art = AnalysisGraph(self.domain,self.pvars)
-            other_art.actions = self.actions
+            other_art = AnalysisGraph(self.domain)
+            print [a for a in other_art.actions]
             with AC(other_art):
                 res = decompose_action_app(state,state.expr)
                 if res != None:
@@ -294,6 +352,10 @@ class AnalysisGraph(object):
                     return other_art
         return None
 
+    def make_concrete_trace(self,state,conc):
+        # TODO
+        return
+        
     def decompose_edge(self,transition):
         prestate,op,label,poststate = transition
         return self.decompose_state(poststate)
@@ -328,6 +390,8 @@ class AnalysisGraph(object):
                 if not eval_state_order(equation.args[1],fpc[equation.args[0]]):
                     yield equation
 
+def label_from_action(action):
+    return iu.pretty(str(action),max_lines=4)
 
 class AnalysisSubgraph(object):
     def __init__(self,op,graph):

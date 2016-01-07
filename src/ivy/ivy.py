@@ -11,6 +11,7 @@ from ivy_utils import Parameter, set_parameters
 import ivy_logic
 import proof as pf
 import ivy_utils as iu
+import ivy_module
 #import tactics_api as ta
 
 # mode = Parameter("mode",None)
@@ -102,6 +103,7 @@ def ivy_init():
     return ag
 
 if __name__ == "__main__":
-    ui_main_loop(ivy_init())
+    with ivy_module.Module():
+        ui_main_loop(ivy_init())
 
 

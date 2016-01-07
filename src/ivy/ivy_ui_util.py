@@ -64,6 +64,7 @@ def center_window(toplevel):
     toplevel.geometry("%dx%d+%d+%d" % (size + (x, y)))
 
 def center_window_on_window(toplevel,win):
+    win = win.winfo_toplevel()
     toplevel.update_idletasks()
     wg = win.geometry().split('+')
     wx,wy = map(int,wg[1:3])
@@ -123,6 +124,17 @@ def ok_dialog(tk,root,msg):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
     b = Button(dlg, text="OK", command=dlg.destroy)
+    b.pack(padx=5,side=TOP)
+    center_window_on_window(dlg,root)
+    tk.wait_window(dlg)
+
+def buttons_dialog_cancel(tk,root,msg,button_commands,on_cancel=lambda:None):
+    dlg = Toplevel(root)
+    Label(dlg, text=msg).pack()
+    for text,command in button_commands:
+        b = Button(dlg, text=text, command=destroy_then(dlg,command))
+        b.pack(padx=5,side=TOP)
+    b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
     b.pack(padx=5,side=TOP)
     center_window_on_window(dlg,root)
     tk.wait_window(dlg)

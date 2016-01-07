@@ -12,6 +12,7 @@ from ivy_transrel import state_to_action,new, compose_updates, condition_update_
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
 import ivy_ast
 from ivy_ast import AST, compose_atoms
+import ivy_module
 
 class Schema(AST):
     def __init__(self,defn,fresh):
@@ -52,7 +53,7 @@ class ActionContext(object):
         context = self.old_context
         return False # don't block any exceptions
     def get(self,symbol):
-        return None
+        return ivy_module.find_action(symbol)
     def new_state(self,clauses, exact = False, domain = None, expr = None):
         domain = self.domain if self.domain is not None else domain
         assert domain is not None
@@ -480,6 +481,7 @@ class Sequence(Action):
             interpreter.execute(op)
     def decompose(self,pre,post):
         return [(pre,self.args,post)]
+        
 
 
 class ChoiceAction(Action):
@@ -519,7 +521,6 @@ class IfAction(Action):
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post):
         return [(pre,[a],post) for a in self.subactions()]
-
 
 class LocalAction(Action):
     """ Hide some symbols in an action """

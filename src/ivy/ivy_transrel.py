@@ -258,6 +258,7 @@ def compose_updates(update1,axioms,update2):
     updated1, clauses1, pre1 = update1
     updated2, clauses2, pre2 = update2
     clauses2 = rename_distinct(clauses2,clauses1)
+    pre2 = rename_distinct(pre2,clauses1)
 #    print "clauses2 = {}".format(clauses2)
     us1 = set(updated1)
     us2 = set(updated2)
@@ -276,7 +277,11 @@ def compose_updates(update1,axioms,update2):
     clauses1 = rename_clauses(clauses1,map1)
     new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2))
     new_updated = list(us1.union(us2))
-    new_pre = or_clauses(pre1,and_clauses(clauses1,rename_clauses(pre2,map2)))
+#    print "pre1 before = {}".format(pre1)
+    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
+#    print "pre1 = {}".format(pre1)
+    new_pre = or_clauses(pre1,and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2)))
+#    print "new_pre = {}".format(new_pre)
     return (new_updated,new_clauses,new_pre)
 
 def exist_quant_map(syms,clauses):
@@ -353,9 +358,14 @@ def forward_image(pre_state,axioms,update):
     map1,res = forward_image_map(pre_state,axioms,update)
     return res
 
+def action_failure(action):
+    upd,tr,pre = action
+    return upd,pre,true_clauses()
+
 class ActionFailed(Exception):
-    def __init__(self,clauses):
+    def __init__(self,clauses,trans):
         self.clauses = clauses
+        self.trans = trans
 
 def clausify(f):
     return f if isinstance(f,Clauses) else formula_to_clauses(f)
@@ -363,6 +373,22 @@ def clausify(f):
 def clausify_state(s):
     upd,tr,pre = s
     return (upd,clausify(tr),clausify(pre))
+
+
+def remove_taut_eqs_clauses(clauses):
+   return Clauses(
+                [f for f in clauses.fmlas if not is_tautology_equality(f)],
+                clauses.defs
+            )
+
+def extract_pre_post_model(clauses,model,updated):
+    renaming = dict((v,new(v)) for v in updated)
+    ignore = lambda s: s.is_skolem() or is_new(s)
+    pre_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    ignore = lambda s: s.is_skolem() or (not is_new(s) and s in renaming)
+    post_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    post_clauses = rename_clauses(post_clauses,inverse_map(renaming))
+    return map(remove_taut_eqs_clauses,(pre_clauses,post_clauses))
 
 def compose_state_action(state,axioms,action, check=True):
     """ Compose a state and an action, returning a state """
@@ -373,8 +399,12 @@ def compose_state_action(state,axioms,action, check=True):
     sc,sp = clausify(sc),clausify(sp)
     if check:
         pre_test = and_clauses(and_clauses(sc,ap),axioms)
-        if clauses_sat(pre_test):
-            raise ActionFailed(pre_test)
+        model = small_model_clauses(pre_test)
+        if model != None:
+            trans = extract_pre_post_model(pre_test,model,au)
+            post_updated = [new(s) for s in au]
+            pre_test = exist_quant(post_updated,pre_test)
+            raise ActionFailed(pre_test,trans)
     if su != None:      # none means all moded
         ssu = set(su) # symbols already modified in state
         rn = dict((x,old(x)) for x in au if x not in ssu)
@@ -459,6 +489,9 @@ def interp_from_unsat_core(clauses1,clauses2,core,interpreted):
 #    print "interp_from_unsat_core res = {}".format(res)
     return res
 
+def small_model_clauses(cls):
+    return get_small_model(cls,ivy_logic.sig.sorts.values(),[])
+
 class History(object):
     """ A history is a symbolically represented sequence of states. """
     def __init__(self,state,maps = []):
@@ -502,7 +535,7 @@ class History(object):
         None if the history is vacuous. """
 
         if _get_model_clauses is None:
-            _get_model_clauses = lambda cls: get_small_model(cls,ivy_logic.sig.sorts.values(),[])
+            _get_model_clauses = small_model_clauses
 
         # A model of the post-state embeds a valuation for each time
         # in the history.
