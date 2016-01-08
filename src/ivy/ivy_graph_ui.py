@@ -622,8 +622,8 @@ class GraphWidget(Canvas):
     def update(self):
         self.delete(ALL)
         self.rebuild()
-        if self.update_callback != None:
-            self.update_callback()
+#        if self.update_callback != None:
+#            self.update_callback()
 
 
 def foo():
@@ -643,7 +643,7 @@ def show_graph(g,tk=None,frame=None,parent=None):
         frame = Toplevel(tk)
     legend = Frame(frame)
 #    legend = Tix.ScrolledWindow(frame, scrollbar=Y) # just the vertical scrollbar
-    legend.pack(side=RIGHT)
+    legend.pack(side=RIGHT,fill=Y)
     menubar = uu.MenuBar(frame)
     menubar.pack(side=TOP,fill=X)
     hbar=Scrollbar(frame,orient=HORIZONTAL)
@@ -658,7 +658,7 @@ def show_graph(g,tk=None,frame=None,parent=None):
     gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
 #    gw.pack(side=LEFT,expand=True,fill=BOTH)
     relbuttons = Frame(legend)
-    relbuttons.pack(side=TOP)
+    relbuttons.pack(side=RIGHT,fill=Y,expand=1)
     update_relbuttons(gw,relbuttons)
     gw.set_update_callback(functools.partial(update_relbuttons,gw,relbuttons))
 
@@ -698,13 +698,27 @@ def show_graph(g,tk=None,frame=None,parent=None):
     # export.pack(side=TOP)
 #    tk.mainloop()
 
+def onFrameConfigure(canvas):
+   bbox = canvas.bbox("all")
+   canvas.configure(scrollregion=bbox,width=bbox[2]-4)
+   
+
 def update_relbuttons(gw,relbuttons):
     for child in relbuttons.winfo_children():
         child.destroy()
     lb = Label(relbuttons,text="State: {}".format(gw.parent.state_label(gw.g.parent_state)))
     lb.pack(side = TOP)
-    btns = Frame(relbuttons)
-    btns.pack(side = TOP)
+
+    # make the grid of buttons scrollable
+    canvas = Canvas(relbuttons, borderwidth=0, background="#ffffff")
+    btns = Frame(canvas, background="#ffffff")
+    vsb = Scrollbar(relbuttons, orient="vertical", command=canvas.yview)
+    canvas.configure(yscrollcommand=vsb.set)
+    vsb.pack(side="right", fill="y")
+    canvas.pack(side="left", fill="both", expand=True)
+    canvas.create_window((4,4), window=btns, anchor="nw")
+    btns.bind("<Configure>", lambda event, canvas=canvas: onFrameConfigure(canvas))
+
     foo = Label(btns,text = '+')
     foo.grid(row = 0, column = 0)
     foo = Label(btns,text = '?')

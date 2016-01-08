@@ -20,30 +20,33 @@ type tl_id
 
 
 ########################################
-# set of addresses that can be requested (high-order bits)
+# set of addresses that can be requested
 
 type tl_addrset
 
 ########################################
-# identifier of address set member (low-order bits)
+# address high and low-order bits
 
-type tl_addrmem
+type tl_addrhi
+type tl_addrlo
 
 ########################################
 # construct adresses from high- and low-order bits
 
-individual addr_cons(X:tl_addrset,Y:tl_addrmem) : addr
+individual addr_cons(X:tl_addrhi,Y:tl_addrlo) : addr
 
 # address constructor is an injection
 axiom addr_cons(X1,Y1) = addr_cons(X2,Y2) -> X1=X2 & Y1=Y2
 
 ########################################
 # semantics of address sets
+# an addreset set must be a subset of a cache line
+
+individual addrset_hi(X:tl_addrset) : tl_addrhi
+relation addrset_lo(X:tl_addrset,Y:tl_addrlo)
 
 relation addrset_contains(X:tl_addrset, Y:addr)
-
-axiom addrset_contains(X,addr_cons(X,Y))
-axiom addrset_contains(X,Y) & addrset_contains(Z,Y) -> X = Z
+axiom addrset_contains(X,addr_cons(H,L)) <-> H = addrset_hi(X) & addrset_lo(X,L)
 
 ########################################
 # type of message status
@@ -54,8 +57,9 @@ type tl_status = {accepted,blocked}
 # structure representing Acquire message
 
 module acq = {
-    individual id : tl_id             # id of requester
-    individual addrs : tl_addrset     # set of requested address
+    individual id_ : id               # id of requester
+    individual addr_hi : tl_addrhi    # hi order bits of address
+    relation words(X:tl_addrlo)       # requested words
     individual own:ownership          # what ownership type? (none=uncached)
     individual op : otype             # what operation?
     individual data_ : data           # what data, if any?
@@ -72,8 +76,8 @@ instantiate acqs(X:acq_id) : acq
 # structure representing Grant message
 
 module gnt = {
-    individual id : tl_id             # id of requester
-    individual addr_ : tl_addrmem     # low-order bits of this response
+    individual id_ : id               # id of requester
+    individual word : tl_addrlo     # low-order bits of this response
     individual own:ownership          # what ownership type? (none=uncached)
     individual data_ : data        # return value, if any
     individual ltime_ : ltime         # logical time (ghost)
@@ -89,7 +93,7 @@ instantiate gnts(X:gnt_id) : gnt
 # structure representing Finish message
 
 module fns = {
-    individual id : tl_id             # id of requester
+    individual id_ : id             # id of requester
 }
 
 ########################################
@@ -102,7 +106,7 @@ instantiate fnss(X:fns_id) : fns
 # structure representing Release message
 
 module rls = {
-    individual id : tl_id             # id of requester
+    individual id_ : id             # id of requester
 }
 
 ########################################
@@ -143,35 +147,84 @@ module tl_interface(ref,clnt,mngr,side) = {
     # timestamped acquire messages
 
     relation pend_acq(M:acq_id, T:time)
-    relation pend_addr(A:addr, T:time)   # individual grants pending
+    relation pend_addr(A:tl_addrlo, T:time)   # individual grants pending
 
     init ~pend_acq(M,T) & ~pend_addr(A,T)
 
     ########################################
-    # Find earliest pending message matching ID
+    # Find earliest pending request matching ID
 
-    action match(mid:tl_id) returns(req:acq_id,reqt:time) = {
-#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id = mid;
-        assume pend_acq(req,reqt) & acqs(req).id = mid;
-        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id = mid)
+    action match_id(mid:id) returns(req:acq_id,reqt:time) = {
+#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid;
+        assume pend_acq(req,reqt) & acqs(req).id_ = mid;
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid)
     }
+
+    ########################################
+    # Find earliest pending request matching ID and lo bits
+
+    action match_id_lo(mid:id, lo:tl_addrlo) returns(req:acq_id,reqt:time) = {
+#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo);
+        assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).words(lo);
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(req).words(lo))
+    }
+
+
+    ########################################
+    # An Aquire conflict with Acquire M is a pending Acquire N at time T with
+    # the same id.
+
+    derived aconfl(M:acq_id, N:acq_id, T:time) = 
+         pend_acq(N,T) & acqs(M).id_ = acqs(N).id_
+
 
     ########################################
     # specification of Acquire message
 
     action tl_Acquire(msg:acq_id) = {
+
+        ########################################
+        # ID of Acquire must match the reference model
+	#
+        
+        assert acqs(msg).id_ = ref.evs(acqs(msg).ltime_).id_;
+
+        ########################################
+        # rules for multiple outstanding uncached Acquires for same id:
+	#
+
+	if acqs(msg).own = none {
+
+	    # 1) No two atomic operations
+
+    	    assert aconfl(msg,M,T) -> (acqs(msg).op ~= cas & acqs(M).op ~= cas);
+
+	    # 2) Addresses must differ in low order bits
+
+	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
+        };	
+
+        ########################################
+        # Update the interface state 
+	#
+
         pend_acq(msg,gt) := true;  # mark message pending
-	pend_addr(X,gt) := addrset_contains(acqs(msg).addrs,X);
+	pend_addr(X,gt) := acqs(msg).words(X);
 	call advance();       
 
+        ########################################
+        # Perform abstract opertions
+	#
+
 	if acqs(msg).own = none { # an uncached request
-	    # get the address (TODO: we assume there is only one in the set)
-	    local addr_:addr {
-  	        assume addrset_contains(acqs(msg).addrs,addr_);
-		assume ~(addrset_contains(acqs(msg).addrs,X) & X ~= addr_);
+	    # get the address (TODO: we allow only one word in the set)
+	    local word:tl_addrlo {
+  	        assume acqs(msg).words(word);
+		assert ~(acqs(msg).words(X) & X ~= word);
 
 		# perform the abstract request
-		call abs.request(addr_,acqs(msg).data_,acqs(msg).op,acqs(msg).ltime_)
+		call abs.request(addr_cons(acqs(msg).addr_hi,word),
+                                 acqs(msg).data_,acqs(msg).op,acqs(msg).ltime_)
             }
 	}
 	# (cached acquires don't correspond to any abstract action) 
@@ -185,15 +238,15 @@ module tl_interface(ref,clnt,mngr,side) = {
     action tl_Grant(msg:gnt_id) = {
         local req:acq_id, reqt:time, maddr:addr {
 	
-	    (req,reqt) := match(gnts(msg).id); # find matching request
-	    maddr := addr_cons(acqs(req).addrs,gnts(msg).addr_);  #construct address
-	    assert pend_addr(maddr,reqt);      # the address must be pending
-	    pend_addr(maddr,reqt) := false;    # mark it no longer pending
+	    (req,reqt) := match_id_lo(gnts(msg).id_,gnts(msg).word); # find matching request
+	    assert pend_addr(gnts(msg).word,reqt);                 # the word must be pending
+	    pend_addr(gnts(msg).word,reqt) := false;               # mark it no longer pending
+	    maddr := addr_cons(acqs(req).addr_hi,gnts(msg).word);  # construct full address
 
-	    if acqs(req).own ~= none {    	        # cached: perform an abstract grant
+	    if acqs(req).own ~= none {    	                   # cached: perform an abstract grant
 		call abs.grant(maddr,gnts(msg).data_,acqs(req).own)
 	    }
-	    else {		                        # uncached: perform an abstract response
+	    else {		                                   # uncached: perform an abstract response
 		call abs.response(maddr,gnts(msg).data_,acqs(req).op,acqs(req).ltime_)
             }
         }
@@ -206,7 +259,7 @@ module tl_interface(ref,clnt,mngr,side) = {
     action tl_Finish(msg:fns_id) = {
         local req:acq_id, reqt:time {
 	
-	    (req,reqt) := match(fnss(msg).id); # find matching request
+	    (req,reqt) := match_id(fnss(msg).id_); # find matching request
 	    assert ~pend_addr(X,reqt);         # must be no addresses pending
 	    pend_acq(req,reqt) := false       # mark request completed
         }
@@ -266,9 +319,9 @@ module tl_generic_client(mngr,ref,side) = {
         } else if * {
 	   call finish(f)
         } else if * {
-	   call ref.perform(lt,sid)
+	   call perform(lt,sid)
         } else {
-	   call ref.fuse(lt,lt1,sid)
+	   call fuse(lt,lt1,sid)
         }
      }
    }
@@ -309,9 +362,9 @@ module tl_generic_manager(clnt,ref,side) = {
         if * {
 	   call grant(g)
         } else if * {
-	   call ref.perform(lt,sid)
+	   call perform(lt,sid)
         } else {
-	   call ref.fuse(lt,lt1,sid)
+	   call fuse(lt,lt1,sid)
         }
      }
    }

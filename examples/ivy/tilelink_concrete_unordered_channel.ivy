@@ -134,24 +134,47 @@ axiom front.cached(A) <-> back.cached(A)
 module tests = {
 
     individual acq1 : acq_id, acq2 : acq_id
-    individual aset1 : tl_addrset
+    individual ahi1 : tl_addrhi, ahi2 : tl_addrhi
+    relation alo1(X:tl_addrlo), alo2(X:tl_addrlo)
 
     # put in two acquires for same address set
-
+    # should be possible only for different id
 
     action test1 = {
 	assume acqs(acq1).own = none;
-	assume acqs(acq1).addrs = aset1;
 	call c.acquire(acq1);
 	assume acqs(acq2).own = none;
-	assume acqs(acq2).addrs = aset1;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).words(X) <-> acqs(acq2).words(X);
 	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
 	call c.acquire(acq2);
 	call b.acquire(acq2)
     }
+
+    # put in two acquires for same line, same id
+    # should be possible only for different words
+
+    action test2 = {
+	assume acqs(acq1).own = none;
+	call c.acquire(acq1);
+	assume acqs(acq2).own = none;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).id_ = acqs(acq2).id_;
+	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
+	call c.acquire(acq2);
+	call b.acquire(acq2)
+
+#	; call b.step
+#	; call m.step
+#	; call m.step
+#       ; call b.step
+    }
+
+
 }
 
 instantiate t : tests
 export t.test1
+export t.test2
 
 isolate iso_t = b with ref,front,back,c,m,t

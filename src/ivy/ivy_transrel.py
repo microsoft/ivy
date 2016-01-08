@@ -537,6 +537,8 @@ class History(object):
         if _get_model_clauses is None:
             _get_model_clauses = small_model_clauses
 
+        print "axioms: {}".format(axioms)
+
         # A model of the post-state embeds a valuation for each time
         # in the history.
         post = and_clauses(self.post,axioms)

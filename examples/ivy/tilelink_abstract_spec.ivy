@@ -124,11 +124,10 @@ module reference = {
     # cas)
 
     derived prevents(T1,T2) =
-	~evs(T1).serialized 
-	& T1 < T2
-	& evs(T1).id_ = evs(T2).id_
-	& (evs(T1).addr_ = evs(T1).addr_ | evs(T1).type_ = cas | evs(T2).type_ = cas)
-  
+    	~evs(T1).serialized 
+    	& T1 < T2
+    	& evs(T1).id_ = evs(T2).id_
+    	& (evs(T1).addr_ = evs(T2).addr_ | evs(T1).type_ = cas | evs(T2).type_ = cas)
     
     ########################################
     # serialize an event lt at current global time. The "id"
