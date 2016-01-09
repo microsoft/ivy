@@ -358,15 +358,18 @@ def is_state_join(expr):
 def action_app(action,arg):
     return ia.Atom(action,[arg])
 
-class fail_action(object):
+class fail_action(Action):
     def __init__(self,action):
-        self.action = action
+        self.action = eval_action(action)
+        if hasattr(self.action,'lineno'):
+            self.lineno = self.action.lineno
     def __str__(self):
         return "fail " + str(self.action)
     def update(self,domain,in_scope):
+        print "action_failure action: {}".format(pretty(str(self.action)))
         return action_failure(self.action.update(domain,in_scope))
     def decompose(self,pre,post):
-        cases = self.action.decompose(pre,post)
+        cases = self.action.decompose(pre,post,fail=True)
         res = []
         for pre,acts,post in cases:
             for i in range(len(acts)):
@@ -459,6 +462,8 @@ def decompose_action_app(state2,expr):
     comps = action.decompose(state1.value,state2.value)
     bg = state1.domain.background_theory(state1.in_scope)
     for pre,acts,post in comps:
+        print "pre core: {} ".format(unsat_core(and_clauses(pre[1],bg),true_clauses()))
+        print "post core: {} ".format(unsat_core(and_clauses(post[1],bg),true_clauses()))
         upds = [act.update(state1.domain,state1.in_scope) for act in acts]
         h = History(pre)
 #        print "h.post: {}".format(h.post)

@@ -28,7 +28,7 @@ that all symbols *not* in S are preserved.
 
 """
 
-from ivy_utils import UniqueRenamer, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps
+from ivy_utils import UniqueRenamer, union_to_list, list_union, list_diff, IvyError, inverse_map, compose_maps, pretty
 from ivy_logic import Variable, Constant, Literal, Atom, Not, And, Or,App, RelationSort, Definition, is_prenex_universal
 from ivy_logic_utils import used_symbols_clauses, rename_clauses, clauses_using_symbols, simplify_clauses,\
     used_variables_clauses, used_constants_clauses, substitute_constants_clause, substitute_constants_clauses, constants_clauses,\
@@ -176,8 +176,12 @@ def updated_join(updated1,updated2):
 def join(s1,s2,relations,op):
     u1,c1,p1 = s1
     u2,c2,p2 = s2
-    c1 = and_clauses(c1,diff_frame(u1,u2,relations,op))
-    c2 = and_clauses(c2,diff_frame(u2,u1,relations,op))
+    df12 = diff_frame(u1,u2,relations,op)
+    df21 = diff_frame(u2,u1,relations,op)
+    c1 = and_clauses(c1,df12)
+    c2 = and_clauses(c2,df21)
+    p1 = and_clauses(p1,df12)
+    p2 = and_clauses(p2,df21)
     u = updated_join(u1,u2)
     c = or_clauses(c1,c2)
     p = or_clauses(p1,p2)
@@ -360,6 +364,7 @@ def forward_image(pre_state,axioms,update):
 
 def action_failure(action):
     upd,tr,pre = action
+    print "action_failure upd: {}".format([str(x) for x in upd])
     return upd,pre,true_clauses()
 
 class ActionFailed(Exception):

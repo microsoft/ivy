@@ -94,6 +94,9 @@ instantiate gnts(X:gnt_id) : gnt
 
 module fns = {
     individual id_ : id             # id of requester
+    individual own:ownership        # what ownership type? (none=uncached)
+    relation words(X:tl_addrlo)     # requested words
+    
 }
 
 ########################################
@@ -129,6 +132,10 @@ module interface_stubs = {
 
 module tl_interface(ref,clnt,mngr,side) = {
 
+    ########################################
+    # whether a line is cached
+
+    relation cached_hi(X:tl_addrhi)
 
     ########################################
     # time stamp generator
@@ -152,36 +159,41 @@ module tl_interface(ref,clnt,mngr,side) = {
     init ~pend_acq(M,T) & ~pend_addr(A,T)
 
     ########################################
-    # Find earliest pending request matching ID
+    # Find earliest pending request matching ID and ownership
 
-    action match_id(mid:id) returns(req:acq_id,reqt:time) = {
+    action match_id_own(mid:id, o:ownership) returns(req:acq_id,reqt:time) = {
 #        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid;
-        assume pend_acq(req,reqt) & acqs(req).id_ = mid;
-        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid)
+        assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).own = o;
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).own = o)
     }
 
     ########################################
-    # Find earliest pending request matching ID and lo bits
+    # Find earliest pending request matching ID, lo bits and ownership
 
-    action match_id_lo(mid:id, lo:tl_addrlo) returns(req:acq_id,reqt:time) = {
+    action match_id_lo_own(mid:id, lo:tl_addrlo, o:ownership) returns(req:acq_id,reqt:time) = {
 #        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo);
-        assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).words(lo);
-        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(req).words(lo))
+        assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).words(lo) & acqs(req).own = o;
+        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo) & acqs(M).own = o)
     }
 
 
     ########################################
     # An Aquire conflict with Acquire M is a pending Acquire N at time T with
-    # the same id.
+    # the same id and same ownership
 
     derived aconfl(M:acq_id, N:acq_id, T:time) = 
-         pend_acq(N,T) & acqs(M).id_ = acqs(N).id_
+         pend_acq(N,T) & acqs(N).own = acqs(M).own & acqs(M).id_ = acqs(N).id_
 
 
     ########################################
     # specification of Acquire message
 
     action tl_Acquire(msg:acq_id) = {
+
+        ########################################
+	# Must request at least one word
+        #    	
+	assert exists W. acqs(msg).words(W);
 
         ########################################
         # ID of Acquire must match the reference model
@@ -202,7 +214,29 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    # 2) Addresses must differ in low order bits
 
 	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
-        };	
+
+	    # 2b) Requested words must not be pending
+
+#	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
+        }
+
+        ########################################
+        # rules for multiple outstanding cached Acquires for same id and ownership:
+	#
+
+	else {
+
+	    # 1) No two with words in common
+
+    	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
+
+        };
+
+        ########################################
+        # acquires must be cached only if in cached space
+	#
+
+	assert cached_hi(acqs(msg).addr_hi) <-> acqs(msg).own ~= none;
 
         ########################################
         # Update the interface state 
@@ -238,7 +272,7 @@ module tl_interface(ref,clnt,mngr,side) = {
     action tl_Grant(msg:gnt_id) = {
         local req:acq_id, reqt:time, maddr:addr {
 	
-	    (req,reqt) := match_id_lo(gnts(msg).id_,gnts(msg).word); # find matching request
+	    (req,reqt) := match_id_lo_own(gnts(msg).id_,gnts(msg).word,gnts(msg).own); # find matching request
 	    assert pend_addr(gnts(msg).word,reqt);                 # the word must be pending
 	    pend_addr(gnts(msg).word,reqt) := false;               # mark it no longer pending
 	    maddr := addr_cons(acqs(req).addr_hi,gnts(msg).word);  # construct full address
@@ -257,9 +291,11 @@ module tl_interface(ref,clnt,mngr,side) = {
     # specification of Finish message
 
     action tl_Finish(msg:fns_id) = {
-        local req:acq_id, reqt:time {
+        local req:acq_id, reqt:time, word:tl_addrlo {
+	    assume fnss(msg).words(word);
+	    assert ~(fnss(msg).words(X) & X ~= word); # TODO: bogus
 	
-	    (req,reqt) := match_id(fnss(msg).id_); # find matching request
+	    (req,reqt) := match_id_lo_own(fnss(msg).id_,word,fnss(msg).own); # find matching request
 	    assert ~pend_addr(X,reqt);         # must be no addresses pending
 	    pend_acq(req,reqt) := false       # mark request completed
         }
@@ -275,6 +311,15 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     instantiate abs : interface_stubs
     instantiate interface(ref,abs,abs,side)
+
+    ########################################
+    # 
+    # All or none of a line is cached
+    #
+    ########################################
+
+    axiom cached(addr_cons(H,L)) <-> cached_hi(H)
+
 }
 
 
@@ -303,12 +348,12 @@ module tl_generic_client(mngr,ref,side) = {
    }
 
    action perform(lt:ltime, sid:id) = {
-       assume side(sid) = manager;
+       assume side(sid) = client;
        call ref.perform(lt,sid)
    }
 
    action fuse(lt:ltime, lt1:ltime, sid:id) = {
-       assume side(sid) = manager;
+       assume side(sid) = client;
        call ref.fuse(lt,lt1,sid)
    }
 

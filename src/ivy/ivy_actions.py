@@ -197,7 +197,7 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_calls():
                     yield c
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
 
 class AssumeAction(Action):
@@ -227,6 +227,12 @@ class AssertAction(Action):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
         return res
+    
+# Ensures is same as Assert except it never gets converted to Assume
+
+class EnsuresAction(AssertAction):
+    def assert_to_assume(self):
+        return Action.assert_to_assume(self)
     
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
@@ -479,7 +485,7 @@ class Sequence(Action):
     def __call__(self,interpreter):
         for op in self.args:
             interpreter.execute(op)
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         return [(pre,self.args,post)]
         
 
@@ -499,7 +505,7 @@ class ChoiceAction(Action):
             return self.label
         else:
             return super(ChoiceAction, self).__repr__()
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.args]
 
 class IfAction(Action):
@@ -519,7 +525,7 @@ class IfAction(Action):
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
 
 class LocalAction(Action):
@@ -536,7 +542,7 @@ class LocalAction(Action):
         res =  hide(syms,update)
 #        print "local res: {}".format(res)
         return res
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         syms = self.args[0:-1]
         pre,post = (hide_state(syms,p) for p in (pre,post))
         return self.args[-1].decompose(pre,post)
@@ -635,7 +641,7 @@ class CallAction(Action):
         return res        
     def iter_calls(self):
         yield self.args[0].relname
-    def decompose(self,pre,post):
+    def decompose(self,pre,post,fail=False):
         v = self.get_callee()
         if not isinstance(v,Action):
             return []
@@ -648,11 +654,17 @@ class CallAction(Action):
         actual_params = [rename_ast(p,premap) for p in actual_params]
         actual_returns = [rename_ast(p,postmap) for p in actual_returns]
         pre = constrain_state(pre,And(*[Equals(x,y) for x,y in zip(actual_params,v.formal_params)]))
-        post = constrain_state(post,And(*[Equals(x,y) for x,y in zip(actual_returns,v.formal_returns)]))
+        if not fail:
+            post = constrain_state(post,And(*[Equals(x,y) for x,y in zip(actual_returns,v.formal_returns)]))
         ren = dict((x,x.prefix('__hide:')) for x in actual_returns)
         post = (post[0],rename_clauses(post[1],ren),post[2])
         callee = v.clone(v.args) # drop the formals
-        return [(pre,[callee],post)]
+        res = [(pre,[callee],post)]
+        print "decompose call:"
+        print "pre = {}".format(pre)
+        print "callee = {}".format(callee)
+        print "post = {}".format(post)
+        return res
         
 
 class RME(AST):

@@ -134,8 +134,20 @@ axiom front.cached(A) <-> back.cached(A)
 module tests = {
 
     individual acq1 : acq_id, acq2 : acq_id
+    individual gnt1 : gnt_id, gnt2 : gnt_id, gnt3 : gnt_id, gnt4 : gnt_id
     individual ahi1 : tl_addrhi, ahi2 : tl_addrhi
     relation alo1(X:tl_addrlo), alo2(X:tl_addrlo)
+    individual id1 : id
+
+    action all = {
+      if * {
+        call c.step
+      } else if * {
+        call b.step 
+      } else {
+        call m.step
+      }
+    }
 
     # put in two acquires for same address set
     # should be possible only for different id
@@ -162,19 +174,32 @@ module tests = {
 	assume acqs(acq1).id_ = acqs(acq2).id_;
 	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
 	call c.acquire(acq2);
-	call b.acquire(acq2)
+	call b.acquire(acq2);
+	call b.acquire(acq1);
+	assume gnts(gnt1).ltime_ = acqs(acq1).ltime_;
+	assume acqs(acq1).words(gnts(gnt1).word); 
+	call m.perform(acqs(acq1).ltime_,id1);
+	call m.grant(gnt1);
+        call b.grant(gnt2);
+	call m.perform(acqs(acq2).ltime_,id1);
+	call m.grant(gnt3);
+        call b.grant(gnt4)
+    }
 
-#	; call b.step
-#	; call m.step
-#	; call m.step
-#       ; call b.step
+    action test3 = {
+#	call m.grant(gnt2);
+	ensures false;
+        call b.grant(gnt2)
     }
 
 
 }
 
 instantiate t : tests
+export t.all
 export t.test1
 export t.test2
+export t.test3
+
 
 isolate iso_t = b with ref,front,back,c,m,t

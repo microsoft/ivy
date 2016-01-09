@@ -304,6 +304,7 @@ module interface(ref,clnt,mngr,side) = {
     action response(a:addr, d:data, mo:otype, lt:ltime) = {
        local rid:id {
            rid := ref.evs(lt).id_;
+	   
 	   assert ~cached(a);
 	   assert side(rid) = client;
 	   assert ref.evs(lt).addr_ = a;
