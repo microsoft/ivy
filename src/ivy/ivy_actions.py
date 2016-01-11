@@ -1,7 +1,8 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic
+
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
@@ -200,6 +201,18 @@ class Action(AST):
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
 
+
+def check_can_assert(fmla,ast):
+    check_can_assume(fmla,ast)
+    logic = ivy_module.logic()
+    if not is_in_logic(Not(fmla),logic):
+        raise IvyError(ast,"This formula is not in logic {} when negated.".format(logic))
+
+def check_can_assume(fmla,ast):
+    logic = ivy_module.logic()
+    if not is_in_logic(fmla,logic):
+        raise IvyError(ast,"This formula is not in logic {}.".format(logic))
+
 class AssumeAction(Action):
     def __init__(self,*args):
         assert len(args) == 1
@@ -209,6 +222,7 @@ class AssumeAction(Action):
         return 'assume'
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
+        check_can_assume(self.args[0],self)
         return ([],formula_to_clauses_tseitin(self.args[0]),false_clauses())
 
 class AssertAction(Action):
@@ -220,6 +234,7 @@ class AssertAction(Action):
         return 'assert'
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
+        check_can_assert(self.args[0],self)
 #        print type(self.args[0])
         cl = formula_to_clauses(dual_formula(self.args[0]))
         return ([],true_clauses(),cl)
@@ -523,6 +538,7 @@ class IfAction(Action):
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
+        check_can_assert(self.args[0],self)
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):

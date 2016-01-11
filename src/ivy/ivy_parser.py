@@ -13,11 +13,9 @@ import ply.yacc as yacc
 import string
 
 precedence = (
-    ('left', 'TIMES'),
-    ('left', 'PLUS'),
+    ('left', 'SEMI'),
     ('left', 'IF'),
     ('left', 'ELSE'),
-    ('left', 'SEMI'),
     ('left', 'OR'),
     ('left', 'AND'),
     ('left', 'TILDA'),

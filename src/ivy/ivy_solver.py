@@ -226,7 +226,7 @@ def formula_to_z3_int(fmla):
         return z3.If(args[0],args[1],args[2])
     if ivy_logic.is_quantifier(fmla):
         variables = ivy_logic.quantifier_vars(fmla)
-        q = z3.forall if ivy_logic.is_forall(fmla) else z3.Exists
+        q = z3.ForAll if ivy_logic.is_forall(fmla) else z3.Exists
         res =  q([term_to_z3(v) for v in variables], args[0])
 #        print "res = {}".format(res)
         return res

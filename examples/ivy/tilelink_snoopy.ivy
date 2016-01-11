@@ -15,10 +15,11 @@ include tilelink_abstract_spec
 ################################################################################
 
 module cache_line = {
-    individual own : ownership
+    relation excl_p  # has exclusive priv
+    relation shrd_p  # has shared priv
     individual data_ : data
 
-    init own = none
+    init ~excl_p & ~shrd_p
 }
 
 ################################################################################
@@ -40,7 +41,7 @@ module snoopy(id,clnt,mngr,ref) = {
     # release action called by the client side
     # not supported
 
-    action release(a:addr, d:data) = {
+    action release(a:addr, d:data, o:ownership) = {
         assert false  # block it
     }
 
@@ -48,7 +49,11 @@ module snoopy(id,clnt,mngr,ref) = {
     # grant action called by the manager side
 
     action grant(a:addr, d:data, o:ownership) = {
-        cache(a).own := o;
+        if o = excl {
+	    cache(a).excl_p := true
+        } else {
+	    cache(a).shrd_p := true
+        };	
 	cache(a).data_ := d
     }
 
@@ -60,14 +65,14 @@ module snoopy(id,clnt,mngr,ref) = {
     action request(a:addr, d:data, mo:otype, lt:ltime) = {
         assume mo ~= cas;  # don't support for now
         if mo = read {
-	    assume cache(a).own ~= none; # models channel blocking
+	    assume cache(a).excl_p | cache(a).shrd_p; # models channel blocking
 	    local d:data {
 	        d := cache(a).data_;
    	        call ref.perform(lt,id); # ghost
 	        call clnt.response(a,d,mo,lt)
             }
         } else { # mo = write	    
-	    assume cache(a).own = excl; # models channel blocking
+	    assume cache(a).excl_p; # models channel blocking
 	    cache(a).data_ := d;
 	    call ref.perform(lt,id); # ghost
             call clnt.response(a,d,mo,lt)
@@ -86,14 +91,21 @@ module snoopy(id,clnt,mngr,ref) = {
     ########################################
     # internal action (step)
     #
-    # this models a release (voluntary pr otherwise
+    # this models a release (voluntary or otherwise)
 
     action step = {
-        local a:addr, d:data {
-            assume cache(a).own ~= none;
+        local a:addr, d:data, o:ownership {
+	    if * {
+                assume cache(a).excl_p;
+		cache(a).excl_p := false;
+		o := excl
+            } else {
+                assume cache(a).shrd_p;
+		cache(a).shrd_p := false;
+		o := shrd
+            };
 	    d := cache(a).data_;
-	    cache(a).own := none;
-	    call mngr.release(a,d)
+	    call mngr.release(a,d,o)
         }
     }
 }

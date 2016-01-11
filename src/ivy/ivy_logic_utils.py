@@ -620,7 +620,7 @@ def de_morgan(f):
 def formula_to_clauses(f):
     if type(f) in (lg.And, lg.Or) and len(f) == 1:
         f = f[0]
-    assert is_prenex_universal(f), f
+#    assert is_prenex_universal(f), f
     return Clauses([drop_universals(f)])
 
 formula_to_clauses_tseitin = formula_to_clauses

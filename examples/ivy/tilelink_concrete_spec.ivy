@@ -77,9 +77,10 @@ instantiate acqs(X:acq_id) : acq
 
 module gnt = {
     individual id_ : id               # id of requester
-    individual word : tl_addrlo     # low-order bits of this response
-    individual own:ownership          # what ownership type? (none=uncached)
-    individual data_ : data        # return value, if any
+    individual word : tl_addrlo       # low-order bits of this response
+    individual own:ownership          # what ownership type? (none = uncached)
+    relation relack                   # is this an ack of a Release?
+    individual data_ : data           # return value, if any
     individual ltime_ : ltime         # logical time (ghost)
 }
 
@@ -110,6 +111,10 @@ instantiate fnss(X:fns_id) : fns
 
 module rls = {
     individual id_ : id             # id of requester
+    relation voluntary              # is this a voluntary release?
+    individual addr_hi : tl_addrhi  # hi order bits of address
+    relation words(X:tl_addrlo)     # requested words
+    individual data_ : data         # data, if exclusive release
 }
 
 ########################################
@@ -120,10 +125,27 @@ instantiate rlss(X:rls_id) : rls
 
 
 ########################################
+# structure representing probe message
+
+module prb = {
+    individual id_ : id             # id of receiver
+    individual addr_hi : tl_addrhi  # hi order bits of address
+    relation words(X:tl_addrlo)     # requested words
+    relation excl_p                 # probing excl privs
+    relation shrd_p                 # probing shared privs
+}
+
+########################################
+# Heap of probe messages
+
+type prb_id
+instantiate prbs(X:prb_id) : prb
+
+########################################
 # Stub actions for mixins
 
 module interface_stubs = {
-    action release(a:addr, d:data) = {}
+    action release(a:addr, d:data, o:ownership) = {}
     action grant(a:addr, d:data, o:ownership) = {}
     action request(a:addr, d:data, mo:otype, lt:ltime) = {}
     action response(a:addr, d:data, mo:otype, lt:ltime) = {}
@@ -156,34 +178,81 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation pend_acq(M:acq_id, T:time)
     relation pend_addr(A:tl_addrlo, T:time)   # individual grants pending
 
-    init ~pend_acq(M,T) & ~pend_addr(A,T)
+    ########################################
+    # pending release messages (unordered)
+
+    relation pend_rls(M:rls_id)
 
     ########################################
-    # Find earliest pending request matching ID and ownership
+    # pending probe messages (unordered)
 
-    action match_id_own(mid:id, o:ownership) returns(req:acq_id,reqt:time) = {
-#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid;
-        assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).own = o;
-        assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).own = o)
-    }
+    relation pend_prb(M:prb_id)
+
+    init ~pend_acq(M,T) & ~pend_addr(A,T) & ~pend_rls(R) & ~pend_prb(P)
 
     ########################################
-    # Find earliest pending request matching ID, lo bits and ownership
+    # Find earliest pending Acquire matching ID, lo bits and ownership
 
-    action match_id_lo_own(mid:id, lo:tl_addrlo, o:ownership) returns(req:acq_id,reqt:time) = {
-#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo);
+    action find_acquire(mid:id, lo:tl_addrlo, o:ownership) returns(req:acq_id,reqt:time) = {
+# TODO: check this
+#        assert exists M. exists T. pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo) & acqs(M).own = o;
         assume pend_acq(req,reqt) & acqs(req).id_ = mid & acqs(req).words(lo) & acqs(req).own = o;
         assume T < reqt -> ~(pend_acq(M,T) & acqs(M).id_ = mid & acqs(M).words(lo) & acqs(M).own = o)
     }
 
+    ########################################
+    # Find the pending voluntary Release matching ID and lo bits.
+
+    action find_release(mid:id, lo:tl_addrlo) returns(req:rls_id) = {
+        assert exists M. pend_rls(M) & rlss(M).id_ = mid & rlss(M).words(lo) & rlss(M).voluntary;
+        assume pend_rls(req) & rlss(req).id_ = mid & rlss(req).words(lo) & rlss(req).voluntary
+    }
+
 
     ########################################
-    # An Aquire conflict with Acquire M is a pending Acquire N at time T with
+    # Find the pending Probe matching a Release.
+    # A probe matches if same id and same hi addr
+    # and some word in common
+
+    action find_probe(msg: rls_id) returns (req:prb_id) = {
+        assert exists P,W. pend_prb(P) & prbs(P).id_ = rlss(msg).id_
+	                     & prbs(P).addr_hi = rlss(msg).addr_hi
+                             & prbs(P).words(W) & rlss(msg).words(W);
+        assume exists W. pend_prb(req) & prbs(req).id_ = rlss(msg).id_
+	                     & prbs(req).addr_hi = rlss(msg).addr_hi
+                             & prbs(req).words(W) & rlss(msg).words(W)
+    }
+	   
+
+    ########################################
+    # An Aquire/Acquire conflict is a pending Acquire N at time T with
     # the same id and same ownership
 
-    derived aconfl(M:acq_id, N:acq_id, T:time) = 
+    derived aaconfl(M:acq_id, N:acq_id, T:time) = 
          pend_acq(N,T) & acqs(N).own = acqs(M).own & acqs(M).id_ = acqs(N).id_
 
+
+    ########################################
+    # An Acquire/Release conflict with a Release M is any pending Aquire N at time T
+    # with same ID (TODO: currently is any ID).
+
+    derived arconfl(M:rls_id, N:acq_id, T:time) = 
+         pend_acq(N,T)
+
+
+    ########################################
+    # An Release/Acquire conflict is a pending Release N at time T with
+    # the same id (TODO: currently is any ID).
+
+    derived raconfl(M:acq_id, N:rls_id) = 
+         pend_rls(N)
+
+    ########################################
+    # An Release/Release conflict is a pending Release N at time T with
+    # the same id (TODO: currently is any ID).
+
+    derived rrconfl(M:rls_id, N:rls_id) = 
+         pend_rls(N)
 
     ########################################
     # specification of Acquire message
@@ -202,33 +271,40 @@ module tl_interface(ref,clnt,mngr,side) = {
         assert acqs(msg).id_ = ref.evs(acqs(msg).ltime_).id_;
 
         ########################################
-        # rules for multiple outstanding uncached Acquires for same id:
+        # rules for uncached Acquires
 	#
 
 	if acqs(msg).own = none {
 
-	    # 1) No two atomic operations
+	    # 1) No two atomic operations can be pending. This is required for
+	    # release consistency, which would be violated be reordering lock
+	    # operations.
 
-    	    assert aconfl(msg,M,T) -> (acqs(msg).op ~= cas & acqs(M).op ~= cas);
+    	    assert aaconfl(msg,M,T) -> (acqs(msg).op ~= cas & acqs(M).op ~= cas);
 
-	    # 2) Addresses must differ in low order bits
+	    # 2) May not have pending acquire with same ID and ownership and with
+	    # words in common, unless that Acquire is fully served. The last proviso
+	    # is needed because the new Acquire can race the Finish of the old Acquire.
 
-	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
-
-	    # 2b) Requested words must not be pending
-
-#	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
+    	    assert aaconfl(msg,M,T) & pend_addr(A,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
         }
 
         ########################################
-        # rules for multiple outstanding cached Acquires for same id and ownership:
+        # rules for cached Acquires
 	#
 
 	else {
 
-	    # 1) No two with words in common
+	    # 1) May not have pending acquire with same ID and ownership and with
+	    # words in common. Because a release must occur between matching Acquires, 
+            # a cached Acquire cannot race with an earlier Finish.
 
-    	    assert aconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X))
+    	    assert aaconfl(msg,M,T) -> ~(acqs(msg).words(X) & acqs(M).words(X));
+
+	    # 2) May not have a pending release with same ID and with
+	    # words in common.
+	    
+	    assert ~raconfl(msg,M)
 
         };
 
@@ -247,7 +323,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 	call advance();       
 
         ########################################
-        # Perform abstract opertions
+        # Perform abstract operations
 	#
 
 	if acqs(msg).own = none { # an uncached request
@@ -270,37 +346,229 @@ module tl_interface(ref,clnt,mngr,side) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local req:acq_id, reqt:time, maddr:addr {
+        local req:acq_id, rls:rls_id, reqt:time, maddr:addr {
 	
-	    (req,reqt) := match_id_lo_own(gnts(msg).id_,gnts(msg).word,gnts(msg).own); # find matching request
-	    assert pend_addr(gnts(msg).word,reqt);                 # the word must be pending
-	    pend_addr(gnts(msg).word,reqt) := false;               # mark it no longer pending
-	    maddr := addr_cons(acqs(req).addr_hi,gnts(msg).word);  # construct full address
+	    if gnts(msg).relack {
 
-	    if acqs(req).own ~= none {    	                   # cached: perform an abstract grant
-		call abs.grant(maddr,gnts(msg).data_,acqs(req).own)
-	    }
-	    else {		                                   # uncached: perform an abstract response
-		call abs.response(maddr,gnts(msg).data_,acqs(req).op,acqs(req).ltime_)
+		########################################
+		# A release ack marks the oldest matching Release as completed
+
+	        rls := find_release(gnts(msg).id_,gnts(msg).word);         # find matching release
+		pend_rls(rls) := false;                                    # mark it completed (no Finish)
+
+	        ########################################
+		# Rules for release acks:
+		#
+		# 1) Cannot ack a release if there is a pending Acquire that matches
+		# the release.
+		#
+		# Note: this is another way of saying that Acquires/Releases have to
+		# be served in order, since a pending Release is necessarily later than
+		# an pending Acquires.
+
+		assert arconfl(rls,M,T) -> ~(rlss(rls).words(X) & acqs(M).words(X))
+            }
+            else {	    
+
+		########################################
+		# For a normal Grant, we find the oldest matching Acquire, then
+		# mark the given word as completed. We then implement the semantics
+		# of Grant by calling the abstract spec.
+
+		(req,reqt) := find_acquire(gnts(msg).id_,gnts(msg).word,gnts(msg).own); # find matching request
+		assert pend_addr(gnts(msg).word,reqt);                 # the word must be pending
+		pend_addr(gnts(msg).word,reqt) := false;               # mark it no longer pending
+
+	        ########################################
+		# Rules for normal grants:
+		#
+		# 1) Cannot grant if there is a pending probe with same id including
+		# the grant's word, unless the grant is for privs specified in the probe.
+		# (TODO: currently ignores ID)
+		#
+		# Note: this is to prevent a race of Release and Acquire in the case
+		# of a Probe and an upgrade Acquire crossing in the channel. The Acquire will
+		# be delayed until after the Release is served.
+
+		assert ~(pend_prb(M) & acqs(req).addr_hi = prbs(M).addr_hi
+		         & prbs(M).words(gnts(msg).word)
+			 & (acqs(req).own = excl & ~prbs(M).excl_p
+			    | acqs(req).own = shrd & ~prbs(M).shrd_p));
+
+
+	        ########################################
+		# Abstract semantics of grant
+
+		maddr := addr_cons(acqs(req).addr_hi,gnts(msg).word);  # construct full address
+		if acqs(req).own ~= none {    	                       # cached: perform an abstract grant
+		    call abs.grant(maddr,gnts(msg).data_,acqs(req).own)
+		}
+		else {		                                       # uncached: perform an abstract response
+		    call abs.response(maddr,gnts(msg).data_,acqs(req).op,acqs(req).ltime_)
+		}
             }
         }
+
     }
     mixin tl_Grant before clnt.tl_Grant
 
     ########################################
     # specification of Finish message
+    #
+    # A finish simply marks the matching Acquire as completed.
 
     action tl_Finish(msg:fns_id) = {
         local req:acq_id, reqt:time, word:tl_addrlo {
 	    assume fnss(msg).words(word);
 	    assert ~(fnss(msg).words(X) & X ~= word); # TODO: bogus
 	
-	    (req,reqt) := match_id_lo_own(fnss(msg).id_,word,fnss(msg).own); # find matching request
+	    (req,reqt) := find_acquire(fnss(msg).id_,word,fnss(msg).own); # find matching request
 	    assert ~pend_addr(X,reqt);         # must be no addresses pending
 	    pend_acq(req,reqt) := false       # mark request completed
         }
     }   
     mixin tl_Finish before mngr.tl_Finish    
+
+    ########################################
+    # specification of Release message
+
+    action tl_Release(msg:rls_id) = {
+
+        ########################################
+	# Must release at least one word
+        #    	
+	assert exists W. rlss(msg).words(W);
+
+
+        ########################################
+        # No release with pending release with same ID and words in common. 
+	# Because a voluntary release has to be acked before an involuntary
+	# release can be issued, we can never have two matching releases
+	# pending.
+
+	assert rrconfl(msg,M) -> ~(rlss(msg).words(X) & rlss(M).words(X));
+
+	if rlss(msg).voluntary {
+
+	    ########################################
+	    # Voluntary release. Mark as pending. 
+	    #
+
+	    pend_rls(msg) := true;
+
+	    ########################################
+	    # Rule: No voluntary release with pending acquire and words in common, if
+	    # any words of the acquire are still pending. If an acquire has
+	    # all words completed but no Finish has arrived, we must allow
+	    # a release, since the release may overtake the finish in a channel.
+
+	    assert arconfl(msg,M,T) & pend_addr(A,T) -> ~(rlss(msg).words(X) & acqs(M).words(X))
+
+        }
+	else {
+	
+	    ########################################
+	    # Involuntary release. Must exist a pending
+	    # probe with same id and exactly the same words. 
+	    #
+	    # Note we *do* allow an involuntary relase with
+	    # a pending Acquire, since this Acquire may be
+	    # an upgrade that cannot be served. This leads to
+	    # the rule below.
+	    # 
+
+	    local p:prb_id {
+	        p := find_probe(msg);
+	    	assert prbs(p).words(W) <-> rlss(msg).words(W);
+		
+		########################################
+		# Rule: The client must have the privs requested
+		# in order to respond. Violating this rule would
+		# lead to loss of coherence, since a grant might be
+		# latent in the channel.
+
+		assert prbs(p).words(W) & prbs(p).excl_p -> excl_p(addr_cons(prbs(p).addr_hi,W));
+		assert prbs(p).words(W) & prbs(p).shrd_p -> shrd_p(addr_cons(prbs(p).addr_hi,W));
+
+		pend_prb(p) := false   # mark the probe completed
+            }
+        };
+
+	# get the address (TODO: we allow only one word in the set)
+
+	local word:tl_addrlo, a:addr {
+
+  	    assume rlss(msg).words(word);
+	    assert ~(rlss(msg).words(X) & X ~= word);
+	    a := addr_cons(rlss(msg).addr_hi,word);
+
+	    ########################################
+	    # Must have some privs on released words
+            # if release is volunrary (TODO: needed?)
+	    	    
+	    assert excl_p(a) | shrd_p(a);  # these are abs state
+
+	    # call abstract spec to release all privs
+
+	    if excl_p(a) {
+	        call abs.release(a,rlss(msg).data_,excl)
+            };
+	    if shrd_p(a) {
+	        call abs.release(a,rlss(msg).data_,shrd)
+            }
+
+        }
+    }
+    mixin tl_Release before mngr.tl_Release
+
+    ########################################
+    # specification of Probe message
+
+    action tl_Probe(msg:prb_id) = {
+    
+        ########################################
+	# Rules for probe
+
+	# 1) A probe must request some word
+
+	assert exists W. prbs(msg).words(W);
+
+	# 2) No pending probes with same id and words
+	# in common (TODO: currently ignores ID)
+
+	assert ~(pend_prb(M) & prbs(M).addr_hi = prbs(msg).addr_hi
+	         & prbs(M).words(W) & prbs(msg).words(W));
+
+	# 3) No pending releases with same id and words
+	# in common (TODO: currently ignores ID)
+
+	assert ~(pend_rls(M) & rlss(M).addr_hi = prbs(msg).addr_hi
+	         & rlss(M).words(W) & prbs(msg).words(W));
+
+        # Note, however, we *do* allow a Probe with a pending
+	# Acquire, since the Acquire may be an upgrade.
+
+	# 4) The requested privs must include the privs granted
+	# so far.
+
+	assert prbs(msg).words(W) & excl_p(addr_cons(prbs(msg).addr_hi,W)) -> 
+	           prbs(msg).excl_p;
+
+	assert prbs(msg).words(W) & shrd_p(addr_cons(prbs(msg).addr_hi,W)) ->
+	           prbs(msg).shrd_p;
+
+        # Note: we might want to make stronger requirements to make
+	# implemenation simpler, for example that a Probe is never
+	# sent while an Acquire is partially served. Currently, the
+	# spec allows this.
+
+	########################################
+	# Mark the probe pending
+
+	pend_prb(msg) := true
+
+    }
+    mixin tl_Probe before clnt.tl_Probe
 
     ########################################
     # 
@@ -339,6 +607,8 @@ module tl_generic_client(mngr,ref,side) = {
 
    action tl_Grant(msg:gnt_id) = {}
 
+   action tl_Probe(msg:prb_id) = {}
+
    action acquire(a:acq_id) = {
        call mngr.tl_Acquire(a)
    }
@@ -347,6 +617,9 @@ module tl_generic_client(mngr,ref,side) = {
        call mngr.tl_Finish(f)
    }
 
+   action release(f:rls_id) = {
+       call mngr.tl_Release(f)
+   }
    action perform(lt:ltime, sid:id) = {
        assume side(sid) = client;
        call ref.perform(lt,sid)
@@ -358,11 +631,15 @@ module tl_generic_client(mngr,ref,side) = {
    }
 
    action step = {
-     local op:client_action, lt:ltime, lt1:ltime, sid:id, a:acq_id, f:fns_id {
+     local op:client_action, lt:ltime, lt1:ltime, sid:id, a:acq_id, f:fns_id, r:rls_id {
         if * {
 	   call acquire(a)
         } else if * {
 	   call finish(f)
+        } else if * {
+	   call finish(f)
+        } else if * {
+	   call release(r)
         } else if * {
 	   call perform(lt,sid)
         } else {
@@ -388,8 +665,14 @@ module tl_generic_manager(clnt,ref,side) = {
 
    action tl_Finish(msg:fns_id) = {}
 
+   action tl_Release(msg:rls_id) = {}
+
    action grant(g:gnt_id) = {
       call clnt.tl_Grant(g)
+   }
+
+   action probe(g:prb_id) = {
+      call clnt.tl_Probe(g)
    }
 
    action perform(lt:ltime, sid:id) = {
@@ -403,9 +686,11 @@ module tl_generic_manager(clnt,ref,side) = {
    }
 
    action step = {
-     local lt:ltime, lt1:ltime, sid:id, g:gnt_id {
+     local lt:ltime, lt1:ltime, sid:id, g:gnt_id, p:prb_id {
         if * {
 	   call grant(g)
+        } else if * {
+	   call probe(p)
         } else if * {
 	   call perform(lt,sid)
         } else {

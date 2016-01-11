@@ -225,7 +225,8 @@ module interface(ref,clnt,mngr,side) = {
     ########################################
     # client side ownership state of address
 
-    individual own(A:addr) : ownership 
+    relation excl_p(A:addr)   # client as exclusive priv
+    relation shrd_p(A:addr)   # client as shared priv
 
     ########################################
     # client side events to serialize on manager side
@@ -240,19 +241,24 @@ module interface(ref,clnt,mngr,side) = {
     ########################################
     # initial state of interface. nothing owned, nothing to serialize
 
-    init own(A) = none & ~to_ser(T)
+    init ~excl_p(A) & ~shrd_p(A) & ~to_ser(T)
 
     
     ########################################
     # specification of release messages
 
-    action release(a:addr, d:data) = {
+    action release(a:addr, d:data, o:ownership) = {
        assert cached(a);
-       assert own(a) ~= none;
-       if own(a) = excl {
-	   assert ref.mem(a) = d  # exclusive release transfers correct data
-       };
-       own(a) := none 
+       assert o ~= none;
+       # cannot release priviledges you don't have
+       assert o = shrd -> shrd_p(a);
+       assert o = excl -> excl_p(a);
+       if o = excl {
+   	   assert ref.mem(a) = d;  # exclusive release transfers correct data
+           excl_p(a) := false 
+       } else {
+           shrd_p(a) := false 
+       }
     }
     mixin release before mngr.release
 
@@ -262,9 +268,15 @@ module interface(ref,clnt,mngr,side) = {
     action grant(a:addr, d:data, o:ownership) = {
        assert cached(a);
        assert o ~= none;
-       assert own(a) = none;
+       # must grant a priviledge only once
        assert ref.mem(a) = d;   # any grant transfers correct data
-       own(a) := o 
+       if o = excl {
+           assert ~excl_p(a);
+           excl_p(a) := true
+       } else {
+           assert ~shrd_p(a);
+           shrd_p(a) := true
+       }
     }
     mixin grant before clnt.grant
 
@@ -286,7 +298,7 @@ module interface(ref,clnt,mngr,side) = {
 	   assert ref.evs(lt).addr_ = a;
 	   assert ref.evs(lt).data_ = d;
 	   assert mo = ref.evs(lt).type_;
-	   assert own(a) = none;
+	   assert ~excl_p(a) & ~shrd_p(a); # TODO: shouldn't matter
 	   assert ~(ref.prevents(T1,lt) & ~to_ser(T1));
 	   to_ser(lt) := true
        }
@@ -310,7 +322,7 @@ module interface(ref,clnt,mngr,side) = {
 	   assert ref.evs(lt).addr_ = a;
 	   assert ref.evs(lt).data_ = d;
 	   assert mo = ref.evs(lt).type_;
-	   assert own(a) = none;
+	   assert ~excl_p(a) & ~shrd_p(a); # TODO: shouldn't matter
 	   assert to_ser(lt);
 	   assert ref.evs(lt).serialized
        }
@@ -340,9 +352,9 @@ module interface(ref,clnt,mngr,side) = {
 	      # and in order
 
 	      if side(sid) = client {  
-		  assert mo = read -> own(a) ~= none;
-		  assert mo = write -> own(a) = excl;
-		  assert mo = cas -> own(a) = excl;
+		  assert mo = read -> excl_p(a) | shrd_p(a);
+		  assert mo = write -> excl_p(a);
+		  assert mo = cas -> excl_p(a);
 		  assert ~ref.prevents(T1,lt)
 	      }	       
 
@@ -363,9 +375,9 @@ module interface(ref,clnt,mngr,side) = {
 
 	   else {
 	      assert side(sid) = manager; # can't serialize a manager side event on client side
-	      assert mo = read -> own(a) ~= excl;
-	      assert mo = write -> own(a) = none;
-	      assert mo = cas -> own(a) = none;
+	      assert mo = read -> ~excl_p(a);
+	      assert mo = write -> ~excl_p(a) & ~shrd_p(a);
+	      assert mo = cas -> ~excl_p(a) & ~shrd_p(a);
 	      assert ~ref.prevents(T1,lt)
 	   }
         }
@@ -407,7 +419,7 @@ module generic_client(mngr,ref,side) = {
      local a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime  {
         assume side(sid) = client;
         if * {
-           call mngr.release(a, d)
+           call mngr.release(a, d, o)
         } else if * {
 	   call mngr.request(a, d, mo, lt)
         } else if * {
@@ -432,7 +444,7 @@ module generic_client(mngr,ref,side) = {
 module generic_manager(clnt,ref,side) = {
    action request(a:addr, d:data, mo:otype, lt:ltime) = {
    }
-   action release(a:addr, d:data) = {
+   action release(a:addr, d:data, o:ownership) = {
    }
    action step = {
      local a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime {

@@ -333,6 +333,37 @@ def drop_existentials(term):
         return lg.Not(drop_universals(term.args[0]))
     return term
 
+def is_alternation_free(term):
+    return is_prenex_universal(term) or is_prenex_existential(term) and not lu.free_variables(term)
+
+def is_ae(term):
+    if isinstance(term,lg.ForAll):
+        return is_ae(term.body)
+    if isinstance(term,lg.Exists):
+        return is_prenex_existential(term.body)
+    if isinstance(term,lg.Not):
+        return is_ea(term.args[0])
+    return is_qf(term)
+
+def is_ea(term):
+    if isinstance(term,lg.Exists):
+        return is_ea(term.body)
+    if isinstance(term,lg.ForAll):
+        return is_prenex_universal(term.body)
+    if isinstance(term,lg.Not):
+        return is_ae(term.args[0])
+    return is_qf(term)
+
+logics = ["epr","fo"]
+
+def is_in_logic(term,logic):
+    assert logic in logics
+    if logic == "epr":
+        if lu.free_variables(term):
+            return is_prenex_universal(term)
+        return is_ea(term)
+
+
 def Constant(sym):
     return sym # first-order constants are not applied in ivy2
 

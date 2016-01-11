@@ -94,3 +94,11 @@ def background_theory(symbols = None):
 
 def find_action(name):
     return module.actions.get(name,None)
+
+param_logic = iu.Parameter("complete","epr",check=lambda s: (s in il.logics))
+
+def logic():
+    return param_logic.get()
+
+
+

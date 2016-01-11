@@ -250,10 +250,11 @@ class Parameter(object):
 
     """
 
-    def __init__(self,key,init_val=None,check=lambda s:True):
+    def __init__(self,key,init_val=None,check=lambda s:True,process=lambda s:s):
         global registry
         self.value = init_val
         self.check = check
+        self.process = process
         self.key = key
         assert key not in registry
         registry[key] = self
@@ -263,11 +264,20 @@ class Parameter(object):
 
     def set(self,new_val):
         if not self.check(new_val):
-            raise IvyError(None,"bad paramater value: {}={}".format(self.key,new_val))
-        self.value = new_val
+            raise IvyError(None,"bad parameter value: {}={}".format(self.key,new_val))
+        self.value = self.process(new_val)
 
     def __nonzero__(self):
         return True if self.value else False
+
+class BooleanParameter(Parameter):
+    """ Parameter that takes "true" for True and "false" for False """
+    def __init__(self,key,init_val=None):
+        Parameter.__init__(self,key,init,
+                           check = lambda s: (s == "true" or s == "false"),
+                           process = lambda s: s == "true")
+
+    
 
 
 def set_parameters(values):

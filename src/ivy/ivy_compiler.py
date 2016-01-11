@@ -580,14 +580,14 @@ def isolate_component(ag,isolate_name):
                     exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
+    ext_act = ia.ChoiceAction(*[new_actions[x] for x in sorted(exported)])
+    exported.add('ext');
+    new_actions['ext'] = ext_act;
+
     ag.public_actions.clear()
     ag.public_actions.update(exported)
     ag.actions.clear()
     ag.actions.update(new_actions)
-
-    ext_act = ia.ChoiceAction(*[ag.actions[x] for x in sorted(exported)])
-    exported.add('ext');
-    ag.actions['ext'] = ext_act;
 
     print "actions:"
     for x,y in ag.actions.iteritems():

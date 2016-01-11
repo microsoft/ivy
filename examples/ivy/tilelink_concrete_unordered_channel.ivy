@@ -28,11 +28,13 @@ module dut(id,clnt,mngr,ref) = {
     relation acqs(I:msg_id,M:acq_id)
     relation gnts(I:msg_id,M:gnt_id)
     relation fnss(I:msg_id,M:fns_id)
+    relation rlss(I:msg_id,M:rls_id)
+    relation prbs(I:msg_id,M:prb_id)
 
     ########################################
     # initially the channels are empty
 
-    init ~acqs(I,A) & ~gnts(I,G) & ~fnss(I,F)
+    init ~acqs(I,A) & ~gnts(I,G) & ~fnss(I,F) & ~rlss(I,R) & ~prbs(I,P)
 
     ########################################
     # acquire action called by the client side
@@ -72,6 +74,31 @@ module dut(id,clnt,mngr,ref) = {
 
 
     ########################################
+    # release action called by the client side
+    #
+    # this just enqueues a release message
+
+    action tl_Release(msg:rls_id) = {
+        local mid:msg_id {
+	    assume ~rlss(mid,msg);
+	    rlss(mid,msg) := true
+        }
+    }
+
+
+    ########################################
+    # probe action called by the manager side
+    #
+    # this just enqueues a probe message
+
+    action tl_Probe(msg:prb_id) = {
+        local mid:msg_id {
+	    assume ~prbs(mid,msg);
+	    prbs(mid,msg) := true
+        }
+    }
+
+    ########################################
     # internal action (step)
     #
     # pick an arbitary message and deliver it.
@@ -101,13 +128,33 @@ module dut(id,clnt,mngr,ref) = {
        }
     }
 
+    action release(a:rls_id) = {
+       local mid:msg_id { 
+	   assume rlss(mid,a);
+	   rlss(mid,a) := false; # remove from channel
+	   call mngr.tl_Release(a)
+       }
+    }
+
+    action probe(a:prb_id) = {
+       local mid:msg_id { 
+            assume prbs(mid,a);
+            prbs(mid,a) := false; # remove from channel
+	    call clnt.tl_Probe(a)
+       }
+    }
+
     action step = {
        if * {
            local a:acq_id {call acquire(a)}
        } else if * {
            local a:gnt_id {call grant(a)}
-       } else {
+       } else if * {
      	   local a:fns_id {call finish(a)}
+       } else if * {
+     	   local a:rls_id {call release(a)}
+       } else {
+           local a:prb_id {call probe(a)}
        }
     }
 }
@@ -135,6 +182,9 @@ module tests = {
 
     individual acq1 : acq_id, acq2 : acq_id
     individual gnt1 : gnt_id, gnt2 : gnt_id, gnt3 : gnt_id, gnt4 : gnt_id
+    individual rls1 : rls_id, rls2 : rls_id
+    individual fns1 : fns_id, fns2 : fns_id
+    individual prb1 : prb_id, prb2 : prb_id
     individual ahi1 : tl_addrhi, ahi2 : tl_addrhi
     relation alo1(X:tl_addrlo), alo2(X:tl_addrlo)
     individual id1 : id
@@ -187,9 +237,125 @@ module tests = {
     }
 
     action test3 = {
-#	call m.grant(gnt2);
-	ensures false;
+	call m.grant(gnt3)
+    }
+
+#     action test4 = {
+# 	assume acqs(acq1).own = shrd;
+# 	call c.acquire(acq1);
+# 	call b.acquire(acq1);
+# 	call m.grant(gnt1);
+#         call b.grant(gnt2);
+# #	call c.finish(fns1);
+# 	call c.release(rls1);
+# 	call b.release(rls1)
+#     }
+
+    action test4 = {
+	assume acqs(acq1).own = shrd;
+	assume acqs(acq2).own = excl;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).words(W) <-> acqs(acq2).words(W);
+	call c.acquire(acq1);
+	call c.acquire(acq2);
+	call b.acquire(acq2);
+	call m.grant(gnt1);
+        call b.grant(gnt1);
+	call b.acquire(acq1);
+	call m.grant(gnt2);
         call b.grant(gnt2)
+;
+ 	call c.release(rls1)
+;
+ 	call c.finish(fns1)
+;
+ 	call b.release(rls1)
+;
+ 	call b.finish(fns1)
+;
+ 	call c.finish(fns2)
+;
+ 	call b.finish(fns2)
+;
+ 	call m.grant(gnt3)
+;
+ 	call b.grant(gnt3)
+;
+ 	call c.acquire(acq1)
+;
+ 	call b.acquire(acq1)
+#;
+# 	call b.release(rls1);
+# 	call b.finish(fns1);
+# 	call m.grant(gnt3);
+# 	call b.grant(gnt3)
+
+    }
+
+    # test probe crossing with upgrade acquire
+
+    action test5 = {
+	assume acqs(acq1).own = shrd;
+	assume acqs(acq2).own = excl;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).words(W) <-> acqs(acq2).words(W);
+	call c.acquire(acq1);
+	call c.acquire(acq2);
+	call b.acquire(acq2);
+	call m.grant(gnt1);
+        call b.grant(gnt1);
+	call m.probe(prb1);
+	call b.probe(prb1);
+ 	call c.release(rls1)
+	;
+ 	call b.acquire(acq1)
+;
+  	call b.release(rls1)
+;
+ 	call m.grant(gnt2)
+;
+	call m.probe(prb2);
+	call b.probe(prb2)
+;
+ 	call b.grant(gnt2)
+;
+ 	call c.release(rls2)
+;
+	call b.release(rls2)
+;
+ 	call c.finish(fns1)
+;
+ 	call b.finish(fns1)
+;
+ 	call c.finish(fns2)
+;
+ 	call b.finish(fns2)
+	
+#         call b.grant(gnt2)
+# ;
+#  	call c.release(rls1)
+# ;
+#  	call c.finish(fns1)
+# ;
+#  	call b.release(rls1)
+# ;
+#  	call c.finish(fns2)
+# ;
+#  	call b.finish(fns2)
+# ;
+#  	call m.grant(gnt3)
+# ;
+#  	call b.grant(gnt3)
+# ;
+#  	call c.acquire(acq1)
+# ;
+#  	call b.acquire(acq1)
+#;
+# 	call b.release(rls1);
+# 	call b.finish(fns1);
+# 	call m.grant(gnt3);
+# 	call b.grant(gnt3)
+
     }
 
 
@@ -200,6 +366,8 @@ export t.all
 export t.test1
 export t.test2
 export t.test3
+export t.test4
+export t.test5
 
 
 isolate iso_t = b with ref,front,back,c,m,t
