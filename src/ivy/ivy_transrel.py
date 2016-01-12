@@ -111,6 +111,12 @@ def top_state():
 def bottom_state():
     return pure_state(false_clauses())
 
+def assert_action(fmla):
+    fail_flag = Symbol("sys:fail",RelationSort([]))
+    return SemActionValue([fail_flag],true_clauses(),
+                          Clauses(defs = [Definition(new(fail_flag),Or(fail_flag,Not(fmla)))]))
+
+
 def state_postcond(state):
     assert isinstance(state,SemStateValue)
     return state.trans

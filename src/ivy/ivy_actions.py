@@ -9,7 +9,8 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
     used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
-    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state, SemActionValue
+    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state, SemActionValue, assert_action
+import ivy_utils as iu
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
 import ivy_ast
 from ivy_ast import AST, compose_atoms
@@ -236,8 +237,11 @@ class AssertAction(Action):
         type_check(domain,self.args[0])
         check_can_assert(self.args[0],self)
 #        print type(self.args[0])
-        cl = formula_to_clauses(dual_formula(self.args[0]))
-        return SemActionValue([],true_clauses(),cl)
+        if iu.new_assert_impl.get():
+            return assert_action(self.args[0])
+        else:
+            cl = formula_to_clauses(dual_formula(self.args[0]))
+            return SemActionValue([],true_clauses(),cl)
     def assert_to_assume(self):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
