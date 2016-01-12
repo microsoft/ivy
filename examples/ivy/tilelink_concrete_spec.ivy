@@ -265,10 +265,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 	assert exists W. acqs(msg).words(W);
 
         ########################################
-        # ID of Acquire must match the reference model
+        # ID of uncached Acquire must match the reference model
 	#
         
-        assert acqs(msg).id_ = ref.evs(acqs(msg).ltime_).id_;
+        assert acqs(msg).own = none -> acqs(msg).id_ = ref.evs(acqs(msg).ltime_).id_;
 
         ########################################
         # rules for uncached Acquires
@@ -419,8 +419,14 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     action tl_Finish(msg:fns_id) = {
         local req:acq_id, reqt:time, word:tl_addrlo {
+
+	    ########################################
+	    # Rule: Finish must have some word
+
+	    assert exists W. fnss(msg).words(W);
+
 	    assume fnss(msg).words(word);
-	    assert ~(fnss(msg).words(X) & X ~= word); # TODO: bogus
+#	    assert ~(fnss(msg).words(X) & X ~= word); # TODO: bogus
 	
 	    (req,reqt) := find_acquire(fnss(msg).id_,word,fnss(msg).own); # find matching request
 	    assert ~pend_addr(X,reqt);         # must be no addresses pending
@@ -461,6 +467,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    # any words of the acquire are still pending. If an acquire has
 	    # all words completed but no Finish has arrived, we must allow
 	    # a release, since the release may overtake the finish in a channel.
+
+	    # TODO: can we relax this to consider only conflicts with same hi addr?
 
 	    assert arconfl(msg,M,T) & pend_addr(A,T) -> ~(rlss(msg).words(X) & acqs(M).words(X))
 
@@ -556,6 +564,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 	assert prbs(msg).words(W) & shrd_p(addr_cons(prbs(msg).addr_hi,W)) ->
 	           prbs(msg).shrd_p;
+
+        # 5) A probe must request some privs
+
+	assert prbs(msg).excl_p | prbs(msg).shrd_p;
 
         # Note: we might want to make stronger requirements to make
 	# implemenation simpler, for example that a Probe is never

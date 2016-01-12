@@ -1,0 +1,343 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is an abstract model of simple snoopy cache using TileLink
+#
+################################################################################
+
+include tilelink_concrete_spec
+
+################################################################################
+#
+# Cache line format
+#
+################################################################################
+
+module cache_line = {
+    relation excl_p  # has exclusive priv
+    relation shrd_p  # has shared priv
+    individual data_ : data
+}
+
+
+################################################################################
+#
+# Transaction ID's
+#
+################################################################################
+
+type tid
+
+################################################################################
+#
+# Pending Acquire transactions
+#
+################################################################################
+
+module trans = {
+   individual acq_ : acq_id
+   relation words(W:tl_addrlo)
+
+   init ~words(W)
+}
+
+################################################################################
+#
+# The snoopy cache model
+#
+################################################################################
+
+
+module dut(myid,clnt,mngr,ref) = {
+
+    ########################################
+    # The cache
+
+    individual cache_data(A:addr) : data
+    relation cache_excl(A:tl_addrhi, W:tl_addrlo)
+    relation cache_shrd(A:tl_addrhi, W:tl_addrlo)
+
+    # protocol state
+
+    instantiate tns(T:tid) : trans
+    relation pend_rls(A:tl_addrhi,W:tl_addrlo)
+    
+    init ~cache_excl(A,W) & ~cache_shrd(A,W) & ~pend_rls(A,W)
+
+    ########################################
+    # release action called by the client side
+    # not supported
+
+    action tl_Release(msg:rls_id) = {
+        assert false  # block it
+    }
+
+    ########################################
+    # produce a finish corresponding to a transaction
+
+    action send_finish(t:tid) = {
+        local f:fns_id {
+	    assume fnss(f).id_ = myid;
+	    assume fnss(f).own = acqs(tns(t).acq_).own;
+	    assume fnss(f).words(W) <-> acqs(tns(t).acq_).words(W);
+	    call mngr.tl_Finish(f)
+        }
+    }    
+
+    ########################################
+    # grant action called by the manager side
+
+    action tl_Grant(msg:gnt_id) = {
+
+        if gnts(msg).relack {
+	
+	    # on a release ack, mark release completed
+
+	    local ahi:tl_addrhi {
+ 	        assert exists A. pend_rls(A,gnts(msg).word);
+	        assume pend_rls(ahi,gnts(msg).word);
+	        pend_rls(ahi,gnts(msg).word) := false
+            }
+        }
+
+	else {
+	    local a:addr, ahi:tl_addrhi, t:tid, w:tl_addrlo {
+
+	        w := gnts(msg).word;
+		assert gnts(msg).own ~= none;
+
+		# find the corresponding transaction
+		assert exists T. (tns(T).words(w) & acqs(tns(T).acq_).own = gnts(msg).own);
+		assume tns(t).words(w) &  acqs(tns(t).acq_).own = gnts(msg).own;
+
+		ahi := acqs(tns(t).acq_).addr_hi;
+		a := addr_cons(ahi,w);
+
+		if gnts(msg).own = excl {
+		    cache_excl(ahi,w) := true
+		} else {
+		    cache_shrd(ahi,w) := true
+		};	
+
+		cache_data(a) := gnts(msg).data_;
+	
+		tns.words(t,w) := false;
+	        if ~tns.words(t,W:tl_addrlo) {
+		    call send_finish(t)      # fire off a corresponding finish
+                }
+	    }
+	}
+    }
+
+
+    ########################################
+    # construct and send an uncached Grant message
+    #
+    # 
+
+    action grant(mid:id, w:tl_addrlo, d:data, lt:ltime) = {
+        local g:gnt_id {
+	    assume gnts(g).id_ = mid;
+	    assume gnts(g).word = w;
+	    assume gnts(g).data_ = d;
+	    assume gnts(g).ltime_ = lt;
+	    call clnt.tl_Grant(g)
+        }
+    }
+
+    ########################################
+    # Acquire action called by the client side
+    #
+    # 
+
+    action tl_Acquire(msg:acq_id) = {
+        assume acqs(msg).own = none;     #only support uncached
+	local o:otype, a:addr, d:data, lt:ltime, mid:id, ahi: tl_addrhi, word:tl_addrlo {
+	      o := acqs(msg).op;
+
+	      # should be only one word requested
+	      assume acqs(msg).words(word);
+	      assume ~(acqs(msg).words(X) & X ~= word);
+
+	      ahi := acqs(msg).addr_hi;
+	      a := addr_cons(ahi,word);
+	      lt := acqs(msg).ltime_;
+	      mid := acqs(msg).id_;
+
+              assume o ~= cas;                # don't support cas for now
+              if o = read {
+	          assume cache_excl(ahi,word) | cache_shrd(ahi,word); # models channel blocking
+	          d := cache_data(a);
+   	          call ref.perform(lt,myid); # ghost
+	          call grant(mid,word,d,lt)
+              } else { # o = write	    
+	          assume cache_excl(ahi,word); # models channel blocking
+		  d := acqs(msg).data_;
+	          cache_data(a) := d;
+	          call ref.perform(lt,myid); # ghost
+                  call grant(mid,word,d,lt)
+              }
+        }
+    }
+
+
+    ########################################
+    # internal acquire action
+    # TODO: should be able to control words set
+
+    action acquire(ahi:tl_addrhi, word: tl_addrlo, own_:ownership) = {
+       local a : addr, msg:acq_id {
+
+         assume own_ ~= none;
+
+	 # construct an Acquire message
+
+	 assume acqs(msg).id_ = myid;
+	 assume acqs(msg).addr_hi = ahi;
+	 assume acqs(msg).words(word);                 # this gives at least one word
+         assume ~(acqs(tns(T).acq_).words(W) & acqs(msg).words(W));     # don't request pending words
+	 assume acqs(msg).own = own_;
+
+	 # other Acquire fields are don't-care here.
+
+	 a := addr_cons(ahi,word);
+         if own_ = excl {
+             assume ~cache_excl(ahi,word)
+	 } else {
+	     assume ~cache_shrd(ahi,word)
+         };
+
+	 # mark pending acquires
+	 local t:tid {
+	     assume ~tns.words(t,W);
+             tns(t).acq_ := msg;
+             tns.words(t,W) := acqs(msg).words(W)
+         };	 
+
+	 call mngr.tl_Acquire(msg)
+       }
+    }
+
+    ########################################
+    #
+    #  steps common to a voluntary and involuntary release
+
+    action send_release(r:rls_id) = {
+
+        local ahi:tl_addrhi, word: tl_addrlo, a:addr {
+	    # must return the data if exclusive
+	    # TODO: this currently means no multiple word involuntary release
+
+	    assume rlss(r).words(word); # must have at least one word
+	    ahi := rlss(r).addr_hi;
+	    a := addr_cons(ahi,word);
+	    assume cache_excl(ahi,W) & rlss(r).words(W) -> W=word;
+	    assume cache_excl(ahi,word) -> rlss(r).data_ = cache_data(a);
+
+	    # erase privs being released
+
+	    cache_excl(ahi,W) := cache_excl(ahi,W) & ~rlss(r).words(W);
+	    cache_shrd(ahi,W) := cache_shrd(ahi,W) & ~rlss(r).words(W);
+	    	    
+	    call mngr.tl_Release(r)
+        }
+    }
+
+
+    ########################################
+    #
+    #  on receiving a probe, send a release
+
+    action tl_Probe(msg:prb_id) = {
+
+        # block the probe if we don't have the privs yet
+
+        assume prbs(msg).words(W) & prbs(msg).excl_p -> cache_excl(prbs(msg).addr_hi,W);
+        assume prbs(msg).words(W) & prbs(msg).shrd_p -> cache_shrd(prbs(msg).addr_hi,W);
+
+	# block the probe if we have any release pending for these words
+
+	assume ~(pend_rls(prbs(msg).addr_hi,W) & prbs(msg).words(W));
+
+	local r:rls_id, a:addr, ahi:tl_addrhi, word:tl_addrlo {
+	    # build a release message
+	    assume rlss(r).id_ = myid;
+	    assume ~rlss(r).voluntary;
+	    assume rlss(r).addr_hi = prbs(msg).addr_hi;
+	    assume rlss(r).words(W) <-> prbs(msg).words(W);
+	    
+	    call send_release(r)     
+       }
+    }
+
+    ########################################
+    #
+    #  ignore finish
+
+    action tl_Finish(msg:fns_id) = {
+    }
+
+
+    action vol_release(ahi:tl_addrhi, word: tl_addrlo) = {
+
+        local msg:rls_id, a:addr {
+
+	    # build a release message
+	    assume rlss(msg).id_ = myid;
+	    assume rlss(msg).voluntary;
+	    assume rlss(msg).addr_hi = ahi;
+	    assume rlss(msg).words(word);
+
+	    # can only release words for which we have privs
+
+	    assume rlss(msg).words(W) -> cache_excl(ahi,W) | cache_shrd(ahi,W);
+
+	    # can't release anything with pending release
+
+    	    assume ~(pend_rls(ahi,W) & rlss(msg).words(W));
+	    
+	    # can't release anything with pending acquire on any released word
+
+    	    assume ~acqs.words(tns(T).acq_,W) & tns(T).words(X);
+	    
+	    # mark the release pending
+	    
+	    pend_rls(ahi,W) := pend_rls(ahi,W) | rlss(msg).words(W);
+
+	    call send_release(msg)
+        }
+    }
+
+
+    ########################################
+    # internal action (step)
+    #
+    # we can either acuire or voluntarily release a line
+
+    action step = {
+        local ahi:tl_addrhi, word: tl_addrlo, own:ownership {
+	    if * {
+	        call acquire(ahi, word, own)
+	    } else {
+	        call vol_release(ahi, word)
+            }
+	}
+    }
+}
+
+################################################################################
+#
+# Verify the module using the standard testbench
+#
+################################################################################
+
+include tilelink_concrete_two_port_testbench
+
+# The cache makes two assumptions about the system configuration:
+
+# 1) supports only one client
+axiom fside(I) = client & fside(J) = client -> I = J  
+
+# 2) everything uncached on front side and cached on back side
+axiom ~front.cached(A) & back.cached(A)

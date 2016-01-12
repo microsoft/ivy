@@ -697,8 +697,9 @@ def read_module(f,nested=False):
 
 def import_module(name):
     fname = name + '.ivy'
-    f = open(fname,'r')
-    if not f:
+    try: 
+        f = open(fname,'r')
+    except Exception:
         raise IvyError(None,"module {} not found in current directory".format(name))
     with iu.SourceFile(fname):
         mod = read_module(f,nested=True)
