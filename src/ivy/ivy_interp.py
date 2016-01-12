@@ -15,7 +15,7 @@ from ivy_logic_utils import *
 from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_model_to_clauses, clauses_model_to_diagram, get_model_clauses
 from ivy_transrel import compose_state_action, forward_interpolant, reverse_image, interpolant, \
     join_state, implies_state, ActionFailed, null_update, forward_image, reverse_interpolant_case, \
-    is_skolem, interpolant_case, History, top_state, action_failure
+    is_skolem, interpolant_case, History, top_state, action_failure, SemStateValue
 from ivy_actions import type_check,Action,RME
 import ivy_ast as ia
 import ivy_actions
@@ -61,8 +61,7 @@ def module_new_state_with_value(self, value):
 
 def module_order(self,state1, state2):
     """True if state1 is a subset of state2 """
-    axioms = self.background_theory(state1.in_scope) 
-    return implies_state(state1.value,state2.value,axioms,self.relations)
+    return implies_state(state1.value,state2.value,self.relations)
 
 def module_skolemizer(self):
     rn = UniqueRenamer('',self.functions)
@@ -85,7 +84,7 @@ class State(object):
             domain = im.module
         self.in_scope = {}        # symbols in scope in this state TODO: obsolete
         self.domain = domain      # interpreter it belongs to (now this is the module)
-        self.moded, self.clauses, self.precond = value if isinstance(value,tuple) else (None,value,false_clauses())
+        self.moded, self.clauses, self.precond = value.comps if isinstance(value,SemStateValue) else (None,value,false_clauses())
         self.expr = expr
         self.label = label
         self.cached_update = None
@@ -93,10 +92,10 @@ class State(object):
 
     @property
     def value(self):
-        return (self.moded,self.clauses,self.precond)
+        return SemStateValue(self.moded,self.clauses,self.precond)
     @value.setter
     def value(self,value):
-        self.moded, self.clauses, self.precond = value
+        self.moded, self.clauses, self.precond = value.comps
 
     # conjectures are currently global for the
     # interpeter, but eventually it should be possible to have different underapprox
@@ -192,10 +191,7 @@ def concrete_post(update, state, expr = None):
     """ Apply an update concretely (compute concrete post). ".
     """
     
-    # TODO: axioms could change as scope changes
-    axioms = state.domain.background_theory(state.in_scope)
-#    print "concrete post: axioms = {}".format(axioms)
-    cons = compose_state_action(state.value,axioms,update,check=context.check)
+    cons = compose_state_action(state.value,update,check=context.check)
     res = new_state(cons,domain = state.domain,expr=expr)
     # record the pre-state and update for future analysis
     res.pred = state
@@ -228,21 +224,20 @@ def reverse_update_concrete_clauses(state,clauses=None):
     if clauses == None:
         clauses = state.clauses
     axioms = state.domain.background_theory(state.in_scope)
-    fi = forward_interpolant(state.pred.clauses,state.update,clauses,axioms,state.domain.functions)
+    fi = forward_interpolant(state.pred.clauses,state.update,clauses,state.domain.functions)
     if fi:
         raise UnsatCoreWithInterpolant(*fi)
-    return and_clauses(reverse_image(clauses,axioms,state.update), axioms)
+    return and_clauses(reverse_image(clauses,state.update), axioms)
 
 
 def reverse_join_concrete_clauses(state,join_of,clauses=None):
     if clauses == None:
         clauses = state.clauses
-    axioms = state.domain.background_theory(state.in_scope)
     for s in join_of:
         if not clauses_imply(and_clauses(s.clauses,clauses),false_clauses()):
             return (and_clauses(s.clauses,clauses),s)
     pre = or_clauses(*[s.clauses for s in join_of])
-    itp = interpolant(pre,clauses,axioms,state.domain.functions)
+    itp = interpolant(pre,clauses,state.domain.functions)
     if itp:
         raise UnsatCoreWithInterpolant(*itp)
     raise IvyError(None,"decision procedure incompleteness")
@@ -278,7 +273,7 @@ def reach_state(state,clauses=None):
         clauses = state.clauses
     print "reach_state: clauses = {}".format(clauses)
     axioms = state.domain.background_theory(state.in_scope)
-    img = and_clauses(forward_image(pre,axioms,state.update),axioms,clauses)
+    img = and_clauses(forward_image(pre,state.update),axioms,clauses)
     m = get_model_clauses(img)
     ignore = lambda s,d=state.domain: s not in d.relations and s not in d.functions
     if m:
@@ -299,7 +294,7 @@ def reach_state_from_pred(state,clauses=None):
     post = reach_state(state,clauses)
     if post != None:
         return post
-    ri = reverse_interpolant_case(clauses,state.update,pre,axioms,state.domain.functions)
+    ri = reverse_interpolant_case(clauses,state.update,pre,state.domain.functions)
     if ri:
         raise UnsatCoreWithInterpolant(*ri)
     return None
@@ -313,7 +308,7 @@ def case_conjecture(state,clauses):
     """
     pre = join_unders(state)
     axioms = state.domain.background_theory(state.in_scope)
-    ri = interpolant_case(pre,clauses,axioms,state.domain.functions)
+    ri = interpolant_case(pre,clauses,state.domain.functions)
     if ri != None:
         core,interp = ri
 #        print "case_conjecture conj = {}".format(interp)

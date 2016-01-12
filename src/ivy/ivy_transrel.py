@@ -1,30 +1,32 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-""" Functions for manipluating transition relations as two-vocabulary formulas
+""" Functions for symbolically manipluating semantic values of actions
+and states.
 
-Updates represent the semantics of actions and states.  Both kinds of
-updates have a set of modified symbols. The difference is that action
-style uses "new" versions of the symbols to represent the post-state,
-while state style uses "old" version to represent the pre-state. In a
-"pure" state, the modifies set is "all" and the "old" symbols are not
+The classes SemActionValue and SemSatateValue represent the semantic
+values of actions and states respectively.  Both kinds of values have
+a set of modified symbols. The difference is that action style uses
+"new" versions of the symbols to represent the post-state, while state
+style uses "old" version to represent the pre-state. In a "pure"
+state, the modifies set is "all" and the "old" symbols are not
 referred to. That is, a pure state says nothing about the initial
-condition. On the other hand, the state of a procedure is
+condition. On the other hand, the state within a procedure is
 "impure". The initial state of a procedure has an empty modifies set,
 meaning mean the current values are all equal to the initial values.
 
-An update is represented as a triple (mod,tr,pre) where mod is a list
-of modified symbols (or "all") and tr is a two-vocabulary transition
-relation, and pre is a one-vocabulary precondition. The precondition
-is stated in the negative, so that an action *fails* in a state s if
-st /\ axioms /\ pre is satisfiable. The tr and pre are both implicitly
-existentially quantified over the skolem symbols.
+A semantic value is represented as a triple (modset,trans,fail) where
+mod is a list of modified symbols (or "all"), trans is the set of
+successful transitions and fail is the set of failure transitions.
+The formulas trans and fail both contain skolem symbols that are implicitly
+existentially quantified.
 
-Because pre is negative, we say that an action a = (mod_a,tr_a,pre_a)
-*refines* (is a safe replacement for) an action b = (mod_b,tr_b,pre_b)
-when pre_a => pre_b and frame(mod_a) /\ tr_a => frame(mod_b) /\
-tr_b. Here, frame(S), where S is a set of symbols, is the condition
-that all symbols *not* in S are preserved.
+In the conformance preorder, we say that an action a =
+(modset_a,trans_a,fail_a) conforms to an action b =
+(modset_b,trans_b,fail_b) when pre(fail_a) => pre(fail_b) and
+frame(modset_a) /\ trans_a => frame(modset_b) /\ trans_b. Here, pre(R)
+is the pre-image of the relation R, frame(S), where S is a set of
+symbols, is the condition that all symbols *not* in S are preserved.
 
 """
 
@@ -39,6 +41,7 @@ from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses
 import ivy_logic
 import ivy_logic_utils as lu
 from logic_util import is_tautology_equality
+import ivy_module as im
 
 
 def new(sym):
@@ -74,14 +77,33 @@ def is_skolem(sym):
     """
     return sym.contains('__')
 
+class SemValue(object):
+    def __init__(self,modset,trans,fail):
+        self.modset,self.trans,self.fail = modset,trans,fail
+    @property
+    def comps(self):
+        return self.modset,self.trans,self.fail
+
+class SemActionValue(SemValue):
+    @property
+    def op(self):
+        return new
+
+class SemStateValue(SemValue):
+    @property
+    def op(self):
+        return old
+
+
 def null_update():
-    return ([],true_clauses(),false_clauses())
+    return SemActionValue([],true_clauses(),false_clauses())
 
 def pure_state(clauses):
-    return (None,clauses,false_clauses())
+    return SemStateValue(None,clauses,false_clauses())
 
 def is_pure_state(state):
-    return state[0] == None
+    assert isinstance(state,SemStateValue)
+    return state.modset == None
 
 def top_state():
     return pure_state(true_clauses())
@@ -90,14 +112,17 @@ def bottom_state():
     return pure_state(false_clauses())
 
 def state_postcond(state):
-    return state[1]
+    assert isinstance(state,SemStateValue)
+    return state.trans
 
 def state_precond(state):
-    return state[2]
+    assert isinstance(state,SemStateValue)
+    return state.fail
 
 def state_to_action(update):
     """ convert from the "state" style to the "action" style """
-    updated,postcond,pre = update
+    assert isinstance(update,SemStateValue)
+    updated,postcond,pre = update.comps
     postcond,pre = clausify(postcond), clausify(pre)
     renaming = dict()
     for s in updated:
@@ -105,32 +130,34 @@ def state_to_action(update):
     for s in used_symbols_clauses(postcond):
         if is_old(s):
             renaming[s] = old_of(s)
-    return (updated,rename_clauses(postcond,renaming),pre)
+    return SemActionValue(updated,rename_clauses(postcond,renaming),pre)
 
 def action_to_state(update):
     """ convert from the "action" style to the "state" style """
-    updated,tr,pre = update
+    assert isinstance(state,SemActionValue)
+    updated,tr,pre = update.comps
     renaming = dict()
     for s in updated:
         renaming[s] = old(s)
     for s in used_symbols_clauses(tr):
         if is_new(s):
             renaming[s] = new_of(s)
-    return (updated,rename_clauses(tr,renaming),pre)
+    return SemStateValue(updated,rename_clauses(tr,renaming),pre)
 
 def update_frame_constraint(update,relations):
     """ Return a clause list constraining all updated symbols
     to keep their previous values """
     clauses = []
-    for sym in update[0]:
+    op = update.op
+    for sym in update.modset:
         if sym in relations:
             arity = relations[sym]
             vs = [Variable("V{}".format(i)) for i in range(0,arity)]
             lit1 = Literal(1,Atom(sym,vs))
-            lit2 = Literal(1,Atom(new(sym),vs))
+            lit2 = Literal(1,Atom(op(sym),vs))
             clauses += [[~lit1,lit2],[lit1,~lit2]]
         else:
-            clauses.append([eq_lit(Constant(sym),Constant(new(sym)))])
+            clauses.append([eq_lit(Constant(sym),Constant(op(sym)))])
     return Clauses(clauses)
 
 
@@ -142,7 +169,7 @@ def frame_def(sym,op):
     dfn = Definition(lhs,rhs)
     return dfn
 
-def frame(updated,relations,op):
+def frame(updated,op):
     """ Return a clause list constraining all updated symbols
     to keep their op values, for op = new,old """
     return Clauses([],[frame_def(sym,op) for sym in updated])
@@ -155,7 +182,8 @@ def frame_update(update,in_scope,sig):
     """ Modify an update so all symbols in "in_scope" are on the
     update list, preserving semantics.
     """
-    updated,clauses,pre = update
+    assert isinstance(state,SemActionValue)
+    updated,clauses,pre = update.comps
     moded = set(updated)
     dfns = []
     for sym in in_scope:
@@ -164,20 +192,22 @@ def frame_update(update,in_scope,sig):
             dfns.append(frame_def(sym,new))
     return (updated,and_clauses(clauses,Clauses([],dfns)),pre)
 
-def diff_frame(updated1,updated2,relations,op):
+def diff_frame(updated1,updated2,op):
     if updated1 == None or updated2 == None: return Clauses([])
     updated = list_diff(updated2,updated1)
-    return frame(updated,relations,op)
+    return frame(updated,op)
 
 def updated_join(updated1,updated2):
     if updated1 == None or updated1 == None: return None
     return list_union(updated1,updated2)
 
-def join(s1,s2,relations,op):
-    u1,c1,p1 = s1
-    u2,c2,p2 = s2
-    df12 = diff_frame(u1,u2,relations,op)
-    df21 = diff_frame(u2,u1,relations,op)
+def join(s1,s2):
+    assert isinstance(s1,SemValue) and type(s1) is type(s2)
+    op = s1.op
+    u1,c1,p1 = s1.comps
+    u2,c2,p2 = s2.comps
+    df12 = diff_frame(u1,u2,op)
+    df21 = diff_frame(u2,u1,op)
     c1 = and_clauses(c1,df12)
     c2 = and_clauses(c2,df21)
     p1 = and_clauses(p1,df12)
@@ -185,7 +215,7 @@ def join(s1,s2,relations,op):
     u = updated_join(u1,u2)
     c = or_clauses(c1,c2)
     p = or_clauses(p1,p2)
-    return (u,c,p)
+    return type(s1)(u,c,p)
 
 class CounterExample(object):
     def __init__(self,clauses):
@@ -198,49 +228,52 @@ def clauses_imply_formula_cex(clauses,fmla):
         return True
     return CounterExample(conjoin(clauses,negate_clauses(formula_to_clauses(fmla))))
 
-def implies(s1,s2,axioms,relations,op):
-    u1,c1,p1 = s1
-    u2,c2,p2 = s2
+def implies(s1,s2):
+    assert isinstance(s1,SemValue) and type(s1) is type(s2)
+    op = s1.op
+    axioms = im.background_theory()
+    u1,c1,p1 = s1.comps
+    u2,c2,p2 = s2.comps
     if u1 == None and u2 != None:
         return False
 #    print "c1: {}".format(c1)
 #    print "axioms: {}".format(axioms)
 #    print "df: {}".format(diff_frame(u1,u2,relations,op))
-    c1 = and_clauses(c1,axioms,diff_frame(u1,u2,relations,op))
+    c1 = and_clauses(c1,axioms,diff_frame(u1,u2,op))
     if isinstance(c2,Clauses):
         if not c2.is_universal_first_order() or not p2.is_universal_first_order():
             return False
-        c2 = and_clauses(c2,diff_frame(u2,u1,relations,op))
+        c2 = and_clauses(c2,diff_frame(u2,u1,op))
         return clauses_imply(p1,p2) and clauses_imply(c1,c2)
     else:
         if not is_prenex_universal(c2) or not is_prenex_universal(p2):
             return False
-        c2 = And(c2,clauses_to_formula(diff_frame(u2,u1,relations,op)))
+        c2 = And(c2,clauses_to_formula(diff_frame(u2,u1,op)))
         return clauses_imply_formula_cex(p1,p2) and clauses_imply_formula_cex(c1,c2)
 
-def implies_state(s1,s2,axioms,relations):
-    return implies(s1,s2,axioms,relations,old)
+def implies_state(s1,s2,axioms=None,relations=None):
+    return implies(s1,s2)
 
-def implies_action(s1,s2,axioms,relations):
-    return implies(s1,s2,axioms,relations,new)
+implies_action = implies_state
 
-def join_state(s1,s2,relations):
-    return join(clausify_state(s1),clausify_state(s2),relations,old)
+def join_state(s1,s2,relations=None):
+    return join(clausify_state(s1),clausify_state(s2))
 
-def join_action(s1,s2,relations):
-    return join(s1,s2,relations,new)
+def join_action(s1,s2,relations=None):
+    return join(s1,s2)
 
-def condition_update_on_fmla(update,fmla,relations):
+def condition_update_on_fmla(update,fmla):
     """Given an update, return an update conditioned on fmla. Maybe an "else" would
     be useful too :-).
     """
-    updated,if_clauses,if_pre = update
-    else_clauses = update_frame_constraint(update,relations)
+    assert isinstance(update,SemValue)
+    updated,if_clauses,if_pre = update.comps
+    else_clauses = update_frame_constraint(update)
     if_clauses = condition_clauses(if_clauses,fmla)
     else_clauses = condition_clauses(else_clauses,Not(fmla))
 ##    print "if_clauses: %s" % if_clauses
 ##    print "else_clauses: %s" % else_clauses
-    return updated,(and_clauses(if_clauses,else_clauses)),if_pre
+    return type(update)(updated,(and_clauses(if_clauses,else_clauses)),if_pre)
 
 def rename_distinct(clauses1,clauses2):
     """ rename skolems in clauses1 so they don't occur in clauses2.
@@ -258,9 +291,11 @@ def rename_distinct(clauses1,clauses2):
 
 # TODO: this will be quadratic for chains of updates
 
-def compose_updates(update1,axioms,update2):
-    updated1, clauses1, pre1 = update1
-    updated2, clauses2, pre2 = update2
+def compose_updates(update1,update2):
+    assert isinstance(update1,SemActionValue) and type(update1) is type(update2)
+    axioms = im.background_theory()
+    updated1, clauses1, pre1 = update1.comps
+    updated2, clauses2, pre2 = update2.comps
     clauses2 = rename_distinct(clauses2,clauses1)
     pre2 = rename_distinct(pre2,clauses1)
 #    print "clauses2 = {}".format(clauses2)
@@ -282,11 +317,11 @@ def compose_updates(update1,axioms,update2):
     new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2))
     new_updated = list(us1.union(us2))
 #    print "pre1 before = {}".format(pre1)
-    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
+    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,new))  # keep track of post-state of assertion failure
 #    print "pre1 = {}".format(pre1)
     new_pre = or_clauses(pre1,and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2)))
 #    print "new_pre = {}".format(new_pre)
-    return (new_updated,new_clauses,new_pre)
+    return SemActionValue(new_updated,new_clauses,new_pre)
 
 def exist_quant_map(syms,clauses):
     used = used_symbols_clauses(clauses)
@@ -305,51 +340,56 @@ def conjoin(clauses1,clauses2):
     return and_clauses(clauses1,rename_distinct(clauses2,clauses1))
 
 def constrain_state(upd,fmla):
-    return (upd[0],and_clauses(upd[1],formula_to_clauses(fmla)),upd[2])
+    assert isinstance(upd,SemStateValue)
+    return SemStateValue(upd.modset,and_clauses(upd.trans,formula_to_clauses(fmla)),upd.fail)
 
 def hide(syms,update):
+    assert isinstance(update,SemActionValue)
     syms = set(syms)
-    syms.update(new(s) for s in update[0] if s in syms)
-    new_updated = [s for s in update[0] if s not in syms]
-    new_tr = exist_quant(syms,update[1])
-    new_pre = exist_quant(syms,update[2])
-    return (new_updated,new_tr,new_pre)
+    syms.update(new(s) for s in update.modset if s in syms)
+    new_updated = [s for s in update.modset if s not in syms]
+    new_tr = exist_quant(syms,update.trans)
+    new_pre = exist_quant(syms,update.fail)
+    return type(update)(new_updated,new_tr,new_pre)
 
 def hide_state(syms,update):
+    assert isinstance(update,SemStateValue)
     syms = set(syms)
-    if update[0] != None:
-        syms.update(old(s) for s in update[0] if s in syms)
-        new_updated = [s for s in update[0] if s not in syms]
+    if update.modset != None:
+        syms.update(old(s) for s in update.modset if s in syms)
+        new_updated = [s for s in update.modset if s not in syms]
     else:
         new_updated = None
-    new_tr = exist_quant(syms,update[1])
-    new_pre = exist_quant(syms,update[2])
-    return (new_updated,new_tr,new_pre)
+    new_tr = exist_quant(syms,update.trans)
+    new_pre = exist_quant(syms,update.fail)
+    return type(update)(new_updated,new_tr,new_pre)
 
 def hide_state_map(syms,update):
+    assert isinstance(update,SemStateValue)
     syms = set(syms)
-    if update[0] != None:
-        syms.update(old(s) for s in update[0] if s in syms)
-        new_updated = [s for s in update[0] if s not in syms]
+    if update.modset != None:
+        syms.update(old(s) for s in update.modset if s in syms)
+        new_updated = [s for s in update.modset if s not in syms]
     else:
         new_updated = None
-    trmap,new_tr = exist_quant_map(syms,update[1])
-    new_pre = exist_quant(syms,update[2])
-    return trmap, (new_updated,new_tr,new_pre)
+    trmap,new_tr = exist_quant_map(syms,update.trans)
+    new_pre = exist_quant(syms,update.fail)
+    return trmap, type(update)(new_updated,new_tr,new_pre)
 
 def subst_action(update,subst):
-    print subst
+    assert isinstance(update,SemActionValue)
     syms = dict(subst.iteritems())
-    syms.update((new(s),new(syms[s])) for s in update[0] if s in syms)
-    print syms
-    new_updated = [subst.get(s,s) for s in update[0]]
-    new_tr = rename_clauses(update[1],syms)
-    new_pre = rename_clauses(update[2],syms)
-    return (new_updated,new_tr,new_pre)
+    syms.update((new(s),new(syms[s])) for s in update.modset if s in syms)
+    new_updated = [subst.get(s,s) for s in update.modset]
+    new_tr = rename_clauses(update.trans,syms)
+    new_pre = rename_clauses(update.fail,syms)
+    return type(update)(new_updated,new_tr,new_pre)
 
-def forward_image_map(pre_state,axioms,update):
-    updated, clauses, _precond = update
+def forward_image_map(pre_state,update):
+    assert isinstance(pre_state,Clauses) and isinstance(update,SemActionValue)
+    updated, clauses, _precond = update.comps
 #    print "transition_relation: {}".format(clauses)
+    axioms = im.background_theory()
     pre_ax = clauses_using_symbols(updated,axioms)
     pre = conjoin(pre_state,pre_ax)
     map1,res = exist_quant_map(updated,conjoin(pre,clauses))
@@ -358,14 +398,15 @@ def forward_image_map(pre_state,axioms,update):
     # res = simplify_clauses(res)
     return map1,res
 
-def forward_image(pre_state,axioms,update):
-    map1,res = forward_image_map(pre_state,axioms,update)
+def forward_image(pre_state,update):
+    map1,res = forward_image_map(pre_state,update)
     return res
 
 def action_failure(action):
-    upd,tr,pre = action
+    assert isinstance(action,SemActionValue)
+    upd,tr,pre = action.comps
     print "action_failure upd: {}".format([str(x) for x in upd])
-    return upd,pre,true_clauses()
+    return type(action)(upd,pre,true_clauses())
 
 class ActionFailed(Exception):
     def __init__(self,clauses,trans):
@@ -395,13 +436,15 @@ def extract_pre_post_model(clauses,model,updated):
     post_clauses = rename_clauses(post_clauses,inverse_map(renaming))
     return map(remove_taut_eqs_clauses,(pre_clauses,post_clauses))
 
-def compose_state_action(state,axioms,action, check=True):
+def compose_state_action(state,action,check=True):
     """ Compose a state and an action, returning a state """
+    assert isinstance(state,SemStateValue) and isinstance(action,SemActionValue)
 #    print "state: {}".format(state)
 #    print "action: {}".format(action)
-    su,sc,sp = state
-    au,ac,ap = action
+    su,sc,sp = state.comps
+    au,ac,ap = action.comps
     sc,sp = clausify(sc),clausify(sp)
+    axioms = im.background_theory()
     if check:
         pre_test = and_clauses(and_clauses(sc,ap),axioms)
         model = small_model_clauses(pre_test)
@@ -417,13 +460,15 @@ def compose_state_action(state,axioms,action, check=True):
         ac = rename_clauses(ac,rn)
         su = list(su)
         union_to_list(su,au)
-    img = forward_image(sc,axioms,action)
+    img = forward_image(sc,action)
 ##    print "compose: {}".format((su,img,sp))
-    return (su,img,sp)
+    return SemStateValue(su,img,sp)
 
 
-def reverse_image(post_state,axioms,update):
-    updated, clauses, _precond = update
+def reverse_image(post_state,update):
+    assert isinstance(post_state,Clauses) and isinstance(update,SemActionValue)
+    updated, clauses, _precond = update.comps
+    axioms = im.background_theory()
     post_ax = clauses_using_symbols(updated,axioms)
     post_clauses = conjoin(post_state,post_ax)
     post_clauses = rename_clauses(post_clauses, dict((x,new(x)) for x in updated))
@@ -432,9 +477,10 @@ def reverse_image(post_state,axioms,update):
 #    res = simplify_clauses(res)
     return res
 
-def interpolant(clauses1,clauses2,axioms,interpreted):
+def interpolant(clauses1,clauses2,interpreted):
 #    print "interpolant clauses1={} clauses2={}".format(clauses1,clauses2)
 #    print "axioms = {}".format(axioms)
+    axioms = im.background_theory()
     foo = and_clauses(clauses1,axioms)
     clauses2 = simplify_clauses(clauses2)
     core = unsat_core(clauses2,foo)
@@ -443,20 +489,22 @@ def interpolant(clauses1,clauses2,axioms,interpreted):
 #    print "core: %s" % core
     return core, interp_from_unsat_core(clauses2,foo,core,interpreted)
 
-def forward_interpolant(pre_state,update,post_state,axioms,interpreted):
-    return interpolant(forward_image(pre_state,axioms,update),post_state,axioms,interpreted)
+def forward_interpolant(pre_state,update,post_state,interpreted):
+    assert isinstance(pre_state,Clauses) and isinstance(update,SemActionValue) and isinstance(pre_state,Clauses)
+    return interpolant(forward_image(pre_state,update),post_state,interpreted)
 
-def reverse_interpolant_case(post_state,update,pre_state,axioms,interpreted):
-    pre = reverse_image(post_state,axioms,update)
+def reverse_interpolant_case(post_state,update,pre_state,interpreted):
+    assert isinstance(pre_state,Clauses) and isinstance(update,SemActionValue) and isinstance(pre_state,Clauses)
+    pre = reverse_image(post_state,update)
     pre_case = clauses_case(pre)
 ##    print "pre_case1: {}".format(pre_case)
     pre_case = [cl for cl in pre_case if len(cl) <= 1
                                          and is_ground_clause(cl)
                                          and not any(is_skolem(r) for r,n in relations_clause(cl))]
 ##    print "pre_case2: {}".format(pre_case)
-    return interpolant(pre_state,pre_case,axioms,interpreted)
+    return interpolant(pre_state,pre_case,interpreted)
 
-def interpolant_case(pre_state,post,axioms,interpreted):
+def interpolant_case(pre_state,post,interpreted):
 #    print "interpolant_case: before clauses_case"
 #    print "interpolant_case post: {}".format(post)
     post_case = clauses_case(post)
@@ -468,7 +516,7 @@ def interpolant_case(pre_state,post,axioms,interpreted):
                          and not any(is_skolem(r) for r,n in relations_clause(cl))])
 #    print "interpolant_case: after filtering"
 #    print "post_case2: {}".format(post_case)
-    return interpolant(pre_state,post_case,axioms,interpreted)
+    return interpolant(pre_state,post_case,interpreted)
 
 def interp_from_unsat_core(clauses1,clauses2,core,interpreted):
     used_syms = used_symbols_clauses(core)
@@ -502,7 +550,7 @@ class History(object):
     def __init__(self,state,maps = []):
         """ state is the initial state of the history """
 #        print "init: {}".format(state)
-        update,clauses,pre = state
+        update,clauses,pre = state.comps
         assert update == None and pre.is_false()
         self.maps = maps     # sequence of symbol renamings resulting from forward images
         self.post = clauses  # characteristic formula of the history
@@ -515,7 +563,7 @@ class History(object):
         times in the history. A new history after forward step is
         returned. """
 #        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
-        map1,res = forward_image_map(self.post,axioms,update)
+        map1,res = forward_image_map(self.post,update)
         return History(pure_state(res),self.maps + [map1])
 
     def assume(self,clauses):
@@ -525,7 +573,7 @@ class History(object):
 #        print "assume: {}".format(clauses)
         if isinstance(clauses,tuple):  # a pure state
             assert is_pure_state(clauses)
-            clauses = clauses[1]
+            clauses = clauses.trans
         clauses = rename_distinct(clauses,self.post) # TODO: shouldn't be needed
         return History(pure_state(and_clauses(self.post,clauses)),self.maps)
 

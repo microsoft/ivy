@@ -9,7 +9,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
     used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
-    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
+    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state, SemActionValue
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
 import ivy_ast
 from ivy_ast import AST, compose_atoms
@@ -125,10 +125,10 @@ class PatternBasedUpdate(AST):
                     precond,postcond = next(y for y in (p.match(action) for p in self.patterns.args) if y != None)
                 except StopIteration:
                     raise IvyError(action,'No matching update axiom for ' + str(x))
-                postcond = state_to_action((updated,postcond,precond))
+                postcond = state_to_action(SemStateValue(updated,postcond,precond))
 #                print "update axioms: {}, {}, {}".format(map(str,postcond[0]),postcond[1],postcond[2])
-                return (updated,postcond[1],precond)
-        return (updated,true_clauses(),false_clauses())
+                return SemActionValue(updated,postcond.trans,precond)
+        return null_update()
 
 class DerivedUpdate(object):
     def __init__(self,defn):
@@ -138,7 +138,7 @@ class DerivedUpdate(object):
         defines = self.defn.args[0].rep
         if defines not in updated and any(x in self.dependencies for x in updated):
             updated.append(defines)
-        return (updated,true_clauses(),false_clauses())
+        return SemActionValue(updated,true_clauses(),false_clauses())
 
 class Action(AST):
     def __init__(self,*args):
@@ -153,10 +153,10 @@ class Action(AST):
             return False
         return ast_match_lists(action.args,self.args,placeholders,subst)
     def int_update(self,domain,in_scope):
-        (updated,clauses,pre) = self.action_update(domain,in_scope)
+        (updated,clauses,pre) = self.action_update(domain,in_scope).comps
         # instantiate the update axioms
         for u in domain.updates:
-            updated,transrel,precond = u.get_update_axioms(updated,self)
+            updated,transrel,precond = u.get_update_axioms(updated,self).comps
             # TODO: do something with the precondition
 #            if transrel:
 ##                print "updated: {}".format(updated)
@@ -164,7 +164,7 @@ class Action(AST):
             clauses = and_clauses(clauses,transrel)
             pre = or_clauses(pre,precond)
 ##        print "update clauses: %s" % clauses
-        res = (updated,clauses,pre)
+        res = SemActionValue(updated,clauses,pre)
         return res
     def update(self,domain,in_scope):
         return self.hide_formals(self.int_update(domain,in_scope))
@@ -223,7 +223,7 @@ class AssumeAction(Action):
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
         check_can_assume(self.args[0],self)
-        return ([],formula_to_clauses_tseitin(self.args[0]),false_clauses())
+        return SemActionValue([],formula_to_clauses_tseitin(self.args[0]),false_clauses())
 
 class AssertAction(Action):
     def __init__(self,*args):
@@ -237,7 +237,7 @@ class AssertAction(Action):
         check_can_assert(self.args[0],self)
 #        print type(self.args[0])
         cl = formula_to_clauses(dual_formula(self.args[0]))
-        return ([],true_clauses(),cl)
+        return SemActionValue([],true_clauses(),cl)
     def assert_to_assume(self):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
@@ -340,7 +340,7 @@ class AssignAction(Action):
             drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
         new_clauses = Clauses([],[Definition(dlhs,drhs)])
 #        print "assign new_clauses = {}".format(new_clauses)
-        return ([n], new_clauses, false_clauses())
+        return SemActionValue([n], new_clauses, false_clauses())
 
 
 def sign(polarity,atom):
@@ -365,7 +365,7 @@ class SetAction(Action):
                             [Or(*([sign(0,Atom(new_n,vs)),sign(1,Atom(n,vs))] + [eq])) for eq in eqs] +
                             [Or(*([sign(1,Atom(new_n,vs)),sign(0,Atom(n,vs))] + [eq])) for eq in eqs]))
         new_clauses = formula_to_clauses(new_clauses)
-        return ([n], new_clauses, false_clauses())
+        return SemActionValue([n], new_clauses, false_clauses())
 
 class HavocAction(Action):
     def __init__(self,*args):
@@ -391,7 +391,7 @@ class HavocAction(Action):
         else: # TODO: ???
             clauses = And()
         clauses = formula_to_clauses(clauses)
-        return ([n], clauses, false_clauses())
+        return SemActionValue([n], clauses, false_clauses())
 
 
 def make_field_update(self,l,f,r,domain,pvars):
@@ -474,7 +474,7 @@ class InstantiateAction(Action):
                 return res
         if inst.relname in domain.schemata:
             clauses = domain.schemata[inst.relname].get_instance(inst.args)
-            return ([],clauses, false_clauses())
+            return SemActionValue([],clauses, false_clauses())
         raise IvyError(inst,"instantiation of undefined: {}".format(inst.relname))
     def cmpl(self):
         return self
@@ -490,12 +490,12 @@ class Sequence(Action):
     def __str__(self):
         return '{' + '; '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
-        update = ([],true_clauses(),false_clauses())
+        update = null_update()
         axioms = domain.background_theory(pvars)
         for op in self.args:
             thing = op.int_update(domain,pvars);
 #            print "op: {}, thing: {}".format(op,thing)
-            update = compose_updates(update,axioms,thing)
+            update = compose_updates(update,thing)
         return update
     def __call__(self,interpreter):
         for op in self.args:
@@ -511,7 +511,7 @@ class ChoiceAction(Action):
     def __str__(self):
         return '{' + '| '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
-        result = [], false_clauses(), false_clauses()
+        result = SemActionValue([], false_clauses(), false_clauses())
         for a in self.args:
             result = join_action(result, a.int_update(domain, pvars), domain.relations)
         return result
@@ -540,7 +540,7 @@ class IfAction(Action):
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
         check_can_assert(self.args[0],self)
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+        return join_action(if_part,else_part)
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
 
@@ -596,7 +596,7 @@ class CallAction(Action):
     def int_update(self,domain,pvars):
 #        print "got here!"
         v = self.get_callee()
-        if not isinstance(v,tuple):
+        if not isinstance(v,SemActionValue):
             if isinstance(v,Action):
                 v = self.apply_actuals(domain,pvars,v)
 #                print "called action: {}".format(v)

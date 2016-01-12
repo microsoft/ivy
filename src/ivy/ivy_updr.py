@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     err_act = ag.actions["error"].update(ag.domain,state.in_scope)
     axioms = state.domain.background_theory(state.in_scope)
-    error = tr.reverse_image([],axioms,err_act)
+    error = tr.reverse_image([],err_act)
     print "error = {}".format(error)
 
     # get actions as updates

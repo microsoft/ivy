@@ -18,13 +18,14 @@ precedence = (
     ('left', 'ELSE'),
     ('left', 'OR'),
     ('left', 'AND'),
+# TODO: PLUS and TIME bind too weakly because used un concept spaces
+    ('left', 'PLUS'),
+    ('left', 'TIMES'),
     ('left', 'TILDA'),
     ('left', 'EQ','LE','LT','GE','GT'),
     ('left', 'TILDAEQ'),
     ('left', 'COLON'),
-    ('left', 'PLUS'),
     ('left', 'MINUS'),
-    ('left', 'TIMES'),
 )
 
 
