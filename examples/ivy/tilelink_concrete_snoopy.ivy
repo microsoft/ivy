@@ -62,8 +62,9 @@ module dut(myid,clnt,mngr,ref) = {
 
     instantiate tns(T:tid) : trans
     relation pend_rls(A:tl_addrhi,W:tl_addrlo)
+    relation wait_finish
     
-    init ~cache_excl(A,W) & ~cache_shrd(A,W) & ~pend_rls(A,W)
+    init ~cache_excl(A,W) & ~cache_shrd(A,W) & ~pend_rls(A,W) & ~wait_finish
 
     ########################################
     # release action called by the client side
@@ -153,6 +154,7 @@ module dut(myid,clnt,mngr,ref) = {
 
     action tl_Acquire(msg:acq_id) = {
         assume acqs(msg).own = none;     #only support uncached
+	assume ~wait_finish;             # block if last request not finished
 	local o:otype, a:addr, d:data, lt:ltime, mid:id, ahi: tl_addrhi, word:tl_addrlo {
 	      o := acqs(msg).op;
 
@@ -177,7 +179,8 @@ module dut(myid,clnt,mngr,ref) = {
 	          cache_data(a) := d;
 	          call ref.perform(lt,myid); # ghost
                   call grant(mid,word,d,lt)
-              }
+              };
+	      wait_finish := true
         }
     }
 
@@ -260,6 +263,10 @@ module dut(myid,clnt,mngr,ref) = {
 
 	assume ~(pend_rls(prbs(msg).addr_hi,W) & prbs(msg).words(W));
 
+	# only one word probed -- TODO
+
+	assume ~(prbs(msg).words(W1) & prbs(msg).words(W2) & W1~=W2);
+	
 	local r:rls_id, a:addr, ahi:tl_addrhi, word:tl_addrlo {
 	    # build a release message
 	    assume rlss(r).id_ = myid;
@@ -273,9 +280,10 @@ module dut(myid,clnt,mngr,ref) = {
 
     ########################################
     #
-    #  ignore finish
+    #  mark client transaction finished
 
     action tl_Finish(msg:fns_id) = {
+        wait_finish := false
     }
 
 

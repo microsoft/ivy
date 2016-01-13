@@ -11,6 +11,29 @@
 ################################################################################
 
 
+################################################################################
+#
+# Oustanding issues:
+#
+#   Managers must include an up-to-date copy of the
+#   data in Grants responding to Acquires upgrading permissions unless
+#   they are certain that client has not been Probed since the Aquire
+#   was issued.
+#
+# TODO: currently the spec requires all Grants to have data, even
+# in the upgrade case.
+#
+#   The voluntary write’s data can be used to respond to the original
+#   requestor with a Grant, but the transaction cannot complete until
+#   the expected number of Releases have been collected by the manager.
+#
+# TODO: The spec may be too strict here, since it doesn't allow any grants
+# to the acquiring client while there is an outstanding probe, even if a
+# voluntary write has come in in the interim.
+#
+################################################################################
+
+
 include tilelink_abstract_spec
 
 ########################################
@@ -489,14 +512,14 @@ module tl_interface(ref,clnt,mngr,side) = {
 	        p := find_probe(msg);
 	    	assert prbs(p).words(W) <-> rlss(msg).words(W);
 		
-		########################################
-		# Rule: The client must have the privs requested
-		# in order to respond. Violating this rule would
-		# lead to loss of coherence, since a grant might be
-		# latent in the channel.
+		# ########################################
+		# # Rule: The client must have the privs requested
+		# # in order to respond. Violating this rule would
+		# # lead to loss of coherence, since a grant might be
+		# # latent in the channel.
 
-		assert prbs(p).words(W) & prbs(p).excl_p -> excl_p(addr_cons(prbs(p).addr_hi,W));
-		assert prbs(p).words(W) & prbs(p).shrd_p -> shrd_p(addr_cons(prbs(p).addr_hi,W));
+		# assert prbs(p).words(W) & prbs(p).excl_p -> excl_p(addr_cons(prbs(p).addr_hi,W));
+		# assert prbs(p).words(W) & prbs(p).shrd_p -> shrd_p(addr_cons(prbs(p).addr_hi,W));
 
 		pend_prb(p) := false   # mark the probe completed
             }
@@ -553,21 +576,32 @@ module tl_interface(ref,clnt,mngr,side) = {
 	assert ~(pend_rls(M) & rlss(M).addr_hi = prbs(msg).addr_hi
 	         & rlss(M).words(W) & prbs(msg).words(W));
 
-        # Note, however, we *do* allow a Probe with a pending
-	# Acquire, since the Acquire may be an upgrade.
+        # 4) We *do* allow a Probe with a pending
+	# Acquire, since the Acquire may be an upgrade. However,
+	# not if any grants have been issued. This avoids a race between
+	# a probe and a grant.
 
-	# 4) The requested privs must include the privs granted
-	# so far.
+	assert ~(pend_acq(M,T) & acqs(M).addr_hi = prbs(msg).addr_hi
+	         & acqs(M).words(W) & prbs(msg).words(W) & ~pend_addr(W,T));
 
-	assert prbs(msg).words(W) & excl_p(addr_cons(prbs(msg).addr_hi,W)) -> 
-	           prbs(msg).excl_p;
+	# 5) Can only probe if client has privs
 
-	assert prbs(msg).words(W) & shrd_p(addr_cons(prbs(msg).addr_hi,W)) ->
-	           prbs(msg).shrd_p;
+	assert prbs(msg).words(W) ->
+	    (excl_p(addr_cons(prbs(msg).addr_hi,W)) | shrd_p(addr_cons(prbs(msg).addr_hi,W)));
 
-        # 5) A probe must request some privs
+	# # 4) The requested privs must include the privs granted
+	# # so far.
 
-	assert prbs(msg).excl_p | prbs(msg).shrd_p;
+	# assert prbs(msg).words(W) & excl_p(addr_cons(prbs(msg).addr_hi,W)) -> 
+	#            prbs(msg).excl_p;
+
+	# assert prbs(msg).words(W) & shrd_p(addr_cons(prbs(msg).addr_hi,W)) ->
+	#            prbs(msg).shrd_p;
+
+        # # 5) A probe must request some privs
+
+	# assert prbs(msg).excl_p | prbs(msg).shrd_p;
+
 
         # Note: we might want to make stronger requirements to make
 	# implemenation simpler, for example that a Probe is never
