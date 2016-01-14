@@ -207,7 +207,7 @@ module tests = {
 	call c.acquire(acq1);
 	assume acqs(acq2).own = none;
 	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
-	assume acqs(acq1).words(X) <-> acqs(acq2).words(X);
+	assume acqs(acq1).word = acqs(acq2).word;
 	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
 	call c.acquire(acq2);
 	call b.acquire(acq2)
@@ -227,7 +227,7 @@ module tests = {
 	call b.acquire(acq2);
 	call b.acquire(acq1);
 	assume gnts(gnt1).ltime_ = acqs(acq1).ltime_;
-	assume acqs(acq1).words(gnts(gnt1).word); 
+	assume acqs(acq1).word = gnts(gnt1).word; 
 	call m.perform(acqs(acq1).ltime_,id1);
 	call m.grant(gnt1);
         call b.grant(gnt2);
@@ -255,7 +255,7 @@ module tests = {
 	assume acqs(acq1).own = shrd;
 	assume acqs(acq2).own = excl;
 	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
-	assume acqs(acq1).words(W) <-> acqs(acq2).words(W);
+	assume acqs(acq1).word = acqs(acq2).word;
 	call c.acquire(acq1);
 	call c.acquire(acq2);
 	call b.acquire(acq2);
@@ -283,7 +283,7 @@ module tests = {
 ;
  	call c.acquire(acq1)
 ;
- 	call b.acquire(acq1)
+  	call b.acquire(acq1)
 #;
 # 	call b.release(rls1);
 # 	call b.finish(fns1);
@@ -298,38 +298,48 @@ module tests = {
 	assume acqs(acq1).own = shrd;
 	assume acqs(acq2).own = excl;
 	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
-	assume acqs(acq1).words(W) <-> acqs(acq2).words(W);
+	assume acqs(acq1).word = acqs(acq2).word;
 	call c.acquire(acq1);
 	call c.acquire(acq2);
 	call b.acquire(acq2);
 	call m.grant(gnt1);
         call b.grant(gnt1);
-	call m.probe(prb1);
-	call b.probe(prb1);
- 	call c.release(rls1)
-	;
- 	call b.acquire(acq1)
+	call c.finish(fns1);
+	call b.finish(fns1);
+	call m.probe(prb1)
 ;
-  	call b.release(rls1)
+ 	call b.probe(prb1);
+  	call c.release(rls1)
 ;
- 	call m.grant(gnt2)
+  	call b.acquire(acq1)
 ;
-	call m.probe(prb2);
-	call b.probe(prb2)
+   	call b.release(rls1)
 ;
- 	call b.grant(gnt2)
+  	call m.grant(gnt2)
 ;
- 	call c.release(rls2)
-;
+  	call b.grant(gnt2);
+	call c.finish(fns2);
+	call b.finish(fns2);
+ 	call m.probe(prb2);
+	call b.probe(prb2);
+	call c.release(rls2);
 	call b.release(rls2)
-;
- 	call c.finish(fns1)
-;
- 	call b.finish(fns1)
-;
- 	call c.finish(fns2)
-;
- 	call b.finish(fns2)
+# ;
+# 	call b.probe(prb2)
+# ;
+#  	call b.grant(gnt2)
+# ;
+#  	call c.release(rls2)
+# ;
+# 	call b.release(rls2)
+# ;
+#  	call c.finish(fns1)
+# ;
+#  	call b.finish(fns1)
+# ;
+#  	call c.finish(fns2)
+# ;
+#  	call b.finish(fns2)
 	
 #         call b.grant(gnt2)
 # ;
