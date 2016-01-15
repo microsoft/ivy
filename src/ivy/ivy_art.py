@@ -58,6 +58,13 @@ class Counterexample(object):
 
 ########################################
 #
+# option to abstract the initial state
+
+option_abs_init = iu.BooleanParameter("abs_init",False)
+
+
+########################################
+#
 # The class of ARG's
 
 class AnalysisGraph(object):
@@ -85,6 +92,19 @@ class AnalysisGraph(object):
     @property
     def context(self):
         return AC(self)
+
+    def add_initial_state(self, ic = None, abstractor = None):
+        if ic == None:
+            ic = im.init_cond
+        s = self.domain.new_state(ic)
+        if option_abs_init.get():
+            s2 = self.domain.new_state(ic)
+            self.add(s2,s)
+            if abstractor:
+                abstractor(s2)
+                print "initial state: {}".format(s2)
+        else:
+            self.add(s)
 
     def state_actions(self,state):
         if hasattr(state,'label') and state.label != None:

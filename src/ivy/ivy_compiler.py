@@ -17,7 +17,7 @@ import string
 import ivy_ast
 import ivy_utils as iu
 import ivy_actions as ia
-
+import ivy_alpha
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -622,7 +622,7 @@ def ivy_compile(ag,decls):
                         if s is not None:
                             s.label = n
                 else:
-                    ac.new_state(ag.init_cond)
+                    ag.add_initial_state(ag.init_cond,ivy_alpha.alpha)
         ag.domain.type_check()
         # try instantiating all the actions to type check them
         for name,action in ag.actions.iteritems():

@@ -273,7 +273,7 @@ class Parameter(object):
 class BooleanParameter(Parameter):
     """ Parameter that takes "true" for True and "false" for False """
     def __init__(self,key,init_val=None):
-        Parameter.__init__(self,key,init,
+        Parameter.__init__(self,key,init_val,
                            check = lambda s: (s == "true" or s == "false"),
                            process = lambda s: s == "true")
 

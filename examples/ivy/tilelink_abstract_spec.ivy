@@ -227,6 +227,7 @@ module interface(ref,clnt,mngr,side) = {
 
     relation excl_p(A:addr)   # client as exclusive priv
     relation shrd_p(A:addr)   # client as shared priv
+    relation dirt_p(A:addr)   # client has modified
 
     ########################################
     # client side events to serialize on manager side
@@ -241,7 +242,7 @@ module interface(ref,clnt,mngr,side) = {
     ########################################
     # initial state of interface. nothing owned, nothing to serialize
 
-    init ~excl_p(A) & ~shrd_p(A) & ~to_ser(T)
+    init ~excl_p(A) & ~shrd_p(A) & ~dirt_p(A) & ~to_ser(T)
 
     
     ########################################
@@ -253,9 +254,10 @@ module interface(ref,clnt,mngr,side) = {
        # cannot release priviledges you don't have
        assert o = shrd -> shrd_p(a);
        assert o = excl -> excl_p(a);
+       assert ref.mem(a) = d;  # release transfers correct data
        if o = excl {
-   	   assert ref.mem(a) = d;  # exclusive release transfers correct data
-           excl_p(a) := false 
+           excl_p(a) := false;
+	   dirt_p(a) := false      # after release the line is clean 
        } else {
            shrd_p(a) := false 
        }
@@ -269,7 +271,7 @@ module interface(ref,clnt,mngr,side) = {
        assert cached(a);
        assert o ~= none;
        # must grant a priviledge only once
-       assert ref.mem(a) = d;   # any grant transfers correct data
+       assert ~dirt_p(a) -> ref.mem(a) = d;   # grant has correct data if not dirty already
        if o = excl {
            assert ~excl_p(a);
            excl_p(a) := true
@@ -355,7 +357,10 @@ module interface(ref,clnt,mngr,side) = {
 		  assert mo = read -> excl_p(a) | shrd_p(a);
 		  assert mo = write -> excl_p(a);
 		  assert mo = cas -> excl_p(a);
-		  assert ~ref.prevents(T1,lt)
+		  assert ~ref.prevents(T1,lt);
+		  if mo ~= read {
+		      dirt_p(a) := true  # if modified, mark as dirty
+		  } 
 	      }	       
 
 	      ########################################
@@ -398,6 +403,33 @@ module interface(ref,clnt,mngr,side) = {
        }
     }
     mixin fuse before ref.fuse
+
+    ################################################################################
+    #
+    # Conjectured invariants of interface state
+    #
+    ################################################################################
+
+    # can only be dirty if exclusive
+
+    conjecture dirt_p(A) -> excl_p(A)
+
+    # can only have privs if cached
+
+    conjecture (excl_p(A) | shrd_p(A)) -> cached(A)
+
+    # to_ser only if uncached
+
+    conjecture ~(to_ser(T) & cached(ref.evs(T).addr_))
+
+    # nothing to_ser if prevented by event not to_ser
+
+    conjecture ~(ref.prevents(T1,T2) & ~to_ser(T1) & to_ser(T2))
+
+    # only client side events are to_ser    
+
+    conjecture to_ser(T) -> side(ref.evs(T).id_) = client
+
 }
 
 ################################################################################
