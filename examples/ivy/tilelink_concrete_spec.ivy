@@ -105,7 +105,6 @@ module gnt = {
     individual own:ownership          # what ownership type? (none = uncached)
     relation relack                   # is this an ack of a Release?
     individual data_ : data           # return value, if any
-    individual ltime_ : ltime         # logical time (ghost)
 }
 
 ########################################
@@ -309,11 +308,11 @@ module tl_interface(ref,clnt,mngr,side) = {
          pend_rls(N) & rlss(N).addr_hi = rlss(M).addr_hi & rlss(N).word = rlss(M).word
 
     ########################################
-    # An Aquire/Grant conflict is a pending Release N with
+    # An Aquire/Grant conflict is an Acquire N with
     # the same id, ownership and word (TODO: currently is any ID).
 
     derived agconfl(M:gnt_id,N:acq_id) =
-       pend_acq(N) & acqs(N).id_ = gnts(M).id_ & acqs(N).own = gnts(M).own &
+       acqs(N).id_ = gnts(M).id_ & acqs(N).own = gnts(M).own &
            (gnts(M).own ~= none | acqs(N).word = gnts(M).word)
 
 
@@ -476,14 +475,16 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# 
 		# A Grant must match an accepted pending Acquire. 
 		# If there is no such, a matching pending but unaccepted
-		# Acquire may be accepted.
+		# Acquire may be accepted, but not if it matches
+		# a previous accepted Acquire that is no longer pending.
 
-		if forall M:acq_id. ~(agconfl(msg,M:acq_id) & accepted(M:acq_id)) {
-		   assert exists M. agconfl(msg,M) & ~accepted(M);
-		   assume agconfl(msg,req) & ~accepted(req);
+		if forall M:acq_id. ~(agconfl(msg,M:acq_id) & pend_acq(M:acq_id) & accepted(M:acq_id)) {
+		   assert ~(agconfl(msg,M) & accepted(M));
+		   assert exists M. agconfl(msg,M) & pend_acq(M) & ~accepted(M);
+		   assume agconfl(msg,req)  & pend_acq(req) & ~accepted(req);
 		   accepted(req) := true
                 } else {
-		   assume agconfl(msg,req) & accepted(req)
+		   assume agconfl(msg,req) & pend_acq(M) & accepted(req)
 	        };
 		   		 
 		gnt_acq(msg) := req; # aux
@@ -509,6 +510,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 		assert ~(pend_prb(M,W) & acqs(req).addr_hi = prbs(M).addr_hi);
 
+	        ########################################
+		# Rule: cannot grant a word already served
+
+		assert (W = gnts(msg).word | gnts(msg).own ~= none) -> unserved(req,W);
+		
 
 	        ########################################
 		# mark the word served
@@ -736,15 +742,17 @@ module tl_interface(ref,clnt,mngr,side) = {
     conjecture pend_acq(M) & ~unserved(M,W) & (acqs(M).own ~= none | W = acqs(M).word) ->
                    accepted(M)
 
-    # While a cached acquire is pending, client has requested privs iff word is served,
-    # and addr is cached
+    # While a cached acquire is pending or accepted, client has requested privs iff word is served,
 
-    conjecture pend_acq(M1) & acqs(M1).own = excl -> 
+    conjecture (pend_acq(M1) | accepted(M1)) & acqs(M1).own = excl -> 
                     (excl_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
-    conjecture pend_acq(M1) & acqs(M1).own = shrd -> 
+    conjecture (pend_acq(M1) | accepted(M1)) & acqs(M1).own = shrd -> 
                     (shrd_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
-    conjecture pend_acq(M1) & acqs(M1).own ~= none -> 
-                    cached_hi(acqs(M1).addr_hi)
+
+    # Acquire cached status must match that of address
+
+    conjecture (pend_acq(M1) | accepted(M1) | finished(M1)) ->
+                  (acqs(M1).own ~= none <-> cached_hi(acqs(M1).addr_hi))
 
     # While an uncached acquire is pending, word must be to_ser and uncached
     
@@ -776,11 +784,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     # No probe pending with matching accepted acquire
 
-    conjecture ~(pend_prb(M1,W) & accepted(M2) & prbs(M1).addr_hi = acqs(M).addr_hi)
+    conjecture ~(pend_prb(M1,W) & accepted(M2) & prbs(M1).addr_hi = acqs(M2).addr_hi)
 
     # No two probes pending with same address
 
-    conjecture ~(pend_prb(M1,W1) & pend_prb(M2,W2) & prbs(M1).addr_hi = prbs(M2).addr_hi)
+    conjecture ~(pend_prb(M1,W1) & pend_prb(M2,W2) & M1 ~= M2 & prbs(M1).addr_hi = prbs(M2).addr_hi)
 
     # If a release is pending, requested privs are false
 
@@ -792,6 +800,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 #    conjecture pend_acq(M) & acqs(M).own = excl -> excl_r(acqs(M).addr_hi,W)   
 #    conjecture pend_acq(M) & acqs(M).own = shrd -> shrd_r(acqs(M).addr_hi,W)   
+
+     # If an uncached Acquire has been served, its event has been serialized.
+
+     conjecture accepted(M) & acqs(M).own = none -> ref.evs(acqs(M).ltime_).serialized
 
 }
 

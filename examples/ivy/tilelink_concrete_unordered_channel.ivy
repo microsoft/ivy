@@ -226,7 +226,6 @@ module tests = {
 	call c.acquire(acq2);
 	call b.acquire(acq2);
 	call b.acquire(acq1);
-	assume gnts(gnt1).ltime_ = acqs(acq1).ltime_;
 	assume acqs(acq1).word = gnts(gnt1).word; 
 	call m.perform(acqs(acq1).ltime_,id1);
 	call m.grant(gnt1);
@@ -392,10 +391,11 @@ isolate iso_t = b with ref,front,back,c,m,t
 ########################################
 # Abstract interface state invariants
 
-# If front has privs, than back also has prive
+# If front has privs, than back also has privs. Channel doesn't dirty the line
 
 conjecture front.excl_p(A) -> back.excl_p(A)
 conjecture front.shrd_p(A) -> back.shrd_p(A)
+conjecture back.dirt_p(A) -> front.dirt_p(A)
 
 # If back has request to serialize any event, then front does
 
