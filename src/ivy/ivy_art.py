@@ -332,6 +332,7 @@ class AnalysisGraph(object):
     def copy_path(self,state,other,bound=None):
         other_state = State(other.domain)
         other_state.arg_node = state
+        print "foo: {}".format(state.id)
         if hasattr(state,'pred') and state.pred != None and bound != 0:
             next_bound = None if bound is None else bound - 1
             pred = self.copy_path(state.pred,other,next_bound)

@@ -135,7 +135,8 @@ module rls = {
     relation voluntary              # is this a voluntary release?
     individual addr_hi : tl_addrhi  # hi order bits of address
     individual word :tl_addrlo      # word being released
-    individual data_ : data         # data, if exclusive release
+    relation dirty                  # is data modified?
+    individual data_ : data         # data, if dirty
 }
 
 ########################################
@@ -217,10 +218,21 @@ module tl_interface(ref,clnt,mngr,side) = {
     #
     # A voluntary Release message is considered to be *pending* from
     # the time it is transmitted until the time its Grant has been
-    # transmitted.
+    # transmitted. As an auxliliary, we record which addresses are pending
+    # release.
     # 
 
     relation pend_rls(M:rls_id)
+
+    ########################################
+    # requested priviledges
+    #
+    # Records the most recently request privs for
+    # an addr. This is auxiliary.
+
+    relation excl_r(A:tl_addrhi,W:tl_addrlo)
+    relation shrd_r(A:tl_addrhi,W:tl_addrlo)
+
 
     ########################################
     # pending probe messages
@@ -235,7 +247,7 @@ module tl_interface(ref,clnt,mngr,side) = {
     ########################################
     # Initial condition of interface
 
-    init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R) & ~pend_prb(P,W)
+    init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R) & ~excl_r(H,L) & ~shrd_r(H,L) & ~pend_prb(P,W)
 
     ########################################
     # auxiliaries: map grants to acquires and releases, 
@@ -400,7 +412,7 @@ module tl_interface(ref,clnt,mngr,side) = {
         # Update the interface state 
 	#
 
-        pend_acq(msg) := true;  # mark acquire pending
+        pend_acq(msg) := true;                  # mark acquire pending
 
         ########################################
         # Perform abstract operations
@@ -410,8 +422,14 @@ module tl_interface(ref,clnt,mngr,side) = {
 		call abs.request(addr_cons(acqs(msg).addr_hi,acqs(msg).word),
                                  acqs(msg).data_,acqs(msg).op,acqs(msg).ltime_)
 	}
-	# (cached acquires don't correspond to any abstract action) 
-
+	else {
+	    # (for cached, we just record the request) 
+	    if acqs(msg).own  = excl {
+ 	       excl_r(acqs(msg).addr_hi,W) :=  true
+            } else {
+ 	       shrd_r(acqs(msg).addr_hi,W) :=  true
+            }
+        } 
     }
     mixin tl_Acquire before mngr.tl_Acquire    
 
@@ -532,25 +550,9 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    # Rule: A finished transaction must correspond to
 	    # some completed acquire.
 	    	
-	    assert exists M. (accepted(M) & ~pend_acq(M) & acqs(M).id_ = fnss(msg).id_);
+	    req := fns_acq(msg);   # auxilary witnesses the matching acquire
 
-	    ########################################
-	    # Arbitrarily choose a matching Acquire
-	    #
-	    # Invariant: All the accepted acquires with a given transaction id
-	    # have the same address. 
-	    #
-	    # As a result, even though we may not choose the acquire here that has
-	    # actually finished, the number of accepted acquires with a given address	
-	    # is still correct, and upper-bounds the number of grants for that address
-	    # that may be latent in a channel.
-	    #
-	    # The proof of this might be simplified by giving the Finish
-	    # message a ghost field that indicate the matching Acquire.
-
-	    assume (accepted(req) & ~pend_acq(req) & acqs(req).id_ = fnss(msg).id_);
-
-	    fns_acq(msg) := req; # aux
+	    assert (accepted(req) & ~pend_acq(req) & acqs(req).id_ = fnss(msg).id_);
 
 	    # Finish the Acquire
 
@@ -574,6 +576,21 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 	assert ~rrconfl(msg,M);
 
+        ########################################
+        # When we release, requested and actual privs must be same.
+	# This is not a rule, but rather a useful auxiliary fact.
+
+#	assert excl_p(addr_cons(rlss(msg).hi_addr,rlss(msg).word))
+#	       <-> excl_r(rlss(msg).hi_addr,rlss(msg).word)
+#	assert shrd_p(addr_cons(rlss(msg).hi_addr,rlss(msg).word))
+#	       <-> shrd_r(rlss(msg).hi_addr,rlss(msg).word)	
+
+        ########################################
+	# Rule: Release is dirty iff exclusive
+	# TODO: allow exclusive but clean?
+
+	assert rlss(msg).dirty <-> excl_p(addr_cons(rlss(msg).addr_hi,rlss(msg).word));
+
 	if rlss(msg).voluntary {
 
 	    ########################################
@@ -581,6 +598,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    #
 
 	    pend_rls(msg) := true;
+	    excl_r(rlss(msg).addr_hi,rlss(msg).word) := false;
+	    shrd_r(rlss(msg).addr_hi,rlss(msg).word) := false;
 
 	    ########################################
 	    # Rule: No voluntary release with pending acquire on same address.
@@ -759,6 +778,20 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     conjecture ~(pend_prb(M1,W) & accepted(M2) & prbs(M1).addr_hi = acqs(M).addr_hi)
 
+    # No two probes pending with same address
+
+    conjecture ~(pend_prb(M1,W1) & pend_prb(M2,W2) & prbs(M1).addr_hi = prbs(M2).addr_hi)
+
+    # If a release is pending, requested privs are false
+
+    conjecture pend_rls(R) ->
+           ~excl_r(rlss(R).addr_hi,rlss(R).word)
+           & ~shrd_r(rlss(R).addr_hi,rlss(R).word)
+
+    # If a cached acquire is pending, the corresponding priv is requested
+
+#    conjecture pend_acq(M) & acqs(M).own = excl -> excl_r(acqs(M).addr_hi,W)   
+#    conjecture pend_acq(M) & acqs(M).own = shrd -> shrd_r(acqs(M).addr_hi,W)   
 
 }
 

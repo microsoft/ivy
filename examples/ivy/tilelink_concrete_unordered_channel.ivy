@@ -432,10 +432,10 @@ conjecture back.pend_rls(M) -> front.pend_rls(M)
 
 conjecture front.pend_prb(M,W) -> back.pend_prb(M,W)
 
-## If a probe is pending on the back and no release pending on front, then
-## front and back privs are equal. 
-#
-#conjecture back.pend_prb(M,W)
+# privs on back are equal to either privs on front or requested privs on front.
+
+#conjecture (back.excl_p(A) <-> front.excl_p(A)) | (back.excl_p(A) <-> front.excl_r(A)) 
+#conjecture (back.shrd_p(A) <-> front.shrd_p(A)) | (back.shrd_p(A) <-> front.shrd_r(A)) 
 
 ########################################
 # Channel content invariants.
@@ -510,11 +510,15 @@ conjecture b.rlss(I1,M1) & ~rlss(M1).voluntary & M2 = front.rls_prb(M1) ->
 	   & ~front.excl_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
 	   & ~front.shrd_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
 
-# release messages have correct data if there are still privs on back side
-# (otherwise this is an involuntary release after voluntary)
+# a dirty release message in channel means excl privs on back side
 
 conjecture b.rlss(I1,M1) & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) &
-	   (back.excl_p(A) | back.shrd_p(A)) -> 
+	   rlss(M1).dirty -> back.excl_p(A)
+
+# dirty release messages have correct data
+
+conjecture b.rlss(I1,M1) & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) &
+	   rlss(M1).dirty -> back.excl_p(A) -> 
               rlss(M1).data_ = ref.mem(A)
 
 # Channel can contain a given Release message at most once
