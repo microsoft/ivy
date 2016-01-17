@@ -391,15 +391,19 @@ isolate iso_t = b with ref,front,back,c,m,t
 ########################################
 # Abstract interface state invariants
 
-# If front has privs, than back also has privs. Channel doesn't dirty the line
+# If front has privs, then back also has privs. Channel doesn't dirty the line
 
 conjecture front.excl_p(A) -> back.excl_p(A)
 conjecture front.shrd_p(A) -> back.shrd_p(A)
-conjecture back.dirt_p(A) -> front.dirt_p(A)
+conjecture back.dirt_p(A) & front.excl_p(A) -> front.dirt_p(A)
 
 # If back has request to serialize any event, then front does
 
 conjecture back.to_ser(E) -> front.to_ser(E) 
+
+# If an event has been granted on front, it has been transmitted to back.
+
+conjecture front.granted(E) -> back.to_ser(E)
 
 ########################################
 # Concrete interface state invariants
@@ -407,6 +411,12 @@ conjecture back.to_ser(E) -> front.to_ser(E)
 # Every Acquire pending on the back side is pending on the front.
 
 conjecture back.pend_acq(M1) -> front.pend_acq(M1)
+
+# Every Acquire accepted on the back side is pending or accepted or finished
+# on the front side
+
+conjecture back.accepted(M1) -> 
+	   (front.pend_acq(M1) | front.accepted(M1) | front.finished(M1))
 
 # If a word of an Acquire is unserved on the back side, it is unserved
 # on the front side.
@@ -448,6 +458,11 @@ conjecture front.pend_prb(M,W) -> back.pend_prb(M,W)
 
 conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1)
 
+# An Acquire cannot request a priv already present on back
+
+conjecture b.acqs(I1,M1) & acqs(M1).own = excl -> ~back.excl_p(addr_cons(acqs(M1).addr_hi,W))
+conjecture b.acqs(I1,M1) & acqs(M1).own = shrd -> ~back.shrd_p(addr_cons(acqs(M1).addr_hi,W))
+
 # Channel can contain a given Acquire message at most once
 
 conjecture b.acqs(I1,M) & b.acqs(I2,M) -> I1 = I2
@@ -462,16 +477,32 @@ conjecture b.acqs(I1,M) & b.acqs(I2,M) -> I1 = I2
 conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack -> 
 	       gnts(M1).id_ = acqs(M2).id_
 	       & gnts(M1).own = acqs(M2).own
+	       & (gnts(M1).own = none -> gnts(M1).word = acqs(M2).word)
 	       & front.pend_acq(M2) & back.accepted(M2)
 	       & ~back.unserved(M2,gnts(M1).word)
 	       & front.unserved(M2,gnts(M1).word)
+
+# A non-relack grant in the channel can only match one accepted Acquire at the front
+
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack
+	       & gnts(M1).id_ = acqs(M2).id_
+	       & gnts(M1).own = acqs(M2).own
+	       & (gnts(M1).own = none -> gnts(M1).word = acqs(M2).word)
+	       & (W = gnts(M1).word | gnts(M1).own ~= none )
+	       & front.accepted(M2) -> M2 = back.gnt_acq(M1)
+
+# A non-relack grant in the channel cannot match a an accepted Acquire at the front
+# with a different transaction ID.
+
+conjecture  b.gnts(I1,M1) & ~gnts(M1).relack & M2 ~= back.gnt_acq(M1) & back.accepted(M2) ->
+	       acqs(M2).id_ = gnts(M1).id_ & acqs(M2).addr_hi = acqs(back.gnt_acq(M1)).addr_hi
 
 
 # non-relack cached grant messages have correct data, if not dirtied by client
 
 conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack
 	   & A = addr_cons(acqs(M2).addr_hi,gnts(M1).word)
-	   & acqs(M2).own ~= none & ~front.dirt_p(A) ->
+	   & acqs(M2).own ~= none & ~front.dirt_p(A) & ~back.dirt_p(A) ->
                    gnts(M1).data_ = ref.mem(A)
 
 # non-relack uncached grant messages have correct data
@@ -480,12 +511,19 @@ conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack & acqs(M2).o
                gnts(M1).data_ = ref.evs(acqs(M2).ltime_).data_
 
 # Every relack grant in the channel matches an pending voluntary release, which must
-# be pending at the front and not pending at the back.
+# be pending at the front. No matching release can be pending at the back.
 
 conjecture b.gnts(I1,M1) & M2 = back.gnt_rls(M1) & gnts(M1).relack -> 
 	       rlss(M2).voluntary
    	       & gnts(M1).id_ = rlss(M2).id_
-	       & front.pend_rls(M2) & ~back.pend_rls(M2)
+   	       & gnts(M1).word = rlss(M2).word
+	       & front.pend_rls(M2)
+
+conjecture b.gnts(I1,M1) & gnts(M1).relack
+	       & rlss(M2).voluntary
+   	       & gnts(M1).id_ = rlss(M2).id_
+   	       & gnts(M1).word = rlss(M2).word
+               -> ~back.pend_rls(M2)
 
 # Channel can contain a given Grant message at most once
 
@@ -541,11 +579,11 @@ conjecture b.prbs(I1,M) & b.prbs(I2,M) -> I1 = I2
 # Finishes
 
 # Every Finish message in the channel matches an acquire that is finished
-# on the front side and not finished on the back side.
+# on the front side and accepted but not finished on the back side.
 
-conjecture b.fnss(I1,M1) & M2 = front.fns_acq(M1) -> 
+conjecture b.fnss(I1,M1) & M2 = fns_acq(M1) -> 
 	     fnss(M1).id_ = acqs(M2).id_
-	     & front.finished(M2) & ~back.finished(M2)
+	     & front.finished(M2) & back.accepted(M2) & ~back.finished(M2)
 
 # Channel can contain a given Finish message at most once
 

@@ -126,6 +126,8 @@ module fns = {
 type fns_id
 instantiate fnss(X:fns_id) : fns
 
+individual fns_acq(M:fns_id) : acq_id  # aux, maps finish to acquire
+
 ########################################
 # structure representing Release message
 
@@ -244,9 +246,19 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation pend_prb(M:prb_id, W:tl_addrlo)
 
     ########################################
+    # granted events
+    #
+    # A memory event E has been granted if a corresponding
+    # uncached Acquire has been granted.
+    # 
+
+    relation granted(E:ltime)
+
+    ########################################
     # Initial condition of interface
 
-    init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R) & ~excl_r(H,L) & ~shrd_r(H,L) & ~pend_prb(P,W)
+    init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R)
+          & ~excl_r(H,L) & ~shrd_r(H,L) & ~pend_prb(P,W) & ~granted(E)
 
     ########################################
     # auxiliaries: map grants to acquires and releases, 
@@ -255,7 +267,6 @@ module tl_interface(ref,clnt,mngr,side) = {
     individual gnt_acq(M:gnt_id) : acq_id
     individual gnt_rls(M:gnt_id) : rls_id
     individual rls_prb(M:rls_id) : prb_id
-    individual fns_acq(M:fns_id) : acq_id
 
     ########################################
     # Find the pending voluntary Release matching ID and lo bits.
@@ -362,6 +373,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 	             & ref.evs(acqs(M).ltime_).id_ = ref.evs(acqs(msg).ltime_).id_
 	             & ref.evs(acqs(M).ltime_).addr_ = ref.evs(acqs(msg).ltime_).addr_);
 
+	    # (6) All preventing events are granted
+	    # TODO: this should supercede 4 and 5
+	    # TODO: this might belong in abstract spec
+
+	    assert ref.prevents(E,acqs(msg).ltime_) -> granted(E);
+
             # mark the request word as unserved
 
 	    unserved(msg,acqs(msg).word) := true
@@ -378,10 +395,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    # same hi addr. We can, however, have more than one ownership
 	    # request in same transaction.
 
-#    	    assert ~aaconfl(msg,M);
+    	    assert ~aaconfl(msg,M);
 
 	    # (1) May not have two cached acquires with same client and privs
-	    # TODO: don't account for multiple cleints here
+	    # TODO: should allow pending with different txid
 
 	    assert ~(acqs(msg).own ~= none & pend_acq(M) & acqs(M).own = acqs(msg).own
 	             & acqs(M).addr_hi = acqs(msg).addr_hi);
@@ -466,7 +483,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# difference transaction ID.
 		#
 		# TODO: can we grant if the transactions have
-		# different clients?
+		# different clients? Should allow multiple transactions
+		# with different hi addr.
 
 		assert ~(accepted(M) & acqs(M).id_ ~= gnts(msg).id_);
 	        
@@ -520,6 +538,13 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# mark the word served
 
 		unserved(req,gnts(msg).word) := false;
+
+	        ########################################
+		# if uncached, mark the event granted
+
+		if acqs(req).own = none {
+		    granted(acqs(req).ltime_) := true
+		};
 
 	        ########################################
 		# if all served, mark the req not pending
@@ -726,10 +751,16 @@ module tl_interface(ref,clnt,mngr,side) = {
     conjecture finished(M) -> ~pend_acq(M) & ~accepted(M)
 
     # No two pending cached acquires with same cache line and same privs
+    # TODO: this should really be allowed
 
     conjecture ~(pend_acq(M1) & pend_acq(M2) & M1 ~= M2 &
                  acqs(M1).own ~= none & acqs(M1).own ~= none
 		 & acqs(M1).own = acqs(M2).own & acqs(M1).addr_hi = acqs(M2).addr_hi)
+
+    # No two pending acquries that match
+
+    conjecture ~(M1 ~= M2 & aaconfl(M1,M2) & pend_acq(M1) & pend_acq(M2) &
+                 (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word))
 
     # No two accepted uncached acquires with same cache line and same word
 
@@ -804,6 +835,14 @@ module tl_interface(ref,clnt,mngr,side) = {
      # If an uncached Acquire has been served, its event has been serialized.
 
      conjecture accepted(M) & acqs(M).own = none -> ref.evs(acqs(M).ltime_).serialized
+
+     # Anything granted is to_ser.
+     
+     conjecture granted(E) -> to_ser(E)
+
+     # If anything to_ser, all prevent events are granted
+
+     conjecture to_ser(E2) & ref.prevents(E1,E2) -> granted(E1)
 
 }
 
