@@ -237,7 +237,7 @@ class AssertAction(Action):
         check_can_assert(self.args[0],self)
 #        print type(self.args[0])
         cl = formula_to_clauses(dual_formula(self.args[0]))
-        return ([],true_clauses(),cl)
+        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
     def assert_to_assume(self):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)

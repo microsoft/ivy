@@ -229,10 +229,11 @@ module tl_interface(ref,clnt,mngr,side) = {
     # requested priviledges
     #
     # Records the most recently request privs for
-    # an addr. This is auxiliary.
+    # an addr. These are auxiliary.
 
     relation excl_r(A:tl_addrhi,W:tl_addrlo)
     relation shrd_r(A:tl_addrhi,W:tl_addrlo)
+    relation none_r(A:tl_addrhi,W:tl_addrlo)
 
 
     ########################################
@@ -241,9 +242,11 @@ module tl_interface(ref,clnt,mngr,side) = {
     # A word of a Probe message is considered to be *pending* from
     # the time the Probe is transmitted until the time the
     # corresponding involuntary Release is transmitted.
+    # We track the set of lines with pending probes.
     # 
 
     relation pend_prb(M:prb_id, W:tl_addrlo)
+    relation prb_addr(H:tl_addrhi)
 
     ########################################
     # granted events
@@ -258,7 +261,7 @@ module tl_interface(ref,clnt,mngr,side) = {
     # Initial condition of interface
 
     init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R)
-          & ~excl_r(H,L) & ~shrd_r(H,L) & ~pend_prb(P,W) & ~granted(E)
+          & ~excl_r(H,L) & ~shrd_r(H,L) & ~none_r(H,L) & ~pend_prb(P,W) & ~granted(E)
 
     ########################################
     # auxiliaries: map grants to acquires and releases, 
@@ -297,11 +300,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 
     ########################################
-    # An Acquire/Release conflict with a Release M is any pending Aquire N
-    # with same ID (TODO: currently is any ID).
+    # An Acquire/Release conflict with a Release M is any Aquire N
+    # with same cache line.
 
     derived arconfl(M:rls_id, N:acq_id) = 
-         pend_acq(N) & acqs(N).addr_hi = rlss(M).addr_hi
+         acqs(N).addr_hi = rlss(M).addr_hi
 
 
     ########################################
@@ -412,6 +415,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    assert acqs(msg).own = excl -> ~excl_p(addr_cons(acqs(msg).addr_hi,W));
 	    assert acqs(msg).own = shrd -> ~shrd_p(addr_cons(acqs(msg).addr_hi,W));
 
+	    # (4) No acquires for privs already requested or being released. 
+	    # This is not a rule, but rather a useful auxiliary fact.
+
+	    assert acqs(msg).own = excl -> ~excl_r(acqs(msg).addr_hi,W) & ~none_r(acqs(msg).addr_hi,W);
+	    assert acqs(msg).own = shrd -> ~shrd_r(acqs(msg).addr_hi,W) & ~none_r(acqs(msg).addr_hi,W);
+
             # mark the entire line as unserved
 
 	    unserved(msg,W) := true
@@ -472,7 +481,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# the release (must wait for Finish).
 		#
 
-		assert ~arconfl(rls,M)
+		assert ~(arconfl(rls,M) & accepted(M));
+
+		# mark the requested release finished
+
+		none_r(rlss(rls).addr_hi,rlss(rls).word) := false
             }
             else {	    
 
@@ -527,6 +540,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		#
 
 		assert ~(pend_prb(M,W) & acqs(req).addr_hi = prbs(M).addr_hi);
+		assert ~prb_addr(acqs(req).addr_hi);
 
 	        ########################################
 		# Rule: cannot grant a word already served
@@ -541,10 +555,17 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 	        ########################################
 		# if uncached, mark the event granted
+		# if cached, mark the request served
 
 		if acqs(req).own = none {
 		    granted(acqs(req).ltime_) := true
-		};
+		}
+		else if acqs(req).own = excl {
+		    excl_r(acqs(req).addr_hi,gnts(msg).word) := false
+                }
+		else if acqs(req).own = shrd {
+		    shrd_r(acqs(req).addr_hi,gnts(msg).word) := false
+                };
 
 	        ########################################
 		# if all served, mark the req not pending
@@ -608,13 +629,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 	assert ~rrconfl(msg,M);
 
         ########################################
-        # When we release, requested and actual privs must be same.
+        # Must have no requests pending when releasing.
 	# This is not a rule, but rather a useful auxiliary fact.
 
-#	assert excl_p(addr_cons(rlss(msg).hi_addr,rlss(msg).word))
-#	       <-> excl_r(rlss(msg).hi_addr,rlss(msg).word)
-#	assert shrd_p(addr_cons(rlss(msg).hi_addr,rlss(msg).word))
-#	       <-> shrd_r(rlss(msg).hi_addr,rlss(msg).word)	
+	assert ~excl_r(rlss(msg).addr_hi,rlss(msg).word)
+                 & ~shrd_r(rlss(msg).addr_hi,rlss(msg).word)
+		 & ~none_r(rlss(msg).addr_hi,rlss(msg).word);
 
         ########################################
 	# Rule: Release is dirty iff exclusive
@@ -629,13 +649,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    #
 
 	    pend_rls(msg) := true;
-	    excl_r(rlss(msg).addr_hi,rlss(msg).word) := false;
-	    shrd_r(rlss(msg).addr_hi,rlss(msg).word) := false;
+	    none_r(rlss(msg).addr_hi,rlss(msg).word) := true;
 
 	    ########################################
 	    # Rule: No voluntary release with pending acquire on same address.
 
-	    assert ~arconfl(msg,M);
+	    assert ~(arconfl(msg,M) & pend_acq(M));
 
 	    ########################################
 	    # Rule: No pending voluntary release with same id and same word
@@ -656,7 +675,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    local p:prb_id {
 	        p := find_probe(msg);
 		rls_prb(msg) := p; # aux
-		pend_prb(p,rlss(msg).word) := false   # mark the word released
+		pend_prb(p,rlss(msg).word) := false;               # mark the word released
+		if forall W:tl_addrlo. ~pend_prb(p,W:tl_addrlo) {
+		    prb_addr(prbs(p).addr_hi) := false 		   # mark probe fully completed
+                }
             }
         };
 
@@ -697,6 +719,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 	# (TODO: currently ignores ID)
 
 	assert ~(pend_prb(M,W) & prbs(M).addr_hi = prbs(msg).addr_hi);
+	assert ~prb_addr(prbs(msg).addr_hi);
 
 	# 2) No pending releases with same client id hi address
 	# (TODO: currently ignores ID)
@@ -716,7 +739,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 	########################################
 	# Mark the probe pending (for all words)
 
-	pend_prb(msg,W) := true
+	pend_prb(msg,W) := true;
+	prb_addr(prbs(msg).addr_hi) := true
 
     }
     mixin tl_Probe before clnt.tl_Probe
@@ -750,10 +774,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     conjecture finished(M) -> ~pend_acq(M) & ~accepted(M)
 
-    # No two pending cached acquires with same cache line and same privs
+    # No two pending or accepted cached acquires with same cache line and same privs
     # TODO: this should really be allowed
 
-    conjecture ~(pend_acq(M1) & pend_acq(M2) & M1 ~= M2 &
+    conjecture ~((pend_acq(M1) | accepted(M1)) & (pend_acq(M2) | accepted(M2)) & M1 ~= M2 &
                  acqs(M1).own ~= none & acqs(M1).own ~= none
 		 & acqs(M1).own = acqs(M2).own & acqs(M1).addr_hi = acqs(M2).addr_hi)
 
@@ -762,11 +786,13 @@ module tl_interface(ref,clnt,mngr,side) = {
     conjecture ~(M1 ~= M2 & aaconfl(M1,M2) & pend_acq(M1) & pend_acq(M2) &
                  (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word))
 
-    # No two accepted uncached acquires with same cache line and same word
+    # No two accepted  acquires that match
 
     conjecture ~(accepted(M1) & accepted(M2) & M1 ~= M2 &
-                 acqs(M1).own = none & acqs(M1).own = none
-		 & acqs(M1).word = acqs(M2).word & acqs(M1).addr_hi = acqs(M2).addr_hi)
+                 acqs(M1).own = acqs(M1).own & 
+		 (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word) &
+		 acqs(M1).addr_hi = acqs(M2).addr_hi)
+
 
     # If some word is served, acquire is accepted
 
@@ -775,10 +801,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     # While a cached acquire is pending or accepted, client has requested privs iff word is served,
 
-    conjecture (pend_acq(M1) | accepted(M1)) & acqs(M1).own = excl -> 
-                    (excl_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
-    conjecture (pend_acq(M1) | accepted(M1)) & acqs(M1).own = shrd -> 
-                    (shrd_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
+#    conjecture pend_acq(M1) & acqs(M1).own = excl -> 
+#                    (excl_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
+#    conjecture pend_acq(M1) & acqs(M1).own = shrd -> 
+#                    (shrd_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
 
     # Acquire cached status must match that of address
 
@@ -804,8 +830,8 @@ module tl_interface(ref,clnt,mngr,side) = {
     # While a release is pending, client has no privs and is cached
 
     conjecture pend_rls(M1) -> 
-                    ~excl_p(addr_cons(rlss(M1).addr_hi,W))
-                    & ~shrd_p(addr_cons(rlss(M1).addr_hi,W))
+                    ~excl_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
+                    & ~shrd_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
 		    & cached_hi(rlss(M1).addr_hi)
 
     # No voluntary release pending while an acquire on the same address
@@ -821,16 +847,34 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     conjecture ~(pend_prb(M1,W1) & pend_prb(M2,W2) & M1 ~= M2 & prbs(M1).addr_hi = prbs(M2).addr_hi)
 
-    # If a release is pending, requested privs are false
+    # Probe message with any word pending implies line is pending
+    conjecture pend_prb(M,W) -> prb_addr(prbs(M).addr_hi)
 
-    conjecture pend_rls(R) ->
-           ~excl_r(rlss(R).addr_hi,rlss(R).word)
-           & ~shrd_r(rlss(R).addr_hi,rlss(R).word)
+    # If a release is pending, the release of the address is requested
 
-    # If a cached acquire is pending, the corresponding priv is requested
+    conjecture pend_rls(R) -> none_r(rlss(R).addr_hi,rlss(R).word)
 
-#    conjecture pend_acq(M) & acqs(M).own = excl -> excl_r(acqs(M).addr_hi,W)   
-#    conjecture pend_acq(M) & acqs(M).own = shrd -> shrd_r(acqs(M).addr_hi,W)   
+    # If a cached acquire is pending and a word is unserved, the corresponding priv is requested
+
+    conjecture pend_acq(M) & acqs(M).own = excl & unserved(M,W) -> excl_r(acqs(M).addr_hi,W)   
+    conjecture pend_acq(M) & acqs(M).own = shrd  & unserved(M,W) -> shrd_r(acqs(M).addr_hi,W)   
+
+    # If a cached acquire is accepted and a word is served, the corresponding priv is not requested,
+    # and either the requested privs are obtained or voluntary release has been issued
+
+    conjecture accepted(M) & acqs(M).own = excl & ~unserved(M,W) & H = acqs(M).addr_hi ->
+                            ~excl_r(H,W) & (none_r(H,W) | excl_p(addr_cons(H,W)))
+    conjecture accepted(M) & acqs(M).own = shrd & ~unserved(M,W) & H = acqs(M).addr_hi ->
+                            ~shrd_r(H,W) & (none_r(H,W) | shrd_p(addr_cons(H,W)))
+
+    # If a cached acquire is accepted and a word is served, we have the priv
+
+    conjecture accepted(M) & acqs(M).own = excl -> ~unserved(M,W) -> ~excl_r(acqs(M).addr_hi,W)   
+    conjecture accepted(M) & acqs(M).own = shrd -> ~unserved(M,W) -> ~shrd_r(acqs(M).addr_hi,W)       
+
+    # Never both release and acquire request for any address
+
+    conjecture (excl_r(H,W) | shrd_r(H,W)) -> ~none_r(H,W)
 
      # If an uncached Acquire has been served, its event has been serialized.
 

@@ -433,6 +433,13 @@ conjecture front.accepted(M) -> back.accepted(M)
 
 conjecture back.finished(M) -> front.finished(M)
 
+# If a cached acquire is accepted on the back, there can't be a distinct pending
+# one on the front that matches.
+
+conjecture ~(back.accepted(M1) & front.pend_acq(M2) & M1 ~= M2
+	     & acqs(M1).own ~= none & acqs(M1).own = acqs(M2).own
+	     & acqs(M1).addr_hi = acqs(M2).addr_hi)
+
 # If a voluntary release is pending on the back side, it is pending on
 # the front side.
 
@@ -442,26 +449,41 @@ conjecture back.pend_rls(M) -> front.pend_rls(M)
 
 conjecture front.pend_prb(M,W) -> back.pend_prb(M,W)
 
-# privs on back are equal to either privs on front or requested privs on front.
+# requested privs on back imply requested privs on front
 
-#conjecture (back.excl_p(A) <-> front.excl_p(A)) | (back.excl_p(A) <-> front.excl_r(A)) 
-#conjecture (back.shrd_p(A) <-> front.shrd_p(A)) | (back.shrd_p(A) <-> front.shrd_r(A)) 
+conjecture (back.excl_r(H,W) -> front.excl_r(H,W))
+	   & (back.shrd_r(H,W) -> front.shrd_r(H,W))
+	   & (back.none_r(H,W) -> front.none_r(H,W))
+
+# if privs on back but not front, and nothing requested on front, then
+# there must be an old probe or voluntary release pending
+
+conjecture A = addr_cons(H,W) & ~front.excl_p(A) & ~front.excl_r(H,W) & back.excl_p(A)
+	   -> front.none_r(H,W) | back.prb_addr(H)
+conjecture A = addr_cons(H,W) & ~front.shrd_p(A) & ~front.shrd_r(H,W) & back.shrd_p(A)
+	   -> front.none_r(H,W) | back.prb_addr(H)
+
 
 ########################################
 # Channel content invariants.
-
+  
 ####################
 # Acquires
 
-# Every Acquire message in the channel is pending on the front side and not
-# pending on the back side. 
+# Every Acquire message in the channel is pending on the front side
+# pending on the back side. Moreover, all requested words are unserved.
 
-conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1)
+conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1) & 
+	                    ((W = acqs(M1).word | acqs(M1).own ~= none) -> front.unserved(M1,W))
 
-# An Acquire cannot request a priv already present on back
+# An uncache Acquire in the channel indicates privs are not already
+# requested on back, or there is a pending probe or voluntary request
+# (from an earlier transaction)
 
-conjecture b.acqs(I1,M1) & acqs(M1).own = excl -> ~back.excl_p(addr_cons(acqs(M1).addr_hi,W))
-conjecture b.acqs(I1,M1) & acqs(M1).own = shrd -> ~back.shrd_p(addr_cons(acqs(M1).addr_hi,W))
+conjecture b.acqs(I1,M1) & acqs(M1).own = excl & H = acqs(M1).addr_hi & back.excl_r(H,W)
+	   -> front.none_r(H,W) | back.prb_addr(H)
+conjecture b.acqs(I1,M1) & acqs(M1).own = shrd & H = acqs(M1).addr_hi & back.shrd_r(H,W)
+	   -> front.none_r(H,W) | back.prb_addr(H)
 
 # Channel can contain a given Acquire message at most once
 
@@ -510,20 +532,25 @@ conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack
 conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack & acqs(M2).own = none ->
                gnts(M1).data_ = ref.evs(acqs(M2).ltime_).data_
 
-# Every relack grant in the channel matches an pending voluntary release, which must
-# be pending at the front. No matching release can be pending at the back.
+# Every relack grant in the channel matches an pending voluntary
+# release, which must be pending at the front. No matching acquire can
+# be accepted at back. No matching release can be pending at the back.
 
 conjecture b.gnts(I1,M1) & M2 = back.gnt_rls(M1) & gnts(M1).relack -> 
 	       rlss(M2).voluntary
    	       & gnts(M1).id_ = rlss(M2).id_
    	       & gnts(M1).word = rlss(M2).word
 	       & front.pend_rls(M2)
+	       & ~(back.accepted(M3) & acqs(M3).addr_hi = rlss(M2).addr_hi)
 
 conjecture b.gnts(I1,M1) & gnts(M1).relack
 	       & rlss(M2).voluntary
    	       & gnts(M1).id_ = rlss(M2).id_
    	       & gnts(M1).word = rlss(M2).word
                -> ~back.pend_rls(M2)
+
+# No grant in the channel if there is a matching Acquire accepted on the back.
+
 
 # Channel can contain a given Grant message at most once
 
