@@ -378,6 +378,11 @@ export t.test3
 export t.test4
 export t.test5
 
+export b.acquire
+ export b.grant
+ export b.finish
+ export b.release
+ export b.probe
 
 isolate iso_t = b with ref,front,back,c,m,t
 
@@ -395,7 +400,7 @@ isolate iso_t = b with ref,front,back,c,m,t
 
 conjecture front.excl_p(A) -> back.excl_p(A)
 conjecture front.shrd_p(A) -> back.shrd_p(A)
-conjecture back.dirt_p(A) & front.excl_p(A) -> front.dirt_p(A)
+#conjecture back.dirt_p(A) & front.excl_p(A) -> front.dirt_p(A)
 
 # If back has request to serialize any event, then front does
 
@@ -403,7 +408,7 @@ conjecture back.to_ser(E) -> front.to_ser(E)
 
 # If an event has been granted on front, it has been transmitted to back.
 
-conjecture front.granted(E) -> back.to_ser(E)
+conjecture front.granted(E) -> back.granted(E)
 
 ########################################
 # Concrete interface state invariants
@@ -417,6 +422,13 @@ conjecture back.pend_acq(M1) -> front.pend_acq(M1)
 
 conjecture back.accepted(M1) -> 
 	   (front.pend_acq(M1) | front.accepted(M1) | front.finished(M1))
+
+# If an uncached request is accepted on back and finished on front, and there
+# is no release pending, then front has the requested privs.
+
+conjecture back.accepted(M1) & front.finished(M1) & ~front.none_r(acqs(M1).addr_hi,W) ->
+	     (acqs(M1).own = excl -> front.excl_p(addr_cons(acqs(M1).addr_hi,W)))
+	     & (acqs(M1).own = shrd -> front.shrd_p(addr_cons(acqs(M1).addr_hi,W)))
 
 # If a word of an Acquire is unserved on the back side, it is unserved
 # on the front side.
@@ -459,10 +471,31 @@ conjecture (back.excl_r(H,W) -> front.excl_r(H,W))
 # there must be an old probe or voluntary release pending
 
 conjecture A = addr_cons(H,W) & ~front.excl_p(A) & ~front.excl_r(H,W) & back.excl_p(A)
-	   -> front.none_r(H,W) | back.prb_addr(H)
+	   -> front.none_r(H,W) | back.prb_addr(H,W)
 conjecture A = addr_cons(H,W) & ~front.shrd_p(A) & ~front.shrd_r(H,W) & back.shrd_p(A)
-	   -> front.none_r(H,W) | back.prb_addr(H)
+	   -> front.none_r(H,W) | back.prb_addr(H,W)
 
+# if dirty on back but not front, then there must be an old probe or
+# voluntary release pending
+
+conjecture A = addr_cons(H,W) & ~front.dirt_p(A) & back.dirt_p(A)
+	   -> front.none_r(H,W) | back.prb_addr(H,W)
+
+# if an aquire is in the channel an there is no pending probe, then back does not have the requested privs
+
+conjecture front.pend_acq(M1) & ~back.pend_acq(M1) & ~back.accepted(M1)
+	       & ~back.prb_addr(acqs(M1).addr_hi,W) & A = addr_cons(acqs(M1).addr_hi,W) ->
+	     (acqs(M1).own = excl -> ~back.excl_p(A)) & (acqs(M1).own = shrd -> ~back.shrd_p(A)) 
+
+# probe on front implies probe on back
+
+conjecture front.prb_addr(H,W) -> back.prb_addr(H,W)
+
+# if an uncached acquire is pending on the front but not the back, it is not to_ser on the back and
+# is not serialized
+
+conjecture front.pend_acq(M) & ~back.pend_acq(M) & acqs(M).own = none ->
+                 ~back.to_ser(acqs(M).ltime_) & ~ref.evs(acqs(M).ltime_).serialized
 
 ########################################
 # Channel content invariants.
@@ -471,9 +504,10 @@ conjecture A = addr_cons(H,W) & ~front.shrd_p(A) & ~front.shrd_r(H,W) & back.shr
 # Acquires
 
 # Every Acquire message in the channel is pending on the front side
-# pending on the back side. Moreover, all requested words are unserved.
+# and not pending or accepted on the back side. Moreover, all requested words are unserved.
 
-conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1) & 
+conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1) &
+	                    ~back.accepted(M1) &
 	                    ((W = acqs(M1).word | acqs(M1).own ~= none) -> front.unserved(M1,W))
 
 # An uncache Acquire in the channel indicates privs are not already
@@ -481,9 +515,15 @@ conjecture b.acqs(I1,M1) -> front.pend_acq(M1) & ~back.pend_acq(M1) &
 # (from an earlier transaction)
 
 conjecture b.acqs(I1,M1) & acqs(M1).own = excl & H = acqs(M1).addr_hi & back.excl_r(H,W)
-	   -> front.none_r(H,W) | back.prb_addr(H)
+	   -> back.prb_addr(H,W)
 conjecture b.acqs(I1,M1) & acqs(M1).own = shrd & H = acqs(M1).addr_hi & back.shrd_r(H,W)
-	   -> front.none_r(H,W) | back.prb_addr(H)
+	   -> back.prb_addr(H,W)
+
+# conjecture b.acqs(I1,M1) & acqs(M1).own = excl & H = acqs(M1).addr_hi & back.excl_r(H,W)
+#	   -> front.none_r(H,W) | back.prb_addr(H,W)
+# conjecture b.acqs(I1,M1) & acqs(M1).own = shrd & H = acqs(M1).addr_hi & back.shrd_r(H,W)
+#	   -> front.none_r(H,W) | back.prb_addr(H,W)
+
 
 # Channel can contain a given Acquire message at most once
 
@@ -503,6 +543,7 @@ conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack ->
 	       & front.pend_acq(M2) & back.accepted(M2)
 	       & ~back.unserved(M2,gnts(M1).word)
 	       & front.unserved(M2,gnts(M1).word)
+#	       & (gnts(M1).own = none -> back.granted(acqs(M2).ltime_))
 
 # A non-relack grant in the channel can only match one accepted Acquire at the front
 
@@ -532,9 +573,16 @@ conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack
 conjecture b.gnts(I1,M1) & M2 = back.gnt_acq(M1) & ~gnts(M1).relack & acqs(M2).own = none ->
                gnts(M1).data_ = ref.evs(acqs(M2).ltime_).data_
 
+# no two grants in channel for same word of same acquire
+
+conjecture ~(b.gnts(I1,M1) & b.gnts(I2,M2) & ~gnts(M1).relack & ~gnts(M2).relack & M1 ~= M2
+	    & back.gnt_acq(M1) = back.gnt_acq(M2)
+            & gnts(M1).word = gnts(M2).word)
+
 # Every relack grant in the channel matches an pending voluntary
 # release, which must be pending at the front. No matching acquire can
 # be accepted at back. No matching release can be pending at the back.
+# There can be no privs on the back
 
 conjecture b.gnts(I1,M1) & M2 = back.gnt_rls(M1) & gnts(M1).relack -> 
 	       rlss(M2).voluntary
@@ -542,6 +590,9 @@ conjecture b.gnts(I1,M1) & M2 = back.gnt_rls(M1) & gnts(M1).relack ->
    	       & gnts(M1).word = rlss(M2).word
 	       & front.pend_rls(M2)
 	       & ~(back.accepted(M3) & acqs(M3).addr_hi = rlss(M2).addr_hi)
+	       & ~back.none_r(rlss(M2).addr_hi,rlss(M2).word)
+	       & ~back.excl_p(addr_cons(rlss(M2).addr_hi,rlss(M2).word))
+	       & ~back.shrd_p(addr_cons(rlss(M2).addr_hi,rlss(M2).word))
 
 conjecture b.gnts(I1,M1) & gnts(M1).relack
 	       & rlss(M2).voluntary
@@ -549,7 +600,12 @@ conjecture b.gnts(I1,M1) & gnts(M1).relack
    	       & gnts(M1).word = rlss(M2).word
                -> ~back.pend_rls(M2)
 
-# No grant in the channel if there is a matching Acquire accepted on the back.
+# no two relacks in channel for same release
+
+conjecture ~(b.gnts(I1,M1) & b.gnts(I2,M2) & gnts(M1).relack & gnts(M2).relack & M1 ~= M2
+	    & back.gnt_rls(M1) = back.gnt_rls(M2))
+
+# No grant in the channel if there is a matching Acquire accepted on the back. TODO: ???
 
 
 # Channel can contain a given Grant message at most once
@@ -565,6 +621,13 @@ conjecture b.gnts(I1,M) & b.gnts(I2,M) -> I1 = I2
 conjecture b.rlss(I1,M1) & rlss(M1).voluntary ->
                   front.pend_rls(M1) & ~back.pend_rls(M1)
 
+
+# no other matching releases are pending the back side
+
+conjecture ~(b.rlss(I1,M1) & M1 ~= M2  & back.pend_rls(M2)
+               & rlss(M1).addr_hi = rlss(M2).addr_hi & rlss(M1).word = rlss(M2).word)
+conjecture b.rlss(I1,M1) -> ~back.none_r(rlss(M1).addr_hi,rlss(M1).word)
+
 # Every involuntary release message in the channel matches a probe
 # that is pending on back side and not pending on font side, and there
 # are no privs on the front side.
@@ -575,10 +638,21 @@ conjecture b.rlss(I1,M1) & ~rlss(M1).voluntary & M2 = front.rls_prb(M1) ->
 	   & ~front.excl_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
 	   & ~front.shrd_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
 
-# a dirty release message in channel means excl privs on back side
+# a release message means some privs on back side
 
-conjecture b.rlss(I1,M1) & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) &
-	   rlss(M1).dirty -> back.excl_p(A)
+conjecture b.rlss(I1,M1) & rlss(M1).voluntary & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) ->
+	      (back.excl_p(A) | back.shrd_p(A))
+
+# no two matching release messages can be in channel
+
+conjecture ~(b.rlss(I1,M1) & b.rlss(I2,M2) & M1 ~= M2
+	     & rlss(M1).addr_hi = rlss(M2).addr_hi
+	     & rlss(M1).word = rlss(M2).word)
+
+# a dirty release message in channel means excl privs on back side, and vice-versa
+
+conjecture b.rlss(I1,M1) & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) ->
+	   (rlss(M1).dirty <-> back.excl_p(A))
 
 # dirty release messages have correct data
 
@@ -597,6 +671,18 @@ conjecture b.rlss(I1,M) & b.rlss(I2,M) -> I1 = I2
 # pending on the front side
 
 conjecture b.prbs(I1,M1) -> back.pend_prb(M1,W) & ~front.pend_prb(M1,W)
+                & ~front.prb_addr(prbs(M1).addr_hi,W)
+
+# Can't be two matching probes in channel
+
+conjecture ~(b.prbs(I1,M1) & b.prbs(I2,M2) & M1 ~= M2
+	     & prbs(M1).addr_hi = prbs(M2).addr_hi)
+
+# Can't be matching probe and involuntary release in channel
+
+conjecture ~(b.prbs(I1,M1) & b.rlss(I2,M2)
+	     & ~rlss(M2).voluntary
+	     & prbs(M1).addr_hi = rlss(M2).addr_hi)
 
 # Channel can contain a given Probe message at most once
 
@@ -611,6 +697,11 @@ conjecture b.prbs(I1,M) & b.prbs(I2,M) -> I1 = I2
 conjecture b.fnss(I1,M1) & M2 = fns_acq(M1) -> 
 	     fnss(M1).id_ = acqs(M2).id_
 	     & front.finished(M2) & back.accepted(M2) & ~back.finished(M2)
+
+# Can't be two finishes for same acquire in channel
+
+conjecture ~(b.fnss(I1,M1) & b.fnss(I2,M2) & M1 ~= M2
+	     & fns_acq(M1) = fns_acq(M2))
 
 # Channel can contain a given Finish message at most once
 
