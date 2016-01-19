@@ -432,10 +432,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 	    assert acqs(msg).own = excl ->
 	                ~none_r(acqs(msg).addr_hi,W)
-			& (~prb_addr(acqs(msg).addr_hi,W) -> ~excl_r(acqs(msg).addr_hi,W));
+#			& (~prb_addr(acqs(msg).addr_hi,W) -> ~excl_r(acqs(msg).addr_hi,W));
+			& ~excl_r(acqs(msg).addr_hi,W);
 	    assert acqs(msg).own = shrd ->
 	                ~none_r(acqs(msg).addr_hi,W)
-			& (~prb_addr(acqs(msg).addr_hi,W) -> ~shrd_r(acqs(msg).addr_hi,W));
+#			& (~prb_addr(acqs(msg).addr_hi,W) -> ~shrd_r(acqs(msg).addr_hi,W));
+			& ~shrd_r(acqs(msg).addr_hi,W);
 
             # mark the entire line as unserved
 
@@ -946,7 +948,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 
      conjecture pend_acq(M) & acqs(M).own = none  ->
                    addr_cons(acqs(M).addr_hi,acqs(M).word) = ref.evs(acqs(M).ltime_).addr_
-	           & acqs(M).data_ = ref.evs(acqs(M).ltime_).data_ 
+	           & (acqs(M).data_ = ref.evs(acqs(M).ltime_).data_  | ref.evs(acqs(M).ltime_).serialized)
 		   & acqs(M).op = ref.evs(acqs(M).ltime_).type_
 
      # No two lock operations can be pending for the same
