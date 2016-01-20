@@ -105,6 +105,8 @@ module gnt = {
     individual own:ownership          # what ownership type? (none = uncached)
     relation relack                   # is this an ack of a Release?
     individual data_ : data           # return value, if any
+
+    individual addr_hi : tl_addrhi    # (aux) hi order bits of address
 }
 
 ########################################
@@ -118,6 +120,10 @@ instantiate gnts(X:gnt_id) : gnt
 
 module fns = {
     individual id_ : id             # transaction id
+
+    individual addr_hi : tl_addrhi    # (aux) hi order bits of acquire
+    individual word : tl_addrlo       # (aux) low-order bits of acquire
+    individual own:ownership          # (aux) ownership or acquire
 }
 
 ########################################
@@ -125,8 +131,6 @@ module fns = {
 
 type fns_id
 instantiate fnss(X:fns_id) : fns
-
-individual fns_acq(M:fns_id) : acq_id  # aux, maps finish to acquire
 
 ########################################
 # structure representing Release message
@@ -180,40 +184,24 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation cached_hi(X:tl_addrhi)
 
     ########################################
-    # pending acquires
-    #
-    # An Acquire message is considered to be *pending* from the time
-    # it is transmitted until the time its last Grant has been
-    # transmitted.
+    # An Acquire has three phases: requested, accepted and finishing
+    # 
+    # There can be requested and accepted acquires that
+    # match only if they are uncached.
 
-    relation pend_acq(M:acq_id)
-
-    ########################################
-    # acquires accepted by manager
-    #
-    # An Acquire message is considered to be *accepted* from the time
-    # its first Grant has been transmitted until the time its
-    # Finish is transmitted.
-
-    relation accepted(M:acq_id)
-
-    ########################################
-    # words unserved for accepted acquires
-    #
-    # A word of an Acquire message is considered to be *unserved* from the time
-    # the Acquire is transmitted until the Grant for the corresponding word
-    # is transmitted.
-   
-    relation unserved(M:acq_id,W:tl_addrlo)
-
-    ########################################
-    # acquires that are finished
-    #
-    # An Acquire message is considered finished afer its finish message
-    # is transmitted
-
-    relation finished(M:acq_id)
-
+    relation excl_r(A:tl_addrhi)               # there is a pending excl acquire for line
+    relation shrd_r(A:tl_addrhi)               # there is a pending shrd acquire for line
+    relation unc_r(A:tl_addrhi,W:tl_addrlo)    # there is a pending uncached acquire
+    
+    relation excl_a(A:tl_addrhi)               # there is an accepted excl acquire for line
+    relation shrd_a(A:tl_addrhi)               # there is an accepted shrd acquire for line
+    relation unc_a(A:tl_addrhi,W:tl_addrlo)    # there is an accepted uncached acquire
+    
+    relation excl_f(A:tl_addrhi)               # there is an finishing excl acquire for line
+    relation shrd_f(A:tl_addrhi)               # there is an finishing shrd acquire for line
+    relation unc_f(A:tl_addrhi,W:tl_addrlo)    # there is an finishing uncached acquire
+    
+    
     ########################################
     # pending release messages
     #
@@ -223,18 +211,7 @@ module tl_interface(ref,clnt,mngr,side) = {
     # release.
     # 
 
-    relation pend_rls(M:rls_id)
-
-    ########################################
-    # requested priviledges
-    #
-    # Records the most recently request privs for
-    # an addr. These are auxiliary.
-
-    relation excl_r(A:tl_addrhi,W:tl_addrlo)
-    relation shrd_r(A:tl_addrhi,W:tl_addrlo)
     relation none_r(A:tl_addrhi,W:tl_addrlo)
-
 
     ########################################
     # pending probe messages
@@ -245,7 +222,6 @@ module tl_interface(ref,clnt,mngr,side) = {
     # We track the set of lines with pending probes.
     # 
 
-    relation pend_prb(M:prb_id, W:tl_addrlo)
     relation prb_addr(H:tl_addrhi, W:tl_addrlo)
 
     ########################################
@@ -258,21 +234,20 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation granted(E:ltime)
 
     ########################################
-    # Initial condition of interface
+    # map from hi addresses to txids
+    #
+    # No two addresses can use the same txid 
 
-    init ~pend_acq(M) & ~accepted(M) & ~unserved(M,W) & ~finished(M) & ~pend_rls(R)
-          & ~excl_r(H,L) & ~shrd_r(H,L) & ~none_r(H,L) & ~pend_prb(P,W) & ~granted(E)
-	  & ~prb_addr(H,W)
+    individual addr_id(A:addr) : id
 
     ########################################
-    # auxiliaries: map grants to acquires and releases, 
-    # release to probes, finishes to acquires, pending
-    # acquires to some pending word
+    # Initial condition of interface
 
-    individual gnt_acq(M:gnt_id) : acq_id
-    individual gnt_rls(M:gnt_id) : rls_id
-    individual rls_prb(M:rls_id) : prb_id
-    individual pend_word(M:acq_id) : tl_addrlo
+    init ~pend_rls(R)
+          & ~excl_r(H) & ~shrd_r(H) & ~unc_r(H,W) 
+          & ~excl_a(H,W) & ~shrd_a(H,W) & ~unc_a(H,W) 
+	  & ~none_r(H,W) & ~granted(E)
+	  & ~prb_addr(H,W) & ~granted(E)
 
 
     ########################################
@@ -339,141 +314,127 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     action tl_Acquire(msg:acq_id) = {
 
-        ########################################
-	# A finished acq_id is not re-used (but
-	# we can have an identical Acquire with a different
-	# acq_id). Having a unique acq_id for each Acquire
-	# has a technical advantage in that it allows
-	# us to count the oustanding Finish messages by
-	# associating each with a different acq_id.
+        local hi:tl_addrhi, lo:tl_addrlo, id_: id, ow:ownership, lt:ltime, a:addr, d:data, o:otype {
 
-	assert ~finished(msg);
+	    ow := acqs(msg).own;
+	    hi := acqs(msg).addr_hi;
+	    lo := acqs(msg).addr_lo;
+	    id_ := acqs(msg).id_;
+	    lt := acqs(msg).ltime_;
+	    a := acqs(msg).addr_;
+	    d := acqs(msg).data_;
+	    o := acqs(msg).op;
 
-        ########################################
-        # rules for uncached Acquires
-	#
+	    ########################################
+	    # rules for uncached Acquires
+	    #
 
-	if acqs(msg).own = none {
+	    if acqs(msg).own = none {
 
-	    # (1) May not have pending acquire with same transaction ID and ownership and word.
+		# (1) May not have a requested acquire with same hi address and word.
 
-    	    assert ~(aaconfl(msg,M) & acqs(msg).word = acqs(M).word);
+		assert ~unc_r(hi,lo);
 
-	    # (2) May not have pending acquire with same transaction ID and different line.
+		# (2 if any prior transactions with same hi address, txid must match
 
-    	    assert ~(aaconfl(msg,M) & acqs(msg).addr_hi ~= acqs(M).addr_hi);
+		assert (unc_r(hi,lo) | unc_a(hi,lo) -> addr_id(hi) = id_
 
-            # (4) No two lock operations can be pending for the same
-	    # client. This is required for release consistency,
-	    # which would be violated by reordering lock operations.
+		# (3) May not use a txid in use for a different hi addr
 
-    	    assert ~(pend_acq(M) & acqs(M).own = none
-	             & ref.evs(acqs(M).ltime_).id_ = ref.evs(acqs(msg).ltime_).id_
-	             & (ref.evs(acqs(M).ltime_).type_ = cas | ref.evs(acqs(msg).ltime_).type_ = cas));
+		assert (unc_r(H,L) | unc_a(H,L)) & H ~= hi -> addr_id(H) ~= id_
 
-	    # (5) No two operations pending on same address for the same
-	    # client. This is required for release consistency,
-	    # which would be violated by reordering lock operations.
-	    # TODO: no client ID's yet
 
-    	    assert ~(pend_acq(M) & acqs(M).own = none
-	             & ref.evs(acqs(M).ltime_).id_ = ref.evs(acqs(msg).ltime_).id_
-	             & ref.evs(acqs(M).ltime_).addr_ = ref.evs(acqs(msg).ltime_).addr_);
+		# (4) No two lock operations can be pending for the same
+		# client. This is required for release consistency,
+		# which would be violated by reordering lock operations.
 
-	    # (6) All preventing events are granted
-	    # TODO: this should supercede 4 and 5
-	    # TODO: this might belong in abstract spec
+		assert ~(to_ser(E) & ~granted(E) & (ref.evs(E).type_ = cas | ref.evs(lt).type_ = cas));
 
-	    assert ref.prevents(E,acqs(msg).ltime_) -> granted(E);
+		# (5) No two operations pending on same address for the same
+		# client. This is required for release consistency,
+		# which would be violated by reordering ops on same address.
+		# TODO: no client ID's yet
 
-	    # (7) Must have correct address, data and op
+		assert ~(to_ser(E) & ~granted(E) & ref.evs(E).addr_ = ref.evs(lt).addr_);
 
-	    assert addr_cons(acqs(msg).addr_hi,acqs(msg).word) = ref.evs(acqs(msg).ltime_).addr_
-	           & acqs(msg).data_ = ref.evs(acqs(msg).ltime_).data_ 
-		   & acqs(msg).op = ref.evs(acqs(msg).ltime_).type_;
+		# (6) All preventing events are already granted
 
-            # mark the request word as unserved
+		assert ref.prevents(E,lt) -> granted(E);
 
-	    unserved(msg,acqs(msg).word) := true
+		# (7) Must have correct address, data and op
 
+		assert addr_cons(hi,lo) = ref.evs(lt).addr_
+		       & d = ref.evs(lt).data_ 
+		       & o = ref.evs(lt).type_;
+
+		# (8) Must be in uncached address space
+
+		assert ~cached_hi(hi);
+
+		# mark the acquire as requested
+
+		unc_r(hi,lo) := true;
+
+		########################################
+	        # Perform abstract operation
+	        #
+
+		call abs.request(addr_cons(hi,lo),d,o,lt)
+
+	    }
+
+	    ########################################
+	    # rules for cached Acquires
+	    #
+
+	    else {
+
+		# (1) May not have pending acquire with same ID and ownership and with
+		# same hi addr. We can, however, have more than one ownership
+		# request in same transaction.
+
+		assert ow = excl -> ~excl_r(hi) & ~excl_a(hi);
+		assert ow = shrd -> ~shrd_r(hi) & ~shrd_a(hi);
+
+		# (2 if any prior transactions with same hi address, txid must match
+
+		assert (excl_r(hi,lo) | excl_a(hi,lo)) -> addr_id(hi) = id_;
+		assert (shrd_r(hi,lo) | shrd_a(hi,lo)) -> addr_id(hi) = id_;
+		
+		# (3) May not use a txid in use for a different hi addr
+
+		assert (excl_r(H | excl_a(H)) & H ~= hi -> addr_id(H) ~= id_;
+		assert (shrd_r(H) | shrd_a(H)) & H ~= hi -> addr_id(H) ~= id_;
+		assert none_r(H,L) & H ~= hi -> addr_id(H) ~= id_;
+
+		# (4) May not have a pending release with same client ID and same hi addr.
+
+		assert ~none_r(hi,W);
+
+		# (5) No acquires for privs we already have, unless probe outstanding
+
+		assert ow = excl & ~prb_addr(hi,W) -> ~excl_p(addr_cons(hi,W));
+		assert ow = shrd & ~prb_addr(hi,W) -> ~shrd_p(addr_cons(hi,W));
+
+		# (6) Must be in cached address space
+
+		assert cached_hi(hi);
+
+		# mark the acquire as requested
+
+		if ow = excl {
+		    excl_r(hi) := true;
+		}
+		if ow = shrd {
+		    shrd_r(hi) := true;
+		}
+	    };
+
+	    ########################################
+	    # Associate the address and txid 
+
+	    addr_id(hi) := id_
         }
-
-        ########################################
-        # rules for cached Acquires
-	#
-
-	else {
-
-	    # (1) May not have pending acquire with same ID and ownership and with
-	    # same hi addr. We can, however, have more than one ownership
-	    # request in same transaction.
-
-    	    assert ~aaconfl(msg,M);
-
-	    # (1) May not have two cached acquires with same client and privs
-	    # TODO: should allow pending with different txid
-
-	    assert ~(acqs(msg).own ~= none & pend_acq(M) & acqs(M).own = acqs(msg).own
-	             & acqs(M).addr_hi = acqs(msg).addr_hi);
-	    
-	    # (2) May not have a pending release with same ID and same hi addr.
-	    
-	    assert ~raconfl(msg,M);
-
-	    # (3) No acquires for privs we already have, unless probe outstanding
-
-	    assert acqs(msg).own = excl & ~prb_addr(acqs(msg).addr_hi,W)
-                        -> ~excl_p(addr_cons(acqs(msg).addr_hi,W));
-	    assert acqs(msg).own = shrd & ~prb_addr(acqs(msg).addr_hi,W)
-                        -> ~shrd_p(addr_cons(acqs(msg).addr_hi,W));
-
-	    # (4) No acquires for privs already requested or being released. 
-	    # This is not a rule, but rather a useful auxiliary fact.
-
-	    assert acqs(msg).own = excl ->
-	                ~none_r(acqs(msg).addr_hi,W)
-#			& (~prb_addr(acqs(msg).addr_hi,W) -> ~excl_r(acqs(msg).addr_hi,W));
-			& ~excl_r(acqs(msg).addr_hi,W);
-	    assert acqs(msg).own = shrd ->
-	                ~none_r(acqs(msg).addr_hi,W)
-#			& (~prb_addr(acqs(msg).addr_hi,W) -> ~shrd_r(acqs(msg).addr_hi,W));
-			& ~shrd_r(acqs(msg).addr_hi,W);
-
-            # mark the entire line as unserved
-
-	    unserved(msg,W) := true
-
-        };
-
-        ########################################
-        # Rule: acquires must be cached only if in cached space
-	#
-
-	assert cached_hi(acqs(msg).addr_hi) <-> acqs(msg).own ~= none;
-
-        ########################################
-        # Update the interface state 
-	#
-
-        pend_acq(msg) := true;                  # mark acquire pending
-	pend_word(msg) := acqs(msg).word;        # aux: track some pending word
-
-        ########################################
-        # Perform abstract operations
-	#
-
-	if acqs(msg).own = none { # uncached
-		call abs.request(addr_cons(acqs(msg).addr_hi,acqs(msg).word),
-                                 acqs(msg).data_,acqs(msg).op,acqs(msg).ltime_)
-	}
-	else {
-	    # (for cached, we just record the request) 
-	    if acqs(msg).own  = excl {
- 	       excl_r(acqs(msg).addr_hi,W) :=  true
-            } else {
- 	       shrd_r(acqs(msg).addr_hi,W) :=  true
-            }
-        } 
     }
     mixin tl_Acquire before mngr.tl_Acquire    
 
@@ -481,30 +442,36 @@ module tl_interface(ref,clnt,mngr,side) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local req:acq_id, rls:rls_id, reqt:time, maddr:addr {
+        local hi:tl_addrhi, lo:tl_addrlo, id_: id, reqt:time, maddr:addr, ow:ownership {
 	
+	    hi := gnts(msg).addr_hi;  # this field is aux
+	    lo := gnts(msg).addr_lo;
+	    id_ := gnts(msg).id_;
+	    ow = gnts(msg).own;	    
+
 	    if gnts(msg).relack {
 
 		########################################
 		# A release ack marks the matching Release as completed
 
-	        rls := find_release(gnts(msg).id_,gnts(msg).word);         # find matching release
-		pend_rls(rls) := false;                                    # mark it completed (no Finish)
+		########################################
+		# Rule: A release ack implies a pending release of the
+		# corresponding word, with a matching txid
 
-		gnt_rls(msg) := rls; # aux
+		assert none_r(hi,lo);
+		assert addr_id(hi) = id_;
+
 
 	        ########################################
-		# Rules for release acks:
-		#
-		# (1) Cannot ack a release if there is a pending Acquire that matches
+		# Rule: Cannot ack a release if there is a pending Acquire that matches
 		# the release (must wait for Finish).
 		#
 
-		assert ~(arconfl(rls,M) & accepted(M));
+		assert ~excl_a(hi,W) & ~shrd_a(hi,W)
 
-		# mark the requested release finished
+		# mark the release finished
 
-		none_r(rlss(rls).addr_hi,rlss(rls).word) := false
+		none_r(hi,lo) := false;
             }
             else {	    
 
@@ -523,28 +490,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 		########################################
 		# Rule:
 		# 
-		# A Grant must match an accepted pending Acquire. 
-		# If there is no such, a matching pending but unaccepted
-		# Acquire may be accepted, but not if it matches
-		# a previous accepted Acquire that is no longer pending.
+		# A Grant must match an accepted or pending Acquire. 
+		 
+		assert ow = none -> (unc_r(hi.lo) | unc_a(hi,lo))
+		assert ow = excl -> (excl_a(hi,lo) | excl_a(hi,lo))
+		assert ow = shrd -> (shrd_a(hi,lo) | shrd_a(hi,lo))
 
-		if forall M:acq_id. ~(agconfl(msg,M:acq_id) & pend_acq(M:acq_id) & accepted(M:acq_id)) {
-		   assert ~(agconfl(msg,M) & accepted(M));
-		   assert exists M. agconfl(msg,M) & pend_acq(M) & ~accepted(M);
-		   assume agconfl(msg,req)  & pend_acq(req) & ~accepted(req);
-		   accepted(req) := true
-                } else {
-		   assume agconfl(msg,req) & pend_acq(M) & accepted(req)
-	        };
-		   		 
-		gnt_acq(msg) := req; # aux
-
-	        ########################################
-		# Rule:
-		#
-                # Cannot merge two acquires with different addresses.
-
-		assert ~(accepted(M) & acqs(M).addr_hi ~= acqs(req).addr_hi);
 
 	        ########################################
 		# Rule:
@@ -558,55 +509,53 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# have seen a voluntary release.
 		#
 
-		assert ~(pend_prb(M,W) & acqs(req).addr_hi = prbs(M).addr_hi);
-		assert ~prb_addr(acqs(req).addr_hi,W);
-
-	        ########################################
-		# Rule: cannot grant a word already served
-
-		assert unserved(req,gnts(msg).word);
-		
-
-	        ########################################
-		# mark the word served
-
-		unserved(req,gnts(msg).word) := false;
+		assert ~prb_addr(hi,W);
 
 	        ########################################
 		# if uncached, mark the event granted
-		# if cached, mark the request served
+		# if the request is not part of an accepted
+		# transaction, move the request to accepted.
 
-		if acqs(req).own = none {
-		    granted(acqs(req).ltime_) := true
+		if ow = none {
+		    unc_r(hi,lo) := false;
+		    unc_f(hi,lo) :-= true;  # for now, can't be in accepted state
 		}
-		else if acqs(req).own = excl {
-		    excl_r(acqs(req).addr_hi,gnts(msg).word) := false
+		else if ow = excl {
+		    if ~excl_a(hi) {
+		        excl_a(hi) := false;
+			excl_a(hi) :-= true;
+		    }
                 }
-		else if acqs(req).own = shrd {
-		    shrd_r(acqs(req).addr_hi,gnts(msg).word) := false
+		else if ow = shrd {
+		    if ~shrd_a(hi) {
+		        shrd_a(hi) := false;
+			shrd_a(hi) :-= true;
+		    }
                 };
-
-	        ########################################
-		# if all served, mark the req not pending
-
-		if forall W:tl_addrlo. ~unserved(req,W:tl_addrlo) {
-		    pend_acq(req) := false
-                } else {
-		   local w:tl_addrlo {
-		      assume unserved(req,w);
-		      pend_word(req) := w   # record some pending word
-		   }
-		};
 
 	        ########################################
 		# Abstract semantics of grant
 
-		maddr := addr_cons(acqs(req).addr_hi,gnts(msg).word);  # construct full address
-		if acqs(req).own ~= none {    	                       # cached: perform an abstract grant
-		    call abs.grant(maddr,gnts(msg).data_,acqs(req).own)
+		maddr := addr_cons(hi,lo);                             # construct full address
+		if gnts(msg.own ~= none {    	                       # cached: perform an abstract grant
+		    call abs.grant(maddr,gnts(msg).data_,ow)
+
+		    # if all excl privs obtained, move to finishing
+		    if forall W:tl_addrlo. (ow=excl & excl_p(hi,W)) {
+		        excl_a(hi) := false;
+			excl_f(hi) := true
+                    }
+
+		    # if all shrd privs obtained, move to finishing
+		    if forall W:tl_addrlo. (ow=shrd & shrd_p(hi,W)) {
+		        shrd_a(hi) := false;
+			shrd_f(hi) := true
+                    }
 		}
+
 		else {		                                       # uncached: perform an abstract response
 		    call abs.response(maddr,gnts(msg).data_,acqs(req).op,acqs(req).ltime_)
+		    granted(acqs(req).ltime_) := true
 		}
             }
         }
@@ -620,20 +569,32 @@ module tl_interface(ref,clnt,mngr,side) = {
     # A finish marks all the Acquires in a transaction as completed.
 
     action tl_Finish(msg:fns_id) = {
-        local req:acq_id {
+        local hi:tl_addrhi, lo:tl_addrlo, id_: id,  ow:ownership {
+
+	    id_ := fnss(msg).id_;
+	    hi := fnss(msg).addr_hi;  # this field is aux
+	    lo := fnss(msg).addr_lo;  # this field is aux
+	    ow = fnss(msg).own;	  # this field is aux    
 	
 	    ########################################
 	    # Rule: A finished transaction must correspond to
-	    # some completed acquire.
+	    # some finishing acquire.
 	    	
-	    req := fns_acq(msg);   # auxilary witnesses the matching acquire
-
-	    assert (accepted(req) & ~pend_acq(req) & ~unserved(req,W) & acqs(req).id_ = fnss(msg).id_);
+	    assert ow = none -> unc_f(hi,lo);
+	    assert ow = excl -> excl_f(hi);
+	    assert ow = shrd -> shrd_f(hi);
 
 	    # Finish the Acquire
 
-	    accepted(req) := false;
-	    finished(req) := true
+	    if ow = none {
+	        unc_f(hi,lo) := false;
+            }
+	    if ow = excl {
+	        excl_f(hi) := false;
+            }
+	    if ow = shrd {
+	        shrd_f(hi) := false;
+            }
         }
     }   
     mixin tl_Finish before mngr.tl_Finish    
@@ -643,97 +604,85 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     action tl_Release(msg:rls_id) = {
 
+        local hi:tl_addrhi, lo:tl_addrlo, id_: id,  ow:ownership, a:addr {
+
+	    id_ := rlss(msg).id_;
+	    hi := rlss(msg).addr_hi;  # this field is aux
+	    lo := rlss(msg).addr_lo;  # this field is aux
+	    ow := rlss(msg).own;	  # this field is aux    
+	    a := addr_cons(hi,lo);
+
+	    
+        ########################################
+	# Rule: release only cached addresses
+
+	assert cached_hi(hi);
 
         ########################################
-        # No release with pending release with same address.
+        # Rule: No release with pending release with same address.
 	# Because a voluntary release has to be acked before an involuntary
 	# release can be issued, we can never have two matching releases
 	# pending.
 
-	assert ~rrconfl(msg,M);
+	assert ~none_r(hi,lo);
 
 
         ########################################
 	# Rule: Release is dirty iff exclusive
-	# TODO: allow exclusive but clean?
+	# TODO: allow exclusive but clean release?
 
-	assert rlss(msg).dirty <-> excl_p(addr_cons(rlss(msg).addr_hi,rlss(msg).word));
+	assert rlss(msg).dirty <-> excl_p(a);
 
 	if rlss(msg).voluntary {
 
 	    ########################################
-	    # Must have no requests pending when voluntarily releasing.
-	    # This is not a rule, but rather a useful auxiliary fact.
+	    # (1) Must have no acquires pending when voluntarily releasing.
 
-	    assert ~excl_r(rlss(msg).addr_hi,rlss(msg).word)
-		     & ~shrd_r(rlss(msg).addr_hi,rlss(msg).word)
-		     & ~none_r(rlss(msg).addr_hi,rlss(msg).word);
+	    assert ~excl_r(hi) &  ~shrd_r(hi);
+
+   	    # (2) May not use a txid in use for a different hi addr
+
+	    assert (excl_r(H | excl_a(H)) & H ~= hi -> addr_id(H) ~= id_;
+	    assert (shrd_r(H) | shrd_a(H)) & H ~= hi -> addr_id(H) ~= id_;
+	    assert none_r(H,L) & H ~= hi -> addr_id(H) ~= id_;
+
+	    # (3): Must have some privs on released words
+            # if release is voluntary
+	    	    
+	    assert excl_p(a) | shrd_p(a);
+
 
 	    ########################################
-	    # Rule: No voluntary release with pending acquire on same address.
-
-	    assert ~(arconfl(msg,M) & pend_acq(M));
-
-	    ########################################
-	    # Rule: No pending voluntary release with same id and same word
-
-	    assert ~(pend_rls(M) & rlss(M).word = rlss(msg).word & rlss(M).id_ = rlss(msg).id_);
-
-	    ########################################
-	    # Voluntary release. Mark as pending. 
+	    # Marke release as request, record txid
 	    #
 
-	    pend_rls(msg) := true;
-	    none_r(rlss(msg).addr_hi,rlss(msg).word) := true
-
-
+	    none_r(hi,lo) := true;
+	    addr_id(hi) := id_
         }
 	else {
 	
 	    ########################################
 	    # Involuntary release. Must exist a pending
-	    # probe with same client id and same full eaddress.
+	    # probe with same client id and same full address.
 	    #
 	    # Note we *do* allow an involuntary relase with
 	    # a pending Acquire.
 	    # 
 
-	    ########################################
-	    # Rule: no involuntary release while voluntary
-	    # release is pending
+	    assert prb_addr(hi,lo);	    
 
-	    assert ~none_r(rlss(msg).addr_hi,rlss(msg).word);
-
-	    local p:prb_id {
-	        p := find_probe(msg);
-		rls_prb(msg) := p; # aux
-		pend_prb(p,rlss(msg).word) := false;               # mark the release completed
-		prb_addr(prbs(p).addr_hi,rlss(msg).word) := false  # mark the address probed (aux)
-            }
+	    prb_addr(hi,lo) := false  # mark the address probed (aux)
         };
 
 	# The abstract semantics
 
-	local a:addr {
+	if excl_p(a) {
+	    call abs.release(a,d,excl)
+	};
+	if shrd_p(a) {
+	    call abs.release(a,d,shrd)
+	}
 
-	    a := addr_cons(rlss(msg).addr_hi,rlss(msg).word);
-
-	    ########################################
-	    # Must have some privs on released words
-            # if release is volunrary (TODO: needed?)
-	    	    
-	    assert rlss(msg).voluntary -> (excl_p(a) | shrd_p(a));  # these are abs state
-
-	    # call abstract spec to release all privs
-
-	    if excl_p(a) {
-	        call abs.release(a,rlss(msg).data_,excl)
-            };
-	    if shrd_p(a) {
-	        call abs.release(a,rlss(msg).data_,shrd)
-            }
-
-        }
     }
     mixin tl_Release before mngr.tl_Release
 
@@ -742,36 +691,33 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     action tl_Probe(msg:prb_id) = {
     
-        ########################################
-	# Rules for probe
+        local hi:tl_addrhi {
 
-	# 1) No pending probes with same transaction id and hi address
-	# (TODO: currently ignores ID)
+	    hi := prbs(msg).addr_hi;
 
-	assert ~(pend_prb(M,W) & prbs(M).addr_hi = prbs(msg).addr_hi);
-	assert ~prb_addr(prbs(msg).addr_hi,W);
+	    ########################################
+	    # Rules for probe
 
-	# 2) No pending releases with same client id hi address
-	# (TODO: currently ignores ID) TODO: this is not true,
-	# since a probe may be delayed. 
 
-#	assert ~(pend_rls(M) & rlss(M).addr_hi = prbs(msg).addr_hi);
+	    # (1) probe only cached addresses
 
-        # 3) No probe if an Acquire has been accepted with same
-	# hi address but is not finished.
+	    assert cached_hi(hi);
 
-	assert ~(accepted(M) & acqs(M).addr_hi = prbs(msg).addr_hi);
+	    # (2) No pending probes on same address and client ID
+	    # (TODO: currently ignores client ID)
 
-	# 5) Can only probe if client has privs on all words
-	# TODO: this is wrong, probe can be delayed
+	    assert ~prb_addr(hi,W);
 
-#	assert excl_p(addr_cons(prbs(msg).addr_hi,W)) | shrd_p(addr_cons(prbs(msg).addr_hi,W));
+	    # 3) No probe if an Acquire with same hi address but is
+	    # accepted or finishing.
 
-	########################################
-	# Mark the probe pending (for all words)
+	    assert ~excl_a(hi) & ~excl_f(hi) & ~shrd_a(hi) & ~ shrd_f(hi);
 
-	pend_prb(msg,W) := true;
-	prb_addr(prbs(msg).addr_hi,W) := true
+	    ########################################
+	    # Mark the probe pending (for all words)
+
+	    prb_addr(hi,W) := true
+        }
 
     }
     mixin tl_Probe before clnt.tl_Probe
@@ -801,132 +747,56 @@ module tl_interface(ref,clnt,mngr,side) = {
     #
     ################################################################################
     
-    # A finished Acquire is neither pending nor accepted
+    # A cached acquire must be in cached space, uncached in uncached space
 
-    conjecture finished(M) -> ~pend_acq(M) & ~accepted(M)
+    conjecture (excl_r(H) | excl_a(H) | excl_f(H) |
+                shrd_r(H) | shrd_a(H) | shrd_f(H)) -> cached_hi(H)
+    conjecture (unc_r(H,L) | unc_a(H) | unc_f(H)) -> ~cached_hi(H)
 
-    # No two pending or accepted cached acquires with same cache line and same privs
-    # TODO: this should really be allowed
-
-    conjecture ~((pend_acq(M1) | accepted(M1)) & (pend_acq(M2) | accepted(M2)) & M1 ~= M2 &
-                 acqs(M1).own ~= none & acqs(M1).own ~= none
-		 & acqs(M1).own = acqs(M2).own & acqs(M1).addr_hi = acqs(M2).addr_hi)
-
-    # No two pending acquries that match
-
-    conjecture ~(M1 ~= M2 & aaconfl(M1,M2) & pend_acq(M1) & pend_acq(M2) &
-                 (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word))
-
-    # No two accepted  acquires that match
-
-    conjecture ~(accepted(M1) & accepted(M2) & M1 ~= M2 &
-                 acqs(M1).own = acqs(M2).own & 
-		 (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word) &
-		 acqs(M1).addr_hi = acqs(M2).addr_hi)
-
-    # If pending acquire, some word must be unserved
-
-    conjecture pend_acq(M) -> unserved(M,pend_word(M))
-
-    # If some word is served, acquire is accepted
-
-    conjecture pend_acq(M) & ~unserved(M,W) & (acqs(M).own ~= none | W = acqs(M).word) ->
-                   accepted(M)
-
-    # While a cached acquire is pending or accepted, client has requested privs iff word is served,
-
-#    conjecture pend_acq(M1) & acqs(M1).own = excl -> 
-#                    (excl_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
-#    conjecture pend_acq(M1) & acqs(M1).own = shrd -> 
-#                    (shrd_p(addr_cons(acqs(M1).addr_hi,W)) <-> ~unserved(M1,W))
-
-    # Acquire cached status must match that of address
-
-    conjecture (pend_acq(M1) | accepted(M1) | finished(M1)) ->
-                  (acqs(M1).own ~= none <-> cached_hi(acqs(M1).addr_hi))
-
-    # While an uncached acquire is pending, word must be to_ser and uncached
     
-    conjecture pend_acq(M1) & acqs(M1).own = none ->
-                  to_ser(acqs(M1).ltime_)
-		  & ~cached_hi(acqs(M1).addr_hi)
+    # An cached acquire must be in only one phase
 
-    # No two pending release with same cache line and word
+    conjecture ~(excl_r(H) & excl_a(H)) & ~(excl_r(H) & excl_f(H)) & ~(excl_a(H) & excl_f(H))
+    conjecture ~(shrd_r(H) & shrd_a(H)) & ~(shrd_r(H) & shrd_f(H)) & ~(shrd_a(H) & shrd_f(H))
 
-    conjecture ~(pend_rls(M1) & pend_rls(M2) & M1 ~= M2 &
-		 rlss(M1).addr_hi = rlss(M2).addr_hi & rlss(M1).word = rlss(M2).word )
+    # An uncached acquire cannot be accepted (TODO: this will change)
 
-    # No two pending release with same id and word
+    conjecture ~unc_a(H,L)
 
-    conjecture ~(pend_rls(M1) & pend_rls(M2) & M1 ~= M2 &
-		 rlss(M1).id_ = rlss(M2).id_ & rlss(M1).word = rlss(M2).word)
+    # If accepted acquire, some word must be unserved
 
-    # While a release is pending, client has no privs and is cached
+#    conjecture excl_a(H) -> exists W. ~excl_p(addr_cons(H,W)
 
-    conjecture pend_rls(M1) -> 
-                    ~excl_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
-                    & ~shrd_p(addr_cons(rlss(M1).addr_hi,rlss(M1).word))
-		    & cached_hi(rlss(M1).addr_hi)
+    # a requested voluntary release is in cached space
 
-    # No voluntary release pending while an acquire on the same address
-    # is pending
+    conjecture none_r(H,W) -> cached_hi(H)
 
-    conjecture ~(pend_rls(M1) & pend_acq(M2) & rlss(M1).addr_hi = acqs(M2).addr_hi)
+    # While a voluntary release is pending, to acquires are in progress
+    # (but acquires can be finishing, since release can pass finish)
 
-    # No probe pending with matching accepted acquire
+    conjecture none_r(H,W) -> ~excl_r(H) & ~excl_a(H) & ~shrd_r(H) & ~shrd_a(H)
 
-    conjecture ~(pend_prb(M1,W) & accepted(M2) & prbs(M1).addr_hi = acqs(M2).addr_hi)
+    # While a release is pending, client has no privs
 
-    # No two probes pending with same address
+    conjecture none_r(H,W) & A = addr_cons(H,W) -> ~excl_p(A) & ~shrd_p(A)
 
-    conjecture ~(pend_prb(M1,W1) & pend_prb(M2,W2) & M1 ~= M2 & prbs(M1).addr_hi = prbs(M2).addr_hi)
+    # A probe is only in cached space
 
-    # Probe message with any word pending implies line is pending
-    conjecture pend_prb(M,W) -> prb_addr(prbs(M).addr_hi,W)
+    conjecture prb_addr(H,W) -> cached_hi(H)
 
-    # If a release is pending, the release of the address is requested
+    # No probe pending with matching accepted or finishing acquire
 
-    conjecture pend_rls(R) -> none_r(rlss(R).addr_hi,rlss(R).word)
+    conjecture prb_addr(H,W) -> ~excl_a(H) & ~excl_f(H) & ~shrd_a(H) & ~shrd_f(H)
 
-    # If a cached acquire is pending and a word is unserved, the corresponding priv is requested
+    # If a cached acquire is requested and no voluntary release or probe outstanding,
+    # we do not have the requested privs    
 
-    conjecture pend_acq(M) & acqs(M).own = excl & unserved(M,W) -> excl_r(acqs(M).addr_hi,W)   
-    conjecture pend_acq(M) & acqs(M).own = shrd  & unserved(M,W) -> shrd_r(acqs(M).addr_hi,W)   
+    conjecture excl_r(H) & ~none_r(H) & ~prb_addr(H,W) -> ~excl_p(addr_cons(H,W))
+    conjecture shrd_r(H) & ~none_r(H) & ~prb_addr(H,W) -> ~shrd_p(addr_cons(H,W))
 
-    # If a cached acquire is accepted and a word is served, the corresponding priv is not requested,
-    # and either the requested privs are obtained or voluntary release has been issued
+     # If an uncached Acquire has been granted, its event has been serialized.
 
-    conjecture accepted(M) & acqs(M).own = excl & ~unserved(M,W) & H = acqs(M).addr_hi ->
-                            ~excl_r(H,W) & (none_r(H,W) | excl_p(addr_cons(H,W)))
-    conjecture accepted(M) & acqs(M).own = shrd & ~unserved(M,W) & H = acqs(M).addr_hi ->
-                            ~shrd_r(H,W) & (none_r(H,W) | shrd_p(addr_cons(H,W)))
-
-    # If a cached acquire is accepted then a word is unserved iff priv is requested
-    # iff priv is not granted.
-
-    conjecture accepted(M) & acqs(M).own = excl -> (unserved(M,W) <-> excl_r(acqs(M).addr_hi,W))   
-    conjecture accepted(M) & acqs(M).own = shrd -> (unserved(M,W) <-> shrd_r(acqs(M).addr_hi,W))       
-
-    conjecture accepted(M) & acqs(M).own = excl & ~none_r(acqs(M).addr_hi,W) -> (unserved(M,W) <-> ~excl_p(addr_cons(acqs(M).addr_hi,W)))   
-    conjecture accepted(M) & acqs(M).own = shrd & ~none_r(acqs(M).addr_hi,W) -> (unserved(M,W) <-> ~shrd_p(addr_cons(acqs(M).addr_hi,W)))       
-    # Anything unserved means acquire is pending
-
-    conjecture unserved(M,W) -> pend_acq(M)
-
-    # if an acquire is pending and not accepted, with no probe pending, client does not have requested privs
-
-    conjecture pend_acq(M) & ~accepted(M) & ~prb_addr(acqs(M).addr_hi,W) & acqs(M).own = excl -> ~excl_p(addr_cons(acqs(M).addr_hi,W))
-    conjecture pend_acq(M) & ~accepted(M) & ~prb_addr(acqs(M).addr_hi,W) & acqs(M).own = shrd -> ~shrd_p(addr_cons(acqs(M).addr_hi,W))
-
-
-    # Never both release and acquire request for any address
-
-    conjecture (excl_r(H,W) | shrd_r(H,W)) -> ~none_r(H,W)
-
-     # If an uncached Acquire has been served, its event has been serialized.
-
-     conjecture accepted(M) & acqs(M).own = none & E = acqs(M).ltime_ ->
-                granted(E) & ref.evs(E).serialized
+     conjecture granted(E) -> ref.evs(E).serialized
 
      # Anything granted is to_ser.
      
@@ -936,42 +806,32 @@ module tl_interface(ref,clnt,mngr,side) = {
 
      conjecture to_ser(E2) & ref.prevents(E1,E2) -> granted(E1)
 
-     # Only voluntary releases can be pending
-
-     conjecture pend_rls(M) -> rlss(M).voluntary
-
-     # Can't be accepted and probing at sime time
-
-     conjecture ~(accepted(M) & prb_addr(acqs(M).addr_hi,W))
-
-     # pending uncached acquire has correct addr, data, and op
-
-     conjecture pend_acq(M) & acqs(M).own = none  ->
-                   addr_cons(acqs(M).addr_hi,acqs(M).word) = ref.evs(acqs(M).ltime_).addr_
-	           & (acqs(M).data_ = ref.evs(acqs(M).ltime_).data_  | ref.evs(acqs(M).ltime_).serialized)
-		   & acqs(M).op = ref.evs(acqs(M).ltime_).type_
-
-     # No two lock operations can be pending for the same
+     # No two lock operations can be requested for the same
      # client. This is required for release consistency,
      # which would be violated by reordering lock operations.
 
-     conjecture ~(pend_acq(M1) & pend_acq(M2) & M1 ~= M2 & acqs(M1).own = none & acqs(M2).own = none
-	      & ref.evs(acqs(M1).ltime_).id_ = ref.evs(acqs(M2).ltime_).id_
-	      & (ref.evs(acqs(M1).ltime_).type_ = cas | ref.evs(acqs(M2).ltime_).type_ = cas))
+     conjecture ~(to_ser(E1) & to_ser(E2) & ~granted(E1) & ~granted(E2) & E1 ~= E2 
+                  ref.evs(E1).id_ = ref.evs(E2).id_
+                  & (ref.evs(E1).type_ = cas | ref.evs(E1).type_ = cas))
 
      # (5) No two operations pending on same address for the same
      # client. This is required for release consistency,
      # which would be violated by reordering lock operations.
      # TODO: no client ID's yet
 
-     conjecture ~(pend_acq(M1)  & pend_acq(M2) & M1 ~= M2 & acqs(M1).own = none & acqs(M2).own = none
-	      & ref.evs(acqs(M1).ltime_).id_ = ref.evs(acqs(M2).ltime_).id_
-	      & ref.evs(acqs(M1).ltime_).addr_ = ref.evs(acqs(M2).ltime_).addr_)
+     conjecture ~(to_ser(E1) & to_ser(E2) & ~granted(E1) & ~granted(E2) & E1 ~= E2 
+                  ref.evs(E1).id_ = ref.evs(E2).id_
+		   & ref.evs(E1).addr_ = ref.evs(E2).addr_)
 
 
-     # (2) May not have pending acquire with same transaction ID and different line.
+     # No two hi addresses with active transactions can have the same txid
 
-     conjecture  ~(aaconfl(M2,M1) & pend_acq(M2) & acqs(M2).addr_hi ~= acqs(M1).addr_hi)
+     conjecture
+        (excl_r(H1) | excl_a(H1) | excl_f(H1) | shrd_r(H1) | shrd_a(H1) | shrd_f(H1) | none_r(H1,W1))
+        & (excl_r(H2) | excl_a(H2) | excl_f(H2) | shrd_r(H2) | shrd_a(H2) | shrd_f(H2) | none_r(H2,W2))
+	& H1 ~= H2
+	-> addr_id(H1) ~= addr_id(H2)
+
 
 
 }
