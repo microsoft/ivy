@@ -453,7 +453,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		########################################
 		# Rule: A grant's txid must match its address
 
-		assert addr_id(hi) = txid;
+		assert addr_nid(hi) = txid;
 
 		# mark the release finished
 
@@ -472,6 +472,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 		assert ow = excl -> (excl_r(hi) | excl_a(hi));
 		assert ow = shrd -> (shrd_r(hi) | shrd_a(hi));
 
+
+		########################################
+		# Cannot grant if the event is already granted
+
+		assert ow = none -> ~granted(lt);
 
 	        ########################################
 		# Rule:
@@ -509,6 +514,16 @@ module tl_interface(ref,clnt,mngr,side) = {
 		assert ~((excl_a(H) | excl_f(H) | shrd_a(H) | shrd_f(H) | unc_a(H,W) | unc_f(H,W))
 		         & addr_id(H) = txid & H ~= hi);
 		
+		########################################
+		# Cannot grant if different txid in use for same address.
+
+		assert ~((excl_a(H) | excl_f(H) | shrd_a(H) | shrd_f(H) | unc_a(H,W) | unc_f(H,W))
+		         & addr_id(H) ~= txid & H = hi);
+
+		########################################
+		# Cannot accept a request that exactly matches one in progress.
+
+		assert ow = none -> ~unc_a(hi,lo) & ~unc_f(hi,lo);
 
 	        ########################################
 		# if uncached, mark the event granted
@@ -777,7 +792,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     # If accepted acquire, some word must be unserved
 
-#    conjecture excl_a(H) -> exists W. ~excl_p(addr_cons(H,W)
+    conjecture excl_a(H) -> exists W. ~excl_p(addr_cons(H,W))
+    conjecture shrd_a(H) -> exists W. ~shrd_p(addr_cons(H,W))
 
     # a requested voluntary release is in cached space
 
@@ -845,9 +861,10 @@ module tl_interface(ref,clnt,mngr,side) = {
      conjecture (excl_a(H) | shrd_a(H) | unc_a(H,W)) -> addr_id(H) = addr_rid(H)
 
      # If any two matching cached requests have same txid
+     # TODO: false
 
-     conjecture shrd_f(H) & excl_r(H) -> addr_id(H) = addr_rid(H)
-     conjecture excl_f(H) & shrd_r(H) -> addr_id(H) = addr_rid(H)
+#     conjecture shrd_f(H) & excl_r(H) -> addr_id(H) = addr_rid(H)
+#     conjecture excl_f(H) & shrd_r(H) -> addr_id(H) = addr_rid(H)
 
      # No two hi addresses of accepted or finishing transactions can have the same txid
 

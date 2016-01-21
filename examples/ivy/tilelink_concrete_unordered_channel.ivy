@@ -569,6 +569,13 @@ conjecture b.acqs(I1,M1) & b.acqs(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
 	   ~(acqs(M1).own = acqs(M2).own & acqs(M1).addr_hi = acqs(M2).addr_hi & 
 	     (acqs(M1).own ~= none | acqs(M1).word = acqs(M2).word))
 
+# No acquire in channel if matching grant in channel
+
+conjecture ~(b.acqs(I1,M1) & b.gnts(I2,M2) & gnts(M2).own = acqs(M1).own & 
+	        gnts(M2).addr_hi = acqs(M1).addr_hi &
+		(acqs(M1).own ~= none | gnts(M2).word = acqs(M1).word))
+
+
 ####################
 # Grants
 
@@ -579,7 +586,7 @@ conjecture b.acqs(I1,M1) & b.acqs(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
 
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = none
 	   & E = gnts(M1).ltime_ 
-	      -> back.unc_f(H,W) & front.unc_r(H,W) & back.granted(E) & ~front.granted(E)
+	      -> back.unc_f(H,W) &  ~back.unc_r(H,W) & front.unc_r(H,W) & back.granted(E) & ~front.granted(E)
                  & gnts(M1).data_ = ref.evs(E).data_
 		 & addr_cons(H,W) = ref.evs(E).addr_
 		 	      
@@ -598,7 +605,7 @@ conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1
 # All grants must have correct txid on front
 
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_rid(H) = gnts(M1).id_
-conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_id(H) = gnts(M1).id_
+conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_nid(H) = gnts(M1).id_
 
 # All normal grants must have correct txid on back
 
@@ -615,7 +622,7 @@ conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1)
 # Channel can contain a given Grant message at most once
 
 conjecture b.gnts(I1,M1) & b.gnts(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
-	     ~(gnts(M1).addr_hi = gnts(M2).addr_hi & gnts(M1).word = gnts(M2).word)
+	     ~(gnts(M1).own = gnts(M2).own & gnts(M1).addr_hi = gnts(M2).addr_hi & gnts(M1).word = gnts(M2).word)
 
 
 ####################
@@ -690,7 +697,8 @@ conjecture b.prbs(I1,M1) & b.prbs(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
 
 # Every Finish message in the channel matches an acquire that is not finishing
 # on the front side and finishing on the back side.
-# Note: uncached acquires may be requested again before the finish arrives.
+# Note: uncached acquires may be requested again before the finish arrives. However,
+# while a grant is still in the channel, no mathing request can occur.
 
 conjecture b.fnss(I1,M1) & H = fnss(M1).addr_hi & W = fnss(M1).word & fnss(M1).own = excl ->
 	      ~front.excl_r(H) & ~front.excl_a(H) & ~front.excl_f(H) & back.excl_f(H)
@@ -704,6 +712,12 @@ conjecture b.fnss(I1,M1) & H = fnss(M1).addr_hi & W = fnss(M1).word & fnss(M1).o
 # Must have correct txid (relative to back, since front may have moved on)
 
 conjecture b.fnss(I1,M1) -> back.addr_id(fnss(M1).addr_hi) = fnss(M1).id_
+
+# No finish in channel if matching grant in channel
+
+conjecture ~(b.fnss(I1,M1) & b.gnts(I2,M2) & gnts(M2).own = fnss(M1).own & 
+	        gnts(M2).addr_hi = fnss(M1).addr_hi &
+		(fnss(M1).own ~= none | gnts(M2).word = fnss(M1).word))
 
 # Can't be two matching finishes in channel
 
