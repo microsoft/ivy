@@ -35,7 +35,14 @@
 #   Managers are not obligated to accept both Acquires and merge the
 #   transactions’ message flows, though they may choose to do so.
 #
-# TODO: In case of an upgrade, the spec requires the transactions to be merged.
+#
+# TODO: We do not allow the same txid to be used for simultaneous transactions
+# even if they differe in type (for example, cached and uncached). This can
+# be relaxed if needed.
+#
+# TODO: We allow a probe to be handled in the middle of a voluntary release,
+# so that some beats are voluntary ans some involuntary. This could be made
+# mode strict.
 ################################################################################
 
 
@@ -236,11 +243,28 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation granted(E:ltime)
 
     ########################################
-    # map from hi addresses to txids
+    # map from hi addresses to txids for requested
+    # transactions
+    #
+    # No two addresses can use the same txid 
+
+    individual addr_rid(H:tl_addrhi) : id
+
+    ########################################
+    # map from hi addresses to txids for accepted
+    # transactions
     #
     # No two addresses can use the same txid 
 
     individual addr_id(H:tl_addrhi) : id
+
+    ########################################
+    # map from hi addresses to txids for voluntary
+    # releases
+    #
+    # No two addresses can use the same txid 
+
+    individual addr_nid(H:tl_addrhi) : id
 
     ########################################
     # Initial condition of interface
@@ -280,25 +304,30 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 		# (2) if any prior transactions with same hi address, txid must match
 
-		assert (unc_r(hi,lo) | unc_a(hi,lo)) -> addr_id(hi) = txid;
+		assert unc_r(hi,W) -> addr_rid(hi) = txid;
+		assert unc_a(hi,W) -> addr_id(hi) = txid;
 
 		# (3) May not use a txid in use for a different hi addr
 
-		assert (unc_r(H,L) | unc_a(H,L)) & H ~= hi -> addr_id(H) ~= txid;
-
+		assert (unc_r(H,W) | excl_r(H) | shrd_r(H)) & H ~= hi -> addr_rid(H) ~= txid;
 
 		# (4) No two lock operations can be pending for the same
 		# client. This is required for release consistency,
 		# which would be violated by reordering lock operations.
 
-		assert ~(to_ser(E) & ~granted(E) & (ref.evs(E).type_ = cas | ref.evs(lt).type_ = cas));
+		assert ~(to_ser(E) & ~granted(E) & 
+		        (ref.evs(E).type_ = cas | ref.evs(lt).type_ = cas)
+			 & ref.evs(E).id_ = ref.evs(lt).id_);
+
 
 		# (5) No two operations pending on same address for the same
 		# client. This is required for release consistency,
 		# which would be violated by reordering ops on same address.
 		# TODO: no client ID's yet
 
-		assert ~(to_ser(E) & ~granted(E) & ref.evs(E).addr_ = ref.evs(lt).addr_);
+		assert ~(to_ser(E) & ~granted(E)
+                         & ref.evs(E).addr_ = ref.evs(lt).addr_
+			 & ref.evs(E).id_ = ref.evs(lt).id_);
 
 		# (6) All preventing events are already granted
 
@@ -319,10 +348,16 @@ module tl_interface(ref,clnt,mngr,side) = {
 		unc_r(hi,lo) := true;
 
 		########################################
+	        # Associate the address and txid 
+
+	        addr_rid(hi) := txid;
+
+		########################################
 	        # Perform abstract operation
 	        #
 
 		call abs.request(addr_cons(hi,lo),d,o,lt)
+
 
 	    }
 
@@ -341,14 +376,13 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 		# (2) if any prior transactions with same hi address, txid must match
 
-		assert (excl_r(hi) | excl_a(hi)) -> addr_id(hi) = txid;
-		assert (shrd_r(hi) | shrd_a(hi)) -> addr_id(hi) = txid;
+		assert (excl_r(hi) | shrd_r(hi)) -> addr_rid(hi) = txid;
+		assert (excl_a(hi) | shrd_a(hi)) -> addr_id(hi) = txid;
 		
 		# (3) May not use a txid in use for a different hi addr
 
-		assert (excl_r(H) | excl_a(H)) & H ~= hi -> addr_id(H) ~= txid;
-		assert (shrd_r(H) | shrd_a(H)) & H ~= hi -> addr_id(H) ~= txid;
-		assert none_r(H,L) & H ~= hi -> addr_id(H) ~= txid;
+		assert (unc_r(H,W) | excl_r(H) | shrd_r(H)) & H ~= hi -> addr_rid(H) ~= txid;
+
 
 		# (4) May not have a pending release with same client ID and same hi addr.
 
@@ -370,13 +404,15 @@ module tl_interface(ref,clnt,mngr,side) = {
 		};
 		if ow = shrd {
 		    shrd_r(hi) := true
-		}
-	    };
+		};
 
-	    ########################################
-	    # Associate the address and txid 
+	        ########################################
+	        # Associate the address and txid 
 
-	    addr_id(hi) := txid
+	        addr_rid(hi) := txid
+
+	    }
+
         }
     }
     mixin tl_Acquire before mngr.tl_Acquire    
@@ -395,11 +431,6 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    maddr := addr_cons(hi,lo);                             # construct full address
 
 
-	    ########################################
-	    # A grant's txid must match its address
-
-	    assert addr_id(hi) = txid;
-
 	    if gnts(msg).relack {
 
 		########################################
@@ -412,15 +443,22 @@ module tl_interface(ref,clnt,mngr,side) = {
 		assert none_r(hi,lo);
 
 	        ########################################
-		# Rule: Cannot ack a release if there is a pending Acquire that matches
+		# Rule: Cannot ack a release if there is an accepted or
+		# finishing  Acquire that matches
 		# the release (must wait for Finish).
 		#
 
-		assert ~excl_a(hi) & ~shrd_a(hi);
+		assert ~excl_a(hi) & ~shrd_a(hi) & ~excl_f(hi) & ~shrd_f(hi);
+
+		########################################
+		# Rule: A grant's txid must match its address
+
+		assert addr_id(hi) = txid;
 
 		# mark the release finished
 
 		none_r(hi,lo) := false
+
             }
             else {	    
 
@@ -431,8 +469,8 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# A Grant must match an accepted or pending Acquire. 
 		 
 		assert ow = none -> (unc_r(hi,lo) | unc_a(hi,lo));
-		assert ow = excl -> (excl_a(hi) | excl_a(hi));
-		assert ow = shrd -> (shrd_a(hi) | shrd_a(hi));
+		assert ow = excl -> (excl_r(hi) | excl_a(hi));
+		assert ow = shrd -> (shrd_r(hi) | shrd_a(hi));
 
 
 	        ########################################
@@ -459,6 +497,19 @@ module tl_interface(ref,clnt,mngr,side) = {
 		assert ow = none -> maddr = ref.evs(lt).addr_ & to_ser(lt) & ref.evs(lt).serialized;
 
 
+		########################################
+		# A grant's txid must match its request
+		
+		assert addr_rid(hi) = txid;
+
+		########################################
+		# Cannot use the txid if already in use for a different
+		# address
+
+		assert ~((excl_a(H) | excl_f(H) | shrd_a(H) | shrd_f(H) | unc_a(H,W) | unc_f(H,W))
+		         & addr_id(H) = txid & H ~= hi);
+		
+
 	        ########################################
 		# if uncached, mark the event granted
 		# if the request is not part of an accepted
@@ -470,16 +521,22 @@ module tl_interface(ref,clnt,mngr,side) = {
 		}
 		else if ow = excl {
 		    if ~excl_a(hi) {
-		        excl_a(hi) := false;
+		        excl_r(hi) := false;
 			excl_a(hi) := true
 		    }
                 }
 		else if ow = shrd {
 		    if ~shrd_a(hi) {
-		        shrd_a(hi) := false;
+		        shrd_r(hi) := false;
 			shrd_a(hi) := true
 		    }
                 };
+
+	        ########################################
+	        # If we are accepting a new uncached transaction,
+		# this associates the new txid with the address
+
+	        addr_id(hi) := txid;
 
 	        ########################################
 		# Abstract semantics of grant
@@ -590,16 +647,18 @@ module tl_interface(ref,clnt,mngr,side) = {
 		########################################
 		# (1) Must have no acquires pending when voluntarily releasing.
 
-		assert ~excl_r(hi) &  ~shrd_r(hi);
+		assert ~excl_r(hi) & ~excl_a(hi) & ~shrd_r(hi) & ~shrd_a(hi);
 
-		# (2) May not use a txid in use for a different hi addr
+		# (2) if any prior releases with same hi address, txid must match
 
-		assert (excl_r(H) | excl_a(H)) & H ~= hi -> addr_id(H) ~= txid;
-		assert (shrd_r(H) | shrd_a(H)) & H ~= hi -> addr_id(H) ~= txid;
-		assert none_r(H,L) & H ~= hi -> addr_id(H) ~= txid;
+		assert none_r(hi,W) -> addr_nid(hi) = txid;
 
-		# (3): Must have some privs on released words
-		# if release is voluntary
+		# (3) May not use a txid in use for a different hi addr
+
+		assert none_r(H,L) & H ~= hi -> addr_nid(H) ~= txid;
+
+		# (4): Must have some privs on released words if
+		# release is voluntary
 
 		assert excl_p(a) | shrd_p(a);
 
@@ -609,7 +668,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		#
 
 		none_r(hi,lo) := true;
-		addr_id(hi) := txid
+		addr_nid(hi) := txid
 	    }
 	    else {
 
@@ -737,6 +796,11 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     conjecture prb_addr(H,W) -> cached_hi(H)
 
+    # When finishing and not releasing, we have requested privs
+
+    conjecture excl_f(H) & ~none_r(H,W) -> excl_p(addr_cons(H,W))
+    conjecture shrd_f(H) & ~none_r(H,W) -> shrd_p(addr_cons(H,W))
+
     # No probe pending with matching accepted or finishing acquire
 
     conjecture prb_addr(H,W) -> ~excl_a(H) & ~excl_f(H) & ~shrd_a(H) & ~shrd_f(H)
@@ -776,15 +840,37 @@ module tl_interface(ref,clnt,mngr,side) = {
                   ref.evs(E1).id_ = ref.evs(E2).id_
 		   & ref.evs(E1).addr_ = ref.evs(E2).addr_)
 
+     # If in accepted phase, request id and accept id must match
 
-     # No two hi addresses with active transactions can have the same txid
+     conjecture (excl_a(H) | shrd_a(H) | unc_a(H,W)) -> addr_id(H) = addr_rid(H)
+
+     # If any two matching cached requests have same txid
+
+     conjecture shrd_f(H) & excl_r(H) -> addr_id(H) = addr_rid(H)
+     conjecture excl_f(H) & shrd_r(H) -> addr_id(H) = addr_rid(H)
+
+     # No two hi addresses of accepted or finishing transactions can have the same txid
 
      conjecture
-        (excl_r(H1) | excl_a(H1) | excl_f(H1) | shrd_r(H1) | shrd_a(H1) | shrd_f(H1) | none_r(H1,W1))
-        & (excl_r(H2) | excl_a(H2) | excl_f(H2) | shrd_r(H2) | shrd_a(H2) | shrd_f(H2) | none_r(H2,W2))
-	& H1 ~= H2
+       (excl_a(H1) | excl_f(H1) | shrd_a(H1) | shrd_f(H1) | unc_a(H1,W1) | unc_f(H1,W1))
+       & (excl_a(H2) | excl_f(H2) | shrd_a(H2) | shrd_f(H2) | unc_a(H2,W2) | unc_f(H2,W2))
+       & H1 ~= H2
 	-> addr_id(H1) ~= addr_id(H2)
 
+     # No two hi addresses of requested transactions can have the same txid
+
+     conjecture 
+       (excl_r(H1) | shrd_r(H1) | unc_r(H1,W1))
+       & (excl_r(H2) | shrd_r(H2) | unc_r(H2,W2))
+       & H1 ~= H2
+	-> addr_rid(H1) ~= addr_rid(H2)
+
+     # No two hi addresses of voluntary releases can have the same txid
+
+     conjecture 
+      none_r(H1,W1) & none_r(H2,W2)
+       & H1 ~= H2
+	-> addr_nid(H1) ~= addr_nid(H2)
 
 
 }

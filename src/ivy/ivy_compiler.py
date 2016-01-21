@@ -269,10 +269,9 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.axioms.append(sortify_with_inference(ax))
     def conjecture(self,ax):
         fmla = sortify_with_inference(ax)
-        try: 
-            self.domain.conjs.append(formula_to_clauses(fmla))
-        except ValueError:
-            raise IvyError(ax,"conjecture must be a clause")
+        clauses = formula_to_clauses(fmla)
+        clauses.lineno = ax.lineno
+        self.domain.conjs.append(clauses)
 
         # Make a conecpt space from the conjecture
 

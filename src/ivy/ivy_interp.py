@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from ivy_logic import *
 from ivy_logic_utils import *
-from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_model_to_clauses, clauses_model_to_diagram, get_model_clauses
+from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_imply_list, clauses_model_to_clauses, clauses_model_to_diagram, get_model_clauses
 from ivy_transrel import compose_state_action, forward_interpolant, reverse_image, interpolant, \
     join_state, implies_state, ActionFailed, null_update, forward_image, reverse_interpolant_case, \
     is_skolem, interpolant_case, History, top_state, action_failure
@@ -523,7 +523,9 @@ def state_implies_formula(state1, fmla2):
 
 def undecided_conjectures(state1):
     clauses1 = and_clauses(state1.clauses,state1.domain.background_theory(state1.in_scope))
-    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
+    truths = clauses_imply_list(clauses1,state1.conjs)
+    return [c for c,t in zip(state1.conjs,truths) if not t]
+#    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 
 def filter_conjectures(state1,model):
     keep = []

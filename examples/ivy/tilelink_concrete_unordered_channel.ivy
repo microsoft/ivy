@@ -410,13 +410,21 @@ conjecture back.to_ser(E) -> front.to_ser(E)
 
 conjecture front.granted(E) -> back.granted(E)
 
+# A, uncached, serialized client-side event must be to_ser on back
+
+# conjecture ~front.cached(ref.evs(T).addr_) & fside(ref.evs(T).id_) = client & ref.evs(T).serialized
+#              -> back.to_ser(T)
+
+conjecture front.to_ser(T) & ref.evs(T).serialized -> back.to_ser(T)
+
+
 ########################################
 # Concrete interface state invariants
 
 # Every Acquire pending on the back side is pending on the front.
 
 conjecture back.excl_r(H) -> front.excl_r(H)
-conjecture back.shrd_r(H) -> front.excl_r(H)
+conjecture back.shrd_r(H) -> front.shrd_r(H)
 conjecture back.unc_r(H,L) -> front.unc_r(H,L)
 
 # Every Acquire accepted on the back side is pending or accepted on front
@@ -426,9 +434,10 @@ conjecture back.shrd_a(H) -> front.shrd_r(H) | front.shrd_a(H)
 conjecture back.unc_a(H,L) -> front.unc_r(H,L) | front.unc_a(H,L)
 
 # Every cached Acquire finishing on the back side not pending on front
+#TODO: false
 
-conjecture back.excl_a(H) -> ~front.excl_r(H)
-conjecture back.shrd_a(H) -> ~front.shrd_r(H)
+# conjecture back.excl_a(H) -> ~front.excl_r(H)
+# conjecture back.shrd_a(H) -> ~front.shrd_r(H)
 
 # Every Acquire accepted on the front side is accepted or finishing on the back
 
@@ -450,14 +459,33 @@ conjecture back.none_r(H,W) -> front.none_r(H,W)
 
 conjecture front.prb_addr(H,W) -> back.prb_addr(H,W)
 
+# If any transaction for a given address is on the back
+# then the txid's on back and front match
+
+conjecture (back.excl_a(H1) | back.shrd_a(H1) | back.unc_a(H1,W1))
+	          -> front.addr_rid(H1) = back.addr_rid(H1)
+
+conjecture (back.excl_r(H1) | back.shrd_r(H1) | back.unc_r(H1,W1))
+	       -> front.addr_rid(H1) = back.addr_rid(H1)
+
+# If front is accepted or finishing, then the txid's on back and front match
+
+conjecture (front.excl_a(H1) | front.shrd_a(H1) | front.unc_a(H1,W1)
+	    | front.excl_f(H1) | front.shrd_f(H1) | front.unc_f(H1,W1))
+	       -> front.addr_id(H1) = back.addr_id(H1)
+
+# If back is releasing, then its txid matches front
+
+conjecture back.none_r(H,W) -> back.addr_nid(H) = front.addr_nid(H)
 
 # if privs on back but not front, and nothing requested on front, then
 # there must be an old probe or voluntary release pending
+# TODO: false?
 
-conjecture A = addr_cons(H,W) & ~front.excl_p(A) & ~front.excl_r(H) & back.excl_p(A)
-	   -> front.none_r(H,W) | back.prb_addr(H,W)
-conjecture A = addr_cons(H,W) & ~front.shrd_p(A) & ~front.shrd_r(H) & back.shrd_p(A)
-	   -> front.none_r(H,W) | back.prb_addr(H,W)
+#conjecture A = addr_cons(H,W) & ~front.excl_p(A) & ~front.excl_r(H) & back.excl_p(A)
+#	   -> front.none_r(H,W) | back.prb_addr(H,W)
+#conjecture A = addr_cons(H,W) & ~front.shrd_p(A) & ~front.shrd_r(H) & back.shrd_p(A)
+#	   -> front.none_r(H,W) | back.prb_addr(H,W)
 
 # if dirty on back but not front, then there must be an old probe or
 # voluntary release pending
@@ -476,9 +504,9 @@ conjecture front.shrd_r(H) & ~back.shrd_r(H) & ~back.shrd_a(H) & ~back.shrd_f(H)
 # if nothing in progress on either side, front privs match back
 
 conjecture ~front.excl_r(H) & ~front.excl_a(H) & ~back.excl_r(H) & ~back.excl_a(H)
-	   & ~front.none_r(H,W) & ~back.prb_addr(H,W) & back.excl_p(addr_cons(H,W)) -> back.excl_p(addr_cons(H,W)) 
+	   & ~front.none_r(H,W) & ~back.prb_addr(H,W) & back.excl_p(addr_cons(H,W)) -> front.excl_p(addr_cons(H,W)) 
 conjecture ~front.shrd_r(H) & ~front.shrd_a(H) & ~back.shrd_r(H) & ~back.shrd_a(H)
-	   & ~front.none_r(H,W) & ~back.prb_addr(H,W) & back.shrd_p(addr_cons(H,W)) -> back.shrd_p(addr_cons(H,W)) 
+	   & ~front.none_r(H,W) & ~back.prb_addr(H,W) & back.shrd_p(addr_cons(H,W)) -> front.shrd_p(addr_cons(H,W)) 
 
 # if a probe has not yet been responded to, front privs match back
 # this is to show that when the probe response occurs, priviledges
@@ -486,10 +514,20 @@ conjecture ~front.shrd_r(H) & ~front.shrd_a(H) & ~back.shrd_r(H) & ~back.shrd_a(
 
 conjecture ~front.excl_a(H) & ~back.excl_a(H)
 	   & ~front.none_r(H,W) & (b.prbs(I1,M1) & prbs(M1).addr_hi = H | front.prb_addr(H,W))
-	       -> back.excl_p(addr_cons(H,W)) 
+	       & back.excl_p(addr_cons(H,W)) -> front.excl_p(addr_cons(H,W)) 
 conjecture ~front.shrd_a(H) & ~back.shrd_a(H)
 	   & ~front.none_r(H,W) & (b.prbs(I1,M1) & prbs(M1).addr_hi = H | front.prb_addr(H,W))
-	       -> back.shrd_p(addr_cons(H,W)) 
+	       & back.shrd_p(addr_cons(H,W)) -> front.shrd_p(addr_cons(H,W)) 
+
+# if nothing in progress on either side, and front has not released,
+# then it has same privs as back
+
+conjecture ~front.excl_r(H) & ~front.excl_a(H) & ~back.excl_r(H) & ~back.excl_a(H)
+	   & ~front.none_r(H,W) & front.shrd_p(addr_cons(H,W)) & back.excl_p(addr_cons(H,W)) -> front.excl_p(addr_cons(H,W)) 
+conjecture ~front.shrd_r(H) & ~front.shrd_a(H) & ~back.shrd_r(H) & ~back.shrd_a(H)
+	   & ~front.none_r(H,W) & front.excl_p(addr_cons(H,W)) & back.shrd_p(addr_cons(H,W)) -> front.shrd_p(addr_cons(H,W)) 
+
+
 
 ########################################
 # Channel content invariants.
@@ -514,6 +552,17 @@ conjecture b.acqs(I1,M1) & acqs(M1).own = none & E = acqs(M1).ltime_ ->
        & acqs(M1).data_ = ref.evs(E).data_ 
        & acqs(M1).op = ref.evs(E).type_ 
 
+# Must have correct txid
+
+conjecture b.acqs(I1,M1) -> front.addr_rid(acqs(M1).addr_hi) = acqs(M1).id_ 
+
+# Event must be ready to request on back
+
+conjecture b.acqs(I1,M1) & acqs(M1).own = none & E = acqs(M1).ltime_ -> 
+       fside(ref.evs(E).id_) = client &
+       front.to_ser(E) & ~front.granted(E) & ~back.to_ser(E) & 
+       (ref.prevents(E1,E) -> back.to_ser(E1))
+
 # Channel can contain a given Acquire message at most once
 
 conjecture b.acqs(I1,M1) & b.acqs(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
@@ -525,23 +574,43 @@ conjecture b.acqs(I1,M1) & b.acqs(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
 
 # Every non-relack grant in the channel matches an acquire, which must
 # be pending an front and accepted on back. Specified word must be
-# served on back side and unserved on front side. Grants have correct data
-# if not dirtied by client.
+# served on back side and unserved on front side. Grants have correct 
+# (aux) address and op, and correct data if not dirtied by client.
 
-conjecture b.gnts(I1,M1) & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = none
-	      -> back.unc_f(H,W) & front.unc_r(H,W) & back.granted(gnts(M1).ltime_)
-                 & gnts(M1).data_ = ref.evs(gnts(M1).ltime_).data_
-	      
-conjecture b.gnts(I1,M1) & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = excl
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = none
+	   & E = gnts(M1).ltime_ 
+	      -> back.unc_f(H,W) & front.unc_r(H,W) & back.granted(E) & ~front.granted(E)
+                 & gnts(M1).data_ = ref.evs(E).data_
+		 & addr_cons(H,W) = ref.evs(E).addr_
+		 	      
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = excl
+	   & A = addr_cons(H,W)
 	      -> (back.excl_a(H) | back.excl_f(H)) & (front.excl_r(H) | front.excl_a(H))
-	         & back.excl_p(addr_cons(H,W)) & ~front.excl_p(addr_cons(H,W))
+	         & back.excl_p(A) & ~front.excl_p(A)
 		 &(~front.dirt_p(A) & ~back.dirt_p(A) -> gnts(M1).data_ = ref.mem(A))
 
-conjecture b.gnts(I1,M1) & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = shrd
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = shrd
+	   & A = addr_cons(H,W)
 	      -> (back.shrd_a(H) | back.shrd_f(H)) & (front.shrd_r(H) | front.shrd_a(H))
-	         & back.shrd_p(addr_cons(H,W)) & ~front.shrd_p(addr_cons(H,W))
+	         & back.shrd_p(A) & ~front.shrd_p(A)
 		 &(~front.dirt_p(A) & ~back.dirt_p(A) -> gnts(M1).data_ = ref.mem(A))
 
+# All grants must have correct txid on front
+
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_rid(H) = gnts(M1).id_
+conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_id(H) = gnts(M1).id_
+
+# All normal grants must have correct txid on back
+
+conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi -> back.addr_id(H) = gnts(M1).id_
+
+# A relack grant means release requested on front but not back and no release in channel and
+# no accepted or finishing transaction on back
+
+conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word ->
+	   front.none_r(H,W) & ~back.none_r(H,W) &
+	   ~(b.rlss(I2,M2) & H = rlss(M2).addr_hi & W = rlss(M2).word) &
+	   ~back.excl_a(H) & ~back.excl_f(H) & ~back.shrd_a(H) & ~back.shrd_f(H)
 
 # Channel can contain a given Grant message at most once
 
@@ -556,7 +625,7 @@ conjecture b.gnts(I1,M1) & b.gnts(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
 # side and not pending on the back side
 
 conjecture b.rlss(I1,M1) & rlss(M1).voluntary & H = rlss(M1).addr_hi & W = rlss(M1).word ->
-                  front.none_r(H,W) & ~front.none_r(H,W)
+                  front.none_r(H,W) & ~back.none_r(H,W)
 
 
 # a voluntary release message means some privs on back side
@@ -579,10 +648,15 @@ conjecture b.rlss(I1,M1) & A = addr_cons(rlss(M1).addr_hi,rlss(M1).word) &
 # that is pending on back side and not pending on font side, and there
 # are no privs on the front side.
 
-conjecture b.rlss(I1,M1) & rlss(M1).voluntary & H = rlss(M1).addr_hi & W = rlss(M1).word ->
+conjecture b.rlss(I1,M1) & ~rlss(M1).voluntary & H = rlss(M1).addr_hi & W = rlss(M1).word ->
                   back.prb_addr(H,W) & ~front.prb_addr(H,W) & ~front.none_r(H,W)
 		  & ~front.excl_p(addr_cons(H,W)) & ~front.shrd_p(addr_cons(H,W)) 
+		  
 
+# Voluntary relase message must have correct txid on front
+
+conjecture b.rlss(I1,M1) & rlss(M1).voluntary & H = rlss(M1).addr_hi ->
+	   front.addr_nid(H) = rlss(M1).id_
 
 
 # no two matching release messages can be in channel
@@ -626,6 +700,10 @@ conjecture b.fnss(I1,M1) & H = fnss(M1).addr_hi & W = fnss(M1).word & fnss(M1).o
 
 conjecture b.fnss(I1,M1) & H = fnss(M1).addr_hi & W = fnss(M1).word & fnss(M1).own = none ->
 	      ~front.unc_a(H,W) & ~front.unc_f(H,W) & back.unc_f(H,W)
+
+# Must have correct txid (relative to back, since front may have moved on)
+
+conjecture b.fnss(I1,M1) -> back.addr_id(fnss(M1).addr_hi) = fnss(M1).id_
 
 # Can't be two matching finishes in channel
 

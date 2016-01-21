@@ -403,6 +403,9 @@ class AnalysisGraphWidget(Canvas):
         if sel:
             conj = udc[sel[0]]
             print "type(conj) = {}".format(type(conj))
+            if hasattr(conj,'lineno'):
+                filename,lineno = conj.lineno
+                self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
             sg = self.g.concept_graph(node)
             sg.add_constraints(dual.clauses)
