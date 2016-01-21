@@ -8,18 +8,6 @@
 
 include tilelink_concrete_spec
 
-################################################################################
-#
-# Cache line format
-#
-################################################################################
-
-module cache_line = {
-    relation excl_p  # has exclusive priv
-    relation shrd_p  # has shared priv
-    individual data_ : data
-}
-
 
 ################################################################################
 #
@@ -35,12 +23,6 @@ type tid
 #
 ################################################################################
 
-module trans = {
-   individual acq_ : acq_id
-   relation words(W:tl_addrlo)
-
-   init ~words(W)
-}
 
 ################################################################################
 #
@@ -60,11 +42,13 @@ module dut(myid,clnt,mngr,ref) = {
 
     # protocol state
 
-    instantiate tns(T:tid) : trans
+    relation pend_excl(A:tl_addrhi,W:tl_addrlo)
+    relation pend_shrd(A:tl_addrhi,W:tl_addrlo)
     relation pend_rls(A:tl_addrhi,W:tl_addrlo)
+    relation pend_prb(A:tl_addrhi,W:tl_addrlo)
     relation wait_finish
     
-    init ~cache_excl(A,W) & ~cache_shrd(A,W) & ~pend_rls(A,W) & ~wait_finish
+    init ~cache_excl(A,W) & ~cache_shrd(A,W) & ~pend_rls(A,W) & ~pend_prb(A,W) & ~pend_excl(A,W) & ~pend_shrd(H,W) & ~wait_finish
 
     ########################################
     # release action called by the client side
@@ -75,13 +59,13 @@ module dut(myid,clnt,mngr,ref) = {
     }
 
     ########################################
-    # produce a finish corresponding to a transaction
+    # produce a finish for a given hi addr
 
-    action send_finish(t:tid) = {
+    action send_finish(ahi:tl_addrhi, ow:ownership) = {
         local f:fns_id {
 	    assume fnss(f).id_ = myid;
-	    assume fnss(f).own = acqs(tns(t).acq_).own;
-	    assume fnss(f).words(W) <-> acqs(tns(t).acq_).words(W);
+	    assume fnss(f).addr_hi = ahi;
+	    assume fnss(f).own = ow;
 	    call mngr.tl_Finish(f)
         }
     }    
@@ -95,10 +79,11 @@ module dut(myid,clnt,mngr,ref) = {
 	
 	    # on a release ack, mark release completed
 
-	    local ahi:tl_addrhi {
- 	        assert exists A. pend_rls(A,gnts(msg).word);
-	        assume pend_rls(ahi,gnts(msg).word);
-	        pend_rls(ahi,gnts(msg).word) := false
+	    local ahi:tl_addrhi, w:tl_addrlo {
+	        w := gnts(msg).word;
+	        assert exists H. pend_rls(H,w);
+		assume pend_rls(ahi,w);
+	        pend_rls(ahi,w) := false
             }
         }
 
@@ -106,26 +91,32 @@ module dut(myid,clnt,mngr,ref) = {
 	    local a:addr, ahi:tl_addrhi, t:tid, w:tl_addrlo {
 
 	        w := gnts(msg).word;
-		assert gnts(msg).own ~= none;
-
-		# find the corresponding transaction
-		assert exists T. (tns(T).words(w) & acqs(tns(T).acq_).own = gnts(msg).own);
-		assume tns(t).words(w) &  acqs(tns(t).acq_).own = gnts(msg).own;
-
-		ahi := acqs(tns(t).acq_).addr_hi;
-		a := addr_cons(ahi,w);
 
 		if gnts(msg).own = excl {
-		    cache_excl(ahi,w) := true
-		} else {
-		    cache_shrd(ahi,w) := true
-		};	
-
-		cache_data(a) := gnts(msg).data_;
-	
-		tns.words(t,w) := false;
-	        if ~tns.words(t,W:tl_addrlo) {
-		    call send_finish(t)      # fire off a corresponding finish
+		    # find the corresponding transaction
+		    assert exists H. pend_excl(H,w);
+		    assume pend_excl(ahi,w);
+		    a := addr_cons(ahi,w);
+		    cache_excl(ahi,w) := true;
+		    cache_data(a) := gnts(msg).data_;
+		    pend_excl(ahi,w) := false;
+		    if forall W:tl_addrlo. ~pend_excl(ahi,W:tl_addrlo) {
+			call send_finish(ahi,excl)      # fire off a corresponding finish
+		    }
+		}
+		else {
+		    # find the corresponding transaction
+		    assert exists H. pend_shrd(H,w);
+		    assume pend_shrd(ahi,w);
+		    a := addr_cons(ahi,w);
+		    cache_shrd(ahi,w) := true;
+		    if ~cache_excl(ahi,w) {  # ignore data if we might be dirty
+		        cache_data(a) := gnts(msg).data_
+                    };
+		    pend_shrd(ahi,w) := false;
+		    if forall W:tl_addrlo. ~pend_shrd(ahi,W:tl_addrlo) {
+			call send_finish(ahi,shrd)      # fire off a corresponding finish
+		    }
                 }
 	    }
 	}
@@ -137,12 +128,15 @@ module dut(myid,clnt,mngr,ref) = {
     #
     # 
 
-    action grant(mid:id, w:tl_addrlo, d:data, lt:ltime) = {
+    action grant(mid:id, ahi:tl_addrhi, w:tl_addrlo, d:data, lt:ltime) = {
         local g:gnt_id {
 	    assume gnts(g).id_ = mid;
 	    assume gnts(g).word = w;
 	    assume gnts(g).data_ = d;
 	    assume gnts(g).ltime_ = lt;
+	    assume ~gnts(g).relack;
+	    assume gnts(g).own = none;
+	    assume gnts(g).addr_hi = ahi;
 	    call clnt.tl_Grant(g)
         }
     }
@@ -155,30 +149,27 @@ module dut(myid,clnt,mngr,ref) = {
     action tl_Acquire(msg:acq_id) = {
         assume acqs(msg).own = none;     #only support uncached
 	assume ~wait_finish;             # block if last request not finished
-	local o:otype, a:addr, d:data, lt:ltime, mid:id, ahi: tl_addrhi, word:tl_addrlo {
+	local o:otype, a:addr, d:data, lt:ltime, mid:id, ahi: tl_addrhi, wrd:tl_addrlo {
 	      o := acqs(msg).op;
 
-	      # should be only one word requested
-	      assume acqs(msg).words(word);
-	      assume ~(acqs(msg).words(X) & X ~= word);
-
+	      wrd := acqs(msg).word;
 	      ahi := acqs(msg).addr_hi;
-	      a := addr_cons(ahi,word);
+	      a := addr_cons(ahi,wrd);
 	      lt := acqs(msg).ltime_;
 	      mid := acqs(msg).id_;
 
               assume o ~= cas;                # don't support cas for now
               if o = read {
-	          assume cache_excl(ahi,word) | cache_shrd(ahi,word); # models channel blocking
+	          assume cache_excl(ahi,wrd) | cache_shrd(ahi,wrd); # models channel blocking
 	          d := cache_data(a);
    	          call ref.perform(lt,myid); # ghost
-	          call grant(mid,word,d,lt)
+	          call grant(mid,ahi,wrd,d,lt)
               } else { # o = write	    
-	          assume cache_excl(ahi,word); # models channel blocking
+	          assume cache_excl(ahi,wrd); # models channel blocking
 		  d := acqs(msg).data_;
 	          cache_data(a) := d;
 	          call ref.perform(lt,myid); # ghost
-                  call grant(mid,word,d,lt)
+                  call grant(mid,ahi,wrd,d,lt)
               };
 	      wait_finish := true
         }
@@ -194,29 +185,25 @@ module dut(myid,clnt,mngr,ref) = {
 
          assume own_ ~= none;
 
+         assume ~(pend_excl(H,W) | pend_shrd(H,W)) & H ~= ahi;     # no threading, for now
+	 assume ~(pend_excl(ahi,W) & own_=excl);                   # not if already acquiring 
+	 assume ~(pend_shrd(ahi,W) & own_=shrd);                   # not if already acquiring 
+
 	 # construct an Acquire message
 
 	 assume acqs(msg).id_ = myid;
 	 assume acqs(msg).addr_hi = ahi;
-	 assume acqs(msg).words(word);                 # this gives at least one word
-         assume ~(acqs(tns(T).acq_).words(W) & acqs(msg).words(W));     # don't request pending words
 	 assume acqs(msg).own = own_;
 
 	 # other Acquire fields are don't-care here.
 
-	 a := addr_cons(ahi,word);
          if own_ = excl {
-             assume ~cache_excl(ahi,word)
+             assume ~cache_excl(ahi,W);
+	     pend_excl(ahi,W) := true 
 	 } else {
-	     assume ~cache_shrd(ahi,word)
+             assume ~cache_shrd(ahi,W);
+	     pend_shrd(ahi,W) := true 
          };
-
-	 # mark pending acquires
-	 local t:tid {
-	     assume ~tns.words(t,W);
-             tns(t).acq_ := msg;
-             tns.words(t,W) := acqs(msg).words(W)
-         };	 
 
 	 call mngr.tl_Acquire(msg)
        }
@@ -228,20 +215,19 @@ module dut(myid,clnt,mngr,ref) = {
 
     action send_release(r:rls_id) = {
 
-        local ahi:tl_addrhi, word: tl_addrlo, a:addr {
+        local ahi:tl_addrhi, wrd: tl_addrlo, a:addr {
 	    # must return the data if exclusive
-	    # TODO: this currently means no multiple word involuntary release
 
-	    assume rlss(r).words(word); # must have at least one word
+	    wrd := rlss(r).word;
 	    ahi := rlss(r).addr_hi;
-	    a := addr_cons(ahi,word);
-	    assume cache_excl(ahi,W) & rlss(r).words(W) -> W=word;
-	    assume cache_excl(ahi,word) -> rlss(r).data_ = cache_data(a);
+	    a := addr_cons(ahi,wrd);
+	    assume rlss(r).data_ = cache_data(a);
+	    assume rlss(r).dirty <-> cache_excl(ahi,wrd);
 
 	    # erase privs being released
 
-	    cache_excl(ahi,W) := cache_excl(ahi,W) & ~rlss(r).words(W);
-	    cache_shrd(ahi,W) := cache_shrd(ahi,W) & ~rlss(r).words(W);
+	    cache_excl(ahi,wrd) := false;
+	    cache_shrd(ahi,wrd) := false;
 	    	    
 	    call mngr.tl_Release(r)
         }
@@ -254,28 +240,8 @@ module dut(myid,clnt,mngr,ref) = {
 
     action tl_Probe(msg:prb_id) = {
 
-        # block the probe if we don't have the privs yet
+        pend_prb(prbs(msg).addr_hi,W) := true
 
-        assume prbs(msg).words(W) & prbs(msg).excl_p -> cache_excl(prbs(msg).addr_hi,W);
-        assume prbs(msg).words(W) & prbs(msg).shrd_p -> cache_shrd(prbs(msg).addr_hi,W);
-
-	# block the probe if we have any release pending for these words
-
-	assume ~(pend_rls(prbs(msg).addr_hi,W) & prbs(msg).words(W));
-
-	# only one word probed -- TODO
-
-	assume ~(prbs(msg).words(W1) & prbs(msg).words(W2) & W1~=W2);
-	
-	local r:rls_id, a:addr, ahi:tl_addrhi, word:tl_addrlo {
-	    # build a release message
-	    assume rlss(r).id_ = myid;
-	    assume ~rlss(r).voluntary;
-	    assume rlss(r).addr_hi = prbs(msg).addr_hi;
-	    assume rlss(r).words(W) <-> prbs(msg).words(W);
-	    
-	    call send_release(r)     
-       }
     }
 
     ########################################
@@ -287,7 +253,23 @@ module dut(myid,clnt,mngr,ref) = {
     }
 
 
-    action vol_release(ahi:tl_addrhi, word: tl_addrlo) = {
+    action vol_release(ahi:tl_addrhi, wrd: tl_addrlo) = {
+
+        # single threaded
+
+	assume ~pend_rls(H,W) & H ~= ahi;
+
+        # can only release words for which we have privs
+
+	assume cache_excl(ahi,wrd) | cache_shrd(ahi,wrd);
+
+        # block the release if we don't have the grants yet
+
+	assume ~pend_excl(ahi,W) & ~pend_shrd(ahi,W);
+
+	# can't release anything with pending release
+
+    	assume ~pend_rls(ahi,W);
 
         local msg:rls_id, a:addr {
 
@@ -295,40 +277,59 @@ module dut(myid,clnt,mngr,ref) = {
 	    assume rlss(msg).id_ = myid;
 	    assume rlss(msg).voluntary;
 	    assume rlss(msg).addr_hi = ahi;
-	    assume rlss(msg).words(word);
+	    assume rlss(msg).word = wrd;
 
-	    # can only release words for which we have privs
-
-	    assume rlss(msg).words(W) -> cache_excl(ahi,W) | cache_shrd(ahi,W);
-
-	    # can't release anything with pending release
-
-    	    assume ~(pend_rls(ahi,W) & rlss(msg).words(W));
-	    
-	    # can't release anything with pending acquire on any released word
-
-    	    assume ~acqs.words(tns(T).acq_,W) & tns(T).words(X);
-	    
 	    # mark the release pending
 	    
-	    pend_rls(ahi,W) := pend_rls(ahi,W) | rlss(msg).words(W);
+	    pend_rls(ahi,wrd) := true;
 
 	    call send_release(msg)
         }
     }
 
 
+    action invol_release(ahi:tl_addrhi, wrd: tl_addrlo) = {
+
+        assume pend_prb(ahi,wrd);
+
+        # block the probe if we don't have the grants yet
+
+	assume ~pend_excl(ahi,W) & ~pend_shrd(ahi,W);
+
+	# can't release anything with pending release
+
+    	assume ~pend_rls(ahi,W);
+
+        local msg:rls_id, a:addr {
+
+	    # build a release message
+	    assume rlss(msg).id_ = myid;
+	    assume ~rlss(msg).voluntary;
+	    assume rlss(msg).addr_hi = ahi;
+	    assume rlss(msg).word = wrd;
+
+	    call send_release(msg);
+	    
+	    # mark probe complete
+
+	    pend_prb(ahi,wrd) := false
+
+        }
+    }
+
     ########################################
     # internal action (step)
     #
-    # we can either acuire or voluntarily release a line
+    # we can either acquire or release a line
 
     action step = {
-        local ahi:tl_addrhi, word: tl_addrlo, own:ownership {
+        local ahi:tl_addrhi, wrd: tl_addrlo, own:ownership {
 	    if * {
-	        call acquire(ahi, word, own)
-	    } else {
-	        call vol_release(ahi, word)
+	        call acquire(ahi, wrd, own)
+	    } else if * {
+	        call vol_release(ahi, wrd)
+            } else {
+	        call invol_release(ahi, wrd)
             }
 	}
     }
@@ -349,3 +350,69 @@ axiom fside(I) = client & fside(J) = client -> I = J
 
 # 2) everything uncached on front side and cached on back side
 axiom ~front.cached(A) & back.cached(A)
+
+################################################################################
+#
+# Conjectured invariants
+#
+################################################################################
+
+conjecture b.pend_prb(H,W) <-> back.prb_addr(H,W)
+
+conjecture b.pend_rls(H,W) <-> back.none_r(H,W)
+
+conjecture b.cache_excl(H,W) <-> back.excl_p(addr_cons(H,W))
+
+conjecture b.cache_shrd(H,W) <-> back.shrd_p(addr_cons(H,W))
+
+conjecture b.pend_excl(H,W) -> back.excl_r(H) | back.excl_a(H)
+
+conjecture back.excl_r(H) -> b.pend_excl(H,W)
+
+conjecture back.excl_a(H) -> exists W. b.pend_excl(H,W)
+
+conjecture b.pend_shrd(H,W) -> back.shrd_r(H) | back.shrd_a(H)
+
+conjecture back.shrd_r(H) -> b.pend_shrd(H,W)
+
+conjecture back.shrd_a(H) -> exists W. b.pend_shrd(H,W)
+
+conjecture ~back.excl_f(H) & ~back.shrd_f(H)
+
+conjecture ~back.unc_r(H,W) & ~back.unc_a(H,W) & ~back.unc_f(H,W) 
+
+conjecture ~front.unc_r(H,W) & ~front.unc_a(H,W)
+
+conjecture ~front.excl_r(H) & ~front.excl_a(H) & ~front.excl_f(H) 
+
+conjecture ~front.shrd_r(H) & ~front.shrd_a(H) & ~front.shrd_f(H) 
+
+conjecture front.unc_f(H,W) -> b.wait_finish
+
+conjecture front.unc_f(H1,W1) & front.unc_f(H2,W2) ->  (H1 = H2 & W1 = W2)
+
+conjecture (b.cache_excl(H,W) | b.cache_shrd(H,W)) -> b.cache_data(addr_cons(H,W)) = ref.mem(addr_cons(H,W))
+
+conjecture ~(b.pend_rls(H1,W1) & b.pend_rls(H2,W2) & H1 ~= H2)
+
+conjecture ~(b.pend_excl(H1,W1) & b.pend_excl(H2,W2) & H1 ~= H2)
+
+conjecture ~(b.pend_shrd(H1,W1) & b.pend_shrd(H2,W2) & H1 ~= H2)
+
+conjecture (back.excl_r(H) | back.shrd_r(H)) -> back.addr_rid(H) = buf_id
+
+conjecture (back.excl_a(H) | back.shrd_a(H) | back.excl_f(H) | back.shrd_f(H)) -> back.addr_id(H) = buf_id
+
+conjecture back.none_r(H,W) -> back.addr_nid(H) = buf_id
+
+conjecture ~(b.cache_shrd(H,W) & b.pend_shrd(H,W)) & ~(b.cache_excl(H,W) & b.pend_excl(H,W))
+
+conjecture b.pend_excl(H,W1) & ~b.cache_excl(H,W2) -> b.pend_excl(H,W2)
+
+conjecture b.pend_shrd(H,W1) & ~b.cache_shrd(H,W2) -> b.pend_shrd(H,W2)
+
+export c.acquire
+export c.finish
+export c.release
+export c.perform
+export c.fuse
