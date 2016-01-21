@@ -449,7 +449,7 @@ conjecture front.unc_a(H,L) -> back.unc_a(H,L) | back.unc_f(H,L)
 
 conjecture front.excl_f(H) -> back.excl_f(H)
 conjecture front.shrd_f(H) -> back.shrd_f(H)
-conjecture front.unc_f(H,L) -> back.unc_a(H,L)
+conjecture front.unc_f(H,L) -> back.unc_f(H,L)
 
 # If a release is pending on the back, must be pending on front
 
@@ -586,19 +586,20 @@ conjecture ~(b.acqs(I1,M1) & b.gnts(I2,M2) & gnts(M2).own = acqs(M1).own &
 
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = none
 	   & E = gnts(M1).ltime_ 
-	      -> back.unc_f(H,W) &  ~back.unc_r(H,W) & front.unc_r(H,W) & back.granted(E) & ~front.granted(E)
+	      -> back.unc_f(H,W) &  ~back.unc_r(H,W) & front.unc_r(H,W) & ~front.unc_f(H,W)
+                 & back.granted(E) & ~front.granted(E)
                  & gnts(M1).data_ = ref.evs(E).data_
 		 & addr_cons(H,W) = ref.evs(E).addr_
 		 	      
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = excl
 	   & A = addr_cons(H,W)
-	      -> (back.excl_a(H) | back.excl_f(H)) & (front.excl_r(H) | front.excl_a(H))
+	      -> (back.excl_a(H) | back.excl_f(H)) & (front.excl_r(H) | front.excl_a(H)) & ~front.excl_f(H)
 	         & back.excl_p(A) & ~front.excl_p(A)
 		 &(~front.dirt_p(A) & ~back.dirt_p(A) -> gnts(M1).data_ = ref.mem(A))
 
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word & gnts(M1).own = shrd
 	   & A = addr_cons(H,W)
-	      -> (back.shrd_a(H) | back.shrd_f(H)) & (front.shrd_r(H) | front.shrd_a(H))
+	      -> (back.shrd_a(H) | back.shrd_f(H)) & (front.shrd_r(H) | front.shrd_a(H)) & ~front.shrd_f(H)
 	         & back.shrd_p(A) & ~front.shrd_p(A)
 		 &(~front.dirt_p(A) & ~back.dirt_p(A) -> gnts(M1).data_ = ref.mem(A))
 
@@ -612,17 +613,19 @@ conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi -> front.addr_
 conjecture b.gnts(I1,M1) & ~gnts(M1).relack & H = gnts(M1).addr_hi -> back.addr_id(H) = gnts(M1).id_
 
 # A relack grant means release requested on front but not back and no release in channel and
-# no accepted or finishing transaction on back
+# no accepted or finishing transaction on back and no privs on back.
 
 conjecture b.gnts(I1,M1) & gnts(M1).relack & H = gnts(M1).addr_hi & W = gnts(M1).word ->
 	   front.none_r(H,W) & ~back.none_r(H,W) &
 	   ~(b.rlss(I2,M2) & H = rlss(M2).addr_hi & W = rlss(M2).word) &
 	   ~back.excl_a(H) & ~back.excl_f(H) & ~back.shrd_a(H) & ~back.shrd_f(H)
+	   & ~back.excl_p(addr_cons(H,W)) & ~back.shrd_p(addr_cons(H,W)) 
 
 # Channel can contain a given Grant message at most once
 
 conjecture b.gnts(I1,M1) & b.gnts(I2,M2) & (I1 ~= I2 | M1 ~= M2) ->
-	     ~(gnts(M1).own = gnts(M2).own & gnts(M1).addr_hi = gnts(M2).addr_hi & gnts(M1).word = gnts(M2).word)
+	     ~((gnts(M1).own = gnts(M2).own | gnts(M1).relack | gnts(M2).relack)
+                & gnts(M1).addr_hi = gnts(M2).addr_hi & gnts(M1).word = gnts(M2).word)
 
 
 ####################
@@ -713,9 +716,9 @@ conjecture b.fnss(I1,M1) & H = fnss(M1).addr_hi & W = fnss(M1).word & fnss(M1).o
 
 conjecture b.fnss(I1,M1) -> back.addr_id(fnss(M1).addr_hi) = fnss(M1).id_
 
-# No finish in channel if matching grant in channel
+# No finish in channel if matching non-relack grant in channel
 
-conjecture ~(b.fnss(I1,M1) & b.gnts(I2,M2) & gnts(M2).own = fnss(M1).own & 
+conjecture ~(b.fnss(I1,M1) & b.gnts(I2,M2) & ~gnts(M2).relack & gnts(M2).own = fnss(M1).own & 
 	        gnts(M2).addr_hi = fnss(M1).addr_hi &
 		(fnss(M1).own ~= none | gnts(M2).word = fnss(M1).word))
 
