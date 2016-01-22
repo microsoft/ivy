@@ -1,0 +1,288 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This is an abstract model of simple directory using TileLink.
+#
+################################################################################
+
+include tilelink_concrete_spec
+
+module dir(myid,clnt,other,ref,mem) = {
+
+    relation cache_excl(H:tl_addrhi,W:tl_addrlo)
+    relation cache_shrd(H:tl_addrhi,W:tl_addrlo)
+    
+    relation pend_excl(A:tl_addrhi,W:tl_addrlo)
+    relation pend_shrd(A:tl_addrhi,W:tl_addrlo)
+    relation pend_rls(A:tl_addrhi,W:tl_addrlo)
+    relation pend_prb(A:tl_addrhi,W:tl_addrlo)
+    relation pend_fnse(A:tl_addrhi,W:tl_addrlo)
+    relation pend_fnss(A:tl_addrhi,W:tl_addrlo)
+    individual addr_id(A:tl_addrhi) : id
+
+TODO:    init ~cache_excl(H,W) & ~cache_shrd(H,W) & ~pend_rls(H,W) & ~pend_prb(H,W) & ~pend_excl(H,W) & ~pend_shrd(H,W) & ~wait_finish
+
+
+    ########################################
+    # release action called by the client side
+
+    action tl_Release(msg:rls_id) = {
+        local hi:tl_addrhi, lo:tladdrlo {
+	    hi := rlss(msg).addr_hi;
+	    lo := rlss(msg).word;
+
+	    if rlss(msg).voluntary {
+	        assume ~pend_excl(hi,W) & ~pend_shrd(hi,W);
+	        assume ~pend_fnse(hi,W) & ~pend_fnss(hi,W)
+            }
+
+            if rlss(msg).dirty {
+	        mem(addr_cons(hi,lo)) := rlss(msg).data_
+            };
+	    cache_excl(hi,lo) := false;
+	    cache_shrd(hi,lo) := false;
+
+	    if rlss(msg).voluntary {
+		local rsp:gnt_id {
+		    assume gnts(rsp).id_ = rlss(msg).id_;
+		    assume gnts(rsp).addr_hi = hi;
+		    assume gnts(rsp).word = lo;
+		    assume gnts(rsp).relack;
+		    clnt.tl_Grant(rsp)
+                }
+            }
+        }
+    }
+
+    ########################################
+    # acquire action called by the client side
+
+    action tl_Acquire(msg:acq_id) = {
+        local hi:tl_addrhi, lo:tladdrlo, ow:ownership, txid:id {
+	    hi := acqs(msg).addr_hi;
+	    ow := acqs(msg).own;
+	    txid := acqs(msg).id_;
+
+	    # block the acquire if we can't grant
+
+	    # rule: Cannot grant if there is a pending probe with 
+            # the same hi address
+
+	    assume ~pend_prb(hi,W);
+	    
+	    # rule:  Cannot grant if the txid if already in use for a
+	    # different hi address
+
+	    assert ~((pend_excl(H) | pend_fnse(H) | pend_shrd(H) | pend_fnss(H))
+		     & addr_id(H) = txid & H ~= hi);
+
+	    # rule:  Cannot grant if different txid in use for same hi address.
+
+    	    assert ~((pend_excl(H) | pend_fnse(H) | pend_shrd(H) | pend_fnss(H))
+		         & addr_id(H) ~= txid & H = hi);
+
+
+	    addr_id(hi) := txid;
+	    
+	    if ow = excl {
+	        pend_excl(hi,W) := true
+	    }
+            else {
+	        pend_shrd(hi,W) := true
+            }
+        }
+    }
+      
+    # internal grant action
+
+    action grant(hi:tl_addrhi, lo:tladdrlo, ow:ownership) = {
+        
+	assume ow ~= none;
+
+	# cannot grant privs if other client has exclusive
+	
+	assume ~other.cache_excl(hi,W);    	    	        
+
+	if ow = excl {
+	    assume pend_excl(hi,lo);
+	    pend_excl(hi,lo) := false
+	    if forall W:tl_addrlo. ~pend_excl(hi,W) {
+	        pend_fnse(hi) := true
+            }  		
+        } 
+	else {
+	    assume pend_shrd(hi,lo);
+	    pend_shrd(hi,lo) := false
+	    if forall W:tl_addrlo. ~pend_shrd(hi,W) {
+	        pend_fnss(hi) := true
+            }  		
+        } 
+
+	local rsp:gnt_id {
+	    assume gnts(rsp).id_ = addr_id(hi);
+	    assume gnts(rsp).addr_hi = hi;
+	    assume gnts(rsp).word = lo;
+	    assume gnts(rsp).own = ow;
+	    assume gnts(rsp).data_ = mem(addr_cons(hi,lo));
+	    assume ~gnts(rsp).relack;
+	    clnt.tl_Grant(rsp)
+        }
+    }
+
+    action tl_Finish(msg:fns_id) = {
+        local hi:tl_addrhi, ow:ownership, txid:id {
+	
+	    txid := fnss(msg).id_;
+
+	    assert exists H. addr_id(H) = txid;  # look up addr by txid
+	    assume addr_id(hi) = txid;
+
+	    # tricky: if both excl and shrd are request, we don't know which
+	    # this is the finish for, so we just guess
+
+	    assert pend_fss(hi) | pend_fnse(hi);
+	    if pend_fnss(hi) {
+	        pend_fnss(hi) := false
+	    } else {
+	        pend_fnse(hi) := false
+            }
+        }
+    }
+
+    # internal probe action
+
+    action probe(hi:tl_addrhi) = {
+
+       # if the other client has requested privs and we have excl, then we probe
+
+       if (other.pend_excl(hi,W1) | other.pend_shrd(hi,W1)) & cache_excl(hi,W2) {
+
+          # probe rules
+
+	  assume ~pend_prb(hi,W);
+
+ 	  assert ~(pend_excl(hi) | pend_fnse(hi) | pend_shrd(hi) | pend_fnss(hi));
+
+	  local rsp:prb_id {
+	      assume prbs(rsp).addr_hi = hi;
+	      clnt.tl_Probe(rsp)
+	  }
+	  
+	  pend_prb(hi,W_ := true
+
+       }
+    }
+
+   action step = {
+     local g:gnt_id, p:prb_id {
+        if * {
+	   call grant(g)
+        } else if {
+	   call probe(p)
+        }
+     }
+   }
+}
+
+module dut(myid,clnt0,clnt1,ref) = {
+
+    ########################################
+    # The directory state
+
+    individual mem(A:addr) : data
+
+    instantiate dir0 : dir(myid,clnt0,dir1,ref,mem)
+    instantiate dir1 : dir(myid,clnt0,dir0,ref,mem)
+
+    action step = {
+       if * {
+           call dir0.step
+       } else {
+           call dir1.step
+       }
+    }
+}
+
+################################################################################
+#
+# Verify the module using the standard testbench
+#
+################################################################################
+
+include tilelink_concrete_two_client_testbench
+
+# The cache makes two assumptions about the system configuration:
+
+# 1) supports only one client
+axiom fside(I) = client & fside(J) = client -> I = J  
+
+# 2) everything cached on both ports
+
+axiom c0.cached(A) & c0.cached(A)
+
+################################################################################
+#
+# Conjectured invariants
+#
+################################################################################
+
+conjecture b.pend_prb(H,W) <-> back.prb_addr(H,W)
+
+conjecture b.pend_rls(H,W) <-> back.none_r(H,W)
+
+conjecture b.cache_excl(H,W) <-> back.excl_p(addr_cons(H,W))
+
+conjecture b.cache_shrd(H,W) <-> back.shrd_p(addr_cons(H,W))
+
+conjecture b.pend_excl(H,W) -> back.excl_r(H) | back.excl_a(H)
+
+conjecture back.excl_r(H) -> b.pend_excl(H,W)
+
+conjecture back.excl_a(H) -> exists W. b.pend_excl(H,W)
+
+conjecture b.pend_shrd(H,W) -> back.shrd_r(H) | back.shrd_a(H)
+
+conjecture back.shrd_r(H) -> b.pend_shrd(H,W)
+
+conjecture back.shrd_a(H) -> exists W. b.pend_shrd(H,W)
+
+conjecture ~back.excl_f(H) & ~back.shrd_f(H)
+
+conjecture ~back.unc_r(H,W) & ~back.unc_a(H,W) & ~back.unc_f(H,W) 
+
+conjecture ~front.unc_r(H,W) & ~front.unc_a(H,W)
+
+conjecture ~front.excl_r(H) & ~front.excl_a(H) & ~front.excl_f(H) 
+
+conjecture ~front.shrd_r(H) & ~front.shrd_a(H) & ~front.shrd_f(H) 
+
+conjecture front.unc_f(H,W) -> b.wait_finish
+
+conjecture front.unc_f(H1,W1) & front.unc_f(H2,W2) ->  (H1 = H2 & W1 = W2)
+
+conjecture (b.cache_excl(H,W) | b.cache_shrd(H,W)) -> b.cache_data(addr_cons(H,W)) = ref.mem(addr_cons(H,W))
+
+conjecture ~(b.pend_rls(H1,W1) & b.pend_rls(H2,W2) & H1 ~= H2)
+
+conjecture ~(b.pend_excl(H1,W1) & b.pend_excl(H2,W2) & H1 ~= H2)
+
+conjecture ~(b.pend_shrd(H1,W1) & b.pend_shrd(H2,W2) & H1 ~= H2)
+
+conjecture (back.excl_r(H) | back.shrd_r(H)) -> back.addr_rid(H) = buf_id
+
+conjecture (back.excl_a(H) | back.shrd_a(H) | back.excl_f(H) | back.shrd_f(H)) -> back.addr_id(H) = buf_id
+
+conjecture back.none_r(H,W) -> back.addr_nid(H) = buf_id
+
+conjecture ~(b.cache_shrd(H,W) & b.pend_shrd(H,W)) & ~(b.cache_excl(H,W) & b.pend_excl(H,W))
+
+conjecture b.pend_excl(H,W1) & ~b.cache_excl(H,W2) -> b.pend_excl(H,W2)
+
+conjecture b.pend_shrd(H,W1) & ~b.cache_shrd(H,W2) -> b.pend_shrd(H,W2)
+
+export c.acquire
+export c.finish
+export c.release
+export c.perform
+export c.fuse
