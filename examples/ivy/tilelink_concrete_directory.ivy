@@ -65,6 +65,9 @@ module dir(myid,clnt,other,ref,mem) = {
 		    call clnt.tl_Grant(rsp)
                 }
             }
+	    else {
+	        pend_prb(hi,lo) := false
+            }
         }
     }
 
@@ -87,12 +90,12 @@ module dir(myid,clnt,other,ref,mem) = {
 	    # rule:  Cannot grant if the txid if already in use for a
 	    # different hi address
 
-	    assert ~((pend_excl(H,W) | pend_fnse(H) | pend_shrd(H,W) | pend_fnss(H))
+	    assume ~((pend_excl(H,W) | pend_fnse(H) | pend_shrd(H,W) | pend_fnss(H))
 		     & addr_id(H) = txid & H ~= hi);
 
 	    # rule:  Cannot grant if different txid in use for same hi address.
 
-    	    assert ~((pend_excl(H,W) | pend_fnse(H) | pend_shrd(H,W) | pend_fnss(H))
+    	    assume ~((pend_excl(H,W) | pend_fnse(H) | pend_shrd(H,W) | pend_fnss(H))
 		         & addr_id(H) ~= txid & H = hi);
 
 
@@ -122,14 +125,16 @@ module dir(myid,clnt,other,ref,mem) = {
 	    pend_excl(hi,lo) := false;
 	    if forall W:tl_addrlo. ~pend_excl(hi,W:tl_addrlo) {
 	        pend_fnse(hi) := true
-            }  		
+            };
+	    cache_excl(hi,lo) := true
         } 
 	else {
 	    assume pend_shrd(hi,lo);
 	    pend_shrd(hi,lo) := false;
 	    if forall W:tl_addrlo. ~pend_shrd(hi,W:tl_addrlo) {
 	        pend_fnss(hi) := true
-            }  		
+            };
+	    cache_shrd(hi,lo) := true
         }; 
 
 	local rsp:gnt_id {
@@ -148,13 +153,12 @@ module dir(myid,clnt,other,ref,mem) = {
 	
 	    txid := fnss(msg).id_;
 
-	    assert exists H. addr_id(H) = txid;  # look up addr by txid
-	    assume addr_id(hi) = txid;
+	    assert exists H. addr_id(H) = txid & (pend_fnss(H) | pend_fnse(H));  # look up addr by txid
+	    assume addr_id(hi) = txid & (pend_fnss(hi) | pend_fnse(hi));
 
 	    # tricky: if both excl and shrd are request, we don't know which
 	    # this is the finish for, so we just guess
 
-	    assert pend_fnss(hi) | pend_fnse(hi);
 	    if pend_fnss(hi) {
 	        pend_fnss(hi) := false
 	    } else {
@@ -177,7 +181,7 @@ module dir(myid,clnt,other,ref,mem) = {
 
 	  assume ~pend_prb(hi,W);
 
- 	  assert ~(pend_excl(hi,W) | pend_fnse(hi) | pend_shrd(hi,W) | pend_fnss(hi));
+ 	  assume ~(pend_excl(hi,W) | pend_fnse(hi) | pend_shrd(hi,W) | pend_fnss(hi));
 
 	  local rsp:prb_id {
 	      assume prbs(rsp).addr_hi = hi;
@@ -190,11 +194,11 @@ module dir(myid,clnt,other,ref,mem) = {
     }
 
    action step = {
-     local g:gnt_id, p:prb_id {
+     local hi:tl_addrhi, lo:tl_addrlo, ow:ownership {
         if * {
-	   call grant(g)
+	   call grant(hi,lo,ow)
         } else {
-	   call probe(p)
+	   call probe(hi)
         }
      }
    }
@@ -210,7 +214,7 @@ module dut(myid,clnt0,clnt1,ref) = {
     init mem(A) = ref.mem(A)
 
     instantiate dir0 : dir(myid,clnt0,dir1,ref,mem)
-    instantiate dir1 : dir(myid,clnt0,dir0,ref,mem)
+    instantiate dir1 : dir(myid,clnt1,dir0,ref,mem)
 
     action step = {
        if * {
@@ -263,9 +267,20 @@ module dirinv(b,intf) = {
 
     conjecture intf.shrd_a(H) -> exists W. b.pend_shrd(H,W)
 
-    conjecture intf.excl_f(H) <-> b.pend_fnse(H)
+    # Note: fnse and fnss can be swapped because finish messages don't carry
+    # their ownership status.
 
-    conjecture intf.shrd_f(H) <-> b.pend_fnss(H)
+    conjecture ((intf.excl_f(H) <-> b.pend_fnse(H)) & (intf.shrd_f(H) <-> b.pend_fnss(H)))
+               | ((intf.excl_f(H) <-> b.pend_fnss(H)) & (intf.shrd_f(H) <-> b.pend_fnse(H)))
+
+    conjecture (b.pend_excl(H,W) -> ~b.pend_fnse(H)) & (b.pend_shrd(H,W) -> ~b.pend_fnss(H)) 
+
+    # Note: if we think an excl finish is pending and it isn't, it is because a shrd finish is pending,
+    # but the finishes got crossed (see note above). This means we have not released, so we must have
+    # excl privs. This implies that a new excl request cannot come in to confuse us.
+
+    conjecture (~intf.excl_f(H) & b.pend_fnse(H) -> intf.excl_p(addr_cons(H,W)))
+               & (~intf.shrd_f(H) & b.pend_fnss(H) -> intf.shrd_p(addr_cons(H,W)))
 
     conjecture (intf.excl_r(H) | intf.shrd_r(H)) -> intf.addr_rid(H) = b.addr_id(H)
 
@@ -277,11 +292,18 @@ module dirinv(b,intf) = {
 
     conjecture b.pend_shrd(H,W1) & ~b.cache_shrd(H,W2) -> b.pend_shrd(H,W2)
 
+    conjecture ~(b.pend_prb(H,W1) & (b.pend_excl(H,W2) | b.pend_fnse(H) | b.pend_shrd(H,W2) | b.pend_fnss(H)))
+
+    conjecture ~((b.pend_excl(H1,W1) | b.pend_shrd(H1,W1) | b.pend_fnse(H1) | b.pend_fnss(H1))
+                 & (b.pend_excl(H2,W2) | b.pend_shrd(H2,W2) | b.pend_fnse(H2) | b.pend_fnss(H2))
+                 & H1 ~= H2 & b.addr_id(H1) = b.addr_id(H2))
 }
 
 instantiate dirinv(b.dir0,intf0)
 instantiate dirinv(b.dir1,intf1)
 
 conjecture ~b.dir0.cache_excl(H,W) & ~b.dir1.cache_excl(H,W) -> b.mem(addr_cons(H,W)) = ref.mem(addr_cons(H,W))
+
+conjecture ~intf0.dirt_p(A) & ~intf1.dirt_p(A) -> b.mem(A) = ref.mem(A)
 
 conjecture ~(b.dir0.cache_excl(H,W) & b.dir1.cache_excl(H,W))

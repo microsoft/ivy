@@ -1,0 +1,66 @@
+#lang ivy1.3
+
+################################################################################
+# 
+# Test bench for a TileLink component with two client ports.
+#
+################################################################################
+
+
+################################################################################
+# 
+# The system we want to verify. Somewhat arbitrarily, the DUT is called "b".
+#
+################################################################################
+
+individual buf_id : id   # arbitrary process id for the buffer
+
+instantiate c0 : tl_generic_client(b.dir0,ref,side0)
+instantiate c1 : tl_generic_client(b.dir1,ref,side1)
+instantiate b : dut(buf_id,c0,c1,ref)
+
+export c0.step
+export c1.step
+export b.step
+
+################################################################################
+# 
+# Instantiate the reference specification
+#
+################################################################################
+
+instantiate ref : reference
+
+################################################################################
+# 
+# Specify the two interfaces of the buffer
+#
+# To do this, we arbitrarily distribute the process id's on the client and
+# manager side. The axioms guarantee the side assignments for the front
+# and back interfaces of the buffer are consistent.
+#
+################################################################################
+
+individual side0(I:id) : side
+individual side1(I:id) : side
+axiom side0(buf_id) = manager
+axiom side1(buf_id) = manager
+axiom I ~= buf_id -> (side0(I) = client <-> side1(I) = manager)
+
+instantiate intf0 : tl_interface(ref,c0,b.dir0,side0)
+instantiate intf1 : tl_interface(ref,c1,b.dir1,side1)
+
+################################################################################
+#
+# Localize the proof
+#
+################################################################################
+
+isolate iso_b = b with ref,intf0,intf1,c0,c1
+
+
+
+
+
+
+
