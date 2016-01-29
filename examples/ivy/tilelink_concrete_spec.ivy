@@ -297,7 +297,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 		assert (unc_r(H,W) | excl_r(H) | shrd_r(H)) & H ~= hi -> addr_rid(H) ~= txid;
 
-		# (4) No two lock operations can be pending for the same
+		# (4) No two lock operations can be requested or accept for the same
 		# client. This is required for release consistency,
 		# which would be violated by reordering lock operations.
 
@@ -305,7 +305,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		        (ref.evs(E).type_ = cas | ref.evs(lt).type_ = cas)
 			 & ref.evs(E).id_ = ref.evs(lt).id_);
 
-		# (5) No two operations pending on same address for the same
+		# (5) No two operations request or accepted on same address for the same
 		# client. This is required for release consistency,
 		# which would be violated by reordering ops on same address.
 		# TODO: no client ID's yet
