@@ -117,7 +117,7 @@ conjecture ~route(V0).dom(V0)
 conjecture ~(pending(P, V0, V1) & dst(P) = V0)
 conjecture ~(pending(P, V0, V1) & ~route(src(P)).dom(V0) & V0 ~= src(P))
 conjecture ~(route(S).tc(V0, V1) & ~V0 = V1 & ~route(S).dom(V0))
-conjecture ~(route(S).tc(V0, V1) & ~V0 = V1 & ~route(S).dom(V1)) # TODO: needed?
+conjecture ~(route(S).tc(V0, V1) & ~V0 = V1 & S ~= V1 & ~route(S).dom(V1)) # TODO: needed?
 conjecture ~(~V0 = S & route(S).tc(S, V0))
 
 #conjecture ~(pending(P, V0, V1) & src(P,S) & ~route(S).dom(V0))
