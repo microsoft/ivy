@@ -29,6 +29,7 @@ tokens = (
    'GE',
    'GT',
    'MINUS',
+   'DOTS',
 )
 
 reserved = all_reserved = {
@@ -109,6 +110,7 @@ t_RCB  = r'\}'
 t_ARROW = r'\->'
 t_IFF = r'\<->'
 t_COLON = r':'
+t_DOTS = r'\.\.'
 
 t_ignore  = ' \t'
 t_ignore_COMMENT = r'\#.*'

@@ -530,6 +530,12 @@ def p_top_interpret_symbol_arrow_symbol(p):
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
+def p_top_interpret_symbol_arrow_symbol(p):
+    'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
+    p[0] = p[1]
+    thing = InterpretDecl(Implies(Atom(p[3],[]),Range(p[6],p[8])))
+    thing.lineno = get_lineno(p,4)
+    p[0].declare(thing)
 
 def p_loc(p):
     'loc : '

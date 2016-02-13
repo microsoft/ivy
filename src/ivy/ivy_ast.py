@@ -746,3 +746,16 @@ def is_true(ast):
 
 def is_false(ast):
     return isinstance(ast,Or) and len(ast.args) == 0
+
+class Range(AST):
+    def __init__(self,lo,hi):
+        self.args = []
+        self.lo, self.hi = lo,hi
+    def __str__(self):
+        return '{' + str(self.lo) + '..' + str(self.hi) + '}'
+    @property
+    def rep(self):
+        return self
+    @property
+    def card(self):
+        return int(self.hi) - int(self.lo) + 1

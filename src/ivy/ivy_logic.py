@@ -445,6 +445,7 @@ ConstantSort.defines = lambda self: []
 ConstantSort.rep = property(lambda self: self.name)
 
 UninterpretedSort = ConstantSort
+UninterpretedSort.is_relational = lambda self: False
 
 class EnumeratedSort(object):
     def __init__(self,extension):
@@ -461,6 +462,9 @@ class EnumeratedSort(object):
         return self
     def next(self): # Python 3: def __next__(self)
         raise StopIteration
+    @property
+    def card(self):
+        return len(self.extension)
 
 FunctionSort = lg.FunctionSort
 FunctionSort.rng = FunctionSort.range
@@ -656,6 +660,12 @@ lg.Ite.__str__ = lambda self:  '{} if {} else {}'.format(self.t_then, self.cond,
 
 lg.Apply.__str__ = app_str
 
+def close_formula(fmla):
+    variables = list(lu.free_variables(fmla))
+    if variables == []:
+        return fmla
+    else:
+        return ForAll(variables,fmla)
 
 if __name__ == '__main__':
     V1 = Variable('V1')

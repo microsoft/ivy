@@ -337,6 +337,9 @@ class IvyDomainSetup(IvyDeclInterp):
             if interp[lhs] != rhs:
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             return
+        if isinstance(rhs,ivy_ast.Range):
+            interp[lhs] = rhs
+            return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.sorts,[x for x in slv.relations] + [x for x in slv.functions]],
                          ['sort','symbol']):
