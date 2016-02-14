@@ -248,7 +248,7 @@ class ConceptSessionControls(object):
         for i, edge_name in enumerate(self.concept_session.domain.concepts_by_arity(2)):
             color = colors[i % len(colors)]
             self.concept_style_colors.append({
-                "selector": "edge[obj={!r}]".format(edge_name),
+                "selector": "edge[obj={!r}]".format(str(edge_name)), # the str() is to convert from unicode
                 "style": dict((x, color) for x in [
                     "line-color",
                     "target-arrow-color",

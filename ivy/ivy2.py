@@ -31,6 +31,10 @@ if __name__ == '__main__':
    },
    "outputs": [],
    "source": [
+    "import z3\n",
+    "z3.set_param('smt.random_seed', 0)\n",
+    "import random\n",
+    "random.seed(0)\n",
     "from proof import AnalysisSession\n",
     "from widget_analysis_session import AnalysisSessionWidget\n",
     "from tactics_api import *\n",
