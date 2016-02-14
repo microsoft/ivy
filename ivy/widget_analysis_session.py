@@ -237,8 +237,8 @@ class ConceptSessionControls(object):
             'purple',
             'black',
             'white',
-            'coral',
-            'teal',
+            '#FF7F50',
+            '#008080',
             '#8B4513',
             '#9ACD32',
             '#556b2f',
@@ -520,7 +520,7 @@ class TransitionViewWidget(ConceptSessionControls):
         self.facts_list = widgets.SelectMultiple(margin='5px')
         self.result = widgets.HTML('')
         self.bmc_bound = widgets.Dropdown(
-            options=[(str(n), n) for n in [3,5,10,15,20]],
+            options=[(str(n), n) for n in [1,3,5,10,15]],
             value=3,
             description='BMC bound:',
         )
@@ -534,8 +534,8 @@ class TransitionViewWidget(ConceptSessionControls):
             ('gather facts', self.gather_facts),
             ('bmc conjecture', self.bmc_conjecture),
             ('minimize conjecture', self.minimize_conjecture),
-            ('sufficient?', self.is_sufficient),
-            ('inductive?', self.is_inductive),
+            #('sufficient?', self.is_sufficient),
+            ('rel. inductive?', self.is_inductive),
             ('strengthen', self.strengthen),
             ('weaken', self.weaken),
             #('necessary?', self.is_necessary),
@@ -1016,7 +1016,9 @@ class TransitionViewWidget(ConceptSessionControls):
                         assert label_name in self.concept_session.domain.concepts, atom
                         self.concept_session.add_custom_node_label(n1, label_name)
                     else:
-                        assert False, atom
+                        # TODO
+                        # assert False, atom
+                        pass
                 else:
                     assert type(atom.t1) is lg.Apply
                     if atom.t1.func.sort.arity == 1:
@@ -1294,7 +1296,7 @@ class AnalysisSessionWidget(object):
 
         self.box.children = [
             self.modal_messages, # invisible
-            self.concept.box, # will display in a separate dialog
+            # self.concept.box, # will display in a separate dialog
             self.transition_view.box, # will display in a separate dialog
 
             HBox(

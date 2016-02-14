@@ -39,11 +39,18 @@ if __name__ == '__main__':
     "from tactics import *\n",
     "from logic import *\n",
     "from ivy_logic_utils import true_clauses, false_clauses, Clauses\n",
+    "import ivy_module\n",
+    "from ivy_interp import EvalContext\n",
+    "m = ivy_module.Module()\n",
+    "m.__enter__()\n",
+    "ctx = EvalContext(check=False)\n",
+    "ctx.__enter__()\n",
     "ivy_widget = AnalysisSessionWidget()\n",
     "session = AnalysisSession(IVY_FILENAME, ivy_widget)\n",
     "set_context(session)\n",
     "ivy_widget.transition_view.conjectures = session.analysis_state.ivy_interp.conjs[:]\n",
     "ta._ivy_ag.actions.setdefault('initialize', ivy_actions.Sequence())\n",
+    "ta._ivy_ag.actions.setdefault('step', ta.get_big_action())\n",
     "ivy_widget.transition_view.autodetect_transitive()\n",
     "ivy_widget"
    ]
