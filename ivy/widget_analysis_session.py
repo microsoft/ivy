@@ -726,13 +726,13 @@ class TransitionViewWidget(ConceptSessionControls):
                           self.concept_session.get_edge_facts(edge, source, target, False)]
         # filter double equalities and self-edges of reflexive relations
         facts = [(f, elements) for f, elements in facts if not (
-            (type(f) is Eq and f.t1 >= f.t2) or
-            (type(f) is Not and type(f.body) is Eq and f.body.t1 >= f.body.t2) or
-            (
-                type(f) is Apply and
-                self.edge_display_checkboxes[f.func.name]['transitive'].value and
-                f.terms[0] == f.terms[1]
-            )
+            #(type(f) is Eq and f.t1 >= f.t2) or
+            (type(f) is Not and type(f.body) is Eq and f.body.t1 >= f.body.t2) #or
+            # (
+            #     type(f) is Apply and
+            #     self.edge_display_checkboxes[f.func.name]['transitive'].value and
+            #     f.terms[0] == f.terms[1]
+            # )
         )]
         self.facts_list.options = [
             (self.fact_to_label(formula), (formula, elements))
@@ -800,7 +800,7 @@ class TransitionViewWidget(ConceptSessionControls):
             if self.relations_to_minimize.value == 'relations to minimize':
                 self.relations_to_minimize.value = ' '.join(sorted(
                     k for k, v in self.session.analysis_state.ivy_interp.sig.symbols.iteritems()
-                    if type(v.sort) is lg.FunctionSort
+                    if type(v.sort) is lg.FunctionSort and v.sort.range == lg.Boolean
                 ))
 
             res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
@@ -831,7 +831,7 @@ class TransitionViewWidget(ConceptSessionControls):
                 finally:
                     self.ignore_display_checkbox_change = False
                 self.set_states(res.states[0], res.states[1])
-                self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
+                #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                 self.show_result('The following conjecture is not inductive:\n{}'.format(
                     str(conj.to_formula()),
                 ))
@@ -1005,21 +1005,38 @@ class TransitionViewWidget(ConceptSessionControls):
         nodes = frozenset(self.concept_session.domain.concepts['nodes'])
         for atom in atoms:
             if type(atom) is lg.Eq:
-                n1 = atom.t1.name
-                n2 = atom.t2.name
-                if n1 in nodes and n2 in nodes:
-                    self.concept_session.add_custom_edge('=', n1, n2)
-                elif n1 in nodes:
-                    label_name = '={}'.format(n2)
-                    assert label_name in self.concept_session.domain.concepts, atom
-                    self.concept_session.add_custom_node_label(n1, label_name)
+                assert type(atom.t2) is lg.Const
+                if type(atom.t1) is lg.Const:
+                    n1 = atom.t1.name
+                    n2 = atom.t2.name
+                    if n1 in nodes and n2 in nodes:
+                        self.concept_session.add_custom_edge('=', n1, n2)
+                    elif n1 in nodes:
+                        label_name = '={}'.format(n2)
+                        assert label_name in self.concept_session.domain.concepts, atom
+                        self.concept_session.add_custom_node_label(n1, label_name)
+                    else:
+                        assert False, atom
                 else:
-                    assert False, atom
+                    assert type(atom.t1) is lg.Apply
+                    if atom.t1.func.sort.arity == 1:
+                        assert type(atom.t1.terms[0]) is lg.Const
+                        self.concept_session.add_custom_edge(
+                            atom.t1.func.name,
+                            atom.t1.terms[0].name,
+                            atom.t2.name,
+                        )
+                    else:
+                        # TODO: support higher arity
+                        pass
             elif type(atom) is lg.Apply:
                 if atom.func.sort.arity == 1:
                     self.concept_session.add_custom_node_label(atom.terms[0].name, atom.func.name)
                 elif atom.func.sort.arity == 2:
                     self.concept_session.add_custom_edge(*(c.name for c in atom))
+                else:
+                    # TODO: support higher arity
+                    pass
             else:
                 assert False, lit
         self.concept_session.widget = self

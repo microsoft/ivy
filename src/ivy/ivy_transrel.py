@@ -389,9 +389,9 @@ def remove_taut_eqs_clauses(clauses):
 def extract_pre_post_model(clauses,model,updated):
     renaming = dict((v,new(v)) for v in updated)
     ignore = lambda s: s.is_skolem() or is_new(s)
-    pre_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    pre_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals=False)
     ignore = lambda s: s.is_skolem() or (not is_new(s) and s in renaming)
-    post_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    post_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals=False)
     post_clauses = rename_clauses(post_clauses,inverse_map(renaming))
     return map(remove_taut_eqs_clauses,(pre_clauses,post_clauses))
 
@@ -564,7 +564,7 @@ class History(object):
             img = set(renaming[s] for s in renaming if not s.is_skolem())
             ignore = lambda s: self.ignore(s,img,renaming)
             # get the sub-mode for the given past time as a formula
-            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals = True)
+            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals=False)
             # map this formula into the past using inverse map
             clauses = rename_clauses(clauses,inverse_map(renaming))
             # remove tautology equalities, TODO: not sure if this is correct here
@@ -579,4 +579,4 @@ class History(object):
                 renaming = compose_maps(next(maps),renaming)
             except StopIteration:
                 break
-        return model.universes(numerals=True), [pure_state(clauses) for clauses in reversed(states)]
+        return model.universes(numerals=False), [pure_state(clauses) for clauses in reversed(states)]
