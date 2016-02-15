@@ -1,47 +1,57 @@
-#lang ivy1.1
-#Panda's synchronization protocol
+#lang ivy1.3
 
-# General modules & macros
-#Functional dependencies
+################################################################################
+#
+# A module for axiomatizing a total order
+#
+################################################################################
+module total_order(r) = {
+    axiom r(X,X)                        # Reflexivity
+    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X, Y) | r(Y, X)             # Totality
+}
+
+################################################################################
+#
+# Modules for lone and injective relations
+#
+################################################################################
 module lone(f) = {
     axiom (f(X, Y1) & f(X, Y2)) -> Y1 = Y2
 }
-
 module injective(f) = {
     axiom (f(X1, Y) & f(X2, Y)) -> X1 = X2
 }
 
-macro assign_empty(f, a) = { # f(a) := {}
-    f(a, X) := false
-}
-
-macro assign_value(f, a, v ) = { # f(a) := {v}
-    f(a, X) :=  X = v
-}
-
+################################################################################
+#
+# Types, relations and functions describing state of the system
+#
+################################################################################
 
 type transaction
 type node
 type key
 type operation
 
+# a total order on the transaction timestamps
+relation le(X:transaction, Y:transaction)  # le(X,Y) means X is before Y
+instantiate total_order(le)
 
-relation before(X:transaction, Y:transaction)
-axiom before(X, X) # Reflexive
-axiom before(X, Y) & before(Y, Z) -> before(X, Z) # Transitive
-axiom before(X, Y) & before(Y, X) -> X = Y # Anti-symmetric
-axiom before(X, Y) | before(Y, X) # total
+# transaction zero is a special transaction, before every transaction,
+# and it reads and writes to all keys
 individual zero:transaction
-axiom before(zero, X)
+axiom le(zero, X)
 
 # Each operation reads and writes one key
 relation op_reads_key(Op: operation, K: key) # OP reads k
-instantiate lone(op_reads_key) # See if we can remove this.
+instantiate lone(op_reads_key)
 relation op_writes_key(Op : operation, K: key) # OP writes k
-instantiate lone(op_reads_key) # See if we can remove this
+instantiate lone(op_reads_key)
 
 # Do not read and write the same key.
-axiom op_reads_key(Op, K) & op_writes_key(Op, K2) -> K1 ~= K2
+axiom op_reads_key(Op, K1) & op_writes_key(Op, K2) -> K1 ~= K2
 
 # The operation in each node
 relation op_node(Op: operation, N : node) # The node on which an operation is applied
@@ -99,12 +109,12 @@ axiom op_writes_key(Op, K) & node_for_key(K, N1) &  op_node(Op, N2) -> N1 = N2 #
 
 macro get_last_write(km, t) = {
     t := *;
-    assume write_tx(t, km) & (~abort_tx(t)) & (write_tx(T, km) -> (before(T, t) | abort_tx(T)))
+    assume write_tx(t, km) & (~abort_tx(t)) & (write_tx(T, km) -> (le(T, t) | abort_tx(T)))
 }
 
 macro get_last_committed_write(km, t) = {
     t := *;
-    assume commit_tx(t) & write_tx(t, km) & ((commit_tx(T) & write_tx(T, km)) -> before(T, t))
+    assume commit_tx(t) & write_tx(t, km) & ((commit_tx(T) & write_tx(T, km)) -> le(T, t))
 }
 
 individual macro_helper_t: transaction
@@ -112,23 +122,23 @@ individual macro_helper_t: transaction
 macro get_last_read(km, t) = {
     t := *;
     macro_helper_t := *;
-    assume depends_tx(t, km, macro_helper_t) & (~abort_tx(t)) & (read_tx(T, km) -> before(T, t) | abort_tx(T))
+    assume depends_tx(t, km, macro_helper_t) & (~abort_tx(t)) & (read_tx(T, km) -> le(T, t) | abort_tx(T))
 }
 
 macro get_last_committed_read(km, t) = {
     t := *;
     macro_helper_t := *;
-    assume commit_tx(t) & depends_tx(t, km, macro_helper_t) & ((commit_tx(T) & read_tx(T, km)) -> before(T, t))
+    assume commit_tx(t) & depends_tx(t, km, macro_helper_t) & ((commit_tx(T) & read_tx(T, km)) -> le(T, t))
 }
 
 macro get_previous_write(km, t, tr) = {
     t := *;
-    assume write_tx(t, km) & before(t, tr) & (~abort_tx(t)) & (write_tx(T, km) -> (before(T, t) | before(tr, T) | abort_tx(T)))
+    assume write_tx(t, km) & le(t, tr) & (~abort_tx(t)) & (write_tx(T, km) -> (le(T, t) | le(tr, T) | abort_tx(T)))
 }
 
 macro get_previous_committed_write(km, t, tr) = {
     t := *;
-    assume commit_tx(t) & write_tx(t, km) & before(t, tr) & ((commit_tx(T) & write_tx(T, km)) -> (before(T, t) | before(tr, T)))
+    assume commit_tx(t) & write_tx(t, km) & le(t, tr) & ((commit_tx(T) & write_tx(T, km)) -> (le(T, t) | le(tr, T)))
 }
 
 # Transaction protocol
@@ -182,10 +192,10 @@ action step = {
     instantiate get_previous_committed_write(kr, lcwkr, tx);
 
     if ((op_writes_key(op, kw) &
-         (before(tx, luwkw) | before(tx, lurkw))) |
+         (le(tx, luwkw) | le(tx, lurkw))) |
         (op_reads_key(op, kr) &
          luwkr ~= lcwkr &
-         before(luwkr, tx))) {
+         le(luwkr, tx))) {
              abort_tx(tx) := true
     } else {
         if (op_writes_key(op, kw)) {
@@ -207,19 +217,20 @@ action step = {
 conjecture ~(TX1 ~= TX2 &
 	    commit_tx(TX1) &
 	    commit_tx(TX2)  &
-	    before(TX1,TX2) & # TX1 was before TX2
+	    le(TX1,TX2) & # TX1 was before TX2
 	    write_tx(TX1, K) & # TX1 wrote K
 	    depends_tx(TX2, K, T3) & # TX2 read K
-	    ~before(TX1, T3))
+	    ~le(TX1, T3))
 
 # Safety: Atomicity
 conjecture commit_tx(T) & op_in_tx(T, O) & op_node(O, N) -> precommit_tx(T, N)
 
+
 # Conjectures generated using CTI's
-conjecture depends_tx(T1, K, T2) -> (before(T2, T1) & (T1 ~= T2 | T1 = zero))
+conjecture depends_tx(T1, K, T2) -> (le(T2, T1) & (T1 ~= T2 | T1 = zero))
 conjecture ~abort_tx(Tx) | ~commit_tx(Tx) # Abort and commit are disjoint
 conjecture (~precommit_tx(T, N) & ~abort_tx(T) & node_for_key(K, N)) -> ~write_tx(T, K)
 conjecture (~precommit_tx(T, N) & ~abort_tx(T) & node_for_key(K, N)) -> ~depends_tx(T, K, T2)
 conjecture commit_tx(zero)
 conjecture ~(~read_tx(T1, K0) & depends_tx(T1, K0, T0))
-conjecture ~(T0 ~= T2 & before(T0, T1) & before(T2, T0) & (~abort_tx(T0)) & (~abort_tx(T1))& depends_tx(T1, K0, T2) & write_tx(T0, K0))
+conjecture ~(T0 ~= T2 & le(T0, T1) & le(T2, T0) & (~abort_tx(T0)) & (~abort_tx(T1))& depends_tx(T1, K0, T2) & write_tx(T0, K0))

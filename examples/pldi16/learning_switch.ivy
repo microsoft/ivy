@@ -34,7 +34,7 @@ module acyclic_partial_function(carrier) = {
     }
 
     action get(x:carrier) returns (y:carrier) = {
-       assume tc(x,y) & ~(tc(x,X) & tc(X,y) & X ~= x & X ~= y)
+       assume tc(x,y) & x ~= y & ((tc(x, Z) & x ~= Z) -> tc(y, Z))
     }
 }
 
@@ -114,8 +114,8 @@ export receive
 # do not create cycles.
 
 # obtained interactively via CTI's
-# conjecture ~(route.tc(N1,N1,N0) & N1 ~= N0)
-# conjecture ~(route.tc(N2,N0,N2) & N0 ~= N2 & ~route.dom(N2,N0))  # this is actually not needed
-# conjecture ~(route.tc(N0,N2,N1) & N1 ~= N2 & ~route.dom(N0,N2))
-# conjecture ~(route.tc(N2,N1,N0) & N0 ~= N2 & N1 ~= N0 & ~route.dom(N2,N0))
-# conjecture ~(pending(P0,N1,N0) & N1 ~= src(P0) & ~route.dom(src(P0),N1))
+conjecture ~(route.tc(N1,N1,N0) & N1 ~= N0)
+conjecture ~(route.tc(N2,N0,N2) & N0 ~= N2 & ~route.dom(N2,N0))  # this is actually not needed
+conjecture ~(route.tc(N0,N2,N1) & N1 ~= N2 & ~route.dom(N0,N2))
+conjecture ~(route.tc(N2,N1,N0) & N0 ~= N2 & N1 ~= N0 & ~route.dom(N2,N0))
+conjecture ~(pending(P0,N1,N0) & N1 ~= src(P0) & ~route.dom(src(P0),N1))
