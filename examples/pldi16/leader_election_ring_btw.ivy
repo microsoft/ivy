@@ -76,7 +76,7 @@ instantiate total_order(le)
 
 # A function relating a node to its id
 individual idn(X:node) : id
-axiom idn(X)=idn(Y) -> X=Y  # the id function is injective
+axiom idn(X)=idn(Y) -> X=Y  # the idn function is injective
 
 # A relation that keeps track of nodes that think they are the leader
 relation leader(N:node)
@@ -128,5 +128,5 @@ conjecture leader(X) -> le(idn(Y), idn(X)) # leader has highest id
 
 
 # conjectures obtained via CTI's
-conjecture ~(le(idn(N1),idn(N0)) & pending(idn(N1),N1) & idn(N1) ~= idn(N0))
-conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.btw(N0,N1,N2) & N1 ~= N0)
+# conjecture ~(le(idn(N1),idn(N0)) & pending(idn(N1),N1) & idn(N1) ~= idn(N0))
+# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.btw(N0,N1,N2) & N1 ~= N0)

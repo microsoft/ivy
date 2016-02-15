@@ -897,7 +897,7 @@ class TransitionViewWidget(ConceptSessionControls):
 
         return result
 
-    def bmc_conjecture(self, button=None):
+    def bmc_conjecture(self, button=None, conjecture=None, verbose=False, add_to_crg=True):
         import ivy_transrel
         import ivy_solver
         from proof import ProofGoal
@@ -909,7 +909,11 @@ class TransitionViewWidget(ConceptSessionControls):
         step_action = ta.get_action('step')
         n_steps = self.bmc_bound.value
 
-        conj = self.get_selected_conjecture()
+        if conjecture is None:
+            conj = self.get_selected_conjecture()
+        else:
+            conj = conjecture
+
         assert conj.is_universal_first_order()
         used_names = frozenset(x.name for x in self.session.analysis_state.ivy_interp.sig.symbols.values())
         def witness(v):
@@ -923,11 +927,23 @@ class TransitionViewWidget(ConceptSessionControls):
             ac.new_state(ag.init_cond)
         post = ag.execute(init_action, None, None, 'initialize')
         for n in range(n_steps):
-            res = ag.bmc(post, clauses, ta._analysis_state.crg)
+            res = ag.bmc(post, clauses, ta._analysis_state.crg if add_to_crg else None)
+            if verbose:
+                if res is None:
+                    msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                else:
+                    msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                print '\n' + msg + '\n'
             if res is not None:
                 ta.step()
                 self.show_result('BMC with bound {} found a counter-example to:\n{}'.format(
-                    n_steps,
+                    n,
                     str(conj.to_formula()),
                 ))
                 return True
@@ -1301,28 +1317,28 @@ class AnalysisSessionWidget(object):
 
             HBox(
                 [
-                    HBox(
-                        [self.proof_graph],
-                        flex=1,
-                        height='100%',
-                        overflow_x='hidden',
-                        overflow_y='hidden',
-                        _css=[
-                            (None, 'margin-right', '5px'),
-                            (None, 'min-width', '150px'),
-                        ],
-                    ),
-                    HBox(
-                        [self.arg],
-                        flex=2,
-                        height='100%',
-                        overflow_x='hidden',
-                        overflow_y='hidden',
-                        _css=[
-                            (None, 'margin-right', '5px'),
-                            (None, 'min-width', '150px'),
-                        ],
-                    ),
+                    # HBox(
+                    #     [self.proof_graph],
+                    #     flex=1,
+                    #     height='100%',
+                    #     overflow_x='hidden',
+                    #     overflow_y='hidden',
+                    #     _css=[
+                    #         (None, 'margin-right', '5px'),
+                    #         (None, 'min-width', '150px'),
+                    #     ],
+                    # ),
+                    # HBox(
+                    #     [self.arg],
+                    #     flex=2,
+                    #     height='100%',
+                    #     overflow_x='hidden',
+                    #     overflow_y='hidden',
+                    #     _css=[
+                    #         (None, 'margin-right', '5px'),
+                    #         (None, 'min-width', '150px'),
+                    #     ],
+                    # ),
                     widgets.HBox(
                         [self.crg],
                         flex=1,
@@ -1341,14 +1357,14 @@ class AnalysisSessionWidget(object):
                     (None, 'margin-bottom', '5px'),
                 ],
             ),
-            self.select_abstractor,
+            #self.select_abstractor,
             self.info_area,
-            self.step_box,
-            widgets.HBox(
-                self.buttons,
-                width='100%',
-                overflow_y='hidden',
-            ),
+            #self.step_box,
+            # widgets.HBox(
+            #     self.buttons,
+            #     width='100%',
+            #     overflow_y='hidden',
+            # ),
         ]
 
         self.arg_node_events = [
