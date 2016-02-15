@@ -926,7 +926,7 @@ class TransitionViewWidget(ConceptSessionControls):
         with ag.context as ac:
             ac.new_state(ag.init_cond)
         post = ag.execute(init_action, None, None, 'initialize')
-        for n in range(n_steps):
+        for n in range(n_steps + 1):
             res = ag.bmc(post, clauses, ta._analysis_state.crg if add_to_crg else None)
             if verbose:
                 if res is None:
