@@ -11,7 +11,7 @@
 # call "q", the origin.
 
 #
-# Theory of partial functions. 
+# Theory of partial functions.
 #
 #
 module partial_function(f) = {
@@ -28,9 +28,9 @@ module partial_function(f) = {
 
 # 4) This defines how dom[f] updates as we update f:
     update dom[f] from f
-      params v,w in v.f := w -> 
+      params v,w in v.f := w ->
 	ensures ((~old dom[f](X) | dom[f](X)) & dom[f](v))
-      params v in v.f := null -> 
+      params v in v.f := null ->
 	ensures (~old dom[f](X) | X = v | dom[f](X))
 }
 
@@ -69,7 +69,7 @@ axiom ~final | ~s1(X,Y) | a(Y) | ~s2(X, Z) | ~a(Z) | bs(X,Z)
 #
 # Theory of "reaches" predicate. rch[y](x) holds if x can reach
 # y by a non-empty sequence of "best successor" arcs. We define rch
-# by a set of horn clauses, as follows. 
+# by a set of horn clauses, as follows.
 #
 
 schema rch(y) =
@@ -107,7 +107,7 @@ derived down(X, Y) = (~btw(X, q, Y) & X ~= q) | X = Y
 #
 schema lep(p) =
     final -> (
-        (p(le[p]) | ~p(X)) 
+        (p(le[p]) | ~p(X))
         & (~btw(le[p],X,q) | ~p(X))
     )
 
@@ -118,7 +118,7 @@ schema lep(p) =
 #
 #
 relation rch[q](X)
-derived err(X) = a(X) & ~rch[q](X) 
+derived err(X) = a(X) & ~rch[q](X)
 
 # TODO: we need to declare the types of these in the img schema, not here
 
@@ -133,8 +133,6 @@ instantiate rch(q)
 instantiate lep(err) # find least error node
 instantiate img[s1](le[err])
 instantiate img[s2](le[err])
-
-conjecture ~(final & err(X))
 
 ###################################################################
 #
@@ -223,7 +221,7 @@ macro fail = {
     assume (~s1(X, Y) | a(Y) | ~s2(X, Z) | a(Z))
 }
 
-# combine all the actions into one 
+# combine all the actions into one
 
 action step = {
     if * {
@@ -254,25 +252,15 @@ action step = {
     }
 }
 
-# the conjectures come from the first abstract state containing an
-# error state
 
-conjecture (a(X) | a(Y) | s1(X, Y) | ~p(Y, X))
-conjecture (a(X) | p(Y, X) | ~s1(X, Y))
-conjecture (a(X) | X ~= q)
-conjecture (a(X) | ~p(Y, X) | ~s1(X, Y))
-conjecture (a(X) | ~s2(X, Y))
-conjecture (a(Y) | a(Z) | ~s1(X, Y) | ~s2(X, Z))
-conjecture (a(Y) | dom[s2](X) | ~a(X) | ~s1(X, Y))
-conjecture (a(Y) | ~a(X) | ~p(Y, X) | ~s1(X, Y))
-conjecture (dom[s1](X) | ~a(X))
-conjecture (s1(X, Y) | ~a(X) | ~p(Y, X))
-conjecture (~btw(X, q, Y) | ~s1(X, Y))
+# the safety property:
+conjecture ~(final & err(X))
 
-# Here is the final inductive invariant discovered interactively by examining CTI's
-# Notice two of the above conjectures have been dropped
 
-# conjecture ~(err(X) & final)
+# the initial conjectures come from the first abstract state
+# containing an error state
+
+# conjecture (a(X) | a(Y) | s1(X, Y) | ~p(Y, X))
 # conjecture (a(X) | p(Y, X) | ~s1(X, Y))
 # conjecture (a(X) | X ~= q)
 # conjecture (a(X) | ~p(Y, X) | ~s1(X, Y))
@@ -281,9 +269,21 @@ conjecture (~btw(X, q, Y) | ~s1(X, Y))
 # conjecture (a(Y) | dom[s2](X) | ~a(X) | ~s1(X, Y))
 # conjecture (a(Y) | ~a(X) | ~p(Y, X) | ~s1(X, Y))
 # conjecture (dom[s1](X) | ~a(X))
+# conjecture (s1(X, Y) | ~a(X) | ~p(Y, X))
 # conjecture (~btw(X, q, Y) | ~s1(X, Y))
 
-# These two were obtained interactively:
-# conjecture  ~(down(S1, q) & down(S2, q) & down(S2, S1) & s1(S2, S1) & s2(S2, S2) & S1 ~= q & S2 ~= q)
-# conjecture  ~(down(S0, q) & down(S0, S1) & down(S0, S2) & down(S1, q) & down(S2, q) & down(S2, S1) & s1(S2, S1) & s2(S2, S0) & S0 ~= q & S1 ~= q & S2 ~= q)
+# Here is the final inductive invariant discovered interactively by
+# examining CTI's. Notice that two of the above conjectures have been
+# dropped and two new conjectures have been added interactively.
 
+conjecture (a(X) | p(Y, X) | ~s1(X, Y))
+conjecture (a(X) | X ~= q)
+conjecture (a(X) | ~p(Y, X) | ~s1(X, Y))
+conjecture (a(X) | ~s2(X, Y))
+conjecture (a(Y) | a(Z) | ~s1(X, Y) | ~s2(X, Z))
+conjecture (a(Y) | dom[s2](X) | ~a(X) | ~s1(X, Y))
+conjecture (a(Y) | ~a(X) | ~p(Y, X) | ~s1(X, Y))
+conjecture (dom[s1](X) | ~a(X))
+conjecture (~btw(X, q, Y) | ~s1(X, Y))
+conjecture  ~(down(S1, q) & down(S2, q) & down(S2, S1) & s1(S2, S1) & s2(S2, S2) & S1 ~= q & S2 ~= q)
+conjecture  ~(down(S0, q) & down(S0, S1) & down(S0, S2) & down(S1, q) & down(S2, q) & down(S2, S1) & s1(S2, S1) & s2(S2, S0) & S0 ~= q & S1 ~= q & S2 ~= q)
