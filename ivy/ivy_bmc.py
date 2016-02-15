@@ -52,7 +52,7 @@ if __name__ == '__main__':
     "ctx = EvalContext(check=False)\n",
     "ctx.__enter__()\n",
     "ivy_widget = AnalysisSessionWidget()\n",
-    "session = AnalysisSession('leader_election_ring_bug.ivy', ivy_widget)\n",
+    "session = AnalysisSession(IVY_FILENAME, ivy_widget)\n",
     "set_context(session)\n",
     "ivy_widget.transition_view.conjectures = session.analysis_state.ivy_interp.conjs[:]\n",
     "ta._ivy_ag.actions.setdefault('initialize', ivy_actions.Sequence())\n",
