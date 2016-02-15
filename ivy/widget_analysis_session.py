@@ -219,6 +219,9 @@ class ConceptSessionControls(object):
             self.concept_style_colors
         )
 
+    def apply_structure_renaming(self, st):
+        return st
+
     def update_view_controls(self):
         """
         update the view controls to reflect the available concepts, after
@@ -258,7 +261,7 @@ class ConceptSessionControls(object):
                 ]),
             })
             btn = SmallButton(
-                description=edge_name,
+                description=self.apply_structure_renaming(edge_name),
                 color=color,
                 margin='5px',
                 background_color=_graph_background_color,
@@ -329,6 +332,7 @@ class ConceptSessionControls(object):
         )
 
     def add_projection(self, node, name, concept):
+        self.edge_display_checkboxes[name]['all_to_all'].value = True
         self.concept_session.add_edge(name, concept)
 
 
@@ -488,6 +492,8 @@ class TransitionViewWidget(ConceptSessionControls):
     def __init__(self, analysis_session_widget):
         super(TransitionViewWidget, self).__init__()
         self.analysis_session_widget = analysis_session_widget
+
+        self.transitive_relations = []
 
         self.box = DialogWidget(
             title='TransitionViewWidget',
@@ -651,7 +657,7 @@ class TransitionViewWidget(ConceptSessionControls):
         if pre is False:
             self.concept_session.replace_domain(self.concept_session.domain)
         else:
-            self.structure_renaming = get_structure_renaming(pre)
+            self.structure_renaming = get_structure_renaming(pre, self.transitive_relations)
             self.concept_session.replace_domain(get_structure_concept_domain(pre))
 
 
@@ -740,11 +746,13 @@ class TransitionViewWidget(ConceptSessionControls):
         ]
         self.facts_list.value = ()
 
+    def apply_structure_renaming(self, st):
+        for k in sorted(self.structure_renaming.keys(), key=len, reverse=True):
+            st = st.replace(k, self.structure_renaming[k])
+        return st
+
     def fact_to_label(self, fact):
-        result = str(fact)
-        for k, v in self.structure_renaming.iteritems():
-            result = result.replace(k, v)
-        return result
+        return self.apply_structure_renaming(str(fact))
 
     def get_active_facts(self):
         """
@@ -800,7 +808,11 @@ class TransitionViewWidget(ConceptSessionControls):
             if self.relations_to_minimize.value == 'relations to minimize':
                 self.relations_to_minimize.value = ' '.join(sorted(
                     k for k, v in self.session.analysis_state.ivy_interp.sig.symbols.iteritems()
-                    if type(v.sort) is lg.FunctionSort and v.sort.range == lg.Boolean
+                    if (type(v.sort) is lg.FunctionSort and
+                        v.sort.range == lg.Boolean and
+                        v.name not in self.transitive_relations and
+                        '.' not in v.name
+                    )
                 ))
 
             res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
@@ -1070,12 +1082,14 @@ class TransitionViewWidget(ConceptSessionControls):
 
         self.edge_display_checkboxes['=']['transitive'].value = True
         self.edge_display_checkboxes['=']['all_to_all'].value = True
+        self.transitive_relations = []
 
         axioms = self.session.analysis_state.ivy_interp.background_theory()
         for c in self.session.analysis_state.ivy_interp.sig.symbols.values():
             if (type(c.sort) is lg.FunctionSort and
                 c.sort.arity == 2 and
-                c.sort.domain[0] == c.sort.domain[1]):
+                c.sort.domain[0] == c.sort.domain[1] and
+                c.sort.range == lg.Boolean):
                 X = lg.Var('X', c.sort.domain[0])
                 Y = lg.Var('Y', c.sort.domain[0])
                 Z = lg.Var('Z', c.sort.domain[0])
@@ -1083,6 +1097,7 @@ class TransitionViewWidget(ConceptSessionControls):
                 defined_symmetry = lg.ForAll([X, Y], lg.Or(c(X,X), lg.Not(c(Y,Y))))
                 t = Clauses([transitive, defined_symmetry])
                 if clauses_imply(axioms, t):
+                    self.transitive_relations.append(c.name)
                     self.edge_display_checkboxes[c.name]['transitive'].value = True
 
     def is_sufficient(self, button=None):

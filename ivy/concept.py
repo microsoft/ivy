@@ -693,7 +693,7 @@ def get_structure_concept_abstract_value(state):
     return dict(abstract_value)
 
 
-def get_structure_renaming(state):
+def get_structure_renaming(state, order_relations=()):
     """
     state is an ivy_interp.State with a .universe
 
@@ -701,6 +701,8 @@ def get_structure_renaming(state):
     names that should be used for displaying to the user
     """
     from ivy_utils import topological_sort
+
+    order_relations = frozenset(order_relations)
 
     # add node_info results for universe elements
     elements = list(set([uc for s in state.universe for uc in state.universe[s]]))
@@ -711,7 +713,11 @@ def get_structure_renaming(state):
     assert type(state_formula) is And
     order = []
     for lit in state_formula:
-        if type(lit) is Apply and lit.func.sort.arity == 2 and lit.func.name in ('reach', 'le'):
+        if (type(lit) is Apply and
+            lit.func.sort.arity == 2 and
+            lit.func.sort.domain[0] == lit.func.sort.domain[1] and
+            lit.func.sort.range == Boolean and
+            lit.func.name in order_relations):
             order.append(lit.terms)
     elements = topological_sort(elements, order, lambda c: c.name)
 
