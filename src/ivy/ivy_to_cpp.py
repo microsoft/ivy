@@ -10,6 +10,12 @@ import ivy_utils as iu
 import ivy_actions as ia
 import logic as lg
 import logic_util as lu
+import ivy_solver as slv
+import ivy_transrel as tr
+import ivy_logic_utils as ilu
+
+def all_state_symbols():
+    return [s for s in il.all_symbols() if s not in il.sig.constructors]
 
 def sort_card(sort):
     if hasattr(sort,'name'):
@@ -28,15 +34,206 @@ def indent(header):
 def declare_symbol(header,sym):
     name, sort = sym.name,sym.sort
     header.append('    bool ' if sort.is_relational() else '    int ')
-    header.append(sym.name)
+    header.append(varname(sym.name))
     if hasattr(sort,'dom'):
         for d in sort.dom:
             header.append('[' + str(sort_card(d)) + ']')
     header.append(';\n')
 
+special_names = {
+    '<' : '__lt',
+    '<=' : '__le',
+    '>' : '__gt',
+    '>=' : '__ge',
+}
+
 def varname(name):
-    name = name.replace('loc:','loc__')
+    global special_names
+    if name in special_names:
+        return special_names[name]
+    name = name.replace('loc:','loc__').replace('___branch:','__branch__').replace('.','__')
     return name.split(':')[-1]
+
+def mk_nondet(code,v,rng,name,unique_id):
+    global nondet_cnt
+    indent(code)
+    code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
+
+def emit_sorts(header):
+    for name,sort in il.sig.sorts.iteritems():
+        if name in il.sig.interp:
+            sort = il.sig.interp[name]
+        if not isinstance(sort,il.EnumeratedSort):
+            raise iu.IvyError(None,'sort {} has no finite interpretation'.format(name))
+        card = sort.card
+        cname = varname(name)
+        indent(header)
+        header.append("const char *{}_values[{}]".format(cname,card) +
+                      " = {" + ','.join('"{}"'.format(x) for x in sort.extension) + "};\n");
+        indent(header)
+        header.append('mk_enum("{}",{},{}_values);\n'.format(name,card,cname))
+
+def emit_decl(header,symbol):
+    name = symbol.name
+    sname = slv.solver_name(symbol)
+    cname = varname(name)
+    sort = symbol.sort
+    rng_name = "Bool" if sort.is_relational() else sort.rng.name
+    domain = sort_domain(sort)
+    if len(domain) == 0:
+        indent(header)
+        header.append('mk_const("{}","{}");\n'.format(sname,rng_name))
+    else:
+        card = len(domain)
+        indent(header)
+        header.append("const char *{}_domain[{}]".format(cname,card) + " = {"
+                      + ','.join('"{}"'.format(s.name) for s in domain) + "};\n");
+        indent(header)
+        header.append('mk_decl("{}",{},{}_domain,"{}");\n'.format(sname,card,cname,rng_name))
+        
+def emit_sig(header):
+    emit_sorts(header)
+    for symbol in all_state_symbols():
+        emit_decl(header,symbol)
+
+def sort_domain(sort):
+    if hasattr(sort,"domain"):
+        return sort.domain
+    return []
+
+def emit_eval(header,symbol,obj=None): 
+    global indent_level
+    name = symbol.name
+    sname = slv.solver_name(symbol)
+    cname = varname(name)
+    sort = symbol.sort
+    domain = sort_domain(sort)
+    for idx,dsort in enumerate(domain):
+        dcard = sort_card(dsort)
+        indent(header)
+        header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
+        indent_level += 1
+    indent(header)
+    header.append((obj + '.' if obj else '')
+                  + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
+                  + ' = eval_apply("{}"'.format(sname)
+                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+                  + ");\n")
+    for idx,dsort in enumerate(domain):
+        indent_level -= 1    
+
+def emit_set(header,symbol): 
+    global indent_level
+    name = symbol.name
+    sname = slv.solver_name(symbol)
+    cname = varname(name)
+    sort = symbol.sort
+    domain = sort_domain(sort)
+    for idx,dsort in enumerate(domain):
+        dcard = sort_card(dsort)
+        indent(header)
+        header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
+        indent_level += 1
+    indent(header)
+    header.append('set("{}"'.format(sname)
+                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+                  + ",obj.{}".format(cname)+ ''.join("[X{}]".format(idx) for idx in range(len(domain)))
+                  + ");\n")
+    for idx,dsort in enumerate(domain):
+        indent_level -= 1    
+
+def emit_eval_sig(header,obj=None):
+    for symbol in all_state_symbols():
+        emit_eval(header,symbol,obj)
+
+def emit_init_gen(header,impl):
+    global indent_level
+    header.append("""
+class init_gen : public gen {
+public:
+    init_gen();
+""")
+    impl.append("init_gen::init_gen(){\n");
+    indent_level += 1
+    emit_sig(impl)
+    indent(impl)
+    impl.append('add("(assert (and\\\n')
+    constraints = [im.module.init_cond.to_formula()]
+    for a in im.module.axioms:
+        constraints.append(a.to_formula())
+    for c in constraints:
+        fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
+        indent(impl)
+        impl.append("  {}\\\n".format(fmla))
+    indent(impl)
+    impl.append('))");\n')
+    indent_level -= 1
+    impl.append("}\n");
+    header.append("    bool generate(ivy_test&);\n};\n");
+    impl.append("""
+bool init_gen::generate(ivy_test& obj) {
+    bool res = solve();
+    if (res) {
+""")
+    indent_level += 2
+    emit_eval_sig(impl,'obj')
+    indent_level -= 2
+    impl.append("""
+    }
+    return res;
+}
+""")
+    
+def emit_randomize(header,symbol):
+    indent(header)
+    header.append('randomize("{}");\n'.format(slv.solver_name(symbol)))
+
+def emit_action_gen(header,impl,name,action):
+    global indent_level
+    caname = varname(name)
+    upd = action.update(im.module,None)
+    pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
+    pre = ilu.trim_clauses(pre).to_formula()
+    syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
+    header.append("class " + caname + "_gen : public gen {\n  public:\n")
+    for sym in syms:
+        declare_symbol(header,sym)
+    header.append("    {}_gen();\n".format(caname))
+    impl.append(caname + "_gen::" + caname + "_gen(){\n");
+    indent_level += 1
+    emit_sig(impl)
+    for sym in syms:
+        emit_decl(impl,sym)
+    
+    indent(impl)
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
+    indent_level -= 1
+    impl.append("}\n");
+    header.append("    bool generate(ivy_test&);\n};\n");
+    impl.append("bool " + caname + "_gen::generate(ivy_test& obj) {\n    push();\n")
+    indent_level += 1
+    for sym in all_state_symbols():
+        emit_set(impl,sym)
+    for sym in syms:
+        if not sym.name.startswith('__ts'):
+            emit_randomize(impl,sym)
+    impl.append("""
+    bool res = solve();
+    if (res) {
+""")
+    indent_level += 1
+    for sym in syms:
+        if not sym.name.startswith('__ts'):
+            emit_eval(impl,sym)
+    indent_level -= 2
+    impl.append("""
+    }
+    pop();
+    obj.___ivy_gen = this;
+    return res;
+}
+""")
+
 
 def emit_method_decl(header,name,action,body=False,classname=None):
     rs = action.formal_returns
@@ -50,7 +247,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
         header.append(classname + '::')
-    header.append(name + '(')
+    header.append(varname(name) + '(')
     first = True
     for p in action.formal_params:
         header.append(('' if first else ', ') + 'int ' + varname(p.name))
@@ -75,17 +272,62 @@ def emit_action(header,impl,name,classname):
     indent_level -= 1
     impl.append('}\n')
 
+def init_method():
+    asserts = [ia.AssertAction(im.module.init_cond.to_formula())]
+    for a in im.module.axioms:
+        asserts.append(ia.AssertAction(a.to_formula()))
+    res = ia.Sequence(*asserts)
+    res.formal_params = []
+    res.formal_returns = []
+    return res
+
 def module_to_cpp_class(classname):
     header = []
-    header.append('extern void assert(bool);\n')
-    header.append('extern void assume(bool);\n')
+    header.append('extern void ivy_assert(bool);\n')
+    header.append('extern void ivy_assume(bool);\n')
+    header.append('extern int choose(int,int);\n')
+    header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
+    header.append('#include <vector>\n')
     header.append('class ' + classname + ' {\n  public:\n')
+    header.append('    std::vector<int> ___ivy_stack;\n')
+    header.append('    ivy_gen *___ivy_gen;\n')
+    header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
+    
     impl = ['#include "' + classname + '.h"\n\n']
-    for sym in il.all_symbols():
+    impl.append("#include <sstream>\n")
+    impl.append("int " + classname)
+    impl.append(
+"""::___ivy_choose(int rng,const char *name,int id) {
+        std::ostringstream ss;
+        ss << name << ':' << id;;
+        for (unsigned i = 0; i < ___ivy_stack.size(); i++)
+            ss << ':' << ___ivy_stack[i];
+        return ___ivy_gen->choose(rng,ss.str().c_str());
+    }
+""")
+    for sym in all_state_symbols():
         declare_symbol(header,sym)
+    for sym in il.sig.constructors:
+        declare_symbol(header,sym)
+    header.append('    ' + classname + '();\n');
+    im.module.actions['.init'] = init_method()
     for a in im.module.actions:
         emit_action(header,impl,a,classname)
     header.append('};\n')
+
+    impl.append(classname + '::' + classname + '(){\n')
+    enums = set(sym.sort.name for sym in il.sig.constructors)  
+    for sortname in enums:
+        for i,n in enumerate(il.sig.sorts[sortname].extension):
+            impl.append('    {} = {};\n'.format(varname(n),i))
+    impl.append('}\n')
+
+    
+    emit_boilerplate1(header,impl)
+    emit_init_gen(header,impl)
+    for name,action in im.module.actions.iteritems():
+        if name in im.module.public_actions:
+            emit_action_gen(header,impl,name,action)
     return ''.join(header) , ''.join(impl)
 
 def emit_constant(self,header,code):
@@ -147,16 +389,32 @@ def emit_unop(self,header,code,op):
 
 lg.Not.emit = lambda self,header,code: emit_unop(self,header,code,'!')
 
-def emit_binop(self,header,code,op):
+def emit_binop(self,header,code,op,ident=None):
+    if len(self.args) == 0:
+        assert ident != None
+        code.append(ident)
+        return
     code.append('(')
     self.args[0].emit(header,code)
-    code.append(' ' + op + ' ')
+    for a in self.args[1:]:
+        code.append(' ' + op + ' ')
+        a.emit(header,code)
+    code.append(')')
+    
+def emit_implies(self,header,code):
+    code.append('(')
+    code.append('!')
+    self.args[0].emit(header,code)
+    code.append(' || ')
     self.args[1].emit(header,code)
     code.append(')')
     
+
 lg.Eq.emit = lambda self,header,code: emit_binop(self,header,code,'==')
-lg.And.emit = lambda self,header,code: emit_binop(self,header,code,'&&')
-lg.Or.emit = lambda self,header,code: emit_binop(self,header,code,'||')
+lg.Iff.emit = lambda self,header,code: emit_binop(self,header,code,'==')
+lg.Implies.emit = emit_implies
+lg.And.emit = lambda self,header,code: emit_binop(self,header,code,'&&','true')
+lg.Or.emit = lambda self,header,code: emit_binop(self,header,code,'||','false')
 
 def emit_assign_simple(self,header):
     code = []
@@ -227,7 +485,7 @@ ia.Sequence.emit = emit_sequence
 def emit_assert(self,header):
     code = []
     indent(code)
-    code.append('assert(')
+    code.append('ivy_assert(')
     il.close_formula(self.args[0]).emit(header,code)
     code.append(');\n')    
     header.extend(code)
@@ -237,7 +495,7 @@ ia.AssertAction.emit = emit_assert
 def emit_assume(self,header):
     code = []
     indent(code)
-    code.append('assume(')
+    code.append('ivy_assume(')
     il.close_formula(self.args[0]).emit(header,code)
     code.append(');\n')    
     header.extend(code)
@@ -246,12 +504,14 @@ ia.AssumeAction.emit = emit_assume
 
 
 def emit_call(self,header):
+    indent(header)
+    header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
     code = []
     indent(code)
     if len(self.args) == 2:
         self.args[1].emit(header,code)
         code.append(' = ')
-    code.append(str(self.args[0].rep) + '(')
+    code.append(varname(str(self.args[0].rep)) + '(')
     first = True
     for p in self.args[0].args:
         if not first:
@@ -260,6 +520,8 @@ def emit_call(self,header):
         first = False
     code.append(');\n')    
     header.extend(code)
+    indent(header)
+    header.append('___ivy_stack.pop_back();\n')
 
 ia.CallAction.emit = emit_call
 
@@ -271,6 +533,7 @@ def emit_local(self,header):
     for p in self.args[0:-1]:
         indent(header)
         header.append('int ' + varname(p.name) + ';\n')
+        mk_nondet(header,p.name,sort_card(p.sort),p.name,self.unique_id)
     self.args[-1].emit(header)
     indent_level -= 1
     indent(header)
@@ -308,6 +571,7 @@ def emit_choice(self,header):
         self.args[0].emit(header)
         return
     tmp = new_temp(header)
+    mk_nondet(header,tmp,len(self.args),"___branch",self.unique_id)
     for idx,arg in enumerate(self.args):
         indent(header)
         if idx != 0:
@@ -323,8 +587,219 @@ def emit_choice(self,header):
 
 ia.ChoiceAction.emit = emit_choice
 
+def emit_boilerplate1(header,impl):
+    header.append("""
+#include <string>
+#include <vector>
+#include <sstream>
+#include <cstdlib>
+#include "z3++.h"
+#include "hash.h"
+
+using namespace hash_space;
+
+class gen : public ivy_gen {
+
+protected:
+    z3::context ctx;
+    z3::solver slvr;
+    z3::model model;
+
+    gen(): slvr(ctx), model(ctx,(Z3_model)0) {}
+
+    hash_map<std::string, z3::sort> enum_sorts;
+    hash_map<Z3_sort, z3::func_decl_vector> enum_values;
+    hash_map<std::string, z3::func_decl> decls_by_name;
+    hash_map<Z3_symbol,int> enum_to_int;
+    std::vector<Z3_symbol> sort_names;
+    std::vector<Z3_sort> sorts;
+    std::vector<Z3_symbol> decl_names;
+    std::vector<Z3_func_decl> decls;
+    std::vector<z3::expr> alits;
+
+
+public:
+    int eval_apply(const char *decl_name, unsigned num_args, const int *args) {
+        z3::func_decl decl = decls_by_name.find(decl_name)->second;
+        std::vector<z3::expr> expr_args;
+        unsigned arity = decl.arity();
+        assert(arity == num_args);
+        for(unsigned i = 0; i < arity; i ++) {
+            z3::sort sort = decl.domain(i);
+            z3::func_decl_vector vals = enum_values.find(sort)->second;
+            expr_args.push_back(vals[args[i]]());
+        }
+        z3::expr apply_expr = decl(arity,&expr_args[0]);
+        //        std::cout << "apply_expr: " << apply_expr << std::endl;
+        try {
+            z3::expr foo = model.eval(apply_expr,true);
+            assert(foo.is_app());
+            if (foo.is_bool())
+                return (foo.decl().decl_kind() == Z3_OP_TRUE) ? 1 : 0;
+            assert(foo.is_app());
+            return enum_to_int[foo.decl().name()];
+        }
+        catch (const z3::exception &e) {
+            std::cout << e << std::endl;
+            throw e;
+        }
+    }
+
+    int eval_apply(const char *decl_name) {
+        return eval_apply(decl_name,0,(int *)0);
+    }
+
+    int eval_apply(const char *decl_name, int arg0) {
+        return eval_apply(decl_name,1,&arg0);
+    }
+    
+    int eval_apply(const char *decl_name, int arg0, int arg1) {
+        int args[2] = {arg0,arg1};
+        return eval_apply(decl_name,2,args);
+    }
+
+    int eval_apply(const char *decl_name, int arg0, int arg1, int arg2) {
+        int args[3] = {arg0,arg1,arg2};
+        return eval_apply(decl_name,4,args);
+    }
+
+    int set(const char *decl_name, unsigned num_args, const int *args, int value) {
+        z3::func_decl decl = decls_by_name.find(decl_name)->second;
+        std::vector<z3::expr> expr_args;
+        unsigned arity = decl.arity();
+        assert(arity == num_args);
+        for(unsigned i = 0; i < arity; i ++) {
+            z3::sort sort = decl.domain(i);
+            z3::func_decl_vector vals = enum_values.find(sort)->second;
+            expr_args.push_back(vals[args[i]]());
+        }
+        z3::expr apply_expr = decl(arity,&expr_args[0]);
+        z3::sort range = decl.range();
+        z3::expr val_expr = range.is_bool() ? ctx.bool_val(value) : enum_values.find(range)->second[value]();
+        z3::expr pred = apply_expr == val_expr;
+        //        std::cout << "pred: " << pred << std::endl;
+        slvr.add(pred);
+    }
+
+    int set(const char *decl_name, int value) {
+        return set(decl_name,0,(int *)0,value);
+    }
+
+    int set(const char *decl_name, int arg0, int value) {
+        return set(decl_name,1,&arg0,value);
+    }
+    
+    int set(const char *decl_name, int arg0, int arg1, int value) {
+        int args[2] = {arg0,arg1};
+        return set(decl_name,2,args,value);
+    }
+
+    int set(const char *decl_name, int arg0, int arg1, int arg2, int value) {
+        int args[3] = {arg0,arg1,arg2};
+        return set(decl_name,4,args,value);
+    }
+
+    void randomize(const char *decl_name) {
+        z3::func_decl decl = decls_by_name.find(decl_name)->second;
+        unsigned arity = decl.arity();
+        assert(arity == 0);
+        z3::expr apply_expr = decl();
+        z3::sort range = decl.range();
+        unsigned card = range.is_bool() ? 2 : enum_values.find(range)->second.size();
+        int value = rand() % card;
+        z3::expr val_expr = range.is_bool() ? ctx.bool_val(value) : enum_values.find(range)->second[value]();
+        z3::expr pred = apply_expr == val_expr;
+        // std::cout << "pred: " << pred << std::endl;
+        std::ostringstream ss;
+        ss << "alit:" << alits.size();
+        z3::expr alit = ctx.bool_const(ss.str().c_str());
+        alits.push_back(alit);
+        slvr.add(!alit || pred);
+    }
+
+    void push(){
+        slvr.push();
+    }
+
+    void pop(){
+        slvr.pop();
+    }
+
+    void mk_enum(const char *sort_name, unsigned num_values, char const * const * value_names) {
+        z3::func_decl_vector cs(ctx), ts(ctx);
+        z3::sort sort = ctx.enumeration_sort(sort_name, num_values, value_names, cs, ts);
+        // can't use operator[] here because the value classes don't have nullary constructors
+        enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
+        enum_values.insert(std::pair<Z3_sort, z3::func_decl_vector>(sort,cs));
+        sort_names.push_back(Z3_mk_string_symbol(ctx,sort_name));
+        sorts.push_back(sort);
+        for(unsigned i = 0; i < num_values; i++){
+            Z3_symbol sym = Z3_mk_string_symbol(ctx,value_names[i]);
+            decl_names.push_back(sym);
+            decls.push_back(cs[i]);
+            enum_to_int[sym] = i;
+        }
+    }
+
+    void mk_decl(const char *decl_name, unsigned arity, const char **domain_names, const char *range_name) {
+        std::vector<z3::sort> domain;
+        for (unsigned i = 0; i < arity; i++)
+            domain.push_back(enum_sorts.find(domain_names[i])->second);
+        std::string bool_name("Bool");
+        z3::sort range = (range_name == bool_name) ? ctx.bool_sort() : enum_sorts.find(range_name)->second;   
+        z3::func_decl decl = ctx.function(decl_name,arity,&domain[0],range);
+        decl_names.push_back(Z3_mk_string_symbol(ctx,decl_name));
+        decls.push_back(decl);
+        decls_by_name.insert(std::pair<std::string, z3::func_decl>(decl_name,decl));
+    }
+
+    void mk_const(const char *const_name, const char *sort_name) {
+        mk_decl(const_name,0,0,sort_name);
+    }
+
+    void add(const std::string &z3inp) {
+        z3::expr fmla(ctx,Z3_parse_smtlib2_string(ctx, z3inp.c_str(), sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]));
+        ctx.check_error();
+
+        slvr.add(fmla);
+    }
+
+    bool solve() {
+        // std::cout << alits.size();
+        while(true){
+            z3::check_result res = slvr.check(alits.size(),&alits[0]);
+            if (res != z3::unsat)
+                break;
+            z3::expr_vector core = slvr.unsat_core();
+            if (core.size() == 0)
+                return false;
+            unsigned idx = rand() % core.size();
+            z3::expr to_delete = core[idx];
+            for (unsigned i = 0; i < alits.size(); i++)
+                if (z3::eq(alits[i],to_delete)) {
+                    alits[i] = alits.back();
+                    alits.pop_back();
+                    break;
+                }
+        }
+        model = slvr.get_model();
+        alits.clear();
+        //        std::cout << model;
+        return true;
+    }
+
+    int choose(int rng, const char *name){
+        if (decls_by_name.find(name) == decls_by_name.end())
+            return 0;
+        return eval_apply(name);
+    }
+};
+""")
+
 
 if __name__ == "__main__":
+    ia.set_determinize(True)
+    slv.set_use_native_enums(True)
     with im.Module():
         ivy.ivy_init()
 

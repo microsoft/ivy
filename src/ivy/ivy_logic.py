@@ -448,7 +448,8 @@ UninterpretedSort = ConstantSort
 UninterpretedSort.is_relational = lambda self: False
 
 class EnumeratedSort(object):
-    def __init__(self,extension):
+    def __init__(self,name,extension):
+        self.name = name
         self.extension = extension
         self.rng = self
         self.dom = []
@@ -465,6 +466,8 @@ class EnumeratedSort(object):
     @property
     def card(self):
         return len(self.extension)
+    def is_relational(self):
+        return False
 
 FunctionSort = lg.FunctionSort
 FunctionSort.rng = FunctionSort.range

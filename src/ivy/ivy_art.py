@@ -88,6 +88,7 @@ class AnalysisGraph(object):
         self.exports = module.exports
         self.delegates = module.delegates
         self.public_actions = module.public_actions
+        self.init_cond = module.init_cond
         
     @property
     def context(self):

@@ -270,6 +270,7 @@ def p_top_type_symbol(p):
 def p_top_type_symbol_eq_sort(p):
     'top : top TYPE SYMBOL EQ sort'
     p[0] = p[1]
+    p[5].name = p[3]
     tdfn = TypeDef(p[3],p[5])
     tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))

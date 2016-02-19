@@ -1,0 +1,13 @@
+#lang ivy1.3
+
+include examp1
+
+axiom ~(X:req < X)
+axiom X:req < Y | X = Y | Y < X
+axiom X:req = zero | zero < X
+
+interpret req -> {0..2}
+interpret resp -> {0..2}
+
+export a0.serve
+export a1.serve

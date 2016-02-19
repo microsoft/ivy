@@ -20,6 +20,17 @@ import ivy_utils
 import ivy_unitres as ur
 import logic as lg
 
+use_z3_enums = False
+
+def set_use_native_enums(t):
+    global use_z3_enums
+    use_z3_enums = t
+
+def solver_name(symbol):
+    name = symbol.name
+    if name in ivy_utils.polymorphic_symbols:
+        name += ':' + symbol.sort.domain[0].name
+    return name
 
 # S = z3.DeclareSort("S")
 
@@ -72,8 +83,16 @@ def functionsort(fs):
         return [s.to_z3() for s in fs.dom] + [z3.BoolSort()]
     return [s.to_z3() for s in fs.dom] + [fs.rng.to_z3()]
 
+def enumeratedsort(es):
+    res,consts = z3.EnumSort(es.name,es.extension)
+    for c in consts:
+        z3_constants[str(c)] = c
+    print "enum {} : {}".format(res,type(res))
+    return res
+
 ivy_logic.UninterpretedSort.to_z3 = uninterpretedsort
 ivy_logic.FunctionSort.to_z3 = functionsort
+ivy_logic.EnumeratedSort.to_z3 = enumeratedsort
 ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())
 
 
@@ -81,6 +100,8 @@ def lookup_native(name,table,kind):
     z3name = ivy_logic.sig.interp.get(name)
     if z3name == None:
         return None
+    if isinstance(z3name,ivy_logic.EnumeratedSort):
+        return z3name.to_z3()
     z3val = table.get(z3name)
     if z3val == None:
         raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
@@ -161,14 +182,14 @@ def term_to_z3(term):
     return res
 
 def atom_to_z3(atom):
-    if ivy_logic.is_equals(atom.rep) and ivy_logic.is_enumerated(atom.args[0]):
+    if ivy_logic.is_equals(atom.rep) and ivy_logic.is_enumerated(atom.args[0]) and not use_z3_enums:
         return encode_equality(*atom.args)
     if atom.relname not in z3_predicates:
         rel = lookup_native(atom.relname,relations,"relation")
 #        print "atom: {}, rep: {}, rep.sort: {}".format(atom,atom.rep,atom.rep.sort)
         if not rel:
             sig = atom.rep.sort.to_z3()
-            rel = z3.Function(atom.rep.name, *sig)
+            rel = z3.Function(solver_name(atom.rep), *sig)
         z3_predicates[atom.relname] = rel
 #    return z3_predicates[atom.relname](
 #        *[term_to_z3(t) for t in atom.args])
@@ -207,7 +228,7 @@ def formula_to_z3_int(fmla):
 #    print "formula_to_z3_int: {} : {}".format(fmla,type(fmla))
     if ivy_logic.is_atom(fmla):
         return atom_to_z3(fmla)
-    if isinstance(fmla,ivy_logic.Definition) and ivy_logic.is_enumerated(fmla.args[0]):
+    if isinstance(fmla,ivy_logic.Definition) and ivy_logic.is_enumerated(fmla.args[0]) and not use_z3_enums:
         return encode_equality(*fmla.args)
     args = [formula_to_z3_int(arg) for arg in fmla.args]
     if isinstance(fmla,ivy_logic.And):
@@ -423,7 +444,7 @@ def constant_from_z3(c):
 
 def get_model_constant(m,t):
     s = t.get_sort()
-    if isinstance(s,ivy_logic.EnumeratedSort):
+    if isinstance(s,ivy_logic.EnumeratedSort) and not use_z3_enums:
         for v in s.defines():
             w = ivy_logic.Constant(ivy_logic.Symbol(v,s))
             if z3.is_true(m.eval(encode_equality(t,w))):
@@ -833,7 +854,7 @@ def function_model_to_clauses(h,f):
     rng = sort.rng
     res = []
     fterm = fun_inst(f)
-    if isinstance(rng,ivy_logic.EnumeratedSort):
+    if isinstance(rng,ivy_logic.EnumeratedSort) and not use_z3_enums:
         for c in rng.defines():
             eq = ivy_logic._eq_lit(fterm,ivy_logic.Constant(ivy_logic.Symbol(c,rng)))
 #            print "function_model_to_clauses: {}".format(eq)

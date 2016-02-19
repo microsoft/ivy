@@ -18,6 +18,7 @@ import ivy_ast
 import ivy_utils as iu
 import ivy_actions as ia
 import ivy_alpha
+import ivy_module as im
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -141,7 +142,7 @@ ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,ivy_logic.find_
 
 ivy_ast.ConstantSort.cmpl = lambda self: ivy_logic.ConstantSort(self.rep)
 
-ivy_ast.EnumeratedSort.cmpl = lambda self: ivy_logic.EnumeratedSort(self.extension)
+ivy_ast.EnumeratedSort.cmpl = lambda self: ivy_logic.EnumeratedSort(self.name,self.extension)
 
 SymbolList.cmpl = lambda self: self.clone([find_symbol(s) for s in self.symbols])
 
@@ -338,7 +339,7 @@ class IvyDomainSetup(IvyDeclInterp):
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             return
         if isinstance(rhs,ivy_ast.Range):
-            interp[lhs] = rhs
+            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.sorts,[x for x in slv.relations] + [x for x in slv.functions]],
@@ -363,7 +364,7 @@ class IvyARGSetup(IvyDeclInterp):
         c = formula_to_clauses_tseitin(s)
         if not c:
             raise IvyError(ax,"initial condition must be a clause")
-        self.ag.init_cond = and_clauses(self.ag.init_cond,c)
+        im.module.init_cond = and_clauses(im.module.init_cond,c)
     def action(self,a):
         self.ag.actions[a.args[0].relname] = compile_action_def(a,self.ag.domain.sig)
         self.ag.public_actions.add(a.args[0].relname)
@@ -606,7 +607,6 @@ def collect_actions(decls):
 
 def ivy_compile(ag,decls):
     with ag.domain.sig:
-        ag.init_cond = true_clauses()
         for name in decls.defined:
             ag.domain.add_to_hierarchy(name)
         with TopContext(collect_actions(decls.decls)):
@@ -617,14 +617,14 @@ def ivy_compile(ag,decls):
             ac = ag.context
             with ac:
                 if ag.predicates:
-                    if not ag.init_cond.is_true():
+                    if not im.module.init_cond.is_true():
                         raise IvyError(None,"init and state declarations are not compatible");
                     for n,p in ag.predicates.iteritems():
                         s = eval_state_facts(p)
                         if s is not None:
                             s.label = n
                 else:
-                    ag.add_initial_state(ag.init_cond,ivy_alpha.alpha)
+                    ag.add_initial_state(im.module.init_cond,ivy_alpha.alpha)
         ag.domain.type_check()
         # try instantiating all the actions to type check them
         for name,action in ag.actions.iteritems():
@@ -645,7 +645,7 @@ def ivy_compile(ag,decls):
                     ag.actions[mixin.args[1].relname] = mixed
             # find the globally exported actions (all if none specified, for compat)
             if ag.exports:
-                ag.public_actions = set()
+                ag.public_actions.clear()
                 for e in ag.exports:
                     if not e.scope(): # global export
                         ag.public_actions.add(e.exported())

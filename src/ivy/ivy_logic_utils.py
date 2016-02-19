@@ -696,6 +696,21 @@ def simplify_clauses(cls):
 #        fmlas = reduce_fmlas(fmlas)
     return Clauses(fmlas,cls.defs)
 
+def trim_clauses(cls):
+    """ remove unused let bindings from a Clauses """
+    used_syms = set()
+    seeds = list(cls.fmlas)
+    seeds += [d.args[1] for d in cls.defs if not(d.args[0].rep.is_skolem())]
+    while seeds:
+        seed = seeds.pop()
+        syms = used_symbols_ast(seed)
+        for sym in syms:
+            if sym.is_skolem() and sym not in used_syms and sym in cls.defidx:
+                used_syms.add(sym)
+                seeds.append(defidx[sym].args[1])
+    newdefs = [d for d in cls.defs if (not d.args[0].rep.is_skolem() or d.args[0].rep in used_syms)]
+    return Clauses(cls.fmlas,newdefs)
+
 def rewrite_clause(clause,v,t):
     subs = dict()
     subs[v.rep] = t

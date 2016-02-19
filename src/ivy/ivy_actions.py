@@ -7,7 +7,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
-    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast
+    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
@@ -504,14 +504,29 @@ class Sequence(Action):
     def decompose(self,pre,post,fail=False):
         return [(pre,self.args,post)]
         
+determinize = False
 
+def set_determinize(t):
+    global determinize
+    determinize = t
+
+choice_action_ctr = 0
 
 class ChoiceAction(Action):
+    def __init__(self,*args):
+        Action.__init__(self,*args)
+        global choice_action_ctr
+        self.unique_id = choice_action_ctr
+        choice_action_ctr += 1
     def name(self):
         return 'choice'
     def __str__(self):
         return '{' + '| '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
+        if determinize and len(self.args) == 2:
+            cond = bool_const('___branch:' + str(self.unique_id))
+            ite = IfAction(cond,self.args[0],self.args[1])
+            return ite.int_update(domain,pvars)
         result = [], false_clauses(), false_clauses()
         for a in self.args:
             result = join_action(result, a.int_update(domain, pvars), domain.relations)
@@ -545,8 +560,15 @@ class IfAction(Action):
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
 
+local_action_ctr = 0
+
 class LocalAction(Action):
     """ Hide some symbols in an action """
+    def __init__(self,*args):
+        Action.__init__(self,*args)
+        global local_action_ctr
+        self.unique_id = local_action_ctr
+        local_action_ctr += 1
     def name(self):
         return 'local'
     def __str__(self):
@@ -564,7 +586,6 @@ class LocalAction(Action):
         pre,post = (hide_state(syms,p) for p in (pre,post))
         return self.args[-1].decompose(pre,post)
 
-
 class LetAction(Action):
     """ Bind some symbols in an action """
     def name(self):
@@ -579,8 +600,15 @@ class LetAction(Action):
 #        print "let res: {}".format(res)
         return res
 
+call_action_ctr = 0
+
 class CallAction(Action):
     """ Inlines a named state or action """
+    def __init__(self,*args):
+        Action.__init__(self,*args)
+        global call_action_ctr
+        self.unique_id = call_action_ctr
+        call_action_ctr += 1
     def name(self):
         return 'call'
     def __str__(self):

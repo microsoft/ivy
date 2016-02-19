@@ -1,0 +1,86 @@
+#lang ivy1.3
+
+type req
+type resp
+type id = {id0,id1}
+
+individual zero : req
+individual f(I:req) : resp
+
+relation (X:req < Y:req)
+
+axiom (X:req < Y) & (Y < Z) -> (X < Z)
+
+module server = {
+   individual last : req
+   init last = zero
+
+   action serve(inp:req,src:id)
+   returns(val:resp) = {
+       assert last < inp;
+       last := inp;
+       val := f(inp) 
+   }
+}
+
+module agent(srvr,partner,id) = {
+   individual last : req
+   relation token
+
+   init last = zero & (token <-> id=id0)
+   
+   action serve(inp:req)
+   returns(out:resp) = {
+       assume token & last < inp;
+       last := inp;
+       if * {
+           out := srvr.serve(inp,id)
+       } else {
+           out := partner.xfer(inp);
+	   token := false
+       }
+   }
+
+   action xfer(inp:req)
+   returns(out:resp) = {
+       token := true;
+       last := inp;
+       out := srvr.serve(inp,id)
+   }
+}
+
+instantiate s : server
+instantiate a0 : agent(s,a1,id0)
+instantiate a1 : agent(s,a0,id1)
+
+module intf(srvr,agnt0,agnt1) = {
+
+    individual last : req
+    individual hastok : id
+    init hastok = id0 & last = zero
+
+    action xfer01(inp:req) = {
+        assert hastok = id0 & last < inp;
+	hastok := id1
+    }
+    mixin xfer01 before agnt1.xfer
+
+    action xfer10(inp:req) = {
+        assert hastok = id1 & last < inp;
+	hastok := id0
+    }
+    mixin xfer10 before agnt0.xfer
+
+    action serve(inp:req,src:id) = {
+        assert src = hastok;
+        assert last < inp;
+	last := inp
+    }
+    mixin serve before srvr.serve
+}    	
+
+instantiate i : intf(s,a0,a1)
+
+isolate iso_a0 = a0 with i
+isolate iso_a1 = a1 with i
+isolate iso_s = s with i
