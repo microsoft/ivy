@@ -707,7 +707,7 @@ def trim_clauses(cls):
         for sym in syms:
             if sym.is_skolem() and sym not in used_syms and sym in cls.defidx:
                 used_syms.add(sym)
-                seeds.append(defidx[sym].args[1])
+                seeds.append(cls.defidx[sym].args[1])
     newdefs = [d for d in cls.defs if (not d.args[0].rep.is_skolem() or d.args[0].rep in used_syms)]
     return Clauses(cls.fmlas,newdefs)
 

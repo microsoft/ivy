@@ -596,20 +596,29 @@ def apps_to_atoms(apps):
 
 # AST rewriting
 
-name_parser = re.compile(r'[ab-zA-Z_:][_a-zA-Z0-9:]*|\[[ab-zA-Z_0-9:]*\]')
+name_parser = re.compile(r'[^\[\]]+|\[[^\[\]]*\]')
 
 
 def str_subst(s,subst):
-    return subst.get(s,s)
+    names = split_name(s)
+    return compose_names(subst.get(names[0],names[0]),*names[1:])
+#    return subst.get(s,s)
 
 def subst_subscripts_comp(s,subst):
+    assert s!=None
+#    print 's: {} subst: {}'.format(s,subst)
     g = name_parser.findall(s)
+#    print 'g: {}'.format(g)
     if not g:
         return s
-    return str_subst(g[0],subst) + ''.join('[' + str_subst(x[1:-1],subst) + ']' for x in g[1:])
+    res =  str_subst(g[0],subst) + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+#    print "res: {}".format(res)
+    return res
 
 def subst_subscripts(s,subst):
-    return compose_names(*[subst_subscripts_comp(t,subst) for t in split_name(s)])
+#    return compose_names(*[subst_subscripts_comp(t,subst) for t in split_name(s)])
+    return subst_subscripts_comp(s,subst)
+
 
 class AstRewriteSubstConstants(object):
     def __init__(self,subst):

@@ -498,6 +498,7 @@ class Sig(object):
         self.interp = {}
         self._default_sort = None
         self.default_numeric_sort = ConstantSort("int")
+        self.sorts["bool"] = RelationSort([])
     def __enter__(self):
         global sig
         self.old_sig = sig

@@ -1,0 +1,246 @@
+#lang ivy1.3
+
+################################################################################
+# 
+# Test generator for a two-port TileLink component that acts like a manager
+# on its front port and a client on its back port.
+#
+################################################################################
+
+include tilelink_concrete_spec
+
+################################################################################
+# 
+# The system we want to verify. This is a "block of wood", since we are just
+# generating inputs, not verifying anything.
+#
+################################################################################
+
+
+module wood_block = {
+
+   action tl_Grant(msg:gnt_id) = {}
+
+   action tl_Probe(msg:prb_id) = {}
+
+   action tl_Acquire(msg:acq_id) = {}
+
+   action tl_Finish(msg:fns_id) = {}
+
+   action tl_Release(msg:rls_id) = {}
+
+}
+
+################################################################################
+#
+# Generic model of a client. This performs arbitrary client actions, except
+# the it guarantees to use only ID's from the "client" side of the interface
+# as defined by its parameter "side".
+#
+# TODO: should be able to generate this
+#
+################################################################################
+
+module tl_generic_client_gen(mngr,ref,side) = {
+
+   action tl_Grant(msg:gnt_id) = {}
+
+   action tl_Probe(msg:prb_id) = {}
+
+   action acquire = {
+       local a:acq_id, 
+           id_ : id,               # id of requester
+	   addr_hi : tl_addrhi,    # hi order bits of address
+           word : tl_addrlo,       # requested word if uncached
+           own:ownership,          # what ownership type? (none=uncached)
+           op : otype,             # what operation?
+           data_ : data,           # what data, if any?
+
+           ltime_ : ltime         # (aux) logical time
+       {
+           acqs(a).id_ := id_;
+	   acqs(a).addr_hi := addr_hi;
+           acqs(a).word := word;
+           acqs(a).own := own;
+           acqs(a).op := op;
+           acqs(a).data_ := data_;
+           acqs(a).ltime_ := ltime_;
+	   call mngr.tl_Acquire(a)
+       }
+   }
+
+   action finish = {
+       local a:fns_id,
+           id_ : id,             # transaction id
+           addr_hi : tl_addrhi,    # (aux) hi order bits of acquire
+           word : tl_addrlo,       # (aux) low-order bits of acquire
+           own:ownership          # (aux) ownership or acquire
+       {
+           fnss(a).id_ := id_;
+           fnss(a).addr_hi := addr_hi;
+           fnss(a).word := word;
+           fnss(a).own := own;
+	   call mngr.tl_Finish(a)
+       }
+   }
+
+   action release = {
+        local a:rls_id,
+           id_ : id,             # id of requester
+           voluntary : bool,     # is this a voluntary release?
+           addr_hi : tl_addrhi,  # hi order bits of address
+           word :tl_addrlo,      # word being released
+           dirty : bool,         # is data modified?
+           data_ : data         # data, if dirty
+        {
+           rlss(a).id_ := id_;
+           rlss(a).voluntary := voluntary;
+           rlss(a).addr_hi := addr_hi;
+           rlss(a).word := word;
+           rlss(a).dirty := dirty;
+           rlss(a).data_ := data_;
+	   call mngr.tl_Release(a)
+        }
+   }
+   action perform(lt:ltime, sid:id) = {
+       assume side(sid) = client;
+       call ref.perform(lt,sid)
+   }
+
+   action fuse(lt:ltime, lt1:ltime, sid:id) = {
+       assume side(sid) = client;
+       call ref.fuse(lt,lt1,sid)
+   }
+}
+
+################################################################################
+#
+# Generic model of a manager. This performs arbitrary manager actions, except
+# the it guarantees to use only ID's from the "manager" side of the interface
+# as defined by its parameter "side".
+#
+# TODO: should be able to generate this
+#
+################################################################################
+
+module tl_generic_manager_gen(clnt,ref,side) = {
+ 
+   action tl_Acquire(msg:acq_id) = {}
+
+   action tl_Finish(msg:fns_id) = {}
+
+   action tl_Release(msg:rls_id) = {}
+
+   action grant = {
+       local a:gnt_id,
+           id_ : id,               # transaction id
+           word : tl_addrlo,       # low-order bits of this response
+           own : ownership,          # what ownership type? (none = uncached)
+           relack : bool,          # is this an ack of a Release?
+           data_ : data,           # return value, if any
+
+           addr_hi : tl_addrhi,    # (aux) hi order bits of address
+           ltime_ : ltime         # (aux) logical time
+       {
+           gnts(a).id_ := id_;
+           gnts(a).word := word;
+           gnts(a).own := own;
+           gnts(a).relack := relack;
+           gnts(a).data_ := data_;
+
+           gnts(a).addr_hi := addr_hi;
+           gnts(a).ltime_ := ltime_;
+	   call clnt.tl_Grant(a)
+       }
+   }
+
+   action probe = {
+       local a:prb_id,
+           id_ : id,             # id of receiver
+           addr_hi : tl_addrhi  # hi order bits of address
+       {
+           prbs(a).id_ := id_;
+           prbs(a).addr_hi := addr_hi;
+           call clnt.tl_Probe(a)
+       }
+   }
+
+   action perform(lt:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.perform(lt,sid)
+   }
+
+   action fuse(lt:ltime, lt1:ltime, sid:id) = {
+       assume side(sid) = manager;
+       call ref.fuse(lt,lt1,sid)
+   }
+
+}
+
+individual buf_id : id   # arbitrary process id for the dut
+
+instantiate c : tl_generic_client_gen(b,ref,fside)
+instantiate b : wood_block
+instantiate m : tl_generic_manager_gen(b,ref,bside)
+
+export c.acquire
+export c.finish
+export c.release
+export m.grant
+export m.probe
+
+################################################################################
+# 
+# Instantiate the reference specification
+#
+################################################################################
+
+instantiate ref : reference
+
+################################################################################
+# 
+# Specify the two interfaces of the buffer
+#
+# To do this, we arbitrarily distribute the process id's on the client and
+# manager side. The axioms guarantee the side assignments for the front
+# and back interfaces of the buffer are consistent.
+#
+################################################################################
+
+individual fside(I:id) : side
+individual bside(I:id) : side
+axiom fside(buf_id) = manager
+axiom bside(buf_id) = client
+axiom I ~= buf_id -> fside(I) = bside(I)
+
+instantiate front : tl_interface(ref,c,b,fside)
+instantiate back : tl_interface(ref,b,m,bside)
+
+################################################################################
+#
+# Localize the proof
+#
+################################################################################
+
+isolate iso_b = b with ref,front,back,c,m
+
+################################################################################
+#
+# Finitely instantiate the types for testing purposes
+#
+################################################################################
+
+interpret time -> bv[2]
+interpret ltime -> bv[2]
+interpret data -> {0..1}
+interpret addr -> {0..3}
+interpret id -> {0..1}
+interpret tl_addrhi -> {0..1}
+interpret tl_addrlo -> {0..1}
+interpret acq_id -> {0..0}
+interpret gnt_id -> {0..0}
+interpret fns_id -> {0..0}
+interpret rls_id -> {0..0}
+interpret prb_id -> {0..0}
+
+

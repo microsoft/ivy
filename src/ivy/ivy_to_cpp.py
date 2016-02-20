@@ -13,18 +13,27 @@ import logic_util as lu
 import ivy_solver as slv
 import ivy_transrel as tr
 import ivy_logic_utils as ilu
+import ivy_compiler as ic
 
 def all_state_symbols():
     return [s for s in il.all_symbols() if s not in il.sig.constructors]
 
 def sort_card(sort):
+    if hasattr(sort,'card'):
+        return sort.card
+    if sort.is_relational():
+        return 2
+    return slv.sort_card(sort)
     if hasattr(sort,'name'):
         name = sort.name
         if name in il.sig.interp:
             sort = il.sig.interp[name]
-    if not hasattr(sort,'card'):
-        raise iu.IvyError(None,'sort {} has no finite interpretation'.format(sort))
-    return sort.card
+            if isinstance(sort,il.EnumeratedSort):
+                return sort.card
+            card = slv.sort_card(sort)
+            if card != None:
+                return card
+    raise iu.IvyError(None,'sort {} has no finite interpretation'.format(sort))
     
 indent_level = 0
 
@@ -32,6 +41,8 @@ def indent(header):
     header.append(indent_level * '    ')
 
 def declare_symbol(header,sym):
+    if slv.solver_name(sym) == None:
+        return # skip interpreted symbols
     name, sort = sym.name,sym.sort
     header.append('    bool ' if sort.is_relational() else '    int ')
     header.append(varname(sym.name))
@@ -51,7 +62,7 @@ def varname(name):
     global special_names
     if name in special_names:
         return special_names[name]
-    name = name.replace('loc:','loc__').replace('___branch:','__branch__').replace('.','__')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('.','__')
     return name.split(':')[-1]
 
 def mk_nondet(code,v,rng,name,unique_id):
@@ -61,9 +72,18 @@ def mk_nondet(code,v,rng,name,unique_id):
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
+        if name == "bool":
+            continue
         if name in il.sig.interp:
             sort = il.sig.interp[name]
         if not isinstance(sort,il.EnumeratedSort):
+            sortname = str(sort)
+            print "sortname: {}".format(sortname)
+            if sortname.startswith('bv[') and sortname.endswith(']'):
+                width = int(sortname[3:-1])
+                indent(header)
+                header.append('mk_bv("{}",{});\n'.format(name,width))
+                continue
             raise iu.IvyError(None,'sort {} has no finite interpretation'.format(name))
         card = sort.card
         cname = varname(name)
@@ -76,6 +96,8 @@ def emit_sorts(header):
 def emit_decl(header,symbol):
     name = symbol.name
     sname = slv.solver_name(symbol)
+    if sname == None:  # this means the symbol is interpreted in some theory
+        return 
     cname = varname(name)
     sort = symbol.sort
     rng_name = "Bool" if sort.is_relational() else sort.rng.name
@@ -144,7 +166,8 @@ def emit_set(header,symbol):
 
 def emit_eval_sig(header,obj=None):
     for symbol in all_state_symbols():
-        emit_eval(header,symbol,obj)
+        if slv.solver_name(symbol) != None: # skip interpreted symbols
+            emit_eval(header,symbol,obj)
 
 def emit_init_gen(header,impl):
     global indent_level
@@ -193,11 +216,13 @@ def emit_action_gen(header,impl,name,action):
     caname = varname(name)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
-    pre = ilu.trim_clauses(pre).to_formula()
+    pre_clauses = ilu.trim_clauses(pre)
+    pre = pre_clauses.to_formula()
     syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
-        declare_symbol(header,sym)
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+            declare_symbol(header,sym)
     header.append("    {}_gen();\n".format(caname))
     impl.append(caname + "_gen::" + caname + "_gen(){\n");
     indent_level += 1
@@ -212,10 +237,13 @@ def emit_action_gen(header,impl,name,action):
     header.append("    bool generate(ivy_test&);\n};\n");
     impl.append("bool " + caname + "_gen::generate(ivy_test& obj) {\n    push();\n")
     indent_level += 1
+    pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
-        emit_set(impl,sym)
+        if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
+            if slv.solver_name(sym) != None: # skip interpreted symbols
+                emit_set(impl,sym)
     for sym in syms:
-        if not sym.name.startswith('__ts'):
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
             emit_randomize(impl,sym)
     impl.append("""
     bool res = solve();
@@ -223,7 +251,7 @@ def emit_action_gen(header,impl,name,action):
 """)
     indent_level += 1
     for sym in syms:
-        if not sym.name.startswith('__ts'):
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
             emit_eval(impl,sym)
     indent_level -= 2
     impl.append("""
@@ -236,6 +264,9 @@ def emit_action_gen(header,impl,name,action):
 
 
 def emit_method_decl(header,name,action,body=False,classname=None):
+    if not hasattr(action,"formal_returns"):
+        print "bad name: {}".format(name)
+        print "bad action: {}".format(action)
     rs = action.formal_returns
     if not body:
         header.append('    ')
@@ -337,6 +368,16 @@ il.Symbol.emit = emit_constant
 il.Variable.emit = emit_constant
 
 def emit_app(self,header,code):
+    # handle interpreted ops
+    if slv.solver_name(self.func) == None:
+        assert len(self.args) == 2 # handle only binary ops for now
+        code.append('(')
+        self.args[0].emit(header,code)
+        code.append(' {} '.format(self.func.name))
+        self.args[1].emit(header,code)
+        code.append(')')
+        return 
+    # handle uninterpreted ops
     code.append(varname(self.func.name))
     for a in self.args:
         code.append('[')
@@ -468,6 +509,13 @@ def emit_assign(self,header):
         header.append('}\n')
     
 ia.AssignAction.emit = emit_assign
+
+def emit_havoc(self,header):
+    print self
+    print self.lineno
+    assert False
+
+ia.HavocAction.emit = emit_havoc
 
 def emit_sequence(self,header):
     global indent_level
@@ -626,17 +674,22 @@ public:
         assert(arity == num_args);
         for(unsigned i = 0; i < arity; i ++) {
             z3::sort sort = decl.domain(i);
-            z3::func_decl_vector vals = enum_values.find(sort)->second;
-            expr_args.push_back(vals[args[i]]());
+            expr_args.push_back(int_to_z3(sort,args[i]));
         }
         z3::expr apply_expr = decl(arity,&expr_args[0]);
         //        std::cout << "apply_expr: " << apply_expr << std::endl;
         try {
             z3::expr foo = model.eval(apply_expr,true);
+            if (foo.is_bv()) {
+                assert(foo.is_numeral());
+                int v;
+                if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
+                    assert(false && "bit vector value too large for machine int");
+                return v;
+            }
             assert(foo.is_app());
             if (foo.is_bool())
                 return (foo.decl().decl_kind() == Z3_OP_TRUE) ? 1 : 0;
-            assert(foo.is_app());
             return enum_to_int[foo.decl().name()];
         }
         catch (const z3::exception &e) {
@@ -663,6 +716,22 @@ public:
         return eval_apply(decl_name,4,args);
     }
 
+    z3::expr int_to_z3(const z3::sort &range, int value) {
+        if (range.is_bool())
+            return ctx.bool_val(value);
+        if (range.is_bv())
+            return ctx.bv_val(value,range.bv_size());
+        return enum_values.find(range)->second[value]();
+    }
+
+    unsigned sort_card(const z3::sort &range) {
+        if (range.is_bool())
+            return 2;
+        if (range.is_bv())
+            return 1 << range.bv_size();
+        return enum_values.find(range)->second.size();
+    }
+
     int set(const char *decl_name, unsigned num_args, const int *args, int value) {
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
         std::vector<z3::expr> expr_args;
@@ -670,12 +739,11 @@ public:
         assert(arity == num_args);
         for(unsigned i = 0; i < arity; i ++) {
             z3::sort sort = decl.domain(i);
-            z3::func_decl_vector vals = enum_values.find(sort)->second;
-            expr_args.push_back(vals[args[i]]());
+            expr_args.push_back(int_to_z3(sort,args[i]));
         }
         z3::expr apply_expr = decl(arity,&expr_args[0]);
         z3::sort range = decl.range();
-        z3::expr val_expr = range.is_bool() ? ctx.bool_val(value) : enum_values.find(range)->second[value]();
+        z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
         //        std::cout << "pred: " << pred << std::endl;
         slvr.add(pred);
@@ -705,9 +773,9 @@ public:
         assert(arity == 0);
         z3::expr apply_expr = decl();
         z3::sort range = decl.range();
-        unsigned card = range.is_bool() ? 2 : enum_values.find(range)->second.size();
+        unsigned card = sort_card(range);
         int value = rand() % card;
-        z3::expr val_expr = range.is_bool() ? ctx.bool_val(value) : enum_values.find(range)->second[value]();
+        z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
         // std::cout << "pred: " << pred << std::endl;
         std::ostringstream ss;
@@ -739,6 +807,12 @@ public:
             decls.push_back(cs[i]);
             enum_to_int[sym] = i;
         }
+    }
+
+    void mk_bv(const char *sort_name, unsigned width) {
+        z3::sort sort = ctx.bv_sort(width);
+        // can't use operator[] here because the value classes don't have nullary constructors
+        enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
     }
 
     void mk_decl(const char *decl_name, unsigned arity, const char **domain_names, const char *range_name) {
@@ -800,6 +874,7 @@ public:
 if __name__ == "__main__":
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
+    ic.set_create_big_action(False)
     with im.Module():
         ivy.ivy_init()
 

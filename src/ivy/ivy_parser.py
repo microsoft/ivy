@@ -42,7 +42,7 @@ class ParseError(Exception):
     
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
-        msg = 'redefining ' + name
+        msg = 'redefining ' + str(name)
         if orig_lineno != None:
             msg += " (from line {})".format(orig_lineno)
         super(Redefining, self).__init__(lineno,None,msg)
@@ -531,7 +531,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
-def p_top_interpret_symbol_arrow_symbol(p):
+def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
     thing = InterpretDecl(Implies(Atom(p[3],[]),Range(p[6],p[8])))

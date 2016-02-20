@@ -342,10 +342,10 @@ class IvyDomainSetup(IvyDeclInterp):
             interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
-                         [slv.sorts,[x for x in slv.relations] + [x for x in slv.functions]],
+                         [slv.is_solver_sort,slv.is_solver_op],
                          ['sort','symbol']):
             if lhs in x:
-                if rhs not in y:
+                if not y(rhs):
                     raise IvyError(thing,"{} not a native {}".format(rhs,z))
                 interp[lhs] = rhs
                 return
@@ -513,7 +513,11 @@ def summarize_action(action):
 
 #     2) The action is not opaque and is called from any opaque action
 
+create_big_action = True
 
+def set_create_big_action(t):
+    global create_big_action
+    create_big_action = t
 
 def startswith_some(s,prefixes):
     return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
@@ -583,9 +587,10 @@ def isolate_component(ag,isolate_name):
                     exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
-    ext_act = ia.ChoiceAction(*[new_actions[x] for x in sorted(exported)])
-    exported.add('ext');
-    new_actions['ext'] = ext_act;
+    if create_big_action:
+        ext_act = ia.ChoiceAction(*[new_actions[x] for x in sorted(exported)])
+        exported.add('ext');
+        new_actions['ext'] = ext_act;
 
     ag.public_actions.clear()
     ag.public_actions.update(exported)

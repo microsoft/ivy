@@ -8,6 +8,7 @@ import encodings.latin_1
 import itertools
 from itertools import chain
 from collections import defaultdict
+import re
 
 import z3
 import ivy_logic
@@ -29,7 +30,10 @@ def set_use_native_enums(t):
 def solver_name(symbol):
     name = symbol.name
     if name in ivy_utils.polymorphic_symbols:
-        name += ':' + symbol.sort.domain[0].name
+        sort = symbol.sort.domain[0].name
+        if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
+            return None
+        name += ':' + sort
     return name
 
 # S = z3.DeclareSort("S")
@@ -44,22 +48,42 @@ def my_eq(x,y):
 #    print "my_eq: {} = {}".format(x,y)
     return z3.BoolRef(z3.Z3_mk_eq(ctx.ref(), x.as_ast(), y.as_ast()), ctx)
 
-sorts = {}
+z3_sort_parser = re.compile(r'bv\[[0-9]+\]')
+
+def sorts(name):
+    if name.startswith('bv[') and name.endswith(']'):
+        width = int(name[3:-1])
+        return z3.BitVecSort(width)
+    return None
+        
+#sorts = {}
 #sorts = {"S":S,
 #         "Int":z3.IntSort()}
 
-relations = {'<':(lambda x,y: x < y),
+def is_solver_sort(name):
+    return name.startswith('bv[') and name.endswith(']')
+
+relations_dict = {'<':(lambda x,y: z3.ULT(x, y)),
              '<=':(lambda x,y: x <= y),
              '>':(lambda x,y: x > y),
              '>=':(lambda x,y: x >= y),
              }
 
-functions = {"+":(lambda x,y: x + y),
+def relations(name):
+    return relations_dict.get(name)
+
+functions_dict = {"+":(lambda x,y: x + y),
              "-":my_minus,
              "*":(lambda x,y: x * y),
              }
 
-z3_sorts = sorts
+def functions(name):
+    return functions_dict.get(name)
+
+def is_solver_op(name):
+    return name in relations or name in functions
+
+z3_sorts = dict()
 z3_predicates = {ivy_logic.equals : my_eq}
 z3_constants = dict()
 z3_functions = dict()
@@ -70,7 +94,7 @@ z3_sorts_inv = {}
 def uninterpretedsort(us):
     s = z3_sorts.get(us.rep,None)
     if s: return s
-    s = lookup_native(us.rep,sorts,"sort")
+    s = lookup_native(us,sorts,"sort")
     if s == None:
         s = z3.DeclareSort(us.rep)
     z3_sorts[us.rep] = s
@@ -96,16 +120,32 @@ ivy_logic.EnumeratedSort.to_z3 = enumeratedsort
 ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())
 
 
-def lookup_native(name,table,kind):
-    z3name = ivy_logic.sig.interp.get(name)
+def lookup_native(thing,table,kind):
+    z3name = ivy_logic.sig.interp.get(thing.name)
     if z3name == None:
+        if thing.name in ivy_utils.polymorphic_symbols:
+            sort = thing.sort.domain[0].name
+            if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
+                z3val = table(thing.name)
+                if z3val == None:
+                    raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
+                return z3val
         return None
     if isinstance(z3name,ivy_logic.EnumeratedSort):
         return z3name.to_z3()
-    z3val = table.get(z3name)
+    z3val = table(z3name)
     if z3val == None:
         raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
     return z3val
+
+def sort_card(sort):
+    sig = lookup_native(sort,sorts,"sort") or sort.to_z3()
+    if z3.is_bv_sort(sig):
+        return 2**sig.size()
+    if isinstance(sig,z3.DatatypeSortRef):
+        return sig.num_constructors()
+    return None
+
 
 # TODO: this seems wrong: why return a constant?
 def native_symbol(sym):
@@ -142,7 +182,7 @@ def term_to_z3(term):
             res = z3_constants.get(sksym)
             if res: return res
 #            print str(term.sort)
-            sig = lookup_native(str(term.sort),sorts,"sort") if sorted else S
+            sig = lookup_native(term.sort,sorts,"sort") if sorted else S
             if sig == None:
                 sig = term.sort.to_z3()
 #            if sorted:
