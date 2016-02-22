@@ -29,6 +29,15 @@ struct tilelink_two_port_dut {
     int addr_hi;
     int word;
     int own;
+
+    friend std::ostream & operator<<(std::ostream & out, finish const &a) {
+      out << "finish{";
+      out << "id_ = " << a.id_ << ", ";
+      out << "addr_hi = " << a.addr_hi << ", ";
+      out << "word = " << a.word << ", ";
+      out << "own = " << a.own << "";
+      out << "}";
+    }
   };
 
   struct release {
@@ -38,6 +47,17 @@ struct tilelink_two_port_dut {
     int word;
     int dirty;
     int data_;
+
+    friend std::ostream & operator<<(std::ostream & out, release const &a) {
+      out << "release{";
+      out << "id_ = " << a.id_ << ", ";
+      out << "voluntary = " << a.voluntary << ", ";
+      out << "addr_hi = " << a.addr_hi << ", ";
+      out << "word = " << a.word << ", ";
+      out << "dirty = " << a.dirty << ", ";
+      out << "data_ = " << a.data_ << "";
+      out << "}";
+    }
   };
 
   struct grant {
@@ -65,6 +85,14 @@ struct tilelink_two_port_dut {
   struct probe {
     int id_;
     int addr_hi;
+
+    friend std::ostream & operator<<(std::ostream & out, probe const &a) {
+      out << "probe{";
+      out << "id_ = " << a.id_ << ", ";
+      out << "addr_hi = " << a.addr_hi << "";
+      out << "}";
+    }
+
   };
 
   struct manager_port {

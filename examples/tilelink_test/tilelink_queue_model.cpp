@@ -108,34 +108,34 @@ class tilelink_queue_model : public tilelink_two_port_dut {
 
   virtual void clock(){
     if(m_cp.pd.acq_send && m_cp.pd.acq_ready){
-      m_cp.pd.acq = acq_q.back();
-      acq_q.pop_back();
+      acq_q.erase(acq_q.begin());
       m_cp.pd.acq_send = acq_q.size();
       m_mp.pd.acq_ready = true;
+      if (acq_q.size()) m_cp.pd.acq = acq_q.front();
     }      
     if(m_cp.pd.fns_send && m_cp.pd.fns_ready){
-      m_cp.pd.fns = fns_q.back();
-      fns_q.pop_back();
+      fns_q.erase(fns_q.begin());
       m_cp.pd.fns_send = fns_q.size();
       m_mp.pd.fns_ready = true;
+      if (fns_q.size()) m_cp.pd.fns = fns_q.front();
     }      
     if(m_cp.pd.rls_send && m_cp.pd.rls_ready){
-      m_cp.pd.rls = rls_q.back();
-      rls_q.pop_back();
+      rls_q.erase(rls_q.begin());
       m_cp.pd.rls_send = rls_q.size();
       m_mp.pd.rls_ready = true;
+      if (rls_q.size()) m_cp.pd.rls = rls_q.front();
     }      
     if(m_mp.pd.gnt_send && m_mp.pd.gnt_ready){
-      m_mp.pd.gnt = gnt_q.back();
-      gnt_q.pop_back();
+      gnt_q.erase(gnt_q.begin());
       m_mp.pd.gnt_send = gnt_q.size();
       m_cp.pd.gnt_ready = true;
+      if (gnt_q.size()) m_mp.pd.gnt = gnt_q.front();
     }      
     if(m_mp.pd.prb_send && m_mp.pd.prb_ready){
-      m_mp.pd.prb = prb_q.back();
-      prb_q.pop_back();
+      prb_q.erase(prb_q.begin());
       m_mp.pd.prb_send = prb_q.size();
       m_cp.pd.prb_ready = true;
+      if (prb_q.size()) m_mp.pd.prb = prb_q.front();
     }      
     if(m_mp.pd.acq_send && m_mp.pd.acq_ready){
       acq_q.push_back(m_mp.pd.acq);
