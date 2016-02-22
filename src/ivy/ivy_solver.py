@@ -111,7 +111,7 @@ def enumeratedsort(es):
     res,consts = z3.EnumSort(es.name,es.extension)
     for c in consts:
         z3_constants[str(c)] = c
-    print "enum {} : {}".format(res,type(res))
+#    print "enum {} : {}".format(res,type(res))
     return res
 
 ivy_logic.UninterpretedSort.to_z3 = uninterpretedsort

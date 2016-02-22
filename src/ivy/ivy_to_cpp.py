@@ -78,7 +78,7 @@ def emit_sorts(header):
             sort = il.sig.interp[name]
         if not isinstance(sort,il.EnumeratedSort):
             sortname = str(sort)
-            print "sortname: {}".format(sortname)
+#            print "sortname: {}".format(sortname)
             if sortname.startswith('bv[') and sortname.endswith(']'):
                 width = int(sortname[3:-1])
                 indent(header)
@@ -169,7 +169,7 @@ def emit_eval_sig(header,obj=None):
         if slv.solver_name(symbol) != None: # skip interpreted symbols
             emit_eval(header,symbol,obj)
 
-def emit_init_gen(header,impl):
+def emit_init_gen(header,impl,classname):
     global indent_level
     header.append("""
 class init_gen : public gen {
@@ -192,9 +192,9 @@ public:
     impl.append('))");\n')
     indent_level -= 1
     impl.append("}\n");
-    header.append("    bool generate(ivy_test&);\n};\n");
+    header.append("    bool generate(" + classname + "&);\n};\n")
+    impl.append("bool init_gen::generate(" + classname + "& obj) {\n")
     impl.append("""
-bool init_gen::generate(ivy_test& obj) {
     bool res = solve();
     if (res) {
 """)
@@ -234,8 +234,8 @@ def emit_action_gen(header,impl,name,action):
     impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
     indent_level -= 1
     impl.append("}\n");
-    header.append("    bool generate(ivy_test&);\n};\n");
-    impl.append("bool " + caname + "_gen::generate(ivy_test& obj) {\n    push();\n")
+    header.append("    bool generate(" + classname + "&);\n};\n");
+    impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
     indent_level += 1
     pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
@@ -340,6 +340,9 @@ def module_to_cpp_class(classname):
         declare_symbol(header,sym)
     for sym in il.sig.constructors:
         declare_symbol(header,sym)
+    for sname in il.sig.interp:
+        header.append('    int __CARD__' + varname(sname) + ';\n')
+
     header.append('    ' + classname + '();\n');
     im.module.actions['.init'] = init_method()
     for a in im.module.actions:
@@ -351,11 +354,13 @@ def module_to_cpp_class(classname):
     for sortname in enums:
         for i,n in enumerate(il.sig.sorts[sortname].extension):
             impl.append('    {} = {};\n'.format(varname(n),i))
+    for sortname in il.sig.interp:
+        impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
     impl.append('}\n')
 
     
     emit_boilerplate1(header,impl)
-    emit_init_gen(header,impl)
+    emit_init_gen(header,impl,classname)
     for name,action in im.module.actions.iteritems():
         if name in im.module.public_actions:
             emit_action_gen(header,impl,name,action)
@@ -878,10 +883,10 @@ if __name__ == "__main__":
     with im.Module():
         ivy.ivy_init()
 
-        classname = 'ivy_test'
+        classname = im.module.name
         header,impl = module_to_cpp_class(classname)
-        print header
-        print impl
+#        print header
+#        print impl
         f = open(classname+'.h','w')
         f.write(header)
         f.close()

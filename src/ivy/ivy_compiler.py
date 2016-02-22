@@ -597,9 +597,9 @@ def isolate_component(ag,isolate_name):
     ag.actions.clear()
     ag.actions.update(new_actions)
 
-    print "actions:"
-    for x,y in ag.actions.iteritems():
-        print iu.pretty("action {} = {}".format(x,y))
+    # print "actions:"
+    # for x,y in ag.actions.iteritems():
+    #     print iu.pretty("action {} = {}".format(x,y))
     
 # collect actions in case of forward reference
 def collect_actions(decls):
@@ -658,9 +658,9 @@ def ivy_compile(ag,decls):
                 for a in ag.actions:
                     ag.public_actions.add(a)
 
-            print "actions:"
-            for x,y in ag.actions.iteritems():
-                print iu.pretty("action {} = {}".format(x,y))
+            # print "actions:"
+            # for x,y in ag.actions.iteritems():
+            #     print iu.pretty("action {} = {}".format(x,y))
 
 
     ivy_logic.sig = ag.domain.sig # TODO: make this an environment

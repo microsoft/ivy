@@ -95,6 +95,7 @@ def ivy_init():
 #            print "loading file %s" % fn
             with iu.SourceFile(fn):
                 ivy_load_file(f,ag)
+                ivy_module.module.name = fn[:fn.rindex('.')]
         except IvyError as e:
             if not hasattr(e,'filename'):
                 e.filename = fn

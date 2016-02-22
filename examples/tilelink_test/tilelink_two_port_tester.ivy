@@ -10,28 +10,6 @@
 include tilelink_concrete_spec
 
 ################################################################################
-# 
-# The system we want to verify. This is a "block of wood", since we are just
-# generating inputs, not verifying anything.
-#
-################################################################################
-
-
-module wood_block = {
-
-   action tl_Grant(msg:gnt_id) = {}
-
-   action tl_Probe(msg:prb_id) = {}
-
-   action tl_Acquire(msg:acq_id) = {}
-
-   action tl_Finish(msg:fns_id) = {}
-
-   action tl_Release(msg:rls_id) = {}
-
-}
-
-################################################################################
 #
 # Generic model of a client. This performs arbitrary client actions, except
 # the it guarantees to use only ID's from the "client" side of the interface
@@ -41,14 +19,13 @@ module wood_block = {
 #
 ################################################################################
 
-module tl_generic_client_gen(mngr,ref,side) = {
+module generic_client_intf(mngr) = {
 
    action tl_Grant(msg:gnt_id) = {}
 
    action tl_Probe(msg:prb_id) = {}
 
-   action acquire = {
-       local a:acq_id, 
+   action acquire(
            id_ : id,               # id of requester
 	   addr_hi : tl_addrhi,    # hi order bits of address
            word : tl_addrlo,       # requested word if uncached
@@ -57,6 +34,8 @@ module tl_generic_client_gen(mngr,ref,side) = {
            data_ : data,           # what data, if any?
 
            ltime_ : ltime         # (aux) logical time
+   ) = {
+       local a:acq_id 
        {
            acqs(a).id_ := id_;
 	   acqs(a).addr_hi := addr_hi;
@@ -69,12 +48,13 @@ module tl_generic_client_gen(mngr,ref,side) = {
        }
    }
 
-   action finish = {
-       local a:fns_id,
-           id_ : id,             # transaction id
+   action finish(
+           id_ : id,               # transaction id
            addr_hi : tl_addrhi,    # (aux) hi order bits of acquire
            word : tl_addrlo,       # (aux) low-order bits of acquire
-           own:ownership          # (aux) ownership or acquire
+           own:ownership           # (aux) ownership or acquire
+   ) = {
+       local a:fns_id
        {
            fnss(a).id_ := id_;
            fnss(a).addr_hi := addr_hi;
@@ -84,14 +64,15 @@ module tl_generic_client_gen(mngr,ref,side) = {
        }
    }
 
-   action release = {
-        local a:rls_id,
+   action release(
            id_ : id,             # id of requester
            voluntary : bool,     # is this a voluntary release?
            addr_hi : tl_addrhi,  # hi order bits of address
            word :tl_addrlo,      # word being released
            dirty : bool,         # is data modified?
            data_ : data         # data, if dirty
+   ) = {
+        local a:rls_id
         {
            rlss(a).id_ := id_;
            rlss(a).voluntary := voluntary;
@@ -102,6 +83,12 @@ module tl_generic_client_gen(mngr,ref,side) = {
 	   call mngr.tl_Release(a)
         }
    }
+}
+
+module tl_generic_client_gen(mngr,ref,side) = {
+
+   instantiate generic_client_intf(mngr)
+
    action perform(lt:ltime, sid:id) = {
        assume side(sid) = client;
        call ref.perform(lt,sid)
@@ -123,16 +110,15 @@ module tl_generic_client_gen(mngr,ref,side) = {
 #
 ################################################################################
 
-module tl_generic_manager_gen(clnt,ref,side) = {
- 
+module generic_manager_intf(clnt) = {
+
    action tl_Acquire(msg:acq_id) = {}
 
    action tl_Finish(msg:fns_id) = {}
 
    action tl_Release(msg:rls_id) = {}
 
-   action grant = {
-       local a:gnt_id,
+   action grant(
            id_ : id,               # transaction id
            word : tl_addrlo,       # low-order bits of this response
            own : ownership,          # what ownership type? (none = uncached)
@@ -141,6 +127,8 @@ module tl_generic_manager_gen(clnt,ref,side) = {
 
            addr_hi : tl_addrhi,    # (aux) hi order bits of address
            ltime_ : ltime         # (aux) logical time
+   ) = {
+       local a:gnt_id
        {
            gnts(a).id_ := id_;
            gnts(a).word := word;
@@ -154,16 +142,22 @@ module tl_generic_manager_gen(clnt,ref,side) = {
        }
    }
 
-   action probe = {
-       local a:prb_id,
+   action probe(
            id_ : id,             # id of receiver
            addr_hi : tl_addrhi  # hi order bits of address
+   ) = {
+       local a:prb_id
        {
            prbs(a).id_ := id_;
            prbs(a).addr_hi := addr_hi;
            call clnt.tl_Probe(a)
        }
    }
+}
+
+module tl_generic_manager_gen(clnt,ref,side) = {
+ 
+   instantiate generic_manager_intf(clnt)
 
    action perform(lt:ltime, sid:id) = {
        assume side(sid) = manager;
@@ -177,17 +171,37 @@ module tl_generic_manager_gen(clnt,ref,side) = {
 
 }
 
+################################################################################
+# 
+# The system we want to verify. This is a "block of wood", since we are just
+# generating inputs, not verifying anything. The block of wood is implemented
+# by combining a generic client and a generic manager.
+#
+################################################################################
+
+
+module wood_block(clnt,mngr) = {
+   instantiate generic_client_intf(mngr)
+   instantiate generic_manager_intf(clnt)
+}
+
 individual buf_id : id   # arbitrary process id for the dut
 
 instantiate c : tl_generic_client_gen(b,ref,fside)
-instantiate b : wood_block
+instantiate b : wood_block(c,m)
 instantiate m : tl_generic_manager_gen(b,ref,bside)
 
 export c.acquire
 export c.finish
 export c.release
+export c.perform
 export m.grant
 export m.probe
+export b.acquire
+export b.finish
+export b.release
+export b.grant
+export b.probe
 
 ################################################################################
 # 
@@ -212,6 +226,8 @@ individual bside(I:id) : side
 axiom fside(buf_id) = manager
 axiom bside(buf_id) = client
 axiom I ~= buf_id -> fside(I) = bside(I)
+individual c_id : id
+axiom fside(c_id) = client
 
 instantiate front : tl_interface(ref,c,b,fside)
 instantiate back : tl_interface(ref,b,m,bside)
