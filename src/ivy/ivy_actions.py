@@ -242,6 +242,10 @@ class AssertAction(Action):
     def assert_to_assume(self):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
         return res
     
 # Ensures is same as Assert except it never gets converted to Assume

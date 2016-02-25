@@ -1,6 +1,15 @@
 /* This is a wrapper for the C++ simulator of the RocketChip Coherence
    manager. */
 
+/* Issues for BroadcastHub:
+
+1) ReleaseTracker does not seem to correctly handle case of one data beat.
+That is, it goes to state "s_outer" and stays there.
+
+
+
+*/
+
 #include "tilelink_two_port_dut.h"
 #include "L2Unit.DefaultCPPConfig.h"
 #include "hash.h"
@@ -57,7 +66,8 @@ int to_a_op(int a_type){
     case 0b010 : return 1; // putType
     case 0b100 : return 2; // putAtomicType
     }
-    assert (false && "unknown builtin acquire op");
+    return 0; // unknown type
+
 }
 
 class tilelink_coherence_manager : public tilelink_two_port_dut {
@@ -148,23 +158,29 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
 
   struct my_client_port : public client_port {
 
+    L2Unit_t &dut;
+
       hash_map<int,int> manager_txid_to_client_txid;
       hash_map<int,int> manager_txid_to_addr_hi;
       hash_map<int,int> manager_txid_to_word;
       hash_map<int,int> manager_txid_to_own;
 
 
+    my_client_port(L2Unit_t &_dut) : dut(_dut) {}
+
     bool get_acquire(acquire &a){
         // TODO: don't have client id bits yet
         // a.client_id = dut.L2Unit__io_inner_acquire_bits_client_id.values[0];
-        a.id_ = dut.L2Unit__io_outer_acquire_bits_client_xact_id.values[0];
+        // TODO: high bit of txid seems to be used for something I don't understand
+        a.id_ = dut.L2Unit__io_outer_acquire_bits_client_xact_id.values[0] & 0x07L;
         a.own = to_a_own(dut.L2Unit__io_outer_acquire_bits_is_builtin_type.values[0],
                          dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
         a.word = dut.L2Unit__io_outer_acquire_bits_addr_beat.values[0];
         a.op = to_a_op(dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
         // dut.L2Unit__io_outer_acquire_bits_union -- TODO: what here?
-        a.addr_hi dut.L2Unit__io_outer_acquire_bits_addr_block.values[0];
-        a.data_ = dut.L2Unit__io_outer_acquire_bits_data.values[0];
+        a.addr_hi = dut.L2Unit__io_outer_acquire_bits_addr_block.values[0];
+        a.data_ = a.op ? dut.L2Unit__io_outer_acquire_bits_data.values[0] : 0;
+        a.ltime_ = 0;
         return dut.L2Unit__io_outer_acquire_valid.values[0];
     }
     void set_acquire_ready(bool b){
@@ -190,7 +206,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         return false;
     }
     void set_release_ready(bool b){
-      pd.rls_ready = b;
+        // No such port!
     }
     void set_grant(bool send, const grant &a){
         dut.L2Unit__io_outer_grant_valid = LIT<1>(send);
@@ -198,7 +214,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_outer_grant_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_outer_grant_bits_client_xact_id = LIT<2>(a.id_);
         // TODO: don't have client id bits yet
-        dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(0);        
+        //        dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(0);        
         // TODO: this is wrong! We need both client and manager xact_ids!
         dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.id_);
         dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own));
@@ -257,7 +273,10 @@ public:
       dut.clock_hi(LIT<1>(1));
   }  
 
-
+  ~tilelink_coherence_manager(){
+      delete m_mp;
+      delete m_cp;
+  }
 };
 
 tilelink_two_port_dut *create_tilelink_two_port_dut() {

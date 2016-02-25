@@ -1,5 +1,5 @@
 #include <iostream>
-#include "tilelink_two_port_tester.h"
+#include "tilelink_coherence_manager_tester.h"
 #include "tilelink_two_port_dut.h"
 
 struct rgen : public ivy_gen {
@@ -14,9 +14,8 @@ typedef tilelink_two_port_dut::release release;
 typedef tilelink_two_port_dut::grant grant;
 typedef tilelink_two_port_dut::probe probe;
  
-
 int main(){
-    tilelink_two_port_tester tb;
+    tilelink_coherence_manager_tester tb;
     tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
     tilelink_two_port_dut &dut = *dut_ptr;
 
@@ -45,106 +44,86 @@ int main(){
 	tb.front__cached_hi[0] = 1;
 	tb.front__cached_hi[1] = 1;
 
-	tb.back__cached[0] = 1;
-	tb.back__cached[1] = 1;
-	tb.back__cached[2] = 1;
-	tb.back__cached[3] = 1;
-	tb.back__cached_hi[0] = 1;
-	tb.back__cached_hi[1] = 1;
+#if 0
+	tb.back__cached[0] = 0;
+	tb.back__cached[1] = 0;
+	tb.back__cached[2] = 0;
+	tb.back__cached[3] = 0;
+	tb.back__cached_hi[0] = 0;
+	tb.back__cached_hi[1] = 0;
+#endif
 
 	rgen rg;
 	tb.___ivy_gen = &rg;
+
+        // buffers for input messages to design
+
+        std::vector<acquire> acq_i;
+        std::vector<finish> fns_i;
+        std::vector<release> rls_i;
+        std::vector<grant> gnt_i;
+        std::vector<probe> prb_i;
+
+        int BUF_MAX = 1;
+
+        acquire acq_m;
+        finish fns_m;
+        release rls_m;
+        grant gnt_c;
+        probe prb_c;
+
+        bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
 	for (int cycle = 0; cycle < 100; cycle++) {
 
 	  // beginning of clock cycle
 
 	  // tee up input messages for the dut
+
+          // we buffer the input messages so that we can present more
+          // than one input in a clock cycle.  TODO: we ought to
+          // dequeue these messages randomly.
+
 	  
-	  acquire dummy_acq;
-	  dut.mp()->set_acquire(false,dummy_acq);
+          if (rand() % 2 && acq_i.size() < BUF_MAX && cag.generate(tb)) {
+              acquire acq_g = {cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,cag.ltime_};
+              acq_i.push_back(acq_g);
+          }
+          acq_gen = acq_i.size();
+          if (acq_gen) acq_m = acq_i[0];
+          dut.mp()->set_acquire(acq_gen,acq_m);
 	  
-	  if (dut.mp()->get_acquire_ready() && rand() % 2) {
-	    if (cag.generate(tb)) {
+          if (rand() % 2 && fns_i.size() < BUF_MAX && cfg.generate(tb)) {
+              finish fns_g = {cfg.id_, cfg.addr_hi, cfg.word, cfg.own};
+              fns_i.push_back(fns_g);
+          }
+          fns_gen = fns_i.size();
+          if (fns_gen) fns_m = fns_i[0];
+          dut.mp()->set_finish(fns_gen,fns_m);
 
-	      // advance the tester state
-	      tb.ext__c__acquire(cag.id_,cag.addr_hi,cag.word,cag.own,cag.op, cag.data_, cag.ltime_);
+          if (rand() % 2 && rls_i.size() < BUF_MAX && crg.generate(tb)) {
+              release rls_g = {crg.id_, crg.voluntary, crg.addr_hi, crg.word, crg.dirty, crg.data_};
+              rls_i.push_back(rls_g);
+          }
+          rls_gen = rls_i.size();
+          if (rls_gen) rls_m = rls_i[0];
+          dut.mp()->set_release(rls_gen,rls_m);
 
-	      // generate message for dut 
-	      acquire acq_m = {cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,cag.ltime_};
-	      dut.mp()->set_acquire(true,acq_m);
+          if (rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
+              grant gnt_g = {mgg.id_,mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
+              gnt_i.push_back(gnt_g);
+          }
+          gnt_gen = gnt_i.size();
+          if (gnt_gen) gnt_c = gnt_i[0];
+          dut.cp()->set_grant(gnt_gen,gnt_c);
 
-	      std::cout << "input: " << acq_m << std::endl;
-	    }
-	  }	    
-
-	  finish dummy_fns;
-	  dut.mp()->set_finish(false,dummy_fns);
-	  
-	  if (dut.mp()->get_finish_ready() && rand() % 2) {
-	    if (cfg.generate(tb)) {
-
-	      // advance the tester state
-              tb.ext__c__finish(cfg.id_, cfg.addr_hi, cfg.word, cfg.own);
-
-	      // generate message for dut 
-	      finish fns_m = {cfg.id_, cfg.addr_hi, cfg.word, cfg.own};
-	      dut.mp()->set_finish(true,fns_m);
-
-	      std::cout << "input: " << fns_m << std::endl;
-	    }
-	  }	    
-
-	  release dummy_rls;
-	  dut.mp()->set_release(false,dummy_rls);
-	  
-	  if (dut.mp()->get_release_ready() && rand() % 2) {
-	    if (crg.generate(tb)) {
-
-	      // advance the tester state
-              tb.ext__c__release(crg.id_, crg.voluntary, crg.addr_hi, crg.word, crg.dirty, crg.data_);
-
-	      // generate message for dut 
-	      release rls_m = {crg.id_, crg.voluntary, crg.addr_hi, crg.word, crg.dirty, crg.data_};
-	      dut.mp()->set_release(true,rls_m);
-
-	      std::cout << "input: " << rls_m << std::endl;
-	    }
-	  }	    
-
-	  grant dummy_gnt;
-	  dut.cp()->set_grant(false,dummy_gnt);
-
-	  if (dut.cp()->get_grant_ready() && rand() % 2) {
-	    if (mgg.generate(tb)) {
-
-	      // advance the tester state
-	      tb.ext__m__grant(mgg.id_,mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,mgg.ltime_);
-	      
-	      // generate message for dut 
-	      grant gnt_c = {mgg.id_,mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,mgg.ltime_};
-	      dut.cp()->set_grant(true,gnt_c);
-
-	      std::cout << "input: " << gnt_c << std::endl;
-	    }
-	  }
-
-	  probe dummy_prb;
-	  dut.cp()->set_probe(false,dummy_prb);
-
-	  if (dut.cp()->get_probe_ready() && rand() % 2) {
-	    if (mpg.generate(tb)) {
-
-	      // advance the tester state
-              tb.ext__m__probe(0 /* mpg.id_ */, mpg.addr_hi);
-	      
-	      // generate message for dut 
-              probe prb_c = {0 /* mpg.id_ */, mpg.addr_hi};
-	      dut.cp()->set_probe(true,prb_c);
-
-	      std::cout << "input: " << prb_c << std::endl;
-	    }
-	  }
+          if (rand() % 2 && prb_i.size() < BUF_MAX && mpg.generate(tb)) {
+              probe prb_g = {0 /* mpg.id_ */, 0 /* mpg.addr_hi */};
+              prb_i.push_back(prb_g);
+          }
+          prb_gen = prb_i.size();
+          if (prb_gen) prb_c = prb_i[0];
+          dut.cp()->set_probe(prb_gen,prb_c);
 
 	  // choose ready signals for dut outputs
 
@@ -159,6 +138,41 @@ int main(){
 	  dut.mp()->set_grant_ready(gnt_ready);
 	  dut.mp()->set_probe_ready(prb_ready);
 	  
+          std::cout << "====clock====\n";
+	  dut.clock();
+
+          // advance the tester state
+
+          if (acq_gen && dut.mp()->get_acquire_ready()){
+	      tb.ext__c__acquire(acq_m.id_,acq_m.addr_hi,acq_m.word,acq_m.own,acq_m.op, acq_m.data_, acq_m.ltime_);
+	      std::cout << "input: " << acq_m << std::endl;
+              acq_i.erase(acq_i.begin());
+          }
+
+          if (fns_gen && dut.mp()->get_finish_ready()){
+              tb.ext__c__finish(fns_m.id_, fns_m.addr_hi, fns_m.word, fns_m.own);
+	      std::cout << "input: " << fns_m << std::endl;
+              fns_i.erase(fns_i.begin());
+          }
+
+          if (rls_gen && dut.mp()->get_release_ready()){
+              tb.ext__c__release(rls_m.id_, rls_m.voluntary, rls_m.addr_hi, rls_m.word, rls_m.dirty, rls_m.data_);
+	      std::cout << "input: " << rls_m << std::endl;
+              rls_i.erase(rls_i.begin());
+          }
+
+          if (gnt_gen && dut.cp()->get_grant_ready()){
+	      tb.ext__m__grant(gnt_c.id_,gnt_c.word,gnt_c.own,gnt_c.relack,gnt_c.data_,gnt_c.addr_hi,gnt_c.ltime_);
+	      std::cout << "input: " << gnt_c << std::endl;
+              gnt_i.erase(gnt_i.begin());
+	  }
+
+          if (prb_gen && dut.cp()->get_probe_ready()){
+              tb.ext__m__probe(0 /* mpg.id_ */, prb_c.addr_hi);
+	      std::cout << "input: " << prb_c << std::endl;
+              prb_i.erase(prb_i.begin());
+          }
+
 	  // get the dut outputs
 
 	  acquire acq_c;
@@ -195,10 +209,7 @@ int main(){
 	    tb.ext__b__probe(prb_m.id_, prb_m.addr_hi);
           }
 
-	  // clock the dut
 
-          std::cout << "====clock====\n";
-	  dut.clock();
 
 	  // end of clock cycle
 	}	  
