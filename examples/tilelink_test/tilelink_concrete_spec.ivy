@@ -173,6 +173,11 @@ module tl_interface(ref,clnt,mngr,side) = {
     relation cached_hi(X:tl_addrhi)
 
     ########################################
+    # if true, this interface does not allowed reordering of messages
+
+    relation ordered
+
+    ########################################
     # An Acquire has three phases: requested, accepted and finishing
     # 
     # These predicates keep track of whether there is an acquire in one
@@ -430,10 +435,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 		########################################
 		# Rules for Release acks:
 		#
-		# (1) A release ack implies a requested release of the
-		# given word.
+		# (1) A release ack implies a requested release of all
+		# words in the block.
 
-		assert none_r(hi,lo);
+		assert none_r(hi,X);
 
 		# (2) Cannot ack a release if there is an accepted
 		# or finishing Acquire for the same hi address.  The
@@ -448,7 +453,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		########################################
 		# mark the release finished
 
-		none_r(hi,lo) := false
+		none_r(hi,X) := false
 
             }
             else {	    
@@ -634,6 +639,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    # TODO: allow exclusive but clean release?
 
 	    assert rlss(msg).dirty <-> excl_p(a);
+
+	    # (4) If ordered, we do not allow a release when a release of a
+	    # different line is partially completed
+
+	    assert ordered -> ~(H ~= hi & (none_r(H,W1) & ~none_r(H,W2)
+                                | prb_addr(H,W1) & ~prb_addr(H,W2)));
 
 	    if rlss(msg).voluntary {
 
@@ -998,7 +1009,8 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
     relation unc_r(A:tl_addrhi,W:tl_addrlo)    # there is a requested uncached acquire
     relation unc_a(A:tl_addrhi,W:tl_addrlo)    # there is an accepted uncached acquire
-    
+    relation unc_w(A:tl_addrhi,W:tl_addrlo)    # there is a requested uncached write
+        
     
     ########################################
     # Each Acquire has a transaction ID (txid). This
@@ -1029,6 +1041,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     # Nothing is requested or accepted
 
     init    ~unc_r(H,W) 
+          & ~unc_w(H,W) 
           & ~unc_a(H,W) 
 	  & ~dirty(A)
 
@@ -1059,7 +1072,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    # (1) May not have a requested acquire with same hi address and word.
 
-	    assert ~unc_r(hi,lo);
+	    assert ~unc_r(hi,lo) & ~unc_w(hi,lo);
 
 	    # (2) if any requested or accepted transactions with
 	    # same hi address, txid must match
@@ -1069,7 +1082,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    # (3) May not use a txid in use by a requested tx with a different hi addr
 
-	    assert unc_r(H,W) & H ~= hi -> addr_rid(H) ~= txid;
+	    assert (unc_r(H,W) | unc_w(H,W)) & H ~= hi -> addr_rid(H) ~= txid;
 
 	    # (4) Writes must have correct data
 
@@ -1077,8 +1090,13 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    ########################################
 	    # mark the acquire as requested
+	    # reads are whole cache blocks
 
-	    unc_r(hi,lo) := true;
+	    if o = read {
+	        unc_r(hi,X) := true
+            } else {
+	        unc_w(hi,lo) := true
+            };
 
 	    ########################################
 	    # Associate the address and txid 
@@ -1118,24 +1136,30 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # 
 	    # (1) A Grant must match a requested or accepted Acquire. 
 
-	    assert unc_r(hi,lo) | unc_a(hi,lo);
+	    assert unc_r(hi,lo) | unc_a(hi,lo) | unc_w(hi,W);
 
 	    # (2) A grant's txid must match its request
 
 	    assert addr_rid(hi) = txid;
 
-	    # (6) Cannot grant if the txid if already in use for a
-	    # different hi address
+	    # Cannot grant if there is any grant in progress
+	    # That is, data beats of a grant must be consecutive
+	    # This assumes an ordered channel
 
-	    assert ~(unc_a(H,W) & addr_id(H) = txid & H ~= hi);
+	    assert ~(unc_a(H,W) & H ~= hi);
+	    
+	    # # (6) Cannot grant if the txid is already in use for a
+	    # # different hi address
 
-	    # (7) Cannot grant if different txid in use for same hi address.
+	    # assert ~(unc_a(H,W) & addr_id(H) = txid & H ~= hi);
 
-	    assert ~(unc_a(H,W) & addr_id(H) ~= txid & H = hi);
+	    # # (7) Cannot grant if different txid in use for same hi address.
 
-	    # (8) Cannot grant a request that exactly matches one in progress.
+	    # assert ~(unc_a(H,W) & addr_id(H) ~= txid & H = hi);
 
-	    assert ~unc_a(hi,lo);
+	    # # (8) Cannot grant a request that exactly matches one in progress.
+
+	    # assert ~unc_a(hi,lo);
 
 	    # Data correct if not dirtied by client
 
@@ -1150,6 +1174,12 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # so can never be in accepted state.
 
 	    unc_r(hi,lo) := false; # for now, can't be in accepted state
+	    unc_w(hi,W) := false;  # one grant for all beats
+
+	    ########################################
+	    # Transaction is accepted if there are any beats remaining	    
+
+	    unc_a(hi,X) := unc_r(hi,X);
 
 	    ########################################
 	    # If we are accepting a new uncached transaction, this

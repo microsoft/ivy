@@ -3,10 +3,6 @@
 
 /* Issues for BroadcastHub:
 
-1) ReleaseTracker does not seem to correctly handle case of one data beat.
-That is, it goes to state "s_outer" and stays there.
-
-
 
 */
 
@@ -32,7 +28,9 @@ int to_a_type(int own, int op){
 }
 
 int to_r_type(int voluntary, int dirty){
-    return 0b000;  // releaseInvalidateData TODO: this could be wrong
+    if (!dirty) 
+        return 0b011; // releaseInvalidateAck
+    return 0b000;  // releaseInvalidateData
 }
 
 // TODO: we don't have any exclusive grant without data (grantExclusiveAck)
@@ -52,6 +50,12 @@ int to_g_own(int is_builtin_type, int g_type){
     return 2;
 }
 
+bool to_g_relack(int is_builtin_type, int g_type){
+    if (is_builtin_type)
+        return g_type == 0b000;
+    return false;
+}
+
 int to_a_own(int is_builtin_type, int a_type){
     if (is_builtin_type)
         return 0;
@@ -65,7 +69,10 @@ int to_a_op(int a_type){
     case 0b000 : return 0; // getType
     case 0b010 : return 1; // putType
     case 0b100 : return 2; // putAtomicType
+    case 0b001 : return 0; // getBlock
+    case 0b011 : return 1; // putBlock
     }
+    std::cout << "unknown a_type:" << a_type << "\n";
     return 0; // unknown type
 
 }
@@ -80,6 +87,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     hash_map<int,int> client_txid_to_addr_hi;
     hash_map<int,int> client_txid_to_ltime;
     hash_map<int,int> client_txid_to_manager_txid;
+    hash_map<int,int> client_rls_txid_to_addr_hi;
 
     my_manager_port(L2Unit_t &_dut) : dut(_dut) {}
 
@@ -104,7 +112,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     }
     void set_finish(bool send, const finish &a){
         dut.L2Unit__io_inner_finish_valid = LIT<1>(send);
-        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(a.id_);
+        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(client_txid_to_manager_txid[a.id_]);
     }
     bool get_finish_ready(){
         return dut.L2Unit__io_inner_finish_ready.values[0];
@@ -119,6 +127,9 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_release_bits_r_type = LIT<3>(to_r_type(a.voluntary,a.dirty));
         dut.L2Unit__io_inner_release_bits_addr_block = LIT<26>(a.addr_hi);
         dut.L2Unit__io_inner_release_bits_data = LIT<128>(a.data_);
+        if (send) {
+            client_rls_txid_to_addr_hi[a.id_] = a.addr_hi;
+        }
     }
     bool get_release_ready(){
         return dut.L2Unit__io_inner_release_ready.values[0];
@@ -128,12 +139,14 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
                          dut.L2Unit__io_inner_grant_bits_g_type.values[0]);
         a.word = dut.L2Unit__io_inner_grant_bits_addr_beat.values[0];
         a.id_ = dut.L2Unit__io_inner_grant_bits_client_xact_id.values[0];
+        a.relack = to_g_relack(dut.L2Unit__io_inner_grant_bits_is_builtin_type.values[0],
+                               dut.L2Unit__io_inner_grant_bits_g_type.values[0]);
         // TODO: don't have client id bits yet
         // a.client_id = dut.L2Unit__io_inner_grant_bits_client_id.values[0];
         // TODO: this is wrong! We need both client and manager xact_ids!
         // a.id_ dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         a.data_ = dut.L2Unit__io_inner_grant_bits_data.values[0];
-        a.addr_hi = client_txid_to_addr_hi[a.id_];
+        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.id_] : client_txid_to_addr_hi[a.id_];
         a.ltime_ = client_txid_to_ltime[a.id_];
         bool send = dut.L2Unit__io_inner_grant_valid.values[0];
         if (send) {

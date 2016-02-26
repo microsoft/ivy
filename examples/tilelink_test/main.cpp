@@ -35,7 +35,7 @@ int main(){
             break;
         }
 
-	// For now, make all the memory cached
+	// For now, make all the memory cached on front
 
 	tb.front__cached[0] = 1;
 	tb.front__cached[1] = 1;
@@ -44,6 +44,10 @@ int main(){
 	tb.front__cached_hi[0] = 1;
 	tb.front__cached_hi[1] = 1;
 
+        // Assume front interface is ordered
+
+        tb.front__ordered = 1;
+        
 #if 0
 	tb.back__cached[0] = 0;
 	tb.back__cached[1] = 0;
@@ -74,7 +78,7 @@ int main(){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 100; cycle++) {
+	for (int cycle = 0; cycle < 1000; cycle++) {
 
 	  // beginning of clock cycle
 
@@ -87,6 +91,7 @@ int main(){
 	  
           if (rand() % 2 && acq_i.size() < BUF_MAX && cag.generate(tb)) {
               acquire acq_g = {cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,cag.ltime_};
+	      tb.ext__c__acquire(acq_g.id_,acq_g.addr_hi,acq_g.word,acq_g.own,acq_g.op, acq_g.data_, acq_g.ltime_);
               acq_i.push_back(acq_g);
           }
           acq_gen = acq_i.size();
@@ -95,6 +100,7 @@ int main(){
 	  
           if (rand() % 2 && fns_i.size() < BUF_MAX && cfg.generate(tb)) {
               finish fns_g = {cfg.id_, cfg.addr_hi, cfg.word, cfg.own};
+              tb.ext__c__finish(fns_g.id_, fns_g.addr_hi, fns_g.word, fns_g.own);
               fns_i.push_back(fns_g);
           }
           fns_gen = fns_i.size();
@@ -103,6 +109,7 @@ int main(){
 
           if (rand() % 2 && rls_i.size() < BUF_MAX && crg.generate(tb)) {
               release rls_g = {crg.id_, crg.voluntary, crg.addr_hi, crg.word, crg.dirty, crg.data_};
+              tb.ext__c__release(rls_g.id_, rls_g.voluntary, rls_g.addr_hi, rls_g.word, rls_g.dirty, rls_g.data_);
               rls_i.push_back(rls_g);
           }
           rls_gen = rls_i.size();
@@ -111,6 +118,7 @@ int main(){
 
           if (rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
               grant gnt_g = {mgg.id_,mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
+	      tb.ext__m__grant(gnt_g.id_,gnt_g.word,gnt_g.own,gnt_g.relack,gnt_g.data_,gnt_g.addr_hi,gnt_g.ltime_);
               gnt_i.push_back(gnt_g);
           }
           gnt_gen = gnt_i.size();
@@ -119,6 +127,7 @@ int main(){
 
           if (rand() % 2 && prb_i.size() < BUF_MAX && mpg.generate(tb)) {
               probe prb_g = {0 /* mpg.id_ */, 0 /* mpg.addr_hi */};
+              tb.ext__m__probe(prb_g.id_, prb_g.addr_hi);
               prb_i.push_back(prb_g);
           }
           prb_gen = prb_i.size();
@@ -141,34 +150,29 @@ int main(){
           std::cout << "====clock====\n";
 	  dut.clock();
 
-          // advance the tester state
+          // dequeue the accepted messages
 
           if (acq_gen && dut.mp()->get_acquire_ready()){
-	      tb.ext__c__acquire(acq_m.id_,acq_m.addr_hi,acq_m.word,acq_m.own,acq_m.op, acq_m.data_, acq_m.ltime_);
 	      std::cout << "input: " << acq_m << std::endl;
               acq_i.erase(acq_i.begin());
           }
 
           if (fns_gen && dut.mp()->get_finish_ready()){
-              tb.ext__c__finish(fns_m.id_, fns_m.addr_hi, fns_m.word, fns_m.own);
 	      std::cout << "input: " << fns_m << std::endl;
               fns_i.erase(fns_i.begin());
           }
 
           if (rls_gen && dut.mp()->get_release_ready()){
-              tb.ext__c__release(rls_m.id_, rls_m.voluntary, rls_m.addr_hi, rls_m.word, rls_m.dirty, rls_m.data_);
 	      std::cout << "input: " << rls_m << std::endl;
               rls_i.erase(rls_i.begin());
           }
 
           if (gnt_gen && dut.cp()->get_grant_ready()){
-	      tb.ext__m__grant(gnt_c.id_,gnt_c.word,gnt_c.own,gnt_c.relack,gnt_c.data_,gnt_c.addr_hi,gnt_c.ltime_);
 	      std::cout << "input: " << gnt_c << std::endl;
               gnt_i.erase(gnt_i.begin());
 	  }
 
           if (prb_gen && dut.cp()->get_probe_ready()){
-              tb.ext__m__probe(0 /* mpg.id_ */, prb_c.addr_hi);
 	      std::cout << "input: " << prb_c << std::endl;
               prb_i.erase(prb_i.begin());
           }
