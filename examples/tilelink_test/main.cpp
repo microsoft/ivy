@@ -14,7 +14,14 @@ typedef tilelink_two_port_dut::release release;
 typedef tilelink_two_port_dut::grant grant;
 typedef tilelink_two_port_dut::probe probe;
  
-int main(){
+int main(int argc, const char **argv){
+
+    unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
+      
+    if (argc) random_seed = atoi(argv[0]);
+
+    srand(random_seed);
+
     tilelink_coherence_manager_tester tb;
     tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
     tilelink_two_port_dut &dut = *dut_ptr;
@@ -78,7 +85,7 @@ int main(){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 1000; cycle++) {
+	for (int cycle = 0; cycle < 100000; cycle++) {
 
 	  // beginning of clock cycle
 
@@ -147,7 +154,7 @@ int main(){
 	  dut.mp()->set_grant_ready(gnt_ready);
 	  dut.mp()->set_probe_ready(prb_ready);
 	  
-          std::cout << "====clock====\n";
+          std::cout << "====clock " << cycle << "====\n";
 	  dut.clock();
 
           // dequeue the accepted messages

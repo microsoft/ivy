@@ -370,10 +370,10 @@ module tl_interface(ref,clnt,mngr,side) = {
 		assert (excl_r(hi) | shrd_r(hi)) -> addr_rid(hi) = txid;
 		assert (excl_a(hi) | shrd_a(hi)) -> addr_id(hi) = txid;
 		
-		# (3) May not use a txid in use by a requested acquire
+		# (3) May not use a txid in use by a requested or accepted acquire
                 # for a different hi addr
 
-		assert (unc_r(H,W) | excl_r(H) | shrd_r(H)) & H ~= hi -> addr_rid(H) ~= txid;
+		assert (unc_r(H,W) | excl_r(H) | shrd_r(H) | unc_a(H,W) | excl_a(H) | shrd_a(H)) & H ~= hi -> addr_rid(H) ~= txid;
 
 		# (4) May not have a pending release with same hi addr.
 

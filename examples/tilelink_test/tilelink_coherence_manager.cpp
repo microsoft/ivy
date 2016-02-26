@@ -28,6 +28,8 @@ int to_a_type(int own, int op){
 }
 
 int to_r_type(int voluntary, int dirty){
+    // TODO: temporary!!! All releases contain data
+    return 0b000;  // releaseInvalidateData
     if (!dirty) 
         return 0b011; // releaseInvalidateAck
     return 0b000;  // releaseInvalidateData
@@ -84,9 +86,9 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
   struct my_manager_port : public manager_port {
     L2Unit_t &dut;
 
-    hash_map<int,int> client_txid_to_addr_hi;
-    hash_map<int,int> client_txid_to_ltime;
-    hash_map<int,int> client_txid_to_manager_txid;
+    hash_map<std::pair<int,int>,int> client_txid_to_addr_hi;
+    hash_map<std::pair<int,int>,int> client_txid_to_ltime;
+    hash_map<std::pair<int,int>,int> client_txid_to_manager_txid;
     hash_map<int,int> client_rls_txid_to_addr_hi;
 
     my_manager_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -103,8 +105,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_acquire_bits_addr_block = LIT<26>(a.addr_hi);
         dut.L2Unit__io_inner_acquire_bits_data = LIT<128>(a.data_);
         if(send) {
-            client_txid_to_addr_hi[a.id_] = a.addr_hi;
-            client_txid_to_ltime[a.id_] = a.ltime_;
+            client_txid_to_addr_hi[std::pair<int,int>(a.id_,a.own)] = a.addr_hi;
+            client_txid_to_ltime[std::pair<int,int>(a.id_,a.own)] = a.ltime_;
         }
     }
     bool get_acquire_ready(){
@@ -112,7 +114,10 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     }
     void set_finish(bool send, const finish &a){
         dut.L2Unit__io_inner_finish_valid = LIT<1>(send);
-        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(client_txid_to_manager_txid[a.id_]);
+        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(client_txid_to_manager_txid[std::pair<int,int>(a.id_,a.own)]);
+        if (send) {
+            //            std::cout << "finish_manager_xact = " << dut.L2Unit__io_inner_finish_bits_manager_xact_id.values[0] << "\n";
+        }
     }
     bool get_finish_ready(){
         return dut.L2Unit__io_inner_finish_ready.values[0];
@@ -146,11 +151,13 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // TODO: this is wrong! We need both client and manager xact_ids!
         // a.id_ dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         a.data_ = dut.L2Unit__io_inner_grant_bits_data.values[0];
-        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.id_] : client_txid_to_addr_hi[a.id_];
-        a.ltime_ = client_txid_to_ltime[a.id_];
+        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.id_] : client_txid_to_addr_hi[std::pair<int,int>(a.id_,a.own)];
+        a.ltime_ = client_txid_to_ltime[std::pair<int,int>(a.id_,a.own)];
         bool send = dut.L2Unit__io_inner_grant_valid.values[0];
         if (send) {
-            client_txid_to_manager_txid[a.id_] = dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
+            //            std::cout << "grant_manager_xact = " << dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0] << " relack = " << a.relack  << "\n";
+            if (!a.relack)
+                client_txid_to_manager_txid[std::pair<int,int>(a.id_,a.own)] = dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         }
         return send;
     }
@@ -274,9 +281,7 @@ public:
       m_mp = new my_manager_port(dut);
       m_cp = new my_client_port(dut);
 
-      unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
-      srand(random_seed);
-      dut.init(random_seed);
+      dut.init(rand());
 
       // reset a couple of clocks
       
