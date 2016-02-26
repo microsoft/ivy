@@ -85,7 +85,7 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 100000; cycle++) {
+	for (int cycle = 0; cycle < 1000; cycle++) {
 
 	  // beginning of clock cycle
 
@@ -100,6 +100,7 @@ int main(int argc, const char **argv){
               acquire acq_g = {cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,cag.ltime_};
 	      tb.ext__c__acquire(acq_g.id_,acq_g.addr_hi,acq_g.word,acq_g.own,acq_g.op, acq_g.data_, acq_g.ltime_);
               acq_i.push_back(acq_g);
+              std::cout << "gen: " << acq_g << std::endl;
           }
           acq_gen = acq_i.size();
           if (acq_gen) acq_m = acq_i[0];
@@ -124,8 +125,8 @@ int main(int argc, const char **argv){
           dut.mp()->set_release(rls_gen,rls_m);
 
           if (rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
-              grant gnt_g = {mgg.id_,mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
-	      tb.ext__m__grant(gnt_g.id_,gnt_g.word,gnt_g.own,gnt_g.relack,gnt_g.data_,gnt_g.addr_hi,gnt_g.ltime_);
+              grant gnt_g = {mgg.clnt_txid, mgg.mngr_txid, mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
+	      tb.ext__m__grant(gnt_g.clnt_txid,gnt_g.clnt_txid,gnt_g.word,gnt_g.own,gnt_g.relack,gnt_g.data_,gnt_g.addr_hi,gnt_g.ltime_);
               gnt_i.push_back(gnt_g);
           }
           gnt_gen = gnt_i.size();
@@ -213,7 +214,7 @@ int main(int argc, const char **argv){
           }
 	  if (gnt_send & gnt_ready){
             std::cout << "output: " << gnt_m << std::endl;
-	    tb.ext__b__grant(gnt_m.id_,gnt_m.word,gnt_m.own,gnt_m.relack,gnt_m.data_,gnt_m.addr_hi,gnt_m.ltime_);
+	    tb.ext__b__grant(gnt_m.clnt_txid,gnt_m.mngr_txid,gnt_m.word,gnt_m.own,gnt_m.relack,gnt_m.data_,gnt_m.addr_hi,gnt_m.ltime_);
           }
 	  if (prb_send & prb_ready){
             std::cout << "output: " << prb_m << std::endl;

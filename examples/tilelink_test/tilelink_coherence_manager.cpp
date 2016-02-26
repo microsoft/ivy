@@ -88,7 +88,6 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
 
     hash_map<std::pair<int,int>,int> client_txid_to_addr_hi;
     hash_map<std::pair<int,int>,int> client_txid_to_ltime;
-    hash_map<std::pair<int,int>,int> client_txid_to_manager_txid;
     hash_map<int,int> client_rls_txid_to_addr_hi;
 
     my_manager_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -114,7 +113,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     }
     void set_finish(bool send, const finish &a){
         dut.L2Unit__io_inner_finish_valid = LIT<1>(send);
-        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(client_txid_to_manager_txid[std::pair<int,int>(a.id_,a.own)]);
+        dut.L2Unit__io_inner_finish_bits_manager_xact_id = LIT<4>(a.id_);
         if (send) {
             //            std::cout << "finish_manager_xact = " << dut.L2Unit__io_inner_finish_bits_manager_xact_id.values[0] << "\n";
         }
@@ -143,21 +142,18 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.own = to_g_own(dut.L2Unit__io_inner_grant_bits_is_builtin_type.values[0],
                          dut.L2Unit__io_inner_grant_bits_g_type.values[0]);
         a.word = dut.L2Unit__io_inner_grant_bits_addr_beat.values[0];
-        a.id_ = dut.L2Unit__io_inner_grant_bits_client_xact_id.values[0];
+        a.clnt_txid = dut.L2Unit__io_inner_grant_bits_client_xact_id.values[0];
+        a.mngr_txid = dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         a.relack = to_g_relack(dut.L2Unit__io_inner_grant_bits_is_builtin_type.values[0],
                                dut.L2Unit__io_inner_grant_bits_g_type.values[0]);
         // TODO: don't have client id bits yet
         // a.client_id = dut.L2Unit__io_inner_grant_bits_client_id.values[0];
-        // TODO: this is wrong! We need both client and manager xact_ids!
-        // a.id_ dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         a.data_ = dut.L2Unit__io_inner_grant_bits_data.values[0];
-        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.id_] : client_txid_to_addr_hi[std::pair<int,int>(a.id_,a.own)];
-        a.ltime_ = client_txid_to_ltime[std::pair<int,int>(a.id_,a.own)];
+        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.clnt_txid] : client_txid_to_addr_hi[std::pair<int,int>(a.clnt_txid,a.own)];
+        a.ltime_ = client_txid_to_ltime[std::pair<int,int>(a.clnt_txid,a.own)];
         bool send = dut.L2Unit__io_inner_grant_valid.values[0];
         if (send) {
             //            std::cout << "grant_manager_xact = " << dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0] << " relack = " << a.relack  << "\n";
-            if (!a.relack)
-                client_txid_to_manager_txid[std::pair<int,int>(a.id_,a.own)] = dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0];
         }
         return send;
     }
@@ -210,7 +206,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
 #if 0
         // No finish messages on uncached port!!!!
         int mid = dut.L2Unit__io_outer_finish_bits_manager_xact_id.values[0];
-        a.id_ = manager_txid_to_client_txid[mid];
+        a.id_ = mid;
         a.addr_hi = manager_txid_to_addr_hi[mid];
         a.word = manager_txid_to_word[mid];
         a.own = manager_txid_to_own[mid];
@@ -232,18 +228,16 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_outer_grant_valid = LIT<1>(send);
         dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(a.own == 0);
         dut.L2Unit__io_outer_grant_bits_addr_beat = LIT<2>(a.word);
-        dut.L2Unit__io_outer_grant_bits_client_xact_id = LIT<2>(a.id_);
+        dut.L2Unit__io_outer_grant_bits_client_xact_id = LIT<2>(a.clnt_txid);
         // TODO: don't have client id bits yet
         //        dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(0);        
-        // TODO: this is wrong! We need both client and manager xact_ids!
-        dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.id_);
+        dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.mngr_txid);
         dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own));
         dut.L2Unit__io_outer_grant_bits_data = LIT<128>(a.data_);
         if(send){
-            manager_txid_to_client_txid[a.id_] = a.id_;
-            manager_txid_to_addr_hi[a.id_] = a.addr_hi;
-            manager_txid_to_word[a.id_] = a.word;
-            manager_txid_to_own[a.id_] = a.own;
+            manager_txid_to_addr_hi[a.mngr_txid] = a.addr_hi;
+            manager_txid_to_word[a.mngr_txid] = a.word;
+            manager_txid_to_own[a.mngr_txid] = a.own;
         }
     }
     bool get_grant_ready(){

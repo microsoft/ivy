@@ -61,7 +61,8 @@ struct tilelink_two_port_dut {
   };
 
   struct grant {
-    int id_;
+    int clnt_txid;
+    int mngr_txid;
     int word;
     int own;
     int relack;
@@ -71,7 +72,8 @@ struct tilelink_two_port_dut {
 
     friend std::ostream & operator<<(std::ostream & out, grant const &a) {
       out << "grant{";
-      out << "id_ = " << a.id_ << ", ";
+      out << "clnt_txid = " << a.clnt_txid << ", ";
+      out << "mngr_txid = " << a.mngr_txid << ", ";
       out << "word = " << a.word << ", ";
       out << "own = " << a.own << ", ";
       out << "relack = " << a.relack << ", ";

@@ -79,7 +79,8 @@ instantiate acqs(X:acq_id) : acq
 # structure representing Grant message
 
 module gnt = {
-    individual id_ : id               # transaction id
+    individual clnt_txid : id         # client side transaction id
+    individual mngr_txid : id         # manager side transaction id
     individual word : tl_addrlo       # low-order bits of this response
     individual own:ownership          # what ownership type? (none = uncached)
     relation relack                   # is this an ack of a Release?
@@ -239,12 +240,12 @@ module tl_interface(ref,clnt,mngr,side) = {
     individual addr_rid(H:tl_addrhi) : id
 
     ########################################
-    # Each Acquire has a transaction ID (txid). This map tracks the
-    # txid associated with accepted and finishing acquires for a given
+    # Each Grant has a transaction ID (txid). This map tracks the
+    # txid associated with grants for a given
     # hi address. It is a protocol invariant that there is at most one
     # such txid.
 
-    individual addr_id(H:tl_addrhi) : id
+    individual addr_gid(H:tl_addrhi) : id
 
     ########################################
     # Each voluntary Release has a transaction ID (txid). This map
@@ -296,7 +297,7 @@ module tl_interface(ref,clnt,mngr,side) = {
                 # same hi address, txid must match
 
 		assert unc_r(hi,W) -> addr_rid(hi) = txid;
-		assert unc_a(hi,W) -> addr_id(hi) = txid;
+		assert unc_a(hi,W) -> addr_rid(hi) = txid;
 
 		# (3) May not use a txid in use by a requested tx with a different hi addr
 
@@ -368,7 +369,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# re4quest is granted, a new txid may be used.
 
 		assert (excl_r(hi) | shrd_r(hi)) -> addr_rid(hi) = txid;
-		assert (excl_a(hi) | shrd_a(hi)) -> addr_id(hi) = txid;
+		assert (excl_a(hi) | shrd_a(hi)) -> addr_rid(hi) = txid;
 		
 		# (3) May not use a txid in use by a requested or accepted acquire
                 # for a different hi addr
@@ -417,11 +418,12 @@ module tl_interface(ref,clnt,mngr,side) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local hi:tl_addrhi, lo:tl_addrlo, txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
+        local hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
 	
 	    hi := gnts(msg).addr_hi;  # this field is aux
 	    lo := gnts(msg).word;
-	    txid := gnts(msg).id_;
+	    c_txid := gnts(msg).clnt_txid;
+	    m_txid := gnts(msg).mngr_txid;
 	    ow := gnts(msg).own;	    
 	    lt := gnts(msg).ltime_;
 	    maddr := addr_cons(hi,lo);                             # construct full address
@@ -444,11 +446,12 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# or finishing Acquire for the same hi address.  The
 		# ack must wait for for Finish.
 
-		assert ~excl_a(hi) & ~shrd_a(hi) & ~excl_f(hi) & ~shrd_f(hi);
+# TODO: allowing this to see what happens
+#		assert ~excl_a(hi) & ~shrd_a(hi) & ~excl_f(hi) & ~shrd_f(hi);
 
 		# (3) A release acks txid must match the request
 
-		assert addr_nid(hi) = txid;
+		assert addr_nid(hi) = c_txid;
 
 		########################################
 		# mark the release finished
@@ -484,18 +487,18 @@ module tl_interface(ref,clnt,mngr,side) = {
 
 		# (5) A grant's txid must match its request
 		
-		assert addr_rid(hi) = txid;
+		assert addr_rid(hi) = c_txid;
 
-		# (6) Cannot grant if the txid if already in use for a
+		# (6) Cannot use a manager-side txid if already in use for a
 		# different hi address
 
 		assert ~((excl_a(H) | excl_f(H) | shrd_a(H) | shrd_f(H) | unc_a(H,W) | unc_f(H,W))
-		         & addr_id(H) = txid & H ~= hi);
+		         & addr_gid(H) = m_txid & H ~= hi);
 		
-		# (7) Cannot grant if different txid in use for same hi address.
+		# (7) Cannot use two different manager-side txid's for same hi address.
 
 		assert ~((excl_a(H) | excl_f(H) | shrd_a(H) | shrd_f(H) | unc_a(H,W) | unc_f(H,W))
-		         & addr_id(H) ~= txid & H = hi);
+		         & addr_gid(H) ~= m_txid & H = hi);
 
 		# (8) Cannot grant a request that exactly matches one in progress.
 
@@ -531,7 +534,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 		# associates the new txid with the address for
 		# accepted transactions.
 
-	        addr_id(hi) := txid;
+	        addr_gid(hi) := m_txid;
 
 	        ########################################
 		# Abstract semantics of grant
@@ -585,9 +588,9 @@ module tl_interface(ref,clnt,mngr,side) = {
 	    assert ow = excl -> excl_f(hi);
 	    assert ow = shrd -> shrd_f(hi);
 
-	    # (2) The txid of the finish must match the acquire.
+	    # (2) The txid of the finish must match the grant.
 	    
-	    assert addr_id(hi) = txid;
+	    assert addr_gid(hi) = txid;
 
 	    ########################################
 	    # Finish the Acquire
@@ -855,7 +858,7 @@ module tl_interface(ref,clnt,mngr,side) = {
 
     # If in accepted phase, request id and accept id must match
 
-    conjecture (excl_a(H) | shrd_a(H) | unc_a(H,W)) -> addr_id(H) = addr_rid(H)
+    conjecture (excl_a(H) | shrd_a(H) | unc_a(H,W)) -> addr_gid(H) = addr_rid(H)
 
     # No two hi addresses of accepted or finishing transactions can have the same txid
 
@@ -863,7 +866,7 @@ module tl_interface(ref,clnt,mngr,side) = {
       (excl_a(H1) | excl_f(H1) | shrd_a(H1) | shrd_f(H1) | unc_a(H1,W1) | unc_f(H1,W1))
       & (excl_a(H2) | excl_f(H2) | shrd_a(H2) | shrd_f(H2) | unc_a(H2,W2) | unc_f(H2,W2))
       & H1 ~= H2
-       -> addr_id(H1) ~= addr_id(H2)
+       -> addr_gid(H1) ~= addr_gid(H2)
 
     # No two hi addresses of requested transactions can have the same txid
 
@@ -1021,12 +1024,12 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     individual addr_rid(H:tl_addrhi) : id
 
     ########################################
-    # Each Acquire has a transaction ID (txid). This map tracks the
-    # txid associated with accepted and finishing acquires for a given
+    # Each Grant has a transaction ID (txid). This map tracks the
+    # txid associated with grants for a given
     # hi address. It is a protocol invariant that there is at most one
     # such txid.
 
-    individual addr_id(H:tl_addrhi) : id
+    individual addr_gid(H:tl_addrhi) : id
 
     ########################################
     # An address is dirty if the clients has serialized
@@ -1078,7 +1081,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # same hi address, txid must match
 
 	    assert unc_r(hi,W) -> addr_rid(hi) = txid;
-	    assert unc_a(hi,W) -> addr_id(hi) = txid;
+	    assert unc_a(hi,W) -> addr_rid(hi) = txid;
 
 	    # (3) May not use a txid in use by a requested tx with a different hi addr
 
@@ -1118,11 +1121,12 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local hi:tl_addrhi, lo:tl_addrlo, txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
+        local hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
 	
 	    hi := gnts(msg).addr_hi;  # this field is aux
 	    lo := gnts(msg).word;
-	    txid := gnts(msg).id_;
+	    c_txid := gnts(msg).clnt_txid;
+	    m_txid := gnts(msg).mngr_txid;
 	    ow := gnts(msg).own;	    
 	    lt := gnts(msg).ltime_;
 	    maddr := addr_cons(hi,lo);                             # construct full address
@@ -1140,7 +1144,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    # (2) A grant's txid must match its request
 
-	    assert addr_rid(hi) = txid;
+	    assert addr_rid(hi) = c_txid;
 
 	    # Cannot grant if there is any grant in progress
 	    # That is, data beats of a grant must be consecutive
@@ -1148,6 +1152,17 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    assert ~(unc_a(H,W) & H ~= hi);
 	    
+	    	# (6) Cannot use a manager-side txid if already in use for a
+		# different hi address
+
+		assert ~((unc_a(H,W))
+		         & addr_gid(H) = m_txid & H ~= hi);
+		
+		# (7) Cannot use two different manager-side txid's for same hi address.
+
+		assert ~((unc_a(H,W))
+		         & addr_gid(H) ~= m_txid & H = hi);
+
 	    # # (6) Cannot grant if the txid is already in use for a
 	    # # different hi address
 
@@ -1186,7 +1201,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # associates the new txid with the address for
 	    # accepted transactions.
 
-	    addr_id(hi) := txid
+	    addr_gid(hi) := m_txid
         }
 
     }

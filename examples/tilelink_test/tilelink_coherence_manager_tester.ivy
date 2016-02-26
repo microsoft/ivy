@@ -120,7 +120,8 @@ module generic_manager_intf(clnt) = {
    action tl_Release(msg:rls_id) = {}
 
    action grant(
-           id_ : id,               # transaction id
+           clnt_txid : id,               # client transaction id
+           mngr_txid : id,               # manager transaction id
            word : tl_addrlo,       # low-order bits of this response
            own : ownership,          # what ownership type? (none = uncached)
            relack : bool,          # is this an ack of a Release?
@@ -131,7 +132,8 @@ module generic_manager_intf(clnt) = {
    ) = {
        local a:gnt_id
        {
-           gnts(a).id_ := id_;
+           gnts(a).clnt_txid := clnt_txid;
+           gnts(a).mngr_txid := mngr_txid;
            gnts(a).word := word;
            gnts(a).own := own;
            gnts(a).relack := relack;
