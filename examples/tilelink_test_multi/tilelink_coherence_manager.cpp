@@ -130,7 +130,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_release_bits_r_type = LIT<3>(to_r_type(a.voluntary,a.dirty));
         dut.L2Unit__io_inner_release_bits_addr_block = LIT<26>(a.addr_hi);
         dut.L2Unit__io_inner_release_bits_data = LIT<128>(a.data_);
-        if (send) {
+        if (send && a.voluntary) {
             client_rls_txid_to_addr_hi[a.cid][a.id_] = a.addr_hi;
         }
     }

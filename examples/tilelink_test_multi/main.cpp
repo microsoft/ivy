@@ -14,6 +14,19 @@ typedef tilelink_two_port_dut::release release;
 typedef tilelink_two_port_dut::grant grant;
 typedef tilelink_two_port_dut::probe probe;
  
+void mutate_memory(tilelink_coherence_manager_tester & tb){
+    int client = rand() % tb.__CARD__client_id;
+    int addr = rand() % tb.__CARD__addr;
+    if (tb.front__excl_p[client][addr]) {
+        int data = rand() % tb.__CARD__data;
+        tb.ref__mem[addr] = data;
+        tb.front__dirt_p[client][addr] = 1;
+        std::cout << "write(cid = " << client << ", addr = " << addr << ", data = " << data << "\n";
+    }
+}
+
+
+
 int main(int argc, const char **argv){
 
     unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
@@ -85,9 +98,11 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 1000; cycle++) {
+	for (int cycle = 0; cycle < 100000; cycle++) {
 
 	  // beginning of clock cycle
+
+            mutate_memory(tb);
 
 	  // tee up input messages for the dut
 
@@ -237,12 +252,16 @@ int main(int argc, const char **argv){
 void ivy_assert(bool c){
     if (!c) {
         std::cerr << "assert failed\n";
+        std::cout << "assert failed\n";
+        exit(1);
     }
 }
 
 void ivy_assume(bool c){
     if (!c) {
         std::cerr << "assume failed\n";
+        std::cout << "assume failed\n";
+        exit(1);
     }
 }
 

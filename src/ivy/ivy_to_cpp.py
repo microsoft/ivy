@@ -718,7 +718,7 @@ public:
 
     int eval_apply(const char *decl_name, int arg0, int arg1, int arg2) {
         int args[3] = {arg0,arg1,arg2};
-        return eval_apply(decl_name,4,args);
+        return eval_apply(decl_name,3,args);
     }
 
     z3::expr int_to_z3(const z3::sort &range, int value) {
@@ -769,7 +769,7 @@ public:
 
     int set(const char *decl_name, int arg0, int arg1, int arg2, int value) {
         int args[3] = {arg0,arg1,arg2};
-        return set(decl_name,4,args,value);
+        return set(decl_name,3,args,value);
     }
 
     void randomize(const char *decl_name) {

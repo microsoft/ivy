@@ -683,6 +683,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert excl_p(c,a) | shrd_p(c,a);
 
+		# (5) No voluntary release if an involuntary one in
+                #  progress
+
+		assert ~(prb_addr(c,hi,W1) & ~prb_addr(c,hi,W2));
+
 		########################################
 		# Mark release as request, record txid
 		#
@@ -726,7 +731,18 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		call abs.release(c,a,d,excl)
 	    };
 	    if shrd_p(c,a) {
-		call abs.release(c,a,d,shrd)
+
+	        # TODO: really this condition should be "if release has data"
+		# TEMPORARY: all voluntary releases have data even if not dirty
+
+       		if excl_p(c,a) | rlss(msg).voluntary { 
+		   call abs.release(c,a,d,shrd)
+		}
+		else {
+	           # TRICKY: release without data invalidates entire block
+		   # TODO: this is not in EPR
+	    	   shrd_p(c,A) := shrd_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W))
+                }
 	    }
 
 	}
