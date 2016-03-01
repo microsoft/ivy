@@ -28,9 +28,6 @@ int to_a_type(int own, int op){
 }
 
 int to_r_type(int voluntary, int dirty){
-    // TODO: temporary!!! All voluntary releases contain data
-    if (voluntary)
-        return 0b000;  // releaseInvalidateData
     if (!dirty) 
         return 0b011; // releaseInvalidateAck
     return 0b000;  // releaseInvalidateData

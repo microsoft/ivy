@@ -646,11 +646,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 	    assert ~none_r(c,hi,lo);
 
-	    # (3) Release is dirty iff exclusive
+	    # (3) If block is modified, Release must have data
 	    #
-	    # TODO: allow exclusive but clean release?
+	    # 
 
-	    assert rlss(msg).dirty <-> excl_p(c,a);
+	    assert dirt_p(c,a) -> rlss(msg).dirty;
 
 	    # (4) If ordered, we do not allow a release when a release of a
 	    # different line or different client is partially completed
@@ -688,6 +688,13 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert ~(prb_addr(c,hi,W1) & ~prb_addr(c,hi,W2));
 
+		# (6) TEMPORARY: voluntary releases must have data
+		# In effect, this means clients silently invalid
+		# clean blocks. However, this assumption should
+		# be remove.
+
+		assert rlss(msg).dirty <-> excl_p(c,a);
+
 		########################################
 		# Mark release as request, record txid
 		#
@@ -712,11 +719,15 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert ~none_r(c,hi,X);
 
+		# Release with data iff exclusive 
+
+		assert rlss(msg).dirty <-> excl_p(c,a);
+
 		########################################
 		# Mark the probe completed. If no data returned,
 		# one beat satisfies the probe.
 
-		if excl_p(c,a) {
+		if rlss(msg).dirty {
 		    prb_addr(c,hi,lo) := false
                 } else {
 		    prb_addr(c,hi,X) := false
@@ -727,24 +738,26 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	    ########################################
 	    # The abstract semantics of release
 
-	    if excl_p(c,a) {
-		call abs.release(c,a,d,excl)
-	    };
-	    if shrd_p(c,a) {
-
-	        # TODO: really this condition should be "if release has data"
-		# TEMPORARY: all voluntary releases have data even if not dirty
-
-       		if excl_p(c,a) | rlss(msg).voluntary { 
+	    # A dirty release contains one data beat, while
+	    # a clean release invalidates the entire block
+	    
+	    if rlss(msg).dirty	{
+	        if excl_p(c,a) {
+		   call abs.release(c,a,d,excl)
+                };
+	        if shrd_p(c,a) {
 		   call abs.release(c,a,d,shrd)
-		}
-		else {
-	           # TRICKY: release without data invalidates entire block
-		   # TODO: this is not in EPR
-	    	   shrd_p(c,A) := shrd_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W))
                 }
 	    }
+	    else {
+	        # TRICKY: to invalidate the entire block we go outside of EPR
+		# We need inverse functions for addr_cons, but Ivy doesn't
+		# support this yet. Also, we don't call the abstract spec here
+		# because it doesn't support releasing a set of addresses (yet).
 
+		excl_p(c,A) := excl_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W));
+		shrd_p(c,A) := shrd_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W))
+	    }
 	}
     }
     mixin tl_Release before mngr.tl_Release

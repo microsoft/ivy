@@ -259,9 +259,8 @@ module interface(ref,clnt,mngr,side,cmap) = {
        # cannot release priviledges you don't have
        assert o = shrd -> shrd_p(c,a);
        assert o = excl -> excl_p(c,a);
-# TODO: temporary -- put this back!!!
 #       assert o = excl -> ref.mem(a) = d;  # excl release transfers correct data
-       assert ref.mem(a) = d;  # TEMPORARY: any release transfers correct data
+       assert ref.mem(a) = d;  # all releases transfer correct data
        if o = excl {
            excl_p(c,a) := false;
 	   dirt_p(c,a) := false      # after release the line is clean 
