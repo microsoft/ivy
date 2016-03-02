@@ -7,7 +7,6 @@
 */
 
 #include "tilelink_two_port_dut.h"
-#include "L2Unit.DefaultCPPConfig.h"
 #include "hash.h"
 
 using namespace hash_space;
@@ -34,11 +33,16 @@ int to_r_type(int voluntary, int dirty){
 }
 
 // TODO: we don't have any exclusive grant without data (grantExclusiveAck)
-int to_g_type(int own){
+int to_g_type(int own, int op){
     switch(own) {
-    case 0: 0b000; // TODO: what for uncached?
-    case 1: 0b000; // grantShared
-    case 2: 0b001; // grantExclusive
+    case 0:
+        switch(op) {
+        case 0: return 0b101; // read = getDataBlockType
+        case 1: return 0b011; // write = putAckType
+        case 2: return 0b000; // ???
+        }
+    case 1: return 0b000; // grantShared
+    case 2: return 0b001; // grantExclusive
     }
 }
 
@@ -175,6 +179,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       hash_map<int,int> manager_txid_to_addr_hi;
       hash_map<int,int> manager_txid_to_word;
       hash_map<int,int> manager_txid_to_own;
+      hash_map<int,int> client_txid_to_op;
 
 
     my_client_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -191,7 +196,11 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.addr_hi = dut.L2Unit__io_outer_acquire_bits_addr_block.values[0];
         a.data_ = a.op ? dut.L2Unit__io_outer_acquire_bits_data.values[0] : 0;
         a.ltime_ = 0;
-        return dut.L2Unit__io_outer_acquire_valid.values[0];
+        bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
+        if (send) {
+            client_txid_to_op[a.id_] = a.op;
+        }
+        return send;
     }
     void set_acquire_ready(bool b){
         dut.L2Unit__io_outer_acquire_ready = LIT<1>(b);
@@ -226,9 +235,10 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // TODO: this doesn't seem to exist in emulator code
         // dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(a.cid);        
         dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.mngr_txid);
-        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own));
+        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own,client_txid_to_op[a.clnt_txid]));
         dut.L2Unit__io_outer_grant_bits_data = LIT<128>(a.data_);
         if(send){
+            std::cout << "grant type = " << dut.L2Unit__io_outer_grant_bits_g_type.values[0] << "\n";
             manager_txid_to_addr_hi[a.mngr_txid] = a.addr_hi;
             manager_txid_to_word[a.mngr_txid] = a.word;
             manager_txid_to_own[a.mngr_txid] = a.own;
@@ -277,6 +287,12 @@ public:
       dut.clock_hi(LIT<1>(1));
       dut.clock_lo(LIT<1>(1),true);
       dut.clock_hi(LIT<1>(1));
+
+      // run a bunch of clocks to clear out the tag array
+      for (unsigned i = 0; i < 0x4000; i++) {
+          dut.clock_lo(LIT<1>(0),true);
+          dut.clock_hi(LIT<1>(0));
+      }
   }  
 
   ~tilelink_coherence_manager(){

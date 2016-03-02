@@ -261,6 +261,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     individual addr_nid(C:client_id,H:tl_addrhi) : id
 
     ########################################
+    # The set of outstanding Grant data beats
+
+    relation g_beats(W:tl_addrlo)
+
+    ########################################
     # Initial condition of interface
     #
     # Nothing is requested, accepted, finished or granted.
@@ -473,9 +478,10 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		# Rules for normal Grants:
 		# 
 		# (1) A Grant must match a requested or accepted Acquire. 
+		# A shared Acquire can be matched by an exclusive Grant.
 		 
 		assert ow = none -> (unc_r(c,hi,lo) | unc_a(c,hi,lo));
-		assert ow = excl -> (excl_r(c,hi) | excl_a(c,hi));
+		assert ow = excl -> (excl_r(c,hi) | excl_a(c,hi) | shrd_r(c,hi));
 		assert ow = shrd -> (shrd_r(c,hi) | shrd_a(c,hi));
 
 		# (2) Cannot grant if the memory event is already granted
@@ -511,10 +517,20 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert ow = none -> ~unc_a(c,hi,lo) & ~unc_f(c,hi,lo);
 
+		# (9) If a grant is in progress, this must be an outstanding
+		# beat of that grant.
+
+		assert excl_a(C,H) -> ow = excl & C = c & H = hi & g_beats(lo);
+		assert shrd_a(C,H) -> ow = shrd & C = c & H = hi & g_beats(lo);
+		assert unc_a(C,H,W) -> ow = none & C = c & H = hi & unc_a(c,hi,lo);
+
 	        ########################################
 		# If uncached, mark the event granted. If the request
 		# is not part of an accepted transaction, move the
 		# request to accepted.
+		#
+		# If only a share privs are requested, but an exclusive
+		# grant is received, we upgrade the shared request to exclusive
 		#
 		# TODO: for no, uncached acquire are only one beat,
 		# so can never be in accepted state.
@@ -525,14 +541,20 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		}
 		else if ow = excl {
 		    if ~excl_a(c,hi) {
-		        excl_r(c,hi) := false;
-			excl_a(c,hi) := true
+		        if excl_r(c,hi) {
+                            excl_r(c,hi) := false
+                        } else {  # answering a shared acquire with exclusive
+			    shrd_r(c,hi) := false
+                        };
+		        excl_a(c,hi) := true;
+			g_beats(W) := W ~= lo  # record pending beats
 		    }
                 }
 		else if ow = shrd {
 		    if ~shrd_a(c,hi) {
 		        shrd_r(c,hi) := false;
-			shrd_a(c,hi) := true
+			shrd_a(c,hi) := true;
+			g_beats(W) := W ~= lo  # record pending beats
 		    }
                 };
 
@@ -546,18 +568,20 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	        ########################################
 		# Abstract semantics of grant
 
-		if gnts(msg).own ~= none {    	                       # cached: perform an abstract grant
+		if ow ~= none {    	                       # cached: perform an abstract grant
 		    call abs.grant(c,maddr,gnts(msg).data_,ow);
 
-		    # if all excl privs obtained, move to finishing
-		    if forall W:tl_addrlo. (ow=excl & excl_p(c,addr_cons(hi,W:tl_addrlo))) {
+		    g_beats(lo) := false;                       # mark the beat completed
+
+		    # if all beats received, move to finishing
+		    if forall W:tl_addrlo. ow = excl & ~g_beats(W:tl_addrlo) {
 		        excl_a(c,hi) := false;
 			excl_f(c,hi) := true
                     };
 
 		    # if all shrd privs obtained, move to finishing
-		    if forall W:tl_addrlo. (ow=shrd & shrd_p(c,addr_cons(hi,W:tl_addrlo))) {
-		        shrd_a(c,hi) := false;
+		    if forall W:tl_addrlo. ow = shrd &  ~g_beats(W:tl_addrlo) {
+   		        shrd_a(c,hi) := false;
 			shrd_f(c,hi) := true
                     }
 		}

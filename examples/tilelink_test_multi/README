@@ -1,0 +1,27 @@
+
+This directory contains a tester for TileLink units with one manager
+port and one client port.
+
+The manager port may connect to multiple clients.
+
+Bugs found by randomized testing
+================================
+
+L2BroadcastHub
+--------------
+
+Hub does not handle voluntary releases with the releaseInvalidatAck
+type, which represent a release of a clean cache block. This was not
+previously detected because the exiting L1 cache invalidates clean
+blocks silently.
+
+
+L2HellaCacheModule
+------------------
+
+Second and subsequent data beats of inner Grants had incorrect type in
+case a shared Acquire was answered by an exclusive Grant. Possibly
+this was not previously discovered because the L1 cached ignored these
+fields.
+
+

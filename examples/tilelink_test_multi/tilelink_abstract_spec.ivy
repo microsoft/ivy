@@ -276,13 +276,12 @@ module interface(ref,clnt,mngr,side,cmap) = {
     action grant(c:client_id, a:addr, d:data, o:ownership) = {
        assert cached(a);
        assert o ~= none;
-       # must grant a priviledge only once
        assert ~dirt_p(c,a) -> ref.mem(a) = d;   # grant has correct data if not dirty already
        if o = excl {
-           assert ~excl_p(c,a);
+#           assert ~excl_p(c,a);
            excl_p(c,a) := true
        } else {
-           assert ~shrd_p(c,a);
+#           assert ~shrd_p(c,a);
            shrd_p(c,a) := true
        }
     }
