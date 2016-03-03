@@ -101,7 +101,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_acquire_bits_is_builtin_type = LIT<1>(a.own == 0);
         dut.L2Unit__io_inner_acquire_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_inner_acquire_bits_a_type = LIT<3>(to_a_type(a.own,a.op));
-        dut.L2Unit__io_inner_acquire_bits_union = LIT<17>(0); // TODO: what here?
+        dut.L2Unit__io_inner_acquire_bits_union = LIT<17>(1); // TODO: what here?
         dut.L2Unit__io_inner_acquire_bits_addr_block = LIT<26>(a.addr_hi);
         dut.L2Unit__io_inner_acquire_bits_data = LIT<128>(a.data_);
         if(send) {
@@ -179,7 +179,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       hash_map<int,int> manager_txid_to_addr_hi;
       hash_map<int,int> manager_txid_to_word;
       hash_map<int,int> manager_txid_to_own;
-      hash_map<int,int> client_txid_to_op;
+      hash_map<int,int> client_txid_to_op, client_txid_to_own;
 
 
     my_client_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -199,6 +199,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
         if (send) {
             client_txid_to_op[a.id_] = a.op;
+            client_txid_to_own[a.id_] = a.own;
         }
         return send;
     }
@@ -228,20 +229,23 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // No such port!
     }
     void set_grant(bool send, const grant &a){
+        int own = client_txid_to_own[a.clnt_txid];
+        if (send)
+            std::cout << "own: " << own << "\n";
         dut.L2Unit__io_outer_grant_valid = LIT<1>(send);
-        dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(a.own == 0);
+        dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(own == 0);
         dut.L2Unit__io_outer_grant_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_outer_grant_bits_client_xact_id = LIT<2>(a.clnt_txid);
         // TODO: this doesn't seem to exist in emulator code
         // dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(a.cid);        
         dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.mngr_txid);
-        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own,client_txid_to_op[a.clnt_txid]));
+        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(own,client_txid_to_op[a.clnt_txid]));
         dut.L2Unit__io_outer_grant_bits_data = LIT<128>(a.data_);
         if(send){
             std::cout << "grant type = " << dut.L2Unit__io_outer_grant_bits_g_type.values[0] << "\n";
             manager_txid_to_addr_hi[a.mngr_txid] = a.addr_hi;
             manager_txid_to_word[a.mngr_txid] = a.word;
-            manager_txid_to_own[a.mngr_txid] = a.own;
+            manager_txid_to_own[a.mngr_txid] = own;
         }
     }
     bool get_grant_ready(){

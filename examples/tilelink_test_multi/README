@@ -15,13 +15,30 @@ type, which represent a release of a clean cache block. This was not
 previously detected because the exiting L1 cache invalidates clean
 blocks silently.
 
+ivy commit: f77aa11
+rocket-chip commit: 4fedd18
+uncore commit: 7ff3c3e
+
 
 L2HellaCacheModule
 ------------------
 
-Second and subsequent data beats of inner Grants had incorrect type in
+1) Second and subsequent data beats of inner Grants had incorrect type in
 case a shared Acquire was answered by an exclusive Grant. Possibly
 this was not previously discovered because the L1 cached ignored these
 fields.
+
+ivy commit: fd3f315
+rocket-chip commit: 4fedd18
+uncore commit: 7ff3c3e
+
+Issues to be resolved
+=====================
+
+-- L2 cache requires that Acquires have allocation bit set. This is OK
+if unset case is being reserved for future use. Perhaps there should
+be an assertion?
+
+-- Should L2 cache cached outer acquires be converted to getBlock?
 
 

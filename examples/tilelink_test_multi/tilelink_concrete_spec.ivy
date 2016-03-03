@@ -474,6 +474,12 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
             else {	    
 
 	        
+		# TEMPORARY: fix ownership type if it's wrong
+
+		if exists C:client_id, H:tl_addrhi. excl_a(C:client_id,H:tl_addrhi) {
+		   ow := excl
+                };
+
 		########################################
 		# Rules for normal Grants:
 		# 
@@ -1143,7 +1149,12 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    # (0) Must be uncached
 
-	    assert acqs(msg).own = none;
+	    # TEMPORARY: treat cached Acquires as GetBlock
+	    #assert acqs(msg).own = none;
+
+	    if ow ~= none {
+	        o := read
+ 	    };
 
 	    # (1) May not have a requested acquire with same hi address and word.
 

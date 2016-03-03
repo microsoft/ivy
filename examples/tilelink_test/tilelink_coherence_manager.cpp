@@ -188,7 +188,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       hash_map<int,int> manager_txid_to_addr_hi;
       hash_map<int,int> manager_txid_to_word;
       hash_map<int,int> manager_txid_to_own;
-      hash_map<int,int> client_txid_to_op;
+      hash_map<int,int> client_txid_to_op, client_txid_to_own;
 
 
     my_client_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -208,6 +208,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.ltime_ = 0;
         bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
         if (send) {
+            client_txid_to_own[a.id_] = a.own;
             client_txid_to_op[a.id_] = a.op;
         }
         return send;
@@ -238,14 +239,17 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // No such port!
     }
     void set_grant(bool send, const grant &a){
+        int own = client_txid_to_own[a.clnt_txid];
+        if (send)
+            std::cout << "own: " << own << "\n";
         dut.L2Unit__io_outer_grant_valid = LIT<1>(send);
-        dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(a.own == 0);
+        dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(own == 0);
         dut.L2Unit__io_outer_grant_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_outer_grant_bits_client_xact_id = LIT<2>(a.clnt_txid);
         // TODO: don't have client id bits yet
         //        dut.L2Unit__io_outer_grant_bits_client_id = LIT<2>(0);        
         dut.L2Unit__io_outer_grant_bits_manager_xact_id = LIT<4>(a.mngr_txid);
-        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(a.own, client_txid_to_op[a.clnt_txid]));
+        dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(own, client_txid_to_op[a.clnt_txid]));
         dut.L2Unit__io_outer_grant_bits_data = LIT<128>(a.data_);
         if(send){
             std::cout << "grant type = " << dut.L2Unit__io_outer_grant_bits_g_type.values[0] << "\n";
