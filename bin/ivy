@@ -1,8 +1,5 @@
 #/bin/sh
 
-Z3DIR=$HOME/projects/z3/release
-IVYDIR=$HOME/projects/ivy
-
 export PYTHONPATH=$Z3DIR:$IVYDIR/src/ivy:$IVYDIR/ivy
 
 python $IVYDIR/src/ivy/ivy.py $@ 
