@@ -2,4 +2,4 @@
 
 export PYTHONPATH=$Z3DIR/bin:$IVYDIR/src/ivy:$IVYDIR/ivy
 
-python $IVYDIR/src/ivy/ivy.py $@ 
+python $IVYDIR/src/ivy/ivy_to_cpp.py $@ 
