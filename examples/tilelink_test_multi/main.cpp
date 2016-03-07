@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdexcept>
 #include "tilelink_coherence_manager_tester.h"
 #include "tilelink_two_port_dut.h"
 
@@ -175,7 +176,13 @@ int main(int argc, const char **argv){
 	  dut.mp()->set_probe_ready(prb_ready);
 	  
           std::cout << "====clock " << cycle << "====\n";
-	  dut.clock();
+          try {
+              dut.clock();
+          }
+          catch (const std::runtime_error &err) {
+              std::cerr << err.what() << "\n";
+              return 1;
+          }
 
           // dequeue the accepted messages
 

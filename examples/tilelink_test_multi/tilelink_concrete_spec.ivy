@@ -729,7 +729,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		# Mark release as request, record txid
 		#
 
-		none_r(c,hi,lo) := true;
+		if rlss(msg).dirty {
+		    none_r(c,hi,lo) := true
+		} else { 
+                    none_r(c,hi,X) := true   # if no data, just one beat for all
+                };
 		addr_nid(c,hi) := txid
 	    }
 	    else {

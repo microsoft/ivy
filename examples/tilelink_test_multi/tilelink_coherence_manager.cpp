@@ -8,6 +8,7 @@
 
 #include "tilelink_two_port_dut.h"
 #include "hash.h"
+#include <cstdio>
 
 using namespace hash_space;
 
@@ -42,7 +43,9 @@ int to_g_type(int own, int op){
         case 2: return 0b000; // ???
         }
     case 1: return 0b000; // grantShared
-    case 2: return 0b001; // grantExclusive
+        // TODO: this assumes MEI on outer interface
+        //    case 2: return 0b001; // grantExclusive
+        case 2: return 0b000; // grantExclusive
     }
 }
 
@@ -63,8 +66,9 @@ bool to_g_relack(int is_builtin_type, int g_type){
 int to_a_own(int is_builtin_type, int a_type){
     if (is_builtin_type)
         return 0;
-    if (a_type == 0b000)
-        return 1;
+    // TODO: This assumes MEI protocol on outer interface
+    //    if (a_type == 0b000)
+    //    return 1;
     return 2;
 }
 
@@ -88,8 +92,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
   struct my_manager_port : public manager_port {
     L2Unit_t &dut;
 
-    hash_map<int, hash_map<std::pair<int,int>,int> > client_txid_to_addr_hi;
-    hash_map<int, hash_map<std::pair<int,int>,int> > client_txid_to_ltime;
+    hash_map<int, hash_map<int,int> > client_txid_to_addr_hi;
+    hash_map<int, hash_map<int,int> > client_txid_to_ltime;
     hash_map<int, hash_map<int,int> > client_rls_txid_to_addr_hi;
 
     my_manager_port(L2Unit_t &_dut) : dut(_dut) {}
@@ -105,8 +109,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_acquire_bits_addr_block = LIT<26>(a.addr_hi);
         dut.L2Unit__io_inner_acquire_bits_data = LIT<128>(a.data_);
         if(send) {
-            client_txid_to_addr_hi[a.cid][std::pair<int,int>(a.id_,a.own)] = a.addr_hi;
-            client_txid_to_ltime[a.cid][std::pair<int,int>(a.id_,a.own)] = a.ltime_;
+            client_txid_to_addr_hi[a.cid][a.id_] = a.addr_hi;
+            client_txid_to_ltime[a.cid][a.id_] = a.ltime_;
         }
     }
     bool get_acquire_ready(){
@@ -148,8 +152,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
                                dut.L2Unit__io_inner_grant_bits_g_type.values[0]);
         a.cid = dut.L2Unit__io_inner_grant_bits_client_id.values[0];
         a.data_ = dut.L2Unit__io_inner_grant_bits_data.values[0];
-        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.cid][a.clnt_txid] : client_txid_to_addr_hi[a.cid][std::pair<int,int>(a.clnt_txid,a.own)];
-        a.ltime_ = client_txid_to_ltime[a.cid][std::pair<int,int>(a.clnt_txid,a.own)];
+        a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.cid][a.clnt_txid] : client_txid_to_addr_hi[a.cid][a.clnt_txid];
+        a.ltime_ = client_txid_to_ltime[a.cid][a.clnt_txid];
         bool send = dut.L2Unit__io_inner_grant_valid.values[0];
         if (send) {
             //            std::cout << "grant_manager_xact = " << dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0] << " relack = " << a.relack  << "\n";
@@ -263,7 +267,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
   my_client_port *m_cp;
   // The chisel generated code
   L2Unit_t dut;
-
+  FILE *dumpf;
   
   virtual manager_port *mp(){
     return m_mp;
@@ -274,9 +278,12 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
   }
 
   virtual void clock(){
-      dut.clock_lo(LIT<1>(0),true);
-      dut.clock_hi(LIT<1>(0));
+      //      dut.clock_lo(LIT<1>(0),true);
+      //      dut.clock_hi(LIT<1>(0));
+      dut.clock(LIT<1>(0));
   }
+
+
 
 public:
   tilelink_coherence_manager(){
@@ -297,9 +304,14 @@ public:
           dut.clock_lo(LIT<1>(0),true);
           dut.clock_hi(LIT<1>(0));
       }
+
+      dumpf = fopen("dump.vcd","w");
+      dut.set_dumpfile(dumpf);
   }  
 
   ~tilelink_coherence_manager(){
+      if (dumpf) 
+          fclose(dumpf);
       delete m_mp;
       delete m_cp;
   }
