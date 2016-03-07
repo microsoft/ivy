@@ -1,5 +1,5 @@
 #/bin/sh
 
-export PYTHONPATH=$Z3DIR:$IVYDIR/src/ivy:$IVYDIR/ivy
+export PYTHONPATH=$Z3DIR/bin:$IVYDIR/src/ivy:$IVYDIR/ivy
 
 python $IVYDIR/src/ivy/ivy.py $@ 

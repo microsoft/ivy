@@ -27,9 +27,10 @@ you installed Z3. By defult this is /usr/local, in which case:
 
 This is needed to run the Tcl/Tk-based user interface. You do not need
 this to use the browser-based user interface or the command-line
-interface. On Ubuntu, install it like this:
+interface. You also need the python packages Tk, Tix and PLy. On
+Ubuntu, install them all like this:
 
-    $ sudo apt-get install libgv-tcl
+    $ sudo apt-get install python-tk python-ply tix libgv-tcl
 
 ## install
 
