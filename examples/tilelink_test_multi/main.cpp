@@ -32,8 +32,16 @@ int main(int argc, const char **argv){
 
     unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
       
-    if (argc) random_seed = atoi(argv[0]);
+    int arg = 1;
+    bool delay_rels = false;
 
+    if (argc > arg &&  argv[arg] == std::string("-r")) {
+        arg++;
+        delay_rels = true;
+    }
+
+    if (argc > arg)
+        random_seed = atoi(argv[arg]);
     srand(random_seed);
 
     tilelink_coherence_manager_tester tb;
@@ -47,6 +55,8 @@ int main(int argc, const char **argv){
     ext__c__perform_gen cpg;
     ext__m__grant_gen mgg;
     ext__m__probe_gen mpg;
+
+    int rel_del = 0;
 
     for (int j = 0; j < 1; j++) {
 
@@ -99,7 +109,7 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 100000; cycle++) {
+	for (int cycle = 0; cycle < 1000; cycle++) {
 
 	  // beginning of clock cycle
 
@@ -137,8 +147,10 @@ int main(int argc, const char **argv){
               tb.ext__c__release(rls_g.cid, rls_g.id_, rls_g.voluntary, rls_g.addr_hi, rls_g.word, rls_g.dirty, rls_g.data_);
               rls_i.push_back(rls_g);
               std::cout << "gen: " << rls_g << std::endl;
+              rel_del = (delay_rels && crg.voluntary) ? 6 : 0;
           }
-          rls_gen = rls_i.size();
+          rls_gen = rls_i.size() && !rel_del;
+          if (rel_del) rel_del--;
           if (rls_gen) rls_m = rls_i[0];
           dut.mp()->set_release(rls_gen,rls_m);
 
@@ -169,6 +181,7 @@ int main(int argc, const char **argv){
 	  bool rls_ready = rand() % 2;
 	  bool gnt_ready = rand() % 2;
 	  bool prb_ready = rand() % 2;
+
 	  dut.cp()->set_acquire_ready(acq_ready);
 	  dut.cp()->set_finish_ready(fns_ready);
 	  dut.cp()->set_release_ready(rls_ready);

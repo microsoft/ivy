@@ -40,3 +40,17 @@ $(L2CACHEGEN)/$(L2CACHEBASE)-0.o: $(L2CACHEGEN)/$(L2CACHEBASE)-0.cpp $(L2CACHEGE
 
 $(L2CACHEGEN)/$(L2CACHEBASE)-1.o: $(L2CACHEGEN)/$(L2CACHEBASE)-1.cpp $(L2CACHEGEN)/$(L2CACHEBASE).h
 	g++ -g  -I$(ROCKETCHIP)/riscv/include -I$(ROCKETCHIP)/csrc -I$(ROCKETCHIP)/dramsim2 -include $(L2CACHEGEN)/$(L2CACHEBASE).scr_map.h -include $(L2CACHEGEN)/$(L2CACHEBASE).h -include $(L2CACHEGEN)/consts.$(L2CACHECONFIG).h -I$(L2CACHEGEN) -c -o $(L2CACHEGEN)/$(L2CACHEBASE)-1.o $(L2CACHEGEN)/$(L2CACHEBASE)-1.cpp
+
+# Make L2HellaCacheBank emulator
+
+srcdir = $(shell pwd)
+
+L2HellaCacheBank/L2HellaCacheBank.o:
+	install -d L2HellaCacheBank
+	cd $(ROCKETCHIP) && sbt "project uncore" "run L2HellaCacheBank DefaultL2Config --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2HellaCacheBank"
+
+tilelink_coherence_manager_hella.cpp: tilelink_coherence_manager.cpp 
+	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2HellaCacheBank_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_hella.cpp
+
+test_L2HellaCacheBank: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_hella.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_hella_cache.cpp L2HellaCacheBank/L2HellaCacheBank.h L2HellaCacheBank/L2HellaCacheBank.o
+	g++ -g -I $(Z3DIR)/include -I L2HellaCacheBank -L $(Z3DIR)/lib -o test_L2HellaCacheBank main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_hella_cache.cpp L2HellaCacheBank/L2HellaCacheBank.o -lz3

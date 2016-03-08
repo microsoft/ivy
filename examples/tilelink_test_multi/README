@@ -4,6 +4,41 @@ port and one client port.
 
 The manager port may connect to multiple clients.
 
+Setup
+=====
+
+Make sure ivy is installed (see ../../README.md).
+
+Build rocket-chip following directions here:
+
+https://github.com/ucb-bar/rocket-chip
+
+Check out unit-testing branch:
+
+$ cd uncore
+$ git checkout unit-testing
+
+Set the ROCKETCHIP environment variable to point to the rocket-chip
+directory.
+
+Back in this directory, do this:
+
+make
+
+This should create two binaries:
+
+test_L2HellaCacheBank
+test_L2BroadcastHub
+
+These are unit testers. Run then like this:
+
+./test_L2HellaCacheBank <options> [seed]
+
+Where seed is a seed for the random number generator and options are:
+
+-r    Delay voluntary Releases to work around issue 20
+
+
 Bugs found by randomized testing
 ================================
 
@@ -31,6 +66,15 @@ fields.
 ivy commit: fd3f315
 rocket-chip commit: 4fedd18
 uncore commit: 7ff3c3e
+
+2) Issue 20: A voluntary Release coming too soon after Acquire will
+read stale metadata. THis is probably not seen in integration testing
+because the actual L1 cannot produce a Release this quickly.
+
+ivy commit: da1db39
+rocket-chip commit: 4fedd18
+uncore commit: 7ff3c3e
+
 
 Issues to be resolved
 =====================

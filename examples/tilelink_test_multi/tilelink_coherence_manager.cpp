@@ -10,6 +10,10 @@
 #include "hash.h"
 #include <cstdio>
 
+#define foo bar##baz
+
+// #define HAS_OUTER_RELEASE
+
 using namespace hash_space;
 
 int to_a_type(int own, int op){
@@ -31,6 +35,10 @@ int to_r_type(int voluntary, int dirty){
     if (!dirty) 
         return 0b011; // releaseInvalidateAck
     return 0b000;  // releaseInvalidateData
+}
+
+int to_dirty(int r_type){
+    return r_type < 3; // Assumes MEI
 }
 
 // TODO: we don't have any exclusive grant without data (grantExclusiveAck)
@@ -85,6 +93,15 @@ int to_a_op(int a_type){
 
 }
 
+int to_addr_block(int addr) {
+    // try to give all the address the same index
+    return addr << 14; // indices are 14 bits, I hope
+}
+
+int to_addr_hi(int addr) {
+    return addr >> 14;
+}
+
 class tilelink_coherence_manager : public tilelink_two_port_dut {
 
     /* This is the "inner" port */
@@ -106,7 +123,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_acquire_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_inner_acquire_bits_a_type = LIT<3>(to_a_type(a.own,a.op));
         dut.L2Unit__io_inner_acquire_bits_union = LIT<17>(1); // TODO: what here?
-        dut.L2Unit__io_inner_acquire_bits_addr_block = LIT<26>(a.addr_hi);
+        dut.L2Unit__io_inner_acquire_bits_addr_block = LIT<26>(to_addr_block(a.addr_hi));
         dut.L2Unit__io_inner_acquire_bits_data = LIT<128>(a.data_);
         if(send) {
             client_txid_to_addr_hi[a.cid][a.id_] = a.addr_hi;
@@ -133,7 +150,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_inner_release_bits_client_id = LIT<2>(a.cid);        
         dut.L2Unit__io_inner_release_bits_addr_beat = LIT<2>(a.word);
         dut.L2Unit__io_inner_release_bits_r_type = LIT<3>(to_r_type(a.voluntary,a.dirty));
-        dut.L2Unit__io_inner_release_bits_addr_block = LIT<26>(a.addr_hi);
+        dut.L2Unit__io_inner_release_bits_addr_block = LIT<26>(to_addr_block(a.addr_hi));
         dut.L2Unit__io_inner_release_bits_data = LIT<128>(a.data_);
         if (send && a.voluntary) {
             client_rls_txid_to_addr_hi[a.cid][a.id_] = a.addr_hi;
@@ -167,7 +184,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // TODO: handle L2Unit__io_inner_probe_bits_p_type
         // TODO: don't have client id bits yet
         a.cid = dut.L2Unit__io_inner_probe_bits_client_id.values[0];
-        a.addr_hi = dut.L2Unit__io_inner_probe_bits_addr_block.values[0];
+        a.addr_hi = to_addr_hi(dut.L2Unit__io_inner_probe_bits_addr_block.values[0]);
         return dut.L2Unit__io_inner_probe_valid.values[0];
     }
     void set_probe_ready(bool b){
@@ -197,7 +214,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.word = dut.L2Unit__io_outer_acquire_bits_addr_beat.values[0];
         a.op = to_a_op(dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
         // dut.L2Unit__io_outer_acquire_bits_union -- TODO: what here?
-        a.addr_hi = dut.L2Unit__io_outer_acquire_bits_addr_block.values[0];
+        a.addr_hi = to_addr_hi(dut.L2Unit__io_outer_acquire_bits_addr_block.values[0]);
         a.data_ = a.op ? dut.L2Unit__io_outer_acquire_bits_data.values[0] : 0;
         a.ltime_ = 0;
         bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
@@ -226,8 +243,28 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // TODO: no such port -- ignore!!!
     }
     bool get_release(release &a){
+#ifdef HAS_OUTER_RELEASE
+        // This doesn't seem to exist
+        // a.cid = dut.L2Unit__io_inner_release_bits_client_id.values[0];
+        a.cid = 0;
+        // TODO: high bit of txid seems to be used for something I don't understand
+        a.id_ = dut.L2Unit__io_outer_release_bits_client_xact_id.values[0] & 0x07L;
+        a.dirty = to_dirty(dut.L2Unit__io_outer_release_bits_r_type.values[0]);
+        a.word = dut.L2Unit__io_outer_release_bits_addr_beat.values[0];
+        a.voluntary = dut.L2Unit__io_outer_release_bits_voluntary.values[0];
+        // dut.L2Unit__io_outer_release_bits_union -- TODO: what here?
+        a.addr_hi = to_addr_hi(dut.L2Unit__io_outer_release_bits_addr_block.values[0]);
+        a.data_ = dut.L2Unit__io_outer_release_bits_data.values[0];
+        bool send = dut.L2Unit__io_outer_release_valid.values[0];
+        if (send) {
+            client_txid_to_op[a.id_] = a.op;
+            client_txid_to_own[a.id_] = a.own;
+        }
+        return send;
+#else 
         // No such port!
         return false;
+#endif
     }
     void set_release_ready(bool b){
         // No such port!
@@ -281,6 +318,9 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       //      dut.clock_lo(LIT<1>(0),true);
       //      dut.clock_hi(LIT<1>(0));
       dut.clock(LIT<1>(0));
+      std::cout << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__tag_arr.contents[0].values[0]) & 0x3) 
+                << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__tag_arr.contents[1].values[0]) & 0x3)
+                << "\n";
   }
 
 
