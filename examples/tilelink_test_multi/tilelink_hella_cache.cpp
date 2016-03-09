@@ -6,5 +6,7 @@
 
 #define L2Unit L2HellaCacheBank
 
+#define HAS_TAG_ARRAY
+
 #include "tilelink_coherence_manager_hella.cpp"
 
