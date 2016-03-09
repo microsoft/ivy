@@ -95,10 +95,14 @@ int to_a_op(int a_type){
 
 int to_addr_block(int addr) {
     // try to give all the address the same index
+    return addr << 10; // indices are 10 bits, I hope
+    return addr;
     return addr << 14; // indices are 14 bits, I hope
 }
 
 int to_addr_hi(int addr) {
+    return addr >> 10;
+    return addr;
     return addr >> 14;
 }
 
@@ -318,9 +322,15 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       //      dut.clock_lo(LIT<1>(0),true);
       //      dut.clock_hi(LIT<1>(0));
       dut.clock(LIT<1>(0));
-      std::cout << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__tag_arr.contents[0].values[0]) & 0x3) 
+      /*      std::cout << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__tag_arr.contents[0].values[0]) & 0x3) 
                 << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__tag_arr.contents[1].values[0]) & 0x3)
+                << "\n"; */
+      std::cout << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[0].values[0]) & 0x3) 
+                << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[1].values[0]) & 0x3)
+                << " d0 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[0].values[0]))
+                << " d1 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[1].values[0]))
                 << "\n";
+
   }
 
 

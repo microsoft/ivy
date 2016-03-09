@@ -25,12 +25,15 @@ $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-0.o: $(L2BROADCASTGEN)/L2Unit.DefaultC
 $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-1.o: $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-1.cpp $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.h
 	g++ -g  -I$(ROCKETCHIP)/riscv/include -I$(ROCKETCHIP)/csrc -I$(ROCKETCHIP)/dramsim2 -include $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.scr_map.h -include $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.h -include $(L2BROADCASTGEN)/consts.DefaultCPPConfig.h -I$(L2BROADCASTGEN) -c -o $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-1.o $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-1.cpp
 
+$(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-2.o: $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-2.cpp $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.h
+	g++ -g  -I$(ROCKETCHIP)/riscv/include -I$(ROCKETCHIP)/csrc -I$(ROCKETCHIP)/dramsim2 -include $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.scr_map.h -include $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig.h -include $(L2BROADCASTGEN)/consts.DefaultCPPConfig.h -I$(L2BROADCASTGEN) -c -o $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-2.o $(L2BROADCASTGEN)/L2Unit.DefaultCPPConfig-2.cpp
+
 # Apply generic tester to L2 cache
 
 L2CACHEGEN = $(ROCKETCHIP)/l2_cache/generated-src-debug
 L2CACHECONFIG = DefaultL2CPPConfig
 L2CACHEBASE = L2Unit.$(L2CACHECONFIG)
-L2CACHEOBJ = $(L2CACHEGEN)/$(L2CACHEBASE)-0.o $(L2CACHEGEN)/$(L2CACHEBASE)-1.o
+L2CACHEOBJ = $(L2CACHEGEN)/$(L2CACHEBASE)-0.o $(L2CACHEGEN)/$(L2CACHEBASE)-1.o $(L2CACHEGEN)/$(L2CACHEBASE)-2.o
 
 tilelink_l2_cache: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_l2_cache.cpp $(L2CACHEGEN)/$(L2CACHEBASE).h $(L2CACHEOBJ)
 	g++ -g -I $(Z3DIR)/include -I $(L2CACHEGEN) -L $(Z3DIR)/lib -o tilelink_l2_cache main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_l2_cache.cpp $(L2CACHEOBJ) -lz3
@@ -47,7 +50,7 @@ srcdir = $(shell pwd)
 
 L2HellaCacheBank/L2HellaCacheBank.o:
 	install -d L2HellaCacheBank
-	cd $(ROCKETCHIP) && sbt "project uncore" "run L2HellaCacheBank DefaultL2Config --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2HellaCacheBank"
+	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run L2HellaCacheBank DefaultL2Config --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2HellaCacheBank"
 
 tilelink_coherence_manager_hella.cpp: tilelink_coherence_manager.cpp 
 	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2HellaCacheBank_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_hella.cpp
