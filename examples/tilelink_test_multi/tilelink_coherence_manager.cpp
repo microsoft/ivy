@@ -95,14 +95,14 @@ int to_a_op(int a_type){
 
 int to_addr_block(int addr) {
     // try to give all the address the same index
-    return addr << 10; // indices are 10 bits, I hope
     return addr;
+    return addr << 10; // indices are 10 bits, I hope
     return addr << 14; // indices are 14 bits, I hope
 }
 
 int to_addr_hi(int addr) {
-    return addr >> 10;
     return addr;
+    return addr >> 10;
     return addr >> 14;
 }
 

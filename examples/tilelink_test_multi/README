@@ -75,6 +75,16 @@ ivy commit: da1db39
 rocket-chip commit: 4fedd18
 uncore commit: 7ff3c3e
 
+3) After refactoring so the acquire tracker handles concurrent
+voluntary releases, a timing error results in loss of writeback data
+when the writeback comes too soon after acquire. This is also a
+situation that likely could not occur with current L1 design (though
+not certain).
+
+ivy commit: af0fb09
+uncore commit: 89d7493
+
+
 
 Issues to be resolved
 =====================

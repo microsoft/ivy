@@ -150,7 +150,7 @@ int main(int argc, const char **argv){
               rel_del = (delay_rels && crg.voluntary) ? 6 : 0;
           }
           rls_gen = rls_i.size() && !rel_del;
-          if (rel_del) rel_del--;
+          if (rel_del) rel_del--;  
           if (rls_gen) rls_m = rls_i[0];
           dut.mp()->set_release(rls_gen,rls_m);
 
