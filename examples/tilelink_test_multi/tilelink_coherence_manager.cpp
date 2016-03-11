@@ -95,13 +95,13 @@ int to_a_op(int a_type){
 
 int to_addr_block(int addr) {
     // try to give all the address the same index
-    return addr;
+    return addr << 1;
     return addr << 10; // indices are 10 bits, I hope
     return addr << 14; // indices are 14 bits, I hope
 }
 
 int to_addr_hi(int addr) {
-    return addr;
+    return addr >> 1;
     return addr >> 10;
     return addr >> 14;
 }
@@ -332,6 +332,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
                 << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[1].values[0]) & 0x3)
                 << " d0 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[0].values[0]))
                 << " d1 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[1].values[0]))
+                << " d2 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[2].values[0]))
+                << " d3 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[3].values[0]))
                 << "\n";
 
 #endif

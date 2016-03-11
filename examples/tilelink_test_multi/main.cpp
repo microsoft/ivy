@@ -109,7 +109,7 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 1000; cycle++) {
+	for (int cycle = 0; cycle < 10000; cycle++) {
 
 	  // beginning of clock cycle
 
