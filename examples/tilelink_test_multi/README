@@ -84,6 +84,16 @@ not certain).
 ivy commit: af0fb09
 uncore commit: 89d7493
 
+4) After fix to above, AcquireTracker still fails to handle a
+voluntary release when the second beat occurs after finish (instead
+the second beat is picked up as a first beat by ReleasTracker.
+Filed as issue #23
+
+ivy commit: 2e6b50f
+uncore commit: 0e080c9
+command line: test_L2HellaCacheBank 1
+
+
 
 
 Issues to be resolved
