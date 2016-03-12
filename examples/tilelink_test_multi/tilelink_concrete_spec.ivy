@@ -66,6 +66,7 @@ module acq = {
     individual own:ownership          # what ownership type? (none=uncached)
     individual op : otype             # what operation?
     individual data_ : data           # what data, if any?
+    relation block                    # true if full block read or write
 
     individual ltime_ : ltime         # (aux) logical time
 }
@@ -174,9 +175,9 @@ module interface_stubs = {
 module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     ########################################
-    # whether a line is cached
+    # whether a line is cached by given client
 
-    relation cached_hi(X:tl_addrhi)
+    relation cached_hi(C:client_id,X:tl_addrhi)
 
     ########################################
     # if true, this interface does not allowed reordering of messages
@@ -344,7 +345,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		# (8) Must be in uncached address space
 
-		assert ~cached_hi(hi);
+		assert ~cached_hi(c,hi);
 
 		########################################
 		# mark the acquire as requested
@@ -401,7 +402,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		# (6) Must be in cached address space.
 
-		assert cached_hi(hi);
+		assert cached_hi(c,hi);
 
 
 		########################################
@@ -666,7 +667,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	    #
 	    # (1) Release only cached addresses
 
-	    assert cached_hi(hi);
+	    assert cached_hi(c,hi);
 
 	    # (2) No release with pending release with same address.
 	    #
@@ -811,7 +812,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	    #
 	    # (1) Probe only cached addresses
 
-	    assert cached_hi(hi);
+	    assert cached_hi(c,hi);
 
 	    # (2) No requested probes on same address
 
@@ -847,7 +848,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     #
     ########################################
 
-    axiom cached(addr_cons(H,L)) <-> cached_hi(H)
+    axiom cached(C,addr_cons(H,L)) <-> cached_hi(C,H)
 
 
     ################################################################################
@@ -859,8 +860,8 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     # A cached acquire must be in cached space, uncached in uncached space
 
     conjecture (excl_r(C,H) | excl_a(C,H) | excl_f(C,H) |
-                shrd_r(C,H) | shrd_a(C,H) | shrd_f(C,H)) -> cached_hi(H)
-    conjecture (unc_r(C,H,L) | unc_a(C,H,L) | unc_f(C,H,L)) -> ~cached_hi(H)
+                shrd_r(C,H) | shrd_a(C,H) | shrd_f(C,H)) -> cached_hi(C,H)
+    conjecture (unc_r(C,H,L) | unc_a(C,H,L) | unc_f(C,H,L)) -> ~cached_hi(C,H)
 
     
     # An cached acquire must be in only one phase
@@ -879,7 +880,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     # a requested voluntary release is in cached space
 
-    conjecture none_r(C,H,W) -> cached_hi(H)
+    conjecture none_r(C,H,W) -> cached_hi(C,H)
 
     # While a voluntary release is pending, to acquires are in progress
     # (but acquires can be finishing, since release can pass finish)
@@ -892,7 +893,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     # A probe is only in cached space
 
-    conjecture prb_addr(C,H,W) -> cached_hi(H)
+    conjecture prb_addr(C,H,W) -> cached_hi(C,H)
 
     # When finishing and not releasing, we have requested privs
 
@@ -1136,7 +1137,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
     action tl_Acquire(msg:acq_id) = {
 
-        local hi:tl_addrhi, lo:tl_addrlo, txid: id, ow:ownership, lt:ltime, a:addr, d:data, o:otype {
+        local hi:tl_addrhi, lo:tl_addrlo, txid: id, ow:ownership, lt:ltime, a:addr, d:data, o:otype, bl:bool {
 
 	    ow := acqs(msg).own;
 	    hi := acqs(msg).addr_hi;
@@ -1146,6 +1147,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    a := addr_cons(hi,lo);
 	    d := acqs(msg).data_;
 	    o := acqs(msg).op;
+	    bl := acqs(msg).block;
 
 	    
 	    ########################################
@@ -1160,9 +1162,11 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	        o := read
  	    };
 
-	    # (1) May not have a requested acquire with same hi address and word.
+	    # (1) May not have a requested acquire with same hi address.
+	    # TODO: in priciple should allow two with different beat addr
 
 	    assert ~unc_r(hi,lo) & ~unc_w(hi,lo);
+	    assert (unc_r(hi,W) | unc_w(hi,W)) -> bl;
 
 	    # (2) if any requested or accepted transactions with
 	    # same hi address, txid must match
@@ -1180,12 +1184,20 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 
 	    ########################################
 	    # mark the acquire as requested
-	    # reads are whole cache blocks
+	    # a block reads marks whole cache block
 
 	    if o = read {
-	        unc_r(hi,X) := true
+	        if bl {
+	            unc_r(hi,X) := true # if block read, request all
+                } else {
+  		    unc_r(hi,lo) := true
+                }
             } else {
-	        unc_w(hi,lo) := true
+	        if bl {
+		    unc_w(hi,lo) := true
+                } else {
+	            unc_w(hi,X) := true  # if not block write, one beat finishes
+                }
             };
 
 	    ########################################
@@ -1226,6 +1238,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # Rules for normal Grants:
 	    # 
 	    # (1) A Grant must match a requested or accepted Acquire. 
+	    # If a write, all beats but be received
 
 	    assert unc_r(hi,lo) | unc_a(hi,lo) | unc_w(hi,W);
 

@@ -240,9 +240,10 @@ module interface(ref,clnt,mngr,side,cmap) = {
     relation to_ser(T:ltime) 
 
     ########################################
-    # set of cached addresses at this interface
+    # set of cached addresses at this interface.
+    # for each client
 
-    relation cached(A:addr)
+    relation cached(C:client_id, A:addr)
 
     ########################################
     # initial state of interface. nothing owned, nothing to serialize
@@ -254,7 +255,7 @@ module interface(ref,clnt,mngr,side,cmap) = {
     # specification of release messages
 
     action release(c:client_id, a:addr, d:data, o:ownership) = {
-       assert cached(a);
+       assert cached(c,a);
        assert o ~= none;
        # cannot release priviledges you don't have
        assert o = shrd -> shrd_p(c,a);
@@ -274,7 +275,7 @@ module interface(ref,clnt,mngr,side,cmap) = {
     # specification of grant messages
 
     action grant(c:client_id, a:addr, d:data, o:ownership) = {
-       assert cached(a);
+       assert cached(c,a);
        assert o ~= none;
        assert ~dirt_p(c,a) -> ref.mem(a) = d;   # grant has correct data if not dirty already
        if o = excl {
@@ -299,7 +300,7 @@ module interface(ref,clnt,mngr,side,cmap) = {
     action request(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {
        local rid:id {
            rid := ref.evs(lt).id_;
-	   assert ~cached(a);
+	   assert ~cached(c,a);
 	   assert ~ref.evs(lt).serialized & ~to_ser(lt);
 	   assert side(rid) = client;
 	   assert ref.evs(lt).addr_ = a;
@@ -324,7 +325,7 @@ module interface(ref,clnt,mngr,side,cmap) = {
        local rid:id {
            rid := ref.evs(lt).id_;
 	   
-	   assert ~cached(a);
+	   assert ~cached(c,a);
 	   assert side(rid) = client;
 	   assert ref.evs(lt).addr_ = a;
 	   assert ref.evs(lt).data_ = d;
@@ -421,11 +422,12 @@ module interface(ref,clnt,mngr,side,cmap) = {
 
     # can only have privs if cached
 
-    conjecture (excl_p(C,A) | shrd_p(C,A)) -> cached(A)
+    conjecture (excl_p(C,A) | shrd_p(C,A)) -> cached(C,A)
 
     # to_ser only if uncached
 
-    conjecture ~(to_ser(T) & cached(ref.evs(T).addr_))
+    # TODO: not true anymore
+    # conjecture ~(to_ser(T) & cached(ref.evs(T).addr_))
 
     # nothing to_ser if prevented by event not to_ser
 

@@ -34,6 +34,7 @@ module generic_client_intf(mngr) = {
            own:ownership,          # what ownership type? (none=uncached)
            op : otype,             # what operation?
            data_ : data,           # what data, if any?
+	   block : bool,           # is this a full block request?
 
            ltime_ : ltime         # (aux) logical time
    ) = {
@@ -46,6 +47,7 @@ module generic_client_intf(mngr) = {
            acqs(a).own := own;
            acqs(a).op := op;
            acqs(a).data_ := data_;
+	   acqs(a).block := block;
            acqs(a).ltime_ := ltime_;
 	   call mngr.tl_Acquire(a)
        }

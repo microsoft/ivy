@@ -10,6 +10,7 @@ struct tilelink_two_port_dut {
     int own;
     int op;
     int data_;
+    int block;
     int ltime_;
 
     friend std::ostream & operator<<(std::ostream & out, acquire const &a) {
@@ -21,6 +22,7 @@ struct tilelink_two_port_dut {
       out << "own = " << a.own << ", ";
       out << "op = " << a.op << ", ";
       out << "data_ = " << a.data_ << ", ";
+      out << "block = " << a.block << ", ";
       out << "ltime_ = " << a.ltime_ << "";
       out << "}";
     }
@@ -88,7 +90,7 @@ struct tilelink_two_port_dut {
       out << "data_ = " << a.data_ << ", ";
       out << "addr_hi = " << a.addr_hi << ", ";
       out << "ltime_ = " << a.ltime_ << "";
-      out << "";
+      out << "}";
     }
   };
 

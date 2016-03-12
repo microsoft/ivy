@@ -80,6 +80,13 @@ int to_a_own(int is_builtin_type, int a_type){
     return 2;
 }
 
+int to_a_block(int is_builtin_type, int a_type){
+    if (!is_builtin_type)
+        return 0;
+    // block built-ins: getBlock, putBlock
+    return 1 ? (a_type == 0b001 || a_type == 0b011) : 0;
+}
+
 int to_a_op(int a_type){
     switch (a_type) {
     case 0b000 : return 0; // getType
@@ -116,6 +123,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     hash_map<int, hash_map<int,int> > client_txid_to_addr_hi;
     hash_map<int, hash_map<int,int> > client_txid_to_ltime;
     hash_map<int, hash_map<int,int> > client_rls_txid_to_addr_hi;
+    hash_map<int, int > addr_hi_to_ltime;
+      int latest_ltime, latest_addr_hi;
 
     my_manager_port(L2Unit_t &_dut) : dut(_dut) {}
 
@@ -132,9 +141,14 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         if(send) {
             client_txid_to_addr_hi[a.cid][a.id_] = a.addr_hi;
             client_txid_to_ltime[a.cid][a.id_] = a.ltime_;
+            latest_ltime = a.ltime_;
+            latest_addr_hi = a.addr_hi;
         }
     }
     bool get_acquire_ready(){
+        if (dut.L2Unit__io_inner_acquire_valid.values[0] && dut.L2Unit__io_inner_acquire_ready.values[0]) { 
+            addr_hi_to_ltime[latest_addr_hi] = latest_ltime;
+        }
         return dut.L2Unit__io_inner_acquire_ready.values[0];
     }
     void set_finish(bool send, const finish &a){
@@ -199,6 +213,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
   struct my_client_port : public client_port {
 
     L2Unit_t &dut;
+    my_manager_port &mp;
 
       hash_map<int,int> manager_txid_to_client_txid;
       hash_map<int,int> manager_txid_to_addr_hi;
@@ -207,7 +222,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
       hash_map<int,int> client_txid_to_op, client_txid_to_own;
 
 
-    my_client_port(L2Unit_t &_dut) : dut(_dut) {}
+    my_client_port(L2Unit_t &_dut, my_manager_port &_mp) : dut(_dut), mp(_mp) {}
 
     bool get_acquire(acquire &a){
         a.cid = dut.L2Unit__io_inner_acquire_bits_client_id.values[0];
@@ -220,7 +235,9 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         // dut.L2Unit__io_outer_acquire_bits_union -- TODO: what here?
         a.addr_hi = to_addr_hi(dut.L2Unit__io_outer_acquire_bits_addr_block.values[0]);
         a.data_ = a.op ? dut.L2Unit__io_outer_acquire_bits_data.values[0] : 0;
-        a.ltime_ = 0;
+        a.block = to_a_block(dut.L2Unit__io_outer_acquire_bits_is_builtin_type.values[0],
+                             dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
+        a.ltime_ = mp.addr_hi_to_ltime[a.addr_hi];
         bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
         if (send) {
             client_txid_to_op[a.id_] = a.op;
@@ -345,7 +362,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
 public:
   tilelink_coherence_manager(){
       m_mp = new my_manager_port(dut);
-      m_cp = new my_client_port(dut);
+      m_cp = new my_client_port(dut,*m_mp);
 
       dut.init(rand());
 

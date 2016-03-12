@@ -68,13 +68,12 @@ int main(int argc, const char **argv){
 
 	// For now, make all the memory cached on front
 
-	tb.front__cached[0] = 1;
-	tb.front__cached[1] = 1;
-	tb.front__cached[2] = 1;
-	tb.front__cached[3] = 1;
-	tb.front__cached_hi[0] = 1;
-	tb.front__cached_hi[1] = 1;
-
+        for (int cl = 0; cl < 2; cl++){
+            for (int a = 0; a < 4; a++) 
+                tb.front__cached[cl][a] = 1 ? (cl == 0) : 0;
+            for (int a = 0; a < 2; a++)
+                tb.front__cached_hi[cl][a] = 1 ? (cl == 0) : 0;
+        }
         // Assume front interface is ordered
 
         tb.front__ordered = 1;
@@ -123,8 +122,8 @@ int main(int argc, const char **argv){
 
 	  
           if (rand() % 2 && acq_i.size() < BUF_MAX && cag.generate(tb)) {
-              acquire acq_g = {cag.cid,cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,cag.ltime_};
-	      tb.ext__c__acquire(acq_g.cid,acq_g.id_,acq_g.addr_hi,acq_g.word,acq_g.own,acq_g.op, acq_g.data_, acq_g.ltime_);
+              acquire acq_g = {cag.cid,cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,0 /* cag.block */,cag.ltime_};
+	      tb.ext__c__acquire(acq_g.cid,acq_g.id_,acq_g.addr_hi,acq_g.word,acq_g.own,acq_g.op, acq_g.data_, acq_g.block, acq_g.ltime_);
               acq_i.push_back(acq_g);
               std::cout << "gen: " << acq_g << std::endl;
           }
@@ -241,7 +240,13 @@ int main(int argc, const char **argv){
 
 	  if (acq_send & acq_ready){
 	    std::cout << "output: " << acq_c << std::endl;
-            tb.ext__b__acquire(acq_c.cid,acq_c.id_,acq_c.addr_hi,acq_c.word,acq_c.own,acq_c.op,acq_c.data_,acq_c.ltime_);
+            tb.ext__b__acquire(acq_c.cid,acq_c.id_,acq_c.addr_hi,acq_c.word,acq_c.own,acq_c.op,acq_c.data_,acq_c.block,acq_c.ltime_);
+            if (acq_c.own == 0 && !acq_c.block){
+                // TEMPORARY: treat non-block memory ops as uncached and perform them
+                // on behalf of the DUT (in principle, DUT should do this). We need a better
+                // way to distinguish ops from uncached clients.
+                tb.ref__perform(acq_c.ltime_,tb.buf_id);
+            }
           }
 	  if (fns_send & fns_ready){
 	    std::cout << "output: " << fns_c << std::endl;
@@ -259,7 +264,6 @@ int main(int argc, const char **argv){
             std::cout << "output: " << prb_m << std::endl;
 	    tb.ext__b__probe(prb_m.cid,prb_m.id_, prb_m.addr_hi);
           }
-
 
 
 	  // end of clock cycle
