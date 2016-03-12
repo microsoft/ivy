@@ -93,7 +93,12 @@ ivy commit: 2e6b50f
 uncore commit: 0e080c9
 command line: test_L2HellaCacheBank 1
 
+5) Data array writes of simultaneous voluntary and involuntary
+write-backs to different blocks can interfere.
 
+ivy commit: affec87
+uncore commit: 0e080c9
+command line: test_L2HellaCacheBank 1
 
 
 Issues to be resolved
