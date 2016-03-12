@@ -64,12 +64,12 @@ L2BroadcastHub/L2BroadcastHub.o:
 	install -d L2BroadcastHub
 	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run L2BroadcastHub DefaultL2Config --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2BroadcastHub"
 
-L2BroadcastHub/L2BroadcastHub_fixed.o: L2BroadcastHub/L2BroadcastHub_fixed.cpp
-	g++ -g -c -o L2BroadcastHub/L2BroadcastHub_fixed.o -I L2BroadcastHub -I $(ROCKETCHIP)/csrc L2BroadcastHub/L2BroadcastHub_fixed.cpp
+#L2BroadcastHub/L2BroadcastHub_fixed.o: L2BroadcastHub/L2BroadcastHub_fixed.cpp
+#	g++ -g -c -o L2BroadcastHub/L2BroadcastHub_fixed.o -I L2BroadcastHub -I $(ROCKETCHIP)/csrc L2BroadcastHub/L2BroadcastHub_fixed.cpp
 
 tilelink_coherence_manager_bcast.cpp: tilelink_coherence_manager.cpp 
 	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2BroadcastHub_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_bcast.cpp
 
-test_L2BroadcastHub: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_bcast.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.h L2BroadcastHub/L2BroadcastHub_fixed.o
-	g++ -g -I $(Z3DIR)/include -I L2BroadcastHub -L $(Z3DIR)/lib -o test_L2BroadcastHub main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub_fixed.o -lz3
+test_L2BroadcastHub: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_bcast.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.h L2BroadcastHub/L2BroadcastHub.o
+	g++ -g -I $(Z3DIR)/include -I L2BroadcastHub -L $(Z3DIR)/lib -o test_L2BroadcastHub main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.o -lz3
 
