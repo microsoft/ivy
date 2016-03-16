@@ -920,7 +920,8 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     # If anything to_ser, all prevent events are granted
 
-    conjecture to_ser(E2) & ref.prevents(E1,E2) -> granted(E1)
+# TEMPORARY
+#    conjecture to_ser(E2) & ref.prevents(E1,E2) -> granted(E1)
 
     # No two lock operations can be requested for the same
     # client. This is required for release consistency,

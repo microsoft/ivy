@@ -167,7 +167,9 @@ def emit_set(header,symbol):
 def emit_eval_sig(header,obj=None):
     for symbol in all_state_symbols():
         if slv.solver_name(symbol) != None: # skip interpreted symbols
-            emit_eval(header,symbol,obj)
+            global is_derived
+            if symbol not in is_derived:
+                emit_eval(header,symbol,obj)
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -184,6 +186,8 @@ public:
     constraints = [im.module.init_cond.to_formula()]
     for a in im.module.axioms:
         constraints.append(a.to_formula())
+    for df in im.module.concepts:
+        constraints.append(df.to_constraint())
     for c in constraints:
         fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
         indent(impl)
@@ -194,6 +198,13 @@ public:
     impl.append("}\n");
     header.append("    bool generate(" + classname + "&);\n};\n")
     impl.append("bool init_gen::generate(" + classname + "& obj) {\n")
+    indent_level += 1
+    for sym in all_state_symbols():
+        if slv.solver_name(sym) != None: # skip interpreted symbols
+            global is_derived
+            if sym not in is_derived:
+                emit_randomize(impl,sym)
+    indent_level -= 1
     impl.append("""
     bool res = solve();
     if (res) {
@@ -208,8 +219,27 @@ public:
 """)
     
 def emit_randomize(header,symbol):
+
+    global indent_level
+    name = symbol.name
+    sname = slv.solver_name(symbol)
+    cname = varname(name)
+    sort = symbol.sort
+    domain = sort_domain(sort)
+    for idx,dsort in enumerate(domain):
+        dcard = sort_card(dsort)
+        indent(header)
+        header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
+        indent_level += 1
     indent(header)
-    header.append('randomize("{}");\n'.format(slv.solver_name(symbol)))
+    header.append('randomize("{}"'.format(sname)
+                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+                  + ");\n")
+    for idx,dsort in enumerate(domain):
+        indent_level -= 1    
+
+#    indent(header)
+#    header.append('randomize("{}");\n'.format(slv.solver_name(symbol)))
 
 def emit_action_gen(header,impl,name,action):
     global indent_level
@@ -217,6 +247,7 @@ def emit_action_gen(header,impl,name,action):
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([df.to_constraint() for df in im.module.concepts]))
     pre = pre_clauses.to_formula()
     syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
@@ -241,7 +272,9 @@ def emit_action_gen(header,impl,name,action):
     for sym in all_state_symbols():
         if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
             if slv.solver_name(sym) != None: # skip interpreted symbols
-                emit_set(impl,sym)
+                global is_derived
+                if sym not in is_derived:
+                    emit_set(impl,sym)
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
             emit_randomize(impl,sym)
@@ -262,6 +295,18 @@ def emit_action_gen(header,impl,name,action):
 }
 """)
 
+def emit_derived(header,impl,df):
+    name = df.defines().name
+    sort = df.defines().sort
+    retval = il.Symbol("ret:val",sort)
+    vs = df.args[0].args
+    ps = [ilu.var_to_skolem('p:',v) for v in vs]
+    mp = dict(zip(vs,ps))
+    rhs = ilu.substitute_ast(df.args[1],mp)
+    action = ia.AssignAction(retval,rhs)
+    action.formal_params = ps
+    action.formal_returns = [retval]
+    emit_some_action(header,impl,name,action,classname)
 
 def emit_method_decl(header,name,action,body=False,classname=None):
     if not hasattr(action,"formal_returns"):
@@ -286,8 +331,11 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     header.append(')')
     
 def emit_action(header,impl,name,classname):
-    global indent_level
     action = im.module.actions[name]
+    emit_some_action(header,impl,name,action,classname)
+
+def emit_some_action(header,impl,name,action,classname):
+    global indent_level
     emit_method_decl(header,name,action)
     header.append(';\n')
     emit_method_decl(impl,name,action,body=True,classname=classname)
@@ -313,6 +361,11 @@ def init_method():
     return res
 
 def module_to_cpp_class(classname):
+    global is_derived
+    is_derived = set()
+    for df in im.module.concepts:
+        is_derived.add(df.defines())
+
     header = []
     header.append('extern void ivy_assert(bool);\n')
     header.append('extern void ivy_assume(bool);\n')
@@ -337,11 +390,14 @@ def module_to_cpp_class(classname):
     }
 """)
     for sym in all_state_symbols():
-        declare_symbol(header,sym)
+        if sym not in is_derived:
+            declare_symbol(header,sym)
     for sym in il.sig.constructors:
         declare_symbol(header,sym)
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
+    for df in im.module.concepts:
+        emit_derived(header,impl,df)
 
     header.append('    ' + classname + '();\n');
     im.module.actions['.init'] = init_method()
@@ -384,10 +440,21 @@ def emit_app(self,header,code):
         return 
     # handle uninterpreted ops
     code.append(varname(self.func.name))
-    for a in self.args:
-        code.append('[')
-        a.emit(header,code)
-        code.append(']')
+    global is_derived
+    if self.func in is_derived:
+        code.append('(')
+        first = True
+        for a in self.args:
+            if not first:
+                code.append(',')
+            a.emit(header,code)
+            first = False
+        code.append(')')
+    else: 
+        for a in self.args:
+            code.append('[')
+            a.emit(header,code)
+            code.append(']')
 
 lg.Apply.emit = emit_app
 
@@ -672,7 +739,7 @@ protected:
 
 
 public:
-    int eval_apply(const char *decl_name, unsigned num_args, const int *args) {
+    z3::expr mk_apply_expr(const char *decl_name, unsigned num_args, const int *args){
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
         std::vector<z3::expr> expr_args;
         unsigned arity = decl.arity();
@@ -681,7 +748,10 @@ public:
             z3::sort sort = decl.domain(i);
             expr_args.push_back(int_to_z3(sort,args[i]));
         }
-        z3::expr apply_expr = decl(arity,&expr_args[0]);
+        return decl(arity,&expr_args[0]);
+    }
+    int eval_apply(const char *decl_name, unsigned num_args, const int *args) {
+        z3::expr apply_expr = mk_apply_expr(decl_name,num_args,args);
         //        std::cout << "apply_expr: " << apply_expr << std::endl;
         try {
             z3::expr foo = model.eval(apply_expr,true);
@@ -772,11 +842,9 @@ public:
         return set(decl_name,3,args,value);
     }
 
-    void randomize(const char *decl_name) {
+    void randomize(const char *decl_name, unsigned num_args, const int *args) {
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
-        unsigned arity = decl.arity();
-        assert(arity == 0);
-        z3::expr apply_expr = decl();
+        z3::expr apply_expr = mk_apply_expr(decl_name,num_args,args);
         z3::sort range = decl.range();
         unsigned card = sort_card(range);
         int value = rand() % card;
@@ -788,6 +856,24 @@ public:
         z3::expr alit = ctx.bool_const(ss.str().c_str());
         alits.push_back(alit);
         slvr.add(!alit || pred);
+    }
+
+    void randomize(const char *decl_name) {
+        randomize(decl_name,0,(int *)0);
+    }
+
+    void randomize(const char *decl_name, int arg0) {
+        randomize(decl_name,1,&arg0);
+    }
+    
+    void randomize(const char *decl_name, int arg0, int arg1) {
+        int args[2] = {arg0,arg1};
+        randomize(decl_name,2,args);
+    }
+
+    void randomize(const char *decl_name, int arg0, int arg1, int arg2) {
+        int args[3] = {arg0,arg1,arg2};
+        randomize(decl_name,3,args);
     }
 
     void push(){

@@ -26,6 +26,15 @@ void mutate_memory(tilelink_coherence_manager_tester & tb){
     }
 }
 
+void usage(){
+    std::cerr << "usage: [options] [random-seed] \n";
+    std::cerr << "options: \n";
+    std::cerr << "  -c <int>    max clock cycles per trace\n";
+    std::cerr << "  -t <int>    max number of traces\n";
+    std::cerr << "  -r          delay voluntary releases\n";
+    std::cerr << "  -u          one uncached client\n";
+    exit(1);
+}
 
 
 int main(int argc, const char **argv){
@@ -34,14 +43,44 @@ int main(int argc, const char **argv){
       
     int arg = 1;
     bool delay_rels = false;
+    bool uncached_client = false;
+    int max_cycles = 1000;
+    int max_traces = 1;
 
-    if (argc > arg &&  argv[arg] == std::string("-r")) {
-        arg++;
-        delay_rels = true;
+    while (arg < argc) {
+        // option -c: max clock cycles per trace
+        if (arg < argc - 1 && argv[arg] == std::string("-c")) {
+            arg++;
+            max_cycles = atoi(argv[arg++]);
+        }
+        // option -c: max number of traces
+        if (arg < argc - 1 && argv[arg] == std::string("-t")) {
+            arg++;
+            max_traces = atoi(argv[arg++]);
+        }
+        // option -r: delay voluntary release to work around L2 cache bug
+        else if (argv[arg] == std::string("-r")) {
+            arg++;
+            delay_rels = true;
+        }
+        // option -u: one uncached and one cached client
+        else if (argv[arg] == std::string("-u")) {
+            arg++;
+            uncached_client = true;
+        }
+        else break;
+    }        
+
+    if (argc > arg){
+        if (!isdigit(argv[arg][0]))
+            usage();
+        random_seed = atoi(argv[arg++]);
+    }
+        
+    if (arg != argc) {
+        usage();
     }
 
-    if (argc > arg)
-        random_seed = atoi(argv[arg]);
     srand(random_seed);
 
     tilelink_coherence_manager_tester tb;
@@ -58,7 +97,7 @@ int main(int argc, const char **argv){
 
     int rel_del = 0;
 
-    for (int j = 0; j < 1; j++) {
+    for (int j = 0; j < max_traces; j++) {
 
         std::cout << "initializing\n";
         if (!ig.generate(tb)){
@@ -70,10 +109,11 @@ int main(int argc, const char **argv){
 
         for (int cl = 0; cl < 2; cl++){
             for (int a = 0; a < 4; a++) 
-                tb.front__cached[cl][a] = 1 ? (cl == 0) : 0;
+                tb.front__cached[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
             for (int a = 0; a < 2; a++)
-                tb.front__cached_hi[cl][a] = 1 ? (cl == 0) : 0;
+                tb.front__cached_hi[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
         }
+
         // Assume front interface is ordered
 
         tb.front__ordered = 1;
@@ -108,13 +148,32 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
-	for (int cycle = 0; cycle < 10000; cycle++) {
+        int all_events_serialized = -1;
+
+	for (int cycle = 0; cycle < max_cycles; cycle++) {
+
+          if (all_events_serialized == -1) {
+              bool all_done = true;
+              for(int lt = 0; lt < tb.__CARD__ltime; lt++)
+                  if (!tb.ref__evs__serialized[lt])
+                      all_done = false;
+              if (all_done)
+                  all_events_serialized = cycle;
+          }
+          else if (cycle == all_events_serialized + 100) {
+              std::cout << "all events done, ending trace\n";
+              break;
+          }
 
 	  // beginning of clock cycle
 
             mutate_memory(tb);
 
 	  // tee up input messages for the dut
+
+            //            int the_addr_hi,the_word;
+            //          tb.ext__c__acquire(1,0,the_addr_hi,the_word,0,tb.ref__evs__type_[0],tb.ref__evs__data_[0],0,0);
+
 
           // we buffer the input messages so that we can present more
           // than one input in a clock cycle.  TODO: we ought to

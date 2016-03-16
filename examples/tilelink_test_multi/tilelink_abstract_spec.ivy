@@ -86,7 +86,8 @@ module memev = {
 
     axiom result(T) & result(U) -> T = U
 
-    init ~serialized & ~fused
+    # TEMPORARY: no atomic ops!
+    init ~serialized & ~fused & type_ ~= cas
 }
 
 ################################################################################
