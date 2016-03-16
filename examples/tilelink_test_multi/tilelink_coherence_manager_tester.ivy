@@ -245,6 +245,10 @@ axiom I ~= buf_id -> fside(I) = bside(I)
 individual c_id : id
 axiom fside(c_id) = client
 
+# All memory events are on the client side of the coherence manager
+
+axiom fside(ref.evs(X).id_) = client
+
 instantiate front : tl_interface(ref,c,b,fside,cmap)
 instantiate back : tl_mm_interface(ref,b,m,bside)
 

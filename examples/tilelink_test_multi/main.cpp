@@ -83,21 +83,22 @@ int main(int argc, const char **argv){
 
     srand(random_seed);
 
-    tilelink_coherence_manager_tester tb;
-    tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
-    tilelink_two_port_dut &dut = *dut_ptr;
-
-    init_gen ig;
-    ext__c__acquire_gen cag;
-    ext__c__finish_gen cfg;
-    ext__c__release_gen crg;
-    ext__c__perform_gen cpg;
-    ext__m__grant_gen mgg;
-    ext__m__probe_gen mpg;
-
-    int rel_del = 0;
 
     for (int j = 0; j < max_traces; j++) {
+
+        tilelink_coherence_manager_tester tb;
+        tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
+        tilelink_two_port_dut &dut = *dut_ptr;
+
+        init_gen ig;
+        ext__c__acquire_gen cag;
+        ext__c__finish_gen cfg;
+        ext__c__release_gen crg;
+        ext__c__perform_gen cpg;
+        ext__m__grant_gen mgg;
+        ext__m__probe_gen mpg;
+
+        int rel_del = 0;
 
         std::cout << "initializing\n";
         if (!ig.generate(tb)){
@@ -299,13 +300,13 @@ int main(int argc, const char **argv){
 
 	  if (acq_send & acq_ready){
 	    std::cout << "output: " << acq_c << std::endl;
-            tb.ext__b__acquire(acq_c.cid,acq_c.id_,acq_c.addr_hi,acq_c.word,acq_c.own,acq_c.op,acq_c.data_,acq_c.block,acq_c.ltime_);
             if (acq_c.own == 0 && !acq_c.block){
                 // TEMPORARY: treat non-block memory ops as uncached and perform them
                 // on behalf of the DUT (in principle, DUT should do this). We need a better
                 // way to distinguish ops from uncached clients.
                 tb.ref__perform(acq_c.ltime_,tb.buf_id);
             }
+            tb.ext__b__acquire(acq_c.cid,acq_c.id_,acq_c.addr_hi,acq_c.word,acq_c.own,acq_c.op,acq_c.data_,acq_c.block,acq_c.ltime_);
           }
 	  if (fns_send & fns_ready){
 	    std::cout << "output: " << fns_c << std::endl;
@@ -328,7 +329,7 @@ int main(int argc, const char **argv){
 	  // end of clock cycle
 	}	  
 
-
+        delete dut_ptr;
     }
 }
 

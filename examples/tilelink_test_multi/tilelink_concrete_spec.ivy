@@ -1097,6 +1097,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     relation unc_r(A:tl_addrhi,W:tl_addrlo)    # there is a requested uncached acquire
     relation unc_a(A:tl_addrhi,W:tl_addrlo)    # there is an accepted uncached acquire
     relation unc_w(A:tl_addrhi,W:tl_addrlo)    # there is a requested uncached write
+    relation unc_wb(A:tl_addrhi)               # there is a requested uncached block write
         
     
     ########################################
@@ -1130,6 +1131,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     init    ~unc_r(H,W) 
           & ~unc_w(H,W) 
           & ~unc_a(H,W) 
+          & ~unc_wb(H) 
 	  & ~dirty(A)
 
     ########################################
@@ -1167,7 +1169,8 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # TODO: in priciple should allow two with different beat addr
 
 	    assert ~unc_r(hi,lo) & ~unc_w(hi,lo);
-	    assert (unc_r(hi,W) | unc_w(hi,W)) -> bl;
+	    assert ~unc_r(hi,W);
+	    assert unc_w(hi,W) -> (bl & unc_wb(hi));  # may be a beat of multi-beat write
 
 	    # (2) if any requested or accepted transactions with
 	    # same hi address, txid must match
@@ -1195,9 +1198,10 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
                 }
             } else {
 	        if bl {
-		    unc_w(hi,lo) := true
+		    unc_w(hi,lo) := true;
+	            unc_wb(hi) := true
                 } else {
-	            unc_w(hi,X) := true  # if not block write, one beat finishes
+	            unc_w(hi,lo) := true  # if not block write, one beat finishes
                 }
             };
 
@@ -1239,9 +1243,9 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # Rules for normal Grants:
 	    # 
 	    # (1) A Grant must match a requested or accepted Acquire. 
-	    # If a write, all beats but be received
+	    # If a multi-beat write, all beats but be received
 
-	    assert unc_r(hi,lo) | unc_a(hi,lo) | unc_w(hi,W);
+	    assert unc_r(hi,lo) | unc_a(hi,lo) | unc_w(hi,W) | unc_w(hi,lo) & ~unc_wb(hi);
 
 	    # (2) A grant's txid must match its request
 
@@ -1290,7 +1294,8 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    # so can never be in accepted state.
 
 	    unc_r(hi,lo) := false; # for now, can't be in accepted state
-	    unc_w(hi,W) := false;  # one grant for all beats
+	    unc_w(hi,W) := false;  # one grant for all write beats
+	    unc_wb(hi) := false;
 
 	    ########################################
 	    # Transaction is accepted if there are any beats remaining	    
