@@ -54,6 +54,17 @@ ivy commit: f77aa11
 rocket-chip commit: 4fedd18
 uncore commit: 7ff3c3e
 
+Uncore issue 29. This trace shows a case with one cached and one
+uncached client. At 120 ps the cached client issues a write-back, and
+at the same time the uncached client issues a single-beat read. The
+write-back goes through to the outer port at 128ps and 134 ps. Then
+the acquire for the uncached read goes through at 136ps before the
+grant comes back for the previous write. This violates the ordering
+rules, since we have two accesses to the same address that are
+un-ordered.
+
+ivy commit: 51c9959
+uncore commit: 4c0b530
 
 L2HellaCacheModule
 ------------------
