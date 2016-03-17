@@ -32,6 +32,7 @@ void usage(){
     std::cerr << "  -c <int>    max clock cycles per trace\n";
     std::cerr << "  -t <int>    max number of traces\n";
     std::cerr << "  -r          delay voluntary releases\n";
+    std::cerr << "  -a          delay uncached acquire if vol release\n";
     std::cerr << "  -u          one uncached client\n";
     exit(1);
 }
@@ -43,6 +44,7 @@ int main(int argc, const char **argv){
       
     int arg = 1;
     bool delay_rels = false;
+    bool delay_acqs = false;
     bool uncached_client = false;
     int max_cycles = 1000;
     int max_traces = 1;
@@ -62,6 +64,11 @@ int main(int argc, const char **argv){
         else if (argv[arg] == std::string("-r")) {
             arg++;
             delay_rels = true;
+        }
+        // option -a: delay uncached acquire if voluntary release to work around BroadcastHub bug
+        else if (argv[arg] == std::string("-a")) {
+            arg++;
+            delay_acqs = true;
         }
         // option -u: one uncached and one cached client
         else if (argv[arg] == std::string("-u")) {
@@ -213,6 +220,12 @@ int main(int argc, const char **argv){
           if (rls_gen) rls_m = rls_i[0];
           dut.mp()->set_release(rls_gen,rls_m);
 
+          // if workaround, don't input a vol release and uncached acquire in same cycle
+          if (delay_acqs && rls_gen && rls_m.voluntary && acq_gen && acq_m.own == 0){
+              acq_gen = false;
+              dut.mp()->set_acquire(false,acq_m);
+          }
+              
           if (rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
               grant gnt_g = {0 /* mgg.cid */, mgg.clnt_txid, mgg.mngr_txid, mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
 	      tb.ext__m__grant(gnt_g.cid, gnt_g.clnt_txid,gnt_g.clnt_txid,gnt_g.word,gnt_g.own,gnt_g.relack,gnt_g.data_,gnt_g.addr_hi,gnt_g.ltime_);
