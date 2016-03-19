@@ -44,6 +44,8 @@ class Module(object):
         self.exports = []
         self.delegates = []
         self.public_actions = set() # hash of the exported actions
+        self.progress = []  # list of progress properties
+        self.rely = [] # list of rely relations
 
         self.sig = il.sig # capture the current signature
 

@@ -424,6 +424,18 @@ class DerivedDecl(Decl):
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
 
+class ProgressDecl(Decl):
+    def name(self):
+        return 'progress'
+    def defines(self):
+        return [(c.defines(),lineno(c)) for c in self.args]
+
+class RelyDecl(Decl):
+    def name(self):
+        return 'rely'
+    def defines(self):
+        return []
+
 class ConceptDecl(Decl):
     def name(self):
         return 'concept'

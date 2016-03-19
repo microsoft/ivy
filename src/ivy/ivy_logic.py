@@ -287,6 +287,11 @@ def add_symbol(symbol_name,sort):
         sig.symbols[symbol_name] = Symbol(symbol_name,sort)
     return sig.symbols[symbol_name]
 
+def remove_symbol(symbol):
+    assert symbol.name in sig.symbols
+    assert not (iu.ivy_have_polymorphism and symbol.name in polymorphic_symbols)
+    del sig.symbols[symbol.name]
+
 def all_symbols():
     for name,sym in sig.symbols.iteritems():
         if isinstance(sym.sort,UnionSort):

@@ -239,6 +239,21 @@ def p_top_derived_defns(p):
     p[0] = p[1]
     p[0].declare(DerivedDecl(*p[3]))
 
+def p_top_progress_defns(p):
+    'top : top PROGRESS defns'
+    p[0] = p[1]
+    p[0].declare(ProgressDecl(*p[3]))
+
+def p_top_rely_atom_arrow_atom(p):
+    'top : top RELY atom ARROW atom'
+    p[0] = p[1]
+    p[0].declare(RelyDecl(Implies(p[3],p[5])))
+
+def p_top_rely_atom(p):
+    'top : top RELY atom'
+    p[0] = p[1]
+    p[0].declare(RelyDecl(p[3]))
+
 def p_top_concept_cdefns(p):
     'top : top CONCEPT cdefns'
     p[0] = p[1]

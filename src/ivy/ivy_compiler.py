@@ -313,6 +313,15 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.updates.append(DerivedUpdate(df))
         except ValueError:
             raise IvyError(df,"definition of derived relation must be a cube")
+    def progress(self,df):
+        rel = df.args[0]
+        with ASTContext(rel):
+            sym = add_symbol(rel.relname,get_relation_sort(self.domain.sig,rel.args,df.args[1]))
+        df = sortify_with_inference(df)
+        self.domain.progress.append(df)
+    def rely(self,df):
+        df = sortify_with_inference(df)
+        self.domain.rely.append(df)
     def concept(self,c):
         rel = c.args[0]
         with ASTContext(c):
@@ -618,6 +627,9 @@ def ivy_compile(ag,decls):
             IvyDomainSetup(ag.domain)(decls)
             IvyARGSetup(ag)(decls)
         ag.domain.macros = decls.macros
+        # progress properties are not state symbols -- remove from sig
+        for p in ag.domain.progress:
+            remove_symbol(p.defines())
         if not ag.states:
             ac = ag.context
             with ac:

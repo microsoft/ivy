@@ -34,9 +34,39 @@ void usage(){
     std::cerr << "  -r          delay voluntary releases\n";
     std::cerr << "  -a          delay uncached acquire if vol release\n";
     std::cerr << "  -u          one uncached client\n";
+    std::cerr << "  -d          inject random delays for progress testing";
     exit(1);
 }
 
+struct delay {
+    bool on;
+    int time, off_cycle, on_cycle;
+    bool enabled;
+    delay() {time = 0; enabled = false; on = false;}
+    void enable(int _off_cycle, int _on_cycle) {
+        enabled = true;
+        off_cycle = _off_cycle;
+        on_cycle = _on_cycle;
+        on = false;
+        time = time = rand() % off_cycle;
+    }
+    bool tick(){
+        if (!enabled) return false;
+        if (time == 0) {
+            if (on) {
+                on = false;
+                time = rand() % off_cycle;
+            }
+            else {
+                on = true;
+                time = rand() % on_cycle;
+            }
+        }
+        else
+            time--;
+        return on;
+    }
+};
 
 int main(int argc, const char **argv){
 
@@ -45,6 +75,7 @@ int main(int argc, const char **argv){
     int arg = 1;
     bool delay_rels = false;
     bool delay_acqs = false;
+    bool inject_delays = false;
     bool uncached_client = false;
     int max_cycles = 1000;
     int max_traces = 1;
@@ -69,6 +100,11 @@ int main(int argc, const char **argv){
         else if (argv[arg] == std::string("-a")) {
             arg++;
             delay_acqs = true;
+        }
+        // option -d: delay uncached acquire if voluntary release to work around BroadcastHub bug
+        else if (argv[arg] == std::string("-d")) {
+            arg++;
+            inject_delays = true;
         }
         // option -u: one uncached and one cached client
         else if (argv[arg] == std::string("-u")) {
@@ -156,6 +192,11 @@ int main(int argc, const char **argv){
 
         bool acq_gen,fns_gen,rls_gen,gnt_gen,prb_gen;
 
+        delay delays[10];
+        if (inject_delays)
+            for (int i = 0; i < 10; i++)
+                delays[i].enable(100,200);
+
         int all_events_serialized = -1;
 
 	for (int cycle = 0; cycle < max_cycles; cycle++) {
@@ -188,7 +229,7 @@ int main(int argc, const char **argv){
           // dequeue these messages randomly.
 
 	  
-          if (rand() % 2 && acq_i.size() < BUF_MAX && cag.generate(tb)) {
+          if (!delays[0].tick() && rand() % 2 && acq_i.size() < BUF_MAX && cag.generate(tb)) {
               acquire acq_g = {cag.cid,cag.id_,cag.addr_hi,cag.word,cag.own,cag.op,cag.data_,0 /* cag.block */,cag.ltime_};
 	      tb.ext__c__acquire(acq_g.cid,acq_g.id_,acq_g.addr_hi,acq_g.word,acq_g.own,acq_g.op, acq_g.data_, acq_g.block, acq_g.ltime_);
               acq_i.push_back(acq_g);
@@ -198,7 +239,7 @@ int main(int argc, const char **argv){
           if (acq_gen) acq_m = acq_i[0];
           dut.mp()->set_acquire(acq_gen,acq_m);
 	  
-          if (rand() % 2 && fns_i.size() < BUF_MAX && cfg.generate(tb)) {
+          if (!delays[1].tick() && rand() % 2 && fns_i.size() < BUF_MAX && cfg.generate(tb)) {
               finish fns_g = {cfg.cid, cfg.id_, cfg.addr_hi, cfg.word, cfg.own};
               tb.ext__c__finish(fns_g.cid, fns_g.id_, fns_g.addr_hi, fns_g.word, fns_g.own);
               fns_i.push_back(fns_g);
@@ -208,7 +249,7 @@ int main(int argc, const char **argv){
           if (fns_gen) fns_m = fns_i[0];
           dut.mp()->set_finish(fns_gen,fns_m);
 
-          if (rand() % 2 && rls_i.size() < BUF_MAX && crg.generate(tb)) {
+          if (!delays[2].tick() && rand() % 2 && rls_i.size() < BUF_MAX && crg.generate(tb)) {
               release rls_g = {crg.cid, crg.id_, crg.voluntary, crg.addr_hi, crg.word, crg.dirty, crg.data_};
               tb.ext__c__release(rls_g.cid, rls_g.id_, rls_g.voluntary, rls_g.addr_hi, rls_g.word, rls_g.dirty, rls_g.data_);
               rls_i.push_back(rls_g);
@@ -226,7 +267,7 @@ int main(int argc, const char **argv){
               dut.mp()->set_acquire(false,acq_m);
           }
               
-          if (rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
+          if (!delays[3].tick() && rand() % 2 && gnt_i.size() < BUF_MAX && mgg.generate(tb)) {
               grant gnt_g = {0 /* mgg.cid */, mgg.clnt_txid, mgg.mngr_txid, mgg.word,mgg.own,mgg.relack,mgg.data_,mgg.addr_hi,0 /* mgg.ltime_ */};
 	      tb.ext__m__grant(gnt_g.cid, gnt_g.clnt_txid,gnt_g.clnt_txid,gnt_g.word,gnt_g.own,gnt_g.relack,gnt_g.data_,gnt_g.addr_hi,gnt_g.ltime_);
               gnt_i.push_back(gnt_g);
@@ -236,7 +277,7 @@ int main(int argc, const char **argv){
           if (gnt_gen) gnt_c = gnt_i[0];
           dut.cp()->set_grant(gnt_gen,gnt_c);
 
-          if (rand() % 2 && prb_i.size() < BUF_MAX && mpg.generate(tb)) {
+          if (!delays[4].tick() && rand() % 2 && prb_i.size() < BUF_MAX && mpg.generate(tb)) {
               probe prb_g = {0 /* mpg.cid */, 0 /* mpg.id_ */, 0 /* mpg.addr_hi */};
               tb.ext__m__probe(prb_g.cid, prb_g.id_, prb_g.addr_hi);
               prb_i.push_back(prb_g);
@@ -248,11 +289,12 @@ int main(int argc, const char **argv){
 
 	  // choose ready signals for dut outputs
 
-	  bool acq_ready = rand() % 2;
-	  bool fns_ready = rand() % 2;
-	  bool rls_ready = rand() % 2;
-	  bool gnt_ready = rand() % 2;
-	  bool prb_ready = rand() % 2;
+          bool acq_delayed = delays[5].tick();
+	  bool acq_ready = rand() % 2 && !acq_delayed;
+	  bool fns_ready = !delays[6].tick() && rand() % 2;
+	  bool rls_ready = !delays[7].tick() && rand() % 2;
+	  bool gnt_ready = !delays[8].tick() && rand() % 2;
+	  bool prb_ready = !delays[9].tick() && rand() % 2;
 
 	  dut.cp()->set_acquire_ready(acq_ready);
 	  dut.cp()->set_finish_ready(fns_ready);
@@ -338,6 +380,9 @@ int main(int argc, const char **argv){
 	    tb.ext__b__probe(prb_m.cid,prb_m.id_, prb_m.addr_hi);
           }
 
+          tb.back_acq_rdy = acq_ready || !acq_send; 
+          if (!tb.back_acq_rdy) std::cout << "outer acq blocked";
+          tb.__tick(50);
 
 	  // end of clock cycle
 	}	  
@@ -346,11 +391,15 @@ int main(int argc, const char **argv){
     }
 }
 
+void my_error() {
+    exit(1);
+}
+
 void ivy_assert(bool c){
     if (!c) {
         std::cerr << "assert failed\n";
         std::cout << "assert failed\n";
-        exit(1);
+        my_error();
     }
 }
 
@@ -358,7 +407,16 @@ void ivy_assume(bool c){
     if (!c) {
         std::cerr << "assume failed\n";
         std::cout << "assume failed\n";
-        exit(1);
+        my_error();
+    }
+}
+
+void ivy_check_progress(int guarantee_ticks, int assume_ticks){
+    //    std::cout << "check_progress: " << guarantee_ticks << "," << assume_ticks << "\n";
+    if (guarantee_ticks > 50 && assume_ticks < 10) {
+        std::cerr << "progress property failed\n";
+        std::cout << "progress property failed\n";
+        my_error();
     }
 }
 

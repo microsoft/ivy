@@ -15,6 +15,8 @@ import ivy_transrel as tr
 import ivy_logic_utils as ilu
 import ivy_compiler as ic
 
+from collections import defaultdict
+
 def all_state_symbols():
     return [s for s in il.all_symbols() if s not in il.sig.constructors]
 
@@ -40,11 +42,13 @@ indent_level = 0
 def indent(header):
     header.append(indent_level * '    ')
 
-def declare_symbol(header,sym):
+def declare_symbol(header,sym,c_type = None):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
     name, sort = sym.name,sym.sort
-    header.append('    bool ' if sort.is_relational() else '    int ')
+    if not c_type:
+        c_type = 'bool' if sort.is_relational() else 'int'
+    header.append('    ' + c_type + ' ')
     header.append(varname(sym.name))
     if hasattr(sort,'dom'):
         for d in sort.dom:
@@ -171,6 +175,19 @@ def emit_eval_sig(header,obj=None):
             if symbol not in is_derived:
                 emit_eval(header,symbol,obj)
 
+def emit_clear_progress(impl,obj=None):
+    for df in im.module.progress:
+        vs = list(lu.free_variables(df.args[0]))
+        open_loop(impl,vs)
+        code = []
+        indent(code)
+        if obj != None:
+            code.append('obj.')
+        df.args[0].emit(impl,code)
+        code.append(' = 0;\n')
+        impl.extend(code)
+        close_loop(impl,vs)
+
 def emit_init_gen(header,impl,classname):
     global indent_level
     header.append("""
@@ -211,6 +228,7 @@ public:
 """)
     indent_level += 2
     emit_eval_sig(impl,'obj')
+    emit_clear_progress(impl,'obj')
     indent_level -= 2
     impl.append("""
     }
@@ -295,6 +313,59 @@ def emit_action_gen(header,impl,name,action):
 }
 """)
 
+def emit_action_gen(header,impl,name,action):
+    global indent_level
+    caname = varname(name)
+    upd = action.update(im.module,None)
+    pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
+    pre_clauses = ilu.trim_clauses(pre)
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([df.to_constraint() for df in im.module.concepts]))
+    pre = pre_clauses.to_formula()
+    syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
+    header.append("class " + caname + "_gen : public gen {\n  public:\n")
+    for sym in syms:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+            declare_symbol(header,sym)
+    header.append("    {}_gen();\n".format(caname))
+    impl.append(caname + "_gen::" + caname + "_gen(){\n");
+    indent_level += 1
+    emit_sig(impl)
+    for sym in syms:
+        emit_decl(impl,sym)
+    
+    indent(impl)
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
+    indent_level -= 1
+    impl.append("}\n");
+    header.append("    bool generate(" + classname + "&);\n};\n");
+    impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
+    indent_level += 1
+    pre_used = ilu.used_symbols_ast(pre)
+    for sym in all_state_symbols():
+        if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
+            if slv.solver_name(sym) != None: # skip interpreted symbols
+                global is_derived
+                if sym not in is_derived:
+                    emit_set(impl,sym)
+    for sym in syms:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+            emit_randomize(impl,sym)
+    impl.append("""
+    bool res = solve();
+    if (res) {
+""")
+    indent_level += 1
+    for sym in syms:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+            emit_eval(impl,sym)
+    indent_level -= 2
+    impl.append("""
+    }
+    pop();
+    obj.___ivy_gen = this;
+    return res;
+}
+""")
 def emit_derived(header,impl,df):
     name = df.defines().name
     sort = df.defines().sort
@@ -360,6 +431,95 @@ def init_method():
     res.formal_returns = []
     return res
 
+def open_loop(impl,vs):
+    global indent_level
+    for idx in vs:
+        indent(impl)
+        impl.append('for (int ' + str(idx) + ' = 0; ' + str(idx) + ' < ' + str(sort_card(idx.sort)) + '; ' + str(idx) + '++) {\n')
+        indent_level += 1
+
+def close_loop(impl,vs):
+    global indent_level
+    for idx in vs:
+        indent_level -= 1    
+        indent(impl)
+        impl.append('}\n')
+        
+
+# This generates the "tick" method, called by the test environment to
+# represent passage of time. For each progress property, if it is not
+# satisfied the counter is incremented else it is set to zero. For each
+# property the maximum of the counter values for all its relies is
+# computed and the test environment's ivy_check_progress function is called.
+
+# This is currently a bit bogus, since we could miss satisfaction of
+# the progress property occurring between ticks.
+
+def emit_tick(header,impl,classname):
+    global indent_level
+    indent_level += 1
+    indent(header)
+    header.append('void __tick(int timeout);\n')
+    indent_level -= 1
+    indent(impl)
+    impl.append('void ' + classname + '::__tick(int __timeout){\n')
+    indent_level += 1
+
+    rely_map = defaultdict(list)
+    for df in im.module.rely:
+        key = df.args[0] if isinstance(df,il.Implies) else df
+        rely_map[key.rep].append(df)
+
+    for df in im.module.progress:
+        vs = list(lu.free_variables(df.args[0]))
+        open_loop(impl,vs)
+        code = []
+        indent(code)
+        df.args[0].emit(impl,code)
+        code.append(' = ')
+        df.args[1].emit(impl,code)
+        code.append(' ? 0 : ')
+        df.args[0].emit(impl,code)
+        code.append(' + 1;\n')
+        impl.extend(code)
+        close_loop(impl,vs)
+
+
+    for df in im.module.progress:
+        if any(not isinstance(r,il.Implies) for r in rely_map[df.defines()]):
+            continue
+        vs = list(lu.free_variables(df.args[0]))
+        open_loop(impl,vs)
+        maxt = new_temp(impl)
+        indent(impl)
+        impl.append(maxt + ' = 0;\n') 
+        for r in rely_map[df.defines()]:
+            if not isinstance(r,il.Implies):
+                continue
+            rvs = list(lu.free_variables(r.args[0]))
+            assert len(rvs) == len(vs)
+            subs = dict(zip(rvs,vs))
+            e = ilu.substitute_ast(r.args[1],subs)
+            indent(impl)
+            impl.append('{} = std::max({},'.format(maxt,maxt))
+            e.emit(impl,impl)
+            impl.append(');\n')
+        indent(impl)
+        impl.append('if (' + maxt + ' > __timeout)\n    ')
+        indent(impl)
+        df.args[0].emit(impl,impl)
+        impl.append(' = 0;\n')
+        indent(impl)
+        impl.append('ivy_check_progress(')
+        df.args[0].emit(impl,impl)
+        impl.append(',{});\n'.format(maxt))
+        close_loop(impl,vs)
+
+    indent_level -= 1
+    indent(impl)
+    impl.append('}\n')
+
+
 def module_to_cpp_class(classname):
     global is_derived
     is_derived = set()
@@ -369,6 +529,7 @@ def module_to_cpp_class(classname):
     header = []
     header.append('extern void ivy_assert(bool);\n')
     header.append('extern void ivy_assume(bool);\n')
+    header.append('extern void ivy_check_progress(int,int);\n')
     header.append('extern int choose(int,int);\n')
     header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
     header.append('#include <vector>\n')
@@ -379,6 +540,7 @@ def module_to_cpp_class(classname):
     
     impl = ['#include "' + classname + '.h"\n\n']
     impl.append("#include <sstream>\n")
+    impl.append("#include <algorithm>\n")
     impl.append("int " + classname)
     impl.append(
 """::___ivy_choose(int rng,const char *name,int id) {
@@ -399,10 +561,16 @@ def module_to_cpp_class(classname):
     for df in im.module.concepts:
         emit_derived(header,impl,df)
 
+    # declare one counter for each progress obligation
+    # TRICKY: these symbols are boolean but we create a C++ int
+    for df in im.module.progress:
+        declare_symbol(header,df.args[0].rep,c_type = 'int')
+
     header.append('    ' + classname + '();\n');
     im.module.actions['.init'] = init_method()
     for a in im.module.actions:
         emit_action(header,impl,a,classname)
+    emit_tick(header,impl,classname)
     header.append('};\n')
 
     impl.append(classname + '::' + classname + '(){\n')
