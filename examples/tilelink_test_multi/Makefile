@@ -70,6 +70,6 @@ L2BroadcastHub/L2BroadcastHub.o:
 tilelink_coherence_manager_bcast.cpp: tilelink_coherence_manager.cpp 
 	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2BroadcastHub_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_bcast.cpp
 
-test_L2BroadcastHub: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_bcast.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.h L2BroadcastHub/L2BroadcastHub.o
+test_L2BroadcastHub: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_bcast.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.o
 	g++ -g -I $(Z3DIR)/include -I L2BroadcastHub -L $(Z3DIR)/lib -o test_L2BroadcastHub main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_broadcast_hub.cpp L2BroadcastHub/L2BroadcastHub.o -lz3
 

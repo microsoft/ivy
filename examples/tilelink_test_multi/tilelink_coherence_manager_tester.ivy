@@ -284,7 +284,7 @@ progress front_prb_rls(C,A) = forall W:tl_addrlo. ~front.prb_addr(C,A,W:tl_addrl
 progress front_gnt_rdy_io = front_gnt_rdy
 progress front_gnt_fns_excl(C,A) = ~front.excl_f(C,A)
 progress front_gnt_fns_shrd(C,A) = ~front.shrd_f(C,A)
-progress front_gnt_fns_unc(C,A,W) = ~front.unf_f(C,A,W)
+progress front_gnt_fns_unc(C,A,W) = ~front.unc_f(C,A,W)
 
 
 # rely/guarantee dependencies
@@ -293,11 +293,20 @@ rely front_acq_excl(C,A) -> back_acq_rdy_io
 rely front_acq_excl(C,A) -> front_prb_rls(C,A)
 rely front_acq_excl(C,A) -> back_acq_unc_r(A)
 
+rely front_acq_excl(C,A) -> front_gnt_rdy_io
+rely front_acq_excl(C,A) -> front_gnt_fns_excl(C,A)
+rely front_acq_excl(C,A) -> front_gnt_fns_shrd(C,A)
+rely front_acq_excl(C,A) -> front_gnt_fns_unc(C,A,W)
+
 # these are guaranteed by the environment
 
 rely back_acq_rdy_io
 rely front_prb_rls(C,A)
 rely back_acq_unc_r(A)
+rely front_gnt_rdy_io
+rely front_gnt_fns_excl(C,A)
+rely front_gnt_fns_shrd(C,A)
+rely front_gnt_fns_unc(C,A,W)
 
 ################################################################################
 #

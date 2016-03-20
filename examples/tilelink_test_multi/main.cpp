@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include "tilelink_coherence_manager_tester.h"
 #include "tilelink_two_port_dut.h"
+#include <sys/types.h>
+#include <unistd.h>
 
 struct rgen : public ivy_gen {
   virtual int choose(int rng,const char *name) {

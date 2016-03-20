@@ -499,11 +499,24 @@ def emit_tick(header,impl,classname):
             rvs = list(lu.free_variables(r.args[0]))
             assert len(rvs) == len(vs)
             subs = dict(zip(rvs,vs))
+
+            ## TRICKY: If there are any free variables on rhs of
+            ## rely not occuring on left, we must prevent their capture
+            ## by substitution
+
+            xvs = set(lu.free_variables(r.args[1]))
+            xvs = xvs - set(rvs)
+            for xv in xvs:
+                subs[xv.name] = xv.rename(xv.name + '__')
+            xvs = [subs[xv.name] for xv in xvs]
+    
             e = ilu.substitute_ast(r.args[1],subs)
+            open_loop(impl,xvs)
             indent(impl)
             impl.append('{} = std::max({},'.format(maxt,maxt))
             e.emit(impl,impl)
             impl.append(');\n')
+            close_loop(impl,xvs)
         indent(impl)
         impl.append('if (' + maxt + ' > __timeout)\n    ')
         indent(impl)
