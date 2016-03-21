@@ -113,6 +113,12 @@ int to_addr_hi(int addr) {
     return addr >> 14;
 }
 
+int to_back_client_txid(int id){
+    int clnt_txid = id & (N_ACQUIRE_TRANSACTORS | N_ACQUIRE_TRANSACTORS >> 1 | N_ACQUIRE_TRANSACTORS >> 2);
+    assert(clnt_txid <= 2);
+    return clnt_txid;
+}
+
 class tilelink_coherence_manager : public tilelink_two_port_dut {
 
     /* This is the "inner" port */
@@ -188,7 +194,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.cid = dut.L2Unit__io_inner_grant_bits_client_id.values[0];
         a.data_ = dut.L2Unit__io_inner_grant_bits_data.values[0];
         a.addr_hi = a.relack ? client_rls_txid_to_addr_hi[a.cid][a.clnt_txid] : client_txid_to_addr_hi[a.cid][a.clnt_txid];
-        a.ltime_ = client_txid_to_ltime[a.cid][a.clnt_txid];
+        //        a.ltime_ = client_txid_to_ltime[a.cid][a.clnt_txid];
+        a.ltime_ = addr_hi_to_ltime[a.addr_hi];
         bool send = dut.L2Unit__io_inner_grant_valid.values[0];
         if (send) {
             //            std::cout << "grant_manager_xact = " << dut.L2Unit__io_inner_grant_bits_manager_xact_id.values[0] << " relack = " << a.relack  << "\n";
@@ -225,9 +232,10 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     my_client_port(L2Unit_t &_dut, my_manager_port &_mp) : dut(_dut), mp(_mp) {}
 
     bool get_acquire(acquire &a){
+        bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
         a.cid = dut.L2Unit__io_inner_acquire_bits_client_id.values[0];
         // TODO: high bit of txid seems to be used for something I don't understand
-        a.id_ = dut.L2Unit__io_outer_acquire_bits_client_xact_id.values[0] & 0x07L;
+        a.id_ = send ? to_back_client_txid(dut.L2Unit__io_outer_acquire_bits_client_xact_id.values[0]) : 0;
         a.own = to_a_own(dut.L2Unit__io_outer_acquire_bits_is_builtin_type.values[0],
                          dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
         a.word = dut.L2Unit__io_outer_acquire_bits_addr_beat.values[0];
@@ -238,7 +246,6 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         a.block = to_a_block(dut.L2Unit__io_outer_acquire_bits_is_builtin_type.values[0],
                              dut.L2Unit__io_outer_acquire_bits_a_type.values[0]);
         a.ltime_ = mp.addr_hi_to_ltime[a.addr_hi];
-        bool send = dut.L2Unit__io_outer_acquire_valid.values[0];
         if (send) {
             client_txid_to_op[a.id_] = a.op;
             client_txid_to_own[a.id_] = a.own;
@@ -372,6 +379,11 @@ public:
       dut.clock_hi(LIT<1>(1));
       dut.clock_lo(LIT<1>(1),true);
       dut.clock_hi(LIT<1>(1));
+
+      dut.L2Unit__io_outer_grant_valid.values[0] = 0;
+      dut.L2Unit__io_inner_acquire_valid.values[0] = 0;
+      dut.L2Unit__io_inner_release_valid.values[0] = 0;
+      dut.L2Unit__io_inner_finish_valid.values[0] = 0;
 
       // run a bunch of clocks to clear out the tag array
       for (unsigned i = 0; i < 0x4000; i++) {

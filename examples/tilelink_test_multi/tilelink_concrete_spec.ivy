@@ -1162,7 +1162,8 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	    #assert acqs(msg).own = none;
 
 	    if ow ~= none {
-	        o := read
+	        o := read;
+		bl := true
  	    };
 
 	    # (1) May not have a requested acquire with same hi address.

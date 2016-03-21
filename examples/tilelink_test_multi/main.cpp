@@ -37,6 +37,7 @@ void usage(){
     std::cerr << "  -a          delay uncached acquire if vol release\n";
     std::cerr << "  -u          one uncached client\n";
     std::cerr << "  -d          inject random delays for progress testing";
+    std::cerr << "  -f <int>    mean time to delay injections";
     exit(1);
 }
 
@@ -81,6 +82,7 @@ int main(int argc, const char **argv){
     bool uncached_client = false;
     int max_cycles = 1000;
     int max_traces = 1;
+    int mtbf = 200;
 
     while (arg < argc) {
         // option -c: max clock cycles per trace
@@ -88,7 +90,7 @@ int main(int argc, const char **argv){
             arg++;
             max_cycles = atoi(argv[arg++]);
         }
-        // option -c: max number of traces
+        // option -t: max number of traces
         if (arg < argc - 1 && argv[arg] == std::string("-t")) {
             arg++;
             max_traces = atoi(argv[arg++]);
@@ -112,6 +114,11 @@ int main(int argc, const char **argv){
         else if (argv[arg] == std::string("-u")) {
             arg++;
             uncached_client = true;
+        }
+        // option -f: mean time to delay failure
+        else if (arg < argc - 1 && argv[arg] == std::string("-f")) {
+            arg++;
+            mtbf = atoi(argv[arg++]);
         }
         else break;
     }        
@@ -197,7 +204,7 @@ int main(int argc, const char **argv){
         delay delays[10];
         if (inject_delays)
             for (int i = 0; i < 10; i++)
-                delays[i].enable(100,200);
+                delays[i].enable(mtbf * 2,200);
 
         int all_events_serialized = -1;
 
@@ -384,7 +391,12 @@ int main(int argc, const char **argv){
 
           tb.back_acq_rdy = acq_ready || !acq_send; 
           if (!tb.back_acq_rdy) std::cout << "outer acq blocked";
-          tb.__tick(50);
+          tb.front_gnt_rdy = gnt_ready || !gnt_send;
+          if (!tb.front_gnt_rdy) std::cout << "inner gnt blocked";
+          tb.front_prb_rdy = prb_ready || !prb_send;
+          if (!tb.front_prb_rdy) std::cout << "inner prb blocked";
+
+          tb.__tick(30);
 
 	  // end of clock cycle
 	}	  
