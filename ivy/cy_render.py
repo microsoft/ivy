@@ -160,8 +160,6 @@ def render_concept_graph(widget):
         ])
 
         disp = node
-        if hasattr(widget, 'structure_renaming'):
-            disp = widget.structure_renaming.get(node, node)
         if '+' in disp or '-' in disp:
             # for concepts that are the result of splits, display just the sort
             disp = str(domain.concepts[node].sorts[0])
@@ -179,6 +177,14 @@ def render_concept_graph(widget):
             cluster = node.split('!')[0].lower()
         else:
             cluster = None
+
+        if hasattr(widget, 'apply_structure_renaming'):
+            label = widget.apply_structure_renaming(label)
+            info = widget.apply_structure_renaming(info)
+            actions = [
+                (widget.apply_structure_renaming(action[0]), ) + tuple(action[1:])
+                for action in actions
+            ]
 
         shape = get_shape(node)
 
@@ -244,6 +250,9 @@ def render_concept_graph(widget):
                 'injective',
             ] if a.get(('edge_info', c) + x)
         ]
+
+        if hasattr(widget, 'apply_structure_renaming'):
+            labels[0] = widget.apply_structure_renaming(labels[0])
 
         g.add_edge(
             edge,

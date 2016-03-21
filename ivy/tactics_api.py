@@ -73,17 +73,10 @@ def get_big_action():
     Return an action which is a big choice between all possible
     actions.
     """
-    all_actions = [
-        v
-        for k,v in _ivy_ag.actions.iteritems()
-        if k != 'error'
-    ]
-    result = ChoiceAction(*all_actions)
-    result.label = ' + '.join([
-        k
-        for k,v in _ivy_ag.actions.iteritems()
-        if k != 'error'
-    ])
+    exported_action_names = [e.exported() for e in _ivy_ag.exports]
+    exported_actions = [_ivy_ag.actions[k] for k in exported_action_names]
+    result = ChoiceAction(*exported_actions)
+    result.label = ' + '.join(exported_action_names)
     return result
 
 

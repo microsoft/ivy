@@ -2,10 +2,11 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 """
-Script to create a new notebook for a given .ivy file
+Script to create a new notebook for a given .ivy file, that is
+used to BMC the conjectures to debug the model.
 
 Usage:
-python ivy2.py ivy_filename
+python ivy_bmc.py ivy_filename
 """
 
 import re
@@ -31,6 +32,7 @@ if __name__ == '__main__':
    },
    "outputs": [],
    "source": [
+    "from IPython.display import display\n",
     "import z3\n",
     "z3.set_param('smt.random_seed', 0)\n",
     "import random\n",
@@ -56,7 +58,12 @@ if __name__ == '__main__':
     "ta._ivy_ag.actions.setdefault('initialize', ivy_actions.Sequence())\n",
     "ta._ivy_ag.actions.setdefault('step', ta.get_big_action())\n",
     "ivy_widget.transition_view.autodetect_transitive()\n",
-    "ivy_widget"
+    "display(ivy_widget)\n",
+    "ivy_widget.transition_view.bmc_bound.value = 5\n",
+    "if ivy_widget.transition_view.bmc_conjecture(None, ta.and_clauses(*ta._ivy_interp.conjs), True, False):\n",
+    "    for conj in ta._ivy_interp.conjs[-1:]:\n",
+    "        if ivy_widget.transition_view.bmc_conjecture(None, conj, True):\n",
+    "            break"
    ]
   }
  ],
@@ -84,12 +91,12 @@ if __name__ == '__main__':
 }
 """.replace('IVY_FILENAME', repr(ivy_filename))
 
-    # if X.ipynb exists, open it, otherwise create a new X.ivy.ipynb
-    notebook_filename = ivy_filename[:-4] + '.ipynb'
+    # if X.bmc.ipynb exists, open it, otherwise create a new X.ivy.bmc.ipynb
+    notebook_filename = ivy_filename[:-4] + '.bmc.ipynb'
     if os.path.isfile(notebook_filename):
         print "Opening existing notebook: {}".format(notebook_filename)
     else:
-        notebook_filename = ivy_filename + '.ipynb'
+        notebook_filename = ivy_filename + '.bmc.ipynb'
         print "Creating new notebook: {}".format(notebook_filename)
         open(notebook_filename, 'w').write(notebook_source)
 
