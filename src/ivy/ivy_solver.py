@@ -54,6 +54,8 @@ def sorts(name):
     if name.startswith('bv[') and name.endswith(']'):
         width = int(name[3:-1])
         return z3.BitVecSort(width)
+    if name == 'int':
+        return z3.IntSort()
     return None
         
 #sorts = {}
@@ -61,7 +63,7 @@ def sorts(name):
 #         "Int":z3.IntSort()}
 
 def is_solver_sort(name):
-    return name.startswith('bv[') and name.endswith(']')
+    return name.startswith('bv[') and name.endswith(']') or name == 'int'
 
 relations_dict = {'<':(lambda x,y: z3.ULT(x, y)),
              '<=':(lambda x,y: x <= y),
@@ -135,7 +137,7 @@ def lookup_native(thing,table,kind):
         return z3name.to_z3()
     z3val = table(z3name)
     if z3val == None:
-        raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
+        raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(z3name,kind))
     return z3val
 
 def sort_card(sort):
