@@ -7,7 +7,8 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
-    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const
+    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, \
+    Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const, formula_for_clauses
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
@@ -41,9 +42,15 @@ class Schema(AST):
         self.instances.append(self.get_instance(params,False))
 
 class ActionContext(object):
-    """ Context Manager for evaluating states and actions. """
-    def __init__(self,domain = None):
-        self.domain = domain
+    """ Context Manager for symbolically executing actions. """
+    def __init__(self):
+        name_base = ""
+        constraint = Clauses()
+        renaming = {}          ## Symbol -> Symbol
+        cfg = {}               ## Symbol -> Symbol list
+        failures = []          ## fmla list
+        control = And()        ## propositional fmla
+        dominators = {}        ## Symbol -> Symbol
     def __enter__(self):
         global context
         self.old_context = context
@@ -53,14 +60,65 @@ class ActionContext(object):
         global context
         context = self.old_context
         return False # don't block any exceptions
-    def get(self,symbol):
+    def find_action(self,symbol):
         return ivy_module.find_action(symbol)
+    def mk_node(self,name,preds):
+        self.control = bool_const(name)
+        assert self.control not in self.cfg
+        self.cfg[self.control] = preds
+    def save(self,syms):
+        return dict((sym,self.renaming.get(sym,sym)) for sym in syms)
+    def restore(self,saved):
+        self.renaming.update(saved)
+    def get_new(self,symbol):
+        return post_subst.get(symbol,new(symbol))
+    def rename_fmla(self,fmla):
+        return rename_ast(fmla,self.renaming)
+    def add_constraint(self,fmla):
+        self.constraint.fmlas.append(Implies(self.control,self.rename_fmla(formula_for_clauses(fmla))))
+    def add_failure(self,fmla):
+        self.failures.append(And(self.control,self.rename_fmla(formula_for_clauses(fmla))))
+    def add_definition(self,defn):
+        defn = self.rename_fmla(defn)
+        assert defn.defines() not in self.constraint.def_idx
+        self.constraint.defs.append(defn)
+        self.constraint.def_idx[defn.defines()] = defn
+    def update_symbols(updated,action):
+        syms2 = [self.get_new(sym1) for sym1 in updated]
+        for u in im.module.updates:
+            u.get_update_axioms(updated,action)
+            clauses = and_clauses(clauses,transrel)
+            pre = or_clauses(pre,precond)
+        for sym1,sym2 in zip(updated,syms2):
+            self.renaming[sym1] = sym2
+            del self.renaming[new(sym1)]
+        mid = [sym1 for (sym1,sym2) in zip(updated,syms2) if sym2.is_skolem()]
+        mid_ax = clauses_using_symbols(mid,im.module.background_theory())
+        self.constraint.fmlas.extend(mid_ax)
+
     def new_state(self,clauses, exact = False, domain = None, expr = None):
         domain = self.domain if self.domain is not None else domain
         assert domain is not None
         return domain.new_state(clauses)
+    def type_checking(self):
+        return False
+    def precond(controls):
+        ancs = get_ancestors(controls)
+        cnstrs = [fmla for fmla in self.constraint.fmlas if fmla.args[0] in ancs]
+        flow_cnstrs = [Implies(n,Or(cfg[n])) for n in ancs if n in self.cfg]
+        res = Clauses(cnstrs+flow_cnstrs,self.constraint.defs)
+
 
 context = ActionContext()
+
+def ensures_to_transrel(ensures,updated):
+    renaming = dict()
+    for s in updated:
+        renaming[s] = new(s)
+    for s in used_symbols_ast(ensures):
+        if is_old(s):
+            renaming[s] = old_of(s)
+    return rename_clauses(ensures,renaming)
 
 class SymbolList(AST):
     def __init__(self,*symbols):
@@ -86,15 +144,17 @@ class UpdatePattern(AST):
         return ('params ' + str(self.placeholders)
                 + ' in ' + str(self.pattern) + ' -> \n    requires ' + str(self.precond)
                 + '\n    ensures ' + str(self.transrel))
-    def match(self,action):
+    def match(self,action,updated):
         """ if action matches pattern, return the axioms, else None """
-##        print "match: %s %s" % (self,action)
         subst = dict()
         if self.pattern.match(action,self.placeholders.args,subst):
-#            print "match: {}".format(subst)
-            axioms_as_clause_sets = (formula_to_clauses(x) for x in (Not(self.precond),self.transrel))
-            return (subst_both_clauses(x,subst) for x in axioms_as_clause_sets)
-        return None
+            axioms_as_clause_sets = (formula_to_clauses(x) for x in )
+            fail,cnstr = (subst_both_clauses(x,subst) for x in (dual_formula(self.precond),self.transrel))
+            cnstr = old_to_new(cnstr,updated)
+            context.add_failure(fail)
+            context.add_constraint(cnstr)
+            return true
+        return false
 
 class UpdatePatternList(AST):
     def __init__(self,*args):
@@ -121,14 +181,10 @@ class PatternBasedUpdate(AST):
         for x in updated:
             if x in self.dependencies.symbols:
                 updated = updated + [y for y in self.defines.symbols if y not in updated]
-                try:
-                    precond,postcond = next(y for y in (p.match(action) for p in self.patterns.args) if y != None)
-                except StopIteration:
-                    raise IvyError(action,'No matching update axiom for ' + str(x))
-                postcond = state_to_action((updated,postcond,precond))
-#                print "update axioms: {}, {}, {}".format(map(str,postcond[0]),postcond[1],postcond[2])
-                return (updated,postcond[1],precond)
-        return (updated,true_clauses(),false_clauses())
+                for p in self.patterns.args:
+                    if p.match(action,updated):
+                        return
+                raise IvyError(action,'No matching update axiom for ' + str(x))
 
 class DerivedUpdate(object):
     def __init__(self,defn):
@@ -152,22 +208,11 @@ class Action(AST):
         if type(action) is not type(self) or len(action.args) != len(self.args):
             return False
         return ast_match_lists(action.args,self.args,placeholders,subst)
-    def int_update(self,domain,in_scope):
-        (updated,clauses,pre) = self.action_update(domain,in_scope)
-        # instantiate the update axioms
-        for u in domain.updates:
-            updated,transrel,precond = u.get_update_axioms(updated,self)
-            # TODO: do something with the precondition
-#            if transrel:
-##                print "updated: {}".format(updated)
-##                print "update from axiom: %s" % transrel
-            clauses = and_clauses(clauses,transrel)
-            pre = or_clauses(pre,precond)
-##        print "update clauses: %s" % clauses
-        res = (updated,clauses,pre)
-        return res
-    def update(self,domain,in_scope):
-        return self.hide_formals(self.int_update(domain,in_scope))
+    def update(self,domain=None,in_scope=None):
+        with ActionContext():
+            self.execute()
+            res = (self.modifies(),context.constraint,context.get_fail())
+            return self.hide_formals(res)
     def hide_formals(self,update):
         to_hide = []
         if hasattr(self,'formal_params'):
@@ -220,10 +265,10 @@ class AssumeAction(Action):
     sort_infer_root = True
     def name(self):
         return 'assume'
-    def action_update(self,domain,pvars):
-        type_check(domain,self.args[0])
-        check_can_assume(self.args[0],self)
-        return ([],formula_to_clauses_tseitin(self.args[0]),false_clauses())
+    def execute(self):
+        fmla = self.args[0]
+        check_can_assume(fmla,self)
+        context.add_constraint(fmla)
 
 class AssertAction(Action):
     def __init__(self,*args):
@@ -232,13 +277,14 @@ class AssertAction(Action):
     sort_infer_root = True
     def name(self):
         return 'assert'
-    def action_update(self,domain,pvars):
-        type_check(domain,self.args[0])
-        check_can_assert(self.args[0],self)
-#        print type(self.args[0])
-        cl = formula_to_clauses(dual_formula(self.args[0]))
-#        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
-        return ([],true_clauses(),cl)
+    def execute(self):
+        fmla = self.args[0]
+        check_can_assert(fmla,self)
+        in_control = context.control
+        context.mk_node(context.base + '_0',[in_control])
+        context.add_constraint(dual_formula(fmla))
+        context.failures.append(context.control)
+        context.mk_node(context.base + '_1',[in_control])
     def assert_to_assume(self):
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
@@ -257,40 +303,7 @@ class EnsuresAction(AssertAction):
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
         return eq_atom(ast1,ast2)
-    return And(Or(ast1,Not(ast2)),Or(Not(ast1),ast2))
-
-def get_correct_arity(domain,atom):
-    if atom.is_numeral():
-        return 0
-    return len(atom.rep.sort.dom)
-
-def type_check(domain,ast):
-    for atom in apps_ast(ast):
-            arity = len(atom.args)
-            correct_arity = get_correct_arity(domain,atom)
-            if arity != correct_arity and not(atom.rep == '-' and arity == 1):
-#                print "atom: {} : {}".format(atom,type(atom))
-                raise IvyError(atom,
-                               "wrong number of arguments to {}: got {}, expecting {}."
-                               .format(atom.rep,arity,correct_arity))
-            for a in atom.args:
-                if isinstance(a.get_sort(),EnumeratedSort):
-                    raise IvyError(a,
-                                   "symbol {} of enumerated type can only appear under equality"
-                                   .format(a.rep))
-    for atom in eqs_ast(ast):
-            t0,t1 = [x.get_sort() for x in atom.args]
-            if t0 != t1:
-                raise IvyError(atom,
-                               "comparison of incompatible types")
-
-
-def type_ast(domain,ast):
-    if is_atom(ast) and ast.rep not in domain.relations and ast.rep != '=':
-        return App(ast.rep,ast.args)
-    if isinstance(ast,App) and ast.rep in domain.relations:
-        return Atom(ast.rep,ast.args)
-    return ast
+    return Iff(ast1,ast2)
 
 class AssignAction(Action):
     def __init__(self,*args):
@@ -301,55 +314,27 @@ class AssignAction(Action):
         return 'assign'
     def __str__(self):
         return str(self.args[0]) + ' := ' + str(self.args[1])
-    def action_update(self,domain,pvars):
+    def modifies(self):
+        return [self.args[0].rep]
+    def execute(self):
         lhs,rhs = self.args
         n = lhs.rep
 
-        # Handle the hierarchical case
-        if n in domain.hierarchy:
-            asgns = [postfix_atoms_ast(self,Atom(x,[])) for x in domain.hierarchy[n]]
-            res = unzip_append([asgn.action_update(domain,pvars) for asgn in asgns])
-            return res
-
-        # If the lhs application is partial, make it total by adding parameters
-        xtra = len(lhs.rep.sort.dom) - len(lhs.args)
-        if xtra < 0:
-            raise IvyError(self,"too many parameters in assignment to " + lhs.rep)
-        if xtra > 0:
-            extend = sym_placeholders(lhs.rep)[-xtra:]
-            extend = variables_distinct_list_ast(extend,self)  # get unused variables
-            lhs = add_parameters_ast(lhs,extend)
-            # Assignment of individual to a boolean is a special case
-            if is_individual_ast(rhs) and not is_individual_ast(lhs):
-                rhs = eq_atom(extend[-1],add_parameters_ast(rhs,extend[0:-1]))
-            else:
-                rhs = add_parameters_ast(rhs,extend)
-
-        type_check(domain,rhs)
-        if is_individual_ast(lhs) != is_individual_ast(rhs):
-#            print type(lhs.rep)
-#            print str(lhs.rep)
-#            print type(lhs.rep.sort)
-#            print "lhs: %s: %s" % (lhs,type(lhs))
-#            print "rhs: %s: %s" % (rhs,type(rhs))
+        # TODO: is this needed?
+        if lhs.sort != rhs.sort:
             raise IvyError(self,"sort mismatch in assignment to {}".format(lhs.rep))
 
         new_n = new(n)
         args = lhs.args
         dlhs = new_n(*sym_placeholders(n))
         vs = dlhs.args
-        eqs = [eq_atom(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
+        eqs = [equiv_ast(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
         rn = dict((a.rep,v) for v,a in zip(vs,args) if isinstance(a,Variable))
         drhs = substitute_ast(rhs,rn)
         if eqs:
             drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
-        new_clauses = Clauses([],[Definition(dlhs,drhs)])
-#        print "assign new_clauses = {}".format(new_clauses)
-        return ([n], new_clauses, false_clauses())
-
-
-def sign(polarity,atom):
-    return atom if polarity else Not(atom)
+        context.add_definition(Definition(dlhs,drhs))
+        context.update_symbols([n],self)
 
 class SetAction(Action):
     def __init__(self,*args):
@@ -358,19 +343,14 @@ class SetAction(Action):
     sort_infer_root = True
     def name(self):
         return 'set'
-    def action_update(self,domain,pvars):
+    def to_assign(self):
         lit = self.args[0]
         n = lit.atom.relname
-        new_n = new(n)
-        args = lit.atom.args
-        vs = sym_placeholders(n)
-        eqs = [Atom(equals,[v,a]) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
-        new_clauses = And(*([Or(sign(lit.polarity,Atom(new_n,vs)),sign(1-lit.polarity,Atom(n,vs))),
-                             sign(lit.polarity,Atom(new_n,args))] +
-                            [Or(*([sign(0,Atom(new_n,vs)),sign(1,Atom(n,vs))] + [eq])) for eq in eqs] +
-                            [Or(*([sign(1,Atom(new_n,vs)),sign(0,Atom(n,vs))] + [eq])) for eq in eqs]))
-        new_clauses = formula_to_clauses(new_clauses)
-        return ([n], new_clauses, false_clauses())
+        return AssignAction(n,And() if lit.polarity else Or())
+    def modifies(self):
+        return self.to_assign().modifies()
+    def execute(self):
+        return self.to_assign().execute()
 
 class HavocAction(Action):
     def __init__(self,*args):
@@ -381,7 +361,9 @@ class HavocAction(Action):
         return 'havoc'
     def __str__(self):
         return str(self.args[0]) + ' := *'
-    def action_update(self,domain,pvars):
+    def modifies(self):
+        return [self.args[0].rep]
+    def execute(self,domain,pvars):
         lhs = type_ast(domain,self.args[0])
         n = lhs.rep
         new_n = new(n)
@@ -389,22 +371,21 @@ class HavocAction(Action):
         vs = [Variable("X%d" % i,s) for i,s in enumerate(n.sort.dom)]
         eqs = [eq_atom(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
         if is_atom(lhs):
-            clauses = And(*([Or(Not(Atom(new_n,vs)),Atom(n,vs),eq) for eq in eqs] +
+            fmla = And(*([Or(Not(Atom(new_n,vs)),Atom(n,vs),eq) for eq in eqs] +
                             [Or(Atom(new_n,vs),Not(Atom(n,vs)),eq) for eq in eqs]))
         elif is_individual_ast(lhs.rep):
-            clauses = And(*[Or(eq_atom(type(lhs)(new_n,vs),type(lhs)(n,vs)),eq) for eq in eqs])
+            fmla = And(*[Or(eq_atom(type(lhs)(new_n,vs),type(lhs)(n,vs)),eq) for eq in eqs])
         else: # TODO: ???
-            clauses = And()
-        clauses = formula_to_clauses(clauses)
-        return ([n], clauses, false_clauses())
+            fmla = And()
+        context.add_constraint(fmla)
 
 
-def make_field_update(self,l,f,r,domain,pvars):
+def make_field_update(self,l,f,r):
     if not f.is_relation() or len(f.sort.dom) != 2:
         raise IvyError(self, "field " + str(f) + " must be a binary relation")
     v = Variable('X',f.sort.dom[1])
     aa = AssignAction(f(l,v),r(v))
-    return aa.action_update(domain,pvars)
+    return aa.execute()
 
 class AssignFieldAction(Action):
     def __init__(self,*args):
@@ -415,9 +396,11 @@ class AssignFieldAction(Action):
         return 'assign_field'
     def __str__(self):
         return str(self.args[0]) + '.' + str(self.args[1]) + ' := ' + str(self.args[2])
-    def action_update(self,domain,pvars):
+    def modifies(self):
+        return [self.args[1]]
+    def execute(self):
         l,f,r = self.args
-        return make_field_update(self,l,f,lambda v: Equals(v,r),domain,pvars)
+        make_field_update(self,l,f,lambda v: Equals(v,r))
 
 class NullFieldAction(Action):
     def __init__(self,*args):
@@ -428,9 +411,11 @@ class NullFieldAction(Action):
         return 'null_field'
     def __str__(self):
         return str(self.args[0]) + '.' + self.args[1] + ' := null'
-    def action_update(self,domain,pvars):
+    def modifies(self):
+        return [self.args[1]]
+    def execute(self):
         l,f = self.args
-        return make_field_update(self,l,f,lambda v: Or(),domain,pvars)
+        make_field_update(self,l,f,lambda v: Or())
 
 class CopyFieldAction(Action):
     def __init__(self,*args):
@@ -442,9 +427,9 @@ class CopyFieldAction(Action):
     def __str__(self):
         return str(self.args[0]) + '.' + str(self.args[1]) + ' := ' + str(self.args[2]) + '.' + str(self.args[3])
     # TODO: here we ignore field name since we support only one field
-    def action_update(self,domain,pvars):
+    def execute(self,domain,pvars):
         l,lf,r,rf = self.args
-        return make_field_update(self,l,lf,lambda v: rf(r,v),domain,pvars)
+        return make_field_update(self,l,lf,lambda v: rf(r,v))
 
 def instantiate_macro(inst,defns):
     if inst.relname in defns:
@@ -467,19 +452,16 @@ class InstantiateAction(Action):
         self.args = args
     def name(self):
         return 'instantiate'
-    def int_update(self,domain,pvars):
+    def execute(self):
         inst = self.args[0]
-        if hasattr(domain,'macros'):
-            im = instantiate_macro(inst,domain.macros)
-#            print "im: {}".format(im)
-            if im:
-#                print im
-                res = im.compile().int_update(domain,pvars)
-##                print "res: {}".format(res)
-                return res
-        if inst.relname in domain.schemata:
-            clauses = domain.schemata[inst.relname].get_instance(inst.args)
-            return ([],clauses, false_clauses())
+        if hasattr(im.module,'macros'):
+            act = instantiate_macro(inst,im.module.macros)
+            if act:
+                res = act.compile().execute()
+                return
+        if inst.relname in im.module.schemata:
+            fmla = im.module.schemata[inst.relname].get_instance(inst.args)
+            context.add_constraint(fmla)
         raise IvyError(inst,"instantiation of undefined: {}".format(inst.relname))
     def cmpl(self):
         return self
@@ -494,14 +476,11 @@ class Sequence(Action):
         return 'sequence'
     def __str__(self):
         return '{' + '; '.join(str(x) for x in self.args) + '}'
-    def int_update(self,domain,pvars):
-        update = ([],true_clauses(),false_clauses())
-        axioms = domain.background_theory(pvars)
-        for op in self.args:
-            thing = op.int_update(domain,pvars);
-#            print "op: {}, thing: {}".format(op,thing)
-            update = compose_updates(update,axioms,thing)
-        return update
+    def execute(self):
+        for i,op in enumerate(self.args):
+            context.push(i)
+            op.execute()
+            context.pop()
     def __call__(self,interpreter):
         for op in self.args:
             interpreter.execute(op)
@@ -514,27 +493,41 @@ def set_determinize(t):
     global determinize
     determinize = t
 
-choice_action_ctr = 0
+def collect_mods(actions):
+    return union_lists(*[a.modifies() for a in actions])
 
 class ChoiceAction(Action):
     def __init__(self,*args):
         Action.__init__(self,*args)
-        global choice_action_ctr
-        self.unique_id = choice_action_ctr
-        choice_action_ctr += 1
+        self.modifies_memo = collect_mods(self.args)
     def name(self):
         return 'choice'
     def __str__(self):
-        return '{' + '| '.join(str(x) for x in self.args) + '}'
-    def int_update(self,domain,pvars):
-        if determinize and len(self.args) == 2:
-            cond = bool_const('___branch:' + str(self.unique_id))
-            ite = IfAction(cond,self.args[0],self.args[1])
-            return ite.int_update(domain,pvars)
-        result = [], false_clauses(), false_clauses()
-        for a in self.args:
-            result = join_action(result, a.int_update(domain, pvars), domain.relations)
-        return result
+        return 'if * {' + '} else if * { '.join(str(x) for x in self.args[:-1]) + '} else {' + str(self.args[-1]) + '}'
+    def modifies(self):
+        return list(self.modifies_memo)
+    def execute(self):
+        controls = []
+        ph = lambda sym: sym(*sym_placeholders(sym))
+        phi_nodes = dict((sym,ph(sym)) for sym in self.modifies())
+        in_control = context.control
+        for i,arg in enumerate(self.args):
+            mods = arg.modifies()
+            save = context.save(mods)
+            context.mk_node(context.base + '_' + str(i), [control])
+            context.push(i)
+            controls.append(context.control)
+            for sym in mods:
+                new_sym = sym.rename(context.base + '_' + str(i) + '_' + sym.name)
+                context.renaming[new(sym)] = new_sym
+                phi_nodes[sym] = Ite(control,ph(new_sym),phi_nodes[sym])
+            arg.execute()
+            context.pop()
+            context.restore(save)
+        context.mk_node(context.base,controls,dominator=in_control)
+        for sym,phi in phi_nodes.iteritems():
+            context.add_definition(Definition(ph(sym),phi))
+        context.update_symbols(self.modifies(),self)
     def __repr__(self):
         if hasattr(self, 'label'):
             return self.label
@@ -544,6 +537,9 @@ class ChoiceAction(Action):
         return [(pre,[a],post) for a in self.args]
 
 class IfAction(Action):
+    def __init__(self,*args):
+        Action.__init__(self,*args)
+        self.choice_action = ChoiceAction(*self.subactions())
     def name(self):
         return 'if'
     def __str__(self):
@@ -555,12 +551,11 @@ class IfAction(Action):
         else_action = self.args[2] if len(self.args) >= 3 else Sequence()
         else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
         return if_part,else_part
-    def int_update(self,domain,pvars):
-#        update = self.args[1].int_update(domain,pvars)
-#        return condition_update_on_fmla(update,self.args[0],domain.relations)
+    def modifies(self):
+        self.choice_action.modifies()
+    def execute(self):
         check_can_assert(self.args[0],self)
-        if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+        self.choice_action.execute()
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
 
@@ -577,14 +572,15 @@ class LocalAction(Action):
         return 'local'
     def __str__(self):
         return 'local ' + ','.join(str(a) for a in self.args[0:-1]) + ' {' + str(self.args[-1]) + '}'
-    def int_update(self,domain,pvars):
-        update = self.args[-1].int_update(domain,pvars)
-#        syms = used_symbols_asts(self.args[0:-1])
-        syms = self.args[0:-1]
-#        print "hiding locals : {}".format(syms)
-        res =  hide(syms,update)
-#        print "local res: {}".format(res)
-        return res
+    def modifies():
+        loc_syms = set(self.args[0:-1])
+        return [sym for sym in self.args[-1].modifies if sym not in loc_syms]
+    def execute(self):
+        save = context.save(self.args[0:-1])
+        for sym in self.args[0:-1]:
+            context.rename(sym,sym.prefix(context.base + '_'))
+        self.args[-1].execute()
+        context.restore(save)
     def decompose(self,pre,post,fail=False):
         syms = self.args[0:-1]
         pre,post = (hide_state(syms,p) for p in (pre,post))
@@ -606,6 +602,12 @@ class LetAction(Action):
 
 call_action_ctr = 0
 
+# assign one symbol to another
+
+def asgn(x,y):
+    ph = lambda sym: sym(*sym_placeholders(sym))
+    return Definition(ph(x),ph(y))
+
 class CallAction(Action):
     """ Inlines a named state or action """
     def __init__(self,*args):
@@ -621,57 +623,49 @@ class CallAction(Action):
     def get_callee(self):
         global context
         name = self.args[0].rep
-        v = context.get(name)
-#        print "v: {}".format(v)
+        v = context.find_action(name)
         if not v:
             raise IvyError(self.args[0],"no value for {}".format(name))
         return v
-    def int_update(self,domain,pvars):
-#        print "got here!"
-        v = self.get_callee()
-        if not isinstance(v,tuple):
-            if isinstance(v,Action):
-                v = self.apply_actuals(domain,pvars,v)
-#                print "called action: {}".format(v)
-            else:
-                v = state_to_action(v.value)
-##                print "called state: {}".format(v)
-        return v
-    def apply_actuals(self,domain,pvars,v):
+    def modifies(self):
+        v = get_callee()
+        assert hasattr(v,'formal_params'), v
+        loc_syms = set(v.formal_params + v.formal_returns)
+        return union_lists([sym for sym in self.args[0].modifies() if sym not in loc_syms],self.args[1:])
+    def execute(self):
+        v = get_callee()
         assert hasattr(v,'formal_params'), v
         actual_params = self.args[0].args
         actual_returns = self.args[1:]
-#        formal_params = [s.prefix('_') for s in v.formal_params] # rename to prevent capture
-#        formal_returns = [s.prefix('_') for s in v.formal_returns] # rename to prevent capture
-#        subst = dict(zip(v.formal_params+v.formal_returns, formal_params+formal_returns))
-        vocab = list(symbols_asts(actual_params+actual_returns))
-        subst = distinct_obj_renaming(v.formal_params+v.formal_returns,vocab)
-#        print "apply_actuals: subst: {}".format(subst)
-        formal_params = [subst[s] for s in  v.formal_params] # rename to prevent capture
-        formal_returns = [subst[s] for s in v.formal_returns] # rename to prevent capture
-        v = substitute_constants_ast(v,subst)
-#        print "formal_params: {}".format(formal_params)
-#        print "formal_returns: {}".format(formal_returns)
-#        print "substituted called action: {}".format(v)
+        formal_params = v.formal_params
+        formal_returns = v.formal_returns
+
         if len(formal_params) != len(actual_params):
             raise IvyError(self,"wrong number of input parameters");
         if len(formal_returns) != len(actual_returns):
             raise IvyError(self,"wrong number of output parameters");
+
+        save = context.save(formal_params + formal_returns)
+        context.push(0)
+
         for x,y in zip(formal_params,actual_params):
             if x.sort != y.sort:
                 raise IvyError(self,"value for input parameter {} has wrong sort".format(x))
+            # TRICKY: this prevents capture of actual param occurring in formal param
+            context.add_definition(asgn(x.prefix(context.base),y))
+            context.renaming[x] = x.prefix(context.base)
+
+        v.execute()
+
         for x,y in zip(formal_returns,actual_returns):
             if x.sort != y.sort:
                 raise IvyError(self,"value for output parameter {} has wrong sort".format(x))
-        input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
-        output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]
-        res = Sequence(*(input_asgns+[v]+output_asgns))
-#        print "with parameter assigns: {}".format(res)
-        res = res.int_update(domain,pvars)
-#        print "call update: {}".format(res)
-        res = hide(formal_params+formal_returns,res)
-#        print "after hide: {}".format(res)
-        return res
+            context.add_definition(asgn(new(y),x))
+
+        context.pop()
+        context.restore(save)
+        context.update_symbols(self.modifies(),self)
+
     def cmpl(self):
         mas = [a.cmpl() for a in self.args[0].args]
         n = self.args[0].rep
@@ -731,12 +725,12 @@ def entry(ensures = And()):
     return RME(And(),[],ensures)
 
 class TypeCheckConext(ActionContext):
-    def get(self,x):
-        return null_update()
+    def type_checking(self):
+        return True
 
 def type_check_action(action,domain,pvars):
     with TypeCheckConext(domain):
-        action.int_update(domain,pvars)
+        action.execute()
 
 def mixin_before(decl,action1,action2):
     assert hasattr(action1,'lineno')

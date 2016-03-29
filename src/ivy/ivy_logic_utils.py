@@ -617,11 +617,14 @@ def de_morgan(f):
         return And(*[negate(x) for x in g.args])
     return Not(g)
 
-def formula_to_clauses(f):
+def formula_for_clauses(f):
     if type(f) in (lg.And, lg.Or) and len(f) == 1:
         f = f[0]
+    return drop_universals(f)
+
+def formula_to_clauses(f):
 #    assert is_prenex_universal(f), f
-    return Clauses([drop_universals(f)])
+    return Clauses([formula_for_clauses(f)])
 
 formula_to_clauses_tseitin = formula_to_clauses
 
