@@ -1,0 +1,29 @@
+#lang ivy1.3
+
+type t
+
+relation (X:t < Y:t)
+individual (X:t + Y:t) : t
+
+axiom X:t < Y & Y < Z -> X < Z
+
+interpret t -> int
+
+action bigger(input:t) returns (output:t) = {
+    output := input + 1
+}
+
+individual x : t, y : t
+
+init x = y
+
+action step = {
+    y := bigger(y);
+    assert x < y
+}
+
+export step
+
+conjecture x < y | x = y
+
+
