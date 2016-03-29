@@ -495,7 +495,8 @@ def interp_from_unsat_core(clauses1,clauses2,core,interpreted):
     return res
 
 def small_model_clauses(cls):
-    return get_small_model(cls,ivy_logic.sig.sorts.values(),[])
+    # Don't try to shrink the integers!
+    return get_small_model(cls,ivy_logic.uninterpreted_sorts(),[])
 
 class History(object):
     """ A history is a symbolically represented sequence of states. """

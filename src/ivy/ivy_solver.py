@@ -65,7 +65,7 @@ def sorts(name):
 def is_solver_sort(name):
     return name.startswith('bv[') and name.endswith(']') or name == 'int'
 
-relations_dict = {'<':(lambda x,y: z3.ULT(x, y)),
+relations_dict = {'<':(lambda x,y: z3.ULT(x, y) if z3.is_bv(x) else x < y),
              '<=':(lambda x,y: x <= y),
              '>':(lambda x,y: x > y),
              '>=':(lambda x,y: x >= y),
@@ -408,11 +408,21 @@ class SortOrder(object):
 #        print "order: %s = %s" % (fact,fact_val)
         return -1 if z3.is_true(fact_val) else 1   
 
+def mine_interpreted_constants(model,vocab):
+    sort_values = dict((u,set()) for u in ivy_logic.sig.interp)
+    for s in vocab:
+        sort = s.sort.rng
+        if sort.name in sort_values:
+            sort_values[sort.name].update(collect_model_values(sort,model,sym))
+    return dict((sym
+    
+
 class HerbrandModel(object):
-    def __init__(self,solver,model):
+    def __init__(self,solver,model,vocab):
         self.solver, self.model = solver, model
         self.constants = dict((sort_from_z3(s),model.get_universe(s))
                               for s in model.sorts())
+        self.constants.update(mine_interpreted_constants(model,vocab))
 #        print "univ: %s" % self.constants
 
     def sorts(self):
@@ -668,7 +678,7 @@ def model_if_none(clauses1,implied,model):
         sort_size = 1
         while True:
             s.push()
-            for sort in ivy_logic.sorts():
+            for sort in ivy_logic.uninterpreted_sorts():
                 s.add(formula_to_z3(sort_size_constraint(sort,sort_size)))
             if s.check() != z3.unsat:
                 m = get_model(s)

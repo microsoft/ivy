@@ -678,6 +678,11 @@ def close_formula(fmla):
     else:
         return ForAll(variables,fmla)
 
+def uninterpreted_sorts():
+    return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
+
+
+
 if __name__ == '__main__':
     V1 = Variable('V1')
     V2 = Variable('V2')
