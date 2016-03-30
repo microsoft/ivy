@@ -19,7 +19,7 @@ init x = y
 
 action step = {
     y := bigger(y);
-    assert x < y
+    assert x = y
 }
 
 export step

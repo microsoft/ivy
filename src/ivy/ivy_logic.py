@@ -681,6 +681,9 @@ def close_formula(fmla):
 def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
 
+def interpreted_sorts():
+    return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name in sig.interp]
+
 
 
 if __name__ == '__main__':

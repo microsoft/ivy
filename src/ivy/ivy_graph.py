@@ -4,7 +4,7 @@
 #TODO: get z3 references out of this file
 #TODO: the import *'s are creating conflicts
 import z3
-from ivy_logic import Literal,Atom,Variable,Constant,Symbol,App,sig,EnumeratedSort,equals,RelationSort
+from ivy_logic import Literal,Atom,Variable,Constant,Symbol,App,sig,EnumeratedSort,equals,RelationSort,UninterpretedSort
 from ivy_solver import *
 from ivy_logic_utils import to_clause,to_literal,to_atom,used_constants_clauses,used_unary_relations_clauses,\
          rename_clause, substitute_clause, is_equality_lit, eq_lit, substitute_lit, is_taut_equality_lit,\
@@ -657,7 +657,7 @@ class Graph(object):
 
 def standard_graph(parent_state=None):
     gsig = parent_state.domain.sig if parent_state else sig
-    nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if not isinstance(s,EnumeratedSort)]
+    nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
 
     g = Graph(nodes)
 #    r = GraphRelation(g,to_literal("n(X,Y)"))

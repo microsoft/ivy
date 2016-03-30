@@ -15,7 +15,7 @@ import ivy_logic
 from ivy_logic_utils import used_variables_clause, used_variables_ast, variables_ast,\
    to_clauses, constants_clauses, used_relations_clauses, rel_inst, fun_eq_inst, \
    is_ground_lit, used_constants_clauses, substitute_constants_clauses, eq_atom, \
-   functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast
+   functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast, sym_placeholders, used_symbols_clauses
 from ivy_core import minimize_core
 import ivy_utils
 import ivy_unitres as ur
@@ -164,15 +164,11 @@ def apply_z3_func(pred,tup):
 
 def numeral_to_z3(num):
     # TODO: allow other numeric types
-    tn = ivy_logic.sig.default_numeric_sort
-    if num.sort != tn:
-        return z3.Const(num.name,num.sort.to_z3())
-    num = num.name
-    z3sort = lookup_native(tn,sorts,"sort")
+    z3sort = lookup_native(num.sort,sorts,"sort")
     if z3sort == None:
-        raise iu.IvyError(None,'default numeric type {} is uninterpreted'.format(tn))
+        return z3.Const(num.name,num.sort.to_z3()) # uninterpreted sort
     try:
-        return z3sort.cast(num)
+        return z3sort.cast(num.name)
     except:
         raise IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,tn))
 
@@ -408,13 +404,31 @@ class SortOrder(object):
 #        print "order: %s = %s" % (fact,fact_val)
         return -1 if z3.is_true(fact_val) else 1   
 
+def collect_numerals(z3term):
+    if z3.is_int_value(z3term) or z3.is_bv_value(z3term):
+        yield z3term
+    elif z3.is_app_of(z3term,z3.Z3_OP_ITE):
+        yield collect_numerals(z3term.arg(1))
+        yield collect_numerals(z3term.arg(2))
+
+def from_z3_numeral(z3term,sort):
+    name = str(z3term)
+    assert name[0].isdigit()
+    return ivy_logic.Symbol(name,sort)
+
+def collect_model_values(sort,model,sym):
+    term = sym(*sym_placeholders(sym))
+    val = model.eval(term_to_z3(term),model_completion=True)
+    nums = set(from_z3_numeral(n,sort) for n in collect_numerals(val))
+    return nums
+
 def mine_interpreted_constants(model,vocab):
-    sort_values = dict((u,set()) for u in ivy_logic.sig.interp)
+    sort_values = dict((sort,set()) for sort in ivy_logic.interpreted_sorts())
     for s in vocab:
         sort = s.sort.rng
-        if sort.name in sort_values:
-            sort_values[sort.name].update(collect_model_values(sort,model,sym))
-    return dict((sym
+        if sort in sort_values:
+            sort_values[sort].update(collect_model_values(sort,model,s))
+    return dict((x,map(term_to_z3,list(y))) for x,y in sort_values.iteritems())
     
 
 class HerbrandModel(object):
@@ -423,7 +437,8 @@ class HerbrandModel(object):
         self.constants = dict((sort_from_z3(s),model.get_universe(s))
                               for s in model.sorts())
         self.constants.update(mine_interpreted_constants(model,vocab))
-#        print "univ: %s" % self.constants
+        print "model: %s" % model
+        print "univ: %s" % self.constants
 
     def sorts(self):
         return [s for s in self.constants]
@@ -618,7 +633,7 @@ def get_model_clauses(clauses1):
     if s.check() == z3.unsat:
         return None
     m = get_model(s)
-    return HerbrandModel(s,m)
+    return HerbrandModel(s,m,used_symbols_clauses(clauses1))
 
 def sort_size_constraint(sort,size):
     if isinstance(sort,ivy_logic.UninterpretedSort):
@@ -685,7 +700,7 @@ def model_if_none(clauses1,implied,model):
                 print "model = {}, size = {}".format(m,sort_size)
 ##        print "clauses1 = {}".format(clauses1)
 ##        print "z3c = {}".format(str(z3c))
-                h = HerbrandModel(s,m)
+                h = HerbrandModel(s,m,used_symbols_clauses(clauses1).update(used_symbols_clauses(implied)))
                 s.pop()
                 return h
             sort_size += 1
@@ -725,7 +740,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
                 s.pop()
     print "} shrinking model"
     m = get_model(s)
-    h = HerbrandModel(s,m)
+    h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h
 
 
