@@ -745,6 +745,8 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
 
 
 def model_universe_facts(h,sort,upclose):
+    if ivy_logic.is_interpreted_sort(sort):
+        return []
     # get universe elements
     elems = h.sort_universe(sort)
     # constraint defining universe

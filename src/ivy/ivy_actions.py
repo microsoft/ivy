@@ -12,7 +12,7 @@ from ivy_transrel import state_to_action,new, compose_updates, condition_update_
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
 import ivy_ast
-from ivy_ast import AST, compose_atoms
+from ivy_ast import AST, compose_atoms, MixinAfterDef
 import ivy_module
 
 class Schema(AST):
@@ -738,21 +738,25 @@ def type_check_action(action,domain,pvars):
     with TypeCheckConext(domain):
         action.int_update(domain,pvars)
 
-def mixin_before(decl,action1,action2):
+def apply_mixin(decl,action1,action2):
     assert hasattr(action1,'lineno')
     assert  hasattr(action2,'lineno')
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):
         raise IvyError(decl,"mixin {} has wrong number of input parameters for {}".format(name1,name2))
-    if len(action1.formal_returns) != 0:
-        raise IvyError(decl,"mixin {} must not have return parameters")
-    for x,y in zip(action1.formal_params,action2.formal_params):
+    if len(action1.formal_returns) != len(action2.formal_params):
+        raise IvyError(decl,"mixin {} has wrong number of output parameters for {}".format(name1,name2))
+    formals1,formals2 = (a.formal_params + a.formal_returns for a in action1,action2) 
+    for x,y in zip(formals1,formals2):
         if x.sort != y.sort:
             raise IvyError(decl,"parameter {} of mixin {} has wrong sort".format(str(x),name1))
-    subst = dict(zip(action1.formal_params,action2.formal_params))
+    subst = dict(zip(formals1,formals2))
     action1_renamed = substitute_constants_ast(action1,subst)
 #    print "action1_renamed: {}".format(action1_renamed)
-    res = Sequence(action1_renamed,action2)
+    if isinstance(decl,MixinAfterDef):
+        res = Sequence(action2,action1_renamed)
+    else:
+        res = Sequence(action1_renamed,action2)
     res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns

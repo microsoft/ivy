@@ -580,4 +580,6 @@ class History(object):
                 renaming = compose_maps(next(maps),renaming)
             except StopIteration:
                 break
-        return model.universes(numerals=True), [pure_state(clauses) for clauses in reversed(states)]
+        uvs = model.universes(numerals=True)
+        print "uvs: {}".format(uvs)
+        return uvs, [pure_state(clauses) for clauses in reversed(states)]

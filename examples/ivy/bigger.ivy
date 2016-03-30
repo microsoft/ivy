@@ -9,7 +9,7 @@ axiom X:t < Y & Y < Z -> X < Z
 
 interpret t -> int
 
-action bigger(input:t) returns (output:t) = {
+action incr(input:t) returns (output:t) = {
     output := input + 1
 }
 
@@ -18,11 +18,19 @@ individual x : t, y : t
 init x = y
 
 action step = {
-    y := bigger(y);
-    assert x = y
+    y := incr(y);
+    assert x < y
 }
 
 export step
+
+# Abstraction of incr
+
+action bigger(input:t) returns (output:t) = {
+    assert input < output;
+}
+
+mixin bigger after incr
 
 conjecture x < y | x = y
 

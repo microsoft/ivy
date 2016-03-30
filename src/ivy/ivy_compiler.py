@@ -430,7 +430,7 @@ def add_mixins(ag,actname,action2,assert_to_assume=False,use_mixin=lambda:True,m
             action1 = mod_mixin(action1)
             assert hasattr(action1,'lineno')
             assert hasattr(action1,'formal_params'), action1
-        res = ivy_actions.mixin_before(mixin,action1,res)
+        res = ivy_actions.apply_mixin(mixin,action1,res)
     return res
 
 def summarize_action(action):
@@ -658,7 +658,7 @@ def ivy_compile(ag,decls):
             for name,mixins in ag.mixins.iteritems():
                 for mixin in mixins:
                     action1,action2 = (lookup_action(mixin,ag,a.relname) for a in mixin.args)
-                    mixed = ivy_actions.mixin_before(mixin,action1,action2)
+                    mixed = ivy_actions.apply_mixin(mixin,action1,action2)
                     ag.actions[mixin.args[1].relname] = mixed
             # find the globally exported actions (all if none specified, for compat)
             if ag.exports:

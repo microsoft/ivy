@@ -665,6 +665,7 @@ def standard_graph(parent_state=None):
     g.parent_state = parent_state
     
     if hasattr(parent_state,'universe'):
+        print "parent_state.universe: {}".format(parent_state.universe)
         for n in g.all_nodes:
             if n.sort in parent_state.universe:
                 g.splatter(n,parent_state.universe[n.sort])

@@ -684,6 +684,8 @@ def uninterpreted_sorts():
 def interpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name in sig.interp]
 
+def is_interpreted_sort(s):
+    return isinstance(s,UninterpretedSort) and s.name in sig.interp
 
 
 if __name__ == '__main__':
