@@ -264,7 +264,7 @@ def find_polymorphic_symbol(symbol_name):
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
     if symbol_name[0].isdigit():
-        return Symbol(symbol_name,alpha)
+        return Symbol(symbol_name,lg.TopSort())
     return find_symbol(symbol_name)
 
 class UnionSort(object):

@@ -1,0 +1,183 @@
+#lang ivy1.3
+
+#
+# An Ivy model of the toy lock example from https://github.com/Microsoft/Ironclad/blob/master/ironfleet/src/Dafny/Distributed/Protocol/Lock/Node.i.dfy
+#
+
+# A total order helper module
+module total_order(t,r) = {
+    axiom r(X:t,X)                        # Reflexivity
+    axiom r(X:t, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X:t, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X:t, Y) | r(Y, X)             # Totality
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type node
+type epoch
+
+# epochs are totally ordered with a least element called zero
+relation (X:epoch <= Y:epoch)
+instantiate total_order(epoch, <=)
+# axiom 0 <= X:epoch
+
+module counter(t) = {
+    action incr(input:t) returns (output:t) = {
+        output := input + 1
+    }
+}        
+    
+# Abstract specification of counter. This outputs an arbitrary value
+# greater then the input
+
+module abs_counter(t,c) = {
+    action incr(input:t) returns (output:t) = {
+        assert ~(output <= input)
+    }
+    mixin incr after c.incr
+}        
+    
+
+
+module abs_net_intf = {
+       
+    # This is a specification of a network interface that
+    # allows sending and receiving of messages tagged with epochs.
+    # The specification allows messages to be arbitrarily duplicated.
+
+    # This is an abstract specification that is not concerned with
+    # the actual message format. We will add that as a refinement.
+
+    # state of abstract network interface
+
+    relation transfer(E:epoch, N:node)  # the node is the message destination
+    init ~transfer(E, N)
+     
+    # send a transfer message to destination address
+
+    action send_transfer(e:epoch, dst:node) = {
+        transfer(e,dst) := true
+    }
+
+    # receive a transfer message to destination address
+
+    action recv_transfer(dst:node) returns (e:epoch) = {
+        assert transfer(e,dst)  # see (*) below
+    }
+
+    # (*) Why is this "assert" and not "assume"? This is a rely/guarantee
+    # spec. The implementation of "send_transfer" must guarantee that the
+    # assert holds, while the client assumes it. Thus, the assert takes
+    # the role of assert or assume depending on context.
+
+}
+
+module proto(cnt,net) = {
+
+    # This module models all of the nodes. We really want to have an
+    # object representing a single node. For that we need a way of
+    # assigning unique ids to the nodes.
+
+    # ep(n) is the current epoch of node n
+
+    individual ep(N:node) : epoch 
+
+    # held(n) is true iff the lock is currently held by node n
+
+    relation held(N:node) 
+
+    # initially exactly one node holds the lock, and all others have epoch zero
+
+    individual first:node
+ 
+    init held(X) <-> X=first
+    init N ~= first -> ep(N) = 0
+    init ~(ep(first) <= 0)
+
+    # set of locked messages, initially none
+
+    relation locked(E:epoch, N:node)  # the node is the message source
+    init ~locked(E, N)
+
+    ################################################################################
+    #
+    # Protocol description
+    #
+    ################################################################################
+
+    # release the lock and send a transfer message
+
+    action grant(n1:node, n2:node) = {
+        local e: epoch {
+	    assume held(n1);
+	    e := cnt.incr(ep(n1));
+	    call net.send_transfer(e, n2);
+	    held(n1) := false
+        }
+    }
+
+    # receive a transfer message and take the lock, sending a locked message
+
+    action accept(n:node) = {
+    	local e:epoch {
+	    e := net.recv_transfer(n);
+	    if ~(e <= ep(n)) {
+		held(n) := true;
+		ep(n) := e;
+		locked(e, n) := true
+	    }
+	}
+    }
+
+    action critical(n:node) = {
+        assume held(n);
+        assert X ~= n -> ~held(X)
+    }
+
+    # invariant conjectures
+
+    conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
+    conjecture net.transfer(E, N1) & net.transfer(E, N2) -> N1 = N2  # epochs transfer to at most one node
+    conjecture locked(E, N) -> (E <= ep(N))  # if a node sent a locked msg, the node's epoch is now higher
+    conjecture held(N) & N ~= M -> ~(ep(N) <= ep(M))  # holding node's epoch is higher than any other node's epoch (this implies a single node holds the lock)
+    conjecture held(N) & net.transfer(E, M) -> (E <= ep(N)) # holding node's epoch is higher than any transfer's epoch
+    conjecture net.transfer(E, N) & ~(E <= ep(N)) -> ~(E <= ep(M)) # pending transfer epoch is higher than any node's epoch
+    conjecture net.transfer(E, N) & ~(E <= ep(N)) & net.transfer(F, M) -> (F <= E)  # pending transfer epoch is higher than any transfer's epoch
+}
+
+instantiate c : counter(epoch)
+instantiate a : abs_net_intf
+instantiate p : proto(c,a)
+
+# The type epoch is implemented with native type "int"
+
+interpret epoch -> int
+
+export p.grant
+export p.accept
+export p.critical
+
+######################################################
+#
+#  All after this is proof
+
+# Overlay the abstract counter specification
+
+instantiate ac : abs_counter(epoch,c)
+
+# When we verify the protocol claim, we use the abstract counter spec. Notice that
+# we also ignore the implementation of "epoch", so for this claim we treat "epoch:
+# as uninterpreted, leaving us in EPR.
+
+isolate iso_p = p with a,ac
+
+# When we verify concrete counter, we use the implementation of "epoch", since we need
+# the arithmetic theory. In this case we are in QF_LRA, which is also decidable.
+
+isolate iso_c = c with ac,epoch
+

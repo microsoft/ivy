@@ -166,7 +166,7 @@ class Eq(recstruct('Eq', [], ['t1', 't2'])):
         if TopS in (t1.sort, t2.sort):
             pass
         elif t1.sort != t2.sort:
-            raise SortError("Cannot compare different sorts: {} == {}".format(t1, t2))
+            raise SortError("Cannot compare different sorts: {}:{} == {}:{}".format(t1,t1.sort,t2,t2.sort))
         elif not first_order_sort(t1.sort):
             raise SortError("Cannot compare high order sorts: {} == {}".format(t1, t2))
         return t1, t2

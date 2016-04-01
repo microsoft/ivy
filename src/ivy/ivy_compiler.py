@@ -412,7 +412,7 @@ def lookup_action(ast,ag,name):
 
 isolate = iu.Parameter("isolate")
 
-def add_mixins(ag,actname,action2,assert_to_assume=False,use_mixin=lambda:True,mod_mixin=lambda m:m):
+def add_mixins(ag,actname,action2,assert_to_assume=lambda m:False,use_mixin=lambda:True,mod_mixin=lambda m:m):
     # TODO: mixins need to be in a fixed order
     assert hasattr(action2,'lineno'), action2
     assert hasattr(action2,'formal_params'), action2
@@ -423,7 +423,7 @@ def add_mixins(ag,actname,action2,assert_to_assume=False,use_mixin=lambda:True,m
         assert hasattr(action1,'lineno')
         assert hasattr(action1,'formal_params'), action1
         if use_mixin(mixin_name):
-            if assert_to_assume:
+            if assert_to_assume(mixin):
                 action1 = action1.assert_to_assume()
                 assert hasattr(action1,'lineno')
                 assert hasattr(action1,'formal_params'), action1
@@ -539,14 +539,22 @@ def isolate_component(ag,isolate_name):
     verified = set(a.relname for a in isolate.verified())
     present = set(a.relname for a in isolate.present())
     present.update(verified)
+    for type_name in list(ivy_logic.sig.interp):
+        if type_name not in present:
+            del ivy_logic.sig.interp[type_name]
+    print "interp: {}".format(ivy_logic.sig.interp) 
     delegates = set(s.delegated() for s in ag.delegates)
     for name in present:
-        if name not in domain.hierarchy:
+        if name not in domain.hierarchy and name not in ivy_logic.sig.sorts:
             raise IvyError(None,"{} is not a module instance".format(name))
     
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present)
     mod_mixin = lambda m: m if startswith_some(name,verified) else m.prefix_calls('ext:')
+    all_mixins = lambda m: True
+    no_mixins = lambda m: False
+    after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
+    before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
     for actname,action in ag.actions.iteritems():
         ver = startswith_some(actname,verified)
         pre = startswith_some(actname,present)
@@ -570,9 +578,9 @@ def isolate_component(ag,isolate_name):
                 assert hasattr(int_action,'lineno')
                 assert hasattr(int_action,'formal_params'), int_action
             # internal version of the action has mixins checked
-            new_actions[actname] = add_mixins(ag,actname,int_action,False,use_mixin,lambda m:m)
+            new_actions[actname] = add_mixins(ag,actname,int_action,no_mixins,use_mixin,lambda m:m)
             # external version of the action assumes mixins are ok
-            new_action = add_mixins(ag,actname,ext_action,True,use_mixin,mod_mixin)
+            new_action = add_mixins(ag,actname,ext_action,before_mixins,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
             # public_actions.add('ext:'+actname)
@@ -580,8 +588,8 @@ def isolate_component(ag,isolate_name):
             # TODO: here must check that summarized action does not
             # have a call dependency on the isolated module
             action = summarize_action(action)
-            new_actions[actname] = add_mixins(ag,actname,action,False,use_mixin,mod_mixin)
-            new_actions['ext:'+actname] = add_mixins(ag,actname,action,True,use_mixin,mod_mixin)
+            new_actions[actname] = add_mixins(ag,actname,action,after_mixins,use_mixin,mod_mixin)
+            new_actions['ext:'+actname] = add_mixins(ag,actname,action,all_mixins,use_mixin,mod_mixin)
 
 
     # figure out what is exported:
@@ -606,9 +614,9 @@ def isolate_component(ag,isolate_name):
     ag.actions.clear()
     ag.actions.update(new_actions)
 
-    # print "actions:"
-    # for x,y in ag.actions.iteritems():
-    #     print iu.pretty("action {} = {}".format(x,y))
+    print "actions:"
+    for x,y in ag.actions.iteritems():
+        print iu.pretty("action {} = {}".format(x,y))
     
 # collect actions in case of forward reference
 def collect_actions(decls):
@@ -630,23 +638,11 @@ def ivy_compile(ag,decls):
         # progress properties are not state symbols -- remove from sig
         for p in ag.domain.progress:
             remove_symbol(p.defines())
-        if not ag.states:
-            ac = ag.context
-            with ac:
-                if ag.predicates:
-                    if not im.module.init_cond.is_true():
-                        raise IvyError(None,"init and state declarations are not compatible");
-                    for n,p in ag.predicates.iteritems():
-                        s = eval_state_facts(p)
-                        if s is not None:
-                            s.label = n
-                else:
-                    ag.add_initial_state(im.module.init_cond,ivy_alpha.alpha)
         ag.domain.type_check()
         # try instantiating all the actions to type check them
         for name,action in ag.actions.iteritems():
 #            print "checking: {} = {}".format(name,action)
-            type_check_action(action,ag.domain,ag.states[0].in_scope)
+            type_check_action(action,ag.domain)
             if not hasattr(action,'lineno'):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
@@ -673,7 +669,18 @@ def ivy_compile(ag,decls):
             # print "actions:"
             # for x,y in ag.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
-
+        if not ag.states:
+            ac = ag.context
+            with ac:
+                if ag.predicates:
+                    if not im.module.init_cond.is_true():
+                        raise IvyError(None,"init and state declarations are not compatible");
+                    for n,p in ag.predicates.iteritems():
+                        s = eval_state_facts(p)
+                        if s is not None:
+                            s.label = n
+                else:
+                    ag.add_initial_state(im.module.init_cond,ivy_alpha.alpha)
 
     ivy_logic.sig = ag.domain.sig # TODO: make this an environment
 

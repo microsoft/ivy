@@ -181,12 +181,54 @@ def p_insts_insts_comma_inst(p):
     p[0] = p[1]
     p[0].append(p[3])
 
-def p_inst_atom(p):
-   'inst : atom'
+def p_name_symbol(p):
+    'name : SYMBOL'
+    p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+
+def p_name_var(p):
+    'name : var'
+    p[0] = p[1]
+
+def p_name_infix(p):
+    'name : infix'
+    p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+
+def p_name_relop(p):
+    'name : relop'
+    p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+
+def p_names(p):
+    'names : '
+    p[0] = []
+
+def p_names_name(p):
+    'names : name'
+    p[0] = [p[1]]
+
+def p_names_names_name(p):
+    'names : names COMMA name'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_modinst_symbol(p):
+    'modinst : SYMBOL'
+    p[0] = Atom(p[1],[])
+    p[0].lineno = get_lineno(p,1)
+
+def p_modinst_symbol_lp_names_rp(p):
+    'modinst : SYMBOL LPAREN names RPAREN'
+    p[0] = Atom(p[1],p[3])
+    p[0].lineno = get_lineno(p,1)
+
+def p_inst_modinst(p):
+   'inst : modinst'
    p[0] = Instantiation(None,app_to_atom(p[1]))
 
-def p_inst_atom_colon_atom(p):
-    'inst : atom COLON atom'
+def p_inst_atom_colon_modinst(p):
+    'inst : modinst COLON modinst'
     p[0] = Instantiation(app_to_atom(p[1]),app_to_atom(p[3]))
 
 def p_top_symdecl(p):

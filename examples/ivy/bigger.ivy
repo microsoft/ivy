@@ -9,29 +9,44 @@ axiom X:t < Y & Y < Z -> X < Z
 
 interpret t -> int
 
-action incr(input:t) returns (output:t) = {
-    output := input + 1
+module foo = {
+    action incr(input:t) returns (output:t) = {
+        output := input + 1
+    }
 }
 
-individual x : t, y : t
+module bar(f) = {
+    individual x : t, y : t
 
-init x = y
+    init x = y
 
-action step = {
-    y := incr(y);
-    assert x < y
+    action step = {
+	y := f.incr(y);
+	assert x < y
+    }
+
+    conjecture x < y | x = y
 }
 
-export step
+instantiate f : foo
+instantiate b : bar(f)
 
-# Abstraction of incr
+export b.step
 
-action bigger(input:t) returns (output:t) = {
-    assert input < output;
+###########################################################
+# all following here is proof
+
+module bigger = {
+    action incr(input:t) returns (output:t) = {
+        assert input < output
+    }
+    mixin incr after f.incr
 }
 
-mixin bigger after incr
+instantiate bg : bigger
 
-conjecture x < y | x = y
+isolate iso_b = b with bg
+isolate iso_f = f with bg,t
+
 
 
