@@ -20,11 +20,12 @@ module total_order(t,r) = {
 
 type node
 type epoch
+type packet
 
-# epochs are totally ordered with a least element called zero
+# epochs are totally ordered
+
 relation (X:epoch <= Y:epoch)
 instantiate total_order(epoch, <=)
-# axiom 0 <= X:epoch
 
 module counter(t) = {
     action incr(input:t) returns (output:t) = {
@@ -33,7 +34,7 @@ module counter(t) = {
 }        
     
 # Abstract specification of counter. This outputs an arbitrary value
-# greater then the input
+# greater than the input
 
 module abs_counter(t,c) = {
     action incr(input:t) returns (output:t) = {
@@ -42,9 +43,77 @@ module abs_counter(t,c) = {
     mixin incr after c.incr
 }        
     
+module abs_formatter = {
 
+       # This is a specification of a packet formatter
 
-module abs_net_intf = {
+       # These are abstract destructuring functions for packets
+
+       individual dst(P:packet) : node     # the destination address
+       individual ep(P:packet) : epoch     # the packet's epoch
+
+       # Make a packet. Right now there are only transfer packets so
+       # there is no tag needed.
+
+       action mk_transfer(d:node,e:epoch) returns (p:packet) = {
+           assert dst(p) = d & ep(p) = e
+       }
+
+}
+
+module abs_low_intf(fmt) = {
+
+    # This is a specification of the low-level packet interface.
+    # It allows for packet duplication. Parameter "fmt" is the
+    # packet formatter.
+
+    relation sent(P:packet)  # the set of sent packets
+
+    init ~sent(P)            # initially, no packets sent
+    
+    action send(p:packet) = {
+        sent(p) := true
+    }
+    
+    action recv(dst:node) returns(p:packet) = {
+    	assert sent(p) & fmt.dst(p) = dst
+    }
+}
+
+module net_intf(lower,fmt) = {
+
+    # This is a specification of a network interface that
+    # allows sending and receiving of messages tagged with epochs.
+    # The specification allows messages to be arbitrarily duplicated.
+
+    # This is a concrete implementation that sends and receives formatted
+    # packets via a lower-level service
+
+    # The parameter "lower" is the lower-level interface and "fmt"
+    # is the packet formatter.
+
+    # send a transfer message to destination address
+
+    action send_transfer(e:epoch, dst:node) = {
+        local p : packet {
+	    p := fmt.mk_transfer(e,dst);
+	    call lower.send(p)
+        }
+    }
+
+    # receive a transfer message to destination address
+
+    action recv_transfer(dst:node) returns (e:epoch) = {
+        local p : packet {
+	    p := lower.recv(dst);
+	    e := fmt.ep(p)
+        }
+    }
+    
+
+}
+
+module abs_net_intf(net) = {
        
     # This is a specification of a network interface that
     # allows sending and receiving of messages tagged with epochs.
@@ -63,12 +132,14 @@ module abs_net_intf = {
     action send_transfer(e:epoch, dst:node) = {
         transfer(e,dst) := true
     }
+    mixin send_transfer after net.send_transfer
 
     # receive a transfer message to destination address
 
     action recv_transfer(dst:node) returns (e:epoch) = {
         assert transfer(e,dst)  # see (*) below
     }
+    mixin recv_transfer after net.recv_transfer
 
     # (*) Why is this "assert" and not "assume"? This is a rely/guarantee
     # spec. The implementation of "send_transfer" must guarantee that the
@@ -142,21 +213,31 @@ module proto(cnt,net) = {
     # invariant conjectures
 
     conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
-    conjecture net.transfer(E, N1) & net.transfer(E, N2) -> N1 = N2  # epochs transfer to at most one node
+    conjecture an.transfer(E, N1) & an.transfer(E, N2) -> N1 = N2  # epochs transfer to at most one node
     conjecture locked(E, N) -> (E <= ep(N))  # if a node sent a locked msg, the node's epoch is now higher
     conjecture held(N) & N ~= M -> ~(ep(N) <= ep(M))  # holding node's epoch is higher than any other node's epoch (this implies a single node holds the lock)
-    conjecture held(N) & net.transfer(E, M) -> (E <= ep(N)) # holding node's epoch is higher than any transfer's epoch
-    conjecture net.transfer(E, N) & ~(E <= ep(N)) -> ~(E <= ep(M)) # pending transfer epoch is higher than any node's epoch
-    conjecture net.transfer(E, N) & ~(E <= ep(N)) & net.transfer(F, M) -> (F <= E)  # pending transfer epoch is higher than any transfer's epoch
+    conjecture held(N) & an.transfer(E, M) -> (E <= ep(N)) # holding node's epoch is higher than any transfer's epoch
+    conjecture an.transfer(E, N) & ~(E <= ep(N)) -> ~(E <= ep(M)) # pending transfer epoch is higher than any node's epoch
+    conjecture an.transfer(E, N) & ~(E <= ep(N)) & an.transfer(F, M) -> (F <= E)  # pending transfer epoch is higher than any transfer's epoch
 }
 
+# Instantiate the modules to build a system
+
+# Notice that the formatter and low interface are currently abstract
+# specifications that could be refined in the future.
+
 instantiate c : counter(epoch)
-instantiate a : abs_net_intf
-instantiate p : proto(c,a)
+instantiate f : abs_formatter()
+instantiate l : abs_low_intf(f)
+instantiate n : net_intf(l,f)
+instantiate an : abs_net_intf(n)
+instantiate p : proto(c,n)
 
 # The type epoch is implemented with native type "int"
 
 interpret epoch -> int
+
+# This is the service we provide to the environment
 
 export p.grant
 export p.accept
@@ -174,10 +255,16 @@ instantiate ac : abs_counter(epoch,c)
 # we also ignore the implementation of "epoch", so for this claim we treat "epoch:
 # as uninterpreted, leaving us in EPR.
 
-isolate iso_p = p with a,ac
+isolate iso_p = p with an,ac
 
 # When we verify concrete counter, we use the implementation of "epoch", since we need
 # the arithmetic theory. In this case we are in QF_LRA, which is also decidable.
 
 isolate iso_c = c with ac,epoch
+
+# When we verify claims about the network interface, we leave "epoch" abstract. We
+# keep the state of the abstract spec, and the lower and formatter interface specs.
+
+isolate iso_n = n with an, l, f
+
 

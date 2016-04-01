@@ -748,7 +748,7 @@ def apply_mixin(decl,action1,action2):
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):
         raise IvyError(decl,"mixin {} has wrong number of input parameters for {}".format(name1,name2))
-    if len(action1.formal_returns) != len(action2.formal_params):
+    if len(action1.formal_returns) != len(action2.formal_returns):
         raise IvyError(decl,"mixin {} has wrong number of output parameters for {}".format(name1,name2))
     formals1,formals2 = (a.formal_params + a.formal_returns for a in (action1,action2)) 
     for x,y in zip(formals1,formals2):
