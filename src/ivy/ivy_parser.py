@@ -136,17 +136,29 @@ def p_top_include_symbol(p):
     for decl in module.decls:
         p[0].declare(decl)
 
-def p_top_axiom_fmla(p):
-    'top : top AXIOM fmla'
+def p_labeledfmla_fmla(p):
+    'labeledfmla : fmla'
+    p[0] = LabeledFormula(None,p[1])
+    p[0].lineno = p[1].lineno
+    
+def p_labeledfmla_label_fmla(p):
+    'labeledfmla : LABEL fmla'
+    p[0] = LabeledFormula(Atom(p[1][1:-1],[]),p[2])
+    p[0].lineno = get_lineno(p,1)
+
+def p_top_axiom_labeledfmla(p):
+    'top : top AXIOM labeledfmla'
     p[0] = p[1]
     d = AxiomDecl(p[3])
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
-def p_top_conjecture_fmla(p):
-    'top : top CONJECTURE fmla'
+def p_top_conjecture_labeledfmla(p):
+    'top : top CONJECTURE labeledfmla'
     p[0] = p[1]
-    p[0].declare(ConjectureDecl(p[3]))
+    d = ConjectureDecl(p[3])
+    d.lineno = get_lineno(p,2)
+    p[0].declare(d)
 
 def p_top_module_atom_eq_lcb_top_rcb(p):
     'top : top MODULE atom EQ LCB top RCB'

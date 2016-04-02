@@ -22,6 +22,7 @@ tokens = (
    'ARROW',
    'IFF',
    'SYMBOL',
+   'LABEL',
    'VARIABLE',
    'COLON',
    'LE',
@@ -124,6 +125,11 @@ def t_newline(t):
 def t_SYMBOL(t):
     r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*'
     t.type = reserved.get(t.value,'SYMBOL')
+    return t
+
+def t_LABEL(t):
+    r'\[[_a-zA-Z0-9]+\]'
+    t.type = reserved.get(t.value,'LABEL')
     return t
 
 def t_VARIABLE(t):

@@ -42,23 +42,39 @@ module abs_counter(t,c) = {
     }
     mixin incr after c.incr
 }        
+
+module formatter = {
+
+    # packets are constructed by concatenation
+
+    individual conc(N:node,E:epoch) : packet
+
+    action mk_transfer(d:node,e:epoch) returns (p:packet) = {
+        p := conc(d,e)
+    }
+
+    interpret conc -> concat
+}
     
-module abs_formatter = {
+module abs_formatter(low) = {
 
-       # This is a specification of a packet formatter
+    # This is a specification of a packet formatter
 
-       # These are abstract destructuring functions for packets
+    # These are abstract destructuring functions for packets
 
-       individual dst(P:packet) : node     # the destination address
-       individual ep(P:packet) : epoch     # the packet's epoch
+    individual dst(P:packet) : node     # the destination address
+    individual ep(P:packet) : epoch     # the packet's epoch
 
-       # Make a packet. Right now there are only transfer packets so
-       # there is no tag needed.
+    interpret ep -> bfe[2][0]
+    interpret dst -> bfe[4][2]
 
-       action mk_transfer(d:node,e:epoch) returns (p:packet) = {
-           assert dst(p) = d & ep(p) = e
-       }
+    # Make a packet. Right now there are only transfer packets so
+    # there is no tag needed.
 
+    action mk_transfer(d:node,e:epoch) returns (p:packet) = {
+	assert dst(p) = d & ep(p) = e
+    }
+    mixin mk_transfer after low.mk_transfer
 }
 
 module abs_low_intf(fmt) = {
@@ -76,7 +92,7 @@ module abs_low_intf(fmt) = {
     }
     
     action recv(dst:node) returns(p:packet) = {
-    	assert sent(p) & fmt.dst(p) = dst
+    	assert sent(p) & af.dst(p) = dst
     }
 }
 
@@ -106,11 +122,11 @@ module net_intf(lower,fmt) = {
     action recv_transfer(dst:node) returns (e:epoch) = {
         local p : packet {
 	    p := lower.recv(dst);
-	    e := fmt.ep(p)
+	    e := af.ep(p)
         }
     }
     
-    conjecture l.sent(P) -> an.transfer(f.ep(P),f.dst(P))
+    conjecture l.sent(P) -> an.transfer(af.ep(P),af.dst(P))
 
 }
 
@@ -244,14 +260,22 @@ module proto(cnt,net) = {
 # specifications that could be refined in the future.
 
 instantiate c : counter(epoch)
-instantiate f : abs_formatter()
+instantiate f : formatter()
 instantiate l : abs_low_intf(f)
 instantiate n : net_intf(l,f)
 instantiate p : proto(c,n)
 
-# The type epoch is implemented with native type "int"
+# The type epoch is implemented with native 2-bit numbers
 
-interpret epoch -> int
+interpret epoch -> bv[3]
+
+# The type node is implemented with native 2-bit numbers
+
+interpret node -> bv[2]
+
+# Packets are made with four-bit vectors
+
+interpret packet -> bv[5]
 
 # This is the service we provide to the environment
 
@@ -267,6 +291,7 @@ export p.critical
 
 instantiate an : abs_net_intf(n)
 instantiate ac : abs_counter(epoch,c)
+instantiate af : abs_formatter(f)
 
 # When we verify the protocol claim, we use the abstract counter spec. Notice that
 # we also ignore the implementation of "epoch", so for this claim we treat "epoch:
@@ -283,5 +308,10 @@ isolate iso_c = c with ac,epoch
 # keep the state of the abstract spec, and the lower and formatter interface specs.
 
 isolate iso_n = n with an, l, f
+
+# When we verify claims about the formatter interface, we interpret "node", "epoch"
+# and "packet" as bit vectors.
+
+isolate iso_f = f with af, node, epoch, packet
 
 

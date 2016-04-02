@@ -25,7 +25,7 @@ class Module(object):
 
         self.all_relations = [] # this includes both base and derived relations in declaration order
         self.concepts = []  # TODO: these are actually "derived" relations
-        self.axioms = []
+        self.labeled_axioms = []
         self.init_cond = lu.true_clauses()
         self.relations = dict()  # TODO: this is redundant, remove
         self.functions = dict()  # TODO: this is redundant, remove
@@ -33,7 +33,7 @@ class Module(object):
         self.schemata = dict()
         self.instantiations = []
         self.concept_spaces = []
-        self.conjs = []  # conjectures
+        self.labeled_conjs = []  # conjectures
         self.hierarchy = defaultdict(set)
         self.actions = {}
         self.predicates = {}
@@ -88,7 +88,20 @@ class Module(object):
             self.add_to_hierarchy(pref)
             self.hierarchy[pref].add(suff)
 
+    @property
+    def axioms(self):
+        return map(drop_label,self.labeled_axioms)
 
+    @property
+    def conjs(self):
+        # This returns the list of conjectures as Clauses, without labels
+        res = []
+        for c in self.labeled_conjs:
+            fmla = c.formula
+            clauses = lu.formula_to_clauses(fmla)
+            clauses.lineno = c.lineno
+            res.append(clauses)
+        return res
 
 module = None
 
@@ -103,5 +116,6 @@ param_logic = iu.Parameter("complete","epr",check=lambda s: (s in il.logics))
 def logic():
     return param_logic.get()
 
-
+def drop_label(labeled_fmla):
+    return labeled_fmla.formula if hasattr(labeled_fmla,'formula') else labeled_fmla
 

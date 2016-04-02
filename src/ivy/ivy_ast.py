@@ -382,6 +382,16 @@ class MacroDecl(Decl):
     def __repr__(self):
         return 'macro ' + ','.join(repr(d.args[0]) + ' = {\n' + repr(d.args[1]) + '\n}' for d in self.args)
 
+class LabeledFormula(AST):
+    @property
+    def label(self):
+        return self.args[0]
+    @property
+    def formula(self):
+        return self.args[1]
+    def __str__(self):
+        return '[' + str(self.label) + '] ' + str(self.formula) if self.label else str(self.formula)
+
 class AxiomDecl(Decl):
     def name(self):
         return 'axiom'
@@ -697,6 +707,15 @@ def ast_rewrite(x,rewrite):
         return type(x)(ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
     if hasattr(x,'rewrite'):
         return x.rewrite(rewrite)
+    if isinstance(x,LabeledFormula):
+        arg0 = x.args[0]
+        if x.args[0] == None:
+            if isinstance(rewrite,AstRewriteSubstPrefix):
+                arg0 = Atom(rewrite.pref,[])
+        else:
+            arg0 = rewrite.rewrite_atom(x.args[0])
+        res = x.clone([arg0,ast_rewrite(x.args[1],rewrite)])
+        return res
     if hasattr(x,'args'):
         return x.clone(ast_rewrite(x.args,rewrite)) # yikes!
     print "wtf: {} {}".format(x,type(x))
@@ -748,7 +767,7 @@ def rename_variable(v,name):
 def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
-    elif not isinstance(ast,str):
+    elif ast != None and not isinstance(ast,str):
         for arg in ast.args:
             for x in variables_ast(arg):
                 yield x
@@ -756,6 +775,8 @@ def variables_ast(ast):
 used_variables_ast = gen_to_set(variables_ast)
 
 def compose_atoms(pr,atom):
+    if atom == None:
+        return pr
     hname = compose_names(pr.rep,atom.rep)
     args = pr.args + atom.args
     res = type(atom)(hname,args)

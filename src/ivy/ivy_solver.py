@@ -62,6 +62,14 @@ def sorts(name):
 #sorts = {"S":S,
 #         "Int":z3.IntSort()}
 
+def parse_int_params(name):
+    things = name.split('[')[1:]
+    print "things:".format(things)
+    if not all(t.endswith(']') for t in things):
+        raise SyntaxError()
+    return [int(t[:-1]) for t in things]
+    
+
 def is_solver_sort(name):
     return name.startswith('bv[') and name.endswith(']') or name == 'int'
 
@@ -77,13 +85,23 @@ def relations(name):
 functions_dict = {"+":(lambda x,y: x + y),
              "-":my_minus,
              "*":(lambda x,y: x * y),
+             "concat":(lambda x,y: z3.Concat(x,y)),
              }
 
+
 def functions(name):
+    if name.startswith('bfe['):
+        try:
+            things = parse_int_params(name)
+            if len(things) == 2:
+                lo,hi = things
+                return lambda x: z3.Extract(lo,hi,x)
+        except:
+            return None
     return functions_dict.get(name)
 
 def is_solver_op(name):
-    return name in relations or name in functions
+    return relations(name) != None or functions(name) != None
 
 z3_sorts = dict()
 z3_predicates = {ivy_logic.equals : my_eq}

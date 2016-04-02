@@ -151,6 +151,8 @@ def cquant(q):
 
 ivy_ast.Quantifier.cmpl = lambda self: cquant(self)([v.compile() for v in self.bounds],self.args[0].compile())
 
+ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,sortify_with_inference(self.formula)])
+
 # compiling update patterns is complicated because they declare constants internally
 def UpdatePattern_cmpl(self):
     with ivy_logic.sig.copy():
@@ -266,23 +268,8 @@ class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
     def axiom(self,ax):
-#        print "axiom: {}".format(ax)
-        self.domain.axioms.append(sortify_with_inference(ax))
-    def conjecture(self,ax):
-        fmla = sortify_with_inference(ax)
-        clauses = formula_to_clauses(fmla)
-        clauses.lineno = ax.lineno
-        self.domain.conjs.append(clauses)
-
-        # Make a conecpt space from the conjecture
-
-        csname = 'conjecture:'+ str(len(self.domain.conjs))
-        variables = list(lu.used_variables_ast(fmla))
-        sort = ivy_logic.RelationSort([v.sort for v in variables])
-        sym = ivy_logic.Symbol(csname,sort)
-        space = NamedSpace(ivy_logic.Literal(0,fmla))
-        self.domain.concept_spaces.append((sym(*variables),space))
-
+        print "axiom: {}".format(ax)
+        self.domain.labeled_axioms.append(ax.compile())
     def schema(self,sch):
         self.domain.schemata[sch.defn.defines()] = sch
     def instantiate(self,inst):
@@ -360,6 +347,12 @@ class IvyDomainSetup(IvyDeclInterp):
                 return
         raise IvyUndefined(thing,lhs)
             
+class IvyConjectureSetup(IvyDeclInterp):
+    def __init__(self,domain):
+        self.domain = domain
+    def conjecture(self,ax):
+        cax = ax.compile()
+        self.domain.labeled_conjs.append(cax)
 
 class IvyARGSetup(IvyDeclInterp):
     def __init__(self,ag):
@@ -531,6 +524,9 @@ def set_create_big_action(t):
 def startswith_some(s,prefixes):
     return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
 
+def startswith_eq_some(s,prefixes):
+    return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
+
 def isolate_component(ag,isolate_name):
     domain = ag.domain
     if isolate_name not in ag.isolates:
@@ -609,6 +605,16 @@ def isolate_component(ag,isolate_name):
         exported.add('ext');
         new_actions['ext'] = ext_act;
 
+    # filter the conjectures
+
+    new_conjs = [c for c in domain.labeled_conjs if startswith_eq_some(str(c.label),present)]
+    del domain.labeled_conjs[:]
+    domain.labeled_conjs.extend(new_conjs)
+
+    print "conjectures:"
+    for c in domain.labeled_conjs:
+        print c
+
     ag.public_actions.clear()
     ag.public_actions.update(exported)
     ag.actions.clear()
@@ -633,6 +639,7 @@ def ivy_compile(ag,decls):
             ag.domain.add_to_hierarchy(name)
         with TopContext(collect_actions(decls.decls)):
             IvyDomainSetup(ag.domain)(decls)
+            IvyConjectureSetup(ag.domain)(decls)
             IvyARGSetup(ag)(decls)
         ag.domain.macros = decls.macros
         # progress properties are not state symbols -- remove from sig
@@ -646,6 +653,11 @@ def ivy_compile(ag,decls):
             if not hasattr(action,'lineno'):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
+
+        # HACK: code beyond here really does not belong in compile
+
+        # Construct an isolate
+
         iso = isolate.get()
         if iso:
             isolate_component(ag,iso)
@@ -665,6 +677,17 @@ def ivy_compile(ag,decls):
             else:
                 for a in ag.actions:
                     ag.public_actions.add(a)
+
+        # Make concept spaces from the conjecture
+
+        for i,cax in enumerate(ag.domain.labeled_conjs):
+            fmla = cax.formula
+            csname = 'conjecture:'+ str(i)
+            variables = list(lu.used_variables_ast(fmla))
+            sort = ivy_logic.RelationSort([v.sort for v in variables])
+            sym = ivy_logic.Symbol(csname,sort)
+            space = NamedSpace(ivy_logic.Literal(0,fmla))
+            ag.domain.concept_spaces.append((sym(*variables),space))
 
             # print "actions:"
             # for x,y in ag.actions.iteritems():
