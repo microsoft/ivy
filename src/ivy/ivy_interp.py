@@ -368,6 +368,9 @@ class fail_action(Action):
     def update(self,domain,in_scope):
         print "action_failure action: {}".format(pretty(str(self.action)))
         return action_failure(self.action.update(domain,in_scope))
+    def int_update(self,domain,in_scope):
+        print "action_failure action: {}".format(pretty(str(self.action)))
+        return action_failure(self.action.int_update(domain,in_scope))
     def decompose(self,pre,post):
         cases = self.action.decompose(pre,post,fail=True)
         res = []
@@ -460,15 +463,20 @@ def decompose_action_app(state2,expr):
     action = eval_action(expr.rep)
     state1 = eval_state(expr.args[0])
     comps = action.decompose(state1.value,state2.value)
+    print "comps:"
+    for comp in comps:
+        for a in comp[1]:
+            print a
+        print ""
     bg = state1.domain.background_theory(state1.in_scope)
     for pre,acts,post in comps:
         print "pre core: {} ".format(unsat_core(and_clauses(pre[1],bg),true_clauses()))
         print "post core: {} ".format(unsat_core(and_clauses(post[1],bg),true_clauses()))
-        upds = [act.update(state1.domain,state1.in_scope) for act in acts]
+        upds = [act.int_update(state1.domain,state1.in_scope) for act in acts]
         h = History(pre)
 #        print "h.post: {}".format(h.post)
         for upd in upds:
-#            print "upd: {}".format(upd)
+            print "upd: {}".format(upd)
             h = h.forward_step(bg,upd)
 #            print "h.post: {}".format(h.post)
         h = h.assume(post)

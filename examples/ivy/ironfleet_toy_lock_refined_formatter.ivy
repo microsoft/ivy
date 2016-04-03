@@ -29,6 +29,7 @@ instantiate total_order(epoch, <=)
 
 module counter(t) = {
     action incr(input:t) returns (output:t) = {
+        assume input < 7;
         output := input + 1
     }
 }        
@@ -65,8 +66,8 @@ module abs_formatter(low) = {
     individual dst(P:packet) : node     # the destination address
     individual ep(P:packet) : epoch     # the packet's epoch
 
-    interpret ep -> bfe[2][0]
-    interpret dst -> bfe[4][2]
+    interpret ep -> bfe[1][0]
+    interpret dst -> bfe[3][2]
 
     # Make a packet. Right now there are only transfer packets so
     # there is no tag needed.
@@ -204,8 +205,9 @@ module proto(cnt,net) = {
         local e: epoch {
 	    assume held(n1);
 	    e := cnt.incr(ep(n1));
-	    call net.send_transfer(e, n2);
-	    held(n1) := false
+	    call net.send_transfer(e, n2)
+#;
+#	    held(n1) := false
         }
     }
 
@@ -267,7 +269,7 @@ instantiate p : proto(c,n)
 
 # The type epoch is implemented with native 2-bit numbers
 
-interpret epoch -> bv[3]
+interpret epoch -> bv[2]
 
 # The type node is implemented with native 2-bit numbers
 
@@ -275,7 +277,7 @@ interpret node -> bv[2]
 
 # Packets are made with four-bit vectors
 
-interpret packet -> bv[5]
+interpret packet -> bv[4]
 
 # This is the service we provide to the environment
 

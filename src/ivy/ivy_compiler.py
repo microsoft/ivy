@@ -536,7 +536,7 @@ def isolate_component(ag,isolate_name):
     present = set(a.relname for a in isolate.present())
     present.update(verified)
     for type_name in list(ivy_logic.sig.interp):
-        if type_name not in present:
+        if not startswith_eq_some(type_name,present):
             del ivy_logic.sig.interp[type_name]
     print "interp: {}".format(ivy_logic.sig.interp) 
     delegates = set(s.delegated() for s in ag.delegates)
@@ -677,6 +677,10 @@ def ivy_compile(ag,decls):
             else:
                 for a in ag.actions:
                     ag.public_actions.add(a)
+
+        # Check native interpretations of symbols
+
+        slv.check_compat()
 
         # Make concept spaces from the conjecture
 

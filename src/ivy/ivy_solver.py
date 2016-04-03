@@ -74,9 +74,9 @@ def is_solver_sort(name):
     return name.startswith('bv[') and name.endswith(']') or name == 'int'
 
 relations_dict = {'<':(lambda x,y: z3.ULT(x, y) if z3.is_bv(x) else x < y),
-             '<=':(lambda x,y: x <= y),
-             '>':(lambda x,y: x > y),
-             '>=':(lambda x,y: x >= y),
+             '<=':(lambda x,y: z3.ULE(x, y) if z3.is_bv(x) else x <= y),
+             '>':(lambda x,y: z3.UGT(x, y) if z3.is_bv(x) else x > y),
+             '>=':(lambda x,y: z3.UGE(x, y) if z3.is_bv(x) else x >= y),
              }
 
 def relations(name):
@@ -157,6 +157,37 @@ def lookup_native(thing,table,kind):
     if z3val == None:
         raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(z3name,kind))
     return z3val
+
+def check_native_compat_sym(sym):
+    table,kind = (relations,"relation") if sym.is_relation() else (functions,"function") 
+    thing = lookup_native(sym,table,kind)
+    print "check_native_compat_sym: {} {}".format(sym,thing)
+    try:
+        if thing != None:
+            print "check_native_compat_sym: {} {}".format(sym,thing)
+            z3args = []
+            for ds in sym.sort.dom:
+                z3sort = lookup_native(ds,sorts,"sort")
+                if z3sort == None:
+                    raise ivy_utils.IvyError(None,'domain sort "{}" is uninterpreted'.format(ds))
+                z3args.append(z3sort.cast("0"))
+            z3val = thing(*z3args)
+            z3sort = z3val.sort()
+            ns = lookup_native(sym.sort.rng,sorts,"sort")
+            if ns == None:
+                raise ivy_utils.IvyError(None,'range sort "{}" is uninterpreted'.format(sym.sort.rng))
+            if ns != z3sort:
+                raise ivy_utils.IvyError(None,'range sort {}={} does not match {}'.format(sym.sort.rng,ns,z3sort))
+    except Exception as e:
+        raise ivy_utils.IvyError(None,'cannot interpret {} as {}: {}'.format(sym,ivy_logic.sig.interp[sym.name],e))
+
+def check_compat():
+    for name,value in ivy_logic.sig.interp.iteritems():
+        if name in ivy_logic.sig.symbols:
+            sym = ivy_logic.sig.symbols[name]
+            sorts = sym.sort.sorts if isinstance(sym.sort,ivy_logic.UnionSort) else [sym.sort]
+            for sort in sorts:
+                check_native_compat_sym(ivy_logic.Symbol(name,sort))
 
 def sort_card(sort):
     sig = lookup_native(sort,sorts,"sort") or sort.to_z3()
@@ -462,7 +493,7 @@ class HerbrandModel(object):
         return [s for s in self.constants]
 
     def sort_universe(self,sort):
-        return [constant_from_z3(c) for c in self.constants[sort]]
+        return [constant_from_z3(sort,c) for c in self.constants[sort]]
 
     def sorted_sort_universe(self,sort):
         elems = self.constants[sort]
@@ -480,12 +511,13 @@ class HerbrandModel(object):
         except IndexError:
             pass
 #        print "elems: {}".format(map(str,elems))
-        return map(constant_from_z3,elems)
+        return [constant_from_z3(sort,elem) for elem in elems]
 
     def universes(self, numerals=False):
 #        print "sorts: {!r}".format(self.sorts())
         if numerals:
-            return dict((s,[c.rename(lambda s:str(i)) for i,c in enumerate(self.sorted_sort_universe(s))])
+            return dict((s,[c.rename(lambda s:str(i)) for i,c in enumerate(self.sorted_sort_universe(s))]
+                           if not ivy_logic.is_interpreted_sort(s) else list(self.sort_universe(s)))
                         for s in self.sorts())
         return dict((s,[c.skolem() for c in self.sort_universe(s)]) for s in self.sorts())
 
@@ -508,7 +540,7 @@ class HerbrandModel(object):
             fact_val = m.eval(fact,model_completion=True)
 #            print "%s = %s" % (fact,fact_val)
             if z3.is_true(fact_val):
-                args = [constant_from_z3(y) for y in tup]
+                args = [constant_from_z3(v.sort,y) for v,y in zip(vs,tup)]
                 insts.append(args)
         return (vs,insts)
 
@@ -524,8 +556,8 @@ class HerbrandModel(object):
 def sort_from_z3(s):
     return z3_sorts_inv[get_id(s)]
 
-def constant_from_z3(c):
-    return ivy_logic.Constant(ivy_logic.Symbol(repr(c),sort_from_z3(c.sort())))
+def constant_from_z3(sort,c):
+    return ivy_logic.Constant(ivy_logic.Symbol(repr(c),sort))
 
 def get_model_constant(m,t):
     s = t.get_sort()
@@ -540,7 +572,7 @@ def get_model_constant(m,t):
         print "warning: model doesn't give a value for enumerated term {}. returning {}.".format(t,res)
         return res
 #        assert False # model doesn't give a value for enumerated term
-    return constant_from_z3(m.eval(term_to_z3(t)))
+    return constant_from_z3(s,m.eval(term_to_z3(t)))
 
 
 
@@ -817,6 +849,10 @@ def numeral_assign(clauses,h):
     used = set()
 #    print "starting: foom = {}".format(foom)
     for s in h.sorts():
+        print "na sort: {}".format(repr(s))
+        if ivy_logic.is_interpreted_sort(s):
+            print "interpreted"
+            continue
 #        print "sort loop: sort = {}, foom = {}".format(s,foom)
         for num in num_by_sort[s]:
 #            print "foom = {}".format(foom)
@@ -860,7 +896,7 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
                  for s in h.sorts() for c in h.sort_universe(s))
     res = substitute_constants_clauses(res,m)
 #    print "core after rename: {} ".format(unsat_core(res,true_clauses()))
-#    print "clauses_model_to_clauses res = {}".format(res)
+    print "clauses_model_to_clauses res = {}".format(res)
     return res
 
 def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None,axioms=None,weaken=True):

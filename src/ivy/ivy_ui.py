@@ -44,7 +44,7 @@ class RunContext(object):
             return True
         return False # don't block any exceptions
 
-modes = ["abstract","concrete","bounded"]
+modes = ["abstract","concrete","bounded","induction"]
 default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
 class AnalysisGraphWidget(Canvas):
@@ -70,6 +70,7 @@ class AnalysisGraphWidget(Canvas):
         modemenu.add("radiobutton",label="Concrete",variable=self.mode,value="concrete")
         modemenu.add("radiobutton",label="Abstract",variable=self.mode,value="abstract")
         modemenu.add("radiobutton",label="Bounded",variable=self.mode,value="bounded")
+        modemenu.add("radiobutton",label="Induction",variable=self.mode,value="induction")
 #        menubar.add_cascade(label="Mode", menu=modemenu)
 #        actionmenu = Menu(menubar, tearoff=0)
         actionmenu = menubar.add("Action")
@@ -254,7 +255,7 @@ class AnalysisGraphWidget(Canvas):
 
     def get_alpha(self):
         return (None if self.mode.get() == "concrete"
-                else ivy_alpha.alpha if self.mode.get() == "abstract"
+                else ivy_alpha.alpha if (self.mode.get() == "abstract" or self.mode.get() == "induction")
                 else top_alpha)
 
     def do_state_action(self,a):
@@ -407,9 +408,12 @@ class AnalysisGraphWidget(Canvas):
                 filename,lineno = conj.lineno
                 self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
-            sg = self.g.concept_graph(node)
-            sg.add_constraints(dual.clauses)
-            ivy_graph_ui.show_graph(sg,self.tk,parent=self)
+            if self.mode.get() == "induction":
+                self.bmc(node,dual)
+            else:
+                sg = self.g.concept_graph(node)
+                sg.add_constraints(dual.clauses)
+                ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
         dlg.destroy()
 
 
