@@ -219,6 +219,9 @@ class ConceptSessionControls(object):
             self.concept_style_colors
         )
 
+    def apply_structure_renaming(self, st):
+        return st
+
     def update_view_controls(self):
         """
         update the view controls to reflect the available concepts, after
@@ -237,8 +240,8 @@ class ConceptSessionControls(object):
             'purple',
             'black',
             'white',
-            'coral',
-            'teal',
+            '#FF7F50',
+            '#008080',
             '#8B4513',
             '#9ACD32',
             '#556b2f',
@@ -248,7 +251,7 @@ class ConceptSessionControls(object):
         for i, edge_name in enumerate(self.concept_session.domain.concepts_by_arity(2)):
             color = colors[i % len(colors)]
             self.concept_style_colors.append({
-                "selector": "edge[obj={!r}]".format(edge_name),
+                "selector": "edge[obj={!r}]".format(str(edge_name)), # the str() is to convert from unicode
                 "style": dict((x, color) for x in [
                     "line-color",
                     "target-arrow-color",
@@ -258,7 +261,7 @@ class ConceptSessionControls(object):
                 ]),
             })
             btn = SmallButton(
-                description=edge_name,
+                description=self.apply_structure_renaming(edge_name),
                 color=color,
                 margin='5px',
                 background_color=_graph_background_color,
@@ -329,6 +332,7 @@ class ConceptSessionControls(object):
         )
 
     def add_projection(self, node, name, concept):
+        self.edge_display_checkboxes[name]['all_to_all'].value = True
         self.concept_session.add_edge(name, concept)
 
 
@@ -489,6 +493,8 @@ class TransitionViewWidget(ConceptSessionControls):
         super(TransitionViewWidget, self).__init__()
         self.analysis_session_widget = analysis_session_widget
 
+        self.transitive_relations = []
+
         self.box = DialogWidget(
             title='TransitionViewWidget',
             orientation='vertical',
@@ -520,7 +526,7 @@ class TransitionViewWidget(ConceptSessionControls):
         self.facts_list = widgets.SelectMultiple(margin='5px')
         self.result = widgets.HTML('')
         self.bmc_bound = widgets.Dropdown(
-            options=[(str(n), n) for n in [3,5,10,15,20]],
+            options=[(str(n), n) for n in [1,3,5,10,15]],
             value=3,
             description='BMC bound:',
         )
@@ -534,8 +540,8 @@ class TransitionViewWidget(ConceptSessionControls):
             ('gather facts', self.gather_facts),
             ('bmc conjecture', self.bmc_conjecture),
             ('minimize conjecture', self.minimize_conjecture),
-            ('sufficient?', self.is_sufficient),
-            ('inductive?', self.is_inductive),
+            #('sufficient?', self.is_sufficient),
+            ('rel. inductive?', self.is_inductive),
             ('strengthen', self.strengthen),
             ('weaken', self.weaken),
             #('necessary?', self.is_necessary),
@@ -651,7 +657,7 @@ class TransitionViewWidget(ConceptSessionControls):
         if pre is False:
             self.concept_session.replace_domain(self.concept_session.domain)
         else:
-            self.structure_renaming = get_structure_renaming(pre)
+            self.structure_renaming = get_structure_renaming(pre, self.transitive_relations)
             self.concept_session.replace_domain(get_structure_concept_domain(pre))
 
 
@@ -726,13 +732,13 @@ class TransitionViewWidget(ConceptSessionControls):
                           self.concept_session.get_edge_facts(edge, source, target, False)]
         # filter double equalities and self-edges of reflexive relations
         facts = [(f, elements) for f, elements in facts if not (
-            (type(f) is Eq and f.t1 >= f.t2) or
-            (type(f) is Not and type(f.body) is Eq and f.body.t1 >= f.body.t2) or
-            (
-                type(f) is Apply and
-                self.edge_display_checkboxes[f.func.name]['transitive'].value and
-                f.terms[0] == f.terms[1]
-            )
+            #(type(f) is Eq and f.t1 >= f.t2) or
+            (type(f) is Not and type(f.body) is Eq and f.body.t1 >= f.body.t2) #or
+            # (
+            #     type(f) is Apply and
+            #     self.edge_display_checkboxes[f.func.name]['transitive'].value and
+            #     f.terms[0] == f.terms[1]
+            # )
         )]
         self.facts_list.options = [
             (self.fact_to_label(formula), (formula, elements))
@@ -740,11 +746,13 @@ class TransitionViewWidget(ConceptSessionControls):
         ]
         self.facts_list.value = ()
 
+    def apply_structure_renaming(self, st):
+        for k in sorted(self.structure_renaming.keys(), key=len, reverse=True):
+            st = st.replace(k, self.structure_renaming[k])
+        return st
+
     def fact_to_label(self, fact):
-        result = str(fact)
-        for k, v in self.structure_renaming.iteritems():
-            result = result.replace(k, v)
-        return result
+        return self.apply_structure_renaming(str(fact))
 
     def get_active_facts(self):
         """
@@ -800,7 +808,11 @@ class TransitionViewWidget(ConceptSessionControls):
             if self.relations_to_minimize.value == 'relations to minimize':
                 self.relations_to_minimize.value = ' '.join(sorted(
                     k for k, v in self.session.analysis_state.ivy_interp.sig.symbols.iteritems()
-                    if type(v.sort) is lg.FunctionSort
+                    if (type(v.sort) is lg.FunctionSort and
+                        v.sort.range == lg.Boolean and
+                        v.name not in self.transitive_relations and
+                        '.' not in v.name
+                    )
                 ))
 
             res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
@@ -831,7 +843,7 @@ class TransitionViewWidget(ConceptSessionControls):
                 finally:
                     self.ignore_display_checkbox_change = False
                 self.set_states(res.states[0], res.states[1])
-                self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
+                #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                 self.show_result('The following conjecture is not inductive:\n{}'.format(
                     str(conj.to_formula()),
                 ))
@@ -897,7 +909,7 @@ class TransitionViewWidget(ConceptSessionControls):
 
         return result
 
-    def bmc_conjecture(self, button=None):
+    def bmc_conjecture(self, button=None, conjecture=None, verbose=False, add_to_crg=True):
         import ivy_transrel
         import ivy_solver
         from proof import ProofGoal
@@ -909,7 +921,11 @@ class TransitionViewWidget(ConceptSessionControls):
         step_action = ta.get_action('step')
         n_steps = self.bmc_bound.value
 
-        conj = self.get_selected_conjecture()
+        if conjecture is None:
+            conj = self.get_selected_conjecture()
+        else:
+            conj = conjecture
+
         assert conj.is_universal_first_order()
         used_names = frozenset(x.name for x in self.session.analysis_state.ivy_interp.sig.symbols.values())
         def witness(v):
@@ -922,12 +938,24 @@ class TransitionViewWidget(ConceptSessionControls):
         with ag.context as ac:
             ac.new_state(ag.init_cond)
         post = ag.execute(init_action, None, None, 'initialize')
-        for n in range(n_steps):
-            res = ag.bmc(post, clauses, ta._analysis_state.crg)
+        for n in range(n_steps + 1):
+            res = ag.bmc(post, clauses, ta._analysis_state.crg if add_to_crg else None)
+            if verbose:
+                if res is None:
+                    msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                else:
+                    msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                print '\n' + msg + '\n'
             if res is not None:
                 ta.step()
                 self.show_result('BMC with bound {} found a counter-example to:\n{}'.format(
-                    n_steps,
+                    n,
                     str(conj.to_formula()),
                 ))
                 return True
@@ -1005,21 +1033,40 @@ class TransitionViewWidget(ConceptSessionControls):
         nodes = frozenset(self.concept_session.domain.concepts['nodes'])
         for atom in atoms:
             if type(atom) is lg.Eq:
-                n1 = atom.t1.name
-                n2 = atom.t2.name
-                if n1 in nodes and n2 in nodes:
-                    self.concept_session.add_custom_edge('=', n1, n2)
-                elif n1 in nodes:
-                    label_name = '={}'.format(n2)
-                    assert label_name in self.concept_session.domain.concepts, atom
-                    self.concept_session.add_custom_node_label(n1, label_name)
+                assert type(atom.t2) is lg.Const
+                if type(atom.t1) is lg.Const:
+                    n1 = atom.t1.name
+                    n2 = atom.t2.name
+                    if n1 in nodes and n2 in nodes:
+                        self.concept_session.add_custom_edge('=', n1, n2)
+                    elif n1 in nodes:
+                        label_name = '={}'.format(n2)
+                        assert label_name in self.concept_session.domain.concepts, atom
+                        self.concept_session.add_custom_node_label(n1, label_name)
+                    else:
+                        # TODO
+                        # assert False, atom
+                        pass
                 else:
-                    assert False, atom
+                    assert type(atom.t1) is lg.Apply
+                    if atom.t1.func.sort.arity == 1:
+                        assert type(atom.t1.terms[0]) is lg.Const
+                        self.concept_session.add_custom_edge(
+                            atom.t1.func.name,
+                            atom.t1.terms[0].name,
+                            atom.t2.name,
+                        )
+                    else:
+                        # TODO: support higher arity
+                        pass
             elif type(atom) is lg.Apply:
                 if atom.func.sort.arity == 1:
                     self.concept_session.add_custom_node_label(atom.terms[0].name, atom.func.name)
                 elif atom.func.sort.arity == 2:
                     self.concept_session.add_custom_edge(*(c.name for c in atom))
+                else:
+                    # TODO: support higher arity
+                    pass
             else:
                 assert False, lit
         self.concept_session.widget = self
@@ -1035,12 +1082,14 @@ class TransitionViewWidget(ConceptSessionControls):
 
         self.edge_display_checkboxes['=']['transitive'].value = True
         self.edge_display_checkboxes['=']['all_to_all'].value = True
+        self.transitive_relations = []
 
         axioms = self.session.analysis_state.ivy_interp.background_theory()
         for c in self.session.analysis_state.ivy_interp.sig.symbols.values():
             if (type(c.sort) is lg.FunctionSort and
                 c.sort.arity == 2 and
-                c.sort.domain[0] == c.sort.domain[1]):
+                c.sort.domain[0] == c.sort.domain[1] and
+                c.sort.range == lg.Boolean):
                 X = lg.Var('X', c.sort.domain[0])
                 Y = lg.Var('Y', c.sort.domain[0])
                 Z = lg.Var('Z', c.sort.domain[0])
@@ -1048,6 +1097,7 @@ class TransitionViewWidget(ConceptSessionControls):
                 defined_symmetry = lg.ForAll([X, Y], lg.Or(c(X,X), lg.Not(c(Y,Y))))
                 t = Clauses([transitive, defined_symmetry])
                 if clauses_imply(axioms, t):
+                    self.transitive_relations.append(c.name)
                     self.edge_display_checkboxes[c.name]['transitive'].value = True
 
     def is_sufficient(self, button=None):
@@ -1277,33 +1327,33 @@ class AnalysisSessionWidget(object):
 
         self.box.children = [
             self.modal_messages, # invisible
-            self.concept.box, # will display in a separate dialog
+            # self.concept.box, # will display in a separate dialog
             self.transition_view.box, # will display in a separate dialog
 
             HBox(
                 [
-                    HBox(
-                        [self.proof_graph],
-                        flex=1,
-                        height='100%',
-                        overflow_x='hidden',
-                        overflow_y='hidden',
-                        _css=[
-                            (None, 'margin-right', '5px'),
-                            (None, 'min-width', '150px'),
-                        ],
-                    ),
-                    HBox(
-                        [self.arg],
-                        flex=2,
-                        height='100%',
-                        overflow_x='hidden',
-                        overflow_y='hidden',
-                        _css=[
-                            (None, 'margin-right', '5px'),
-                            (None, 'min-width', '150px'),
-                        ],
-                    ),
+                    # HBox(
+                    #     [self.proof_graph],
+                    #     flex=1,
+                    #     height='100%',
+                    #     overflow_x='hidden',
+                    #     overflow_y='hidden',
+                    #     _css=[
+                    #         (None, 'margin-right', '5px'),
+                    #         (None, 'min-width', '150px'),
+                    #     ],
+                    # ),
+                    # HBox(
+                    #     [self.arg],
+                    #     flex=2,
+                    #     height='100%',
+                    #     overflow_x='hidden',
+                    #     overflow_y='hidden',
+                    #     _css=[
+                    #         (None, 'margin-right', '5px'),
+                    #         (None, 'min-width', '150px'),
+                    #     ],
+                    # ),
                     widgets.HBox(
                         [self.crg],
                         flex=1,
@@ -1322,14 +1372,14 @@ class AnalysisSessionWidget(object):
                     (None, 'margin-bottom', '5px'),
                 ],
             ),
-            self.select_abstractor,
+            #self.select_abstractor,
             self.info_area,
-            self.step_box,
-            widgets.HBox(
-                self.buttons,
-                width='100%',
-                overflow_y='hidden',
-            ),
+            #self.step_box,
+            # widgets.HBox(
+            #     self.buttons,
+            #     width='100%',
+            #     overflow_y='hidden',
+            # ),
         ]
 
         self.arg_node_events = [

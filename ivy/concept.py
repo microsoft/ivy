@@ -471,6 +471,13 @@ def get_diagram_concept_domain(sig, diagram):
     return ConceptDomain(concepts, get_standard_combiners(), get_standard_combinations())
 
 
+def universe_element_to_concept_name(uc):
+    assert first_order_sort(uc.sort)
+    name = uc.name
+    if str(uc.sort) not in name:
+        name += ':{}'.format(uc.sort)
+    return name
+
 def get_structure_concept_domain(state, sig=None):
     """
     state is an ivy_interp.State with a .universe
@@ -491,9 +498,7 @@ def get_structure_concept_domain(state, sig=None):
     for uc in sorted(elements):
         # add unary equality concept
         X = Var('X', uc.sort)
-        name = uc.name
-        if str(uc.sort) not in name:
-            name += ':{}'.format(uc.sort)
+        name = universe_element_to_concept_name(uc)
         concepts[name] = Concept([X], Eq(X,uc))
         concepts['nodes'].append(name)
 
@@ -507,7 +512,7 @@ def get_structure_concept_domain(state, sig=None):
     #     for uc in state.universe[s]
     # )
 
-    # add concepts for relations and constants
+    # add concepts for functions, relations and constants
     state_formula = state.clauses.to_formula()
     symbols = used_constants(state_formula)
     if sig is not None:
@@ -523,29 +528,59 @@ def get_structure_concept_domain(state, sig=None):
             name = '={}'.format(c.name)
             concepts[name] = Concept([X], Eq(X,c))
 
-        elif type(c.sort) is FunctionSort and c.sort.arity == 1:
-            # add unary concept and label
-            X = Var('X', c.sort.domain[0])
-            name = '{}'.format(c.name)
-            concepts[name] = Concept([X], c(X))
+        elif type(c.sort) is FunctionSort and c.sort.range == Boolean:
+            # relation, support arity 1,2 and 3
+            # TODO: support higher arity relations
 
-        elif type(c.sort) is FunctionSort and c.sort.arity == 2:
-            # add binary concept and edge
-            X = Var('X', c.sort.domain[0])
-            Y = Var('Y', c.sort.domain[1])
-            name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y], c(X, Y))
+            if c.sort.arity == 1:
+                # add unary concept and label
+                X = Var('X', c.sort.domain[0])
+                name = '{}'.format(c.name)
+                concepts[name] = Concept([X], c(X))
 
-        elif type(c.sort) is FunctionSort and c.sort.arity == 3:
-            # add ternary concept
-            X = Var('X', c.sort.domain[0])
-            Y = Var('Y', c.sort.domain[1])
-            Z = Var('Z', c.sort.domain[2])
-            name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y, Z], c(X, Y, Z))
+            elif c.sort.arity == 2:
+                # add binary concept and edge
+                X = Var('X', c.sort.domain[0])
+                Y = Var('Y', c.sort.domain[1])
+                name = '{}'.format(c.name)
+                concepts[name] = Concept([X, Y], c(X, Y))
 
+            elif c.sort.arity == 3:
+                # add ternary concept
+                X = Var('X', c.sort.domain[0])
+                Y = Var('Y', c.sort.domain[1])
+                Z = Var('Z', c.sort.domain[2])
+                name = '{}'.format(c.name)
+                concepts[name] = Concept([X, Y, Z], c(X, Y, Z))
+
+            else:
+                # arity >= 4
+                pass
+
+        elif type(c.sort) is FunctionSort and c.sort.range != Boolean:
+            # function, support arity 1 and 2
+            # TODO: support higher arity functions
+
+            if c.sort.arity == 1:
+                # add binary concept and edge
+                X = Var('X', c.sort.domain[0])
+                Y = Var('Y', c.sort.range)
+                name = '{}'.format(c.name)
+                concepts[name] = Concept([X, Y], Eq(c(X), Y))
+
+
+            elif c.sort.arity == 2:
+                # add ternary concept
+                X = Var('X', c.sort.domain[0])
+                Y = Var('Y', c.sort.domain[1])
+                Z = Var('Z', c.sort.range)
+                name = '{}'.format(c.name)
+                concepts[name] = Concept([X, Y, Z], Eq(c(X, Y), Z))
+
+            else:
+                # function with arity >= 3
+                pass
         else:
-            # skip other symbols
             pass
 
     return ConceptDomain(concepts, get_standard_combiners(), get_standard_combinations())
@@ -557,27 +592,28 @@ def get_structure_concept_abstract_value(state):
 
     result can be used as a cache for concept_alpha.alpha
     """
+    global _state
+    _state = state
     abstract_value = []
 
     # add node_info results for universe elements
     elements = [uc for s in state.universe for uc in state.universe[s]]
-    nodes = []
+    nodes = {}
     for uc in sorted(elements):
-        name = uc.name
-        nodes.append(name)
+        name = universe_element_to_concept_name(uc)
+        nodes[uc] = name
         abstract_value += [
             (('node_info', 'none', name), False),
             (('node_info', 'at_least_one', name), True),
             (('node_info', 'at_most_one', name), True),
         ]
-    nodes = frozenset(nodes)
 
-    # add concepts for relations and constants
+    # add concepts for functions, relations and constants
     state_formula = state.clauses.to_formula()
     assert type(state_formula) is And
     for lit in state_formula:
         if type(lit) is ForAll:
-            # universe constaint
+            # universe constraint
             continue
 
         if type(lit) is Not:
@@ -586,20 +622,51 @@ def get_structure_concept_abstract_value(state):
         else:
             polarity = True
 
+        if type(lit) is Apply:
+            assert lit.func.sort.range == Boolean, repr(lit)
+
         if type(lit) is Eq:
-            if lit.t1.name not in nodes:
+            if lit.t1 not in nodes:
                 assert polarity is True
-                label_name = '={}'.format(lit.t1.name)
-                for node_name in nodes:
-                    polarity = node_name == lit.t2.name
-                    abstract_value += [
-                        (('node_label', 'node_necessarily', node_name, label_name), polarity),
-                        (('node_label', 'node_necessarily_not', node_name, label_name), not polarity),
-                    ]
+                assert type(lit.t2) is Const
+                assert lit.t2 in nodes
+                if type(lit.t1) is Const:
+                    # unary equality concept
+                    label_name = '={}'.format(lit.t1.name)
+                    for uc, node_name in nodes.iteritems():
+                        if uc.sort != lit.t2.sort:
+                            continue
+                        polarity = uc == lit.t2
+                        abstract_value += [
+                            (('node_label', 'node_necessarily', node_name, label_name), polarity),
+                            (('node_label', 'node_necessarily_not', node_name, label_name), not polarity),
+                        ]
+
+                elif type(lit.t1) is Apply:
+                    # function concept
+                    if lit.t1.func.sort.arity == 1:
+                        edge_name = lit.t1.func.name
+                        source_name = nodes[lit.t1.terms[0]]
+                        for uc, target_name in nodes.iteritems():
+                            if uc.sort != lit.t2.sort:
+                                continue
+                            polarity = uc == lit.t2
+                            abstract_value += [
+                                (('edge_info', 'all_to_all', edge_name, source_name, target_name),
+                                 polarity),
+                                (('edge_info', 'none_to_none', edge_name, source_name, target_name),
+                                 not polarity),
+                            ]
+                    else:
+                        # TODO: support higher arities (projections)
+                        pass
+
+                else:
+                    assert False, lit
 
         elif type(lit) is Apply and lit.func.sort.arity == 1:
             label_name = lit.func.name
-            node_name = lit.terms[0].name
+            node_name = nodes[lit.terms[0]]
             abstract_value += [
                 (('node_label', 'node_necessarily', node_name, label_name), polarity),
                 (('node_label', 'node_necessarily_not', node_name, label_name), not polarity),
@@ -607,8 +674,8 @@ def get_structure_concept_abstract_value(state):
 
         elif type(lit) is Apply and lit.func.sort.arity == 2:
             edge_name = lit.func.name
-            source_name = lit.terms[0].name
-            target_name = lit.terms[1].name
+            source_name = nodes[lit.terms[0]]
+            target_name = nodes[lit.terms[1]]
             abstract_value += [
                 (('edge_info', 'all_to_all', edge_name, source_name, target_name),
                  polarity),
@@ -626,7 +693,7 @@ def get_structure_concept_abstract_value(state):
     return dict(abstract_value)
 
 
-def get_structure_renaming(state):
+def get_structure_renaming(state, order_relations=()):
     """
     state is an ivy_interp.State with a .universe
 
@@ -634,6 +701,8 @@ def get_structure_renaming(state):
     names that should be used for displaying to the user
     """
     from ivy_utils import topological_sort
+
+    order_relations = frozenset(order_relations)
 
     # add node_info results for universe elements
     elements = list(set([uc for s in state.universe for uc in state.universe[s]]))
@@ -644,7 +713,11 @@ def get_structure_renaming(state):
     assert type(state_formula) is And
     order = []
     for lit in state_formula:
-        if type(lit) is Apply and lit.func.sort.arity == 2 and lit.func.name in ('reach', 'le'):
+        if (type(lit) is Apply and
+            lit.func.sort.arity == 2 and
+            lit.func.sort.domain[0] == lit.func.sort.domain[1] and
+            lit.func.sort.range == Boolean and
+            lit.func.name in order_relations):
             order.append(lit.terms)
     elements = topological_sort(elements, order, lambda c: c.name)
 

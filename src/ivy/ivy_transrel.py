@@ -38,6 +38,7 @@ from ivy_logic_utils import used_symbols_clauses, rename_clauses, clauses_using_
 from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_sat, clauses_case, get_model_clauses, clauses_model_to_clauses, get_small_model
 import ivy_logic
 import ivy_logic_utils as lu
+import ivy_utils as iu
 from logic_util import is_tautology_equality
 
 
@@ -389,9 +390,9 @@ def remove_taut_eqs_clauses(clauses):
 def extract_pre_post_model(clauses,model,updated):
     renaming = dict((v,new(v)) for v in updated)
     ignore = lambda s: s.is_skolem() or is_new(s)
-    pre_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    pre_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals=use_numerals())
     ignore = lambda s: s.is_skolem() or (not is_new(s) and s in renaming)
-    post_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals = True)
+    post_clauses = clauses_model_to_clauses(clauses,ignore = ignore,model = model,numerals=use_numerals())
     post_clauses = rename_clauses(post_clauses,inverse_map(renaming))
     return map(remove_taut_eqs_clauses,(pre_clauses,post_clauses))
 
@@ -565,7 +566,7 @@ class History(object):
             img = set(renaming[s] for s in renaming if not s.is_skolem())
             ignore = lambda s: self.ignore(s,img,renaming)
             # get the sub-mode for the given past time as a formula
-            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals = True)
+            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals=use_numerals())
             # map this formula into the past using inverse map
             clauses = rename_clauses(clauses,inverse_map(renaming))
             # remove tautology equalities, TODO: not sure if this is correct here
@@ -580,6 +581,10 @@ class History(object):
                 renaming = compose_maps(next(maps),renaming)
             except StopIteration:
                 break
-        uvs = model.universes(numerals=True)
+        uvs = model.universes(numerals=use_numerals())
         print "uvs: {}".format(uvs)
         return uvs, [pure_state(clauses) for clauses in reversed(states)]
+
+
+def use_numerals():
+    return iu.use_numerals.get()
