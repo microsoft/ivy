@@ -55,6 +55,15 @@ Run Ivy on an example, using the Tcl/Tk user interface:
     $ cd examples/ivy
     $ ivy client_server.ivy
 
+## emacs mode
+
+An emacs major mode for Ivy is available in lib/emacs/ivy-mode.el. Put this file
+somewhere in your emacs load path and add the following code to your
+.emacs:
+
+    (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
+    (autoload 'ivy-mode "ivy" "Major mode for editing Ivy code" t)
+
 
 
 
