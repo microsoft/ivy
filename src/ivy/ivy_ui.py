@@ -24,198 +24,96 @@ import ivy_utils as iu
 # app.eval('tk::PlaceWindow %s center' % app.winfo_pathname(app.winfo_id()) )
 
 
-class RunContext(object):
-    """ Context Manager that handles exceptions and reports errors. """
-    def __init__(self,parent):
-        """ parent should be a window """
-        self.parent = parent
-    def __enter__(self):
-        self.parent.busy()
-        return self
-    def __exit__(self,exc_type, exc_val, exc_tb):
-        self.parent.ready()
-        if exc_type == IvyError:
-            dlg = Toplevel(self.parent)
-            Label(dlg, text=repr(exc_val)).pack(side=TOP)
-            b = Button(dlg, text="OK", command=dlg.destroy)
-            b.pack(padx=5,side=TOP)
-#            uu.center_window_on_window(dlg,self.parent.root)
-            self.parent.tk.wait_window(dlg)
-            return True
-        return False # don't block any exceptions
 
 modes = ["abstract","concrete","bounded","induction"]
 default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
 class AnalysisGraphWidget(Canvas):
-    def __init__(self,tk,g,root=None,toplevel=None):
-        if root == None:
-            root = tk
-        if toplevel==None:
-            toplevel=root
-#        menubar = Menu(toplevel)
-        menubar = uu.MenuBar(root)
-        menubar.pack(side=TOP,fill=X)
-#        filemenu = Menu(menubar, tearoff=0)
-        filemenu = menubar.add("File")
-        filemenu.add_command(label="Save",command=self.save)
-        filemenu.add_command(label="Save abstraction",command=self.save_abstraction)
-        filemenu.add_separator()
-        filemenu.add_command(label="Remove tab", command=lambda self=self: self.ui_parent.remove(self))
-        filemenu.add_command(label="Exit", command=tk.quit)
-#        menubar.add_cascade(label="File", menu=filemenu)
-#        modemenu = Menu(menubar, tearoff=0)
-        modemenu = menubar.add("Mode")
-        self.mode = StringVar(root,default_mode.get())
-        modemenu.add("radiobutton",label="Concrete",variable=self.mode,value="concrete")
-        modemenu.add("radiobutton",label="Abstract",variable=self.mode,value="abstract")
-        modemenu.add("radiobutton",label="Bounded",variable=self.mode,value="bounded")
-        modemenu.add("radiobutton",label="Induction",variable=self.mode,value="induction")
-#        menubar.add_cascade(label="Mode", menu=modemenu)
-#        actionmenu = Menu(menubar, tearoff=0)
-        actionmenu = menubar.add("Action")
-        actionmenu.add_command(label="Recalculate all",command=self.recalculate_all)
-        actionmenu.add_command(label="Show reachable states",command=self.show_reachable_states)
-#        menubar.add_cascade(label="Action", menu=actionmenu)
-#        toplevel.config(menu=menubar)
 
-#        sw= Tix.ScrolledWindow(root, scrollbar=BOTH) # just the vertical scrollbar
-#        sw.pack(fill=BOTH, expand=1)
+    # Save the current arg and maybe concept graph in a file
 
-        Canvas.__init__(self,root)
-        self.g = g
-        self.tk = tk
-        self.root = root
-        self.mark = None
-        tk.eval('package require Tcldot')
-        self.pack(fill=BOTH,expand=1)
-        self.rebuild()
-    def busy(self):
-        self.tk.config(cursor="watch")
-        self.tk.update()
-        self.config(cursor="watch")
-    def ready(self):
-        self.tk.config(cursor="")
-        self.tk.update()
-        self.config(cursor="")
     def save(self):
-        f = tkFileDialog.asksaveasfile(mode='w',filetypes = [('analysis files', '.a2g')],title='Save analysis state as...',parent=self)
+        f = self.ui_parent.saveas_dialog('Save analysis state as...',[('analysis files', '.a2g')])
         if f:
             pickle.dump(self.g,f, protocol=2)
             f.close()
+
+    # Save the current abstract domain in a file
+
     def save_abstraction(self):
-        f = tkFileDialog.asksaveasfile(mode='w',filetypes = [('ivy files', '.ivy')],title='Save abstraction as...',parent=self)
+        f = self.ui_parent.saveas_dialog('Save abstraction as...',[('ivy files', '.ivy')])
         if f:
             for concept in self.g.domain.concept_spaces:
                 f.write('concept ' + repr(concept[0]) + ' = ' + repr(concept[1]) + '\n')
             f.close()
     
+    # Get the display color of an ARG node. Used by UI.
+
     def node_color(self,node):
         return "green" if hasattr(node,'safe') and node.safe else "black"
 
-    def rebuild(self):
-        tk = self.tk
-        g = self.g
-        tk.eval('set graph [dotnew digraph forcelabels true]')
-        handle_to_node = dict()
-        self.node_to_handle = dict()
-        for (s,i) in zip(g.states,range(len(g.states))):
-                p = "%d" % i
-                shape = "point" if (s.clauses != None and s.clauses.is_false()) else "circle"
-                label = str(s.id) if s.clauses != None else '?'
-                color = self.node_color(s) 
-                handle = tk.eval('$graph addnode "' + p + '" label "' + label + '" shape ' + shape + ' color ' + color + ' fontsize 10 width 0.5 penwidth 2.0')
-                handle = 'node' + str(i+1) if handle.startswith('node0x') else handle
-                self.node_to_handle[i] = handle
-                handle_to_node[handle] = s
-        i = 0
-        edge_handles = []
-        for transition in g.transitions:
-                x,op,label,y = transition
-                # Curly braces don't survive tcldot (even if they balance). We work around this by replacing them with digraphs
-                # and then fixing it below by modding the text of the canvas items. Also, we want our code labels to be left 
-                # justified, so we end the lines with \l, which dot recognizes. Note the backslashes are escaped, since this
-                # is *not* a special character, it is a two-character sequence.
-                label = label.replace('}',']-').replace('{','-[')
-                label = label.replace('\n','\\l')+'\\l'
-                handle = tk.eval('$graph addedge "' + ("%d" % x.id) + '" "' + ("%d" % y.id) + '" label {' + label + '} fontsize 10 penwidth 2.0')
-                handle = 'edge' + str(i+1)  if handle.startswith('edge0x') else handle
-                edge_handles.append(handle)
-                i += 1
-                if isinstance(op,AnalysisSubgraph):
-                    self.tag_bind("0" + handle, "<Button-1>", lambda y, op=op: op.display(tk))
-                    self.tag_bind("1" + handle, "<Button-1>", lambda y, op=op: op.display(tk))
-                self.tag_bind("0" + handle, "<Button-3>", lambda ev, transition=transition: self.right_click_edge(ev,transition))
-                self.tag_bind("1" + handle, "<Button-3>", lambda ev, transition=transition: self.right_click_edge(ev,transition))
-        for (x,y) in g.covering:
-                handle = tk.eval('$graph addedge "' + ("%d" % x.id) + '" "' + ("%d" % y.id) + '" style dashed')
-        self.delete(ALL)
-#        print tk.eval('$graph render ' + self._w  + ' DOT')
-        tk.eval('eval [$graph render ' + self._w  + ' DOT]')
-        self.config(scrollregion=self.bbox(ALL))
-        for x in handle_to_node:
-            n = handle_to_node[x]
-#            print "x = {}".format(x)
-#            print "n = {}".format(n)
-            self.tag_bind("0" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            self.tag_bind("1" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            self.tag_bind("0" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
-            self.tag_bind("1" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
-        for x in edge_handles:
-            items = self.find_withtag("0" + x)
-#            print 'items:{}'.format(items)
-            for item in items:
-                text = self.itemcget(item,'text')
-                text = text.replace('-[','{').replace(']-','}')
-                self.itemconfig(item,text=text)
-        self.show_mark(True)
+    # Show a state in the current concept graph, or create a concept graph
 
-    def update_node_color(self,node):
-        for item in self.find_withtag("1"+self.node_to_handle[node.id]):
-            self.itemconfig(item,outline=self.node_color(node))
-
-    def show_mark(self,on=True):
-        if self.mark in self.node_to_handle:
-            for item in self.find_withtag("1"+self.node_to_handle[self.mark]):
-                self.itemconfig(item,fill=('red' if on else 'white'))
     def view_state(self,n,clauses):
         print "state: {}".format(clauses)
         if hasattr(self,'current_concept_graph') and self.current_concept_graph.winfo_exists():
             self.current_concept_graph.set_parent_state(n,clauses)
             return
         sg = self.g.concept_graph(n,clauses)
-        self.current_concept_graph = ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
+        self.current_concept_graph = self.show_graph(sg)
+
+    # TODO: unsure what this does
+
     def view_concrete_trace(self,n,conc):
         pass
 #        ui_create(self.g.make_concrete_trace(n,conc))
-    def left_click_node(self,event,n):
-        if n.clauses != None:
-            self.view_state(n,n.clauses)
-    def right_click_node(self,event,n):
-        tk = self.tk
-        g = self.g
-        self.popup = Menu(tk, tearoff=0)
-        self.popup.add_command(label="Execute action:")
-        self.popup.add_separator()
-        state_equations = g.state_actions(n)
-        for a in sorted(state_equations, key=state_equation_label):
-            self.popup.add_command(label=state_equation_label(a),command = lambda n=n,a=a: self.do_state_action(a))
-        self.popup.add_separator()
-        self.popup.add_command(label='Check safety',command = lambda n=n: self.check_safety_node(n))
-        self.popup.add_command(label='Extend',command = lambda n=n: self.find_extension(n))
-        self.popup.add_command(label='Mark',command = lambda n=n: self.mark_node(n))
-        self.popup.add_command(label='Cover by marked',command = lambda n=n: self.cover_node(n))
-        self.popup.add_command(label='Join with marked',command = lambda n=n: self.join_node(n))
-        self.popup.add_command(label='Try conjecture',command = lambda n=n: self.try_conjecture(n))
-        self.popup.add_command(label='Try remembered goal',command = lambda n=n: self.try_remembered_graph(n))
-        self.popup.add_command(label='Delete',command = lambda n=n: self.delete_node(n))
-        self.popup.tk_popup(event.x_root, event.y_root, 0)
+
+
+    # Get the commands for the node context menu
+
+    def node_commands(self):
+        return [
+          ('Check safety',self.check_safety_node),
+          ('Extend',self.find_extension),
+          ('Mark',self.mark_node),
+          ('Cover by marked',self.cover_node),
+          ('Join with marked',self.join_node),
+          ('Try conjecture',self.try_conjecture),
+          ('Try remembered goal',self.try_remembered_graph),
+          ('Delete',self.delete_node),
+        ]
+
+    # Get the commands for the node execute menu
+
+    def node_execute_commands(self,n):
+        state_equations = self.g.state_actions(n)
+        return [(state_equation_label(a), lambda a=a: self.do_state_action(a))
+                for a in sorted(state_equations, key=state_equation_label)]
+
+    # Get the actions for the edge context menu
+
+    def edge_actions(self,transition):
+        return [
+            ("Recalculate",self.recalculate_edge),
+            ("Decompose",self.decompose_edge),
+            ("View Source",self.view_source_edge),
+            ]
+
+
+    # Set the marked node
+
     def mark_node(self,n):
         self.show_mark(False)
         self.mark = n.id
         self.show_mark(True)
+
+    # Get the marked node
+
     def get_mark(self):
         return self.g.states[self.mark]
+
+    # Try covering a node by the marked node
+
     def cover_node(self,covered_node):
         g = self.g
         try:
@@ -223,43 +121,46 @@ class AnalysisGraphWidget(Canvas):
         except:
             return
         print "Trying to cover %s by %s" % (covered_node.id,covering_node.id)
-        with RunContext(self):
+        with self.ui_parent.run_context():
             if not g.cover(covered_node,covering_node):
                 raise IvyError(None,"Covering failed")
         self.rebuild()
+
+    # Join a node with the marked node
+
     def join_node(self,node2):
         g = self.g
         try:
             node1 = self.get_mark()
         except:
             return
-        with RunContext(self):
+        with self.ui_parent.run_context():
             g.join(node1,node2,self.get_alpha())
         self.rebuild()
+
+    # Delete a node from the ARG
+
     def delete_node(self,deleted_node):
         g = self.g
         g.delete(deleted_node)
         self.rebuild()
-    def right_click_edge(self,event,transition):
-        tk = self.tk
-        g = self.g
-        self.popup = Menu(tk, tearoff=0)
-        self.popup.add_command(label="Dismiss")
-        self.popup.add_command(label="Recalculate",command = lambda transition=transition: self.recalculate_edge(transition))
-        self.popup.add_command(label="Decompose",command = lambda transition=transition: self.decompose_edge(transition))
-        self.popup.add_command(label="View Source",command = lambda transition=transition: self.view_source_edge(transition))
-        self.popup.tk_popup(event.x_root, event.y_root, 0)
+
+    # Set the abstract value of a state
 
     def set_state(self,state,clauses):
         state.clauses = clauses
+
+    # Get the abstraction operator
 
     def get_alpha(self):
         return (None if self.mode.get() == "concrete"
                 else ivy_alpha.alpha if (self.mode.get() == "abstract" or self.mode.get() == "induction")
                 else top_alpha)
 
+    # Evaluate a state equation to generate a new node
+
     def do_state_action(self,a):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             with EvalContext(check=False):
                 print "action {"
                 s = self.g.do_state_action(a,self.get_alpha())
@@ -267,15 +168,21 @@ class AnalysisGraphWidget(Canvas):
                 print "} action %s" % a.args[0]
         self.rebuild()
 
+    # Evaluate an action at a node
+
     def execute_action(self,n,a):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             print "action %s {" % a
             s = self.g.execute_action(a,n,self.get_alpha())
             print "} action %s" % a
         self.rebuild()
 
+    # Display the reached states tree
+
     def show_reachable_states(self):
         ui_create(self.reachable_tree)
+
+    # Reevaluate all the nodes in the ARG
 
     def recalculate_all(self):
         done = set()
@@ -284,31 +191,43 @@ class AnalysisGraphWidget(Canvas):
                 self.recalculate_edge(transition)
                 done.add(transition[-1].id)
 
+    # Reevaluate just one edges of the ARG
+    # DEPRECATED: use recalculate_state
+
     def recalculate_edge(self,transition):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             self.g.recalculate(transition,self.get_alpha())
         self.rebuild()
 
+    # Decompose an edge into smaller actions
+
     def decompose_edge(self,transition):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             art = self.g.decompose_edge(transition)
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
             ui_create(art)
 
+    # Browse the source of an edge
+
     def view_source_edge(self,transition):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             act = transition[1]
             assert isinstance(act,Action)
             if hasattr(act,'lineno'):
                 filename,lineno = act.lineno
                 self.ui_parent.browse(filename,lineno)
 
+    # Recalculate a state based on its equation
+
     def recalculate_state(self,state):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             self.g.recalculate_state(state,self.get_alpha())
         self.rebuild()
         
+    # Return a concrete reachability graph with all the known
+    # reachable states
+
     @property
     def reachable_tree(self):
         if  not hasattr(self,'_reachable_tree'):
@@ -317,8 +236,11 @@ class AnalysisGraphWidget(Canvas):
                 self._reachable_tree.add(s)
         return self._reachable_tree
 
+    # Try to reach a state in one step from known reached states under
+    # a constraint. TODO: the computation part should be moved to AnalysisGraph
+
     def one_step_reach(self,state,clauses):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             rs = reach_state_from_pred_no_abduction(state,clauses)
             if rs != None:
                 self.reachable_tree.add(rs)
@@ -328,20 +250,9 @@ class AnalysisGraphWidget(Canvas):
                     self.reachable_tree.transitions.append((rs.pred,action,label,rs))
                 f = filter_conjectures(state,rs.clauses)
                 if f:
-                    dlg = Toplevel(self)
-                    Label(dlg, text="The following conjectures have been eliminated:").pack()
-                    S = Scrollbar(dlg)
-                    T = Listbox(dlg, height=8, width=50, selectmode=SINGLE)
-                    S.pack(side=RIGHT, fill=Y)
-                    T.pack(side=LEFT, fill=Y)
-                    S.config(command=T.yview)
-                    T.config(yscrollcommand=S.set)
-                    for conj in f:
-                        T.insert(END, repr(clauses_to_formula(conj)))
-                    b = Button(dlg, text="OK", command=dlg.destroy)
-                    b.pack(padx=5,side=TOP)
-                    uu.center_window_on_window(dlg,self.root)
-                    self.tk.wait_window(dlg)
+                    msg = "The following conjectures have been eliminated:"
+                    items = [repr(clauses_to_formula(conj)) for conj in f]
+                    self.ui_parent.listbox_dialog(msg,items,on_cancel=None)
             return rs
 
     def check_safety_node(self,node):
@@ -371,38 +282,21 @@ class AnalysisGraphWidget(Canvas):
             
     def find_extension(self,node):
         try:
-            with RunContext(self):
+            with self.ui_parent.run_context():
                 a = next(self.g.state_extensions(node))
                 self.do_state_action(a)
         except StopIteration:
             uu.ok_dialog(self.tk,self.root,"State {} is closed.".format(node.id))
             
 
-    def try_conjecture(self,node):
-        dlg = Toplevel(self)
-        lbl = "Choose a conjecture to prove:"
-        Label(dlg, text=lbl).pack()
-        S = Scrollbar(dlg)
-        T = Listbox(dlg, height=8, width=50, selectmode=SINGLE)
-        S.pack(side=RIGHT, fill=Y)
-        T.pack(side=LEFT, fill=Y)
-        S.config(command=T.yview)
-        T.config(yscrollcommand=S.set)
-        udc = undecided_conjectures(node)
-        for conj in udc:
-            T.insert(END, repr(clauses_to_formula(conj)))
-        b = Button(dlg, text="Prove", command=functools.partial(self.do_try_conjecture,node,T,dlg,udc))
-        b.pack(padx=5,side=TOP)
-        b = Button(dlg, text="Cancel", command=dlg.destroy)
-        b.pack(padx=5,side=TOP)
-        uu.center_window_on_window(dlg,self.root)
-        self.tk.wait_window(dlg)
-        
-
-    def do_try_conjecture(self,node,T,dlg,udc):
-        sel = map(int, T.curselection())
-        if sel:
-            conj = udc[sel[0]]
+    def try_conjecture(self,node,conj=None):
+        if conj == None:
+            udc = undecided_conjectures(node)
+            udc_text = [repr(clauses_to_formula(conj)) for conj in udc]
+            msg = "Choose a conjecture to prove:"
+            cmd = lambda idx: self.try_conjecture(node,udc[idx])
+            self.ui_parent.listbox_dialog(msg,udc_text,command=cmd)
+        else:
             print "type(conj) = {}".format(type(conj))
             if hasattr(conj,'lineno'):
                 filename,lineno = conj.lineno
@@ -413,9 +307,7 @@ class AnalysisGraphWidget(Canvas):
             else:
                 sg = self.g.concept_graph(node)
                 sg.add_constraints(dual.clauses)
-                ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
-        dlg.destroy()
-
+                self.show_graph(sg)
 
     def try_remembered_graph(self,node):
         dlg = Toplevel(self)
@@ -456,7 +348,7 @@ class AnalysisGraphWidget(Canvas):
         self.remembered_graphs[name] = graph
 
     def reverse_update_concrete_clauses(self,state, clauses):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             try:
                 if state.pred != None:
                     print "reverse from %s to %s: post_state = %s" % (state.id,state.pred.id,clauses)
@@ -497,7 +389,7 @@ class AnalysisGraphWidget(Canvas):
         return ([[]],next_state)
 
     def conjecture(self,state,clauses):
-        with RunContext(self):
+        with self.ui_parent.run_context():
             return case_conjecture(state,clauses)
 
     def refine(self,concept,dlg):
@@ -532,61 +424,7 @@ def state_equation_label(se):
 
 class IvyUI(object):
     def __init__(self,tk=None,frame=None):
-        if tk == None:
-            tk = Tix.Tk()
-            tk.tk_setPalette(background='white')
-            tk.wm_title("ivy")
-            frame = tk
-        elif frame == None:
-            frame = Toplevel(tk)
-        self.tk = tk
-        self.frame = frame
-        self.notebook = Tix.NoteBook(frame)
-        self.notebook.pack(fill=BOTH,expand=1)
-        self.tab_counter = 0
-        self.tabs = 0
-        
-    def add(self,art,name=None,label=None):
-        self.tab_counter += 1
-        self.tabs += 1
-        if name == None:
-            name = "sheet_{}".format(self.tab_counter)
-        if label == None:
-            label = "Sheet {}".format(self.tab_counter)
-        tk = self.tk
-        nb = self.notebook
-        if not hasattr(art,'state_graphs'):
-            art.state_graphs = []
-        tab = nb.add(name,label=label) 
-        pw=Tix.PanedWindow(tab,orientation='horizontal')
-        pw.pack(fill=BOTH,expand=1)
-        frame=pw.add('f1')
-        state_frame=pw.add('f2')
-        hbar=Scrollbar(frame,orient=HORIZONTAL)
-        hbar.pack(side=BOTTOM,fill=X)
-        vbar=Scrollbar(frame,orient=VERTICAL)
-        vbar.pack(side=RIGHT,fill=Y)
-        gw = AnalysisGraphWidget(tk,art,frame)
-        gw.state_frame=state_frame
-        gw.ui_parent = self
-        gw.ui_tab_name = name
-        hbar.config(command=gw.xview)
-        vbar.config(command=gw.yview)
-        gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-        for sg in art.state_graphs:
-            ivy_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame)
-        nb.raise_page(name)
-
-    def remove(self,art):
-        self.notebook.delete(art.ui_tab_name)
-        self.tabs -= 1
-        if self.tabs == 0:
-            self.tk.quit()
-
-    def browse(self,filename,lineno):
-        if not (hasattr(self,'browser') and self.browser.winfo_exists()):
-            self.browser = uu.new_file_browser(self.tk)
-        self.browser.set(filename,lineno)
+        pass
 
 ui = None
 

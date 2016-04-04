@@ -105,8 +105,9 @@ def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None):
         T.insert(END, item)
     b = Button(dlg, text="OK", command=destroy_then_command_on_selection(dlg,T,command))
     b.pack(padx=5,side=TOP)
-    b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
-    b.pack(padx=5,side=TOP)
+    if on_cancel != None:
+        b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
+        b.pack(padx=5,side=TOP)
     center_window_on_window(dlg,root)
     tk.wait_window(dlg)
 

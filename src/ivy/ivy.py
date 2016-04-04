@@ -6,7 +6,7 @@ import sys
 import pickle
 import string
 from ivy_compiler import IvyError, ivy_new, ivy_load_file
-from ivy_ui import ui_main_loop
+from tk_ui import ui_main_loop
 from ivy_utils import Parameter, set_parameters
 import ivy_logic
 import proof as pf
