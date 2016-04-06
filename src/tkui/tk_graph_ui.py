@@ -13,11 +13,11 @@ import functools
 
 class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
-    def __init__(self,tk,g,root=None,ui_parent=None):
+    def __init__(self,tk,gs,root=None,ui_parent=None):
         if root == None:
             root = tk
         Canvas.__init__(self,root)
-        self.g = g
+        self.graph_stack = gs
         self.tk = tk
         tk.eval('package require Tcldot')
         self.pack(fill=BOTH,expand=1)
@@ -31,10 +31,6 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
     # our parent of our demise.
 
     def destroy(self):
-##        print "destroying graph canvas"
-        if self.parent != None:
-##            print "removing state graph"
-            self.parent.remove_state_graph(self.g)
         Canvas.destroy(self)
 
 

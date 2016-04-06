@@ -677,6 +677,35 @@ class Graph(object):
         with self.parent_state.domain.sig:
             s_add(self.solver,clauses_to_z3(self.solver_clauses))
 
+class GraphStack(object):
+    """ A Graph with an undo/redo stack. """
+    def __init__(self,graph):
+        self.current = graph
+        self.undo_stack = []
+        self.redo_stack = []
+        
+    def can_undo(self):
+        return len(self.undo_stack) > 0
+
+    def undo(self):
+        """ Roll back to most recent checkpoint """
+        if self.undo_stack:
+            self.redo_stack.append(self.current)
+            self.current = self.undo_stack[-1]
+            del self.undo_stack[-1]
+
+    def redo(self):
+        """ Undo most recent undo """
+        if self.redo_stack:
+            self.undo_stack.append(self.current)
+            self.current = self.redo_stack[-1]
+            del self.redo_stack[-1]
+
+    def checkpoint(self):
+        """ Record a checkpoint """
+        self.undo_stack.append(self.current.copy())
+        del self.redo_stack[:]
+
 def standard_graph(parent_state=None):
     gsig = parent_state.domain.sig if parent_state else sig
     nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
@@ -691,6 +720,6 @@ def standard_graph(parent_state=None):
         for n in g.all_nodes:
             if n.sort in parent_state.universe:
                 g.splatter(n,parent_state.universe[n.sort])
-    return g
+    return GraphStack(g)
     
 

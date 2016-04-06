@@ -22,6 +22,12 @@ repr = str
 
 class GraphWidget(object):
 
+    # Shorthand accessor for the current concept graph:
+
+    @property
+    def g(self):
+        return self.graph_stack.current
+
     def set_update_callback(self,update_callback):
         self.update_callback = update_callback
 
@@ -82,7 +88,7 @@ class GraphWidget(object):
     #    foo = n.fmla
         return [repr(n.sort)] + [make_lit_label(lit) for lit in foo]
 
-    # TODO: ???
+    # Should we group sorts into subgraphs?
 
     def make_subgraphs(self):
         return True
@@ -113,7 +119,7 @@ class GraphWidget(object):
                 res.append((make_lit_label(p[0]),act))
             else:
                 vs = used_variables_ast(p)
-                if not vs or next(v for v in vs).sort == self.lookup_node(node.name).sort:
+                if not vs or next(v for v in vs).sort == node.sort:
                     res.append((make_lit_label(p),act))
         return res
 
@@ -139,97 +145,79 @@ class GraphWidget(object):
             ("Dematerialize",self.dematerialize_edge),
         ]
 
+    # Look up a node in the current graph by name
+
     def lookup_node(self,name):
         return next(n for n in self.g.all_nodes if n.name == name)
 
     def checkpoint(self):
-        if hasattr(self,'redo_stack'):
-            del self.redo_stack
-        c = self.g.copy()
-        # Tricky: we want this to be a side effect on self.g, since
-        # this is shared with other objects. So instead of assigning
-        # self.g = c, we swap the contents of the objects. This could be fixed
-        # by changing copy() so that x.copy().pred = x, but carefully :-).
-#        self.g.__dict__, c.__dict__ = c.__dict__, self.g.__dict__
-#        self.g.pred = c
-        if self.parent != None:
-            self.parent.remove_state_graph(self.g)
-            self.parent.add_state_graph(c)
-        self.g = c
+        self.graph_stack.checkpoint()
         self.g.enabled_relations = set(x.name() for x in self.visible_relations())
 
     def undo(self):
-        if self.g.pred != None:
-            if self.parent != None:
-                self.parent.remove_state_graph(self.g)
-                self.parent.add_state_graph(self.g.pred)
-            if not hasattr(self,'redo_stack'):
-                self.redo_stack = []
-            self.redo_stack.append(self.g)
-            self.g = self.g.pred
-            self.update()
+        self.graph_stack.undo()
+        self.update()
 
     def redo(self):
-        if not hasattr(self,'redo_stack') or not self.redo_stack:
-            return
-        if self.parent != None:
-            self.parent.remove_state_graph(self.g)
-        self.g = self.redo_stack.pop()
-        if self.parent != None:
-            self.parent.add_state_graph(self.g)
+        self.graph_stack.redo()
         self.update()
 
+    # Undo to the most recent backtrack point
+
     def backtrack(self):
-        g = self.g
-        while g.pred != None and "backtrack_point" not in g.attributes:
-#            print "backing up..."
-            g = g.pred
-        if "backtrack_point" in g.attributes:
-            g.attributes.remove("backtrack_point")
-        if self.parent != None:
-            self.parent.remove_state_graph(self.g)
-            self.parent.add_state_graph(g)
-        self.g = g
+        gs = self.graph_stack
+        while gs.can_undo() and "backtrack_point" not in gs.current.attributes:
+            gs.undo()
+        if "backtrack_point" in gs.current.attributes:
+            gs.current.attributes.remove("backtrack_point")
         self.update()
         
+    # make the state concrete by adding concrete state constraints
+
     def concrete(self):
         self.checkpoint()
         g = self.g
-        # make the state concrete by adding concrete state constraints
-#        print "concrete: %s" % g.concrete
         g.set_state(g.state + g.concrete)
         self.update()
 
+    # return the set of visible concepts (those represented in any way
+    # in the graph)
+    
     def visible_relations(self):
         return [rel for rel in self.g.relations if any(e.get() for e in self.get_enabled(rel))]
 
+    # DEPRECATED: replace abstract state with visible facts
+
     def replace(self):
         rels = self.visible_relations()
-##        print "rels: %s" % rels
         clauses = self.g.get_facts(rels)
         if self.parent != None and self.g.parent_state != None:
-##            print "foo!"
             self.parent.set_state(self.g.parent_state,clauses)
+
+    # Get the enabled polarities for a concept
 
     def displayed_relation_values(self,rel):
         return [val for (val,idx) in [('true',0),('false',2)] if self.get_enabled(rel)[idx].get()]
+
+    # Gather the definite facts in the graph into a new goal
 
     def gather(self):
         self.checkpoint()
         g = self.g
         rels = [(rel,self.displayed_relation_values(rel)) for rel in self.g.relations]
-##        print "rels: %s" % rels
         clauses = self.g.get_facts(rels)
-##        print "clauses: %s" % clauses
         g.constraints = Clauses(clauses)
         self.update()
+
+    # Push the goal back to the the state's predecessor, if possible.
+    # If infeasible, refine the abstract domain with an interpolant.
+    # Sets the current goal as a backtrack point.
 
     def reverse(self):
         if self.parent != None and self.g.parent_state != None:
             self.g.attributes.append("backtrack_point")
             self.checkpoint()
             g = self.g
-##            print "g.constraints: %s" % g.constraints
             p = self.parent.reverse_update_concrete_clauses(g.parent_state, g.constraints)
             if p == None:
                 self.ui_parent.ok_dialog("Cannot reverse.")
@@ -239,8 +227,11 @@ class GraphWidget(object):
             g.parent_state = parent_state
             g.set_state(and_clauses(parent_state.clauses,clauses))
             print "reverse: state = {}".format(g.state)
+            # This is a HACK to support "diagram"
             g.reverse_result = (parent_state.clauses,clauses)
             self.update()
+
+    # Recalculate the current state
 
     def recalculate(self):
         if self.parent != None and self.g.parent_state != None:
@@ -267,6 +258,8 @@ class GraphWidget(object):
             if self.update_callback != None:
                 self.update_callback()
 
+    # Record the current goal with a string name
+
     def remember(self,text):
         if text == None:
             msg = "Enter a name for this goal:"
@@ -286,8 +279,7 @@ class GraphWidget(object):
 
     def splatter(self,node):
         self.checkpoint()
-        cn = self.lookup_node(node.name)
-        self.g.splatter(cn)
+        self.g.splatter(node)
         self.update()
 
     # Change the parent state, keeping concepts
@@ -379,7 +371,7 @@ class GraphWidget(object):
 
     def split(self,p,node):
         self.checkpoint()
-        cn = self.lookup_node(node.name)
+        cn = node
         self.g.split(cn,p)
         self.update()
 
@@ -397,18 +389,14 @@ class GraphWidget(object):
         
     def empty(self,node):
         self.checkpoint()
-        cn = self.lookup_node(node.name)
-        self.g.empty(cn)
+        self.g.empty(node)
         self.update()
 
     # Materialize a node.
 
     def materialize(self,node):
-#        if not self.lookup_node(node.name).summary:
-#            return # no point in materializing singleton nodes
         self.checkpoint()
-        cn = self.lookup_node(node.name)
-        self.g.materialize(cn)
+        self.g.materialize(node)
         self.update()
 
     # Materialize an edge from the selected node to this one. User

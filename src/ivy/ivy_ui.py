@@ -445,12 +445,12 @@ class AnalysisGraphWidget(object):
     # DEPRECATED: add a concept graph to the ARG's list
 
     def add_state_graph(self,sg):
-        self.g.state_graphs.append(sg)
+        pass
 
     # DEPRECATED: remove a concept graph to the ARG's list
 
     def remove_state_graph(self,sg):
-        self.g.state_graphs.remove(sg)
+        pass
 
     # Bounded reachability: find a concrete path from initial node to
     # a given state satisfying err_cond in state.

@@ -285,9 +285,9 @@ class AnalysisGraph(object):
         bg = self.domain.background_theory(state.in_scope)
         print "bg: {}".format(bg)
         sg = standard_graph(state)
-        sg.set_state(and_clauses(clauses,bg))
-        sg.set_concrete([])  # TODO: get rid of this
-        self.state_graphs.append(sg)
+        # TODO: following shouldn't be needed.
+        sg.current.set_state(and_clauses(clauses,bg))
+        sg.current.set_concrete([])  # TODO: get rid of this
         return sg
 
     def transition_to(self,state):
