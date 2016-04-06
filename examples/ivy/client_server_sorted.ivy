@@ -34,6 +34,6 @@ action error = {
   assume x ~= z & c(x,y) & c(z,y)
 }
 
-concept c1(X,Y,Z) = (c(X,Z) * ~X = Y * c(Y,Z))
+# concept c1(X,Y,Z) = (c(X,Z) * ~X = Y * c(Y,Z))
 
 conjecture (X = Z | ~c(X,Y) | ~c(Z,Y))

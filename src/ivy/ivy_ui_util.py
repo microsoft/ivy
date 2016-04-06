@@ -77,8 +77,8 @@ def center_window_on_window(toplevel,win):
     toplevel.geometry("%dx%d+%d+%d" % (size + (x, y)))
 
 def destroy_then_aux(dlg,command):
-    dlg.destroy()
     command()
+    dlg.destroy()
 
 def destroy_then(dlg,command):
     return functools.partial(destroy_then_aux,dlg,command)
@@ -110,6 +110,42 @@ def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None):
         b.pack(padx=5,side=TOP)
     center_window_on_window(dlg,root)
     tk.wait_window(dlg)
+
+
+def text_dialog(tk,root,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None):
+    dlg = Toplevel(root)
+    Label(dlg, text=msg).pack()
+    S = Scrollbar(dlg)
+    T = Text(dlg, height=4, width=100)
+    S.pack(side=RIGHT, fill=Y)
+    T.pack(side=LEFT, fill=Y)
+    S.config(command=T.yview)
+    T.config(yscrollcommand=S.set)
+    T.insert(END, text)
+    lbl = command_label or "OK"
+    b = Button(dlg, text=lbl, command=destroy_then(dlg,command))
+    b.pack(padx=5,side=TOP)
+    if on_cancel != None:
+        b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
+        b.pack(padx=5,side=TOP)
+    center_window_on_window(dlg,root)
+    tk.wait_window(dlg)
+
+def entry_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,command_label=None):
+    dlg = Toplevel(root)
+    Label(dlg, text=msg).pack()
+    e = Entry(dlg)
+    e.focus()
+    e.pack()
+    action = destroy_then(dlg,lambda command=command, e=e: command(e.get()))
+    e.bind('<Return>', lambda q,action=action: action())
+    lbl = command_label or "OK"
+    Button(dlg, text=lbl,command=action).pack(padx=5,side=TOP)
+    if on_cancel != None:
+        b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel)).pack(padx=5,side=TOP)
+    center_window_on_window(dlg,root)
+    tk.wait_window(dlg)
+
 
 def ok_cancel_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None):
     dlg = Toplevel(root)

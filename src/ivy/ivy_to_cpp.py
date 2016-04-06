@@ -1147,6 +1147,7 @@ if __name__ == "__main__":
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     ic.set_create_big_action(False)
+    ic.set_interpret_all_sorts(True)
     with im.Module():
         ivy.ivy_init()
 

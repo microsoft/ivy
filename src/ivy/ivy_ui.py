@@ -6,9 +6,6 @@ from ivy_graph import *
 from string import *
 import copy
 import functools
-from Tkinter import *
-import Tkconstants, tkFileDialog
-import Tix
 import pickle
 from ivy_concept_space import clauses_to_concept
 import ivy_actions
@@ -28,7 +25,7 @@ import ivy_utils as iu
 modes = ["abstract","concrete","bounded","induction"]
 default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
-class AnalysisGraphWidget(Canvas):
+class AnalysisGraphWidget(object):
 
     # Save the current arg and maybe concept graph in a file
 
@@ -66,7 +63,7 @@ class AnalysisGraphWidget(Canvas):
 
     def view_concrete_trace(self,n,conc):
         pass
-#        ui_create(self.g.make_concrete_trace(n,conc))
+#        self.ui_parent.add(self.g.make_concrete_trace(n,conc))
 
 
     # Get the commands for the node context menu
@@ -180,7 +177,7 @@ class AnalysisGraphWidget(Canvas):
     # Display the reached states tree
 
     def show_reachable_states(self):
-        ui_create(self.reachable_tree)
+        self.ui_parent.add(self.reachable_tree)
 
     # Reevaluate all the nodes in the ARG
 
@@ -206,7 +203,7 @@ class AnalysisGraphWidget(Canvas):
             art = self.g.decompose_edge(transition)
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
-            ui_create(art)
+            self.ui_parent.add(art)
 
     # Browse the source of an edge
 
@@ -237,7 +234,8 @@ class AnalysisGraphWidget(Canvas):
         return self._reachable_tree
 
     # Try to reach a state in one step from known reached states under
-    # a constraint. TODO: the computation part should be moved to AnalysisGraph
+    # a constraint. TODO: the computation part should be moved to
+    # AnalysisGraph
 
     def one_step_reach(self,state,clauses):
         with self.ui_parent.run_context():
@@ -255,39 +253,70 @@ class AnalysisGraphWidget(Canvas):
                     self.ui_parent.listbox_dialog(msg,items,on_cancel=None)
             return rs
 
-    def check_safety_node(self,node):
-        if self.mode.get() != "bounded":
-            node.safe = self.g.check_safety(node)
+    # Check the safety of a state on a path from the initial
+    # state. This is not really BMC checking since only the last state
+    # is checked. To be marked safe, the node must satsify any
+    # specified safety condition, and the incoming transition must not
+    # have any failures.
+
+    def check_bounded_safety(self,node):
+        res = self.g.check_bounded_safety(node)
+        if res == None:
+            node.safe = True
             self.update_node_color(node)
-            if not node.safe:
-                bcs = []
-                if node.safe.clauses != None:
-                    bcs.append(("View unsafe states",functools.partial(self.view_state,node.safe.state,node.safe.clauses)))
-                if node.safe.conc != None:
-                    bcs.append(("View concrete trace",functools.partial(self.view_concrete_trace,node.safe.state,node.safe.conc)))
-                uu.buttons_dialog_cancel(self.tk,self.root,"The node is not proved safe: {}".format(node.safe.msg),bcs)
         else:
-#                print "bounded check: node.safe.clauses={}".format(node.safe.clauses)
-            res = self.g.check_bounded_safety(node)
-            if res == None:
-                node.safe = True
-                self.update_node_color(node)
-            else:
-                node.safe = False
-                uu.ok_cancel_dialog(self.tk,self.root,"The node is unsafe: View error trace?",
-                                        command=functools.partial(self.view_ag,res))
+            node.safe = False
+            msg = "The node is unsafe: View error trace?"
+            cmd = functools.partial(self.view_ag,res)
+            self.ui_parent.ok_cancel_dialog(msg,cmd)
+
+    # Check local safety of a node. A node is locally safe if its
+    # abstract state implies any safety conditions and if if its
+    # predecessor's abstrafct state implies the weakest precondition
+    # of its incoming action.
+
+    def check_local_safety(self,node):
+        node.safe = self.g.check_safety(node)
+        self.update_node_color(node)
+        if not node.safe:
+            bcs = []
+            if node.safe.clauses != None:
+                bcs.append(("View unsafe states",functools.partial(self.view_state,node.safe.state,node.safe.clauses)))
+            if node.safe.conc != None:
+                bcs.append(("View concrete trace",functools.partial(self.view_concrete_trace,node.safe.state,node.safe.conc)))
+            msg = "The node is not proved safe: {}".format(node.safe.msg)
+            self.ui_parent.buttons_dialog_cancel(msg,bcs)
+        
+    # Check safety of a node using the current mode.
+
+    def check_safety_node(self,node):
+        if self.mode.get() != "bounded" and self.mode.get() != "induction":
+            self.check_local_safety(node)
+        else:
+            self.check_bounded_safety(node)
+
+    # Add an ARG to the UI
 
     def view_ag(self,res):
-        ui_create(res)
+        self.ui_parent.add(res)
             
+    # Find an action that can extend the ARG at the given node,
+    # without being covered. This is a useful operation for lazy
+    # abstraction.
+
     def find_extension(self,node):
         try:
             with self.ui_parent.run_context():
                 a = next(self.g.state_extensions(node))
                 self.do_state_action(a)
         except StopIteration:
-            uu.ok_dialog(self.tk,self.root,"State {} is closed.".format(node.id))
+            self.ui_parent.ok_dialog("State {} is closed.".format(node.id))
             
+
+    # Set up to prove a conjecture at the given node. If no conjecture
+    # is given, display a list of not-yet-proven conjectures for the
+    # user to choose from. Also browses the source code of the
+    # conjecture. The proof method depends on the current mode.
 
     def try_conjecture(self,node,conj=None):
         if conj == None:
@@ -309,112 +338,130 @@ class AnalysisGraphWidget(Canvas):
                 sg.add_constraints(dual.clauses)
                 self.show_graph(sg)
 
-    def try_remembered_graph(self,node):
-        dlg = Toplevel(self)
-        lbl = "Choose a remembered goal:"
-        Label(dlg, text=lbl).pack()
-        S = Scrollbar(dlg)
-        T = Listbox(dlg, height=8, width=50, selectmode=SINGLE)
-        S.pack(side=RIGHT, fill=Y)
-        T.pack(side=LEFT, fill=Y)
-        S.config(command=T.yview)
-        T.config(yscrollcommand=S.set)
+    # Set up to prove a remembered subgoal. If no goal is given, display a list
+    # of remembered subgoals for the user. 
+
+    def try_remembered_graph(self,node, goal=None):
         if not hasattr(self,'remembered_graphs'):
             self.remembered_graphs = {}
-        names = [n for n in self.remembered_graphs]
-        for name in names:
-            T.insert(END, name)
-        b = Button(dlg, text="Try", command=functools.partial(self.do_try_remembered_graph,node,T,dlg,names))
-        b.pack(padx=5,side=TOP)
-        b = Button(dlg, text="Cancel", command=dlg.destroy)
-        b.pack(padx=5,side=TOP)
-        uu.center_window_on_window(dlg,self.root)
-        self.tk.wait_window(dlg)
-        
-
-    def do_try_remembered_graph(self,node,T,dlg,names):
-        sel = map(int, T.curselection())
-        dlg.destroy()
-        if sel:
-            sg = self.remembered_graphs[names[sel[0]]].copy()
+        if goal == None:
+            msg = "Choose a remembered goal:"
+            names = [n for n in self.remembered_graphs]
+            cmd = lambda idx: self.try_remembered_graph(node,names[idx])
+            self.ui_parent.listbox_dialog(msg,names,command=cmd)
+        else:
+            sg = self.remembered_graphs[goal].copy()
             sg.parent_state = node
             sg.set_state(and_clauses(node.clauses,sg.constraints))
             self.g.state_graphs.append(sg)
-            ivy_graph_ui.show_graph(sg,self.tk,parent=self)
+            self.show_graph(sg)
+
+    # Save a proof goal under a given name.
 
     def remember_graph(self,name,graph):
         if not hasattr(self,'remembered_graphs'):
             self.remembered_graphs = {}
         self.remembered_graphs[name] = graph
 
+    # This is the "reverse" step from lazy annotation or IC3, with
+    # refinement.  It tries to push back the proof goal "clauses" at
+    # node "state" to the predecessor state. If this feasible, the new
+    # proof goal is returned as a pair (clauses,state). If infeasible,
+    # an interpolant is computed that can be used as a refinement for
+    # the current node. In this case, the returned goal is "false". If
+    # here is no predecessor node, None is returned.
+
     def reverse_update_concrete_clauses(self,state, clauses):
         with self.ui_parent.run_context():
             try:
-                if state.pred != None:
-                    print "reverse from %s to %s: post_state = %s" % (state.id,state.pred.id,clauses)
-                    next_state = state.pred
-                    clauses = reverse_update_concrete_clauses(state,clauses)
-                    return (clauses,state.pred)
-
-                elif hasattr(state,'join_of') and state.join_of:
-                    next_state = state
-                    return reverse_join_concrete_clauses(state,state.join_of,clauses)
-
-                return None
-
+                return self.reverse_goal(state, clauses)
             except UnsatCoreWithInterpolant as ici:
 #                print "core: %s" % ici.core
 #                print "interp: %s" % ici.interp
                 if ici.interp != None:
-                    used_names = used_symbols_clauses(Clauses([[Literal(0,a)] for a,d in self.g.domain.concept_spaces]))
-                    name = unused_name_with_base('itp',set(s.name for s in used_names))
-                    concept = clauses_to_concept(name,ici.interp)
-                    dlg = Toplevel(self)
-                    Label(dlg, text="The pre-state is vacuous. The following concept can be used to prove your goal in the post-state:").pack()
-                    S = Scrollbar(dlg)
-                    T = Text(dlg, height=4, width=100)
-                    S.pack(side=RIGHT, fill=Y)
-                    T.pack(side=LEFT, fill=Y)
-                    S.config(command=T.yview)
-                    T.config(yscrollcommand=S.set)
-                    T.insert(END, 'concept ' + repr(concept[0]) + ' = ' + repr(concept[1]))
-                    b = Button(dlg, text="OK", command=dlg.destroy)
-                    b.pack(padx=5,side=TOP)
-                    b = Button(dlg, text="Refine", command=functools.partial(self.refine,concept,dlg))
-                    b.pack(padx=5,side=TOP)
-                    uu.center_window_on_window(dlg,self.root)
-                    self.tk.wait_window(dlg)
-                    return (false_clauses(),next_state)
+                    self.refine_with_interpolant(ici.interp)
+                    return (false_clauses(),state.pred)
                 raise IvyError(None,"UNSAT, but interpolant could not be computed")
-        return ([[]],next_state)
+
+    # This is the "reverse" step from lazy annotation or IC3.
+    # It tries to push back the proof goal "clauses" at node "state"
+    # to the predecessor state. If this feasible, the new proof goal
+    # is returned as a pair (clauses,state). If infeasible, an
+    # UnsatCoreWithInterpolant exception is raised. If
+    # here is no predecessor node, None is returned.
+
+    # TODO: this should really move to ARG, since there are not UI actions
+
+    def reverse_goal(self, state, clauses):
+        if state.pred != None:
+            print "reverse from %s to %s: post_state = %s" % (state.id,state.pred.id,clauses)
+            next_state = state.pred
+            clauses = reverse_update_concrete_clauses(state,clauses)
+            return (clauses,state.pred)
+        elif hasattr(state,'join_of') and state.join_of:
+            next_state = state
+            return reverse_join_concrete_clauses(state,state.join_of,clauses)
+        return None
+
+    # Refine the abstract domain with an interpolant (as a Clauses)
+    # Displays the refinement and gives the user the option to apply
+    # it.
+
+    def refine_with_interpolant(self,interp):
+        concept = self.interp_to_refinement(interp)
+        msg = "The pre-state is vacuous. The following concept can be used to prove your goal in the post-state:"
+        text = 'concept ' + repr(concept[0]) + ' = ' + repr(concept[1])
+        cmd = functools.partial(self.refine,concept)
+        self.ui_parent.text_dialog(msg,text,command=cmd,command_label="Refine")
+
+    # Refine the abstract domain with an interpolant (as a Clauses)
+    # Displays the refinement and gives the user the option to apply
+    # it. TODO: move to ARG.
+
+    def interp_to_refinement(self,interp):
+        used_names = used_symbols_clauses(Clauses([[Literal(0,a)] for a,d in self.g.domain.concept_spaces]))
+        name = unused_name_with_base('itp',set(s.name for s in used_names))
+        return clauses_to_concept(name,interp)
+
+    # Conjecture a separator between state underapprox and clauses.
+    # The separator must be true of all models of the underapprox and
+    # false in at least one model of clauses.
 
     def conjecture(self,state,clauses):
         with self.ui_parent.run_context():
             return case_conjecture(state,clauses)
 
-    def refine(self,concept,dlg):
+    # Refines the abstract domain by adding a new concept space.
+
+    def refine(self,concept):
         print "concept: {}".format(concept)
         self.g.domain.concept_spaces.append((concept[0],concept[1]))
-#        print "current concepts: {}".format(self.g.domain.concept_spaces)
-        dlg.destroy()
+
+    # Get a label for an ARG node
+
     def state_label(self,state):
         return str(state.id)
+
+    # DEPRECATED: add a concept graph to the ARG's list
+
     def add_state_graph(self,sg):
         self.g.state_graphs.append(sg)
+
+    # DEPRECATED: remove a concept graph to the ARG's list
+
     def remove_state_graph(self,sg):
         self.g.state_graphs.remove(sg)
+
+    # Bounded reachability: find a concrete path from initial node to
+    # a given state satisfying err_cond in state.
 
     def bmc(self,state,err_cond):
         res = self.g.bmc(state,err_cond)
         if res == None:
-            dlg = Toplevel(self)
-            Label(dlg, text="The condition is unreachable along the given path").pack()
-            b = Button(dlg, text="OK", command=dlg.destroy)
-            b.pack(padx=5,side=TOP)
-            uu.center_window_on_window(dlg,self.root)
-            self.tk.wait_window(dlg)
+            msg = "The condition is unreachable along the given path"
+            self.ui_parent.ok_dialog(msg)
             return
-        ui_create(res)
+        self.ui_parent.add(res)
 
 
 def state_equation_label(se):
@@ -423,18 +470,9 @@ def state_equation_label(se):
     return al if ac is None else al + ' -> ' + str(se.args[0])
 
 class IvyUI(object):
-    def __init__(self,tk=None,frame=None):
-        pass
+    pass
 
 ui = None
-
-def ui_create(art,tk=None,frame=None):
-    # if ui exists, ignore the requested frame and put the art in a
-    # tab of the global ui
-    global ui
-    if ui == None:
-        ui = IvyUI(tk,frame)
-    ui.add(art)
 
 def ui_main_loop(art, tk = None, frame = None):
     ui_create(art,tk,frame)

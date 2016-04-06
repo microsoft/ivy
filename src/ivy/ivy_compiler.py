@@ -521,6 +521,12 @@ def set_create_big_action(t):
     global create_big_action
     create_big_action = t
 
+interpret_all_sorts = False
+
+def set_interpret_all_sorts(t):
+    global interpret_all_sorts
+    interpret_all_sorts = t
+
 def startswith_some(s,prefixes):
     return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
 
@@ -535,9 +541,10 @@ def isolate_component(ag,isolate_name):
     verified = set(a.relname for a in isolate.verified())
     present = set(a.relname for a in isolate.present())
     present.update(verified)
-    for type_name in list(ivy_logic.sig.interp):
-        if not startswith_eq_some(type_name,present):
-            del ivy_logic.sig.interp[type_name]
+    if not interpret_all_sorts:
+        for type_name in list(ivy_logic.sig.interp):
+            if not startswith_eq_some(type_name,present):
+                del ivy_logic.sig.interp[type_name]
     print "interp: {}".format(ivy_logic.sig.interp) 
     delegates = set(s.delegated() for s in ag.delegates)
     for name in present:

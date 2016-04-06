@@ -5,7 +5,7 @@
 import ivy_ui
 import ivy_ui_util as uu
 import ivy_utils as iu
-import ivy_graph_ui
+import tk_graph_ui
 from Tkinter import *
 import Tkconstants, tkFileDialog
 import Tix
@@ -29,6 +29,11 @@ class RunContext(object):
             self.parent.tk.wait_window(dlg)
             return True
         return False # don't block any exceptions
+
+
+# This user interface has one window with a set of tabs containing
+# ARG's. There is a single window on the right hand side displaying a
+# concept graph (usually the current proof goal or concrete state).
 
 class TkUI(ivy_ui.IvyUI):
 
@@ -77,7 +82,7 @@ class TkUI(ivy_ui.IvyUI):
         vbar.config(command=gw.yview)
         gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
         for sg in art.state_graphs:
-            ivy_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame)
+            tk_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame,ui_parent=this)
         nb.raise_page(name)
 
     def remove(self,art):
@@ -93,12 +98,54 @@ class TkUI(ivy_ui.IvyUI):
             self.browser = uu.new_file_browser(self.tk)
         self.browser.set(filename,lineno)
 
+
+    # Show a message and get "OK"
+
+    def ok_dialog(self,msg):
+        uu.ok_dialog(self.tk,self.frame,msg)
+
+    # Show a message and get "OK" or cancel
+
+    def ok_cancel_dialog(self,msg,cmd):
+        uu.ok_cancel_dialog(self.tk,self.frame,msg,cmd)
+
+    # Create a dialog letting user choose from a list of string items.
+    # The command is called with the chosen item index. If the user
+    # selects "Cancel", on_cancel is called. If on_cancel is None
+    # no "Cancel" button is provided.
+
     def listbox_dialog(self,msg,items,command=lambda:None,on_cancel=lambda:None):
         uu.listbox_dialog(self.tk,self.frame,msg,items,command,on_cancel)
 
+    # Create a dialog showing a message and some text.  The command is
+    # called when the user selects "OK". If the user selects "Cancel",
+    # on_cancel is called. If on_cancel is None no "Cancel" button is
+    # provided. Parameter command_label is alternative text for "OK".
+
+    def text_dialog(self,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None):
+        uu.text_dialog(self.tk,self.frame,msg,text,command,on_cancel,command_label)
+
+    # Create a dialog showing a message and antry.  The command is
+    # called with the entry contents when the user selects "OK". If
+    # the user selects "Cancel", on_cancel is called. If on_cancel is
+    # None no "Cancel" button is provided. Parameter command_label is
+    # alternative text for "OK".
+
+    def entry_dialog(self,msg,command=lambda:None,on_cancel=lambda:None,command_label=None):
+        uu.entry_dialog(self.tk,self.frame,msg,command,on_cancel,command_label)
+
+    # Create a dialog with a message and some action buttons. Each button_command
+    # is a (label,function) pair.
+
+    def buttons_dialog_cancel(msg,button_commands,on_cancel=lambda:None):
+        uu.buttons_dialog_cancel(self.tk,self.frame,msg,button_commands,on_cancel=lambda:None)
+
+
+    # Create a "save as" dialog with given message and file types. Parameter
+    # filetypes is a list of pairs (extension, description).
+
     def saveas_dialog(self,msg,filetypes):
         return tkFileDialog.asksaveasfile(mode='w',filetypes=filetypes,title=msg,parent=self.frame)
-
 
     # Return a context object to use for a computation that might take
     # take or throw an error the needs reporting
@@ -120,7 +167,7 @@ class TkUI(ivy_ui.IvyUI):
         self.tk.update()
         self.frame.config(cursor="")
 
-class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget):
+class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
 
     def __init__(self,tk,g,root=None,toplevel=None):
         if root == None:
@@ -227,7 +274,7 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget):
     # Display a concept graph
 
     def show_graph(self,sg):
-        return ivy_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame)
+        return tk_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame,ui_parent=self.ui_parent)
 
 
     # Called if the status of a node changes to update display
@@ -272,7 +319,7 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget):
         self.popup.tk_popup(event.x_root, event.y_root, 0)
 
 
-def ui_main_loop(art, tk = None, frame = None):
-    ivy_ui.ui = TkUI(tk,frame)
+def ui_main_loop(art):
+    ivy_ui.ui = TkUI()
     ivy_ui.ui.add(art)
     ivy_ui.ui.tk.mainloop()

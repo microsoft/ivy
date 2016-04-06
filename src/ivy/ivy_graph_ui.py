@@ -9,65 +9,24 @@ concept graphs """
 #
 
 #TODO: the import *'s are creating conflicts
-from Tkinter import *
-import Tkconstants, tkFileDialog
-import Tix
 import functools
 import string
 from ivy_graph import *
-import ivy_ui_util as uu
 import ivy_logic
 import ivy_logic_utils as lu
 import ivy_interp
 from ivy_utils import topological_sort
 from collections import defaultdict
-from tkColorChooser import askcolor
 
 repr = str
 
-def make_node_label(n):
-    foo = [lit for lit in n.fmla if not(lit.polarity == 0 and lit.atom.relname == "=")] 
-#    foo = n.fmla
-    return [repr(n.sort)] + [make_lit_label(lit) for lit in foo]
+class GraphWidget(object):
 
-line_colors = ["black","blue","red","green","VioletRed4","brown1",
-"DarkSlateGray4","navy","DeepPink4","DarkOliveGreen4","purple4","RosyBrown4",
-"SkyBlue4","tomato4",'DarkSeaGreen4','DarkOrchid2','DarkOrange3',
-"DeepSkyBlue4", "IndianRed1", "maroon4", "DarkOrchid3", "chocolate1",
-"RoyalBlue1", "OrangeRed4", "green2", "MediumPurple4", "brown4",
-]
-def line_color(idx):
-    return line_colors[idx % len(line_colors)]
-
-class GraphWidget(Canvas):
-    def __init__(self,tk,g,root=None):
-        if root == None:
-            root = tk
-        Canvas.__init__(self,root)
-        self.g = g
-        self.tk = tk
-        tk.eval('package require Tcldot')
-        self.pack(fill=BOTH,expand=1)
-        self.root = root
-        self.rel_enabled = dict()
-        self.rebuild()
-        self.update_callback = None
-    def destroy(self):
-##        print "destroying graph canvas"
-        if self.parent != None:
-##            print "removing state graph"
-            self.parent.remove_state_graph(self.g)
-        Canvas.destroy(self)
     def set_update_callback(self,update_callback):
         self.update_callback = update_callback
-    def get_enabled(self,r):
-#        rel = repr(r.rel_lit.atom)
-        rel = r.rel_lit.atom
-        if rel in self.rel_enabled:
-            return self.rel_enabled[rel]
-        res = [IntVar(self,0),IntVar(self,0),IntVar(self,0),IntVar(self,0)]
-        self.rel_enabled[rel] = res
-        return res
+
+    # Sort a list of nodes, taking into account transitive relations
+    # This has no specific semantics and is just used to make the display prettier.
 
     def sort_nodes(self,nodes):
         g = self.g
@@ -87,6 +46,8 @@ class GraphWidget(Canvas):
         nodes = topological_sort(nodes,order,lambda n: n.name)
         return nodes
 
+    # Returns a map from node names to node labels
+    # TODO: parameter "nodes" seems to be ignored
 
     def get_node_labels(self,nodes):
         labels = defaultdict(list)
@@ -114,150 +75,70 @@ class GraphWidget(Canvas):
                                 labels[x.name].append(make_lit_label(r.rel_lit) + '?')
         return labels
 
+    # Return label for a node as a list of string
+
+    def make_node_label(self,n):
+        foo = [lit for lit in n.fmla if not(lit.polarity == 0 and lit.atom.relname == "=")] 
+    #    foo = n.fmla
+        return [repr(n.sort)] + [make_lit_label(lit) for lit in foo]
+
+    # TODO: ???
 
     def make_subgraphs(self):
         return True
 
-    def rebuild(self):
-##        print "rebuild"
-        with uu.RunContext(self):
-            tk = self.tk
-            g = self.g
-            g.recompute()
-            tk.eval('set graph [dotnew digraph forcelabels true]')
-            handle_to_node = dict()
-            handle_to_edge = dict()
-            self.node_to_handle = dict()
-            if hasattr(self,'mark'):
-                del self.mark
-            i = 0
-            sorted_nodes = self.sort_nodes([n for n in g.all_nodes if n.status != "false"])
-            node_labels = self.get_node_labels(sorted_nodes)
-            sort_colors = dict((sort,line_color(i)) for i,sort in enumerate(ivy_logic.sig.sorts))
+    # This returns a list of (name,action) pairs for the node menu.
+    # The actions are functions of one parameter, a node. You can also
+    # add a label by using action None, and a separator with label
+    # '---'.
 
-            # make subgraphs for sorts
-            sort_graph = {}
-            for sort in ivy_logic.sig.sorts:
-                if self.make_subgraphs():
-                    sg = tk.eval('$graph addsubgraph cluster_' + sort + ' rank min')
-                else:
-                    sg = '$graph'
-                sort_graph[sort] = sg
+    def get_node_actions(self,node):
+        return [
+            ("Select",self.select),
+            ("Empty",self.empty),
+            ("Materialize",self.materialize),
+            ("Materialize edge",self.materialize_from_selected),
+            ("Splatter",self.splatter),
+            ("Split with...",None),
+            ("---",None),
+        ] + self.get_node_splitting_actions(node) + self.get_node_projection_actions(node)
 
-            for n in sorted_nodes:
-                if n.status != "false":
-                    p = n.name
-    #                print "rebuild: p = {}, type(p) = {}".format(p,type(p))
-                    shape = "doubleoctagon" if n.summary else "octagon"
-                    labels = make_node_label(n) + node_labels[n.name]
-    #                labels = node_labels[n.name]
-                    if not labels:
-                        labels = [str(n.sort)]
-                    label = '\n'.join(labels)
-                    penwidth = '4.0' if n.status == 'true' else '2.0'
-                    color = sort_colors[n.sort.name]
-                    handle = tk.eval(sort_graph[n.sort.name] + ' addnode {' + p + '} label {' + label + '} shape ' + shape + ' fontsize 10 penwidth ' + penwidth + ' color ' + color)
-                    handle = 'node' + str(i+1)  if handle.startswith('node0x') else handle
-                    i += 1
-                    handle_to_node[handle] = n
-                    self.node_to_handle[n.name] = handle
-    ##        print "relations: %s" % g.relations
-            i = 0 
-            for idx,r in enumerate(g.relations):
-                if r.arity() != 2:
-                    continue
-                ena = self.get_enabled(r)
-                if any(e.get() for e in ena[0:2]):  # avoid computing edges we don't need
-                    transitive = ena[3].get()
-                    r.properties['reflexive'] = transitive
-                    r.properties['transitive'] = transitive
-                    for (x,y),status in r.get_edges():
-                        style = {'true':0,'undef':1,'false':2}[status]
-                        if ena[style].get():
-                            style = ["solid","dotted","dashed"][style]
-                            weight = '10' if transitive else '0'
-                            ge = '$graph addedge {' + x.name + '} {' + y.name + '} style ' + style+ ' color {' + line_color(idx) + '} penwidth 2.0 weight ' + weight
-                            handle = tk.eval(ge)
-                            handle = 'edge' + str(i+1) if handle.startswith('edge0x') else handle
-                            i += 1
-                            rl = ~r.rel_lit if status == 'false' else r.rel_lit
-                            handle_to_edge[handle] = (rl,x.name,y.name)
-            tk.eval('eval [$graph render ' + self._w  + ' DOT]')
-            if not g.constraints.is_true():
-                bb = self.bbox(ALL)
-    ##            print "bbox: {}".format(bb)
-                if not bb or bb == None: # what does bbox return if canvas is empty?
-                    bb = (3,3,3,3) # put text somewhere if empty canvas
-                text = ['Constraints:\n' + '\n'.join(repr(clause) for clause in g.constraints.conjuncts())]
-                self.create_text((bb[0],bb[3]),anchor=NW,text=text)
-            self.config(scrollregion=self.bbox(ALL))
-            tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
-            for x in handle_to_node:
-                n = handle_to_node[x]
-                self.tag_bind("0" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-                self.tag_bind("1" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            for x in handle_to_edge:
-                r,h,t = handle_to_edge[x]
-    ##            print "r,h,t: %s %s %s" % (r,h,t)
-                self.tag_bind("0" + x, "<Button-1>", lambda y, r=r,h=h,t=t: self.left_click_edge(y,r,h,t))
-                self.tag_bind("1" + x, "<Button-1>", lambda y, r=r,h=h,t=t: self.left_click_edge(y,r,h,t))
-            self.edge_popup = Menu(tk, tearoff=0)
-            self.edge_popup.add_command(label="Empty",command=self.empty_edge)
-            self.edge_popup.add_command(label="Materialize",command=self.materialize_edge)
-            self.edge_popup.add_command(label="Dematerialize",command=self.dematerialize_edge)
+    # get splitting predicates for node
 
-    def export(self):
-            tk = self.tk
-            f = tkFileDialog.asksaveasfilename(filetypes = [('dot files', '.dot')],title='Export graph as...',parent=self)
-            tk.eval('set myfd [open {' + f + '} w]')
-            tk.eval('$graph write $myfd dot')
-            tk.eval('close $myfd')
-
-    def make_popup(self):
-        tk = self.tk
-        g = self.g
-        popup = Menu(tk, tearoff=0)
-        popup.add_command(label="Select",command=self.select)
-        popup.add_command(label="Empty",command=self.empty)
-        popup.add_command(label="Materialize",command=self.materialize)
-        popup.add_command(label="Materialize edge",command=self.materialize_from_selected)
-        popup.add_command(label="Splatter",command=self.splatter)
-        popup.add_command(label="Split with...")
-        popup.add_separator()
-        for p in g.predicates:
+    def get_node_splitting_actions(self,node):
+        res = []
+        for p in self.g.predicates:
+            act = functools.partial(self.split,p)
             if isinstance(p,tuple):
-                popup.add_command(label=make_lit_label(p[0]),command = lambda p=p: self.split(p))
+                res.append((make_lit_label(p[0]),act))
             else:
                 vs = used_variables_ast(p)
-                if not vs or next(v for v in vs).sort == self.lookup_node(self.current_node).sort:
-                    popup.add_command(label=make_lit_label(p),command = lambda p=p: self.split(p))
-        wit = get_witness(self.lookup_node(self.current_node))
+                if not vs or next(v for v in vs).sort == self.lookup_node(node.name).sort:
+                    res.append((make_lit_label(p),act))
+        return res
+
+    # add projections
+
+    def get_node_projection_actions(self,node):
+        res = []
+        wit = get_witness(node)
         if wit != None:
             trs = list(get_projections_of_ternaries(wit))
             if trs != []:
-                popup.add_command(label="Add projection...")
+                res.append(("Add projection...",None))
                 for p in trs:
-                    popup.add_command(label=str(p),command = lambda p=p: self.project(p))
-        return popup
+                    res.append((str(p),lambda p=p: self.project(p)))
+        return res
 
-    def left_click_node(self,event,n):
-        # display the popup menu
-        self.current_node = n.name # must be a better way...
-        popup = self.make_popup()
-        try:
-            popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            popup.grab_release()
+    # get the edge menu actions
 
-    def left_click_edge(self,event,rel_lit,head,tail):
-        # display the popup menu
-        self.current_edge = (rel_lit,head,tail)
-        try:
-            self.edge_popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            self.edge_popup.grab_release()
+    def get_edge_actions(self,edge):
+        return [
+            ("Empty",self.empty_edge),
+            ("Materialize",self.materialize_edge),
+            ("Dematerialize",self.dematerialize_edge),
+        ]
+
     def lookup_node(self,name):
         return next(n for n in self.g.all_nodes if n.name == name)
 
@@ -351,12 +232,7 @@ class GraphWidget(Canvas):
 ##            print "g.constraints: %s" % g.constraints
             p = self.parent.reverse_update_concrete_clauses(g.parent_state, g.constraints)
             if p == None:
-                dlg = Toplevel(self)
-                Label(dlg, text="Cannot reverse.").pack()
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
+                self.ui_parent.ok_dialog("Cannot reverse.")
                 return
             clauses, parent_state = p
             g.constraints = true_clauses()
@@ -376,80 +252,45 @@ class GraphWidget(Canvas):
             g.set_state(clauses)
             self.update()
 
-    def add_relation(self):
-        dlg = Toplevel(self)
-        Label(dlg, text="Add a relation [example: p(X,a,Y)]:").pack()
-        e = Entry(dlg)
-        e.focus()
-        e.pack()
-        action = functools.partial(self.add_rel_lit,dlg,e)
-        e.bind('<Return>', lambda q,action=action: action())
-        Button(dlg, text="Add",command=action).pack(padx=5,side=TOP)
-        b = Button(dlg, text="Cancel", command=dlg.destroy).pack(padx=5,side=TOP)
-        uu.center_window_on_window(dlg,self.root)
-        self.tk.wait_window(dlg)
-        
-    def add_rel_lit(self,dlg,entry):
-        with uu.RunContext(self):
-#            with ivy_logic.UnsortedContext():
-#                lit = to_literal(entry.get())
-            sig = ivy_logic.sig.copy()
-            with sig:
-                for c in used_constants_clauses(self.g.state):
-                    if not isinstance(c.sort,ivy_logic.EnumeratedSort):
-#                        print "found constant {!r}".format(c)
-                        ivy_logic.add_symbol(str(c),c.sort)
-                for c in used_constants_clauses(self.g.constraints):
-                    if not isinstance(c.sort,ivy_logic.EnumeratedSort):
-#                        print "found constant {!r}".format(c)
-                        ivy_logic.add_symbol(str(c),c.sort)
-                lit = to_literal(entry.get())
-#                lit = ivy_logic.sortify(lit)
-            dlg.destroy()
-#            print "add_rel_lit: {}".format(lit)
+    # Add new concept to the graph, given as a string. If not given, a
+    # dialog is presented to the user.
+
+    def add_concept_from_string(self,text=None):
+        if text == None:
+            msg = "Add a relation [example: p(X,a,Y)]:"
+            cmd = self.add_concept_from_string
+            self.ui_parent.entry_dialog(msg,command=cmd,command_label="Add")
+        else:
+            with self.ui_parent.run_context():  # to catch errors
+                lit = self.g.string_to_concept(text)
             self.g.new_relation(lit)
             if self.update_callback != None:
                 self.update_callback()
 
-    def remember(self):
-        dlg = Toplevel(self)
-        Label(dlg, text="Enter a name for this goal:").pack()
-        e = Entry(dlg)
-        e.focus()
-        e.pack()
-        action = functools.partial(self.remember_aux,dlg,e)
-        e.bind('<Return>', action)
-        Button(dlg, text="Remember",command=action).pack(padx=5,side=TOP)
-        b = Button(dlg, text="Cancel", command=dlg.destroy).pack(padx=5,side=TOP)
-        uu.center_window_on_window(dlg,self.root)
-        self.tk.wait_window(dlg)
+    def remember(self,text):
+        if text == None:
+            msg = "Enter a name for this goal:"
+            self.ui_parent.entry_dialog(msg,command=self.remember,command_label="Remember")
+        else:
+            with self.ui_parent.run_context():  # to catch errors
+                self.parent.remember_graph(text,self.g.copy())
+                
+    # Add a concept to the graph
 
-    def remember_aux(self,dlg,entry,*args):
-        with uu.RunContext(self):
-            name = entry.get()
-            dlg.destroy()
-            self.parent.remember_graph(name,self.g.copy())
-
-    def project(self,p):
-        self.g.new_relation(Literal(1,p))
+    def add_concept(self,p):
+        self.g.new_relation(p)
         if self.update_callback != None:
             self.update_callback()
 
-    def busy(self):
-        self.tk.config(cursor="watch")
-        self.tk.update()
-        self.config(cursor="watch")
+    # Split a node using all available constants
 
-    def ready(self):
-        self.tk.config(cursor="")
-        self.tk.update()
-        self.config(cursor="")
-
-    def splatter(self):
+    def splatter(self,node):
         self.checkpoint()
-        cn = self.lookup_node(self.current_node)
+        cn = self.lookup_node(node.name)
         self.g.splatter(cn)
         self.update()
+
+    # Change the parent state, keeping concepts
 
     def set_parent_state(self,new_parent_state,clauses = None):
         self.checkpoint()
@@ -457,90 +298,74 @@ class GraphWidget(Canvas):
         self.g.set_state(clauses if clauses else new_parent_state.clauses)
         self.update()
                          
+    # Check whether the goal is reachable in one step from
+    # a known-reachable state
+
     def reach(self):
         if self.parent != None and self.g.parent_state != None:
 #            self.checkpoint()
             g = self.g
-##            print "g.constraints: %s" % g.constraints
             rs = self.parent.one_step_reach(g.parent_state, g.constraints)
             if rs != None:
                 clauses = rs.clauses
-#                print "reach clauses: {}".format(clauses)
-                dlg = Toplevel(self)
-                Label(dlg, text="Goal reached! A reachable state has been added.").pack()
-                b = Button(dlg, text="View state", command=functools.partial(self.view_reached,clauses,dlg))
-                b.pack(padx=5,side=TOP)
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
-#                g.constraints = []
-#                g.set_state(clauses)
-#                self.update()
+                msg = "Goal reached! A reachable state has been added."
+                bcs = [("View state", functools.partial(self.set_state,clauses)),
+                       ("OK", lambda: None)]
+                self.ui_parent.buttons_dialog_cancel(msg,bcs)
             else:
-                dlg = Toplevel(self)
-                Label(dlg, text="Cannot reach this state in on step from any known reachable state. Try \"reverse\".").pack()
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
+                self.ui_parent.ok_dialog("Cannot reach this state in on step from any "
+                                         + 'known reachable state. Try "reverse".')
 
-    def view_reached(self,clauses,dlg):
-        dlg.destroy()
+    # Set the current state
+
+    def set_state(self,clauses):
         self.checkpoint()
         self.g.set_state(clauses)
         self.update()
 
+    # Check reachability of the goal along the path the current state.
+
     def path_reach(self):
         if self.parent != None and self.g.parent_state != None:
-            self.parent.bmc(self.g.parent_state,self.g.constraints if not self.g.constraints.is_true() else self.g.state)
+            cnstr = self.g.constraints if not self.g.constraints.is_true() else self.g.state
+            self.parent.bmc(self.g.parent_state,cnstr)
+
+    # Conjecture an invariant the separates known reachable states and
+    # current goal. TODO: we shouldn't be computing the goal from the
+    # core here.
 
     def conjecture(self):
         if self.parent != None and self.g.parent_state != None:
             self.checkpoint()
             g = self.g
-#            print "g.constraints: %s" % g.constraints
-#            print "g.state: %s" % g.state
-#            print "g.constraints.is_true: %s" % g.constraints.is_true()
             s = g.state if g.constraints.is_true() else g.constraints
-#            print "s: {}".format(s)
             ri = self.parent.conjecture(g.parent_state, s)
             if ri != None:
                 core,interp = ri
                 dlg = Toplevel(self)
-                Label(dlg, text="Based on this goal and the known reached states, we can conjecture the following invariant:").pack()
-                S = Scrollbar(dlg)
-                T = Text(dlg, height=4, width=100)
-                S.pack(side=RIGHT, fill=Y)
-                T.pack(side=LEFT, fill=Y)
-                S.config(command=T.yview)
-                T.config(yscrollcommand=S.set)
-                T.insert(END, repr(clauses_to_formula(interp)))
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
-#                goal = dual_clauses(interp,skolemizer=self.g.parent_state.domain.skolemizer())
+                msg = ("Based on this goal and the known reached states, " +
+                       "we can conjecture the following invariant:")
+                text = str(clauses_to_formula(interp))
+                self.ui_parent.text_dialog(msg,text,on_cancel=None)
                 goal = lu.reskolemize_clauses(core,self.g.parent_state.domain.skolemizer())
                 g.constraints = goal
                 g.set_state(goal)
                 self.update()
             else:
-                dlg = Toplevel(self)
-                Label(dlg, text="Cannot form a conjecture based in the known reached states and this goal. Suggest manually materializing a goal pattern.").pack()
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
+                msg = ("Cannot form a conjecture based in the known reached states " +
+                       "and this goal. Suggest manually materializing a goal pattern.")
+                self.ui_parent.ok_dialog(msg)
+
+    # Diagram the goal.
 
     def diagram(self):
         if self.parent != None and self.g.parent_state != None:
             self.checkpoint()
             g = self.g
-##            print "g.constraints: %s" % g.constraints
             if hasattr(g,'reverse_result'):
-#                "print reverse diagram"
-                dgm = ivy_interp.diagram(self.g.parent_state,self.g.reverse_result[1],extra_axioms = self.g.reverse_result[0])
+                dgm = ivy_interp.diagram(self.g.parent_state,
+                                         self.g.reverse_result[1],
+                                         extra_axioms = self.g.reverse_result[0])
             else:
                 dgm = ivy_interp.diagram(self.g.parent_state,self.g.state)
             if dgm != None:
@@ -549,17 +374,12 @@ class GraphWidget(Canvas):
                 g.set_state(goal)
                 self.update()
             else:
-                dlg = Toplevel(self)
-                Label(dlg, text="The current state is vacuous.").pack()
-                b = Button(dlg, text="OK", command=dlg.destroy)
-                b.pack(padx=5,side=TOP)
-                uu.center_window_on_window(dlg,self.root)
-                self.tk.wait_window(dlg)
+                self.ui_parent.ok_dialog("The current state is vacuous.")
         
 
-    def split(self,p):
+    def split(self,p,node):
         self.checkpoint()
-        cn = self.lookup_node(self.current_node)
+        cn = self.lookup_node(node.name)
         self.g.split(cn,p)
         self.update()
 
@@ -568,179 +388,74 @@ class GraphWidget(Canvas):
             for item in self.find_withtag("1"+self.node_to_handle[self.mark]):
                 self.itemconfig(item,fill=('red' if on else 'white'))
 
-    def select(self):
+    # Select a node for a future action
+
+    def select(self,node):
         self.show_mark(False)
-        self.mark = self.current_node
+        self.mark = node.name
         self.show_mark(True)
         
-    def empty(self):
+    def empty(self,node):
         self.checkpoint()
-        cn = self.lookup_node(self.current_node)
+        cn = self.lookup_node(node.name)
         self.g.empty(cn)
         self.update()
 
-    def materialize(self):
-#        if not self.lookup_node(self.current_node).summary:
+    # Materialize a node.
+
+    def materialize(self,node):
+#        if not self.lookup_node(node.name).summary:
 #            return # no point in materializing singleton nodes
         self.checkpoint()
-        cn = self.lookup_node(self.current_node)
+        cn = self.lookup_node(node.name)
         self.g.materialize(cn)
         self.update()
 
-    def materialize_from_selected(self):
+    # Materialize an edge from the selected node to this one. User
+    # chooses a binary concept from a list
+
+    def materialize_from_selected(self,node):
         if hasattr(self,'mark'):
-            sorts = [self.lookup_node(x).sort for x in [self.mark,self.current_node]]
+            sorts = [self.lookup_node(x).sort for x in [self.mark,node.name]]
             required_sort = ivy_logic.RelationSort(sorts)
             rels = [r for r in self.g.relations if r.sort == required_sort]
             items = [str(r.rel_lit) for r in rels]
             msg = "Materialize this relation from selected node:"
-            uu.listbox_dialog(self.tk,self.root,msg,items,command=functools.partial(self.materialize_from_selected_aux,rels))
+            cmd = functools.partial(self.materialize_from_selected_aux,rels,node)
+            self.ui_parent.listbox_dialog(msg,items,command=cmd)
             
-    def materialize_from_selected_aux(self,rels,idx):
-        self.current_edge = (rels[idx].rel_lit,self.mark,self.current_node)
-        self.materialize_edge()
+    def materialize_from_selected_aux(self,rels,node,idx):
+        edge = (rels[idx].rel_lit,self.mark,node.name)
+        self.materialize_edge(edge)
 
-    def empty_edge(self):
+    # Negate an edge
+
+    def empty_edge(self,edge):
         self.checkpoint()
-        rel_lit,head,tail = self.current_edge
+        rel_lit,head,tail = edge
         head,tail = self.lookup_node(head), self.lookup_node(tail)
         self.g.empty_edge(rel_lit,head,tail)
         self.update()
 
-    def materialize_edge(self):
+    # Materialize an edge
+
+    def materialize_edge(self,edge):
         self.checkpoint()
-        rel_lit,head,tail = self.current_edge
+        rel_lit,head,tail = edge
         head,tail = self.lookup_node(head), self.lookup_node(tail)
         self.g.materialize_edge(rel_lit,head,tail)
         self.update()
 
-    def dematerialize_edge(self):
-        rel_lit,head,tail = self.current_edge
-        self.current_edge = (Literal(0,rel_lit.atom),head,tail)
-        self.materialize_edge()
+    # Materialize a negative edge
 
-    def update(self):
-        self.delete(ALL)
-        self.rebuild()
+    def dematerialize_edge(self,edge):
+        rel_lit,head,tail = edge
+        edge = (Literal(0,rel_lit.atom),head,tail)
+        self.materialize_edge(edge)
+
 #        if self.update_callback != None:
 #            self.update_callback()
 
-
-def foo():
-    pass
-##    print "foo"
-
-def show_graph(g,tk=None,frame=None,parent=None):
-#    tk = Tix.Tk()
-#    scrwin = Tix.ScrolledWindow(tk, scrollbar='both')
-#    scrwin.pack(fill=BOTH,expand=1)
-#    gw = GraphWidget(tk,g,scrwin.window)
-    global foo
-    if tk == None:
-        tk = Tk()
-        frame = tk
-    elif frame == None:
-        frame = Toplevel(tk)
-    legend = Frame(frame)
-#    legend = Tix.ScrolledWindow(frame, scrollbar=Y) # just the vertical scrollbar
-    legend.pack(side=RIGHT,fill=Y)
-    menubar = uu.MenuBar(frame)
-    menubar.pack(side=TOP,fill=X)
-    hbar=Scrollbar(frame,orient=HORIZONTAL)
-    hbar.pack(side=BOTTOM,fill=X)
-    vbar=Scrollbar(frame,orient=VERTICAL)
-    vbar.pack(side=RIGHT,fill=Y)
-    gw = GraphWidget(tk,g,frame)
-    gw.parent = parent
-    hbar.config(command=gw.xview)
-    vbar.config(command=gw.yview)
-#    gw.config(width=300,height=300)
-    gw.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
-#    gw.pack(side=LEFT,expand=True,fill=BOTH)
-    relbuttons = Frame(legend)
-    relbuttons.pack(side=RIGHT,fill=Y,expand=1)
-    update_relbuttons(gw,relbuttons)
-    gw.set_update_callback(functools.partial(update_relbuttons,gw,relbuttons))
-
-#    menubar = Menu(frame)
-    actionmenu = menubar.add("Action")
-#    actionmenu = Menu(menubar, tearoff=0)
-    actionmenu.add_command(label="Undo",command=gw.undo)
-    actionmenu.add_command(label="Redo",command=gw.redo)
-    actionmenu.add_command(label="Concrete",command=gw.concrete)
-    actionmenu.add_command(label="Gather",command=gw.gather)
-    actionmenu.add_command(label="Reverse",command=gw.reverse)
-    actionmenu.add_command(label="Path reach",command=gw.path_reach)
-    actionmenu.add_command(label="Reach",command=gw.reach)
-    actionmenu.add_command(label="Conjecture",command=gw.conjecture)
-    actionmenu.add_command(label="Backtrack",command=gw.backtrack)
-    actionmenu.add_command(label="Recalculate",command=gw.recalculate)
-    actionmenu.add_command(label="Diagram",command=gw.diagram)
-    actionmenu.add_command(label="Remember",command=gw.remember)
-    actionmenu.add_command(label="Export",command=gw.export)
-#    menubar.add_cascade(label="Action", menu=actionmenu)
-    viewmenu = menubar.add("View")
-    viewmenu.add_command(label="Add relation",command=gw.add_relation)
-#    menubar.add_cascade(label="View", menu=viewmenu)
-#    frame.config(menu=menubar)
-    return gw
-
-    # undo = Button(legend,text="Undo",command=gw.undo)
-    # undo.pack(side=TOP)
-    # conc = Button(legend,text="Concrete",command=gw.concrete)
-    # conc.pack(side=TOP)
-    # gather = Button(legend,text="Gather",command=gw.gather)
-    # gather.pack(side=TOP)
-    # reverse = Button(legend,text="Reverse",command=gw.reverse)
-    # reverse.pack(side=TOP)
-#    # print "foo!!!"
-    # export = Button(legend,text="Export",command=gw.export)
-    # export.pack(side=TOP)
-#    tk.mainloop()
-
-def onFrameConfigure(canvas):
-   bbox = canvas.bbox("all")
-   canvas.configure(scrollregion=bbox,width=bbox[2]-4)
-   
-
-def update_relbuttons(gw,relbuttons):
-    for child in relbuttons.winfo_children():
-        child.destroy()
-    lb = Label(relbuttons,text="State: {}".format(gw.parent.state_label(gw.g.parent_state)))
-    lb.pack(side = TOP)
-
-    # make the grid of buttons scrollable
-    canvas = Canvas(relbuttons, borderwidth=0, background="#ffffff")
-    btns = Frame(canvas, background="#ffffff")
-    vsb = Scrollbar(relbuttons, orient="vertical", command=canvas.yview)
-    canvas.configure(yscrollcommand=vsb.set)
-    vsb.pack(side="right", fill="y")
-    canvas.pack(side="left", fill="both", expand=True)
-    canvas.create_window((4,4), window=btns, anchor="nw")
-    btns.bind("<Configure>", lambda event, canvas=canvas: onFrameConfigure(canvas))
-
-    foo = Label(btns,text = '+')
-    foo.grid(row = 0, column = 0)
-    foo = Label(btns,text = '?')
-    foo.grid(row = 0, column = 1)
-    foo = Label(btns,text = '-')
-    foo.grid(row = 0, column = 2)
-    foo = Label(btns,text = 'T')
-    foo.grid(row = 0, column = 4)
-    rels = list(sorted(enumerate(gw.g.relations),key=lambda r:r[1].name()))
-    for idx,(num,rel) in enumerate(rels):
-        foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[0],command=gw.update)
-        foo.grid(row = idx+1, column = 0)
-        foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[1],command=gw.update)
-        foo.grid(row = idx+1, column = 1)
-        foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[2],command=gw.update)
-        foo.grid(row = idx+1, column = 2)
-        foo = Label(btns,text=rel.name(),fg=line_color(num),justify=LEFT,anchor="w")
-        foo.grid(sticky=W,row = idx+1, column = 3)
-        foo.bind("<Button-1>", lambda e: askcolor())
-        foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=gw.update)
-        foo.grid(row = idx+1, column = 4)
-        
 
 
 if __name__ == '__main__':

@@ -301,7 +301,7 @@ def get_projections_of_ternaries(wit):
 #            print "ternary: {}, sort = {}".format(sym,sym.sort)
             for i in range(3):
                 if sym.sort.dom[i] == wit.sort:
-                    yield sym(*[t if t is wit else Variable(t,s) for t,s in zip(lins(['X','Y'],i,wit),sym.sort.dom)])
+                    yield Literal(1,sym(*[t if t is wit else Variable(t,s) for t,s in zip(lins(['X','Y'],i,wit),sym.sort.dom)]))
                     
 
 def node_concept(sort,varname):
@@ -328,6 +328,28 @@ class Graph(object):
         self.nodes = []
         self.edges = []
         self.enabled_relations = set()
+
+    @property
+    def sorts(self):
+        return sig.sorts  # for now, display all declared sorts
+
+
+    # Parse a string into a concept
+
+    def string_to_concept(self,text):
+        # set up the signature with symbols in graph so
+        # we can parse the formula.
+        sig = ivy_logic.sig.copy()
+        with sig:
+            for c in used_constants_clauses(self.state):
+                if not isinstance(c.sort,ivy_logic.EnumeratedSort):
+                    ivy_logic.add_symbol(str(c),c.sort)
+            for c in used_constants_clauses(self.constraints):
+                if not isinstance(c.sort,ivy_logic.EnumeratedSort):
+                    ivy_logic.add_symbol(str(c),c.sort)
+
+            return to_literal(text)
+
     def add_relation(self,rela):
         self.relations.append(rela)
     def check_node(self,n):

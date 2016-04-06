@@ -12,9 +12,6 @@ from ivy_compiler import ivy_load_file, ivy_new, IvyError
 from ivy_art import AnalysisGraph
 from ivy_utils import use_numerals
 
-# TODO: set this false until we can handle numerals in models.
-use_numerals.set("false")
-
 class IvyModel(object):
     """
     This represents what comes out of the .ivy file. Namely, the set
@@ -58,6 +55,10 @@ class AnalysisSession(object):
     """
 
     def __init__(self, filename, widget=None):
+
+        # HACK: set this false until we can handle numerals in models.
+        use_numerals.set("false")
+
         self.filename = filename
         try:
             m = IvyModel(filename)

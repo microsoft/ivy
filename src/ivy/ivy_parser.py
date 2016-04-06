@@ -193,35 +193,35 @@ def p_insts_insts_comma_inst(p):
     p[0] = p[1]
     p[0].append(p[3])
 
-def p_name_symbol(p):
-    'name : SYMBOL'
+def p_pname_symbol(p):
+    'pname : SYMBOL'
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
 
-def p_name_var(p):
-    'name : var'
+def p_pname_var(p):
+    'pname : var'
     p[0] = p[1]
 
-def p_name_infix(p):
-    'name : infix'
+def p_pname_infix(p):
+    'pname : infix'
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
 
-def p_name_relop(p):
-    'name : relop'
+def p_pname_relop(p):
+    'pname : relop'
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
 
-def p_names(p):
-    'names : '
+def p_pnames(p):
+    'pnames : '
     p[0] = []
 
-def p_names_name(p):
-    'names : name'
+def p_pnames_pname(p):
+    'pnames : pname'
     p[0] = [p[1]]
 
-def p_names_names_name(p):
-    'names : names COMMA name'
+def p_pnames_pnames_pname(p):
+    'pnames : pnames COMMA pname'
     p[0] = p[1]
     p[0].append(p[3])
 
@@ -230,8 +230,8 @@ def p_modinst_symbol(p):
     p[0] = Atom(p[1],[])
     p[0].lineno = get_lineno(p,1)
 
-def p_modinst_symbol_lp_names_rp(p):
-    'modinst : SYMBOL LPAREN names RPAREN'
+def p_modinst_symbol_lp_pnames_rp(p):
+    'modinst : SYMBOL LPAREN pnames RPAREN'
     p[0] = Atom(p[1],p[3])
     p[0].lineno = get_lineno(p,1)
 

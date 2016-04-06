@@ -273,7 +273,7 @@ def atom_to_z3(atom):
         return encode_equality(*atom.args)
     if atom.relname not in z3_predicates:
         rel = lookup_native(atom.relname,relations,"relation")
-        print "atom: {}, rep: {}, rep.sort: {}".format(atom,atom.rep,atom.rep.sort)
+#        print "atom: {}, rep: {}, rep.sort: {}".format(atom,atom.rep,atom.rep.sort)
         if not rel:
             sig = atom.rep.sort.to_z3()
             rel = z3.Function(solver_name(atom.rep), *sig)
