@@ -396,6 +396,17 @@ Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
 Variable.rename = lambda self,name: Variable(name,self.sort)
 
+show_variable_sorts = False
+
+Variable.__str__ = lambda self: (self.name+':'+self.sort.name) if show_variable_sorts else self.name
+
+def to_str_with_var_sorts(t):
+    global show_variable_sorts
+    show_variable_sorts = True
+    res = str(t)
+    show_variable_sorts = False
+    return res
+    
 class Literal(AST):
     """
     Either a positive or negative atomic formula. Literals are not
@@ -466,6 +477,9 @@ class EnumeratedSort(object):
         return hash(tuple(self.extension))
     def defines(self):
         return self.extension
+    @property
+    def constructors(self):
+        return [Symbol(n,self) for n in extension]
     def __iter__(self):  # make it iterable so it pretends to be an actual sort
         return self
     def next(self): # Python 3: def __next__(self)
@@ -481,6 +495,16 @@ FunctionSort.rng = FunctionSort.range
 FunctionSort.dom = FunctionSort.domain
 FunctionSort.defines = lambda self: []
 FunctionSort.is_relational = lambda self: self.rng == lg.Boolean
+
+def is_enumerated_sort(s):
+    return isinstance(s,EnumeratedSort)
+
+def is_boolean_sort(s):
+    return s == lg.Boolean
+
+# TODO: arguably boolean and enumerated are first-order sorts
+def is_first_order_sort(s):
+    return isinstance(s,UninterpretedSort)
 
 def RelationSort(dom):
     return FunctionSort(*(list(dom) + [lg.Boolean]))
