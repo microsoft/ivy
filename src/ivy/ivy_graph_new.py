@@ -196,6 +196,9 @@ class GraphRelation(object):
         res = s_check_cube(solver,[substitute_lit(self.rel_lit,{'X':x,'Y':y})])
         solver.pop()
         return res
+    @property
+    def id(self):
+        return il.to_str_with_var_sorts(self.rel_lit.atom)
     def name(self):
         return str(self.rel_lit.atom)
     def to_concept_space(self):

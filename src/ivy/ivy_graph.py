@@ -15,7 +15,8 @@ import functools
 from ivy_alpha import ProgressiveDomain
 from ivy_concept_space import NamedSpace, SumSpace, ProductSpace
 from ivy_transrel import is_skolem
-from ivy_utils import union_to_list,BooleanParameter
+import ivy_utils as iu
+from ivy_utils import union_to_list
 import string
 from collections import defaultdict
 
@@ -706,14 +707,12 @@ class GraphStack(object):
         self.undo_stack.append(self.current.copy())
         del self.redo_stack[:]
 
-use_new_ui = BooleanParameter("new_ui",False)
-
 def standard_graph(parent_state=None):
     gsig = parent_state.domain.sig if parent_state else sig
     nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
 
     import ivy_graph_new
-    g = ivy_graph_new.Graph(nodes)  if use_new_ui.get() else Graph(nodes) 
+    g = ivy_graph_new.Graph(nodes)  if iu.use_new_ui.get() else Graph(nodes) 
 #    r = GraphRelation(g,to_literal("n(X,Y)"))
 #    g.add_relation(r)
     g.parent_state = parent_state

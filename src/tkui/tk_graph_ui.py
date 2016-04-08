@@ -122,6 +122,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
                             i += 1
                             rl = ~r.rel_lit if status == 'false' else r.rel_lit
                             handle_to_edge[handle] = (rl,x.name,y.name)
+            print(tk.eval('$graph render ' + self._w  + ' DOT'))
             tk.eval('eval [$graph render ' + self._w  + ' DOT]')
             if not g.constraints.is_true():
                 bb = self.bbox(ALL)
@@ -228,7 +229,11 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
     hbar.pack(side=BOTTOM,fill=X)
     vbar=Scrollbar(frame,orient=VERTICAL)
     vbar.pack(side=RIGHT,fill=Y)
-    gw = TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
+    if iu.use_new_ui.get():
+        import tk_graph_ui_new
+        gw = tk_graph_ui_new.TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
+    else:
+        gw = TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
     gw.parent = parent
     hbar.config(command=gw.xview)
     vbar.config(command=gw.yview)
