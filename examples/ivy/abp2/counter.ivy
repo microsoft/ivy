@@ -1,0 +1,59 @@
+#lang ivy1.3
+
+################################################################################
+#
+# This module implements a counter that can count up and down and test for zero.
+#
+################################################################################
+
+include total_order
+
+########################################
+# the carrier set is a total order
+
+type cc
+individual czero : cc  # TODO: should be a numeral
+
+instantiate total_order(cc)
+
+########################################
+# TODO: we need a boolean type
+
+type bool = {b0,b1}
+
+module counter = {
+
+    individual val : cc
+
+    init val = czero    
+
+    action incr = {
+       local res:cc {
+          assume val < res & ~(val < X:cc & X < res);
+	  val := res
+       }
+    }
+
+    action decr = {
+       local res:cc {
+           assume res < val & ~(res < X & X < val);
+	  val := res
+       }
+    }
+
+    action get returns(res:cc) = {
+        res := val
+    }
+
+    action set(newval:cc) = {
+        val := newval
+    }
+
+    action clear = {
+        val := czero
+    }
+
+    action is_zero returns(res:bool) = {
+        assume val = czero <-> res = b1
+    }
+}

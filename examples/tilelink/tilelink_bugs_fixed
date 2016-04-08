@@ -1,0 +1,62 @@
+1) Release must transfer correct data (forgotten spec)
+
+2) grant data allowed to be incorrect if line is dirty (spec too strong)
+
+3) Did not consider that matching acquires can be both requested and accepted.
+
+4) Did not specify we can't have acquires for already obtained privs
+
+5) Forgot to specify cannot have voluntary release with matching one already pending.
+
+6) Did not account for fact that involuntary relase can occur when
+privs are already lost.
+
+7) Did not consider that release must have correct data only if exclusive (spec too strong)
+
+8) Forgot to update transaction state on voluntary release.
+
+9) Got condition for conflict of Acquires wrong.
+
+10) Allowed duplicate grants.
+
+11) Did not require that all preventing uncached ops must be actually
+granted for an op can be requested (resulted in possible bad
+serialization).
+
+12) Didn't specify that can't have a new identical acquire while still
+waiting for voluntary release to be acked.
+
+13) Forgot to specify acquire data and address must match the abstract memory op.
+
+14) Didn't consider that an request for privs client already has can
+appear if a probe is outstanding, since the acking release may be delayed.
+
+15) Had asserted that cannot probe after having seen a voluntary
+release, but this is not true.
+
+16) Had asserted that can only probe if client has priviledges on all
+words of a line, but this is not true.
+
+17) Had allowed repeat cached acquires when a probe pending, but this is wrong.
+
+18) Rules for re-use of txids were wrong.
+
+19) Forgot to specify a grant must refer to an operation that is
+already serialized.
+
+20) Did not consider the different txid can be in use for same line if
+one acquire is requested and the other is accepted.
+
+21) Incorrectly specified rules consistency rules for uncached
+acquires (did not take into account localities).
+
+22) Didn't specify that a relack may not occur while waiting for finish.
+
+23) Didn't specify that a request cannot be accepted if the txid is in use for a different address.
+
+24) For voluntary release, should have said cannot have requested *or* accepted transactions.
+
+25) For voluntary relase, did not specify that must have some privs.
+
+
+

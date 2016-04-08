@@ -1,0 +1,216 @@
+################################################################################
+#
+# Some tests
+#
+################################################################################
+
+include tilelink_concrete_unordered_channel
+
+module tests = {
+
+    individual acq1 : acq_id, acq2 : acq_id
+    individual gnt1 : gnt_id, gnt2 : gnt_id, gnt3 : gnt_id, gnt4 : gnt_id
+    individual rls1 : rls_id, rls2 : rls_id
+    individual fns1 : fns_id, fns2 : fns_id
+    individual prb1 : prb_id, prb2 : prb_id
+    individual ahi1 : tl_addrhi, ahi2 : tl_addrhi
+    relation alo1(X:tl_addrlo), alo2(X:tl_addrlo)
+    individual id1 : id
+
+    action all = {
+      if * {
+        call c.step
+      } else if * {
+        call b.step 
+      } else {
+        call m.step
+      }
+    }
+
+    # put in two acquires for same address set
+    # should be possible only for different id
+
+    action test1 = {
+	assume acqs(acq1).own = none;
+	call c.acquire(acq1);
+	assume acqs(acq2).own = none;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).word = acqs(acq2).word;
+	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
+	call c.acquire(acq2);
+	call b.acquire(acq2)
+    }
+
+    # put in two acquires for same line, same id
+    # should be possible only for different words
+
+    action test2 = {
+	assume acqs(acq1).own = none;
+	call c.acquire(acq1);
+	assume acqs(acq2).own = none;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).id_ = acqs(acq2).id_;
+	assume acqs(acq1).ltime_ < acqs(acq2).ltime_;
+	call c.acquire(acq2);
+	call b.acquire(acq2);
+	call b.acquire(acq1);
+	assume acqs(acq1).word = gnts(gnt1).word; 
+	call m.perform(acqs(acq1).ltime_,id1);
+	call m.grant(gnt1);
+        call b.grant(gnt2);
+	call m.perform(acqs(acq2).ltime_,id1);
+	call m.grant(gnt3);
+        call b.grant(gnt4)
+    }
+
+    action test3 = {
+	call m.grant(gnt3)
+    }
+
+#     action test4 = {
+# 	assume acqs(acq1).own = shrd;
+# 	call c.acquire(acq1);
+# 	call b.acquire(acq1);
+# 	call m.grant(gnt1);
+#         call b.grant(gnt2);
+# #	call c.finish(fns1);
+# 	call c.release(rls1);
+# 	call b.release(rls1)
+#     }
+
+    action test4 = {
+	assume acqs(acq1).own = shrd;
+	assume acqs(acq2).own = excl;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).word = acqs(acq2).word;
+	call c.acquire(acq1);
+	call c.acquire(acq2);
+	call b.acquire(acq2);
+	call m.grant(gnt1);
+        call b.grant(gnt1);
+	call b.acquire(acq1);
+	call m.grant(gnt2);
+        call b.grant(gnt2)
+;
+ 	call c.release(rls1)
+;
+ 	call c.finish(fns1)
+;
+ 	call b.release(rls1)
+;
+ 	call b.finish(fns1)
+;
+ 	call c.finish(fns2)
+;
+ 	call b.finish(fns2)
+;
+ 	call m.grant(gnt3)
+;
+ 	call b.grant(gnt3)
+;
+ 	call c.acquire(acq1)
+;
+  	call b.acquire(acq1)
+#;
+# 	call b.release(rls1);
+# 	call b.finish(fns1);
+# 	call m.grant(gnt3);
+# 	call b.grant(gnt3)
+
+    }
+
+    # test probe crossing with upgrade acquire
+
+    action test5 = {
+	assume acqs(acq1).own = shrd;
+	assume acqs(acq2).own = excl;
+	assume acqs(acq1).addr_hi = acqs(acq2).addr_hi;
+	assume acqs(acq1).word = acqs(acq2).word;
+	call c.acquire(acq1);
+	call c.acquire(acq2);
+	call b.acquire(acq2);
+	call m.grant(gnt1);
+        call b.grant(gnt1);
+	call c.finish(fns1);
+	call b.finish(fns1);
+	call m.probe(prb1)
+;
+ 	call b.probe(prb1);
+  	call c.release(rls1)
+;
+  	call b.acquire(acq1)
+;
+   	call b.release(rls1)
+;
+  	call m.grant(gnt2)
+;
+  	call b.grant(gnt2);
+	call c.finish(fns2);
+	call b.finish(fns2);
+ 	call m.probe(prb2);
+	call b.probe(prb2);
+	call c.release(rls2);
+	call b.release(rls2)
+# ;
+# 	call b.probe(prb2)
+# ;
+#  	call b.grant(gnt2)
+# ;
+#  	call c.release(rls2)
+# ;
+# 	call b.release(rls2)
+# ;
+#  	call c.finish(fns1)
+# ;
+#  	call b.finish(fns1)
+# ;
+#  	call c.finish(fns2)
+# ;
+#  	call b.finish(fns2)
+	
+#         call b.grant(gnt2)
+# ;
+#  	call c.release(rls1)
+# ;
+#  	call c.finish(fns1)
+# ;
+#  	call b.release(rls1)
+# ;
+#  	call c.finish(fns2)
+# ;
+#  	call b.finish(fns2)
+# ;
+#  	call m.grant(gnt3)
+# ;
+#  	call b.grant(gnt3)
+# ;
+#  	call c.acquire(acq1)
+# ;
+#  	call b.acquire(acq1)
+#;
+# 	call b.release(rls1);
+# 	call b.finish(fns1);
+# 	call m.grant(gnt3);
+# 	call b.grant(gnt3)
+
+    }
+
+
+}
+
+instantiate t : tests
+export t.all
+export t.test1
+export t.test2
+export t.test3
+export t.test4
+export t.test5
+
+export b.acquire
+ export b.grant
+ export b.finish
+ export b.release
+ export b.probe
+
+isolate iso_t = b with ref,front,back,c,m,t
+

@@ -1,0 +1,80 @@
+#lang ivy1.3
+
+include abp2
+
+individual m2curr(X:msg_id) : cc
+relation m2pendr(X:msg_id)
+individual m2curs(X:msg_id) : cc
+relation m2pends(X:msg_id)
+
+individual lastrr : msg_id
+individual lastsr : msg_id
+
+action rsm(id:msg_id,ms:msg) = {
+    if ms = delta {
+       m2curr(id) := r.cur
+    }
+    else {
+       m2curs(id) := m2curs(lastrr);
+       m2pends(id) := m2pends(lastrr);
+    }
+}
+mixin rsm before rs.msgs_add
+
+action ssm(id:msg_id,ms:msg) = {
+    if ms = delta {
+       m2curs(id) := s.cur
+    }
+    else {
+       m2curr(id) := m2curr(lastsr);
+       m2pendr(id) := m2pendr(lastsr);
+    }
+}
+mixin ssm before sr.msgs_add
+
+action rrm(id:msg_id,ms:msg) = {
+    if ms = delta {
+       lastrr := id;
+    }
+    else {
+       local last:cc {
+           if m2pends(id) {
+	       assume last < r.pend.val & ~(last < X & X < r.pend.val);
+	   }
+	   else {
+	       assume last < r.cur.val & ~(last < X & X < r.cur.val);
+           }
+	   if exists X. (m2pends(X) <-> m2pends(id)) & m2curs(X) = last {
+	       local other:msg_id {
+	           assume (m2pends(other) <-> m2pends(id)) & m2curs(other) = last;
+		   m2curr(other) := m2curr(id)
+               }
+	   }
+      }
+    }
+}
+mixin rrm before sr.msgs_del
+
+action srm(id:msg_id,ms:msg) = {
+    if ms = delta {
+       lastrr := id;
+    }
+    else {
+       local last:cc {
+           if m2pends(id) {
+	       assume last < r.pend.val & ~(last < X & X < r.pend.val);
+	   }
+	   else {
+	       assume last < r.cur.val & ~(last < X & X < r.cur.val);
+           }
+	   if exists X. (m2pends(X) <-> m2pends(id)) & m2curs(X) = last {
+	       local other:msg_id {
+	           assume (m2pends(other) <-> m2pends(id)) & m2curs(other) = last;
+		   m2curr(other) := m2curr(id)
+               }
+	   }
+      }
+    }
+}
+mixin srm before rs.msgs_del
+

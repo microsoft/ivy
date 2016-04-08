@@ -1,0 +1,14 @@
+L2BroadcastHub/*
+L2HellaCacheBank/*
+dump*
+*.cpp
+test_L2BroadcastHub
+test_L2HellaCacheBank
+tilelink_broadcast_hub.cpp
+tilelink_coherence_manager
+tilelink_coherence_manager_hella.cpp
+tilelink_coherence_manager_tester.cpp
+tilelink_coherence_manager_tester.h
+tilelink_l2_cache
+tilelink_l2_cache.cpp
+.z3-trace

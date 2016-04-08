@@ -1,0 +1,27 @@
+#lang ivy1.3
+
+################################################################################
+#
+# Theory or total orders
+
+module total_order(carrier) = {
+    relation (T:carrier < U:carrier)
+    # note: because < is polymorphic, we need to use the type here
+    axiom (T:carrier < U & U < V) -> (T < V)
+    axiom ~(T:carrier < T)
+    axiom ~(T:carrier < U & U < T)
+    axiom T:carrier < U | T = U | U < T
+    # could add <= as derived relation here
+}
+
+module total_order_with_zero(carrier,zero) = {
+    relation (T:carrier < U:carrier)
+    # note: because < is polymorphic, we need to use the type here
+    axiom (T:carrier < U & U < V) -> (T < V)
+    axiom ~(T:carrier < T)
+    axiom ~(T:carrier < U & U < T)
+    axiom T:carrier < U | T = U | U < T
+    axiom X:carrier = czero | czero < X
+    # could add <= as derived relation here
+}
+

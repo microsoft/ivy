@@ -1,0 +1,162 @@
+#lang ivy1.3
+
+include counter
+
+########################################
+# messages are an uninterpreted sort that includes
+# a special message "delta"
+
+type msg
+individual delta : msg
+individual non : msg
+axiom delta ~= non
+
+########################################
+# the "tape" is the sequence of messgages to be sent
+
+individual tape(X:cc) : msg
+axiom tape(X) ~= delta
+
+module sndr(sch,rch) = {
+
+   instantiate cur : counter
+   instantiate cnt : counter
+   instantiate pend : counter
+   instantiate round : counter
+
+   individual ms : msg, oldv : msg
+   init ms = tape(czero) & oldv = non
+
+   action next_round(vs:msg) = {
+      oldv := vs;
+      call round.incr;
+      assume tape(round.val) ~= ms;   # no conscutive messages same
+      ms := tape(round.val);
+      call pend.set(cur.val);
+      call cur.clear;
+      call cnt.clear
+   }
+
+   action step = {
+      if * {
+          call sch.send(delta);
+          call cur.incr
+      } else {
+          local vs:msg {
+	      call vs := rch.receive;
+	      if vs = delta {
+	          call sch.send(ms)
+              }
+	      else {
+	          call cur.decr;  # one request was served
+		  if vs ~= oldv { # ignore old message value
+		      if pend.val = cnt.val {
+		         call next_round(vs)
+		      }
+		      else {
+			call cnt.incr
+		      }
+		  }
+              }
+          }
+      }
+   }
+}
+
+module rcvr(sch,rch) = {
+
+   instantiate cur : counter
+   instantiate cnt(X:msg) : counter   # one counter per msg value
+   instantiate pend : counter
+   instantiate round : counter
+
+   individual mr : msg, oldv : msg
+   init mr = non & oldv = non
+
+   action step = {
+      if * {
+          call sch.send(delta);
+          call cur.incr
+      } else {
+          local vr:msg {
+	      call vr := rch.receive;
+	      if vr = delta {
+	          call sch.send(mr)
+              } else {
+		  call cur.decr;  # one request was served
+		  if vr ~= oldv {  # ignore old message value
+		      if pend.val = cnt(vr).val {
+			  assert vr = tape(round.val);      # correctness property!
+			  oldv := vr;
+			  local newack:msg {
+			     assume newack ~= mr & newack ~= delta;   # choose a new, different ack msg
+			     mr := newack
+			  };
+			  call round.incr;
+			  call pend.set(cur.val);
+			  call cur.clear;
+			  cnt(X:msg).val := czero      # TODO: abstraction breaking
+		      }
+		      else {
+			  call cnt(vr).incr
+		      }
+		  }
+              }
+          }
+      }
+   }
+}
+
+type msg_id
+
+module chan = {
+
+    ########################################
+    # This models a multiset of msgs in channel       
+
+    relation msgs(X:msg_id,Y:msg)
+   
+    init ~msgs(X,Y)
+
+    action msgs_add(id:msg_id,ms:msg) = {
+        msgs(id,ms) := true
+    }
+
+    action send(ms:msg) = {
+        local id:msg_id {
+	    assume ~msgs(id,ms);
+	    call msgs_add(id,ms)
+        }
+    }
+
+    action msgs_del(id:msg_id,ms:msg) = {
+        msgs(id,ms) := false
+    }
+
+    action receive returns(ms:msg) = {
+        local id:msg_id {
+	    assume msgs(id,ms);
+	    call msgs_del(id,ms)
+        }
+    }
+
+}
+
+instantiate sr : chan
+instantiate rs : chan
+instantiate s : sndr(sr,rs)
+instantiate r : rcvr(rs,sr)
+
+action step = {
+  if * {
+     call s.step
+  }
+  else {
+     call r.step
+  }
+}
+
+export step
+
+#export s.step
+#export r.step

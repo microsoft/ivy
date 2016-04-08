@@ -1,0 +1,12 @@
+Issues to be addressed:
+
+1) One grant for all release beats
+
+2) Manager-side txid's (grants contain two txid's)
+
+3) What happens if we remove rules 
+
+4) What happens if we allow release with no priviledges?
+
+
+
