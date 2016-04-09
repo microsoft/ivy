@@ -10,7 +10,7 @@ from ivy_logic_utils import to_clause,to_literal,to_atom,used_constants_clauses,
          rename_clause, substitute_clause, is_equality_lit, eq_lit, substitute_lit, is_taut_equality_lit,\
          unused_constant, used_symbols_clauses, used_symbols_clause, used_symbols_ast, used_unary_functions_clauses, used_functions_clauses,\
          has_enumerated_sort, var_to_skolem, variables_ast, used_variables_in_order_clauses, used_variables_in_order_clause,\
-         substitute_clauses, substitute_constants_clause, clauses_to_formula, dual_clauses, true_clauses, and_clauses, Clauses, clause_to_formula
+         substitute_clauses, substitute_constants_clause, clauses_to_formula, dual_clauses, true_clauses, and_clauses, Clauses, clause_to_formula, substitute_ast
 import functools
 from ivy_alpha import ProgressiveDomain
 from ivy_concept_space import NamedSpace, SumSpace, ProductSpace
@@ -330,37 +330,63 @@ def concept_from_formula(fmla):
     vs = sorted(list(used_variables_ast(fmla)),key=str)
     return co.Concept(vs,fmla)
 
+def concept_name(concept):
+    return il.to_str_with_var_sorts(concept.formula)
+
 def add_domain_concept(concepts,fmla,name=None,kind=None):
     con = concept_from_formula(fmla)
     arity = con.arity
-    name = '.' + (name or il.to_str_with_var_sorts(fmla))
+    name = '.' + (name or concept_name(con))
     if 1 <= arity and arity <= 2:
         kind = kind or ('node_labels' if arity==1 else 'edges')
         concepts[name] = con
         concepts[kind].append(name)
     return name    
 
-def initial_concept_domain(sorts):
-
+def empty_concepts():
     concepts = OrderedDict()
-
     concepts['nodes'] = []
     concepts['node_labels'] = []
     concepts['edges'] = []
+    return concepts
 
-    # add the requested nodes
+def make_concept_domain(concepts):
+    return co.ConceptDomain(concepts, co.get_standard_combiners(), co.get_standard_combinations())
+    
+# This creates the default initial concept graph, with one
+# node for each sort.
+
+def initial_concept_domain(sorts):
+
+    concepts = empty_concepts()
+
+    # add one node for each sort
     for sort in sorts:
         X = Variable('X', sort)
         add_domain_concept(concepts,Equals(X,X),name=sort.name,kind='nodes')
-
+        
     # add equality concept
     if False:
         X = Variable('X', TopSort())
         Y = Variable('Y', TopSort())
         concepts['='] = co.Concept([X, Y], Equals(X, Y))
 
+    return make_concept_domain(concepts)
+
+def replace_concept_domain_vocabulary(concept_domain,symbols):
+
+    concepts = empty_concepts()
+
+    # keep all the old nodes
+
+    old_concepts = concept_domain.concepts
+    for node in old_concepts['nodes']:
+        concepts['nodes'].append(node)
+        concepts[node] = old_concepts[node]
+
     # add concepts from the signature
-    for c in sorted(all_symbols(),key=str):
+
+    for c in sorted(symbols,key=str):
 
         dom,rng = c.sort.dom,c.sort.rng
 
@@ -383,8 +409,12 @@ def initial_concept_domain(sorts):
             elif len(dom == 1):
                 fmla = Equals(c(Variable('X', dom[0])),Variable('Y', rng))
                 add_domain_concept(concepts,fmla)
+
+    print "concepts: {}".format(concepts)
+
+    return make_concept_domain(concepts)
+
                 
-    return co.ConceptDomain(concepts, co.get_standard_combiners(), co.get_standard_combinations())
 
 
 _edge_display_classes = ['all_to_all', 'edge_unknown', 'none_to_none']
@@ -392,9 +422,11 @@ _edge_display_checkboxes = _edge_display_classes + ['transitive']
 _node_label_display_checkboxes = ['node_necessarily', 'node_maybe', 'node_necessarily_not']
 
 class Option(object):
+    def __init__(self,val=False):
+        self.val = True if val else False
     @property
     def value(self):
-        return True
+        return self.val
 
 _label_prefix = {
     'node_necessarily': '',
@@ -584,6 +616,7 @@ def render_concept_graph(widget):
         else:
             classes.append('edge_unknown')
 
+        print "getting edge: {} {}".format(edge,classes[0])
         if (widget.edge_display_checkboxes[edge][classes[0]].value is False and
             x not in custom):
             # don't add invisible edges
@@ -648,37 +681,74 @@ class ConceptStateViewWidget(object):
         self.materialize_node = None
         self.add_projection = None
 
+    def set_checkbox(self,obj,idx,val):
+        obj = '.' + obj  # get name in graph
+        # HACK: can't tell if it's edge or node_label so set both
+        val = Option(val)
+        if idx < len(_edge_display_checkboxes):
+            print "setting edge: {} {}".format(obj,_edge_display_checkboxes[idx])
+            self.edge_display_checkboxes[obj][_edge_display_checkboxes[idx]] = val
+        if idx < len(_node_label_display_checkboxes):
+            self.node_label_display_checkboxes[obj][_node_label_display_checkboxes[idx]] = val
+
     def get_transitive_reduction(self):
         return [] # TODO: implement
 
     def render(self):
+        print "rendering..."
         self.cy_elements = dot_layout(render_concept_graph(self))
         print self.cy_elements.elements
         
-
+    def projection(self,concept_name,concept_class):
+        print 'thing: {} {}'.format(concept_name,concept_class)
+        if concept_class == 'node_labels':
+            return concept_name in set(['.s(X:server)'])
+        return True
 
 class Graph(object):
     def __init__(self,nodes,parent_state=None):
-        self.parent_state = parent_state
-        self.all_nodes = [GraphNode(n,f,s) for (n,f,s) in nodes]
-        self.relations = []
-        self.pred = None
-        self.status = dict()
-        self.solver = z3.Solver()
-        self.solver.push()
         self.constraints = true_clauses()
-        self.needs_recompute = False
-        self.nodes = []
-        self.edges = []
-        self.enabled_relations = set()
+        self.parent_state = parent_state
         self.concept_domain = initial_concept_domain([s for n,f,s in nodes])
         self.widget = ConceptStateViewWidget()
         self.session = cis.ConceptInteractiveSession(self.concept_domain,And(),And(),widget=self.widget)
 
     @property
-    def sorts(self):
-        return sig.sorts  # for now, display all declared sorts
+    def sort_ids(self):
+        return ['.' + s for s in sig.sorts]  # for now, display all declared sorts
 
+    @property
+    def relation_ids(self):
+        """ Return ids of all the concepts that need check-boxes """
+        return self.concept_domain.concepts['edges'] + self.concept_domain.concepts['node_labels']
+
+    def concept_from_id(self,id):
+        """ Get a relational concept from its id """
+        return self.concept_domain.concepts[id]
+
+    @property
+    def relations(self):
+        """ Returns all the concepts that need check-boxes """
+        return map(self.concept_from_id,self.relation_ids)
+
+    @property
+    def node_ids(self):
+        """ Return ids of all the node concepts """
+        return self.concept_domain.concepts['nodes']
+
+    @property
+    def nodes(self):
+        """ Returns all the concepts that need check-boxes """
+        return map(self.concept_from_id,self.node_ids)
+    
+    def node_sort(self,node):
+        return node.sorts[0]
+
+    def concept_label(self,concept):
+        fmla = concept.formula
+        for v in concept.variables:
+            return str(substitute_ast(fmla,{v.rep:Variable('',v.sort)})).replace(' ','').replace('()','')
+        return str(fmla)
 
     # Parse a string into a concept
 
@@ -757,24 +827,14 @@ class Graph(object):
 
     def set_state(self,clauses,recomp=True):
         self.state = clauses
-        self.solver_clauses = true_clauses()
-        self.predicates = self.get_predicates(clauses)
-        sig = self.parent_state.domain.sig
-        ufs = [x for x,arity in self.parent_state.domain.functions.iteritems()
-               if arity == 1 and not has_enumerated_sort(sig,x)]
-        if not hasattr(self,'brels'):
-            self.brels = ([self.make_rel_lit(r,['X','Y'])
-                           for r,arity in self.parent_state.domain.all_relations
-                           if arity == 2] +
-                          [Literal(1,Atom(equals,[App(f,Variable('X',f.sort.dom[0])),Variable('Y',f.sort.rng)]))
-                           for f in ufs])
-#        brels =  list(used_binary_relations_clauses(clauses))
-#        brels = [r for r in brels if ((r != equals) and not r.startswith('__'))]
-##        print "brels: %s" % brels
-        self.relations = [GraphRelation(self,rel) for rel in self.brels]
-        self.relations += [GraphRelationUnary(self,rel) for rel in self.predicates if not isinstance(rel,tuple) and used_variables_ast(rel)]
-        self.relations += [GraphFunctionUnary(self,Literal(1,rel[0])) for rel in self.predicates if isinstance(rel,tuple)]
-        self.needs_recompute = True
+
+        # Create a new concept domain using the vocabulary of the state
+
+        vocab = set(list(all_symbols()) + list(used_symbols_clauses(clauses)))
+        self.concept_domain = replace_concept_domain_vocabulary(self.session.domain,vocab)
+        state = clauses_to_formula(clauses)
+        self.session = cis.ConceptInteractiveSession(self.concept_domain,state,And(),widget=self.widget)
+
         if recomp:
             self.recompute()
 
@@ -840,21 +900,7 @@ class Graph(object):
         self.solver_clauses = and_clauses(self.solver_clauses,clauses)
 
     def recompute(self):
-        if not self.needs_recompute:
-##            print "skipped recompute"
-            return
-        self.needs_recompute = False
-##        print "did recompute"
-        self.solver.pop()
-        self.solver.push()
-        self.solver_clauses = true_clauses()
-        self.get_solver_clauses()
-        for n in self.all_nodes:
-            self.check_node(n)
-        self.nodes = [GraphNode(n.name,n.fmla,n.sort) for n in self.all_nodes if n.status != "false"]
-        for r in self.relations:
-            r.compute_edges(self.solver)
-
+        self.session.recompute()
 
     # TODO: this seems to be unused -- remove?
     def get_facts(self,rels,definite=True):
@@ -1057,8 +1103,7 @@ def standard_graph(parent_state=None):
     nodes = [(str(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
 
     g = Graph(nodes,parent_state)
-#    r = GraphRelation(g,to_literal("n(X,Y)"))
-#    g.add_relation(r)
+
     if hasattr(parent_state,'universe'):
         print "parent_state.universe: {}".format(parent_state.universe)
         for n in g.all_nodes:

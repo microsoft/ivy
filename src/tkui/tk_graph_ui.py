@@ -215,6 +215,11 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
 #    scrwin = Tix.ScrolledWindow(tk, scrollbar='both')
 #    scrwin.pack(fill=BOTH,expand=1)
 #    gw = GraphWidget(tk,g,scrwin.window)
+
+    if iu.use_new_ui.get():
+        import tk_graph_ui_new
+        return tk_graph_ui_new.show_graph(g,tk,frame,parent,ui_parent)
+
     if tk == None:
         tk = Tk()
         frame = tk
@@ -229,11 +234,6 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
     hbar.pack(side=BOTTOM,fill=X)
     vbar=Scrollbar(frame,orient=VERTICAL)
     vbar.pack(side=RIGHT,fill=Y)
-    if iu.use_new_ui.get():
-        import tk_graph_ui_new
-        gw = tk_graph_ui_new.TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
-    else:
-        gw = TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
     gw.parent = parent
     hbar.config(command=gw.xview)
     vbar.config(command=gw.yview)

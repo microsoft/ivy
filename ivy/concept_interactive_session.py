@@ -74,8 +74,14 @@ class ConceptInteractiveSession(object):
         return next(name for name in constant_name_generator()
                     if name not in used)
 
+    def get_projection(self):
+        if self.widget != None and hasattr(self.widget,'projection'):
+            return self.widget.projection
+        return None
+            
     def recompute(self):
-        self.abstract_value = alpha(self.domain, self._to_formula(), self.cache)
+        self.abstract_value = alpha(self.domain, self._to_formula(), self.cache,
+                                    projection = self.get_projection())
         if self.widget is not None:
             self.widget.render()
 

@@ -7,18 +7,18 @@
 from z3_utils import z3_implies
 from logic import Or
 
-def alpha(concept_domain, state, cache=None):
+def alpha(concept_domain, state, cache=None, projection=None):
     """
     Right now, state is just a plain formula
 
     This is a *very* unoptimized implementation
     """
     if z3_implies(state, Or()):
-        return [(tag, True) for tag, formula in concept_domain.get_facts()]
+        return [(tag, True) for tag, formula in concept_domain.get_facts(projection)]
 
     if cache is None:
         cache = dict()
-    facts = concept_domain.get_facts()
+    facts = concept_domain.get_facts(projection)
     result = []
     for tag, formula in facts:
         if tag in cache:

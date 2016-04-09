@@ -53,7 +53,9 @@ class AnalysisGraphWidget(object):
 
     def view_state(self,n,clauses):
         print "state: {}".format(clauses)
-        if hasattr(self,'current_concept_graph') and self.current_concept_graph.winfo_exists():
+        if hasattr(self,'current_concept_graph'):
+           #  and self.current_concept_graph.winfo_exists():
+            print "current cg: {}".format(type(self.current_concept_graph))
             self.current_concept_graph.set_parent_state(n,clauses)
             return
         sg = self.g.concept_graph(n,clauses)

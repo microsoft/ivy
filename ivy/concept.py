@@ -148,6 +148,13 @@ def _replace_name(x, name, new):
         return list(chain(*(new if y == name else [y] for y in x)))
 
 
+def _filter_concept_names(concept_names,combination,projection):
+    if projection != None:
+        concept_names = [[n for n in ns if projection(n,c)]
+                         for ns,c in zip(concept_names,combination)]
+        print "concept_names: {}".format(concept_names)
+    return concept_names
+
 class ConceptDomain(object):
     """
     A concept domain is a set of named concepts, named concept
@@ -194,12 +201,16 @@ class ConceptDomain(object):
             name not in nodes
         ]
 
-    def get_facts(self):
+    def get_facts(self,projection = None):
         """
         Return a list of pairs of the form:
         ((combination_name, combiner_name, concept_name_1, ..., concept_name_k), formula)
 
         Formulas that are ill-sorted are ignored
+
+        If "projection" is present, we project on the set of concept
+        names in the given set. This can be used to avoid computing
+        unneeded information.
 
         This function causes a combinatoric explosion that should be
         avoided by using a better type system (with high-order sort
@@ -211,6 +222,7 @@ class ConceptDomain(object):
             combination_name = combination[0]
             combiner_names = _resolve_name(self.combiners, combination[1])
             concept_names = [_resolve_name(self.concepts, x) for x in combination[2:]]
+            concept_names = _filter_concept_names(concept_names, combination[2:],projection)
             # this combinatoric loop should be avoided using sorts...
             for concept_combo in product(*concept_names):
                 concepts = [self.concepts[n] for n in concept_combo]

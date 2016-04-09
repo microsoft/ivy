@@ -113,21 +113,19 @@ class GraphWidget(object):
 
     def get_node_splitting_actions(self,node):
         res = []
-        for p in self.g.predicates:
+        for p in self.g.relations:
             act = functools.partial(self.split,p)
-            if isinstance(p,tuple):
-                res.append((make_lit_label(p[0]),act))
-            else:
-                vs = used_variables_ast(p)
-                if not vs or next(v for v in vs).sort == node.sort:
-                    res.append((make_lit_label(p),act))
+            vs = p.variables
+            node_sort = self.g.node_sort(node)
+            if len(vs) == 1 and vs[0].sort == node_sort:
+                res.append((self.g.concept_label(p),act))
         return res
 
     # add projections
 
     def get_node_projection_actions(self,node):
         res = []
-        wit = get_witness(node)
+        wit = self.g.get_witness(node)
         if wit != None:
             trs = list(get_projections_of_ternaries(wit))
             if trs != []:
@@ -384,7 +382,7 @@ class GraphWidget(object):
 
     def select(self,node):
         self.show_mark(False)
-        self.mark = node.name
+        self.mark = node
         self.show_mark(True)
         
     def empty(self,node):
@@ -404,45 +402,35 @@ class GraphWidget(object):
 
     def materialize_from_selected(self,node):
         if hasattr(self,'mark'):
-            sorts = [self.lookup_node(x).sort for x in [self.mark,node.name]]
-            required_sort = ivy_logic.RelationSort(sorts)
-            rels = [r for r in self.g.relations if r.sort == required_sort]
-            items = [str(r.rel_lit) for r in rels]
+            sorts = [self.g.node_sort(x) in [self.mark,node]]
+            rels = [r for r in self.g.relations if r.sorts == sorts]
+            items = [str(r) for r in rels]
             msg = "Materialize this relation from selected node:"
             cmd = functools.partial(self.materialize_from_selected_aux,rels,node)
             self.ui_parent.listbox_dialog(msg,items,command=cmd)
             
     def materialize_from_selected_aux(self,rels,node,idx):
-        edge = (rels[idx].rel_lit,self.mark,node.name)
+        edge = (rels[idx],self.mark,node)
         self.materialize_edge(edge)
 
     # Negate an edge
 
     def empty_edge(self,edge):
         self.checkpoint()
-        rel_lit,head,tail = edge
-        head,tail = self.lookup_node(head), self.lookup_node(tail)
-        self.g.empty_edge(rel_lit,head,tail)
+        self.g.empty_edge(edge)
         self.update()
 
     # Materialize an edge
 
-    def materialize_edge(self,edge):
+    def materialize_edge(self,edge,truth=True):
         self.checkpoint()
-        rel_lit,head,tail = edge
-        head,tail = self.lookup_node(head), self.lookup_node(tail)
-        self.g.materialize_edge(rel_lit,head,tail)
+        self.g.materialize_edge(edge,truth)
         self.update()
-
+        
     # Materialize a negative edge
 
     def dematerialize_edge(self,edge):
-        rel_lit,head,tail = edge
-        edge = (Literal(0,rel_lit.atom),head,tail)
-        self.materialize_edge(edge)
-
-#        if self.update_callback != None:
-#            self.update_callback()
+        self.materialize_edge(edge,truth=False)
 
 
 

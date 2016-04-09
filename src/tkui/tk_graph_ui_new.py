@@ -36,7 +36,7 @@ def get_id(element):
 
 def get_obj(element):
     # drop initial dot
-    return element['data']['obj'][1:]
+    return element['data']['obj']
 
 def get_arrowend(element):
     p1 = get_coord(element['data']['bspline'][-1])
@@ -91,7 +91,6 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
         Canvas.__init__(self,root)
         self.graph_stack = gs
         self.tk = tk
-        tk.eval('package require Tcldot')
         self.pack(fill=BOTH,expand=1)
         self.root = root
         self.rel_enabled = dict()
@@ -114,25 +113,35 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
     # Get the enabled state for a concept "r". TODO: create a class
     # for this.
 
-    def get_enabled(self,r):
-#        rel = repr(r.rel_lit.atom)
-        rel = r.rel_lit.atom
+    def get_enabled(self,rel):
         if rel in self.rel_enabled:
             return self.rel_enabled[rel]
         res = [IntVar(self,0),IntVar(self,0),IntVar(self,0),IntVar(self,0)]
         self.rel_enabled[rel] = res
         return res
 
+    # Copy checkbox state to the renderer
+
+    def sync_checkboxes(self):
+        for rel in self.g.relation_ids:
+            boxes = self.get_enabled(rel)
+            for idx,box in enumerate(boxes):
+                self.g.widget.set_checkbox(rel,idx,box.get())
+
     # Get styles for nodes
 
     def get_node_styles(self,elem):
-        return node_styles[get_classes(elem)]
+        res = node_styles[get_classes(elem)]
+        res['fill'] = ''
+        res['outline'] = self.colors[get_obj(elem)]
+        return res
+        
             
     # Get styles for edges
 
     def get_edge_styles(self,elem):
         res = edge_styles[get_classes(elem)]
-        res['arrowshape']="16 16 6"
+        res['arrowshape']="14 14 5"
         res['fill'] = self.colors[get_obj(elem)]
         return res
 
@@ -173,10 +182,10 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
             # choose colors for sorts and concepts
 
-            self.colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sorts))
-            for idx,r in enumerate(g.relations):
-                name = r.id
-                self.colors[name] = self.line_color(idx)
+            self.colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sort_ids))
+            for idx,r in enumerate(g.relation_ids):
+                self.colors[r] = self.line_color(idx)
+            print "colors: {}".format(self.colors)
 
             # "mark" gives the name of the selected node. clear it
 
@@ -216,7 +225,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
             self.config(scrollregion=self.bbox(ALL))
 
-            # TODO: ???
+            # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
 
 
@@ -257,7 +266,8 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     # Handle a left click on a node
 
-    def left_click_node(self,event,n):
+    def left_click_node(self,event,elem):
+        n = self.g.concept_from_id(get_obj(elem))
         # display the popup menu
         popup = self.make_node_popup(n)
         try:
@@ -268,9 +278,10 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     # Handle a left click on an edge
 
-    def left_click_edge(self,event,rel_lit,head,tail):
+    def left_click_edge(self,event,elem):
         # display the popup menu 
-        edge = (rel_lit,head,tail)
+        edge = tuple(self.g.concept_from_id(f(elem))
+                     for x in (get_obj,get_source_obj,get_target_obj))
         popup = self.make_edge_popup(edge)
         try:
             popup.tk_popup(event.x_root, event.y_root, 0)
@@ -282,6 +293,11 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     def update(self):
         self.delete(ALL)
+        print "syncing..."
+        self.sync_checkboxes()
+        print "recomputing..."
+        self.g.recompute()
+        print "rebuilding"
         self.rebuild()
 
 
@@ -379,7 +395,7 @@ def update_relbuttons(gw,relbuttons):
     foo.grid(row = 0, column = 2)
     foo = Label(btns,text = 'T')
     foo.grid(row = 0, column = 4)
-    rels = list(sorted(enumerate(gw.g.relations),key=lambda r:r[1].name()))
+    rels = list(sorted(enumerate(gw.g.relation_ids),key=lambda r:r[1]))
     line_color = gw.line_color
     for idx,(num,rel) in enumerate(rels):
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[0],command=gw.update)
@@ -388,7 +404,7 @@ def update_relbuttons(gw,relbuttons):
         foo.grid(row = idx+1, column = 1)
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[2],command=gw.update)
         foo.grid(row = idx+1, column = 2)
-        foo = Label(btns,text=rel.name(),fg=line_color(num),justify=LEFT,anchor="w")
+        foo = Label(btns,text=rel,fg=line_color(num),justify=LEFT,anchor="w")
         foo.grid(sticky=W,row = idx+1, column = 3)
         foo.bind("<Button-1>", lambda e: askcolor())
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=gw.update)
