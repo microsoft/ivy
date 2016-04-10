@@ -25,18 +25,20 @@ class ArityError(IvyError):
     pass
 
 
-class Concept(record('Concept', ['variables', 'formula'])):
+class Concept(record('Concept', ['name', 'variables', 'formula'])):
     """
     A concept is a quantifier-free formula with some first-order free variables
     """
     @classmethod
-    def _preprocess_(cls, variables, formula):
+    def _preprocess_(cls, name, variables, formula):
+        if not isinstance(name,str):
+            raise IvyError("Concept name {} is not a string".format(name))
         variables = tuple(variables)
         if set(variables) != free_variables(formula):
             raise IvyError("Free variables {} must match formula: {}".format(variables, formula))
         if not all(type(v) is Var and first_order_sort(v.sort) for v in variables):
             raise IvyError("Concept variables must be first-order: {}".format(variables))
-        return variables, formula
+        return name,variables, formula
 
     arity = property(lambda self: len(self.variables))
     sorts = property(lambda self: tuple(v.sort for v in self.variables))
@@ -55,6 +57,15 @@ class Concept(record('Concept', ['variables', 'formula'])):
             self.formula,
         )
 
+class ConceptDict(OrderedDict):
+    """ A collection of concepts, allowing to look up concepts by name """
+    def add(self,category,name,variables,formula):
+        c = Concept(name,variables,formula)
+        assert name not in self
+        self[name] = c
+        if category not in self:
+            self[category] = []
+        self.category.append(name)
 
 class ConceptCombiner(record('Concept', ['variables', 'formula'])):
     """
@@ -177,7 +188,7 @@ class ConceptDomain(object):
     ill-sorted combinations are silently ignored.
     """
     def __init__(self, concepts, combiners, combinations):
-        self.concepts = OrderedDict(concepts)
+        self.concepts = ConceptDict(concepts)
         self.combiners = OrderedDict(combiners)
         self.combinations = list(combinations)
 
@@ -255,10 +266,10 @@ class ConceptDomain(object):
         formula_plus = And(c1(*variables), c2(*variables))
         formula_minus = And(c1(*variables), Not(c2(*variables)))
         new_names = '({}+{})'.format(concept, split_by), '({}-{})'.format(concept, split_by)
-        new_concepts = Concept(variables, formula_plus), Concept(variables, formula_minus)
+        new_concepts = Concept(new_names[0],variables, formula_plus), Concept(new_names[1],variables, formula_minus)
         names = self.concepts.keys()
         self.concepts.update(zip(new_names, new_concepts))
-        self.concepts = OrderedDict((k, self.concepts[k]) for k in _replace_name(names, concept, new_names))
+        self.concepts = ConceptDict((k, self.concepts[k]) for k in _replace_name(names, concept, new_names))
         self.replace_concept(concept, new_names)
 
     def replace_concept(self, concept, new):
@@ -368,7 +379,7 @@ def get_initial_concept_domain(sig):
     """
     sig is an ivy_logic.Sig object
     """
-    concepts = OrderedDict()
+    concepts = ConceptDict()
 
     concepts['nodes'] = []
     concepts['node_labels'] = []
@@ -377,13 +388,12 @@ def get_initial_concept_domain(sig):
     # add sort concepts
     for s in sorted(sig.sorts.values()):
         X = Var('X', s)
-        concepts[s.name] = Concept([X], Eq(X,X))
-        concepts['nodes'].append(s.name)
+        concepts.add('nodes',s.name,[X], Eq(X,X))
 
     # add equality concept
     X = Var('X', TopSort())
     Y = Var('Y', TopSort())
-    concepts['='] = Concept([X, Y], Eq(X, Y))
+    concepts['='] = Concept('=',[X, Y], Eq(X, Y))
 
     # add concepts from relations
     for c in sorted(sig.symbols.values()):
@@ -393,20 +403,20 @@ def get_initial_concept_domain(sig):
             # first order constant, add unary equality concept
             X = Var('X', c.sort)
             name = '={}'.format(c.name)
-            concepts[name] = Concept([X], Eq(X,c))
+            concepts[name] = Concept(name,[X], Eq(X,c))
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 1:
             # add unary concept and label
             X = Var('X', c.sort.domain[0])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X], c(X))
+            concepts[name] = Concept(name,[X], c(X))
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 2:
             # add binary concept and edge
             X = Var('X', c.sort.domain[0])
             Y = Var('Y', c.sort.domain[1])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y], c(X, Y))
+            concepts[name] = Concept(name,[X, Y], c(X, Y))
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 3:
             # add ternary concept
@@ -414,7 +424,7 @@ def get_initial_concept_domain(sig):
             Y = Var('Y', c.sort.domain[1])
             Z = Var('Z', c.sort.domain[2])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y, Z], c(X, Y, Z))
+            concepts[name] = Concept(name,[X, Y, Z], c(X, Y, Z))
 
         else:
             # skip other symbols
@@ -437,7 +447,7 @@ def get_diagram_concept_domain(sig, diagram):
     # add equality concept
     X = Var('X', TopSort())
     Y = Var('Y', TopSort())
-    concepts['='] = Concept([X, Y], Eq(X, Y))
+    concepts['='] = Concept('=',[X, Y], Eq(X, Y))
 
     # add concepts from relations and constants in the signature and
     # in the diagram
@@ -452,21 +462,21 @@ def get_diagram_concept_domain(sig, diagram):
             # first order constant, add unary equality concept
             X = Var('X', c.sort)
             name = '{}:{}'.format(c.name, c.sort)
-            concepts[name] = Concept([X], Eq(X,c))
+            concepts[name] = Concept(name,[X], Eq(X,c))
             concepts['nodes'].append(name)
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 1:
             # add unary concept and label
             X = Var('X', c.sort.domain[0])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X], c(X))
+            concepts[name] = Concept(name,[X], c(X))
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 2:
             # add binary concept and edge
             X = Var('X', c.sort.domain[0])
             Y = Var('Y', c.sort.domain[1])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y], c(X, Y))
+            concepts[name] = Concept(name,[X, Y], c(X, Y))
 
         elif type(c.sort) is FunctionSort and c.sort.arity == 3:
             # add ternary concept
@@ -474,7 +484,7 @@ def get_diagram_concept_domain(sig, diagram):
             Y = Var('Y', c.sort.domain[1])
             Z = Var('Z', c.sort.domain[2])
             name = '{}'.format(c.name)
-            concepts[name] = Concept([X, Y, Z], c(X, Y, Z))
+            concepts[name] = Concept(name,[X, Y, Z], c(X, Y, Z))
 
         else:
             # skip other symbols
@@ -503,7 +513,7 @@ def get_structure_concept_domain(state, sig=None):
     # add equality concept
     X = Var('X', TopSort())
     Y = Var('Y', TopSort())
-    concepts['='] = Concept([X, Y], Eq(X, Y))
+    concepts['='] = Concept('=',[X, Y], Eq(X, Y))
 
     # add nodes for universe elements
     elements = [uc for s in state.universe for uc in state.universe[s]]
@@ -511,7 +521,7 @@ def get_structure_concept_domain(state, sig=None):
         # add unary equality concept
         X = Var('X', uc.sort)
         name = universe_element_to_concept_name(uc)
-        concepts[name] = Concept([X], Eq(X,uc))
+        concepts[name] = Concept(name,[X], Eq(X,uc))
         concepts['nodes'].append(name)
 
     # # find which symbols are equal to which universe constant
@@ -538,7 +548,7 @@ def get_structure_concept_domain(state, sig=None):
             # first order constant, add unary equality concept
             X = Var('X', c.sort)
             name = '={}'.format(c.name)
-            concepts[name] = Concept([X], Eq(X,c))
+            concepts[name] = Concept(name,[X], Eq(X,c))
 
         elif type(c.sort) is FunctionSort and c.sort.range == Boolean:
             # relation, support arity 1,2 and 3
@@ -548,14 +558,14 @@ def get_structure_concept_domain(state, sig=None):
                 # add unary concept and label
                 X = Var('X', c.sort.domain[0])
                 name = '{}'.format(c.name)
-                concepts[name] = Concept([X], c(X))
+                concepts[name] = Concept(name,[X], c(X))
 
             elif c.sort.arity == 2:
                 # add binary concept and edge
                 X = Var('X', c.sort.domain[0])
                 Y = Var('Y', c.sort.domain[1])
                 name = '{}'.format(c.name)
-                concepts[name] = Concept([X, Y], c(X, Y))
+                concepts[name] = Concept(name,[X, Y], c(X, Y))
 
             elif c.sort.arity == 3:
                 # add ternary concept
@@ -563,7 +573,7 @@ def get_structure_concept_domain(state, sig=None):
                 Y = Var('Y', c.sort.domain[1])
                 Z = Var('Z', c.sort.domain[2])
                 name = '{}'.format(c.name)
-                concepts[name] = Concept([X, Y, Z], c(X, Y, Z))
+                concepts[name] = Concept(name,[X, Y, Z], c(X, Y, Z))
 
             else:
                 # arity >= 4
@@ -578,7 +588,7 @@ def get_structure_concept_domain(state, sig=None):
                 X = Var('X', c.sort.domain[0])
                 Y = Var('Y', c.sort.range)
                 name = '{}'.format(c.name)
-                concepts[name] = Concept([X, Y], Eq(c(X), Y))
+                concepts[name] = Concept(name,[X, Y], Eq(c(X), Y))
 
 
             elif c.sort.arity == 2:
@@ -587,7 +597,7 @@ def get_structure_concept_domain(state, sig=None):
                 Y = Var('Y', c.sort.domain[1])
                 Z = Var('Z', c.sort.range)
                 name = '{}'.format(c.name)
-                concepts[name] = Concept([X, Y, Z], Eq(c(X, Y), Z))
+                concepts[name] = Concept(name,[X, Y, Z], Eq(c(X, Y), Z))
 
             else:
                 # function with arity >= 3
@@ -763,13 +773,13 @@ if __name__ == '__main__':
     q = Const('q', UnaryRelationS)
     u = Const('u', UnaryRelationS)
 
-    c11 = Concept([X], And(p(X), q(X)))
-    c10 = Concept([X], And(p(X), Not(q(X))))
-    c01 = Concept([X], And(Not(p(X)), q(X)))
-    c00 = Concept([X], And(Not(p(X)), Not(q(X))))
-    cu = Concept([X], u(X))
+    c11 = Concept('both',[X], And(p(X), q(X)))
+    c10 = Concept('onlyp',[X], And(p(X), Not(q(X))))
+    c01 = Concept('onlyq',[X], And(Not(p(X)), q(X)))
+    c00 = Concept('none',[X], And(Not(p(X)), Not(q(X))))
+    cu = Concept('u',[X], u(X))
 
-    crn = Concept([X, Y], Or(r(X,Y), n(X,Y)))
+    crn = Concept('r_or_n',[X, Y], Or(r(X,Y), n(X,Y)))
 
     combiners = get_standard_combiners()
     combinations = get_standard_combinations()

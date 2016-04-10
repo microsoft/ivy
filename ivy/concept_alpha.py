@@ -31,7 +31,7 @@ def alpha(concept_domain, state, cache=None, projection=None):
 
 
 if __name__ == '__main__':
-    from collections import OrderedDict
+    from collections import ConceptDict
     from logic import (Var, Const, Apply, Eq, Not, And, Or, Implies,
                        ForAll, Exists)
     from logic import UninterpretedSort, FunctionSort, first_order_sort, Boolean
@@ -57,13 +57,13 @@ if __name__ == '__main__':
     x = Const('x', S)
     y = Const('y', S)
 
-    c11 = Concept([X], And(Eq(x,X), Eq(y,X)))
-    c10 = Concept([X], And(Eq(x,X), Not(Eq(y,X))))
-    c01 = Concept([X], And(Not(Eq(x,X)), Eq(y,X)))
-    c00 = Concept([X], And(Not(Eq(x,X)), Not(Eq(y,X))))
+    c11 = Concept('xy',[X], And(Eq(x,X), Eq(y,X)))
+    c10 = Concept('x',[X], And(Eq(x,X), Not(Eq(y,X))))
+    c01 = Concept('y',[X], And(Not(Eq(x,X)), Eq(y,X)))
+    c00 = Concept('other',[X], And(Not(Eq(x,X)), Not(Eq(y,X))))
 
-    cnstar = Concept([X, Y], nstar(X,Y))
-    cnplus = Concept([X, Y], And(nstar(X,Y), Not(Eq(X,Y))))
+    cnstar = Concept('nstar',[X, Y], nstar(X,Y))
+    cnplus = Concept('nplus',[X, Y], And(nstar(X,Y), Not(Eq(X,Y))))
 
     notexists = ConceptCombiner([U], Not(Exists([X], U(X))))
     exists = ConceptCombiner([U], Exists([X], U(X)))

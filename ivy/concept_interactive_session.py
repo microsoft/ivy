@@ -52,6 +52,7 @@ class ConceptInteractiveSession(object):
         result = ConceptInteractiveSession(
             self.domain.copy(),
             self.state,
+            self.axioms,
             self.goal_constraints[:],
             self.suppose_constraints[:],
             self.widget,
@@ -158,7 +159,7 @@ class ConceptInteractiveSession(object):
             # TODO: maybe we shouldn't split here, and create the concepts explicitly
             X = Var('X', c.sort)
             name = '={}'.format(c.name)
-            self.domain.concepts[name] = Concept([X], Eq(X,c))
+            self.domain.concepts[name] = Concept(name,[X], Eq(X,c))
             self.domain.split(concept_name, name)
         self.suppose_constraints.append(concept(c))
         return c
@@ -268,8 +269,8 @@ class ConceptInteractiveSession(object):
                 if v.sort == w.sort:
                     variables = [x for x in t_concept.variables if x is not v]
                     formula = substitute(t_concept.formula, {v: w})
-                    concept = Concept(variables, formula)
-                    name = str(concept.formula)
+                    name = str(formula)
+                    concept = Concept(name,variables, formula)
                     result.append((name, concept))
         return result
 

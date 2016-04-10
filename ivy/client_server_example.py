@@ -63,14 +63,11 @@ a = Const('a', client_sort)
 b = Const('b', server_sort)
 constrains = And(Not(s(b)), c(a,b))
 
-concepts = OrderedDict()
-concepts['client'] = Concept([X], Eq(X,X))
-concepts['server'] = Concept([Y], Eq(Y,Y))
-concepts['s'] = Concept([Y], s(Y))
-concepts['c'] = Concept([X,Y], c(X,Y))
-concepts['nodes'] = ['client', 'server']
-concepts['edges'] = ['c']
-concepts['node_labels'] = ['s']
+concepts = ConceptDict()
+concepts.add('nodes','client', [X], Eq(X,X))
+concepts.add('nodes','server', [Y], Eq(Y,Y))
+concepts.add('node_labels','s', [Y], s(Y))
+concepts.add('edges','c', [X,Y], c(X,Y))
 
 cd = ConceptDomain(concepts, get_standard_combiners(), get_standard_combinations())
 

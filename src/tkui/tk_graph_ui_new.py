@@ -44,9 +44,10 @@ def get_arrowend(element):
     return p1 + p2
 
 node_styles = {
-    'at_least_one' : {'width' : 2, 'double' : 5},
+    'at_least_one' : {'width' : 4, 'double' : 5},
     'at_most_one' : {'width' : 2},
     'exactly_one' : {'width' : 4},
+    'node_unknown' :  {'width' : 2, 'double' : 5},
     }
 
 edge_styles = {
@@ -163,6 +164,19 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             method(x0+gap,y0+gap,x1-gap,y1-gap,**kwargs)
         return method(x0,y0,x1,y1,**kwargs)
  
+    # choose colors for concepts. nodes are colored by sort
+
+    def choose_colors(self):
+        g = self.g
+        sort_colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sort_names))
+        self.colors = {}
+        for n in g.nodes:
+            self.colors[g.id_from_concept(n)] = sort_colors[g.node_sort(n).name]
+        for idx,r in enumerate(g.relation_ids):
+            self.colors[r] = self.line_color(idx)
+        print "colors: {}".format(self.colors)
+
+
     # Rebuild the display. This is called after any change to the
     # concept graph that affects the layout. Here, we assume layout
     # has already been done and we render to a Tk Canvas.
@@ -178,14 +192,8 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
             tk = self.tk
             g = self.g
-            # g.recompute()  (we assume already computed and layed out)
 
-            # choose colors for sorts and concepts
-
-            self.colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sort_ids))
-            for idx,r in enumerate(g.relation_ids):
-                self.colors[r] = self.line_color(idx)
-            print "colors: {}".format(self.colors)
+            self.choose_colors()
 
             # "mark" gives the name of the selected node. clear it
 
@@ -227,6 +235,14 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
             # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
+
+
+    def show_mark(self,on=True):
+        if hasattr(self,'mark'):
+            tag = self.g.id_from_concept(self.mark)
+            for item in self.find_withtag(tag):
+                if item.has_tag('shape'):
+                    self.itemconfig(item,fill=('red' if on else 'white'))
 
 
     # Export the display in DOT format. This also depends on tcldot.

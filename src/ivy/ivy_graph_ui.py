@@ -124,15 +124,12 @@ class GraphWidget(object):
     # add projections
 
     def get_node_projection_actions(self,node):
-        res = []
-        wit = self.g.get_witness(node)
-        if wit != None:
-            trs = list(get_projections_of_ternaries(wit))
-            if trs != []:
-                res.append(("Add projection...",None))
-                for p in trs:
-                    res.append((str(p),lambda p=p: self.project(p)))
-        return res
+        projs = self.g.get_projections(node)
+        if len(projs) > 0:
+            res.append(("Add projection...",None))
+            for (name,p) in projs:
+                    res.append((name,lambda p=p: self.project(p)))
+        return projs
 
     # get the edge menu actions
 
@@ -372,11 +369,6 @@ class GraphWidget(object):
         cn = node
         self.g.split(cn,p)
         self.update()
-
-    def show_mark(self,on=True):
-        if hasattr(self,'mark') and self.mark in self.node_to_handle:
-            for item in self.find_withtag("1"+self.node_to_handle[self.mark]):
-                self.itemconfig(item,fill=('red' if on else 'white'))
 
     # Select a node for a future action
 

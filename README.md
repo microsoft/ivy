@@ -23,14 +23,20 @@ you installed Z3. By defult this is /usr/local, in which case:
 
     $ export Z3DIR = /usr/local
 
-### tcldot
+### Python packages
 
-This is needed to run the Tcl/Tk-based user interface. You do not need
-this to use the browser-based user interface or the command-line
-interface. You also need the python packages Tk, Tix and PLy. On
-Ubuntu, install them all like this:
+Install the python packages ply and pygraphviz. On Ubuntu, install them
+like this:
 
-    $ sudo apt-get install python-tk python-ply tix libgv-tcl
+    $ sudo apt-get install python-ply python-pygraphviz
+
+### tcl/tk/tcldot
+
+To use the Tk-based user interface, you need to install the python
+package tk, the tix widget set, and the tcldot package (part of
+graphviz). On Ubuntu, install them all like this:
+
+    $ sudo apt-get install python-tk tix libgv-tcl
 
 ## install
 

@@ -17,7 +17,7 @@ from ivy_concept_space import NamedSpace, SumSpace, ProductSpace
 from ivy_transrel import is_skolem
 from ivy_utils import union_to_list
 import string
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 
 import ivy_logic as il
 import concept as co
@@ -25,280 +25,6 @@ import concept_interactive_session as cis
 from dot_layout import dot_layout
 from cy_elements import CyElements
 
-def cube_to_z3(cube):
-    if len(cube) == 0:
-        return z3.BoolVal(True)
-    fmla = z3.And([literal_to_z3(lit) for lit in cube])
-    return fmla
-
-def s_add(s,f):
-#    print "add: {}".format(f)
-    s.add(f)
-
-def s_check_fmla(s,fmla):
-    s.push()
-    f = z3.Not(formula_to_z3(fmla))
-    s_add(s,f)
-    cr = s.check()
-    s.pop()
-    return cr
-
-def s_check_cube_p(s,polarity,cube,assump = None):
-    s.push()
-    if assump is not None:
-        s_add(s,formula_to_z3(assump))
-    f = cube_to_z3(cube)
-    if polarity == 0:
-        f = z3.Not(f)
-    s_add(s,f)
-    cr = s.check()
-#    print "cr: {}".format(cr)
-    s.pop()
-    return cr
-
-def s_check_cube(s,cube,assump = None):
-    if s_check_cube_p(s,1,cube) == z3.unsat:
-        res = "false"
-    elif s_check_cube_p(s,0,cube,assump) == z3.unsat:
-        res = "true"
-    else:
-        res = "undef"
-    return res
-
-def make_lit_label(lit):
-    # pred = lit.atom.relname
-    # if pred != "=":
-    #     label = pred
-    # else:
-    #     terms = lit.atom.args
-    #     arg = 1 if isinstance(terms[0],Variable) else 0
-    #     label = "=" + lit.atom.args[arg].rep
-    for v in used_variables_ast(lit):
-        return str(substitute_lit(lit,{v.rep:Variable('',v.sort)})).replace(' ','').replace('()','')
-    label = str(lit.atom)
-    return label if lit.polarity == 1 else "~" + label
-
-class GraphNode(object):
-    def __init__(self,name,fmla,sort):
-#        print "GraphNode: name: {}".format(name)
-#        print "GraphNode: type(name): {}".format(type(name))
-        self.name = name
-        self.fmla = fmla
-        self.sort = sort
-    def copy(self):
-        c = GraphNode(self.name,self.fmla,self.sort)
-        c.__dict__ = self.__dict__.copy() 
-        return c
-    def text_name(self):
-        return '___' + self.name
-    def variable(self,name):
-        return Variable(name,self.sort)
-    def to_concept_space(self):
-        return Atom(self.text_name(),[self.variable('X')]), ProductSpace([NamedSpace(x) for x in self.fmla])
-    def extra_concepts(self):
-        tn = self.text_name()
-        X,Y = self.variable('X'),self.variable('Y')
-        c = [Literal(1,Atom(tn,[X])),~eq_lit(X,Y),Literal(1,Atom(tn,[Y]))]
-        cs = [ProductSpace([NamedSpace(x) for x in c])]
-        w = get_witness(self)
-        if w:
-            cls = [[~lit,eq_lit(X,w)] for lit in self.fmla]
-            cs += [ProductSpace([NamedSpace(x) for x in c]) for c in cls]
-        return cs
-
-def definite_node(n):
-    if n.status != true:
-        return None
-    return get_witness(n)
-
-def rela_fact(polarity,relname,n1,n2):
-    return ([~lit for lit in fmla1]
-            + [~lit for lit in substitute_clause(n2.fmla,{'X':Variable('Y',n2.sort)})]
-            + [Literal(polarity,Atom(relname,[Variable('X',n1.sort),Variable('Y',n2.sort)]))])
-
-def str_of_edge(e):
-    return e[0][0].name + '|' + e[0][1].name + '|' + e[1]
-
-class GraphRelation(object):
-    def __init__(self,parent,rel_lit):
-        self.parent = parent
-        self.rel_lit = rel_lit
-        params = dict((v.name,v) for v in used_variables_ast(rel_lit.atom))
-#        self.sorts = [a.get_sort() for a in rel_lit.atom.args]
-        self.sorts = [params['X'].sort,params['Y'].sort]
-#        print "GraphRelation: rel = {}, sorts = {}".format(rel_lit,self.sorts)
-        self.properties = {'transitive':False,'reflexive':False}
-    def arity(self):
-        return 2
-    @property
-    def sort(self):
-        return RelationSort(self.sorts)
-    def copy(self,new_parent):
-        r = type(self)(new_parent,self.rel_lit)
-        r.edges = self.edges # these are immutable I hope
-        if hasattr(self,'solver'):
-            r.solver = self.solver
-        r.properties = self.properties.copy()
-        return r
-    def compute_edges(self,solver):
-        self.edges = None # compute them lazily
-# don't save solver, use parent's
-#        self.solver = solver
-    def really_compute_edges(self,solver):
-        self.edges = []
-        self.parent.enable_relation(self)
-        for n1 in self.parent.nodes:
-            if n1.sort == self.sorts[0]:
-                for n2 in self.parent.nodes:
-                    if n2.sort == self.sorts[1]:
-                        status = self.check_edge(n1.fmla,n2.fmla,solver)
-                        self.edges.append(((n1,n2),status))
-#        self.solver = None #once edges are computed, we don't need solver
-    def get_edges(self):
-        if self.edges == None:
-            self.really_compute_edges(self.parent.solver)
-        edges = self.edges
-        if self.properties['reflexive']:
-            edges = [((x,y),status) for (x,y),status in edges if x is not y]
-        if self.properties['transitive']:
-            idx = defaultdict(list)
-            for e in edges:
-                idx[e[0][0].name].append(e)
-            d = set()
-            for ((n1,n2),s1) in edges:
-                if s1 == 'true':
-                    for (n3,n4),s2 in idx[n2.name]:
-                        if s2 == 'true':
-                            d.add(str_of_edge(((n1,n4),'true')))
-            edges = [e for e in edges if str_of_edge(e) not in d]
-        return edges
-    # TODO: this seems to be unused -- remove?
-    def get_facts(self,names,tvals):
-        edges = self.get_edges()
-        return [rela_fact(1 if status =='true' else 0,self.name(),p1,p2)
-                for (p1,p2),status in edges
-                if status != 'undef' and status in tvals and p1.name in names and p2.name in names]
-    # here, we trust that all the named states are definite
-    def get_definite_facts(self,names,tvals):
-        edges = self.get_edges()
-        return [[substitute_lit(Literal(1 if status =='true' else 0,self.rel_lit.atom),
-                               {'X':get_witness(p1),'Y':get_witness(p2)})]
-                for (p1,p2),status in edges
-                if status != 'undef' and status in tvals and p1.name in names and p2.name in names]
-    def check_edge(self,f1,f2,solver):
-        x = var_to_skolem('__',Variable('X',self.sorts[0])).suffix(str(self.sorts[0]))
-        y = var_to_skolem('__',Variable('Y',self.sorts[1])).suffix(str(self.sorts[1]))
-        solver.push()
-        s_add(solver,cube_to_z3(substitute_clause(f1,{'X':x})))
-        s_add(solver,cube_to_z3(substitute_clause(f2,{'X':y})))
-#        print "xsort: {}, ysort: {}".format(x.get_sort(),y.get_sort())
-#        print "rel_lit: {}, subs: {}".format(self.rel_lit,substitute_lit(self.rel_lit,{'X':x,'Y':y}))
-        res = s_check_cube(solver,[substitute_lit(self.rel_lit,{'X':x,'Y':y})])
-        solver.pop()
-        return res
-    @property
-    def id(self):
-        return il.to_str_with_var_sorts(self.rel_lit.atom)
-    def name(self):
-        return str(self.rel_lit.atom)
-    def to_concept_space(self):
-        rel_lit = self.rel_lit
-        return Atom('__' + rel_lit.atom.rep,rel_lit.atom.args),SumSpace([NamedSpace(rel_lit),NamedSpace(~rel_lit)])
-
-class GraphRelationUnary(GraphRelation):
-    def __init__(self,parent,rel_lit):
-        self.parent = parent
-        self.rel_lit = rel_lit
-        params = dict((v.name,v) for v in used_variables_ast(rel_lit.atom))
-#        self.sorts = [a.get_sort() for a in rel_lit.atom.args]
-        self.sorts = [params['X'].sort]
-#        print "GraphRelation: rel = {}, sorts = {}".format(rel_lit,self.sorts)
-        self.properties = {'transitive':False,'reflexive':False}
-    def arity(self):
-        return 1
-    def really_compute_edges(self,solver):
-        self.edges = []
-        self.parent.enable_relation(self)
-        for n1 in self.parent.nodes:
-            if n1.sort == self.sorts[0]:
-                status = self.check_edge(n1.fmla,solver)
-                self.edges.append(((n1,),status))
-#        self.solver = None #once edges are computed, we don't need solver
-    def get_edges(self):
-        if self.edges == None:
-            self.really_compute_edges(self.parent.solver)
-        return self.edges
-    # TODO: this seems to be unused -- remove?
-    def get_facts(self,names,tvals):
-        edges = self.get_edges()
-        return [rela_fact(1 if status =='true' else 0,self.name(),p1)
-                for (p1,),status in edges
-                if status != 'undef' and status in tvals and p1.name in names]
-    # here, we trust that all the named states are definite
-    def get_definite_facts(self,names,tvals):
-        edges = self.get_edges()
-        return [[substitute_lit(Literal(1 if status =='true' else 0,self.rel_lit.atom),
-                               {'X':get_witness(p1)})]
-                for (p1,),status in edges
-                if status != 'undef' and status in tvals and p1.name in names]
-    def check_edge(self,f1,solver):
-        x = var_to_skolem('__',Variable('X',self.sorts[0])).suffix(str(self.sorts[0]))
-        solver.push()
-        s_add(solver,cube_to_z3(substitute_clause(f1,{'X':x})))
-        #  print "xsort: {}, ysort: {}".format(x.get_sort(),y.get_sort())
-#        print "rel_lit: {}, subs: {}".format(self.rel_lit,substitute_lit(self.rel_lit,{'X':x,'Y':y}))
-        res = s_check_cube(solver,[substitute_lit(self.rel_lit,{'X':x})])
-        solver.pop()
-        return res
-
-class GraphFunctionUnary(GraphRelationUnary):
-    def __init__(self,parent,rel_lit):
-#        print "GraphFunctionUnary: {} : {}".format(rel_lit,type(rel_lit))
-        self.parent = parent
-        fmla = rel_lit.atom
-        self.fmla = fmla
-        self.rel_lit = rel_lit # this is fake
-        params = dict((v.name,v) for v in used_variables_ast(fmla))
-#        self.sorts = [a.get_sort() for a in rel_lit.atom.args]
-        self.sorts = [params['X'].sort]
-#        print "GraphRelation: rel = {}, sorts = {}".format(rel_lit,self.sorts)
-        self.properties = {'transitive':False,'reflexive':False}
-    def status_lit(self,status):
-        return Literal(1,Atom(equals,[self.fmla,status]))
-    def test_lit(self,param,status):
-        return substitute_lit(self.status_lit(status),{'X':param})
-    def get_definite_facts(self,names,tvals):
-        edges = self.get_edges()
-        return [[self.test_lit(get_witness(p1),status)]
-                for (p1,),status in edges
-                if status != 'undef' and p1.name in names]
-    def check_edge(self,f1,solver):
-        x = var_to_skolem('__',Variable('X',self.sorts[0])).suffix(str(self.sorts[0]))
-        solver.push()
-        s_add(solver,cube_to_z3(substitute_clause(f1,{'X':x})))
-        #  print "xsort: {}, ysort: {}".format(x.get_sort(),y.get_sort())
-#        print "rel_lit: {}, subs: {}".format(self.rel_lit,substitute_lit(self.rel_lit,{'X':x,'Y':y}))
-        f = self.fmla
-        vals = [Constant(Symbol(y,f.sort.rng)) for y in f.sort.rng.defines()]
-        status = 'undef'
-        for v in vals:
-            if s_check_fmla(solver,self.test_lit(x,v).atom) == z3.unsat:
-                status = v
-                break
-        solver.pop()
-        return status
-
-                    
-def get_witness(n):
-    for lit in n.fmla:
-#        print "get_witness: lit = {}, iseq = {}, type(lit) = {}, type(lit.atom) = {}, lit.atom.rep = {}, lit.atom.rep == equals = {}".format(lit,is_equality_lit(lit),type(lit), type(lit.atom), lit.atom.rep, lit.atom.rep == equals)
-        if is_equality_lit(lit) and isinstance(lit.atom.args[0],Variable):
-            return lit.atom.args[1]
-    return None
-
-def lins(l,i,e):
-    l.insert(i,e)
-    return l
 
 def get_projections_of_ternaries(wit):
 #    print "witness: {}".format(wit)
@@ -311,40 +37,28 @@ def get_projections_of_ternaries(wit):
                     yield Literal(1,sym(*[t if t is wit else Variable(t,s) for t,s in zip(lins(['X','Y'],i,wit),sym.sort.dom)]))
                     
 
-def node_concept(sort,varname):
-    return Literal(1,Atom('__node:' + sort,[Variable(varname,sort)])) 
 
-def xtra_concept(sort,vn1,vn2):
-    return Literal(1,Atom('__xtra:' + sort,[Variable(vn1,sort),Variable(vn2,sort)])) 
-
-def apply_edge_rel(rel_lit,arg1,arg2):
-    return substitute_lit(rel_lit,{'X':arg1,'Y':arg2})
-
-use_ivy_alpha = False
-
-
-# This creates a concept from a formula with free variables,
-# using the variables in alphabetical order.
+# This creates a concept from a formula with free variables, using the
+# variables in alphabetical order.  A canonical concept name is
+# generated from the formula.
 
 def concept_from_formula(fmla):
     vs = sorted(list(used_variables_ast(fmla)),key=str)
-    return co.Concept(vs,fmla)
+    name = (','.join(str(v) + ':' + str(v.sort) for v in vs)
+            + '.' + str(fmla))
+    return co.Concept(name,vs,fmla)
 
-def concept_name(concept):
-    return il.to_str_with_var_sorts(concept.formula)
-
-def add_domain_concept(concepts,fmla,name=None,kind=None):
+def add_domain_concept(concepts,fmla,kind=None):
     con = concept_from_formula(fmla)
     arity = con.arity
-    name = '.' + (name or concept_name(con))
+    name = con.name
     if 1 <= arity and arity <= 2:
         kind = kind or ('node_labels' if arity==1 else 'edges')
         concepts[name] = con
         concepts[kind].append(name)
-    return name    
-
+ 
 def empty_concepts():
-    concepts = OrderedDict()
+    concepts = co.ConceptDict()
     concepts['nodes'] = []
     concepts['node_labels'] = []
     concepts['edges'] = []
@@ -363,14 +77,8 @@ def initial_concept_domain(sorts):
     # add one node for each sort
     for sort in sorts:
         X = Variable('X', sort)
-        add_domain_concept(concepts,Equals(X,X),name=sort.name,kind='nodes')
+        add_domain_concept(concepts,Equals(X,X),kind='nodes')
         
-    # add equality concept
-    if False:
-        X = Variable('X', TopSort())
-        Y = Variable('Y', TopSort())
-        concepts['='] = co.Concept([X, Y], Equals(X, Y))
-
     return make_concept_domain(concepts)
 
 def replace_concept_domain_vocabulary(concept_domain,symbols):
@@ -547,16 +255,9 @@ def render_concept_graph(widget):
                 (node, label_name) not in custom):
                 # don't add invisible labels
                 continue
-            if label_name.startswith('='):
-                disp = _label_prefix_equality[k] + label_name[1:]
-            else:
-                disp = _label_prefix[k] + label_name
-            label_lines.append(disp)
+            label_lines.append(widget.concept_label(domain.concepts[label_name]))
 
-        disp = node
-        if '+' in disp or '-' in disp:
-            # for concepts that are the result of splits, display just the sort
-            disp = str(domain.concepts[node].sorts[0])
+        disp = widget.node_label(domain.concepts[node])
         label = '\n'.join([disp] + label_lines)
         info = '\n'.join(
             [
@@ -663,7 +364,10 @@ def render_concept_graph(widget):
 
 
 class ConceptStateViewWidget(object):
-    def __init__(self):
+    def __init__(self,parent):
+
+        self.parent = parent
+
         # dict mapping edge names to widget tuples
         self.edge_display_checkboxes = defaultdict(
             lambda: dict((x, Option()) for x in _edge_display_checkboxes)
@@ -682,7 +386,6 @@ class ConceptStateViewWidget(object):
         self.add_projection = None
 
     def set_checkbox(self,obj,idx,val):
-        obj = '.' + obj  # get name in graph
         # HACK: can't tell if it's edge or node_label so set both
         val = Option(val)
         if idx < len(_edge_display_checkboxes):
@@ -701,21 +404,28 @@ class ConceptStateViewWidget(object):
         
     def projection(self,concept_name,concept_class):
         print 'thing: {} {}'.format(concept_name,concept_class)
+        return True
         if concept_class == 'node_labels':
             return concept_name in set(['.s(X:server)'])
         return True
+
+    def concept_label(self,concept):
+        return self.parent.concept_label(concept)
+
+    def node_label(self,concept):
+        return str(concept.sorts[0])
 
 class Graph(object):
     def __init__(self,nodes,parent_state=None):
         self.constraints = true_clauses()
         self.parent_state = parent_state
         self.concept_domain = initial_concept_domain([s for n,f,s in nodes])
-        self.widget = ConceptStateViewWidget()
+        self.widget = ConceptStateViewWidget(self)
         self.session = cis.ConceptInteractiveSession(self.concept_domain,And(),And(),widget=self.widget)
 
     @property
-    def sort_ids(self):
-        return ['.' + s for s in sig.sorts]  # for now, display all declared sorts
+    def sort_names(self):
+        return sorted(list(sig.sorts))  # for now, display all declared sorts
 
     @property
     def relation_ids(self):
@@ -725,6 +435,10 @@ class Graph(object):
     def concept_from_id(self,id):
         """ Get a relational concept from its id """
         return self.concept_domain.concepts[id]
+
+    def id_from_concept(self,concept):
+        """ Get a relational concept from its id """
+        return concept.name
 
     @property
     def relations(self):
@@ -744,11 +458,19 @@ class Graph(object):
     def node_sort(self,node):
         return node.sorts[0]
 
+    # This gives the shorthand name for a concept used in node labels.
+    
     def concept_label(self,concept):
         fmla = concept.formula
         for v in concept.variables:
             return str(substitute_ast(fmla,{v.rep:Variable('',v.sort)})).replace(' ','').replace('()','')
         return str(fmla)
+
+    # Get the projections of ternary relations using the witnesses of
+    # a node.
+
+    def get_projections(self,node):
+        return self.session.get_projections(node.name)
 
     # Parse a string into a concept
 
@@ -766,65 +488,6 @@ class Graph(object):
 
             return to_literal(text)
 
-    def add_relation(self,rela):
-        self.relations.append(rela)
-    def check_node(self,n):
-        x = var_to_skolem('__',Variable('X',n.sort)).suffix(str(n.sort))
-        y = var_to_skolem('__',Variable('Y',n.sort)).suffix(str(n.sort))
-#        print "x.sort: {}",format(x.sort)
-        self.solver.push()
-        s = self.solver
-        # if we have a witness we can show node is definite (present in all models)
-        wit = get_witness(n)
-#        print "checking: {}".format(n.fmla)
-        cube = substitute_clause(n.fmla,{'X':x})
-#        print "cube: {!r}".format(cube)
-#        print wit
-#        if wit != None:
-##            print "wit: {}, wit.sort: {}, x.sort: {}".format(wit,wit.sort,x.sort)
-        res = s_check_cube(s,cube,(Atom(equals,[x,wit]) if wit != None else None))
-##        print"check cube: %s = %s" % (cube,res)
-#        res = s_check_cube(s,substitute_clause(n.fmla,{'X':x}))
-#        print "status: {}".format(res)
-        n.status = res
-        s_add(s,cube_to_z3(substitute_clause(n.fmla,{'X':x})))
-        s_add(s,cube_to_z3(substitute_clause(n.fmla,{'X':y})))
-        s_add(s,cube_to_z3([Literal(0,Atom(equals,[x,y]))]))
-        n.summary = s.check() != z3.unsat
-        self.solver.pop()
-        
-    def concept(c):
-        """ Get the node corresponding to a concept """
-        if isinstance(c,str):
-            c = to_cube(c)
-        
-    def get_predicates(self,clauses):
-#        print "get_predicates: {}".format(clauses)
-        d = self.parent_state.domain
-        sig = d.sig
-        urs = [x for x in used_unary_relations_clauses(clauses) if not is_skolem(x)]
-        cs = [x for x in used_constants_clauses(clauses)
-              if not is_skolem(x) and not has_enumerated_sort(sig,x) and not x.is_numeral()]
-        ufs = [x for x in used_unary_functions_clauses(clauses)
-               if not is_skolem(x) and  has_enumerated_sort(sig,x)]
-        nrs = [x for x,arity in d.relations.iteritems() if arity == 0]
-        union_to_list(urs,[x for x,arity in d.relations.iteritems() if arity == 1])
-        union_to_list(cs,[x for x,arity in d.functions.iteritems()
-                          if arity == 0 and not has_enumerated_sort(sig,x)])
-        union_to_list(ufs,[x for x,arity in d.functions.iteritems()
-                           if arity == 1 and has_enumerated_sort(sig,x)])
-#        print "ufs: {}".format(ufs)
-        ccs = [Constant(c) for c in cs]
-#        print "sorts: {}".format([(c,c.get_sort()) for c in ccs])
-        return ([Literal(1,Atom(c,[])) for c in nrs] +
-                [Literal(1,Atom(equals,[Variable("X",c.get_sort()),c])) for c in ccs] +
-                [Literal(1,Atom(r,[Variable("X",r.sort.dom[0])])) for r in urs] +
-                [(App(f,Variable('X',f.sort.dom[0])),[Constant(Symbol(x,f.sort.rng)) for x in f.sort.rng.defines()]) for f in ufs])
-
-    def make_rel_lit(self,rel,varnames):
-        args = [Variable(v,t) for v,t in zip(varnames,rel.sort.dom)]
-        return Literal(1,Atom(rel,args))
-
     def set_state(self,clauses,recomp=True):
         self.state = clauses
 
@@ -835,71 +498,11 @@ class Graph(object):
         state = clauses_to_formula(clauses)
         self.session = cis.ConceptInteractiveSession(self.concept_domain,state,And(),widget=self.widget)
 
-        if recomp:
-            self.recompute()
-
-    def new_relation(self,lit):
-        self.brels.append(lit)
-        r = GraphRelation(self,lit)
-        self.relations.append(r)
-        r.compute_edges(self.solver)
-
     def set_concrete(self,clauses):
         self.concrete = clauses
 
-    def relation_concepts(self,relations):
-        rcons = [r.to_concept_space() for r in relations]
-        rprods = [ProductSpace([NamedSpace(x) for x in [node_concept(r.sorts[0],'X'),Literal(1,cs[0]),node_concept(r.sorts[1],'Y')]]) for (r,cs) in zip(relations,rcons)]
-        rsp = to_atom('__rsp(X,Y)'), SumSpace(rprods)
-        return rcons + [rsp]
-
-    def compile_concepts(self,concepts):
-        clauses = self.post.post_step(concepts)
-#        print "compile_concepts clauses={}".format(clauses)
-        vs = used_variables_in_order_clauses(clauses)
-        sksubs = dict((v.rep,var_to_skolem('__',Variable(v.rep,v.sort))) for v in vs)
-        clauses = substitute_clauses(clauses,sksubs)
-#        print "clauses: {}".format(clauses)
-        return clauses
-
-    def enable_relation(self,relation):
-        if relation.name() in self.enabled_relations:
-            return
-        self.enabled_relations.add(relation.name())
-        if use_ivy_alpha:
-            concepts = self.relation_concepts([relation])
-#    #        print concepts
-            self.post.concept_spaces += concepts
-            clauses = self.compile_concepts(concepts)
-#    #        print clauses
-            s_add(self.solver,clauses_to_z3(clauses))
-            self.solver_clauses = and_clauses(self.solver.clauses,clauses)
-
-    def get_solver_clauses(self):
-#        expr = self.state_as_z3_expr
-        if use_ivy_alpha:
-            d = ProgressiveDomain(verbose=True)
-            self.post = d
-            sorts = sorted(set(n.sort for n in self.all_nodes))
-            concepts = []
-            for s in sorts:
-                nconcepts = [n.to_concept_space() for n in self.all_nodes]
-                nconcepts.append((node_concept(s,'X').atom, SumSpace([NamedSpace(Literal(1,x)) for x,y in nconcepts])))
-                nconcepts.append((xtra_concept(s,'X','Y').atom,SumSpace([x for n in self.all_nodes for x in n.extra_concepts()])))
-                concepts += nconcepts
-            concepts = concepts + self.relation_concepts([r for r in self.relations if r.name() in self.enabled_relations])
-            d.concept_spaces = concepts
-#    #        print "concepts: %s" % concepts
-            d.post_init(self.state,[],{},[])
-            clauses = self.compile_concepts(concepts)
-#    #        print "clauses: %s" % clauses
-        else:
-            clauses = self.state
-#        print "graph solver clauses = {}".format(clauses)
-        s_add(self.solver,clauses_to_z3(clauses))
-        self.solver_clauses = and_clauses(self.solver_clauses,clauses)
-
     def recompute(self):
+        self.widget.concept_session = self.session
         self.session.recompute()
 
     # TODO: this seems to be unused -- remove?
@@ -924,26 +527,12 @@ class Graph(object):
 
     def copy(self):
         c = Graph([])
-        c.all_nodes = [n.copy() for n in self.all_nodes] #deep copy cause we mutate this
-        c.nodes = list(self.nodes)
-        c.edges = list(self.edges)
-        c.relations = [rel.copy(c) for rel in self.relations]
-        c.enabled_relations = set(self.enabled_relations)
-        c.state = self.state.copy()
-        c.solver_clauses = self.solver_clauses.copy()
-        s_add(c.solver,clauses_to_z3(self.solver_clauses))
-        c.concrete = self.concrete # this should be immutable so don't copy
-        c.predicates = list(self.predicates)
-        c.pred = self # remember we are the predcessor of the new graph
+        c.session = self.session.clone()
         c.parent_state = self.parent_state
         c.constraints = self.constraints.copy()
         c.attributes = []
-        if hasattr(self,'brels'):
-            c.brels = list(self.brels)
         if hasattr(self,'reverse_result'):
             c.reverse_result = list(self.reverse_result)
-#        print "self.constraints = {}".format(self.constraints)
-#        print "c.constraints = {}".format(c.constraints)
         return c
 
     def state_implies_fmla(self,fmla):
@@ -951,14 +540,11 @@ class Graph(object):
         res = s_check_fmla(s,fmla)
         return res == z3.unsat
 
-    def node(self,name):
-        return next(n for n in self.all_nodes if n.name == name)
-
     def split_n_way(self,node,ps):
 #        print "split_n_way, ps = {}".format([str(p) for p in ps])
         self.all_nodes = [n for n in self.all_nodes if n is not node]
         for p in ps:
-            label = make_lit_label(p)
+            label = self.concept_label(p)
             posname = node.name + "+" + label
             self.all_nodes.append(GraphNode(posname, node.fmla + [p],node.sort))
         self.needs_recompute = True
@@ -967,14 +553,9 @@ class Graph(object):
         if isinstance(p,tuple):
             self.split_n_way(node,[eq_lit(p[0],x) for x in p[1]])
             return
-        label = make_lit_label(p)
-        posname = node.name + "+" + label
-        negname = node.name + "-" + label
-        self.all_nodes = [n for n in self.all_nodes if n is not node]
-        self.all_nodes.append(GraphNode(posname, node.fmla + [p],node.sort))
-        neg_p = Literal(1-p.polarity,p.atom)
-        self.all_nodes.append(GraphNode(negname, node.fmla + [neg_p],node.sort))
-        self.needs_recompute = True
+        nid,pid = (self.id_from_concept(x) for x in (node,p))
+        self.session.domain.split(nid,pid)
+        self.recompute()
 
     def splatter(self,node,constants = None):
         if constants == None:
@@ -985,17 +566,14 @@ class Graph(object):
 
     def add_constraints(self,cnstrs,recompute=True):
         g = self
-        fc = [c for c in cnstrs if not g.state_implies_fmla(clause_to_formula(c))]
-#        print "fc: %s" % fc
+        fc = [c for c in cnstrs if not g.state_implies_fmla(c)]
         if fc:
             g.set_state(and_clauses(g.state,Clauses(fc)),recompute)
             g.constraints = and_clauses(g.constraints,Clauses(cnstrs))
-#        print "g.constraints: %s" % g.constraints
 
     def empty(self,node):
         g = self
-        fmla = [~lit for lit in node.fmla]
-##        print "adding clause: %s" % fmla
+        fmla = il.Not(node.formula)
         self.add_constraints([fmla])
 
     def add_witness_constraint(self,node,nc):

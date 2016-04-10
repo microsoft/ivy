@@ -285,9 +285,9 @@ if __name__ == '__main__':
 
 
     """
-    c10 = Concept([X], And(p(X), Not(q(X))))
-    c01 = Concept([X], And(Not(p(X)), q(X)))
-    c00 = Concept([X], And(Not(p(X)), Not(q(X))))
+    c10 = Concept('c10',[X], And(p(X), Not(q(X))))
+    c01 = Concept('c01',[X], And(Not(p(X)), q(X)))
+    c00 = Concept('c00',[X], And(Not(p(X)), Not(q(X))))
 
     crn = Concept([X, Y], Or(r(X,Y), n(X,Y)))
 
