@@ -33,7 +33,9 @@ class ConceptInteractiveSession(object):
                  goal_constraints=[],
                  suppose_constraints=[],
                  widget=None,
-                 analysis_session=None):
+                 analysis_session=None,
+                 cache = None,
+                 recompute = True):
         self.analysis_session = analysis_session
         self.domain = domain
         self.state = state
@@ -45,10 +47,11 @@ class ConceptInteractiveSession(object):
         self.info = ''
         if self.widget is not None:
             self.widget.concept_session = self
-        self.cache = None
-        self.recompute()
+        self.cache = cache
+        if recompute:
+            self.recompute()
 
-    def clone(self):
+    def clone(self,recompute=True):
         result = ConceptInteractiveSession(
             self.domain.copy(),
             self.state,
@@ -56,7 +59,9 @@ class ConceptInteractiveSession(object):
             self.goal_constraints[:],
             self.suppose_constraints[:],
             self.widget,
-            self.analysis_session
+            self.analysis_session,
+            self.cache,
+            recompute
         )
         result.undo_stack = self.undo_stack[:]
         return result
@@ -80,9 +85,10 @@ class ConceptInteractiveSession(object):
             return self.widget.projection
         return None
             
-    def recompute(self):
+    def recompute(self,projection = None):
+        projection = projection or (lambda x,y: True)
         self.abstract_value = alpha(self.domain, self._to_formula(), self.cache,
-                                    projection = self.get_projection())
+                                    projection = projection)
         if self.widget is not None:
             self.widget.render()
 

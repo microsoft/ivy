@@ -163,7 +163,6 @@ def _filter_concept_names(concept_names,combination,projection):
     if projection != None:
         concept_names = [[n for n in ns if projection(n,c)]
                          for ns,c in zip(concept_names,combination)]
-        print "concept_names: {}".format(concept_names)
     return concept_names
 
 class ConceptDomain(object):
@@ -212,6 +211,26 @@ class ConceptDomain(object):
             name not in nodes
         ]
 
+                
+    def get_comb_facts(self,combination_name, combiner_class, concept_names, facts):
+        combiner_names = _resolve_name(self.combiners, combiner_class)
+        for concept_combo in product(*concept_names):
+            concepts = [self.concepts[n] for n in concept_combo]
+            for combiner_name in combiner_names:
+                combiner = self.combiners[combiner_name]
+                try:
+                    formula = combiner(*concepts)
+                    # assertion removed for speedup...
+                    # assert not contains_topsort(formula)
+                except (SortError, ArityError):
+                    # silently ignore this instantiation, assuming
+                    # all other combiners in this combination are
+                    # also not suitable for it
+                    break
+                else:
+                    tag = (combination_name, combiner_name) + concept_combo
+                    facts.append((tag, formula))
+                    
     def get_facts(self,projection = None):
         """
         Return a list of pairs of the form:
@@ -227,30 +246,37 @@ class ConceptDomain(object):
         avoided by using a better type system (with high-order sort
         functors). For now I'm just using hacks to keep the
         combinatoric explosion under control.
+
+        HACK: treat edge_info and node_label combinations as special cases
+
         """
         facts = []
+
+        nodes_by_sort_name = defaultdict(list)
+        for n in self.concepts['nodes']:
+            nodes_by_sort_name[self.concepts[n].sorts[0].name].append(n)
+            
         for combination in self.combinations:
             combination_name = combination[0]
-            combiner_names = _resolve_name(self.combiners, combination[1])
-            concept_names = [_resolve_name(self.concepts, x) for x in combination[2:]]
-            concept_names = _filter_concept_names(concept_names, combination[2:],projection)
-            # this combinatoric loop should be avoided using sorts...
-            for concept_combo in product(*concept_names):
-                concepts = [self.concepts[n] for n in concept_combo]
-                for combiner_name in combiner_names:
-                    combiner = self.combiners[combiner_name]
-                    try:
-                        formula = combiner(*concepts)
-                        # assertion removed for speedup...
-                        # assert not contains_topsort(formula)
-                    except (SortError, ArityError):
-                        # silently ignore this instantiation, assuming
-                        # all other combiners in this combination are
-                        # also not suitable for it
-                        break
-                    else:
-                        tag = (combination_name, combiner_name) + concept_combo
-                        facts.append((tag, formula))
+
+            if combination_name == 'edge_info':
+                 for e in self.concepts['edges']:
+                     if projection(e,'edges'):
+                         ec = self.concepts[e]
+                         c0,c1 = (nodes_by_sort_name[ec.sorts[i].name] for i in (0,1))
+                         self.get_comb_facts('edge_info','edge_info',([e],c0,c1),facts)
+            elif combination_name == 'node_label':
+                 for l in self.concepts['node_labels']:
+                     if projection(l,'node_labels'):
+                         lc = self.concepts[l]
+                         c0 = nodes_by_sort_name[lc.sorts[0].name]
+                         self.get_comb_facts('node_label','node_label',(c0,[l]),facts)
+            else:
+                # excepting above special cases, just get all tuples of concepts
+                concept_names = [_resolve_name(self.concepts, x) for x in combination[2:]]
+                concept_names = _filter_concept_names(concept_names, combination[2:],projection)
+                self.get_comb_facts(combination_name,combination[1],concept_names,facts)
+
         return facts
 
     def split(self, concept, split_by):

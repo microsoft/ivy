@@ -118,8 +118,6 @@ def replace_concept_domain_vocabulary(concept_domain,symbols):
                 fmla = Equals(c(Variable('X', dom[0])),Variable('Y', rng))
                 add_domain_concept(concepts,fmla)
 
-    print "concepts: {}".format(concepts)
-
     return make_concept_domain(concepts)
 
                 
@@ -186,7 +184,9 @@ def render_concept_graph(widget):
 
     TODO: maybe this should be a method of ConceptSessionWidget
     """
+
     concept_session = widget.concept_session
+
     a = dict(concept_session.abstract_value)
     domain = concept_session.domain
 
@@ -317,7 +317,6 @@ def render_concept_graph(widget):
         else:
             classes.append('edge_unknown')
 
-        print "getting edge: {} {}".format(edge,classes[0])
         if (widget.edge_display_checkboxes[edge][classes[0]].value is False and
             x not in custom):
             # don't add invisible edges
@@ -368,6 +367,19 @@ class ConceptStateViewWidget(object):
 
         self.parent = parent
 
+        
+    def copy(self):
+        res = ConceptStateViewWidget(self.parent)
+        return res
+
+
+
+class Graph(object):
+    def __init__(self,nodes,parent_state=None):
+        self.constraints = true_clauses()
+        self.parent_state = parent_state
+        self.concept_domain = initial_concept_domain([s for n,f,s in nodes])
+
         # dict mapping edge names to widget tuples
         self.edge_display_checkboxes = defaultdict(
             lambda: dict((x, Option()) for x in _edge_display_checkboxes)
@@ -376,52 +388,9 @@ class ConceptStateViewWidget(object):
         self.node_label_display_checkboxes = defaultdict(
             lambda: dict((x, Option()) for x in _node_label_display_checkboxes)
         )
-        self.ignore_display_checkbox_change = False
-        
-        # TODO: temporary since cy_render needs
 
-        self.remove_concept = None
-        self.suppose_empty = None
-        self.materialize_node = None
-        self.add_projection = None
-
-    def set_checkbox(self,obj,idx,val):
-        # HACK: can't tell if it's edge or node_label so set both
-        val = Option(val)
-        if idx < len(_edge_display_checkboxes):
-            print "setting edge: {} {}".format(obj,_edge_display_checkboxes[idx])
-            self.edge_display_checkboxes[obj][_edge_display_checkboxes[idx]] = val
-        if idx < len(_node_label_display_checkboxes):
-            self.node_label_display_checkboxes[obj][_node_label_display_checkboxes[idx]] = val
-
-    def get_transitive_reduction(self):
-        return [] # TODO: implement
-
-    def render(self):
-        print "rendering..."
-        self.cy_elements = dot_layout(render_concept_graph(self))
-        print self.cy_elements.elements
-        
-    def projection(self,concept_name,concept_class):
-        print 'thing: {} {}'.format(concept_name,concept_class)
-        return True
-        if concept_class == 'node_labels':
-            return concept_name in set(['.s(X:server)'])
-        return True
-
-    def concept_label(self,concept):
-        return self.parent.concept_label(concept)
-
-    def node_label(self,concept):
-        return str(concept.sorts[0])
-
-class Graph(object):
-    def __init__(self,nodes,parent_state=None):
-        self.constraints = true_clauses()
-        self.parent_state = parent_state
-        self.concept_domain = initial_concept_domain([s for n,f,s in nodes])
-        self.widget = ConceptStateViewWidget(self)
-        self.session = cis.ConceptInteractiveSession(self.concept_domain,And(),And(),widget=self.widget)
+        self.cy_elements = CyElements() # start with empty graph
+        self.concept_session = None
 
     @property
     def sort_names(self):
@@ -466,11 +435,16 @@ class Graph(object):
             return str(substitute_ast(fmla,{v.rep:Variable('',v.sort)})).replace(' ','').replace('()','')
         return str(fmla)
 
+    # This gives the top label of a node based on its concept
+
+    def node_label(self,concept):
+        return str(concept.sorts[0])
+
     # Get the projections of ternary relations using the witnesses of
     # a node.
 
     def get_projections(self,node):
-        return self.session.get_projections(node.name)
+        return self.concept_session.get_projections(node.name)
 
     # Parse a string into a concept
 
@@ -494,16 +468,18 @@ class Graph(object):
         # Create a new concept domain using the vocabulary of the state
 
         vocab = set(list(all_symbols()) + list(used_symbols_clauses(clauses)))
-        self.concept_domain = replace_concept_domain_vocabulary(self.session.domain,vocab)
+        self.concept_domain = replace_concept_domain_vocabulary(self.concept_domain,vocab)
         state = clauses_to_formula(clauses)
-        self.session = cis.ConceptInteractiveSession(self.concept_domain,state,And(),widget=self.widget)
+        self.concept_session = cis.ConceptInteractiveSession(self.concept_domain,state,And(),cache={},recompute=False)
+        self.recompute()
 
     def set_concrete(self,clauses):
         self.concrete = clauses
 
     def recompute(self):
-        self.widget.concept_session = self.session
-        self.session.recompute()
+        print "recompute..."
+        self.concept_session.recompute(self.projection)
+        self.cy_elements = dot_layout(render_concept_graph(self))
 
     # TODO: this seems to be unused -- remove?
     def get_facts(self,rels,definite=True):
@@ -525,9 +501,28 @@ class Graph(object):
                 clauses += r.get_definite_facts(names,tvals) if definite else r.get_facts(names,tvals)
         return clauses
 
+    def set_checkbox(self,obj,idx,val):
+        # HACK: can't tell if it's edge or node_label so set both
+        val = Option(val)
+        if idx < len(_edge_display_checkboxes):
+            self.edge_display_checkboxes[obj][_edge_display_checkboxes[idx]] = val
+        if idx < len(_node_label_display_checkboxes):
+            self.node_label_display_checkboxes[obj][_node_label_display_checkboxes[idx]] = val
+
+    def get_transitive_reduction(self):
+        return [] # TODO: implement
+        
+    def projection(self,concept_name,concept_class):
+        if concept_class in ('node_labels','edges'):
+            cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
+            boxes = cb[concept_name]
+            return any(boxes[i].value for i in boxes if i != 'transitive')
+        return True
+
     def copy(self):
         c = Graph([])
-        c.session = self.session.clone()
+        c.cy_elements = self.cy_elements
+        c.concept_session = self.concept_session.clone(recompute=False)
         c.parent_state = self.parent_state
         c.constraints = self.constraints.copy()
         c.attributes = []
@@ -554,7 +549,7 @@ class Graph(object):
             self.split_n_way(node,[eq_lit(p[0],x) for x in p[1]])
             return
         nid,pid = (self.id_from_concept(x) for x in (node,p))
-        self.session.domain.split(nid,pid)
+        self.concept_session.domain.split(nid,pid)
         self.recompute()
 
     def splatter(self,node,constants = None):
@@ -566,7 +561,8 @@ class Graph(object):
 
     def add_constraints(self,cnstrs,recompute=True):
         g = self
-        fc = [c for c in cnstrs if not g.state_implies_fmla(c)]
+#        fc = [c for c in cnstrs if not g.state_implies_fmla(c)]
+        fc = cnstrs
         if fc:
             g.set_state(and_clauses(g.state,Clauses(fc)),recompute)
             g.constraints = and_clauses(g.constraints,Clauses(cnstrs))

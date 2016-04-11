@@ -4,8 +4,10 @@
 """
 """
 
-from z3_utils import z3_implies
-from logic import Or
+# from z3_utils import z3_implies
+import ivy_solver as slvr
+from logic import Or, Not
+import time
 
 def alpha(concept_domain, state, cache=None, projection=None):
     """
@@ -13,20 +15,37 @@ def alpha(concept_domain, state, cache=None, projection=None):
 
     This is a *very* unoptimized implementation
     """
-    if z3_implies(state, Or()):
-        return [(tag, True) for tag, formula in concept_domain.get_facts(projection)]
+
+    time1 = time.time()
+
+    facts = concept_domain.get_facts(projection)
+
+    time2 = time.time()
+
+    solver = slvr.new_solver()
+
+    slvr.solver_add(solver,state)
 
     if cache is None:
         cache = dict()
-    facts = concept_domain.get_facts(projection)
     result = []
     for tag, formula in facts:
         if tag in cache:
             value = cache[tag]
         else:
             # assert len(cache) == 0, tag
-            value = z3_implies(state, formula)
+            solver.push()
+            slvr.solver_add(solver,Not(formula))
+            value = not slvr.is_sat(solver)
+            solver.pop()
+            cache[tag] = value
+
         result.append((tag, value))
+
+    time3 = time.time()
+
+#    print 'alpha times: get_facts: {} check: {}'.format(time2-time1,time3-time2)
+
     return result
 
 

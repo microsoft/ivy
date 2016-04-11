@@ -127,7 +127,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
         for rel in self.g.relation_ids:
             boxes = self.get_enabled(rel)
             for idx,box in enumerate(boxes):
-                self.g.widget.set_checkbox(rel,idx,box.get())
+                self.g.set_checkbox(rel,idx,box.get())
 
     # Get styles for nodes
 
@@ -174,7 +174,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             self.colors[g.id_from_concept(n)] = sort_colors[g.node_sort(n).name]
         for idx,r in enumerate(g.relation_ids):
             self.colors[r] = self.line_color(idx)
-        print "colors: {}".format(self.colors)
+#        print "colors: {}".format(self.colors)
 
 
     # Rebuild the display. This is called after any change to the
@@ -200,7 +200,9 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             if hasattr(self,'mark'):
                 del self.mark
 
-            cy_elements  = g.widget.cy_elements  # the graph with layout
+            cy_elements  = g.cy_elements  # the graph with layout
+
+            print cy_elements.elements
 
             # create all the graph elements (TODO: factor out)
 
@@ -208,11 +210,12 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
                 eid = get_id(elem)
                 group = get_group(elem)
                 if group == 'nodes':
-                    dims = get_dimensions(elem)
-                    styles = self.get_node_styles(elem)
-                    shape = self.create_shape(get_shape(elem),dims,tags=eid,**styles)
-                    label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
-                    self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
+                    if get_classes(elem) != 'non_existing':
+                        dims = get_dimensions(elem)
+                        styles = self.get_node_styles(elem)
+                        shape = self.create_shape(get_shape(elem),dims,tags=eid,**styles)
+                        label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
+                        self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
                 elif group == 'edges':
                     coords = get_bspline(elem)
                     styles = self.get_edge_styles(elem)
@@ -229,12 +232,15 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
                 text = ['Constraints:\n' + '\n'.join(str(clause) for clause in g.constraints.conjuncts())]
                 self.create_text((bb[0],bb[3]),anchor=NW,text=text)
 
+            print "got here 1"
             # set the scroll region
 
             self.config(scrollregion=self.bbox(ALL))
 
             # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
+
+            print "got here 2"
 
 
     def show_mark(self,on=True):

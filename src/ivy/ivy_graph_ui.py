@@ -394,7 +394,7 @@ class GraphWidget(object):
 
     def materialize_from_selected(self,node):
         if hasattr(self,'mark'):
-            sorts = [self.g.node_sort(x) in [self.mark,node]]
+            sorts = [self.g.node_sort(x) for x in [self.mark,node]]
             rels = [r for r in self.g.relations if r.sorts == sorts]
             items = [str(r) for r in rels]
             msg = "Materialize this relation from selected node:"

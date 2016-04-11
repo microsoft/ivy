@@ -410,6 +410,12 @@ def check_cube(s,cube,memo = None,memo_unsat_only = False):
 def new_solver():
     return z3.Solver()
 
+def solver_add(solver,fmla):
+    solver.add(formula_to_z3(fmla))
+
+def is_sat(s):
+    return s.check() != z3.unsat
+
 def add_clauses(s,clauses):
     foo = clauses_to_z3(clauses)
 #    print "foo = {}".format(foo)
