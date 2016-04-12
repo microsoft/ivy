@@ -769,3 +769,9 @@ def ivy_load_file(f,ag):
     decls = read_module(f)
     ivy_compile(ag,decls)
 
+def ivy_from_string(string):
+    ag = ivy_new()
+    import StringIO
+    sio = StringIO.StringIO(string)
+    ivy_load_file(sio,ag)
+    return ag

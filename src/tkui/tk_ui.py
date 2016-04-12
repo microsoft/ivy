@@ -52,6 +52,11 @@ class TkUI(ivy_ui.IvyUI):
         self.tab_counter = 0
         self.tabs = 0
         
+    # run the ui
+
+    def mainloop(self):
+        self.tk.mainloop()
+
     # Add a new AnalysisGraph to the UI
 
     def add(self,art,name=None,label=None):
@@ -84,6 +89,7 @@ class TkUI(ivy_ui.IvyUI):
         for sg in art.state_graphs:
             tk_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame,ui_parent=this)
         nb.raise_page(name)
+        return gw
 
     def remove(self,art):
         self.notebook.delete(art.ui_tab_name)
@@ -318,8 +324,11 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
             self.popup.add_command(label=label,command = lambda c=c,transition=transition: c(transition))
         self.popup.tk_popup(event.x_root, event.y_root, 0)
 
-
-def ui_main_loop(art):
+def new_ui():
     ivy_ui.ui = TkUI()
+    return ivy_ui.ui
+    
+def ui_main_loop(art):
+    new_ui()
     ivy_ui.ui.add(art)
     ivy_ui.ui.tk.mainloop()

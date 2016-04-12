@@ -43,6 +43,7 @@ def empty_concepts():
     concepts['node_labels'] = []
     concepts['edges'] = []
     concepts['enum'] = []
+    concepts['enum_case'] = []
     return concepts
 
 def make_concept_domain(concepts):
@@ -63,13 +64,16 @@ def initial_concept_domain(sorts):
         
     return make_concept_domain(concepts)
 
-class enum_concepts(list):
-    def __init__(self,name,formula):
+# This is a concept set for t erm of enumerated type. 
+
+class enum_concepts(co.ConceptSet,list):
+    def __init__(self,name,variables,formula):
         list.__init__(self)
         self.name = name
+        self.variables = variables
         self.formula = formula
 
-# This creates concepts from the signature. 
+# This creates concepts and concept sets from the signature. 
 
 def concepts_from_sig(symbols,concepts):
 
@@ -83,9 +87,9 @@ def concepts_from_sig(symbols,concepts):
                 vs = [Variable(n,s) for n,s in zip(['X','Y'],dom)]
                 ec = concept_from_formula(c(*vs))
                 concepts['enum'].append(ec.name)
-                concepts[ec.name] = enum_concepts(ec.name)
+                concepts[ec.name] = enum_concepts(ec.name,vs,c(*vs))
                 for cons in rng.constructors:
-                    c1 = add_domain_concept_fmla(concepts,Equals(c(*vs),cons),kind='enum')
+                    c1 = add_domain_concept_fmla(concepts,Equals(c(*vs),cons),kind='enum_case')
                     concepts[ec.name].append(c1.name)
 
         elif il.is_boolean_sort(rng):
@@ -357,6 +361,15 @@ def render_concept_graph(widget):
 
     return g
 
+# In concept labels, we drop the variable X from formulas
+# of the form p(X), X=e and f(X)=e where e is ground.
+
+def can_abbreviate_formula(v,fmla):
+    return (len(fmla.args) == 1 and fmla.args[0] == v or
+            il.is_eq(fmla)
+            and (fmla.args[0] == v or 
+                 len(fmla.args[0].args) ==1 and fmla.args[0].args[0] == v)
+            and not any(ilu.variables_ast(fmla.args[1])))
 
 class Graph(object):
     def __init__(self,sorts,parent_state=None):
@@ -372,8 +385,8 @@ class Graph(object):
             lambda: dict((x, Option()) for x in _node_label_display_checkboxes)
         )
 
-        self.cy_elements = CyElements() # start with empty graph
-        self.concept_session = cis.ConceptInteractiveSession(concept_domain,And(),And(),cache={},recompute=False)
+        self.concept_session = cis.ConceptInteractiveSession(concept_domain,And(),And(),cache={},recompute=True)
+        render_concept_graph(self)
 
     @property
     def constraints(self):
@@ -393,7 +406,7 @@ class Graph(object):
         """ Return ids of all the concepts that need check-boxes """
         return (self.concept_domain.concepts['edges'] +
                 self.concept_domain.concepts['node_labels'] +
-                self.concept_domain.concepts['enums'])
+                self.concept_domain.concepts['enum'])
 
     def concept_from_id(self,id):
         """ Get a relational concept from its id """
@@ -427,7 +440,7 @@ class Graph(object):
         fmla = concept.formula
         if len(concept.variables) == 1:
             v = concept.variables[0]
-            if (il.is_eq(fmla) or len(fmla.args) == 1) and fmla.args[0] == v:
+            if can_abbreviate_formula(v,fmla):
                 res = str(ilu.substitute_ast(fmla,{v.rep:Variable('',v.sort)}))
                 return res.replace(' ','').replace('()','')
         return str(fmla)
@@ -439,6 +452,20 @@ class Graph(object):
 
     # Get the projections of ternary relations using the witnesses of
     # a node.
+
+    def find_node_with_labels(self,labels):
+        for elem in self.cy_elements.elements:
+            if elem['group'] == 'nodes':
+                nlabs = set(elem['data']['label'].split('\n'))
+                if all(l in nlabs for l in labels):
+                    return self.concept_domain.concepts[elem['data']['obj']]
+
+    # find a relation with the given label
+
+    def find_relation_with_label(self,label):
+        for rel in self.relations:
+            if self.concept_label(rel) == label:
+                return rel
 
     def get_projections(self,node):
         return self.concept_session.get_projections(node.name)
@@ -479,7 +506,6 @@ class Graph(object):
         self.concrete = clauses
 
     def recompute(self):
-        print "recompute..."
         self.concept_session.recompute(self.projection)
         self.cy_elements = dot_layout(render_concept_graph(self))
 
@@ -504,6 +530,15 @@ class Graph(object):
         return clauses
 
     def set_checkbox(self,obj,idx,val):
+
+        # if object is a concept set, set boxes for all elements
+
+        concept = self.concept_domain.concepts[obj]
+        if isinstance(concept,co.ConceptSet):
+            for sobj in concept:
+                self.set_checkbox(sobj,idx,val)
+            return
+
         # HACK: can't tell if it's edge or node_label so set both
         val = Option(val)
         if idx < len(_edge_display_checkboxes):

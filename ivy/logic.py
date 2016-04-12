@@ -51,6 +51,9 @@ class FunctionSort(recstruct('FunctionSort', [], ['*sorts'])):
 class EnumeratedSort(recstruct('EnumeratedSort', ['name','extension'], [])):
     __slots__ = ()
     @classmethod
+    def _preprocess_(cls, name, extension):
+        extension = tuple(extension)
+        return name,extension
     def __str__(self):
         return '{' + ','.join(self.extension) + '}'
     @property

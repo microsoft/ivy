@@ -469,6 +469,8 @@ EnumeratedSort = lg.EnumeratedSort
 
 EnumeratedSort.defines = lambda self: self.extension
 EnumeratedSort.is_relational = lambda self: False
+EnumeratedSort.dom = property(lambda self: [])
+EnumeratedSort.rng = property(lambda self: self)
 
 # class EnumeratedSort(object):
 #     def __init__(self,name,extension):

@@ -51,7 +51,8 @@ class AnalysisGraphWidget(object):
 
     # Show a state in the current concept graph, or create a concept graph
 
-    def view_state(self,n,clauses):
+    def view_state(self,n,clauses = None):
+        clauses = clauses or n.clauses
         print "state: {}".format(clauses)
         if hasattr(self,'current_concept_graph'):
            #  and self.current_concept_graph.winfo_exists():
@@ -60,6 +61,7 @@ class AnalysisGraphWidget(object):
             return
         sg = self.g.concept_graph(n,clauses)
         self.current_concept_graph = self.show_graph(sg)
+        return self.current_concept_graph
 
     # TODO: unsure what this does
 

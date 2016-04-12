@@ -11,6 +11,79 @@ import Tkconstants, tkFileDialog
 import Tix
 import functools
 
+# Functions for destructuring cytoscape elements
+
+def xform(coord):
+    return (coord[0],-coord[1])
+
+def get_coord(position):
+    return xform(tuple(position[s] for s in ('x','y')))
+
+def get_group(element):
+    return element['group']
+
+def get_classes(element):
+    return element['classes']
+
+def get_shape(element):
+    return element['data']['shape']
+
+def get_label(element):
+    return element['data']['label']
+
+def get_id(element):
+    return element['data']['id']
+
+def get_obj(element):
+    # drop initial dot
+    return element['data']['obj']
+
+def get_arrowend(element):
+    p1 = get_coord(element['data']['bspline'][-1])
+    p2 = get_coord(element['data']['arrowend'])
+    return p1 + p2
+
+node_styles = {
+    'at_least_one' : {'width' : 4, 'double' : 5},
+    'at_most_one' : {'width' : 2},
+    'exactly_one' : {'width' : 4},
+    'node_unknown' :  {'width' : 2, 'double' : 5},
+    }
+
+edge_styles = {
+    'none_to_none' : {'width' : 2, 'dash' : (10,10)},
+    'all_to_all' : {'width' : 2},
+    'edge_unknown' : {'width' : 2, 'dash' : (2,2)},
+    }
+
+def octagon_points(x0,y0,x1,y1):
+    cut = 1.0 - (1.0 / (2.4142135623730951))
+    xcut = (x1 - x0) * cut / 2.0
+    ycut = (y1 - y0) * cut / 2.0
+    return (x0+xcut,y0,x1-xcut,y0,x1,y0+ycut,x1,y1-ycut,
+            x1-xcut,y1,x0+xcut,y1,x0,y1-ycut,x0,y0+ycut)
+
+
+# Return the dimension of an elenent as (x,y,w,h) where x and y are
+# center coords.
+
+def get_dimensions(element):
+    data = element['data']
+    position = element['position']
+    return get_coord(position) + tuple(data[s] for s in ('width','height'))
+
+# Return the bspline of an element as a list of coords
+# (x0,y0,x1,y1,...)
+
+def get_bspline(element):
+    bspline = map(get_coord,element['data']['bspline'])
+    coords = []
+    for p in bspline:
+        coords.append(p[0])
+        coords.append(p[1])
+    return coords
+            
+
 class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     def __init__(self,tk,gs,root=None,ui_parent=None):
@@ -19,129 +92,176 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
         Canvas.__init__(self,root)
         self.graph_stack = gs
         self.tk = tk
-        tk.eval('package require Tcldot')
         self.pack(fill=BOTH,expand=1)
         self.root = root
         self.rel_enabled = dict()
         self.update_callback = None
         self.ui_parent = ui_parent
+        self.elem_ids = {}
         self.rebuild()
 
-    # This is in case the widget is detroyed by the user. We inform
-    # our parent of our demise.
+    # This is in case the widget is detroyed by the user. We could
+    # inform our parent of our demise. TODO: not needed any more?
 
     def destroy(self):
         Canvas.destroy(self)
 
 
-    # Get the nth line color. This is toolkit-dependent.
+    # Get the nth line color. Colors are toolkit-dependent, so it's here.
 
     def line_color(self,idx):
         return line_colors[idx % len(line_colors)]
 
-    # Get the enabled state for a concept "r"
+    # Get the enabled state for a concept "r". TODO: create a class
+    # for this.
 
-    def get_enabled(self,r):
-#        rel = repr(r.rel_lit.atom)
-        rel = r.rel_lit.atom
+    def get_enabled(self,rel):
         if rel in self.rel_enabled:
             return self.rel_enabled[rel]
         res = [IntVar(self,0),IntVar(self,0),IntVar(self,0),IntVar(self,0)]
         self.rel_enabled[rel] = res
         return res
 
+    # Copy checkbox state to the renderer
+
+    def sync_checkboxes(self):
+        for rel in self.g.relation_ids:
+            boxes = self.get_enabled(rel)
+            for idx,box in enumerate(boxes):
+                self.g.set_checkbox(rel,idx,box.get())
+
+    # Make a node label visible
+
+    def show_node_label(self,concept):
+        boxes = self.get_enabled(concept.name)
+        boxes[0].set(True)
+
+    # Make an edge relation visible
+
+    def show_edge(self,concept):
+        boxes = self.get_enabled(concept.name)
+        boxes[0].set(True)
+
+    # Get styles for nodes
+
+    def get_node_styles(self,elem):
+        res = node_styles[get_classes(elem)]
+        res['fill'] = ''
+        res['outline'] = self.colors[get_obj(elem)]
+        return res
+        
+            
+    # Get styles for edges
+
+    def get_edge_styles(self,elem):
+        res = edge_styles[get_classes(elem)]
+        res['arrowshape']="14 14 5"
+        res['fill'] = self.colors[get_obj(elem)]
+        return res
+
+    # Make an octagon
+
+    def create_octagon(self,*box,**kwargs):
+        pts = octagon_points(*box)
+        return self.create_polygon(*pts,**kwargs)
+
+    # Create a shape with given dimansions on canvas
+
+    def create_shape(self,shape,dimensions,**kwargs):
+        x,y,w,h = dimensions
+        x0,y0,x1,y1 = x-w/2, y-h/2, x+w/2, y+h/2
+        method = {'oval':self.create_oval, 'octagon':self.create_octagon}[shape]
+        if 'double' in kwargs:
+            gap = kwargs['double']
+            del kwargs['double']
+            method(x0+gap,y0+gap,x1-gap,y1-gap,**kwargs)
+        return method(x0,y0,x1,y1,**kwargs)
+ 
+    # choose colors for concepts. nodes are colored by sort
+
+    def choose_colors(self):
+        g = self.g
+        sort_colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sort_names))
+        self.colors = {}
+        for n in g.nodes:
+            self.colors[g.id_from_concept(n)] = sort_colors[g.node_sort(n).name]
+        for idx,r in enumerate(g.relation_ids):
+            self.colors[r] = self.line_color(idx)
+#        print "colors: {}".format(self.colors)
+
+
     # Rebuild the display. This is called after any change to the
-    # concept graph that might affect more that just line styles.
-    # This calls tcldot to lay out the graph and render it in the Tk
-    # canvas.
+    # concept graph that affects the layout. Here, we assume layout
+    # has already been done and we render to a Tk Canvas.
 
     def rebuild(self):
-##        print "rebuild"
-        with self.ui_parent.run_context():
+        with self.ui_parent.run_context():  # in case this is slow, but should not be
+
+            # update the state label if needed (TODO: could be elsewhere)
+
             if hasattr(self,"state_label_widget"):
                 sl = self.parent.state_label(self.g.parent_state)
                 self.state_label_widget.configure(text="State: {}".format(sl))
+
             tk = self.tk
             g = self.g
-            g.recompute()
-            tk.eval('set graph [dotnew digraph forcelabels true]')
-            handle_to_node = dict()
-            handle_to_edge = dict()
-            self.node_to_handle = dict()
+
+            self.choose_colors()
+
+            # "mark" gives the name of the selected node. clear it
+
             if hasattr(self,'mark'):
                 del self.mark
-            i = 0
-            sorted_nodes = self.sort_nodes([n for n in g.all_nodes if n.status != "false"])
-            node_labels = self.get_node_labels(sorted_nodes)
-            sort_colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sorts))
 
-            # make subgraphs for sorts
-            sort_graph = {}
-            for sort in g.sorts:
-                if self.make_subgraphs():
-                    sg = tk.eval('$graph addsubgraph cluster_' + sort + ' rank min')
-                else:
-                    sg = '$graph'
-                sort_graph[sort] = sg
+            cy_elements  = g.cy_elements  # the graph with layout
 
-            for n in sorted_nodes:
-                if n.status != "false":
-                    p = n.name
-    #                print "rebuild: p = {}, type(p) = {}".format(p,type(p))
-                    shape = "doubleoctagon" if n.summary else "octagon"
-                    labels = self.make_node_label(n) + node_labels[n.name]
-    #                labels = node_labels[n.name]
-                    if not labels:
-                        labels = [str(n.sort)]
-                    label = '\n'.join(labels)
-                    penwidth = '4.0' if n.status == 'true' else '2.0'
-                    color = sort_colors[n.sort.name]
-                    handle = tk.eval(sort_graph[n.sort.name] + ' addnode {' + p + '} label {' + label + '} shape ' + shape + ' fontsize 10 penwidth ' + penwidth + ' color ' + color)
-                    handle = 'node' + str(i+1)  if handle.startswith('node0x') else handle
-                    i += 1
-                    handle_to_node[handle] = n
-                    self.node_to_handle[n.name] = handle
-    ##        print "relations: %s" % g.relations
-            i = 0 
-            for idx,r in enumerate(g.relations):
-                if r.arity() != 2:
-                    continue
-                ena = self.get_enabled(r)
-                if any(e.get() for e in ena[0:2]):  # avoid computing edges we don't need
-                    transitive = ena[3].get()
-                    r.properties['reflexive'] = transitive
-                    r.properties['transitive'] = transitive
-                    for (x,y),status in r.get_edges():
-                        style = {'true':0,'undef':1,'false':2}[status]
-                        if ena[style].get():
-                            style = ["solid","dotted","dashed"][style]
-                            weight = '10' if transitive else '0'
-                            ge = '$graph addedge {' + x.name + '} {' + y.name + '} style ' + style+ ' color {' + self.line_color(idx) + '} penwidth 2.0 weight ' + weight
-                            handle = tk.eval(ge)
-                            handle = 'edge' + str(i+1) if handle.startswith('edge0x') else handle
-                            i += 1
-                            rl = ~r.rel_lit if status == 'false' else r.rel_lit
-                            handle_to_edge[handle] = (rl,x.name,y.name)
-            print(tk.eval('$graph render ' + self._w  + ' DOT'))
-            tk.eval('eval [$graph render ' + self._w  + ' DOT]')
+            # create all the graph elements (TODO: factor out)
+
+            for idx,elem in enumerate(cy_elements.elements):
+                eid = get_id(elem)
+                group = get_group(elem)
+                self.elem_ids[get_obj(elem)] = eid
+                if group == 'nodes':
+                    if get_classes(elem) != 'non_existing':
+                        dims = get_dimensions(elem)
+                        styles = self.get_node_styles(elem)
+                        shape = self.create_shape(get_shape(elem),dims,tags=[eid,'shape'],**styles)
+                        label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
+                        self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
+                elif group == 'edges':
+                    coords = get_bspline(elem)
+                    styles = self.get_edge_styles(elem)
+                    line = self.create_line(*coords,tags=eid,smooth="bezier",**styles)
+                    arrow = self.create_line(*get_arrowend(elem),tags=eid,arrow=LAST,**styles)
+                    self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_edge(y,elem))
+
+            # show the constraint if there is one
+
             if not g.constraints.is_true():
                 bb = self.bbox(ALL)
-    ##            print "bbox: {}".format(bb)
                 if not bb or bb == None: # what does bbox return if canvas is empty?
                     bb = (3,3,3,3) # put text somewhere if empty canvas
                 text = ['Constraints:\n' + '\n'.join(str(clause) for clause in g.constraints.conjuncts())]
                 self.create_text((bb[0],bb[3]),anchor=NW,text=text)
+
+            # set the scroll region
+
             self.config(scrollregion=self.bbox(ALL))
+
+            # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
-            for x in handle_to_node:
-                n = handle_to_node[x]
-                self.tag_bind("0" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-                self.tag_bind("1" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            for x in handle_to_edge:
-                r,h,t = handle_to_edge[x]
-    ##            print "r,h,t: %s %s %s" % (r,h,t)
-                self.tag_bind("0" + x, "<Button-1>", lambda y, r=r,h=h,t=t: self.left_click_edge(y,r,h,t))
-                self.tag_bind("1" + x, "<Button-1>", lambda y, r=r,h=h,t=t: self.left_click_edge(y,r,h,t))
+
+
+    def show_mark(self,on=True):
+        if hasattr(self,'mark'):
+            print "show_mark"
+            tag = self.elem_ids[self.g.id_from_concept(self.mark)]
+            print "tag: {}".format(tag)
+            for item in self.find_withtag(tag):
+                print "item: {}".format(item)
+                if 'shape' in self.gettags(item):
+                    self.itemconfig(item,fill=('red' if on else ''))
+
 
     # Export the display in DOT format. This also depends on tcldot.
 
@@ -180,7 +300,8 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     # Handle a left click on a node
 
-    def left_click_node(self,event,n):
+    def left_click_node(self,event,elem):
+        n = self.g.concept_from_id(get_obj(elem))
         # display the popup menu
         popup = self.make_node_popup(n)
         try:
@@ -191,9 +312,10 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     # Handle a left click on an edge
 
-    def left_click_edge(self,event,rel_lit,head,tail):
+    def left_click_edge(self,event,elem):
         # display the popup menu 
-        edge = (rel_lit,head,tail)
+        edge = tuple(self.g.concept_from_id(f(elem))
+                     for x in (get_obj,get_source_obj,get_target_obj))
         popup = self.make_edge_popup(edge)
         try:
             popup.tk_popup(event.x_root, event.y_root, 0)
@@ -205,6 +327,8 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
     def update(self):
         self.delete(ALL)
+        self.sync_checkboxes()
+        self.g.recompute()
         self.rebuild()
 
 
@@ -215,11 +339,6 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
 #    scrwin = Tix.ScrolledWindow(tk, scrollbar='both')
 #    scrwin.pack(fill=BOTH,expand=1)
 #    gw = GraphWidget(tk,g,scrwin.window)
-
-    if iu.use_new_ui.get():
-        import tk_graph_ui_new
-        return tk_graph_ui_new.show_graph(g,tk,frame,parent,ui_parent)
-
     if tk == None:
         tk = Tk()
         frame = tk
@@ -234,6 +353,7 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
     hbar.pack(side=BOTTOM,fill=X)
     vbar=Scrollbar(frame,orient=VERTICAL)
     vbar.pack(side=RIGHT,fill=Y)
+    gw = TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
     gw.parent = parent
     hbar.config(command=gw.xview)
     vbar.config(command=gw.yview)
@@ -306,16 +426,17 @@ def update_relbuttons(gw,relbuttons):
     foo.grid(row = 0, column = 2)
     foo = Label(btns,text = 'T')
     foo.grid(row = 0, column = 4)
-    rels = list(sorted(enumerate(gw.g.relations),key=lambda r:r[1].name()))
+    rels = list(sorted(enumerate(gw.g.relation_ids),key=lambda r:r[1]))
     line_color = gw.line_color
     for idx,(num,rel) in enumerate(rels):
+        label = gw.g.concept_label(gw.g.concept_from_id(rel))
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[0],command=gw.update)
         foo.grid(row = idx+1, column = 0)
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[1],command=gw.update)
         foo.grid(row = idx+1, column = 1)
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[2],command=gw.update)
         foo.grid(row = idx+1, column = 2)
-        foo = Label(btns,text=rel.name(),fg=line_color(num),justify=LEFT,anchor="w")
+        foo = Label(btns,text=label,fg=line_color(num),justify=LEFT,anchor="w")
         foo.grid(sticky=W,row = idx+1, column = 3)
         foo.bind("<Button-1>", lambda e: askcolor())
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=gw.update)

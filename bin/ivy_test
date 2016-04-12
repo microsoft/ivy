@@ -1,0 +1,5 @@
+#/bin/sh
+
+export PYTHONPATH=$Z3DIR/bin:$Z3DIR/lib/python2.7/dist-packages:$IVYDIR/src/ivy:$IVYDIR/src/tkui:$IVYDIR/ivy
+
+python $@ 

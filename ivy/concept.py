@@ -58,8 +58,14 @@ class Concept(record('Concept', ['name', 'variables', 'formula'])):
         )
 
 
+class ConceptSet(object):
+    """ A concept set is an object that can be iterated to produce
+    concepts names """
+    pass 
+
 class ConceptDict(OrderedDict):
-    """ A collection of concepts, allowing to look up concepts by name """
+    """ A collection of concepts, allowing to look up concepts or
+    concept sets by name """
     def add(self,category,name,variables,formula):
         c = Concept(name,variables,formula)
         assert name not in self
@@ -140,7 +146,7 @@ def _resolve_name(d, x):
         return _resolve_name(d, [k for k in d])
     elif isinstance(x, basestring):
         v = d.get(x, ())
-        if type(v) in (tuple, list, set):
+        if type(v) in (list,set,tuple) or isinstance(v,ConceptSet):
             return _resolve_name(d, v)
         else:
             return [x]
@@ -248,7 +254,8 @@ class ConceptDomain(object):
         functors). For now I'm just using hacks to keep the
         combinatoric explosion under control.
 
-        HACK: treat edge_info and node_label combinations as special cases
+        HACK: treat edge_info and node_label combinations as special
+        cases, for performance reasons
 
         """
         facts = []
@@ -266,12 +273,13 @@ class ConceptDomain(object):
                          ec = self.concepts[e]
                          c0,c1 = (nodes_by_sort_name[ec.sorts[i].name] for i in (0,1))
                          self.get_comb_facts('edge_info','edge_info',([e],c0,c1),facts)
-            elif combination_name == 'node_label':
-                 for l in self.concepts['node_labels']:
-                     if projection(l,'node_labels'):
-                         lc = self.concepts[l]
-                         c0 = nodes_by_sort_name[lc.sorts[0].name]
-                         self.get_comb_facts('node_label','node_label',(c0,[l]),facts)
+            elif combination_name in ('node_label','enum'):
+                 for l in self.concepts[combination[3]]:
+                     if projection(l,combination[3]):
+                         for cname in _resolve_name(self.concepts, l):
+                             lc = self.concepts[cname]
+                             c0 = nodes_by_sort_name[lc.sorts[0].name]
+                             self.get_comb_facts('node_label','node_label',(c0,[cname]),facts)
             else:
                 # excepting above special cases, just get all tuples of concepts
                 concept_names = [_resolve_name(self.concepts, x) for x in combination[2:]]
@@ -290,10 +298,14 @@ class ConceptDomain(object):
         c1 = self.concepts[concept]
         c2 = self.concepts[split_by]
         variables = c1.variables
-        formula_plus = And(c1(*variables), c2(*variables))
-        formula_minus = And(c1(*variables), Not(c2(*variables)))
-        new_names = '({}+{})'.format(concept, split_by), '({}-{})'.format(concept, split_by)
-        new_concepts = Concept(new_names[0],variables, formula_plus), Concept(new_names[1],variables, formula_minus)
+
+        if isinstance(c2,ConceptSet):
+            formulas = [self.concepts[n](*variables) for n in c2]
+            new_names = ['({}+{})'.format(concept,n) for n in c2]
+        else:
+            formulas = [c2(*variables),Not(c2(*variables))]
+            new_names = ['({}+{})'.format(concept, split_by), '({}-{})'.format(concept, split_by)]
+        new_concepts = [Concept(n,variables,And(c1.formula,f)) for n,f in zip(new_names,formulas)]
         names = self.concepts.keys()
         self.concepts.update(zip(new_names, new_concepts))
         self.concepts = ConceptDict((k, self.concepts[k]) for k in _replace_name(names, concept, new_names))
@@ -304,7 +316,7 @@ class ConceptDomain(object):
         concept is a concept name, and new is a list of names to replace it with
         """
         for k, v in self.concepts.iteritems():
-            if type(v) is not Concept:
+            if not isinstance(v,Concept) and not isinstance(v,ConceptSet):
                 self.concepts[k] = _replace_name(v, concept, new)
         self.combinations = [
             combination[:1] + tuple(_replace_name(x, concept, new) for x in combination[1:])

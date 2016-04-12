@@ -191,6 +191,6 @@ def dot_layout(cy_elements):
         elif e["group"] == "edges":
             attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
             e["data"].update(_to_edge_position(attr['pos']))
-    g.draw('g.png')
+#    g.draw('g.png')
 
     return cy_elements

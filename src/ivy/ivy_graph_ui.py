@@ -147,7 +147,7 @@ class GraphWidget(object):
 
     def checkpoint(self):
         self.graph_stack.checkpoint()
-        self.g.enabled_relations = set(x.name() for x in self.visible_relations())
+        self.g.enabled_relations = set(x.name for x in self.visible_relations())
 
     def undo(self):
         self.graph_stack.undo()
@@ -179,7 +179,7 @@ class GraphWidget(object):
     # in the graph)
     
     def visible_relations(self):
-        return [rel for rel in self.g.relations if any(e.get() for e in self.get_enabled(rel))]
+        return [rel for rel in self.g.relations if any(e.get() for e in self.get_enabled(rel.name))]
 
     # DEPRECATED: replace abstract state with visible facts
 
@@ -437,7 +437,15 @@ class GraphWidget(object):
     def dematerialize_edge(self,edge):
         self.materialize_edge(edge,truth=False)
 
+    # find a node with given labels
 
+    def node(self,*labels):
+        return self.g.find_node_with_labels(labels)
+
+    # find a relation with given label
+
+    def relation(self,label):
+        return self.g.find_relation_with_label(label)
 
 if __name__ == '__main__':
     nodes = [("p",to_clause("[]"))]

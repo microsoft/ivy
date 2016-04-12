@@ -1,0 +1,10 @@
+#!/bin/bash
+
+for x in *.py; do
+    echo $x ...
+    if ivy_test $x; then
+        echo PASS
+    else
+        echo FAIL
+    fi
+done
