@@ -48,6 +48,18 @@ class FunctionSort(recstruct('FunctionSort', [], ['*sorts'])):
     arity = property(lambda self: len(self.domain))
 
 
+class EnumeratedSort(recstruct('EnumeratedSort', ['name','extension'], [])):
+    __slots__ = ()
+    @classmethod
+    def __str__(self):
+        return '{' + ','.join(self.extension) + '}'
+    @property
+    def constructors(self):
+        return [Const(n,self) for n in self.extension]    
+    @property
+    def card(self):
+        return len(self.extension)
+
 class TopSort(recstruct('TopSort', ['name="TopSort"'], [])):
     """
     An unknown sort. Either 1st order or 2nd order.

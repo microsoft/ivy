@@ -465,30 +465,35 @@ ConstantSort.rep = property(lambda self: self.name)
 UninterpretedSort = ConstantSort
 UninterpretedSort.is_relational = lambda self: False
 
-class EnumeratedSort(object):
-    def __init__(self,name,extension):
-        self.name = name
-        self.extension = extension
-        self.rng = self
-        self.dom = []
-    def __str__(self):
-        return '{' + ','.join(self.extension) + '}'
-    def __hash__(self):
-        return hash(tuple(self.extension))
-    def defines(self):
-        return self.extension
-    @property
-    def constructors(self):
-        return [Symbol(n,self) for n in extension]
-    def __iter__(self):  # make it iterable so it pretends to be an actual sort
-        return self
-    def next(self): # Python 3: def __next__(self)
-        raise StopIteration
-    @property
-    def card(self):
-        return len(self.extension)
-    def is_relational(self):
-        return False
+EnumeratedSort = lg.EnumeratedSort
+
+EnumeratedSort.defines = lambda self: self.extension
+EnumeratedSort.is_relational = lambda self: False
+
+# class EnumeratedSort(object):
+#     def __init__(self,name,extension):
+#         self.name = name
+#         self.extension = extension
+#         self.rng = self
+#         self.dom = []
+#     def __str__(self):
+#         return '{' + ','.join(self.extension) + '}'
+#     def __hash__(self):
+#         return hash(tuple(self.extension))
+#     def defines(self):
+#         return self.extension
+#     @property
+#     def constructors(self):
+#         return [Symbol(n,self) for n in extension]
+#     def __iter__(self):  # make it iterable so it pretends to be an actual sort
+#         return self
+#     def next(self): # Python 3: def __next__(self)
+#         raise StopIteration
+#     @property
+#     def card(self):
+#         return len(self.extension)
+#     def is_relational(self):
+#         return False
 
 FunctionSort = lg.FunctionSort
 FunctionSort.rng = FunctionSort.range

@@ -57,6 +57,7 @@ class Concept(record('Concept', ['name', 'variables', 'formula'])):
             self.formula,
         )
 
+
 class ConceptDict(OrderedDict):
     """ A collection of concepts, allowing to look up concepts by name """
     def add(self,category,name,variables,formula):

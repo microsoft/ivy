@@ -74,8 +74,10 @@ class ConceptInteractiveSession(object):
         )
 
     def _fresh_const_name(self, extra=frozenset()):
+        contents = ([self._to_formula()] +
+                    [c.formula for n,c in self.domain.concepts.iteritems() if isinstance(c,Concept)])
         used = frozenset(c.name for c in (
-            used_constants(self._to_formula()) | extra
+            used_constants(*contents) | extra
         ))
         return next(name for name in constant_name_generator()
                     if name not in used)
@@ -116,12 +118,15 @@ class ConceptInteractiveSession(object):
             self.domain.replace_concept(concept, [])
         self.recompute()
 
-    def suppose_empty(self, concept):
-        self.push()
+    def _suppose_empty(self,concept):
         f = self.domain.concepts[concept].formula
         self.suppose_constraints.append(
             ForAll(free_variables(f), Not(f))
         )
+
+    def suppose_empty(self, concept):
+        self.push()
+        self._suppose_empty(concept)
         self.recompute()
 
     def _get_witnesses(self, concept_name):
@@ -167,28 +172,35 @@ class ConceptInteractiveSession(object):
             name = '={}'.format(c.name)
             self.domain.concepts[name] = Concept(name,[X], Eq(X,c))
             self.domain.split(concept_name, name)
-        self.suppose_constraints.append(concept(c))
+        self.suppose(concept(c))
         return c
 
+    def suppose(self,fmla):
+        if not is_tautology_equality(fmla):
+            self.suppose_constraints.append(fmla)
 
     def materialize_node(self, concept_name):
         self.push()
         self._materialize_node(concept_name)
         self.recompute()
 
-    def materialize_edge(self, edge, source, target, polarity):
-        """
-        Materialize an edge to either positive or negative
-        """
-        self.push()
+    def _materialize_edge(self, edge, source, target, polarity):
         edge_concept = self.domain.concepts[edge]
         source_c = self._materialize_node(source)
         if source == target:
             target_c = source_c
         else:
-            target_c = self._materialize_node(target)
+            target_c = self._materialize_node(target)        
         f = edge_concept(source_c, target_c)
-        self.suppose_constraints.append(f if polarity else Not(f))
+        self.suppose(f if polarity else Not(f))
+        return (source_c,target_c)
+
+    def materialize_edge(self, edge, source, target, polarity):
+        """
+        Materialize an edge to either positive or negative
+        """
+        self.push()
+        _materialize_edge(self, edge, source, target, polarity)
         self.recompute()
 
     def get_node_facts(self, node):

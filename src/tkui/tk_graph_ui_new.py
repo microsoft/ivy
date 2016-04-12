@@ -97,6 +97,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
         self.rel_enabled = dict()
         self.update_callback = None
         self.ui_parent = ui_parent
+        self.elem_ids = {}
         self.rebuild()
 
     # This is in case the widget is detroyed by the user. We could
@@ -128,6 +129,18 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             boxes = self.get_enabled(rel)
             for idx,box in enumerate(boxes):
                 self.g.set_checkbox(rel,idx,box.get())
+
+    # Make a node label visible
+
+    def show_node_label(self,concept):
+        boxes = self.get_enabled(concept.name)
+        boxes[0].set(True)
+
+    # Make an edge relation visible
+
+    def show_edge(self,concept):
+        boxes = self.get_enabled(concept.name)
+        boxes[0].set(True)
 
     # Get styles for nodes
 
@@ -202,18 +215,17 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
 
             cy_elements  = g.cy_elements  # the graph with layout
 
-            print cy_elements.elements
-
             # create all the graph elements (TODO: factor out)
 
             for idx,elem in enumerate(cy_elements.elements):
                 eid = get_id(elem)
                 group = get_group(elem)
+                self.elem_ids[get_obj(elem)] = eid
                 if group == 'nodes':
                     if get_classes(elem) != 'non_existing':
                         dims = get_dimensions(elem)
                         styles = self.get_node_styles(elem)
-                        shape = self.create_shape(get_shape(elem),dims,tags=eid,**styles)
+                        shape = self.create_shape(get_shape(elem),dims,tags=[eid,'shape'],**styles)
                         label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
                         self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
                 elif group == 'edges':
@@ -232,7 +244,6 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
                 text = ['Constraints:\n' + '\n'.join(str(clause) for clause in g.constraints.conjuncts())]
                 self.create_text((bb[0],bb[3]),anchor=NW,text=text)
 
-            print "got here 1"
             # set the scroll region
 
             self.config(scrollregion=self.bbox(ALL))
@@ -240,15 +251,16 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
 
-            print "got here 2"
-
 
     def show_mark(self,on=True):
         if hasattr(self,'mark'):
-            tag = self.g.id_from_concept(self.mark)
+            print "show_mark"
+            tag = self.elem_ids[self.g.id_from_concept(self.mark)]
+            print "tag: {}".format(tag)
             for item in self.find_withtag(tag):
-                if item.has_tag('shape'):
-                    self.itemconfig(item,fill=('red' if on else 'white'))
+                print "item: {}".format(item)
+                if 'shape' in self.gettags(item):
+                    self.itemconfig(item,fill=('red' if on else ''))
 
 
     # Export the display in DOT format. This also depends on tcldot.
@@ -420,13 +432,14 @@ def update_relbuttons(gw,relbuttons):
     rels = list(sorted(enumerate(gw.g.relation_ids),key=lambda r:r[1]))
     line_color = gw.line_color
     for idx,(num,rel) in enumerate(rels):
+        label = gw.g.concept_label(gw.g.concept_from_id(rel))
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[0],command=gw.update)
         foo.grid(row = idx+1, column = 0)
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[1],command=gw.update)
         foo.grid(row = idx+1, column = 1)
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[2],command=gw.update)
         foo.grid(row = idx+1, column = 2)
-        foo = Label(btns,text=rel,fg=line_color(num),justify=LEFT,anchor="w")
+        foo = Label(btns,text=label,fg=line_color(num),justify=LEFT,anchor="w")
         foo.grid(sticky=W,row = idx+1, column = 3)
         foo.bind("<Button-1>", lambda e: askcolor())
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=gw.update)

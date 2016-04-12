@@ -249,9 +249,7 @@ class GraphWidget(object):
         else:
             with self.ui_parent.run_context():  # to catch errors
                 lit = self.g.string_to_concept(text)
-            self.g.new_relation(lit)
-            if self.update_callback != None:
-                self.update_callback()
+            self.add_concept(lit)
 
     # Record the current goal with a string name
 
@@ -263,12 +261,18 @@ class GraphWidget(object):
             with self.ui_parent.run_context():  # to catch errors
                 self.parent.remember_graph(text,self.g.copy())
                 
+    # Call this if relations might have changed
+
+    def update_relations(self):
+        if self.update_callback != None:
+            self.update_callback()
+        
+
     # Add a concept to the graph
 
     def add_concept(self,p):
         self.g.new_relation(p)
-        if self.update_callback != None:
-            self.update_callback()
+        self.update_relations()
 
     # Split a node using all available constants
 
@@ -366,8 +370,8 @@ class GraphWidget(object):
 
     def split(self,p,node):
         self.checkpoint()
-        cn = node
-        self.g.split(cn,p)
+        self.g.split(node,p)
+        self.show_node_label(p)
         self.update()
 
     # Select a node for a future action
@@ -386,7 +390,9 @@ class GraphWidget(object):
 
     def materialize(self,node):
         self.checkpoint()
-        self.g.materialize(node)
+        witness = self.g.materialize(node)
+        self.update_relations()
+        self.show_node_label(witness)
         self.update()
 
     # Materialize an edge from the selected node to this one. User
@@ -394,9 +400,12 @@ class GraphWidget(object):
 
     def materialize_from_selected(self,node):
         if hasattr(self,'mark'):
-            sorts = [self.g.node_sort(x) for x in [self.mark,node]]
+            sorts = tuple(self.g.node_sort(x) for x in [self.mark,node])
+            print "sorts: {}".format(sorts)
+            for r in self.g.relations:
+                print "{} : {}".format(r,r.sorts)
             rels = [r for r in self.g.relations if r.sorts == sorts]
-            items = [str(r) for r in rels]
+            items = [self.g.concept_label(r) for r in rels]
             msg = "Materialize this relation from selected node:"
             cmd = functools.partial(self.materialize_from_selected_aux,rels,node)
             self.ui_parent.listbox_dialog(msg,items,command=cmd)
@@ -416,7 +425,11 @@ class GraphWidget(object):
 
     def materialize_edge(self,edge,truth=True):
         self.checkpoint()
-        self.g.materialize_edge(edge,truth)
+        witness = self.g.materialize_edge(edge,truth)
+        self.update_relations()
+        for w in witness:
+            self.show_node_label(w)
+        self.show_edge(edge[0])
         self.update()
         
     # Materialize a negative edge
