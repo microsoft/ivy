@@ -51,6 +51,7 @@ class TkUI(ivy_ui.IvyUI):
         self.notebook.pack(fill=BOTH,expand=1)
         self.tab_counter = 0
         self.tabs = 0
+        self.answers = []
         
     # run the ui
 
@@ -129,7 +130,7 @@ class TkUI(ivy_ui.IvyUI):
     # provided. Parameter command_label is alternative text for "OK".
 
     def text_dialog(self,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None):
-        uu.text_dialog(self.tk,self.frame,msg,text,command,on_cancel,command_label)
+        uu.text_dialog(self.tk,self.frame,msg,text,command,on_cancel,command_label,ans=self.getans())
 
     # Create a dialog showing a message and antry.  The command is
     # called with the entry contents when the user selects "OK". If
@@ -172,6 +173,15 @@ class TkUI(ivy_ui.IvyUI):
         self.tk.config(cursor="")
         self.tk.update()
         self.frame.config(cursor="")
+
+    # Record a dialog answer for testing
+
+    def answer(self,string):
+        self.answers.append(string)
+
+    def getans(self):
+        return self.answers.pop() if self.answers else None
+        
 
 class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
 
@@ -221,60 +231,23 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
     # This is called to rebuild the graph display after any change
 
     def rebuild(self):
-        tk = self.tk
-        g = self.g
-        tk.eval('set graph [dotnew digraph forcelabels true]')
-        handle_to_node = dict()
-        self.node_to_handle = dict()
-        for (s,i) in zip(g.states,range(len(g.states))):
-                p = "%d" % i
-                shape = "point" if (s.clauses != None and s.clauses.is_false()) else "circle"
-                label = str(s.id) if s.clauses != None else '?'
-                color = self.node_color(s) 
-                handle = tk.eval('$graph addnode "' + p + '" label "' + label + '" shape ' + shape + ' color ' + color + ' fontsize 10 width 0.5 penwidth 2.0')
-                handle = 'node' + str(i+1) if handle.startswith('node0x') else handle
-                self.node_to_handle[i] = handle
-                handle_to_node[handle] = s
-        i = 0
-        edge_handles = []
-        for transition in g.transitions:
-                x,op,label,y = transition
-                # Curly braces don't survive tcldot (even if they balance). We work around this by replacing them with digraphs
-                # and then fixing it below by modding the text of the canvas items. Also, we want our code labels to be left 
-                # justified, so we end the lines with \l, which dot recognizes. Note the backslashes are escaped, since this
-                # is *not* a special character, it is a two-character sequence.
-                label = label.replace('}',']-').replace('{','-[')
-                label = label.replace('\n','\\l')+'\\l'
-                handle = tk.eval('$graph addedge "' + ("%d" % x.id) + '" "' + ("%d" % y.id) + '" label {' + label + '} fontsize 10 penwidth 2.0')
-                handle = 'edge' + str(i+1)  if handle.startswith('edge0x') else handle
-                edge_handles.append(handle)
-                i += 1
-                if isinstance(op,ivy_ui.AnalysisSubgraph):
-                    self.tag_bind("0" + handle, "<Button-1>", lambda y, op=op: op.display(tk))
-                    self.tag_bind("1" + handle, "<Button-1>", lambda y, op=op: op.display(tk))
-                self.tag_bind("0" + handle, "<Button-3>", lambda ev, transition=transition: self.right_click_edge(ev,transition))
-                self.tag_bind("1" + handle, "<Button-3>", lambda ev, transition=transition: self.right_click_edge(ev,transition))
-        for (x,y) in g.covering:
-                handle = tk.eval('$graph addedge "' + ("%d" % x.id) + '" "' + ("%d" % y.id) + '" style dashed')
-        self.delete(ALL)
-#        print tk.eval('$graph render ' + self._w  + ' DOT')
-        tk.eval('eval [$graph render ' + self._w  + ' DOT]')
+
+        self.create_elements(self.g.as_cy_elements())
+
+        # set the scroll region
+        
         self.config(scrollregion=self.bbox(ALL))
-        for x in handle_to_node:
-            n = handle_to_node[x]
-#            print "x = {}".format(x)
-#            print "n = {}".format(n)
-            self.tag_bind("0" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            self.tag_bind("1" + x, "<Button-1>", lambda y, n=n: self.left_click_node(y,n))
-            self.tag_bind("0" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
-            self.tag_bind("1" + x, "<Button-3>", lambda y, n=n: self.right_click_node(y,n))
-        for x in edge_handles:
-            items = self.find_withtag("0" + x)
-#            print 'items:{}'.format(items)
-            for item in items:
-                text = self.itemcget(item,'text')
-                text = text.replace('-[','{').replace(']-','}')
-                self.itemconfig(item,text=text)
+        
+        # fix the digraphs in edge labels
+
+        items = self.find_withtag('edge_label')
+        for item in items:
+            text = self.itemcget(item,'text')
+            text = text.replace('-[','{').replace(']-','}')
+            self.itemconfig(item,text=text)
+
+        # show the marked node, if any
+
         self.show_mark(True)
 
     # Display a concept graph
@@ -282,47 +255,32 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
     def show_graph(self,sg):
         return tk_graph_ui.show_graph(sg,self.tk,parent=self,frame=self.state_frame,ui_parent=self.ui_parent)
 
+    # Get tag of node
+
+    def node_tag(self,node):
+        return "n{}".format([node.id])
 
     # Called if the status of a node changes to update display
 
     def update_node_color(self,node):
-        for item in self.find_withtag("1"+self.node_to_handle[node.id]):
-            self.itemconfig(item,outline=self.node_color(node))
+        for item in self.find_withtag(node_tag(node)):
+            if 'shape' in self.gettags(item):
+                self.itemconfig(item,outline=self.node_color(node))
 
     # Called if the marked node changes to update display
 
     def show_mark(self,on=True):
-        if self.mark in self.node_to_handle:
-            for item in self.find_withtag("1"+self.node_to_handle[self.mark]):
-                self.itemconfig(item,fill=('red' if on else 'white'))
+        for item in self.find_withtag(node_tag(self.mark)):
+            if 'shape' in self.gettags(item):
+                self.itemconfig(item,fill=('red' if on else ''))
 
-    # When left-clicking a node, we view it
+    def node_from_cy_elem(self,elem):
+        return get_obj(elem)
 
-    def left_click_node(self,event,n):
-        if n.clauses != None:
-            self.view_state(n,n.clauses)
+    def edge_from_cy_elem(self,elem):
+        return tuple(f(elem)
+                     for f in (get_source_obj,get_obj,get_label,get_target_obj))
 
-    def right_click_node(self,event,n):
-        tk = self.tk
-        g = self.g
-        self.popup = Menu(tk, tearoff=0)
-        self.popup.add_command(label="Execute action:")
-        self.popup.add_separator()
-        for label,command in self.node_execute_commands(n):
-            self.popup.add_command(label=label,command=command)
-        self.popup.add_separator()
-        for label,c in self.node_commands():
-            self.popup.add_command(label=label,command=lambda c=c,n=n: c(n))
-        self.popup.tk_popup(event.x_root, event.y_root, 0)
-
-    def right_click_edge(self,event,transition):
-        tk = self.tk
-        g = self.g
-        self.popup = Menu(tk, tearoff=0)
-        self.popup.add_command(label="Dismiss")
-        for label,c in self.edge_actions(transition):
-            self.popup.add_command(label=label,command = lambda c=c,transition=transition: c(transition))
-        self.popup.tk_popup(event.x_root, event.y_root, 0)
 
 def new_ui():
     ivy_ui.ui = TkUI()

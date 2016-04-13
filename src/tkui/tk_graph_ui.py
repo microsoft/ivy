@@ -10,38 +10,8 @@ from Tkinter import *
 import Tkconstants, tkFileDialog
 import Tix
 import functools
-
-# Functions for destructuring cytoscape elements
-
-def xform(coord):
-    return (coord[0],-coord[1])
-
-def get_coord(position):
-    return xform(tuple(position[s] for s in ('x','y')))
-
-def get_group(element):
-    return element['group']
-
-def get_classes(element):
-    return element['classes']
-
-def get_shape(element):
-    return element['data']['shape']
-
-def get_label(element):
-    return element['data']['label']
-
-def get_id(element):
-    return element['data']['id']
-
-def get_obj(element):
-    # drop initial dot
-    return element['data']['obj']
-
-def get_arrowend(element):
-    p1 = get_coord(element['data']['bspline'][-1])
-    p2 = get_coord(element['data']['arrowend'])
-    return p1 + p2
+from cy_elements import *
+from tk_cy import *
 
 node_styles = {
     'at_least_one' : {'width' : 4, 'double' : 5},
@@ -63,28 +33,7 @@ def octagon_points(x0,y0,x1,y1):
     return (x0+xcut,y0,x1-xcut,y0,x1,y0+ycut,x1,y1-ycut,
             x1-xcut,y1,x0+xcut,y1,x0,y1-ycut,x0,y0+ycut)
 
-
-# Return the dimension of an elenent as (x,y,w,h) where x and y are
-# center coords.
-
-def get_dimensions(element):
-    data = element['data']
-    position = element['position']
-    return get_coord(position) + tuple(data[s] for s in ('width','height'))
-
-# Return the bspline of an element as a list of coords
-# (x0,y0,x1,y1,...)
-
-def get_bspline(element):
-    bspline = map(get_coord,element['data']['bspline'])
-    coords = []
-    for p in bspline:
-        coords.append(p[0])
-        coords.append(p[1])
-    return coords
-            
-
-class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
+class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
 
     def __init__(self,tk,gs,root=None,ui_parent=None):
         if root == None:
@@ -159,23 +108,6 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
         res['fill'] = self.colors[get_obj(elem)]
         return res
 
-    # Make an octagon
-
-    def create_octagon(self,*box,**kwargs):
-        pts = octagon_points(*box)
-        return self.create_polygon(*pts,**kwargs)
-
-    # Create a shape with given dimansions on canvas
-
-    def create_shape(self,shape,dimensions,**kwargs):
-        x,y,w,h = dimensions
-        x0,y0,x1,y1 = x-w/2, y-h/2, x+w/2, y+h/2
-        method = {'oval':self.create_oval, 'octagon':self.create_octagon}[shape]
-        if 'double' in kwargs:
-            gap = kwargs['double']
-            del kwargs['double']
-            method(x0+gap,y0+gap,x1-gap,y1-gap,**kwargs)
-        return method(x0,y0,x1,y1,**kwargs)
  
     # choose colors for concepts. nodes are colored by sort
 
@@ -213,27 +145,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             if hasattr(self,'mark'):
                 del self.mark
 
-            cy_elements  = g.cy_elements  # the graph with layout
-
-            # create all the graph elements (TODO: factor out)
-
-            for idx,elem in enumerate(cy_elements.elements):
-                eid = get_id(elem)
-                group = get_group(elem)
-                self.elem_ids[get_obj(elem)] = eid
-                if group == 'nodes':
-                    if get_classes(elem) != 'non_existing':
-                        dims = get_dimensions(elem)
-                        styles = self.get_node_styles(elem)
-                        shape = self.create_shape(get_shape(elem),dims,tags=[eid,'shape'],**styles)
-                        label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
-                        self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
-                elif group == 'edges':
-                    coords = get_bspline(elem)
-                    styles = self.get_edge_styles(elem)
-                    line = self.create_line(*coords,tags=eid,smooth="bezier",**styles)
-                    arrow = self.create_line(*get_arrowend(elem),tags=eid,arrow=LAST,**styles)
-                    self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_edge(y,elem))
+            self.create_elements(g.cy_elements)
 
             # show the constraint if there is one
 
@@ -272,56 +184,12 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             tk.eval('$graph write $myfd dot')
             tk.eval('close $myfd')
 
+    def node_from_cy_elem(self,elem):
+        return self.g.concept_from_id(get_obj(elem))
 
-    def make_popup(self,actions,arg):
-        tk = self.tk
-        g = self.g
-        popup = Menu(tk, tearoff=0)
-        for lbl,cmd in actions:
-            if lbl == '---':
-                popup.add_separator()
-            else:
-                if cmd == None:
-                    popup.add_command(label=lbl)
-                else:
-                    popup.add_command(label=lbl,command=functools.partial(cmd,arg))
-        return popup
-        
-
-    # Make the node pop-up menu for left-click
-
-    def make_node_popup(self,node):
-        return self.make_popup(self.get_node_actions(node),node)
-    
-    # Make the edge pop-up menu for left-click
-
-    def make_edge_popup(self,edge):
-        return self.make_popup(self.get_edge_actions(edge),edge)
-
-    # Handle a left click on a node
-
-    def left_click_node(self,event,elem):
-        n = self.g.concept_from_id(get_obj(elem))
-        # display the popup menu
-        popup = self.make_node_popup(n)
-        try:
-            popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            popup.grab_release()
-
-    # Handle a left click on an edge
-
-    def left_click_edge(self,event,elem):
-        # display the popup menu 
-        edge = tuple(self.g.concept_from_id(f(elem))
-                     for x in (get_obj,get_source_obj,get_target_obj))
-        popup = self.make_edge_popup(edge)
-        try:
-            popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            popup.grab_release()
+    def edge_from_cy_elem(self,elem):
+        return tuple(self.g.concept_from_id(f(elem))
+                     for f in (get_obj,get_source_obj,get_target_obj))
 
     # Call this when UI needs to be updated.
 

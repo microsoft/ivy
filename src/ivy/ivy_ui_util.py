@@ -112,7 +112,7 @@ def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None):
     tk.wait_window(dlg)
 
 
-def text_dialog(tk,root,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None):
+def text_dialog(tk,root,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None,ans=None):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
     S = Scrollbar(dlg)
@@ -125,10 +125,15 @@ def text_dialog(tk,root,msg,text,command=lambda:None,on_cancel=lambda:None,comma
     lbl = command_label or "OK"
     b = Button(dlg, text=lbl, command=destroy_then(dlg,command))
     b.pack(padx=5,side=TOP)
+    buttons = {lbl:b}
     if on_cancel != None:
         b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
         b.pack(padx=5,side=TOP)
+        buttons["Cancel"] = b
     center_window_on_window(dlg,root)
+    if ans:
+        buttons[ans].invoke()
+        return
     tk.wait_window(dlg)
 
 def entry_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,command_label=None):

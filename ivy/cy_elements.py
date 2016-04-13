@@ -107,3 +107,26 @@ class CyElements(object):
             },
             'classes': classes,
         })
+
+
+# Some convenience functions
+
+def get_group(element):
+    return element['group']
+
+def get_classes(element):
+    return element['classes']
+
+def get_shape(element):
+    return element['data']['shape']
+
+def get_label(element):
+    return element['data']['label']
+
+def get_id(element):
+    return element['data']['id']
+
+def get_obj(element):
+    # drop initial dot
+    return element['data']['obj']
+

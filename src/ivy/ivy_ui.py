@@ -49,6 +49,30 @@ class AnalysisGraphWidget(object):
     def node_color(self,node):
         return "green" if hasattr(node,'safe') and node.safe else "black"
 
+    # Actions to perform on nodes
+
+    def get_node_actions(self,node,click='left'):
+        if click == 'left':
+            return [("<>",self.view_state)]
+        else:
+            return ([("Execute action:",None),
+                     ("---",None),] +
+                    self.node_execute_commands(node) +
+                    [("---",None),] +
+                    self.node_commands())
+
+    # When left-clicking a node, we view it
+
+    def get_edge_actions(self,transition,click='right'):
+        if click == 'left':
+            return [] # nothing on right click yet
+        else:
+            return ([("Dismiss",lambda t: None),
+                     ("Recalculate",self.recalculate_edge),
+                     ("Decompose",self.decompose_edge),
+                     ("View Source",self.view_source_edge),])
+
+
     # Show a state in the current concept graph, or create a concept graph
 
     def view_state(self,n,clauses = None):
@@ -90,16 +114,6 @@ class AnalysisGraphWidget(object):
         state_equations = self.g.state_actions(n)
         return [(state_equation_label(a), lambda a=a: self.do_state_action(a))
                 for a in sorted(state_equations, key=state_equation_label)]
-
-    # Get the actions for the edge context menu
-
-    def edge_actions(self,transition):
-        return [
-            ("Recalculate",self.recalculate_edge),
-            ("Decompose",self.decompose_edge),
-            ("View Source",self.view_source_edge),
-            ]
-
 
     # Set the marked node
 
@@ -158,9 +172,14 @@ class AnalysisGraphWidget(object):
                 else ivy_alpha.alpha if (self.mode.get() == "abstract" or self.mode.get() == "induction")
                 else top_alpha)
 
+    # Get the node with given id
+
+    def node(self,id):
+        return self.g.states[id]
+
     # Evaluate a state equation to generate a new node
 
-    def do_state_action(self,a):
+    def do_state_action(self,a,node=None):
         with self.ui_parent.run_context():
             with EvalContext(check=False):
                 print "action {"

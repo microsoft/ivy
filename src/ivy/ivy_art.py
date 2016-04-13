@@ -412,6 +412,9 @@ class AnalysisGraph(object):
                 if not eval_state_order(equation.args[1],fpc[equation.args[0]]):
                     yield equation
 
+    def as_cy_elements(self):
+        return render_rg(self)
+
 def label_from_action(action):
     return iu.pretty(str(action),max_lines=4)
 
@@ -422,3 +425,70 @@ class AnalysisSubgraph(object):
     def __str__(self):
         return self.op
     __repr__ = __str__
+
+
+def render_rg(rg):
+    """
+    Render an ivy_arg.AnalysisGraph object
+
+    """
+    g = CyElements()
+
+    # add nodes for states
+    for s in rg.states:
+        if s.is_bottom():
+            classes = ['bottom_state']
+        else:
+            classes = ['state']
+        g.add_node(
+            obj=s,
+            label=str(s.id),
+            classes=classes,
+            short_info=str(s.id),
+            long_info=[str(x) for x in s.clauses.to_open_formula()],
+            locked=True,
+        )
+
+    # add edges for transitions
+    for source, op, label, target in rg.transitions:
+        if label == 'join':
+            classes = ['transition_join']
+            label = 'join'
+            info = 'join'
+        else:
+            classes = ['transition_action']
+
+            # Curly braces don't survive dot (even if they balance). We work around this by replacing them with digraphs
+            # and then fixing it later by modding the text of the canvas items. Also, we want our code labels to be left 
+            # justified, so we end the lines with \l, which dot recognizes. Note the backslashes are escaped, since this
+            # is *not* a special character, it is a two-character sequence.
+
+            label = label.replace('}',']-').replace('{','-[')
+            label = label.replace('\n','\\l')+'\\l'
+            info = str(op)
+        g.add_edge(
+            op,
+            source,
+            target,
+            label=label,
+            classes=classes,
+            short_info=info,
+            long_info=info,
+        )
+
+    # add edges for covering
+    for covered, by in rg.covering:
+        g.add_edge(
+            'cover',
+            covered,
+            by,
+            label='',
+            classes=['cover'],
+            short_info='',
+            long_info='',
+            events=[],
+            actions=[],
+        )
+
+    return g
+

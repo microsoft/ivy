@@ -98,16 +98,19 @@ class GraphWidget(object):
     # add a label by using action None, and a separator with label
     # '---'.
 
-    def get_node_actions(self,node):
-        return [
-            ("Select",self.select),
-            ("Empty",self.empty),
-            ("Materialize",self.materialize),
-            ("Materialize edge",self.materialize_from_selected),
-            ("Splatter",self.splatter),
-            ("Split with...",None),
-            ("---",None),
-        ] + self.get_node_splitting_actions(node) + self.get_node_projection_actions(node)
+    def get_node_actions(self,node,click='left'):
+        if click == 'left':
+            return [
+                ("Select",self.select),
+                ("Empty",self.empty),
+                ("Materialize",self.materialize),
+                ("Materialize edge",self.materialize_from_selected),
+                ("Splatter",self.splatter),
+                ("Split with...",None),
+                ("---",None),
+                ] + self.get_node_splitting_actions(node) + self.get_node_projection_actions(node)
+        else:
+            return [] # nothing on right click
 
     # get splitting predicates for node
 
@@ -145,9 +148,9 @@ class GraphWidget(object):
     def lookup_node(self,name):
         return next(n for n in self.g.all_nodes if n.name == name)
 
-    def checkpoint(self):
-        self.graph_stack.checkpoint()
-        self.g.enabled_relations = set(x.name for x in self.visible_relations())
+    def checkpoint(self,set_backtrack_point=False):
+        self.graph_stack.checkpoint(set_backtrack_point=False)
+#        self.g.enabled_relations = set(x.name for x in self.visible_relations())
 
     def undo(self):
         self.graph_stack.undo()
@@ -210,17 +213,15 @@ class GraphWidget(object):
 
     def reverse(self):
         if self.parent != None and self.g.parent_state != None:
-            self.g.attributes.append("backtrack_point")
-            self.checkpoint()
+            self.checkpoint(set_backtrack_point=True)
             g = self.g
             p = self.parent.reverse_update_concrete_clauses(g.parent_state, g.constraints)
             if p == None:
                 self.ui_parent.ok_dialog("Cannot reverse.")
                 return
             clauses, parent_state = p
-            g.constraints = true_clauses()
             g.parent_state = parent_state
-            g.set_state(and_clauses(parent_state.clauses,clauses))
+            g.set_state(ilu.and_clauses(parent_state.clauses,clauses),clear_constraints=True)
             print "reverse: state = {}".format(g.state)
             # This is a HACK to support "diagram"
             g.reverse_result = (parent_state.clauses,clauses)
@@ -233,7 +234,7 @@ class GraphWidget(object):
             g = self.g
             p = self.parent.recalculate_state(g.parent_state)
             clauses = g.parent_state.clauses
-            clauses = remove_duplicates_clauses(and_clauses(g.state,clauses)) 
+#            clauses = ilu.remove_duplicates_clauses(and_clauses(g.state,clauses)) 
 #            print "recalculate clauses={}".format(clauses)
             g.set_state(clauses)
             self.update()

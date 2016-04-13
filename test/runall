@@ -1,8 +1,10 @@
 #!/bin/bash
 
-for x in *.py; do
+tests='enum1 client_server1'
+
+for x in $tests; do
     echo $x ...
-    if ivy_test $x; then
+    if ivy_test $x.py; then
         echo PASS
     else
         echo FAIL

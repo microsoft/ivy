@@ -497,9 +497,11 @@ class Graph(object):
         if recomp:
             self.recompute()
 
-    def set_state(self,clauses,recomp=True):
+    def set_state(self,clauses,recomp=True,clear_constraints=False):
         self.state = clauses        
         self.concept_session.state = ilu.clauses_to_formula(clauses)
+        if clear_constraints:
+            self.concept_session.suppose_constraints = []
         self.state_changed(recomp)
 
     def set_concrete(self,clauses):
@@ -561,7 +563,7 @@ class Graph(object):
         c.cy_elements = self.cy_elements
         c.concept_session = self.concept_session.clone(recompute=False)
         c.parent_state = self.parent_state
-        c.attributes = []
+        c.attributes = list(self.attributes)
         if hasattr(self,'reverse_result'):
             c.reverse_result = list(self.reverse_result)
         return c
@@ -663,9 +665,11 @@ class GraphStack(object):
             self.current = self.redo_stack[-1]
             del self.redo_stack[-1]
 
-    def checkpoint(self):
+    def checkpoint(self,set_backtrack_point=False):
         """ Record a checkpoint """
         self.undo_stack.append(self.current.copy())
+        if set_backtrack_point:
+            self.undo_stack[-1].attributes.append("backtrack_point")
         del self.redo_stack[:]
 
 def standard_graph(parent_state=None):
