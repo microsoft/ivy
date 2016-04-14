@@ -316,4 +316,7 @@ isolate iso_n = n with an, l, f
 
 isolate iso_f = f with af, node, epoch, packet
 
+# This isolate is for code extraction. We use all the concrete modules, and all
+# concrete data types
 
+isolate iso_code = p with c, n, f, node, epoch, packet

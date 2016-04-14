@@ -430,3 +430,14 @@ polymorphic_symbols = set(
 use_numerals = BooleanParameter("use_numerals",True)
 use_new_ui = BooleanParameter("new_ui",False)
 
+
+def dbg(*exprs):
+    """Print expressions evaluated in the caller's frame."""
+    import inspect
+    frame = inspect.currentframe()
+    try:
+        locs = frame.f_back.f_locals
+        for e in exprs:
+            print "{}:{}".format(e,eval(e,globals(),locs))
+    finally:
+        del frame

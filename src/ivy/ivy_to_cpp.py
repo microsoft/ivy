@@ -202,7 +202,7 @@ public:
     impl.append('add("(assert (and\\\n')
     constraints = [im.module.init_cond.to_formula()]
     for a in im.module.axioms:
-        constraints.append(a.to_formula())
+        constraints.append(a)
     for df in im.module.concepts:
         constraints.append(df.to_constraint())
     for c in constraints:
@@ -425,7 +425,7 @@ def emit_some_action(header,impl,name,action,classname):
 def init_method():
     asserts = [ia.AssertAction(im.module.init_cond.to_formula())]
     for a in im.module.axioms:
-        asserts.append(ia.AssertAction(a.to_formula()))
+        asserts.append(ia.AssertAction(a))
     res = ia.Sequence(*asserts)
     res.formal_params = []
     res.formal_returns = []
@@ -592,7 +592,8 @@ def module_to_cpp_class(classname):
         for i,n in enumerate(il.sig.sorts[sortname].extension):
             impl.append('    {} = {};\n'.format(varname(n),i))
     for sortname in il.sig.interp:
-        impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
+        if sortname in il.sig.sorts:
+            impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
     impl.append('}\n')
 
     
@@ -609,9 +610,33 @@ def emit_constant(self,header,code):
 il.Symbol.emit = emit_constant
 il.Variable.emit = emit_constant
 
+def parse_int_params(name):
+    spl = name.split('[')
+    name,things = spl[0],spl[1:]
+#    print "things:".format(things)
+    if not all(t.endswith(']') for t in things):
+        raise SyntaxError()
+    return name,[int(t[:-1]) for t in things]
+
+def emit_special_op(self,op,header,code):
+    if op == 'concat':
+        sname,sparms = parse_int_params(self.args[1].sort.name)
+        if sname == 'bv' and len(sparms) == 1:
+            code.append('(')
+            self.args[0].emit(header,code)
+            code.append(' << {} | '.format(sparms[0]))
+            self.args[1].emit(header,code)
+            code.append(')')
+            return
+    raise IvyError(self,"operator {} cannot be emitted as C++")
+
 def emit_app(self,header,code):
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
+        if self.func.name in il.sig.interp:
+            op = il.sig.interp[self.func.name]
+            emit_special_op(self,op,header,code)
+            return
         assert len(self.args) == 2 # handle only binary ops for now
         code.append('(')
         self.args[0].emit(header,code)

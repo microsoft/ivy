@@ -34,6 +34,8 @@ def solver_name(symbol):
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
         name += ':' + sort
+    if name in ivy_utils.polymorphic_symbols:
+        return None
     return name
 
 # S = z3.DeclareSort("S")
@@ -64,7 +66,7 @@ def sorts(name):
 
 def parse_int_params(name):
     things = name.split('[')[1:]
-    print "things:".format(things)
+#    print "things:".format(things)
     if not all(t.endswith(']') for t in things):
         raise SyntaxError()
     return [int(t[:-1]) for t in things]
