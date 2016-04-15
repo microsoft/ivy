@@ -277,6 +277,12 @@ class BooleanParameter(Parameter):
                            check = lambda s: (s == "true" or s == "false"),
                            process = lambda s: s == "true")
 
+class EnumeratedParameter(Parameter):
+    """ Parameter that takes "true" for True and "false" for False """
+    def __init__(self,key,vals,init_val=None):
+        Parameter.__init__(self,key,init_val,
+                           check = lambda s, vals=vals: (s in vals),
+                           process = lambda s: s)
     
 
 

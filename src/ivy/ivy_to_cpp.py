@@ -14,6 +14,7 @@ import ivy_solver as slv
 import ivy_transrel as tr
 import ivy_logic_utils as ilu
 import ivy_compiler as ic
+import itertools
 
 from collections import defaultdict
 
@@ -386,6 +387,8 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     rs = action.formal_returns
     if not body:
         header.append('    ')
+    if not body and target.get() != "gen":
+        header.append('virtual ')
     if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
@@ -540,28 +543,41 @@ def module_to_cpp_class(classname):
         is_derived.add(df.defines())
 
     header = []
-    header.append('extern void ivy_assert(bool);\n')
-    header.append('extern void ivy_assume(bool);\n')
-    header.append('extern void ivy_check_progress(int,int);\n')
-    header.append('extern int choose(int,int);\n')
-    header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
+    if target.get() == "gen":
+        header.append('extern void ivy_assert(bool);\n')
+        header.append('extern void ivy_assume(bool);\n')
+        header.append('extern void ivy_check_progress(int,int);\n')
+        header.append('extern int choose(int,int);\n')
+        header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
     header.append('#include <vector>\n')
     header.append('class ' + classname + ' {\n  public:\n')
     header.append('    std::vector<int> ___ivy_stack;\n')
-    header.append('    ivy_gen *___ivy_gen;\n')
+    if target.get() == "gen":
+        header.append('    ivy_gen *___ivy_gen;\n')
     header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
+    if target.get() != "gen":
+        header.append('    void ivy_assert(bool){}\n')
+        header.append('    void ivy_assume(bool){}\n')
+        header.append('    void ivy_check_progress(int,int){}\n')
     
     impl = ['#include "' + classname + '.h"\n\n']
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("int " + classname)
-    impl.append(
+    if target.get() == "gen":
+        impl.append(
 """::___ivy_choose(int rng,const char *name,int id) {
         std::ostringstream ss;
         ss << name << ':' << id;;
         for (unsigned i = 0; i < ___ivy_stack.size(); i++)
             ss << ':' << ___ivy_stack[i];
         return ___ivy_gen->choose(rng,ss.str().c_str());
+    }
+""")
+    else:
+        impl.append(
+"""::___ivy_choose(int rng,const char *name,int id) {
+        return 0;
     }
 """)
     for sym in all_state_symbols():
@@ -594,17 +610,48 @@ def module_to_cpp_class(classname):
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
+    if target.get() != "gen":
+        emit_one_initial_state(impl)
     impl.append('}\n')
 
-    
-    emit_boilerplate1(header,impl)
-    emit_init_gen(header,impl,classname)
-    for name,action in im.module.actions.iteritems():
-        if name in im.module.public_actions:
-            emit_action_gen(header,impl,name,action)
+    if target.get() == "gen":
+        emit_boilerplate1(header,impl)
+        emit_init_gen(header,impl,classname)
+        for name,action in im.module.actions.iteritems():
+            if name in im.module.public_actions:
+                emit_action_gen(header,impl,name,action)
     return ''.join(header) , ''.join(impl)
 
+def assign_symbol_from_model(header,sym,m):
+    if slv.solver_name(sym) == None:
+        return # skip interpreted symbols
+    name, sort = sym.name,sym.sort
+    if hasattr(sort,'dom'):
+        for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
+            term = sym(*[il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)])
+            val = m.eval_to_constant(term)
+            iu.dbg('val','type(val)')
+            header.append(varname(sym.name) + ''.join('['+str(a)+']' for a in args) + ' = ')
+            header.append(str(val) + ';\n')
+    else:
+        header.append(varname(sym.name) + ' = ' + m.eval_to_constant(sym) + ';\n')
+        
+
+def emit_one_initial_state(header):
+    m = slv.get_model_clauses(im.module.init_cond)
+    if m == None:
+        raise IvyError(None,'Initial condition is inconsistent')
+    for sym in all_state_symbols():
+        if sym not in is_derived:
+            assign_symbol_from_model(header,sym,m)
+
+
 def emit_constant(self,header,code):
+    if (isinstance(self,il.Symbol) and self.is_numeral() and self.sort.name in il.sig.interp
+        and il.sig.interp[self.sort.name].startswith('bv[')):
+        sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
+        code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
+        return
     code.append(varname(self.name))
 
 il.Symbol.emit = emit_constant
@@ -620,7 +667,9 @@ def parse_int_params(name):
 
 def emit_special_op(self,op,header,code):
     if op == 'concat':
-        sname,sparms = parse_int_params(self.args[1].sort.name)
+        sort_name = il.sig.interp[self.args[1].sort.name]
+        sname,sparms = parse_int_params(sort_name)
+        iu.dbg('sname','sparms')
         if sname == 'bv' and len(sparms) == 1:
             code.append('(')
             self.args[0].emit(header,code)
@@ -628,7 +677,14 @@ def emit_special_op(self,op,header,code):
             self.args[1].emit(header,code)
             code.append(')')
             return
-    raise IvyError(self,"operator {} cannot be emitted as C++")
+    if op.startswith('bfe['):
+        opname,opparms = parse_int_params(op)
+        mask = (1 << (opparms[0]-opparms[1]+1)) - 1
+        code.append('(')
+        self.args[0].emit(header,code)
+        code.append(' >> {} & {})'.format(opparms[1],mask))
+        return
+    raise iu.IvyError(self,"operator {} cannot be emitted as C++".format(op))
 
 def emit_app(self,header,code):
     # handle interpreted ops
@@ -1167,6 +1223,8 @@ public:
 };
 """)
 
+
+target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
 
 if __name__ == "__main__":
     ia.set_determinize(True)

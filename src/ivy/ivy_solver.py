@@ -34,7 +34,7 @@ def solver_name(symbol):
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
         name += ':' + sort
-    if name in ivy_utils.polymorphic_symbols:
+    if name in ivy_logic.sig.interp:
         return None
     return name
 
@@ -554,11 +554,18 @@ class HerbrandModel(object):
     def eval_constant(self,c):
         return get_model_constant(self.model,c)
 
+    def eval_to_constant(self,t):
+        return constant_from_z3(t.sort,self.model.eval(term_to_z3(t)))
+    
 # TODO: need to map Z3 sorts back to ivy sorts
 def sort_from_z3(s):
     return z3_sorts_inv[get_id(s)]
 
 def constant_from_z3(sort,c):
+    if z3.is_true(c):
+        return ivy_logic.And()
+    if z3.is_false(c):
+        return ivy_logic.Or()
     return ivy_logic.Constant(ivy_logic.Symbol(repr(c),sort))
 
 def get_model_constant(m,t):

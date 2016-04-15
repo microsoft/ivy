@@ -205,9 +205,8 @@ module proto(cnt,net) = {
         local e: epoch {
 	    assume held(n1);
 	    e := cnt.incr(ep(n1));
-	    call net.send_transfer(e, n2)
-#;
-#	    held(n1) := false
+	    call net.send_transfer(e, n2);
+	    held(n1) := false
         }
     }
 
