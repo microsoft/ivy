@@ -1,0 +1,408 @@
+#lang ivy1.3
+
+#
+# An Ivy model of the toy lock example from https://github.com/Microsoft/Ironclad/blob/master/ironfleet/src/Dafny/Distributed/Protocol/Lock/Node.i.dfy
+#
+
+# A total order helper module
+module total_order(t,r) = {
+    axiom r(X:t,X)                        # Reflexivity
+    axiom r(X:t, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X:t, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X:t, Y) | r(Y, X)             # Totality
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type tag = {xfer,ack}
+type node
+type epoch
+type packet
+
+# epochs are totally ordered
+
+relation (X:epoch <= Y:epoch)
+instantiate total_order(epoch, <=)
+
+module counter(t) = {
+    action incr(input:t) returns (output:t) = {
+        assume input < 0xffff;
+        output := input + 1
+    }
+}        
+    
+# Abstract specification of counter. This outputs an arbitrary value
+# greater than the input
+
+module abs_counter(t,c) = {
+    action incr(input:t) returns (output:t) = {
+        assert ~(output <= input)
+    }
+    mixin incr after c.incr
+}        
+
+# This module describes the network topology. It happens to be
+# a ring, but this isn't needed to prove safety. In principle, it
+# would be nice for the ring to be sparse.
+
+module topology = {
+
+    # this action returns the successor of a given node (the
+    # arithmetic is mod the number of nodes).
+
+    action next(n:node) returns (succ:node) = {
+	succ := n + 1
+    }
+
+    action prev(n:node) returns (pred:node) = {
+	pred := n - 1
+    }
+
+}
+
+# This is an abstraction of the topology that is sufficient to prove
+# safety. We only assume each node has a unique successor
+
+module abs_topology = {
+
+    # abstract successor relation
+    relation succ(X:node,Y:node)
+
+    # this should be a theorem!
+    axiom succ(X,Y) & succ(X,Z) -> Y = Z
+
+    action next(n:node) returns (s:node) = {
+	assert succ(n,s)
+    }
+}
+
+module formatter = {
+
+    # packets are constructed by concatenation
+
+    individual conc(T:tag,E:epoch) : packet
+
+    action mk_transfer(e:epoch) returns (p:packet) = {
+        p := conc(xfer,e)
+    }
+
+    action mk_ack(e:epoch) returns (p:packet) = {
+        p := conc(ack,e)
+    }
+
+    interpret conc -> concat
+}
+    
+
+# These are abstract destructuring functions for packets
+
+individual get_tg(P:packet) : tag       # the packet's tag
+individual get_ep(P:packet) : epoch     # the packet's epoch
+
+interpret get_ep -> bfe[7][0]
+interpret get_tg -> bfe[9][8]
+
+module abs_formatter(low) = {
+
+    # This is a specification of a packet formatter
+
+    # Make a packet. Right now there are only transfer packets so
+    # there is no tag needed.
+
+    action mk_transfer(e:epoch) returns (p:packet) = {
+	assert get_tg(p) = xfer & get_ep(p) = e
+    }
+    mixin mk_transfer after low.mk_transfer
+
+    action mk_ack(e:epoch) returns (p:packet) = {
+	assert get_tg(p) = ack & get_ep(p) = e
+    }
+    mixin mk_ack after low.mk_ack
+
+}
+
+module abs_low_intf(fmt) = {
+
+    # This is a specification of the low-level packet interface.
+    # It allows for packet duplication. Parameter "fmt" is the
+    # packet formatter.
+
+    relation sent(D:node, P:packet)  # the set of sent packets
+
+    init ~sent(D,P)            # initially, no packets sent
+    
+    action send(dst:node,p:packet) = {
+        sent(dst,p) := true
+    }
+    
+    action recv(dst:node) returns(p:packet) = {
+    	assert sent(dst,p)
+    }
+
+}
+
+
+module net_intf(lower,fmt,pro,top) = {
+
+    # This is a specification of a network interface that
+    # allows sending and receiving of messages tagged with epochs.
+    # The specification allows messages to be arbitrarily duplicated.
+
+    # This is a concrete implementation that sends and receives formatted
+    # packets via a lower-level service
+
+    # The parameter "lower" is the lower-level interface and "fmt"
+    # is the packet formatter.
+
+    # This represents a packet that has been sent but not acked. This
+    # could be replaced by a finite buffer.
+
+    relation pend(S:node)                   # a packet sent by S is pending
+    individual pend_pkt(S:node):packet      # the pending packet
+
+    init ~pend(S)
+
+    # format and send a transfer message to destination address
+
+    action send_transfer(src:node, e:epoch, dst:node) = {
+        local p : packet {
+	    p := fmt.mk_transfer(e);
+	    call lower.send(dst, p);
+	    pend(src) := true;
+	    pend_pkt(src) := p
+        }
+    }
+
+    # check for an incoming packet and handle it
+
+    action incoming(n:node) = {
+	local p:packet, e:epoch, s:node {
+	    p := lower.recv(n);
+	    e := get_ep(p);
+	    if get_tg(p) = xfer {
+		call pro.accept(n,e);
+		local a:packet, s:node {
+		    a := fmt.mk_ack(e);
+		    s := top.prev(n);
+		    call lower.send(s,a)
+		}
+	    }
+	    else {
+		if get_ep(p) = get_ep(pend_pkt(n)) {
+		    pend(n) := false
+		}
+	    }
+	}
+    }
+
+    # handle a timeout event. resend pending pkt
+
+    action timeout(n:node) = {
+	if pend(n) {
+	    local dst:node {
+		dst := top.next(n);
+		call lower.send(dst,pend_pkt(n))
+	    }
+	}
+    }
+    
+#    conjecture l.sent(D,P) & get_tg(P) = xfer -> an.transfer(get_ep(P),D)
+#    conjecture pend(S) & P = pend_pkt(S) & at.succ(S,D) -> get_tg(P) = xfer & an.transfer(get_ep(P),D)
+
+}
+
+module abs_net_intf(net) = {
+       
+    # This is a specification of a network interface that
+    # allows sending and receiving of messages tagged with epochs.
+    # The specification allows messages to be arbitrarily duplicated.
+
+    # This is an abstract specification that is not concerned with
+    # the actual message format. We will add that as a refinement.
+
+    # state of abstract network interface
+
+    relation transfer(E:epoch, N:node)  # the node is the message destination
+    init ~transfer(E, N)
+     
+    # send a transfer message to destination address
+
+    action send_transfer(src:node, e:epoch, dst:node) = {
+        transfer(e,dst) := true
+    }
+    mixin send_transfer after net.send_transfer
+
+    # specify call back from net to protocol
+
+    action accept(dst:node,e:epoch) = {
+        assert transfer(e,dst)  # see (*) below
+    }
+    mixin accept before pro.accept
+
+
+}
+
+module proto(cnt,top,net) = {
+
+    # This module models all of the nodes. We really want to have an
+    # object representing a single node. For that we need a way of
+    # assigning unique ids to the nodes.
+
+    # ep(n) is the current epoch of node n
+
+    individual ep(N:node) : epoch 
+
+    # held(n) is true iff the lock is currently held by node n
+
+    relation held(N:node) 
+
+    # initially exactly one node holds the lock, and all others have epoch zero
+
+    individual first:node
+ 
+    init held(X) <-> X=first
+    init N ~= first -> ep(N) = 0
+    init ~(ep(first) <= 0)
+
+    # set of locked messages, initially none
+
+    relation locked(E:epoch, N:node)  # the node is the message source
+    init ~locked(E, N)
+
+    ################################################################################
+    #
+    # Protocol description
+    #
+    ################################################################################
+
+    # release the lock and send a transfer message
+
+    action grant(n1:node) = {
+        local e:epoch, n2:node {
+	    assume held(n1);
+	    e := cnt.incr(ep(n1));
+	    n2 := top.next(n1);
+	    call net.send_transfer(n1, e, n2);
+	    held(n1) := false
+        }
+    }
+
+    # call back from network when receive transfer message. take the
+    # lock, but only if epoch increases. recored when we took it for
+    # posterity
+
+    action accept(n:node,e:epoch) = {
+	if ~(e <= ep(n)) {
+	    held(n) := true;
+	    ep(n) := e;
+	    locked(e, n) := true
+	}
+    }
+
+    # added just to have something to verify (mutual exclusion)
+
+    action critical(n:node) = {
+        assume held(n);
+        assert X ~= n -> ~held(X)
+    }
+
+    ################################################################################
+    # invariant conjectures
+
+    # no two locked at same epoch (as a sanity check)
+    conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
+
+    # epochs transfer to at most one node    
+    conjecture an.transfer(E, N1) & an.transfer(E, N2) -> N1 = N2
+
+    # if a node sent a locked msg, the node's epoch is now higher
+    conjecture locked(E, N) -> (E <= ep(N))
+
+    # holding node's epoch is higher than any other node's epoch (this implies a single node holds the lock)
+    conjecture held(N) & N ~= M -> ~(ep(N) <= ep(M))
+
+    # holding node's epoch is higher than any transfer's epoch
+    conjecture held(N) & an.transfer(E, M) -> (E <= ep(N))
+
+    # pending transfer epoch is higher than any node's epoch
+    conjecture an.transfer(E, N) & ~(E <= ep(N)) -> ~(E <= ep(M))
+
+    # pending transfer epoch is higher than any transfer's epoch
+    conjecture an.transfer(E, N) & ~(E <= ep(N)) & an.transfer(F, M) -> (F <= E) 
+}
+
+
+# Instantiate the modules to build a system
+
+# Notice that the formatter and low interface are currently abstract
+# specifications that could be refined in the future.
+
+instantiate c : counter(epoch)
+instantiate t : topology
+instantiate f : formatter()
+instantiate l : abs_low_intf(f)
+instantiate n : net_intf(l,f,p,t)
+instantiate p : proto(c,t,n)
+
+# The type epoch is implemented with native 2-bit numbers
+
+interpret epoch -> bv[8]
+
+# The type node is implemented with native 2-bit numbers
+
+interpret node -> bv[2]
+
+# Packets are made with four-bit vectors
+
+interpret packet -> bv[10]
+
+# Packet tags are interpreted as 2-bit numbers
+
+interpret tag -> bv[2]
+
+# This is the service we provide to the environment
+
+export p.grant
+export n.incoming
+export n.timeout
+export p.critical
+
+######################################################
+#
+#  All after this is proof
+
+# Overlay the abstract counter specification
+
+instantiate an : abs_net_intf(n)
+instantiate ac : abs_counter(epoch,c)
+instantiate af : abs_formatter(f)
+
+# When we verify the protocol claim, we use the abstract counter spec. Notice that
+# we also ignore the implementation of "epoch", so for this claim we treat "epoch:
+# as uninterpreted, leaving us in EPR.
+
+isolate iso_p = p with an,ac
+
+# When we verify concrete counter, we use the implementation of "epoch", since we need
+# the arithmetic theory. In this case we are in QF_LRA, which is also decidable.
+
+isolate iso_c = c with ac,epoch
+
+# When we verify claims about the network interface, we leave "epoch" abstract. We
+# keep the state of the abstract spec, and the lower and formatter interface specs.
+
+isolate iso_n = n with an, l, f
+
+# When we verify claims about the formatter interface, we interpret "node", "epoch"
+# and "packet" as bit vectors.
+
+isolate iso_f = f with af, node, epoch, packet
+
+# This isolate is for code extraction. We use all the concrete modules, and all
+# concrete data types
+
+isolate iso_code = p with c, n, f, t, node, epoch, packet, tag

@@ -314,7 +314,7 @@ def p_top_concept_cdefns(p):
     p[0].declare(ConceptDecl(*p[3]))
 
 def p_top_init_fmla(p):
-    'top : top INIT fmla'
+    'top : top INIT labeledfmla'
     p[0] = p[1]
     d = InitDecl(p[3])
     d.lineno = get_lineno(p,2)

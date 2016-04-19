@@ -542,6 +542,11 @@ def module_to_cpp_class(classname):
     for df in im.module.concepts:
         is_derived.add(df.defines())
 
+    # remove the actions not reachable from exported
+        
+    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
+    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
+
     header = []
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool);\n')
@@ -556,9 +561,9 @@ def module_to_cpp_class(classname):
         header.append('    ivy_gen *___ivy_gen;\n')
     header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
     if target.get() != "gen":
-        header.append('    void ivy_assert(bool){}\n')
-        header.append('    void ivy_assume(bool){}\n')
-        header.append('    void ivy_check_progress(int,int){}\n')
+        header.append('    virtual void ivy_assert(bool){}\n')
+        header.append('    virtual void ivy_assume(bool){}\n')
+        header.append('    virtual void ivy_check_progress(int,int){}\n')
     
     impl = ['#include "' + classname + '.h"\n\n']
     impl.append("#include <sstream>\n")
@@ -686,6 +691,20 @@ def emit_special_op(self,op,header,code):
         return
     raise iu.IvyError(self,"operator {} cannot be emitted as C++".format(op))
 
+def emit_bv_op(self,header,code):
+    sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
+    code.append('(')
+    code.append('(')
+    self.args[0].emit(header,code)
+    code.append(' {} '.format(self.func.name))
+    self.args[1].emit(header,code)
+    code.append(') & {})'.format((1 << sparms[0])-1))
+
+def is_bv_term(self):
+    return (il.is_first_order_sort(self.sort)
+            and self.sort.name in il.sig.interp
+            and il.sig.interp[self.sort.name].startswith('bv['))
+
 def emit_app(self,header,code):
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
@@ -694,6 +713,9 @@ def emit_app(self,header,code):
             emit_special_op(self,op,header,code)
             return
         assert len(self.args) == 2 # handle only binary ops for now
+        if is_bv_term(self):
+            emit_bv_op(self,header,code)
+            return
         code.append('(')
         self.args[0].emit(header,code)
         code.append(' {} '.format(self.func.name))

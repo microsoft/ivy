@@ -343,6 +343,25 @@ def topological_sort(items,order,key=lambda x:x):
                 l.append(i)
     return list(reversed(l))
 
+def reachable(items,iter_succ,key=lambda x:x):
+    """ items is a list, key maps list elements to hashable keys,
+    order is a set of pairs of items representing a pre-order.  Returns a
+    list of descendants of items."""
+    m,s,l,d = set(),list(items),[],set()
+    while len(s) > 0:
+        i = s.pop()
+        k = key(i)
+        if not k in d:
+            if k not in m:
+                s.append(i)
+                s.extend(x for x in iter_succ(k) if key(x) != k)
+                m.add(k)
+            else:
+                d.add(k)
+                l.append(i)
+    return list(reversed(l))
+
+
 class ErrorPrinter(object):
     """ Context Manager that handles exceptions and reports errors. """
     def __init__(self):

@@ -26,6 +26,7 @@ class Module(object):
         self.all_relations = [] # this includes both base and derived relations in declaration order
         self.concepts = []  # TODO: these are actually "derived" relations
         self.labeled_axioms = []
+        self.labeled_inits = []
         self.init_cond = lu.true_clauses()
         self.relations = dict()  # TODO: this is redundant, remove
         self.functions = dict()  # TODO: this is redundant, remove

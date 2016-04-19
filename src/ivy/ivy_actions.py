@@ -273,11 +273,11 @@ def type_check(domain,ast):
                 raise IvyError(atom,
                                "wrong number of arguments to {}: got {}, expecting {}."
                                .format(atom.rep,arity,correct_arity))
-            for a in atom.args:
-                if isinstance(a.get_sort(),EnumeratedSort):
-                    raise IvyError(a,
-                                   "symbol {} of enumerated type can only appear under equality"
-                                   .format(a.rep))
+#            for a in atom.args:
+#                if isinstance(a.get_sort(),EnumeratedSort):
+#                    raise IvyError(a,
+#                                   "symbol {} of enumerated type can only appear under equality"
+#                                   .format(a.rep))
     for atom in eqs_ast(ast):
             t0,t1 = [x.get_sort() for x in atom.args]
             if t0 != t1:
@@ -565,7 +565,7 @@ class IfAction(Action):
         return [(pre,[a],post) for a in self.subactions()]
     def cmpl(self):
         args = [self.args[0].compile_with_sort_inference()] + [a.compile() for a in self.args[1:]]
-        return IfAction(*args)
+        return self.clone(args)
 
 
 local_action_ctr = 0

@@ -258,7 +258,7 @@ def compile_action_def(a,sig):
         returns = [compile_const(v,sig) for v in a.formal_returns]
 #        print returns
         res = sortify(a.args[1])
-        assert hasattr(res,'lineno')
+        assert hasattr(res,'lineno'), res
         res.formal_params = formals
         res.formal_returns = returns
         return res
@@ -360,13 +360,15 @@ class IvyARGSetup(IvyDeclInterp):
     def individual(self,v):
         self.ag.pvars.append(sortify(v).rep)
     def init(self,s):
-        s = sortify_with_inference(s)
+        la = s.compile()
+        self.ag.domain.labeled_inits.append(la)
+#        s = sortify_with_inference(s)
 #        print "s:{}".format(s)
-        type_check(self.ag.domain,s)
-        c = formula_to_clauses_tseitin(s)
-        if not c:
-            raise IvyError(ax,"initial condition must be a clause")
-        im.module.init_cond = and_clauses(im.module.init_cond,c)
+#        type_check(self.ag.domain,s)
+#         c = formula_to_clauses_tseitin(s)
+#        if not c:
+#            raise IvyError(ax,"initial condition must be a clause")
+        im.module.init_cond = and_clauses(im.module.init_cond,formula_to_clauses(la.formula))
     def action(self,a):
         self.ag.actions[a.args[0].relname] = compile_action_def(a,self.ag.domain.sig)
         self.ag.public_actions.add(a.args[0].relname)
@@ -423,7 +425,7 @@ def add_mixins(ag,actname,action2,assert_to_assume=lambda m:False,use_mixin=lamb
             action1 = mod_mixin(action1)
             assert hasattr(action1,'lineno')
             assert hasattr(action1,'formal_params'), action1
-        res = ivy_actions.apply_mixin(mixin,action1,res)
+            res = ivy_actions.apply_mixin(mixin,action1,res)
     return res
 
 def summarize_action(action):
@@ -533,6 +535,12 @@ def startswith_some(s,prefixes):
 def startswith_eq_some(s,prefixes):
     return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
 
+def test_startswith_some(name,present):
+    iu.dbg('name','present')
+    res = startswith_some(name,present)
+    iu.dbg('res')
+    return res
+
 def isolate_component(ag,isolate_name):
     domain = ag.domain
     if isolate_name not in ag.isolates:
@@ -552,7 +560,8 @@ def isolate_component(ag,isolate_name):
             raise IvyError(None,"{} is not a module instance".format(name))
     
     new_actions = {}
-    use_mixin = lambda name: startswith_some(name,present)
+    iu.dbg('present')
+    use_mixin = lambda name: test_startswith_some(name,present)
     mod_mixin = lambda m: m if startswith_some(name,verified) else m.prefix_calls('ext:')
     all_mixins = lambda m: True
     no_mixins = lambda m: False
@@ -612,15 +621,53 @@ def isolate_component(ag,isolate_name):
         exported.add('ext');
         new_actions['ext'] = ext_act;
 
+
+    # We allow objects to reference any symbols in global scope, and
+    # we keep axioms declared in global scope. Because of the way
+    # thigs are named, this gives a different condition for keeping
+    # symbols and axioms (in particular, axioms in global scope have
+    # label None). Maybe this needs to be cleaned up.
+
+    keep_sym = lambda name: (iu.ivy_compose_character not in name
+                            or startswith_eq_some(name,present))
+    
+    keep_ax = lambda name: (name is None or startswith_eq_some(name,present))
+
     # filter the conjectures
 
-    new_conjs = [c for c in domain.labeled_conjs if startswith_eq_some(str(c.label),present)]
+    new_conjs = [c for c in domain.labeled_conjs if keep_ax(str(c.label))]
     del domain.labeled_conjs[:]
     domain.labeled_conjs.extend(new_conjs)
 
     print "conjectures:"
     for c in domain.labeled_conjs:
         print c
+
+    # filter the signature
+
+    new_syms = set(s for s in domain.sig.symbols if keep_sym(s))
+    for s in list(domain.sig.symbols):
+        if s not in new_syms:
+            del domain.sig.symbols[s]
+
+    iu.dbg('domain.sig.symbols')
+
+    # filter the inits
+
+    for thing in domain.labeled_inits:
+        print thing
+    print present
+
+    new_inits = [c for c in domain.labeled_inits if keep_ax(str(c.label))]
+    for thing in new_inits:
+        print thing
+    del domain.labeled_inits[:]
+    domain.labeled_inits.extend(new_inits)
+    
+    init_cond = ivy_logic.And(*(lf.formula for lf in new_inits))
+    im.module.init_cond = formula_to_clauses(init_cond)
+
+    iu.dbg('init_cond')
 
     ag.public_actions.clear()
     ag.public_actions.update(exported)
