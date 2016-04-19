@@ -524,13 +524,17 @@ else:
 if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):
         'top : top MIXIN callatom BEFORE callatom'
-        d = MixinDecl(MixinBeforeDef(p[3],p[5]))
+        m = MixinBeforeDef(p[3],p[5])
+        m.lineno = get_lineno(p,2)
+        d = MixinDecl(m)
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_mixin_callatom_after_callatom(p):
         'top : top MIXIN callatom AFTER callatom'
-        d = MixinDecl(MixinAfterDef(p[3],p[5]))
+        m = MixinAfterDef(p[3],p[5])
+        m.lineno = get_lineno(p,2)
+        d = MixinDecl(m)
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)

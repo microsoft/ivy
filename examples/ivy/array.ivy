@@ -1,0 +1,45 @@
+#lang ivy1.3
+
+type t
+
+module array = {
+
+    individual a(X:t) : t
+    
+    action put(addr:t,val:t) = {
+	a(addr) := val
+    }
+
+    action get(addr:t) returns (val:t) = {
+	val := a(addr)
+    }
+
+}
+
+module array_spec(arr) = {
+    
+    relation rel(X:t,Y:t)
+
+    init rel(X,Y)
+
+    action put(addr:t,val:t) = {
+	rel(addr,V) := V = val
+    }
+    mixin put after arr.put
+
+    action get(addr:t) returns (val:t) = {
+	assert rel(addr,val)
+    }
+    mixin get after arr.get
+
+    conjecture rel(X,arr.a(X))
+
+}
+
+instantiate a : array
+instantiate s : array_spec(a)
+
+export a.put
+export a.get
+
+

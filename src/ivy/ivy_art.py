@@ -326,9 +326,11 @@ class AnalysisGraph(object):
             if res != None:
                 return res
         # currently checks failure only in last action
-        fail = State(expr = fail_expr(state.expr))
-        res = self.bmc(fail,true_clauses())
-        return res
+        if state.expr != None:
+            fail = State(expr = fail_expr(state.expr))
+            res = self.bmc(fail,true_clauses())
+            return res
+        return True
 
     def copy_path(self,state,other,bound=None):
         other_state = State(other.domain)

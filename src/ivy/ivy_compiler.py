@@ -708,7 +708,17 @@ def ivy_compile(ag,decls):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
 
+        # check all mixin declarations
+
+        for name,mixins in ag.mixins.iteritems():
+            for mixin in mixins:
+                with ASTContext(mixins):
+                    action1,action2 = (lookup_action(mixin,ag,a.relname) for a in mixin.args)
+
         # HACK: code beyond here really does not belong in compile
+
+
+
 
         # Construct an isolate
 

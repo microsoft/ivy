@@ -30,7 +30,7 @@ instantiate total_order(epoch, <=)
 
 module counter(t) = {
     action incr(input:t) returns (output:t) = {
-        assume input < 0xffff;
+        assume input < 0xff;
         output := input + 1
     }
 }        
@@ -51,12 +51,15 @@ module abs_counter(t,c) = {
 
 module topology = {
 
-    # this action returns the successor of a given node (the
-    # arithmetic is mod the number of nodes).
+    # return the successor of a given node (the arithmetic is mod the
+    # number of nodes, assuming type 'node' is interpreted as a bit
+    # vector type).
 
     action next(n:node) returns (succ:node) = {
 	succ := n + 1
     }
+
+    # return the predecessor of a given node
 
     action prev(n:node) returns (pred:node) = {
 	pred := n - 1
@@ -64,10 +67,12 @@ module topology = {
 
 }
 
-# This is an abstraction of the topology that is sufficient to prove
-# safety. We only assume each node has a unique successor
+# This is a specification of the interface of the topology layer. It
+# is sufficient to prove safety. It only requires that each node has a
+# unique successor. To prove liveness, we'd need an induction
+# principle.
 
-module abs_topology = {
+module abs_topology(top) = {
 
     # abstract successor relation
     relation succ(X:node,Y:node)
@@ -78,6 +83,7 @@ module abs_topology = {
     action next(n:node) returns (s:node) = {
 	assert succ(n,s)
     }
+    mixin next after top.next
 }
 
 module formatter = {
@@ -210,25 +216,37 @@ module net_intf(lower,fmt,pro,top) = {
 	}
     }
     
-#    conjecture l.sent(D,P) & get_tg(P) = xfer -> an.transfer(get_ep(P),D)
-#    conjecture pend(S) & P = pend_pkt(S) & at.succ(S,D) -> get_tg(P) = xfer & an.transfer(get_ep(P),D)
+    conjecture l.sent(D,P) & get_tg(P) = xfer -> an.transfer(get_ep(P),D)
+    conjecture pend(S) & P = pend_pkt(S) & at.succ(S,D) -> get_tg(P) = xfer & an.transfer(get_ep(P),D)
 
 }
 
-module abs_net_intf(net) = {
+module abs_net_intf(net,pro,top) = {
        
-    # This is a specification of a network interface that
-    # allows sending and receiving of messages tagged with epochs.
-    # The specification allows messages to be arbitrarily duplicated.
+    # This is a specification of the interface between the application
+    # layer and the transport layer. This interface allows sending and
+    # receiving of transfer messages tagged with epochs.  The
+    # specification allows messages to be arbitrarily duplicated.
 
-    # This is an abstract specification that is not concerned with
-    # the actual message format. We will add that as a refinement.
+    # Notice that this module takes two parameters: net is the
+    # transport layer and pro is the application layer. It specifies
+    # both the calls from pro to net and the calls from net to pro.
 
     # state of abstract network interface
 
     relation transfer(E:epoch, N:node)  # the node is the message destination
     init ~transfer(E, N)
      
+    # precondition of send_transfer
+
+    action send_transfer_pre(src:node, e:epoch, dst:node) = {
+	local n2:node {
+	    n2 := top.next(src);
+	    assert dst = n2
+	}
+    }
+    mixin send_transfer_pre before net.send_transfer
+
     # send a transfer message to destination address
 
     action send_transfer(src:node, e:epoch, dst:node) = {
@@ -239,7 +257,7 @@ module abs_net_intf(net) = {
     # specify call back from net to protocol
 
     action accept(dst:node,e:epoch) = {
-        assert transfer(e,dst)  # see (*) below
+        assert transfer(e,dst)
     }
     mixin accept before pro.accept
 
@@ -377,15 +395,17 @@ export p.critical
 
 # Overlay the abstract counter specification
 
-instantiate an : abs_net_intf(n)
+instantiate an : abs_net_intf(n,p,t)
 instantiate ac : abs_counter(epoch,c)
 instantiate af : abs_formatter(f)
+instantiate at : abs_topology(t)
 
-# When we verify the protocol claim, we use the abstract counter spec. Notice that
+# When we verify the protocol claim, we use the abstract specs of the transport layer
+# (abs_net_intf), epoch counter (abs_counter) and topology (abs_topology). Notice that
 # we also ignore the implementation of "epoch", so for this claim we treat "epoch:
 # as uninterpreted, leaving us in EPR.
 
-isolate iso_p = p with an,ac
+isolate iso_p = p with an,ac,at
 
 # When we verify concrete counter, we use the implementation of "epoch", since we need
 # the arithmetic theory. In this case we are in QF_LRA, which is also decidable.
@@ -395,12 +415,12 @@ isolate iso_c = c with ac,epoch
 # When we verify claims about the network interface, we leave "epoch" abstract. We
 # keep the state of the abstract spec, and the lower and formatter interface specs.
 
-isolate iso_n = n with an, l, f
+isolate iso_n = n with an, l, af, at
 
 # When we verify claims about the formatter interface, we interpret "node", "epoch"
 # and "packet" as bit vectors.
 
-isolate iso_f = f with af, node, epoch, packet
+isolate iso_f = f with af, node, epoch, packet, tag
 
 # This isolate is for code extraction. We use all the concrete modules, and all
 # concrete data types

@@ -150,7 +150,7 @@ def lookup_native(thing,table,kind):
             if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
                 z3val = table(thing.name)
                 if z3val == None:
-                    raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
+                    raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
                 return z3val
         return None
     if isinstance(z3name,ivy_logic.EnumeratedSort):
@@ -219,9 +219,9 @@ def numeral_to_z3(num):
     if z3sort == None:
         return z3.Const(num.name,num.sort.to_z3()) # uninterpreted sort
     try:
-        return z3sort.cast(num.name)
+        return z3sort.cast(str(int(num.name,0))) # allow 0x,0b, etc
     except:
-        raise IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,tn))
+        raise ivy_utils.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
 
 def term_to_z3(term):
     if not term.args:
