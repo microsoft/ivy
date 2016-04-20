@@ -118,6 +118,12 @@ def compose_maps(m1,m2):
     res.update((x,m2.get(y,y)) for x,y in m1.iteritems())
     return res
 
+def partition(things,key):
+    res = collections.defaultdict(list)
+    for t in things:
+        res[key(t)].append(t)
+    return res
+
 # unique name generation
 
 def constant_name_generator():

@@ -19,6 +19,7 @@ import ivy_utils as iu
 import ivy_actions as ia
 import ivy_alpha
 import ivy_module as im
+import ivy_theory as ith
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -774,6 +775,8 @@ def ivy_compile(ag,decls):
                     ag.add_initial_state(im.module.init_cond,ivy_alpha.alpha)
 
     ivy_logic.sig = ag.domain.sig # TODO: make this an environment
+
+    ith.check_theory()
 
 def clear_rules(modname):
     import sys

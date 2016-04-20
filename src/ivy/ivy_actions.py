@@ -198,20 +198,15 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_calls():
                     yield c
+    def iter_subactions(self):
+        yield self
+        for a in self.args:
+            if isinstance(a,Action):
+                for c in a.iter_subactions():
+                    yield c
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
 
-
-def check_can_assert(fmla,ast):
-    check_can_assume(fmla,ast)
-    logic = ivy_module.logic()
-    if not is_in_logic(Not(fmla),logic):
-        raise IvyError(ast,"This formula is not in logic {} when negated.".format(logic))
-
-def check_can_assume(fmla,ast):
-    logic = ivy_module.logic()
-    if not is_in_logic(fmla,logic):
-        raise IvyError(ast,"This formula is not in logic {}.".format(logic))
 
 class AssumeAction(Action):
     def __init__(self,*args):
@@ -222,7 +217,6 @@ class AssumeAction(Action):
         return 'assume'
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
-        check_can_assume(self.args[0],self)
         return ([],formula_to_clauses_tseitin(self.args[0]),false_clauses())
 
 class AssertAction(Action):
@@ -234,7 +228,6 @@ class AssertAction(Action):
         return 'assert'
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
-        check_can_assert(self.args[0],self)
 #        print type(self.args[0])
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
@@ -558,7 +551,6 @@ class IfAction(Action):
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
-        check_can_assert(self.args[0],self)
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):
