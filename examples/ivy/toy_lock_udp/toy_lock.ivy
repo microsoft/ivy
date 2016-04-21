@@ -1,4 +1,4 @@
-#lang ivy1.3
+#lang ivy1.4
 
 #
 # An Ivy model of the toy lock example from https://github.com/Microsoft/Ironclad/blob/master/ironfleet/src/Dafny/Distributed/Protocol/Lock/Node.i.dfy
@@ -67,6 +67,8 @@ module topology = {
 
 }
 
+derived succ(X:node,Y:node) = (Y = X + 1)
+
 # This is a specification of the interface of the topology layer. It
 # is sufficient to prove safety. It only requires that each node has a
 # unique successor. To prove liveness, we'd need an induction
@@ -74,14 +76,8 @@ module topology = {
 
 module abs_topology(top) = {
 
-    # abstract successor relation
-    relation succ(X:node,Y:node)
-
-    # this should be a theorem!
-    axiom succ(X,Y) & succ(X,Z) -> Y = Z
-
     action next(n:node) returns (s:node) = {
-	assert succ(n,s)
+	assert succ(n,s) & (succ(n,X) -> s = X)
     }
     mixin next after top.next
 }
@@ -217,7 +213,7 @@ module net_intf(lower,fmt,pro,top) = {
     }
     
     conjecture l.sent(D,P) & get_tg(P) = xfer -> an.transfer(get_ep(P),D)
-    conjecture pend(S) & P = pend_pkt(S) & at.succ(S,D) -> get_tg(P) = xfer & an.transfer(get_ep(P),D)
+    conjecture pend(S) & P = pend_pkt(S) & succ(S,D) -> get_tg(P) = xfer & an.transfer(get_ep(P),D)
 
 }
 
@@ -421,6 +417,10 @@ isolate iso_n = n with an, l, af, at
 # and "packet" as bit vectors.
 
 isolate iso_f = f with af, node, epoch, packet, tag
+
+# When we verify topology module, make the "succ" relation concrete
+
+isolate iso_t = t with at, node, succ 
 
 # This isolate is for code extraction. We use all the concrete modules, and all
 # concrete data types

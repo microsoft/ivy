@@ -48,14 +48,14 @@ class Module(object):
         self.progress = []  # list of progress properties
         self.rely = [] # list of rely relations
 
-        self.sig = il.sig # capture the current signature
+        self.sig = il.sig.copy() # capture the current signature
 
     def __enter__(self):
         global module
         self.old_module = module
         self.old_sig = il.sig
         module = self
-        
+        il.sig = self.sig
         return self
 
     def __exit__(self,exc_type, exc_val, exc_tb):

@@ -137,7 +137,7 @@ class TkUI(ivy_ui.IvyUI):
     # Create a dialog with a message and some action buttons. Each button_command
     # is a (label,function) pair.
 
-    def buttons_dialog_cancel(msg,button_commands,on_cancel=lambda:None):
+    def buttons_dialog_cancel(self,msg,button_commands,on_cancel=lambda:None):
         uu.buttons_dialog_cancel(self.tk,self.frame,msg,button_commands,on_cancel=lambda:None)
 
 

@@ -58,6 +58,16 @@ def read_params():
 #         sys.exit(1)
     
     
+def source_file(fn,f):
+    try:
+        with iu.SourceFile(fn):
+            ivy_load_file(f)
+            ivy_module.module.name = fn[:fn.rindex('.')]
+    except IvyError as e:
+        if not hasattr(e,'filename'):
+            e.filename = fn
+        print repr(e)
+        sys.exit(1)
 
 def ivy_init():
     read_params()
@@ -73,34 +83,23 @@ def ivy_init():
     if files[0][0].endswith('.a2g'):
         fn,f = files.pop(0)
         ag = pickle.load(f)
-
-        if not hasattr(ag.domain,'all_relations'):
-#            print "reconstructing all_relations"
-            ag.domain.all_relations = []
-            for x in ag.domain.relations:
-                ag.domain.all_relations.append((x,ag.domain.relations[x]))
-            for (x,y) in ag.domain.concepts:
-                ag.domain.all_relations.append((x.atom.relname,len(x.atom.args)))
-        ivy_logic.sig = ag.domain.sig # TODO: make this an environment
+        im.module = ag.domain
+        il.sig = ag.domain.sig
         f.close()
     else:
-#        print "creating new"
-        ag = ivy_new()
+        ag = None
 
     if files:
         fn,f = files.pop(0)
         if not fn.endswith('.ivy') and not fn.endswith('.dfy'):
             usage()
-        try:
-#            print "loading file %s" % fn
-            with iu.SourceFile(fn):
-                ivy_load_file(f,ag)
-                ivy_module.module.name = fn[:fn.rindex('.')]
-        except IvyError as e:
-            if not hasattr(e,'filename'):
-                e.filename = fn
-            print repr(e)
-            sys.exit(1)
+        source_file(fn,f)
+
+        if ag:
+            ag.update_module()
+        else: 
+            ag = ivy_new()
+
     return ag
 
 if __name__ == "__main__":

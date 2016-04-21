@@ -28,7 +28,8 @@ def get_qa_arcs(fmla,ast,pol,univs):
             yield a
 
 def get_sort_arcs(assumes,asserts):
-    for name,sym in il.sig.symbols.iteritems():
+    for sym in il.all_symbols():
+        name = sym.name
         sort = sym.sort
         rng = sort.rng
         if il.is_uninterpreted_sort(rng):
@@ -89,7 +90,6 @@ def get_assumes_and_asserts():
 
     # TODO: check axioms, inits, conjectures
 
-    iu.dbg('assumes','asserts')
     return assumes,asserts
 
 def report_error(note,ast,unstrat):

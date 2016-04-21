@@ -74,7 +74,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
             sorted_nodes = self.sort_nodes([n for n in g.all_nodes if n.status != "false"])
             node_labels = self.get_node_labels(sorted_nodes)
             sort_colors = dict((sort,self.line_color(i)) for i,sort in enumerate(g.sorts))
-
+            
             # make subgraphs for sorts
             sort_graph = {}
             for sort in g.sorts:

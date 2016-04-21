@@ -4,7 +4,7 @@
 #TODO: get z3 references out of this file
 #TODO: the import *'s are creating conflicts
 import z3
-from ivy_logic import Literal,Atom,Variable,Constant,Symbol,App,sig,EnumeratedSort,equals,RelationSort,UninterpretedSort
+from ivy_logic import Literal,Atom,Variable,Constant,Symbol,App,EnumeratedSort,equals,RelationSort,UninterpretedSort
 from ivy_solver import *
 from ivy_logic_utils import to_clause,to_literal,to_atom,used_constants_clauses,used_unary_relations_clauses,\
          rename_clause, substitute_clause, is_equality_lit, eq_lit, substitute_lit, is_taut_equality_lit,\
@@ -332,7 +332,7 @@ class Graph(object):
 
     @property
     def sorts(self):
-        return sig.sorts  # for now, display all declared sorts
+        return ivy_logic.sig.sorts  # for now, display all declared sorts
 
 
     # Parse a string into a concept
@@ -710,6 +710,8 @@ class GraphStack(object):
 def standard_graph(parent_state=None):
     gsig = parent_state.domain.sig if parent_state else sig
     nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
+
+    iu.dbg('nodes')
 
     import ivy_graph_new
     g = ivy_graph_new.Graph(nodes)  if iu.use_new_ui.get() else Graph(nodes) 

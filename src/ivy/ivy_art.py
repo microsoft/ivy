@@ -68,7 +68,7 @@ option_abs_init = iu.BooleanParameter("abs_init",False)
 # The class of ARG's
 
 class AnalysisGraph(object):
-    def __init__(self,module = None,pvars = []):
+    def __init__(self,module = None, pvars = [], initializer=None):
         if module == None:
             module = im.module  # use the current module if not specified
         self.domain = module
@@ -90,6 +90,10 @@ class AnalysisGraph(object):
         self.public_actions = module.public_actions
         self.init_cond = module.init_cond
         
+        # TODO: may not really want this
+        if initializer is not None:
+            self.initialize(initializer)
+
     @property
     def context(self):
         return AC(self)
@@ -106,6 +110,20 @@ class AnalysisGraph(object):
                 print "initial state: {}".format(s2)
         else:
             self.add(s)
+
+    def initialize(self, abstractor):
+        ac = self.context
+        with ac:
+            if self.predicates:
+                if not im.module.init_cond.is_true():
+                    raise IvyError(None,"init and state declarations are not compatible");
+                for n,p in self.predicates.iteritems():
+                    s = eval_state_facts(p)
+                    if s is not None:
+                        s.label = n
+            else:
+                self.add_initial_state(self.domain.init_cond,abstractor)
+
 
     def state_actions(self,state):
         if hasattr(state,'label') and state.label != None:
