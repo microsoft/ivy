@@ -398,7 +398,7 @@ def collect_actions(decls):
                 res[a.defines()] = a.formal_returns
     return res
 
-def ivy_compile(decls,mod=None):
+def ivy_compile(decls,mod=None,create_isolate=True):
     mod = mod or im.module
     with mod.sig:
         for name in decls.defined:
@@ -424,7 +424,8 @@ def ivy_compile(decls,mod=None):
             # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
 
-        iso.create_isolate(isolate.get(),mod)
+        if create_isolate:
+            iso.create_isolate(isolate.get(),mod)
 
 
 
@@ -475,7 +476,7 @@ def import_module(name):
         mod = read_module(f,nested=True)
     return mod
 
-def ivy_load_file(f,mod=None):
+def ivy_load_file(f,**kwargs):
     decls = read_module(f)
-    ivy_compile(decls,mod)
+    ivy_compile(decls,**kwargs)
 

@@ -58,10 +58,10 @@ def read_params():
 #         sys.exit(1)
     
     
-def source_file(fn,f):
+def source_file(fn,f,**kwargs):
     try:
         with iu.SourceFile(fn):
-            ivy_load_file(f)
+            ivy_load_file(f,**kwargs)
             ivy_module.module.name = fn[:fn.rindex('.')]
     except IvyError as e:
         if not hasattr(e,'filename'):

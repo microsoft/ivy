@@ -104,6 +104,16 @@ class Module(object):
             res.append(clauses)
         return res
 
+
+    # This makes a semi-shallow copy so we can side-effect 
+
+    def copy(self):
+        m = Module()
+        from copy import copy
+        for x,y in self.__dict__.iteritems():
+            m.__dict__[x] = copy(y)
+        return m
+
 module = None
 
 def background_theory(symbols = None):

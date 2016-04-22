@@ -13,6 +13,8 @@ import ivy_module as im
 import ivy_alpha
 import ivy_art
 import ivy_interp
+import ivy_compiler
+import ivy_isolate
 
 import sys
 
@@ -33,13 +35,28 @@ if __name__ == "__main__":
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
     with im.Module():
-        ivy.source_file(sys.argv[1],ivy.open_read(sys.argv[1]))
-        ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
-        with utl.ErrorPrinter():
-            with ivy_interp.EvalContext(check=False):
-                ag.execute_action('foo')
-                cex = ag.check_bounded_safety(ag.states[-1])
-                if cex is not None:
-                    display_cex("consecution failed",cex)
+        isolate = ivy_compiler.isolate.get()
+        ivy.source_file(sys.argv[1],ivy.open_read(sys.argv[1]),create_isolate=False)
+
+        # If user specifies an isolate, check it. Else, if any isolates
+        # are specificied in the file, check all, else check globally.
+
+        if isolate != None:
+            isolates = [isolate]
+        else:
+            isolates = sorted(list(im.module.isolates))
+            if len(isolates) == 0:
+                isolates = [None]
+
+        for isolate in isolates:
+            with im.module.copy():
+                ivy_isolate.create_isolate(isolate)
+                ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
+                with utl.ErrorPrinter():
+                    with ivy_interp.EvalContext(check=False):
+                        ag.execute_action('ext')
+                        cex = ag.check_bounded_safety(ag.states[-1])
+                        if cex is not None:
+                            display_cex("consecution failed",cex)
     print "OK"
 
