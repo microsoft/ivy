@@ -371,6 +371,13 @@ def can_abbreviate_formula(v,fmla):
                  len(fmla.args[0].args) ==1 and fmla.args[0].args[0] == v)
             and not any(ilu.variables_ast(fmla.args[1])))
 
+# Return true if concept is of the form X=n where n is a numeral
+
+def is_numeral_concept(c):
+    return (len(c.variables) == 1 and il.is_eq(c.formula) and isinstance(c.formula.args[0],il.Variable) and
+            il.is_numeral(c.formula.args[1]))
+
+
 class Graph(object):
     def __init__(self,sorts,parent_state=None):
         self.parent_state = parent_state
@@ -404,9 +411,15 @@ class Graph(object):
     @property
     def relation_ids(self):
         """ Return ids of all the concepts that need check-boxes """
-        return (self.concept_domain.concepts['edges'] +
-                self.concept_domain.concepts['node_labels'] +
-                self.concept_domain.concepts['enum'])
+        concepts = self.concept_domain.concepts
+        nls = [n for n in concepts['node_labels'] if not is_numeral_concept(concepts[n])]
+        return (concepts['edges'] + nls + concepts['enum'])
+
+    @property
+    def default_labels(self):
+        """ Return ids of all the concepts that are shown by default """
+        concepts = self.concept_domain.concepts
+        return [n for n in concepts['node_labels'] if is_numeral_concept(concepts[n])]
 
     def concept_from_id(self,id):
         """ Get a relational concept from its id """
@@ -555,6 +568,7 @@ class Graph(object):
         if concept_class in ('node_labels','edges'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
+            print "projection: {} {} {}".format(concept_name,concept_class,[(n,b.value) for n,b in boxes.iteritems()])
             return any(boxes[i].value for i in boxes if i != 'transitive')
         return True
 
@@ -588,9 +602,15 @@ class Graph(object):
     def splatter(self,node,constants = None):
         if constants == None:
             constants = used_constants_clauses(self.constraints)
-        eqs = [eq_lit(node.variable('X'),Constant(c)) for c in constants if c.sort == node.sort]
-#        print "splatter eqs = {}".format(eqs)
-        self.split_n_way(node,eqs)
+        concepts = self.concept_session.domain.concepts
+        name = node.name + '.splatter'
+        concepts[name] = enum_concepts(name,None,None)
+        for cons in constants:
+            c1 = concept_from_formula(Equals(Variable('X',node.sort),cons))
+            concepts[c1.name] = c1
+            concepts[name].append(c1.name)
+        self.concept_session.domain.split(node.name,name)
+        self.recompute()
 
     def add_constraints(self,cnstrs,recompute=True):
         self.concept_session.suppose_constraints.extend(cnstrs)
@@ -677,11 +697,13 @@ def standard_graph(parent_state=None):
 
     g = Graph(sorts,parent_state)
 
+    print "node labels:{}".format( g.relation_ids)
     if hasattr(parent_state,'universe'):
         print "parent_state.universe: {}".format(parent_state.universe)
-        for n in g.all_nodes:
+        for n in g. nodes:
             if n.sort in parent_state.universe:
                 g.splatter(n,parent_state.universe[n.sort])
+    print "node labels:{}".format( g.relation_ids)
     return GraphStack(g)
     
 

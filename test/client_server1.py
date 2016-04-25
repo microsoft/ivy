@@ -48,6 +48,7 @@ with ivy_module.Module():
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
     ui.execute_action(ui.node(0),"connect")
+#    ui.mainloop()
     cg = ui.view_state(ui.g.states[1])
     cg.materialize_edge((cg.relation('c(X,Y)'),cg.node('client'),cg.node('server')))
     cg.split(cg.relation('s'),cg.node('=b'))

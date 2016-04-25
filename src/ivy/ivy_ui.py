@@ -112,14 +112,15 @@ class AnalysisGraphWidget(object):
 
     def node_execute_commands(self,n):
         state_equations = self.g.state_actions(n)
-        return [(state_equation_label(a), lambda a=a: self.do_state_action(a))
+        print "eqns: {}".format([type(q) for q in state_equations])
+        return [(state_equation_label(a), functools.partial(self.do_state_action,a))
                 for a in sorted(state_equations, key=state_equation_label)]
 
     # Set the marked node
 
     def mark_node(self,n):
         self.show_mark(False)
-        self.mark = n.id
+        self.mark = n
         self.show_mark(True)
 
     # Get the marked node
@@ -180,6 +181,7 @@ class AnalysisGraphWidget(object):
     # Evaluate a state equation to generate a new node
 
     def do_state_action(self,a,node=None):
+        print "a: {}".format(type(a))
         with self.ui_parent.run_context():
             with EvalContext(check=False):
                 print "action {"

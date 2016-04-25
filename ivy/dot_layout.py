@@ -117,7 +117,7 @@ def _to_edge_position(st):
     return result
 
 
-def dot_layout(cy_elements):
+def dot_layout(cy_elements,edge_labels=False):
     """
     Get a CyElements object and augment it (in-place) with positions,
     widths, heights, and spline data from a dot based layout.
@@ -160,11 +160,13 @@ def dot_layout(cy_elements):
     # add edges to the graph
     for e in elements:
         if e["group"] == "edges":
+#            kwargs = {'weight': weight.get(e["data"]["obj"], 0)},
+            kwargs = {'label':e["data"]["label"]}  if edge_labels else {}
             g.add_edge(
                 e["data"]["source"],
                 e["data"]["target"],
                 e["data"]["id"],
-                weight=weight.get(e["data"]["obj"], 0),
+                **kwargs
                 #constraint=constraint.get(e["data"]["obj"], True),
             )
 
@@ -190,7 +192,10 @@ def dot_layout(cy_elements):
 
         elif e["group"] == "edges":
             attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
+#            print "attr: {}".format(attr)
             e["data"].update(_to_edge_position(attr['pos']))
+            if edge_labels:
+                e["data"]["lp"] = _to_position(attr['lp'])
 #    g.draw('g.png')
 
     return cy_elements

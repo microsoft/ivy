@@ -6,6 +6,8 @@ import ivy_ui
 import ivy_ui_util as uu
 import ivy_utils as iu
 import tk_graph_ui
+import tk_cy
+from cy_elements import *
 from Tkinter import *
 import Tkconstants, tkFileDialog
 import Tix
@@ -183,7 +185,7 @@ class TkUI(ivy_ui.IvyUI):
         return self.answers.pop() if self.answers else None
         
 
-class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
+class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
 
     def __init__(self,tk,g,root=None,toplevel=None):
         if root == None:
@@ -228,9 +230,28 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
         self.pack(fill=BOTH,expand=1)
         self.rebuild()
 
+    # Get styles for nodes
+
+    def get_node_styles(self,elem):
+        res = {'width' : 2}
+        res['fill'] = ''
+        res['outline'] = 'black'
+        return res
+        
+            
+    # Get styles for edges
+
+    def get_edge_styles(self,elem):
+        res = {'width' : 2}
+        res['arrowshape']="14 14 5"
+        res['fill'] = 'black'
+        return res
+
     # This is called to rebuild the graph display after any change
 
     def rebuild(self):
+
+        self.delete(ALL)
 
         self.create_elements(self.g.as_cy_elements())
 
@@ -270,9 +291,10 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,Canvas):
     # Called if the marked node changes to update display
 
     def show_mark(self,on=True):
-        for item in self.find_withtag(node_tag(self.mark)):
-            if 'shape' in self.gettags(item):
-                self.itemconfig(item,fill=('red' if on else ''))
+        if self.mark is not None:
+            for item in self.find_withtag(self.node_tag(self.mark)):
+                if 'shape' in self.gettags(item):
+                    self.itemconfig(item,fill=('red' if on else ''))
 
     def node_from_cy_elem(self,elem):
         return get_obj(elem)

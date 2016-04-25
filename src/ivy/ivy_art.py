@@ -6,6 +6,8 @@ from ivy_interp import *
 from ivy_graph import standard_graph
 import ivy_utils as iu
 import ivy_module as im
+from cy_elements import CyElements
+from dot_layout import dot_layout
 from string import *
 import copy
 import functools
@@ -413,7 +415,7 @@ class AnalysisGraph(object):
                     yield equation
 
     def as_cy_elements(self):
-        return render_rg(self)
+        return dot_layout(render_rg(self),edge_labels=True)
 
 def label_from_action(action):
     return iu.pretty(str(action),max_lines=4)

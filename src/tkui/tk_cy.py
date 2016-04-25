@@ -6,6 +6,7 @@ import ivy_ui
 import ivy_ui_util as uu
 import ivy_utils as iu
 import ivy_graph_ui
+from cy_elements import *
 from Tkinter import *
 import Tkconstants, tkFileDialog
 import Tix
@@ -16,7 +17,7 @@ import functools
 # Transform x/y coordinates from Cytoscape to Tk
 
 def xform(coord):
-    return (coord[0],-coord[1])
+    return (coord[0],coord[1])
 
 def get_coord(position):
     return xform(tuple(position[s] for s in ('x','y')))
@@ -47,6 +48,27 @@ def get_bspline(element):
         coords.append(p[1])
     return coords
             
+# Returns the position of the label or None
+
+def get_label_pos(element):
+    data = element['data']
+    if 'lp' not in data:
+        return None
+    position = data['lp']
+    x,y = get_coord(position)
+    return x+10,y
+    
+# Remove formatting characters
+
+def get_label_text(element):
+    return get_label(element).replace('\\l', '')
+
+def octagon_points(x0,y0,x1,y1):
+    cut = 1.0 - (1.0 / (2.4142135623730951))
+    xcut = (x1 - x0) * cut / 2.0
+    ycut = (y1 - y0) * cut / 2.0
+    return (x0+xcut,y0,x1-xcut,y0,x1,y0+ycut,x1,y1-ycut,
+            x1-xcut,y1,x0+xcut,y1,x0,y1-ycut,x0,y0+ycut)
 
 class TkCyCanvas(Canvas):
 
@@ -61,16 +83,23 @@ class TkCyCanvas(Canvas):
     def create_shape(self,shape,dimensions,**kwargs):
         x,y,w,h = dimensions
         x0,y0,x1,y1 = x-w/2, y-h/2, x+w/2, y+h/2
-        method = {'oval':self.create_oval, 'octagon':self.create_octagon}[shape]
+        method = {'ellipse':self.create_oval, 'oval':self.create_oval, 'octagon':self.create_octagon}[shape]
         if 'double' in kwargs:
             gap = kwargs['double']
             del kwargs['double']
             method(x0+gap,y0+gap,x1-gap,y1-gap,**kwargs)
         return method(x0,y0,x1,y1,**kwargs)
 
+    # Override this to show edge labels
+
+    def show_edge_labels(self):
+        return False
+
     # create all the graph elements
 
-    def create_elements(cy_elements):
+    def create_elements(self,cy_elements):
+        print 'cy_elements" {}'.format(cy_elements.elements)
+        self.elem_ids = {}
         for idx,elem in enumerate(cy_elements.elements):
             eid = get_id(elem)
             group = get_group(elem)
@@ -81,15 +110,24 @@ class TkCyCanvas(Canvas):
                     styles = self.get_node_styles(elem)
                     shape = self.create_shape(get_shape(elem),dims,tags=[eid,'shape'],**styles)
                     label = self.create_text(dims[0],dims[1],text=get_label(elem),tags=eid)
-                    self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_node(y,elem))
+                    self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.click_node("left",y,elem))
+                    self.tag_bind(eid, "<Button-3>", lambda y, elem=elem: self.click_node("right",y,elem))
             elif group == 'edges':
                 coords = get_bspline(elem)
                 styles = self.get_edge_styles(elem)
                 line = self.create_line(*coords,tags=eid,smooth="bezier",**styles)
                 arrow = self.create_line(*get_arrowend(elem),tags=eid,arrow=LAST,**styles)
-                self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.left_click_edge(y,elem))
+                lp = get_label_pos(elem)
+                if lp:
+                    label = self.create_text(lp[0],lp[1],text=get_label_text(elem),tags=eid)
+                self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.click_edge("left",y,elem))
+                self.tag_bind(eid, "<Button-3>", lambda y, elem=elem: self.click_edge("right",y,elem))
+                    
 
-    def make_popup(self,actions,arg):
+    def make_popup(self,event,actions,arg):
+        if len(actions) == 1 and actions[0][0] == '<>':
+            actions[0][1](arg)
+            return
         tk = self.tk
         g = self.g
         popup = Menu(tk, tearoff=0)
@@ -101,39 +139,22 @@ class TkCyCanvas(Canvas):
                     popup.add_command(label=lbl)
                 else:
                     popup.add_command(label=lbl,command=functools.partial(cmd,arg))
-        return popup
+        try:
+            popup.tk_popup(event.x_root, event.y_root, 0)
+        finally:
+            # make sure to release the grab (Tk 8.0a1 only)
+            popup.grab_release()
         
 
-    # Make the node pop-up menu for left-click
+    # Handle a clicks on nodes
 
-    def make_node_popup(self,node):
-        return self.make_popup(self.get_node_actions(node),node)
-    
-    # Make the edge pop-up menu for left-click
+    def click_node(self,click,event,elem):
+        node = self.node_from_cy_elem(elem)
+        self.make_popup(event,self.get_node_actions(node,click=click),node)
 
-    def make_edge_popup(self,edge):
-        return self.make_popup(self.get_edge_actions(edge),edge)
+    # Handle a clicks on an edges
 
-    # Handle a left click on a node
-
-    def left_click_node(self,event,elem):
-        n = self.node_from_cy_elem(elem)
-        # display the popup menu
-        popup = self.make_node_popup(n)
-        try:
-            popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            popup.grab_release()
-
-    # Handle a left click on an edge
-
-    def left_click_edge(self,event,elem):
+    def click_edge(self,click,event,elem):
         # display the popup menu 
         edge = self.edge_from_cy_elem(elem)
-        popup = self.make_edge_popup(edge)
-        try:
-            popup.tk_popup(event.x_root, event.y_root, 0)
-        finally:
-            # make sure to release the grab (Tk 8.0a1 only)
-            popup.grab_release()
+        self.make_popup(event,self.get_edge_actions(edge,click=click),edge)

@@ -718,6 +718,8 @@ def interpreted_sorts():
 def is_interpreted_sort(s):
     return isinstance(s,UninterpretedSort) and s.name in sig.interp
 
+def is_numeral(term):
+    return isinstance(term,Symbol) and term.is_numeral()
 
 if __name__ == '__main__':
     V1 = Variable('V1')

@@ -127,6 +127,10 @@ def get_id(element):
     return element['data']['id']
 
 def get_obj(element):
-    # drop initial dot
     return element['data']['obj']
 
+def get_source_obj(element):
+    return element['data']['source_obj']
+
+def get_target_obj(element):
+    return element['data']['target_obj']

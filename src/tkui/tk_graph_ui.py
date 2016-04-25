@@ -26,13 +26,6 @@ edge_styles = {
     'edge_unknown' : {'width' : 2, 'dash' : (2,2)},
     }
 
-def octagon_points(x0,y0,x1,y1):
-    cut = 1.0 - (1.0 / (2.4142135623730951))
-    xcut = (x1 - x0) * cut / 2.0
-    ycut = (y1 - y0) * cut / 2.0
-    return (x0+xcut,y0,x1-xcut,y0,x1,y0+ycut,x1,y1-ycut,
-            x1-xcut,y1,x0+xcut,y1,x0,y1-ycut,x0,y0+ycut)
-
 class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
 
     def __init__(self,tk,gs,root=None,ui_parent=None):
@@ -74,10 +67,17 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
     # Copy checkbox state to the renderer
 
     def sync_checkboxes(self):
+        print "self.g.relation_ids: {}".format(self.g.relation_ids)
         for rel in self.g.relation_ids:
             boxes = self.get_enabled(rel)
             for idx,box in enumerate(boxes):
+                print "setting: {} {} {}".format(rel,idx,box.get())
                 self.g.set_checkbox(rel,idx,box.get())
+        print "self.g.default_labels: {}".format(self.g.default_labels)
+        for rel in self.g.default_labels:
+            for idx in range(4):
+                print "setting: {} {} {}".format(rel,idx,idx==0)
+                self.g.set_checkbox(rel,idx,idx==0)
 
     # Make a node label visible
 

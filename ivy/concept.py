@@ -42,6 +42,7 @@ class Concept(record('Concept', ['name', 'variables', 'formula'])):
 
     arity = property(lambda self: len(self.variables))
     sorts = property(lambda self: tuple(v.sort for v in self.variables))
+    sort = property(lambda self: self.sorts[0])
 
     def __call__(self, *terms):
         if len(terms) != self.arity:
@@ -270,6 +271,7 @@ class ConceptDomain(object):
             if combination_name == 'edge_info':
                  for e in self.concepts['edges']:
                      if projection(e,'edges'):
+                         print "e: {}".format(e)
                          ec = self.concepts[e]
                          c0,c1 = (nodes_by_sort_name[ec.sorts[i].name] for i in (0,1))
                          self.get_comb_facts('edge_info','edge_info',([e],c0,c1),facts)
