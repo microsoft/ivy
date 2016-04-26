@@ -92,7 +92,7 @@ int main(int argc, char **argv){
             {perror("select failed"); exit(1);}
         
         if (foo == 0){
-            std::cout << "TIMEOUT\n";            
+            //            std::cout << "TIMEOUT\n";            
             dut.ext__n__timeout(my_id);
         }
         else if (FD_ISSET(0,&rdfds)) {
