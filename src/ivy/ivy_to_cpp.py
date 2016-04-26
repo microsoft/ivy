@@ -14,6 +14,7 @@ import ivy_solver as slv
 import ivy_transrel as tr
 import ivy_logic_utils as ilu
 import ivy_compiler as ic
+import ivy_isolate as iso
 import itertools
 
 from collections import defaultdict
@@ -1249,8 +1250,8 @@ target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
 if __name__ == "__main__":
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
-    ic.set_create_big_action(False)
-    ic.set_interpret_all_sorts(True)
+    iso.set_create_big_action(False)
+    iso.set_interpret_all_sorts(True)
     with im.Module():
         ivy.ivy_init()
 
