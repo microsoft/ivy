@@ -18,10 +18,15 @@ module total_order(t,r) = {
 #
 ################################################################################
 
-type tag = {xfer,ack}
+type tag
 type node
 type epoch
 type packet
+
+# We have message tag values -- 'xfer' and 'ack'
+
+individual xfer:tag, ack:tag
+axiom xfer ~= ack
 
 # epochs are totally ordered
 
@@ -328,13 +333,13 @@ module proto(cnt,top,net) = {
     # invariant conjectures
 
     # no two locked at same epoch (as a sanity check)
-    conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
+#    conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
 
     # epochs transfer to at most one node    
     conjecture an.transfer(E, N1) & an.transfer(E, N2) -> N1 = N2
 
     # if a node sent a locked msg, the node's epoch is now higher
-    conjecture locked(E, N) -> (E <= ep(N))
+#    conjecture locked(E, N) -> (E <= ep(N))
 
     # holding node's epoch is higher than any other node's epoch (this implies a single node holds the lock)
     conjecture held(N) & N ~= M -> ~(ep(N) <= ep(M))
@@ -416,7 +421,7 @@ isolate iso_n = n with an, l, af, at
 # When we verify claims about the formatter interface, we interpret "node", "epoch"
 # and "packet" as bit vectors.
 
-isolate iso_f = f with af, node, epoch, packet, tag
+isolate iso_f = f with af, node, epoch, packet, tag, get_ep, get_tg
 
 # When we verify topology module, make the "succ" relation concrete
 

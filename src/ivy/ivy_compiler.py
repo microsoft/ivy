@@ -256,7 +256,6 @@ class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
     def axiom(self,ax):
-        print "axiom: {}".format(ax)
         self.domain.labeled_axioms.append(ax.compile())
     def schema(self,sch):
         self.domain.schemata[sch.defn.defines()] = sch

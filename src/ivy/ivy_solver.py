@@ -105,10 +105,15 @@ def functions(name):
 def is_solver_op(name):
     return relations(name) != None or functions(name) != None
 
-z3_sorts = dict()
-z3_predicates = {ivy_logic.equals : my_eq}
-z3_constants = dict()
-z3_functions = dict()
+
+def clear():
+    global z3_sorts, z3_predicates, z3_constants, z3_functions
+    z3_sorts = dict()
+    z3_predicates = {ivy_logic.equals : my_eq}
+    z3_constants = dict()
+    z3_functions = dict()
+
+clear()    
 
 #z3_sorts_inv = dict((get_id(z3sort),ivysort) for ivysort,z3sort in z3_sorts.iteritems())
 z3_sorts_inv = {}
@@ -163,10 +168,10 @@ def lookup_native(thing,table,kind):
 def check_native_compat_sym(sym):
     table,kind = (relations,"relation") if sym.is_relation() else (functions,"function") 
     thing = lookup_native(sym,table,kind)
-    print "check_native_compat_sym: {} {}".format(sym,thing)
+#    print "check_native_compat_sym: {} {}".format(sym,thing)
     try:
         if thing != None:
-            print "check_native_compat_sym: {} {}".format(sym,thing)
+#            print "check_native_compat_sym: {} {}".format(sym,thing)
             z3args = []
             for ds in sym.sort.dom:
                 z3sort = lookup_native(ds,sorts,"sort")
@@ -223,6 +228,12 @@ def numeral_to_z3(num):
     except:
         raise ivy_utils.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
 
+# Enumerated sorts can be interpreted as numeric types. However, we have to
+# check that the constants actually fit in the type.
+
+def enumerated_to_numeral(term):
+    raise ivy_utils.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
+
 def term_to_z3(term):
     if not term.args:
         if isinstance(term,ivy_logic.Variable):
@@ -249,6 +260,8 @@ def term_to_z3(term):
 #                print "{} : {}".format(term,term.rep)
             if term.is_numeral():
                 res = numeral_to_z3(term.rep)
+            elif ivy_logic.is_enumerated(term) and ivy_logic.is_interpreted_sort(term.sort):
+                res = enumerated_to_numeral(term)
             else:
                 iso = term.rep.sort
                 # TODO: this is dangerous
@@ -474,7 +487,8 @@ def collect_model_values(sort,model,sym):
     return nums
 
 def mine_interpreted_constants(model,vocab):
-    sort_values = dict((sort,set()) for sort in ivy_logic.interpreted_sorts())
+    sorts = ivy_logic.interpreted_sorts()
+    sort_values = dict((sort,set()) for sort in sorts)
     for s in vocab:
         sort = s.sort.rng
         if sort in sort_values:

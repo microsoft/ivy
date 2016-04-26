@@ -49,6 +49,9 @@ if __name__ == "__main__":
                 isolates = [None]
 
         for isolate in isolates:
+            if len(im.module.isolates[isolate].verified()) == 0:
+                continue # skip if nothing to verify
+            iu.dbg('isolate')
             with im.module.copy():
                 ivy_isolate.create_isolate(isolate)
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
@@ -57,6 +60,6 @@ if __name__ == "__main__":
                         ag.execute_action('ext')
                         cex = ag.check_bounded_safety(ag.states[-1])
                         if cex is not None:
-                            display_cex("consecution failed",cex)
+                            display_cex("safety failed",cex)
     print "OK"
 

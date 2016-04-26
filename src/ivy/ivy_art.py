@@ -184,7 +184,7 @@ class AnalysisGraph(object):
         poststate = self.post_state(op,prestate,abstractor)
         label = label if label else repr(op)
         self.add(poststate,action_app(label,prestate))
-        print "post state %s: %s" % (poststate.id,poststate.clauses)
+#        print "post state %s: %s" % (poststate.id,poststate.clauses)
         return poststate
 
     def execute_action(self,name,prestate = None, abstractor = None):

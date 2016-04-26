@@ -711,8 +711,6 @@ def standard_graph(parent_state=None):
     gsig = parent_state.domain.sig if parent_state else sig
     nodes = [(repr(s),[],s) for name,s in gsig.sorts.iteritems() if isinstance(s,UninterpretedSort)]
 
-    iu.dbg('nodes')
-
     import ivy_graph_new
     g = ivy_graph_new.Graph(nodes)  if iu.use_new_ui.get() else Graph(nodes) 
 #    r = GraphRelation(g,to_literal("n(X,Y)"))

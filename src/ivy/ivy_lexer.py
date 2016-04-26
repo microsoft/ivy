@@ -85,6 +85,7 @@ reserved = all_reserved = {
    'include' : 'INCLUDE',
    'progress' : 'PROGRESS',
    'rely' : 'RELY',
+   'extract' : 'EXTRACT',
 }
 
 tokens += tuple(all_reserved.values())

@@ -552,6 +552,13 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+    def p_top_extract_callatom_eq_callatoms(p):
+        'top : top EXTRACT callatom EQ callatoms'
+        d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
+        d.args[0].with_args = len(p[5])
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
     def p_top_export_callatom(p):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))

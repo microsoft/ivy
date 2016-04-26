@@ -361,7 +361,7 @@ def is_ea(term):
         return is_ae(term.args[0])
     return is_qf(term)
 
-logics = ["epr","fo"]
+logics = ["epr","qf"]
 
 def subterms(term):
     yield term
@@ -376,7 +376,6 @@ def is_segregated(fmla):
     fmla = drop_existentials(fmla)
     vs = lu.used_variables(fmla)
     apps = list(t for t in subterms(fmla) if isinstance(t,lg.Apply) and lu.used_variables(t))
-    iu.dbg('apps')
     byname = iu.partition(apps,lambda self:self.func.name)
     for name,terms in byname.iteritems():
         pat = seg_var_pat(terms[0])
@@ -413,6 +412,8 @@ def is_in_logic(term,logic,unstrat = False):
                 reason_text = "formula is unsegregated"
                 return False
         return True
+    elif logic == "qf":
+        return is_qf(term)
 
 
 def Constant(sym):
@@ -750,13 +751,13 @@ def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
 
 def interpreted_sorts():
-    return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name in sig.interp]
+    return [s for s in sig.sorts.values() if is_interpreted_sort(s)]
 
 def is_uninterpreted_sort(s):
     return isinstance(s,UninterpretedSort) and s.name not in sig.interp
 
 def is_interpreted_sort(s):
-    return isinstance(s,UninterpretedSort) and s.name in sig.interp
+    return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
 
 
 if __name__ == '__main__':

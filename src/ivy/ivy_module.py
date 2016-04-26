@@ -4,6 +4,7 @@
 import ivy_utils as iu
 import ivy_logic as il
 import ivy_logic_utils as lu
+import ivy_solver
 
 from collections import defaultdict
 import string
@@ -56,6 +57,7 @@ class Module(object):
         self.old_sig = il.sig
         module = self
         il.sig = self.sig
+        ivy_solver.clear()   # this clears cached values, needed when changing sig
         return self
 
     def __exit__(self,exc_type, exc_val, exc_tb):
@@ -111,7 +113,10 @@ class Module(object):
         m = Module()
         from copy import copy
         for x,y in self.__dict__.iteritems():
-            m.__dict__[x] = copy(y)
+            if x is 'sig':
+                m.__dict__[x] = y.copy()
+            else:
+                m.__dict__[x] = copy(y)
         return m
 
 module = None
@@ -122,10 +127,11 @@ def background_theory(symbols = None):
 def find_action(name):
     return module.actions.get(name,None)
 
-param_logic = iu.Parameter("complete","epr",check=lambda s: (s in il.logics))
+param_logic = iu.Parameter("complete",','.join(il.logics),
+                           check=lambda ls: all(s in il.logics for s in ls.split(',')))
 
-def logic():
-    return param_logic.get()
+def logics():
+    return param_logic.get().split(',')
 
 def drop_label(labeled_fmla):
     return labeled_fmla.formula if hasattr(labeled_fmla,'formula') else labeled_fmla

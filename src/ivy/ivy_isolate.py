@@ -16,6 +16,7 @@ import ivy_theory as ith
 import ivy_concept_space as ics
 from ivy_ast import ASTContext
 
+show_compiled = iu.BooleanParameter("show_compiled",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -164,14 +165,14 @@ def isolate_component(mod,isolate_name):
         for type_name in list(ivy_logic.sig.interp):
             if not startswith_eq_some(type_name,present):
                 del ivy_logic.sig.interp[type_name]
-    print "interp: {}".format(ivy_logic.sig.interp) 
     delegates = set(s.delegated() for s in mod.delegates)
     derived = set(df.args[0].func.name for df in mod.concepts)
     for name in present:
         if (name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
-            and name not in derived):
-            raise IvyError(None,"{} is not a module instance, sort or definition".format(name))
+            and name not in derived
+            and name not in ivy_logic.sig.interp):
+            raise iu.IvyError(None,"{} is not a module instance, sort, definition, or interpreted function".format(name))
     
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present)
@@ -253,10 +254,6 @@ def isolate_component(mod,isolate_name):
     del mod.labeled_conjs[:]
     mod.labeled_conjs.extend(new_conjs)
 
-    print "conjectures:"
-    for c in mod.labeled_conjs:
-        print c
-
     # filter the signature
 
     new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
@@ -266,13 +263,8 @@ def isolate_component(mod,isolate_name):
 
     # filter the inits
 
-    for thing in mod.labeled_inits:
-        print thing
-    print present
 
     new_inits = [c for c in mod.labeled_inits if keep_ax(c.label)]
-    for thing in new_inits:
-        print thing
     del mod.labeled_inits[:]
     mod.labeled_inits.extend(new_inits)
     
@@ -290,9 +282,9 @@ def isolate_component(mod,isolate_name):
     mod.actions.clear()
     mod.actions.update(new_actions)
 
-    print "actions:"
-    for x,y in mod.actions.iteritems():
-        print iu.pretty("action {} = {}".format(x,y))
+    if show_compiled.get():
+        for x,y in mod.actions.iteritems():
+            print iu.pretty("action {} = {}".format(x,y))
 
 
 

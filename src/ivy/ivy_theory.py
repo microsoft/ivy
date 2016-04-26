@@ -52,14 +52,12 @@ def get_sort_sccs(arcs):
         m[ds.name].add(rng.name)
 
     sccs = tarjan(m)
-    iu.dbg('sccs')
     return sccs
                     
 
 def get_unstratified_funs(assumes,asserts):
     arcs = list(get_sort_arcs(assumes,asserts))
 
-    iu.dbg('arcs')
 
     sccs = get_sort_sccs(arcs)
     scc_map = dict((name,idx) for idx,scc in enumerate(sccs) for name in scc)
@@ -69,10 +67,8 @@ def get_unstratified_funs(assumes,asserts):
     for ds,rng,ast in arcs:
         if scc_map[ds.name] == scc_map[rng.name]:
             scc_arcs[scc_map[ds.name]].append(ast)
-    iu.dbg('scc_arcs')
             
     fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs) if y]
-    iu.dbg('fun_sccs')
     return fun_sccs
 
 
@@ -92,8 +88,8 @@ def get_assumes_and_asserts():
 
     return assumes,asserts
 
-def report_error(note,ast,unstrat):
-    msg = "This formula is not in logic {}{} because {}".format(im.logic(),note,il.reason())
+def report_error(logic,note,ast,unstrat):
+    msg = "This formula is not in logic {}{} because {}".format(logic,note,il.reason())
     for sorts,asts in unstrat:
         msg += "\n\nNote: the sort(s) " + ','.join(sorts) + ' form a function cycle using:\n'
         for a in asts:
@@ -103,24 +99,35 @@ def report_error(note,ast,unstrat):
                 msg += '  {}\n'.format(IvyError(a,"quantifier alternation"))                
     raise iu.IvyError(ast,msg)
 
-def check_can_assert(fmla,ast,unstrat):
-    check_can_assume(fmla,ast,unstrat)
-    logic = im.logic()
+def check_can_assert(logic,fmla,ast,unstrat):
+    check_can_assume(logic,fmla,ast,unstrat)
     if not il.is_in_logic(il.Not(fmla),logic,unstrat):
-        report_error(" when negated",ast,unstrat)
+        report_error(logic," when negated",ast,unstrat)
 
-def check_can_assume(fmla,ast,unstrat):
-    logic = im.logic()
+def check_can_assume(logic,fmla,ast,unstrat):
     if not il.is_in_logic(fmla,logic,unstrat):
-        report_error("",ast,unstrat)
+        report_error(logic,"",ast,unstrat)
     
 def check_theory():
     assumes,asserts = get_assumes_and_asserts()
     unstrat = get_unstratified_funs(assumes,asserts)
     
-    for a in assumes:
-        check_can_assume(*a,unstrat=unstrat)
+    errs = []
+    for logic in im.logics():
+        try:
+            for a in assumes:
+                check_can_assume(logic,*a,unstrat=unstrat)
 
-    for a in asserts:
-        check_can_assert(*a,unstrat=unstrat)
+            for a in asserts:
+                check_can_assert(logic,*a,unstrat=unstrat)
+        except iu.IvyError as err:
+            errs.append(err)
+        return
 
+    # if we got here, all logics had errors
+
+    if len(errs) == 1:
+        raise errs[0]
+
+    raise iu.ErrorList(errs)
+    

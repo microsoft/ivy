@@ -635,7 +635,6 @@ def assign_symbol_from_model(header,sym,m):
         for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
             term = sym(*[il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)])
             val = m.eval_to_constant(term)
-            iu.dbg('val','type(val)')
             header.append(varname(sym.name) + ''.join('['+str(a)+']' for a in args) + ' = ')
             header.append(str(val) + ';\n')
     else:
@@ -674,7 +673,6 @@ def emit_special_op(self,op,header,code):
     if op == 'concat':
         sort_name = il.sig.interp[self.args[1].sort.name]
         sname,sparms = parse_int_params(sort_name)
-        iu.dbg('sname','sparms')
         if sname == 'bv' and len(sparms) == 1:
             code.append('(')
             self.args[0].emit(header,code)
