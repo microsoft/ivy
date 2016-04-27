@@ -62,7 +62,7 @@ somewhere in your emacs load path and add the following code to your
 .emacs:
 
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
-    (autoload 'ivy-mode "ivy" "Major mode for editing Ivy code" t)
+    (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
 
 
 

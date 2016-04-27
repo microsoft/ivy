@@ -167,7 +167,7 @@ def isolate_component(mod,isolate_name):
             if not startswith_eq_some(type_name,present):
                 del ivy_logic.sig.interp[type_name]
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
-    delagated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
+    delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
     derived = set(df.args[0].func.name for df in mod.concepts)
     for name in present:
         if (name not in mod.hierarchy
@@ -183,7 +183,7 @@ def isolate_component(mod,isolate_name):
     no_mixins = lambda m: False
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
-    delegated_to_verified = lambda n: n in delegated_to and startswith_some(delegated_to[n],verified)
+    delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified)
     ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
     for actname,action in mod.actions.iteritems():
         ver = startswith_some(actname,verified)
@@ -211,7 +211,7 @@ def isolate_component(mod,isolate_name):
             new_actions[actname] = add_mixins(mod,actname,int_action,no_mixins,use_mixin,lambda m:m)
             # external version of the action assumes mixins are ok, unless they
             # are delegated to a currently verified object
-            new_action = add_mixins(mod,actname,ext_action,before_mixins,use_mixin,mod_mixin)
+            new_action = add_mixins(mod,actname,ext_action,ext_assumes,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
             # public_actions.add('ext:'+actname)
@@ -291,14 +291,10 @@ def isolate_component(mod,isolate_name):
 class SortOrder(object):
     def __init__(self,arcs):
         self.arcs = arcs
-        iu.dbg('arcs')
     def __call__(self,x,y):
         x = x.args[0].relname
         y = y.args[0].relname
-        iu.dbg('x')
-        iu.dbg('y')
         res =  -1 if y in self.arcs[x] else 1 if x in self.arcs[y] else 0   
-        iu.dbg('res')
         return res
 
 
@@ -314,9 +310,9 @@ def get_mixin_order(iso,mod):
         after = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinAfterDef)],order)
         before.reverse() # add the before mixins in reverse order
         mixins = before + after
-        print 'mixin order for action {}:'
-        for m in mixins:
-            print m.args[0]
+#        print 'mixin order for action {}:'
+#        for m in mixins:
+#            print m.args[0]
         mod.mixins[action] = mixins
         
 
@@ -330,6 +326,13 @@ def create_isolate(iso,mod = None):
             for mixin in mixins:
                 with ASTContext(mixins):
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
+
+        # check all the delagate declarations
+
+        for dl in mod.delegates:
+            lookup_action(dl.args[0],mod,dl.delegated())
+            if dl.delegee() and dl.delegee() not in mod.hierarchy:
+                raise iu.IvyError(dl.args[1],"{} is not a module instance".format(name))
 
         # Determine the mixin order (as a side effect on module.mixins)
 
