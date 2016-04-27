@@ -296,6 +296,8 @@ class IvyDomainSetup(IvyDeclInterp):
     def rely(self,df):
         df = sortify_with_inference(df)
         self.domain.rely.append(df)
+    def mixord(self,df):
+        self.domain.mixord.append(df)
     def concept(self,c):
         rel = c.args[0]
         with ASTContext(c):

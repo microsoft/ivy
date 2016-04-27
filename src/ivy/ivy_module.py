@@ -48,6 +48,7 @@ class Module(object):
         self.public_actions = set() # hash of the exported actions
         self.progress = []  # list of progress properties
         self.rely = [] # list of rely relations
+        self.mixord = [] # list of mixin order relations
 
         self.sig = il.sig.copy() # capture the current signature
 

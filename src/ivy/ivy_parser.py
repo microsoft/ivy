@@ -303,6 +303,11 @@ def p_top_rely_atom_arrow_atom(p):
     p[0] = p[1]
     p[0].declare(RelyDecl(Implies(p[3],p[5])))
 
+def p_top_mixord_atom_arrow_atom(p):
+    'top : top MIXORD atom ARROW atom'
+    p[0] = p[1]
+    p[0].declare(MixOrdDecl(Implies(p[3],p[5])))
+
 def p_top_rely_atom(p):
     'top : top RELY atom'
     p[0] = p[1]
@@ -568,6 +573,13 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_delegate_callatom(p):
         'top : top DELEGATE callatoms'
         d = DelegateDecl(*[DelegateDef(s) for s in p[3]])
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
+
+    def p_top_delegate_callatom(p):
+        'top : top DELEGATE callatoms ARROW callatom'
+        d = DelegateDecl(*[DelegateDef(s,p[5]) for s in p[3]])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)

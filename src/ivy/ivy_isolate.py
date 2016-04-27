@@ -15,12 +15,13 @@ import ivy_module as im
 import ivy_theory as ith
 import ivy_concept_space as ics
 from ivy_ast import ASTContext
+from collections import defaultdict
 
 show_compiled = iu.BooleanParameter("show_compiled",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
-        raise IvyError(ast,"action {} undefined".format(name))
+        raise iu.IvyError(ast,"action {} undefined".format(name))
     return mod.actions[name]
 
 def add_mixins(mod,actname,action2,assert_to_assume=lambda m:False,use_mixin=lambda:True,mod_mixin=lambda m:m):
@@ -156,7 +157,7 @@ def startswith_eq_some(s,prefixes):
 
 def isolate_component(mod,isolate_name):
     if isolate_name not in mod.isolates:
-        raise IvyError(None,"undefined isolate: {}".format(isolate_name))
+        raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
     isolate = mod.isolates[isolate_name]
     verified = set(a.relname for a in isolate.verified())
     present = set(a.relname for a in isolate.present())
@@ -165,7 +166,8 @@ def isolate_component(mod,isolate_name):
         for type_name in list(ivy_logic.sig.interp):
             if not startswith_eq_some(type_name,present):
                 del ivy_logic.sig.interp[type_name]
-    delegates = set(s.delegated() for s in mod.delegates)
+    delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
+    delagated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
     derived = set(df.args[0].func.name for df in mod.concepts)
     for name in present:
         if (name not in mod.hierarchy
@@ -181,6 +183,8 @@ def isolate_component(mod,isolate_name):
     no_mixins = lambda m: False
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
+    delegated_to_verified = lambda n: n in delegated_to and startswith_some(delegated_to[n],verified)
+    ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
     for actname,action in mod.actions.iteritems():
         ver = startswith_some(actname,verified)
         pre = startswith_some(actname,present)
@@ -205,7 +209,8 @@ def isolate_component(mod,isolate_name):
                 assert hasattr(int_action,'formal_params'), int_action
             # internal version of the action has mixins checked
             new_actions[actname] = add_mixins(mod,actname,int_action,no_mixins,use_mixin,lambda m:m)
-            # external version of the action assumes mixins are ok
+            # external version of the action assumes mixins are ok, unless they
+            # are delegated to a currently verified object
             new_action = add_mixins(mod,actname,ext_action,before_mixins,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
@@ -282,12 +287,38 @@ def isolate_component(mod,isolate_name):
     mod.actions.clear()
     mod.actions.update(new_actions)
 
-    if show_compiled.get():
-        for x,y in mod.actions.iteritems():
-            print iu.pretty("action {} = {}".format(x,y))
+
+class SortOrder(object):
+    def __init__(self,arcs):
+        self.arcs = arcs
+        iu.dbg('arcs')
+    def __call__(self,x,y):
+        x = x.args[0].relname
+        y = y.args[0].relname
+        iu.dbg('x')
+        iu.dbg('y')
+        res =  -1 if y in self.arcs[x] else 1 if x in self.arcs[y] else 0   
+        iu.dbg('res')
+        return res
 
 
-
+def get_mixin_order(iso,mod):
+    arcs = defaultdict(list)
+    for rdf in mod.mixord:
+        arcs[rdf.args[0].relname].append(rdf.args[1].relname)
+    actions = mod.mixins.keys()
+    for action in actions:
+        mixins = mod.mixins[action]
+        order = SortOrder(arcs)
+        before = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinBeforeDef)],order)
+        after = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinAfterDef)],order)
+        before.reverse() # add the before mixins in reverse order
+        mixins = before + after
+        print 'mixin order for action {}:'
+        for m in mixins:
+            print m.args[0]
+        mod.mixins[action] = mixins
+        
 
 def create_isolate(iso,mod = None):
 
@@ -300,13 +331,11 @@ def create_isolate(iso,mod = None):
                 with ASTContext(mixins):
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
 
-        # HACK: code beyond here really does not belong in compile
+        # Determine the mixin order (as a side effect on module.mixins)
 
-
-
+        get_mixin_order(iso,mod)
 
         # Construct an isolate
-
 
         if iso:
             isolate_component(mod,iso)
@@ -343,3 +372,8 @@ def create_isolate(iso,mod = None):
             mod.concept_spaces.append((sym(*variables),space))
 
         ith.check_theory()
+
+        if show_compiled.get():
+            for x,y in mod.actions.iteritems():
+                print iu.pretty("action {} = {}".format(x,y))
+

@@ -447,6 +447,12 @@ class RelyDecl(Decl):
     def defines(self):
         return []
 
+class MixOrdDecl(Decl):
+    def name(self):
+        return 'mixord'
+    def defines(self):
+        return []
+
 class ConceptDecl(Decl):
     def name(self):
         return 'concept'
@@ -495,10 +501,16 @@ class MixinDecl(Decl):
     def defines(self):
         return []
     
-class MixinBeforeDef(AST):
+class MixinDef(AST):
+    def mixer(self):
+        return self.args[0].relname
+    def mixee(self):
+        return self.args[1].relname
+    
+class MixinBeforeDef(MixinDef):
     pass
     
-class MixinAfterDef(AST):
+class MixinAfterDef(MixinDef):
     pass
 
 class IsolateDecl(Decl):    
@@ -542,8 +554,15 @@ class DelegateDecl(Decl):
 class DelegateDef(AST):
     def delegated(self):
         return self.args[0].relname
+    def delegee(self):
+        if len(self.args) > 1:
+            return self.args[1].relname
+        return None
     def __repr__(self):
-        return self.delegated()
+        s = self.delegated()
+        if len(self.args) > 1:
+            s += ' -> ' + self.delegee
+        return s
 
 class TypeDef(Definition):
     def __init__(self,name,sort):
