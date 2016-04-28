@@ -53,6 +53,27 @@ instantiate back : tl_interface(ref,b,m,bside)
 
 ################################################################################
 #
+# Assume/guarantee relationships
+#
+################################################################################
+
+# Correctness of client-side serializations is proved from front to back.
+# When verifying the dut "b", we prove all serializations on the client
+# side of the back interface are correct.
+
+mixord front.perform_client -> back.perform_client
+delegate back.perform_client -> b
+
+# Correctness of manager-side serializations is proved from back to front.
+# When verifying the dut "b", we prove all serializations on the manager
+# side of the front interface are correct.
+
+mixord back.perform_manager -> front.perform_manager
+delegate front.perform_manager -> b
+
+
+################################################################################
+#
 # Localize the proof
 #
 ################################################################################
