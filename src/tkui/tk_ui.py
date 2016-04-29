@@ -60,6 +60,11 @@ class TkUI(ivy_ui.IvyUI):
     def mainloop(self):
         self.tk.mainloop()
 
+    # stop the ui
+
+    def exit(self):
+        self.tk.quit()
+
     # Add a new AnalysisGraph to the UI
 
     def add(self,art,name=None,label=None):
@@ -192,43 +197,37 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
             root = tk
         if toplevel==None:
             toplevel=root
-#        menubar = Menu(toplevel)
+        self.radios = {}
+
         menubar = uu.MenuBar(root)
         menubar.pack(side=TOP,fill=X)
-#        filemenu = Menu(menubar, tearoff=0)
-        filemenu = menubar.add("File")
-        filemenu.add_command(label="Save",command=self.save)
-        filemenu.add_command(label="Save abstraction",command=self.save_abstraction)
-        filemenu.add_separator()
-        filemenu.add_command(label="Remove tab", command=lambda self=self: self.ui_parent.remove(self))
-        filemenu.add_command(label="Exit", command=tk.quit)
-#        menubar.add_cascade(label="File", menu=filemenu)
-#        modemenu = Menu(menubar, tearoff=0)
-        modemenu = menubar.add("Mode")
-        self.mode = StringVar(root,ivy_ui.default_mode.get())
-        modemenu.add("radiobutton",label="Concrete",variable=self.mode,value="concrete")
-        modemenu.add("radiobutton",label="Abstract",variable=self.mode,value="abstract")
-        modemenu.add("radiobutton",label="Bounded",variable=self.mode,value="bounded")
-        modemenu.add("radiobutton",label="Induction",variable=self.mode,value="induction")
-#        menubar.add_cascade(label="Mode", menu=modemenu)
-#        actionmenu = Menu(menubar, tearoff=0)
-        actionmenu = menubar.add("Action")
-        actionmenu.add_command(label="Recalculate all",command=self.recalculate_all)
-        actionmenu.add_command(label="Show reachable states",command=self.show_reachable_states)
-#        menubar.add_cascade(label="Action", menu=actionmenu)
-#        toplevel.config(menu=menubar)
-
-#        sw= Tix.ScrolledWindow(root, scrollbar=BOTH) # just the vertical scrollbar
-#        sw.pack(fill=BOTH, expand=1)
+        for mtype,mname,mcontents in self.menus():
+            menu = menubar.add(mname)
+            for mitem in mcontents:
+                itype = mitem[0]
+                if itype == "button":
+                    menu.add_command(label=mitem[1],command=mitem[2])
+                elif itype == "separator":
+                    menu.add_separator()
+                elif itype == "radiobuttons":
+                    ivar = StringVar(root,mitem[2])
+                    self.radios[mitem[1]] = ivar
+                    for rblabel,rbvalue in mitem[3]:
+                        menu.add("radiobutton",label=rblabel,variable=ivar,value=rbvalue)
+                else:
+                    assert False,itype
 
         Canvas.__init__(self,root)
         self.g = g
         self.tk = tk
         self.root = root
         self.mark = None
-        tk.eval('package require Tcldot')
+#        tk.eval('package require Tcldot')
         self.pack(fill=BOTH,expand=1)
         self.rebuild()
+
+    def radiobutton(self,name):
+        return self.radios[name]
 
     # Get styles for nodes
 
@@ -245,6 +244,8 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
         res = {'width' : 2}
         res['arrowshape']="14 14 5"
         res['fill'] = 'black'
+        if get_classes(elem) == "cover":
+            res['dash'] = (5,5)
         return res
 
     # This is called to rebuild the graph display after any change
@@ -279,12 +280,12 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
     # Get tag of node
 
     def node_tag(self,node):
-        return "n{}".format([node.id])
+        return "n{}".format(node.id)
 
     # Called if the status of a node changes to update display
 
     def update_node_color(self,node):
-        for item in self.find_withtag(node_tag(node)):
+        for item in self.find_withtag(self.node_tag(node)):
             if 'shape' in self.gettags(item):
                 self.itemconfig(item,outline=self.node_color(node))
 

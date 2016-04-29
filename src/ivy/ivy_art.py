@@ -389,7 +389,7 @@ class AnalysisGraph(object):
         covered = set(x for x,y in self.covering)
         joined = set()
         for state in self.states:
-            if hasattr(state,'expr'):
+            if hasattr(state,'expr') and state.expr is not None:
                 if any(s.id in covered
                        for s in states_state_expr(state.expr)):
                     covered.add(state)

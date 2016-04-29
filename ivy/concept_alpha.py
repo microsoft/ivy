@@ -32,7 +32,6 @@ def alpha(concept_domain, state, cache=None, projection=None):
     for tag, formula in facts:
         if tag in cache:
             value = cache[tag]
-            print "cached: {} {}".format(tag,value)
         else:
             # assert len(cache) == 0, tag
             solver.push()
@@ -40,7 +39,6 @@ def alpha(concept_domain, state, cache=None, projection=None):
             value = not slvr.is_sat(solver)
             solver.pop()
             cache[tag] = value
-            print "computed: {} {}".format(tag,value)
 
         result.append((tag, value))
 

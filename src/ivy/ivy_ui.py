@@ -27,6 +27,32 @@ default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
 class AnalysisGraphWidget(object):
 
+    # This defines the menus items we provide. The actual menus might be
+    # tool buttons or other such things.
+
+    def menus(self):
+        return [("menu","File",
+                 [("button","Save",self.save),
+                  ("button","Save abstraction",self.save_abstraction),
+                  ("separator",),
+                  ("button","Remove tab",lambda self=self: self.ui_parent.remove(self)),
+                  ("button","Exit", lambda self=self: self.ui_parent.exit()),]),
+                ("menu","Mode",
+                 [("radiobuttons","mode",default_mode.get(),
+                   [("Concrete","concrete"),
+                    ("Abstract","abstract"),
+                    ("Bounded","bounded"),
+                    ("Induction","induction")])]),
+                 ("menu","Action",
+                  [("button","Recalculate all",self.recalculate_all),
+                   ("button","Show reachable states",self.show_reachable_states),])]
+
+    # get the mode variable
+
+    @property 
+    def mode(self):
+        return self.radiobutton('mode')
+
     # Save the current arg and maybe concept graph in a file
 
     def save(self):
@@ -126,21 +152,19 @@ class AnalysisGraphWidget(object):
     # Get the marked node
 
     def get_mark(self):
-        return self.g.states[self.mark]
+        return self.mark
 
     # Try covering a node by the marked node
 
     def cover_node(self,covered_node):
         g = self.g
-        try:
-            covering_node = self.get_mark()
-        except:
-            return
-        print "Trying to cover %s by %s" % (covered_node.id,covering_node.id)
-        with self.ui_parent.run_context():
-            if not g.cover(covered_node,covering_node):
-                raise IvyError(None,"Covering failed")
-        self.rebuild()
+        covering_node = self.get_mark()
+        if covering_node is not None:
+            print "Trying to cover %s by %s" % (covered_node.id,covering_node.id)
+            with self.ui_parent.run_context():
+                if not g.cover(covered_node,covering_node):
+                    raise IvyError(None,"Covering failed")
+            self.rebuild()
 
     # Join a node with the marked node
 
@@ -228,7 +252,16 @@ class AnalysisGraphWidget(object):
             art = self.g.decompose_edge(transition)
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
-            self.ui_parent.add(art)
+            return self.ui_parent.add(art)
+
+    # Decompose incoming edge of a node into smaller actions
+
+    def decompose_node(self,node):
+        with self.ui_parent.run_context():
+            art = self.g.decompose_state(node)
+            if art == None:
+                raise IvyError(None,'Cannot decompose action')
+            return self.ui_parent.add(art)
 
     # Browse the source of an edge
 

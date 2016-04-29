@@ -15,6 +15,7 @@ from pygraphviz import AGraph
 
 from ivy_utils import topological_sort
 
+import pygraphviz
 
 def cubic_bezier_point(p0, p1, p2, p3, t):
     """
@@ -87,11 +88,12 @@ def get_approximation_points(bspline):
 
 
 def _to_position(st):
+    global y_origin
     sp = st.split(',')
     assert len(sp) == 2
     return {
         "x": float(sp[0]),
-        "y": -float(sp[1]),
+        "y": y_origin-float(sp[1]),
     }
 
 
@@ -117,7 +119,14 @@ def _to_edge_position(st):
     return result
 
 
-def dot_layout(cy_elements,edge_labels=False):
+def _to_coord_list(st):
+    """ create a sequence of positions from a dot-generated string """
+    nums = st.split(',')
+    pairs = [','.join((nums[2*i],nums[2*i+1])) for i in range(len(nums)//2)]
+    return map(_to_position,pairs)
+
+
+def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     """
     Get a CyElements object and augment it (in-place) with positions,
     widths, heights, and spline data from a dot based layout.
@@ -125,6 +134,7 @@ def dot_layout(cy_elements,edge_labels=False):
     Returns the object.
     """
     elements = cy_elements.elements
+
     g = AGraph(directed=True, strict=False)
 
     # make transitive relations appear top to bottom
@@ -183,6 +193,26 @@ def dot_layout(cy_elements,edge_labels=False):
 
     # now get positions, heights, widths, and bsplines
     g.layout(prog='dot')
+
+    # get the y origin. we want the top left of the graph to be a
+    # fixed coordinate (hopefully (0,0)) so the graph doesn't jump when
+    # its height changes. Unfortunately, pygraphviz has a bug a gives
+    # the wrong bbox, so we compute the max y coord.
+
+#    bbox = pygraphviz.graphviz.agget(g.handle,'bb')
+
+    global y_origin
+    y_origin = 0.0
+    for n in g.nodes():
+        top = float(n.attr['pos'].split(',')[1]) + float(n.attr['height'])/2
+        if top > y_origin:
+            y_origin = top
+    if subgraph_boxes:
+        for sg in g.subgraphs():
+            top = float(sg.graph_attr['bb'].split(',')[3])
+            if top > y_origin:
+                y_origin = top
+
     for e in elements:
         if e["group"] == "nodes":
             attr = g.get_node(e["data"]["id"]).attr
@@ -192,10 +222,15 @@ def dot_layout(cy_elements,edge_labels=False):
 
         elif e["group"] == "edges":
             attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
-#            print "attr: {}".format(attr)
             e["data"].update(_to_edge_position(attr['pos']))
-            if edge_labels:
+            if edge_labels and e["data"]["label"] != '':
                 e["data"]["lp"] = _to_position(attr['lp'])
 #    g.draw('g.png')
+
+    if subgraph_boxes:
+        for sg in g.subgraphs():
+            box = cy_elements.add_shape(sg.name,classes='subgraphs')
+            coords = _to_coord_list(sg.graph_attr['bb'])
+            box["data"]["coords"] = coords
 
     return cy_elements

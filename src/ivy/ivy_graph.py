@@ -267,11 +267,9 @@ def render_concept_graph(widget):
             ] +
             label_lines
         )
-        # cluster by sort in concrete models
-        if '!' in node:
-            cluster = node.split('!')[0].lower()
-        else:
-            cluster = None
+        
+        cluster = domain.concepts[node].sort.name
+
 
         if hasattr(widget, 'apply_structure_renaming'):
             label = widget.apply_structure_renaming(label)
@@ -522,7 +520,7 @@ class Graph(object):
 
     def recompute(self):
         self.concept_session.recompute(self.projection)
-        self.cy_elements = dot_layout(render_concept_graph(self))
+        self.cy_elements = dot_layout(render_concept_graph(self),subgraph_boxes=True)
 
     # TODO: this seems to be unused -- remove?
     def get_facts(self,rels,definite=True):
@@ -568,7 +566,6 @@ class Graph(object):
         if concept_class in ('node_labels','edges'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
-            print "projection: {} {} {}".format(concept_name,concept_class,[(n,b.value) for n,b in boxes.iteritems()])
             return any(boxes[i].value for i in boxes if i != 'transitive')
         return True
 
@@ -697,13 +694,10 @@ def standard_graph(parent_state=None):
 
     g = Graph(sorts,parent_state)
 
-    print "node labels:{}".format( g.relation_ids)
     if hasattr(parent_state,'universe'):
-        print "parent_state.universe: {}".format(parent_state.universe)
         for n in g. nodes:
             if n.sort in parent_state.universe:
                 g.splatter(n,parent_state.universe[n.sort])
-    print "node labels:{}".format( g.relation_ids)
     return GraphStack(g)
     
 

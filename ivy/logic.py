@@ -98,6 +98,7 @@ def is_polymorphic(x):
     x can be a term or a sort
     """
     return (
+        type(x) == Const and not x.name[0].islower() or
         type(x) == TopSort and x.is_sort_variable() or
         hasattr(x, 'sort') and is_polymorphic(x.sort) or
         any(is_polymorphic(y) for y in x)

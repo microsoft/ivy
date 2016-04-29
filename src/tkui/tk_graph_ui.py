@@ -67,16 +67,12 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
     # Copy checkbox state to the renderer
 
     def sync_checkboxes(self):
-        print "self.g.relation_ids: {}".format(self.g.relation_ids)
         for rel in self.g.relation_ids:
             boxes = self.get_enabled(rel)
             for idx,box in enumerate(boxes):
-                print "setting: {} {} {}".format(rel,idx,box.get())
                 self.g.set_checkbox(rel,idx,box.get())
-        print "self.g.default_labels: {}".format(self.g.default_labels)
         for rel in self.g.default_labels:
             for idx in range(4):
-                print "setting: {} {} {}".format(rel,idx,idx==0)
                 self.g.set_checkbox(rel,idx,idx==0)
 
     # Make a node label visible
@@ -87,9 +83,10 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
 
     # Make an edge relation visible
 
-    def show_edge(self,concept):
+    def show_edge(self,concept,box='+',value=True):
         boxes = self.get_enabled(concept.name)
-        boxes[0].set(True)
+        idx = {'+':0,'?':1,'-':2,'T':3}[box]
+        boxes[idx].set(value)
 
     # Get styles for nodes
 

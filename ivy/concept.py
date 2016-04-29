@@ -271,7 +271,6 @@ class ConceptDomain(object):
             if combination_name == 'edge_info':
                  for e in self.concepts['edges']:
                      if projection(e,'edges'):
-                         print "e: {}".format(e)
                          ec = self.concepts[e]
                          c0,c1 = (nodes_by_sort_name[ec.sorts[i].name] for i in (0,1))
                          self.get_comb_facts('edge_info','edge_info',([e],c0,c1),facts)

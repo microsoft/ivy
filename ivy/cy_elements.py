@@ -42,6 +42,7 @@ class CyElements(object):
         self.elements = []
         self.node_id = dict()
         self.edge_id = dict()
+        self.shape_id = dict()
 
     def add_node(self, obj, label=None, classes=[], short_info='',
                  long_info='', events=[], actions=[], locked=True, cluster=None, shape='ellipse'):
@@ -108,6 +109,30 @@ class CyElements(object):
             'classes': classes,
         })
 
+    def add_shape(self, obj, label = '', classes=[], locked=True, shape='rectangle', coords=''):
+        """
+        Add a node. See class docstring for details.
+        """
+        assert self.elements is not None, "This object us not reusable"
+        if not isinstance(classes, basestring):
+            classes = ' '.join(str(x) for x in classes)
+        sid = 's{}'.format(len(self.shape_id))
+        self.shape_id[obj] = sid
+        res = {
+            'group': 'shapes',
+            'data': {
+                'id': sid,
+                'obj': obj,
+                'label': label,
+                'shape': shape,
+                'coords' : coords,
+            },
+            'classes': classes,
+            'locked': locked,
+        }
+        self.elements.append(res)
+        return res
+
 
 # Some convenience functions
 
@@ -134,3 +159,9 @@ def get_source_obj(element):
 
 def get_target_obj(element):
     return element['data']['target_obj']
+
+def get_coords(element):
+    return element['data']['coords']
+
+def get_shape(element):
+    return element['data']['shape']

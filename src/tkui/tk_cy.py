@@ -56,7 +56,7 @@ def get_label_pos(element):
         return None
     position = data['lp']
     x,y = get_coord(position)
-    return x+10,y
+    return x,y
     
 # Remove formatting characters
 
@@ -98,7 +98,7 @@ class TkCyCanvas(Canvas):
     # create all the graph elements
 
     def create_elements(self,cy_elements):
-        print 'cy_elements" {}'.format(cy_elements.elements)
+#        print 'cy_elements" {}'.format(cy_elements.elements)
         self.elem_ids = {}
         for idx,elem in enumerate(cy_elements.elements):
             eid = get_id(elem)
@@ -122,6 +122,10 @@ class TkCyCanvas(Canvas):
                     label = self.create_text(lp[0],lp[1],text=get_label_text(elem),tags=eid)
                 self.tag_bind(eid, "<Button-1>", lambda y, elem=elem: self.click_edge("left",y,elem))
                 self.tag_bind(eid, "<Button-3>", lambda y, elem=elem: self.click_edge("right",y,elem))
+            elif group == 'shapes':
+                coords = map(get_coord,get_coords(elem))
+                (x0,y0),(x1,y1) = coords
+                self.create_rectangle((x0,y0,x1,y1))
                     
 
     def make_popup(self,event,actions,arg):

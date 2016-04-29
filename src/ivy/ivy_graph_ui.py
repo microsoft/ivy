@@ -448,6 +448,13 @@ class GraphWidget(object):
     def relation(self,label):
         return self.g.find_relation_with_label(label)
 
+    # tick a checkbox on a concept
+
+    def show_relation(self,concept,boxes='+',value=True):
+        for box in boxes:
+            self.show_edge(concept,box,value)
+        self.update()
+
 if __name__ == '__main__':
     nodes = [("p",to_clause("[]"))]
     state = to_clauses("[[~n(_nil,V)], [~n(V,_x)], [~n(V,_y)], [~_r_x(V),~n(V,W),_r_x(W)], [~_r_y(V),~n(V,W),_r_y(W)], [~_r_y(W),~n(_x,W)], [_r_x(W),~n(_x,W)], [_r_y(W),~n(_y,W)], [~_r_x(V),~n(_y,V)], [~_r_x(V),~_r_y(W),~n(V,W),=(W,_nil)], [~_r_x(V),~_r_y(W),~n(W,V),=(V,_nil)], [~=(_x, _nil)], [~=(_nil, _x)], [_r_x(_nil)], [~=(_x, _y)], [~=(_y, _nil)], [~_r_x(_y)], [_r_y(_nil)], [~_r_y(_x), =(_x, _nil)], [~_r_y(_x), =(_nil, _x)], [~_r_y(Xp), =(Xp, _nil), ~_r_x(Xp)], [~_r_y(Xp), =(_nil, Xp), ~_r_x(Xp)], [~=(_nil, _y)], [~_r_x(_x)], [~_r_y(_y)],[~_r_x(X),_p(X)], [~_r_y(X),_p(X)], [_p(_x)], [_p(_y)]]")
