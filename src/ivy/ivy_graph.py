@@ -346,6 +346,8 @@ def render_concept_graph(widget):
         if hasattr(widget, 'apply_structure_renaming'):
             labels[0] = widget.apply_structure_renaming(labels[0])
 
+        transitive = widget.edge_display_checkboxes[edge]['transitive'].value
+
         g.add_edge(
             edge,
             source,
@@ -355,6 +357,7 @@ def render_concept_graph(widget):
             short_info='\n'.join(labels),
             long_info=[str(domain.concepts[edge])] + labels[1:],
             events=[],
+            transitive = transitive,
         )
 
     return g
@@ -598,7 +601,7 @@ class Graph(object):
 
     def splatter(self,node,constants = None):
         if constants == None:
-            constants = used_constants_clauses(self.constraints)
+            constants = ilu.used_constants_clauses(self.constraints)
         concepts = self.concept_session.domain.concepts
         name = node.name + '.splatter'
         concepts[name] = enum_concepts(name,None,None)

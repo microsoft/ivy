@@ -76,7 +76,7 @@ class CyElements(object):
 
     def add_edge(self, obj, source_obj, target_obj, label=None,
                  classes=[], short_info='', long_info='', events=[],
-                 actions=[], locked=True):
+                 actions=[], locked=True, transitive=False):
         """
         Add an edge. See class docstring for details.
 
@@ -105,6 +105,7 @@ class CyElements(object):
                 'long_info': long_info,
                 'events': events,
                 'actions': actions,
+                'transitive': transitive,
             },
             'classes': classes,
         })

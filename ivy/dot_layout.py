@@ -131,6 +131,9 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     Get a CyElements object and augment it (in-place) with positions,
     widths, heights, and spline data from a dot based layout.
 
+    edge_labels is true if labels should appear on edges
+    subgraph_boxes is true if boxes should be drawn around subgraphs
+
     Returns the object.
     """
     elements = cy_elements.elements
@@ -138,7 +141,7 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     g = AGraph(directed=True, strict=False)
 
     # make transitive relations appear top to bottom
-    # TODO: make this not specific to leader example
+
     elements = list(elements)
     nodes_by_id = dict(
         (e["data"]["id"], e)
@@ -148,8 +151,10 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
         (nodes_by_id[e["data"]["source"]], nodes_by_id[e["data"]["target"]])
         for e in elements if
         e["group"] == "edges" and
-        e["data"]["obj"] in ('reach', 'le')
+        "transitive" in e["data"] and
+        e["data"]["transitive"]
     ]
+    print "order: {}".format(order)
     elements = topological_sort(elements, order, lambda e: e["data"]["id"])
 
     # add nodes to the graph
