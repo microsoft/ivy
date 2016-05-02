@@ -70,7 +70,7 @@ option_abs_init = iu.BooleanParameter("abs_init",False)
 # The class of ARG's
 
 class AnalysisGraph(object):
-    def __init__(self,module = None,pvars = []):
+    def __init__(self,module = None, pvars = [], initializer=None):
         if module == None:
             module = im.module  # use the current module if not specified
         self.domain = module
@@ -92,6 +92,10 @@ class AnalysisGraph(object):
         self.public_actions = module.public_actions
         self.init_cond = module.init_cond
         
+        # TODO: may not really want this
+        if initializer is not None:
+            self.initialize(initializer)
+
     @property
     def context(self):
         return AC(self)
@@ -108,6 +112,20 @@ class AnalysisGraph(object):
                 print "initial state: {}".format(s2)
         else:
             self.add(s)
+
+    def initialize(self, abstractor):
+        ac = self.context
+        with ac:
+            if self.predicates:
+                if not im.module.init_cond.is_true():
+                    raise IvyError(None,"init and state declarations are not compatible");
+                for n,p in self.predicates.iteritems():
+                    s = eval_state_facts(p)
+                    if s is not None:
+                        s.label = n
+            else:
+                self.add_initial_state(self.domain.init_cond,abstractor)
+
 
     def state_actions(self,state):
         if hasattr(state,'label') and state.label != None:
@@ -168,7 +186,7 @@ class AnalysisGraph(object):
         poststate = self.post_state(op,prestate,abstractor)
         label = label if label else repr(op)
         self.add(poststate,action_app(label,prestate))
-        print "post state %s: %s" % (poststate.id,poststate.clauses)
+#        print "post state %s: %s" % (poststate.id,poststate.clauses)
         return poststate
 
     def execute_action(self,name,prestate = None, abstractor = None):
@@ -328,9 +346,11 @@ class AnalysisGraph(object):
             if res != None:
                 return res
         # currently checks failure only in last action
-        fail = State(expr = fail_expr(state.expr))
-        res = self.bmc(fail,true_clauses())
-        return res
+        if state.expr != None:
+            fail = State(expr = fail_expr(state.expr))
+            res = self.bmc(fail,true_clauses())
+            return res
+        return True
 
     def copy_path(self,state,other,bound=None):
         other_state = State(other.domain)

@@ -4,7 +4,7 @@
 #TODO: get z3 references out of this file
 #TODO: the import *'s are creating conflicts
 
-from ivy_logic import Variable,sig,EnumeratedSort,UninterpretedSort,all_symbols,Equals,And
+from ivy_logic import Variable,EnumeratedSort,UninterpretedSort,all_symbols,Equals,And
 import ivy_logic as il
 import  ivy_logic_utils as ilu
 import functools
@@ -13,6 +13,7 @@ import concept as co
 import concept_interactive_session as cis
 from dot_layout import dot_layout
 from cy_elements import CyElements
+import ivy_utils as iu
 
 # This creates a concept from a formula with free variables, using the
 # variables in alphabetical order.  A canonical concept name is
@@ -405,9 +406,12 @@ class Graph(object):
     def concept_domain(self):
         return self.concept_session.domain
 
+    def sorts(self):
+        return ivy_logic.sig.sorts  # for now, display all declared sorts
+
     @property
     def sort_names(self):
-        return sorted(list(sig.sorts))  # for now, display all declared sorts
+        return sorted(list(il.sig.sorts))  # for now, display all declared sorts
 
     @property
     def relation_ids(self):
@@ -693,7 +697,8 @@ class GraphStack(object):
         del self.redo_stack[:]
 
 def standard_graph(parent_state=None):
-    sorts = [s for s in sig.sorts.values() if il.is_first_order_sort(s)]
+
+    sorts = [s for s in il.sig.sorts.values() if il.is_first_order_sort(s)]
 
     g = Graph(sorts,parent_state)
 

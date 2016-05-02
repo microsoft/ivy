@@ -4,6 +4,7 @@
 import ivy_utils as iu
 import ivy_logic as il
 import ivy_logic_utils as lu
+import ivy_solver
 
 from collections import defaultdict
 import string
@@ -26,6 +27,7 @@ class Module(object):
         self.all_relations = [] # this includes both base and derived relations in declaration order
         self.concepts = []  # TODO: these are actually "derived" relations
         self.labeled_axioms = []
+        self.labeled_inits = []
         self.init_cond = lu.true_clauses()
         self.relations = dict()  # TODO: this is redundant, remove
         self.functions = dict()  # TODO: this is redundant, remove
@@ -46,15 +48,17 @@ class Module(object):
         self.public_actions = set() # hash of the exported actions
         self.progress = []  # list of progress properties
         self.rely = [] # list of rely relations
+        self.mixord = [] # list of mixin order relations
 
-        self.sig = il.sig # capture the current signature
+        self.sig = il.sig.copy() # capture the current signature
 
     def __enter__(self):
         global module
         self.old_module = module
         self.old_sig = il.sig
         module = self
-        
+        il.sig = self.sig
+        ivy_solver.clear()   # this clears cached values, needed when changing sig
         return self
 
     def __exit__(self,exc_type, exc_val, exc_tb):
@@ -103,6 +107,19 @@ class Module(object):
             res.append(clauses)
         return res
 
+
+    # This makes a semi-shallow copy so we can side-effect 
+
+    def copy(self):
+        m = Module()
+        from copy import copy
+        for x,y in self.__dict__.iteritems():
+            if x is 'sig':
+                m.__dict__[x] = y.copy()
+            else:
+                m.__dict__[x] = copy(y)
+        return m
+
 module = None
 
 def background_theory(symbols = None):
@@ -111,10 +128,11 @@ def background_theory(symbols = None):
 def find_action(name):
     return module.actions.get(name,None)
 
-param_logic = iu.Parameter("complete","epr",check=lambda s: (s in il.logics))
+param_logic = iu.Parameter("complete",','.join(il.logics),
+                           check=lambda ls: all(s in il.logics for s in ls.split(',')))
 
-def logic():
-    return param_logic.get()
+def logics():
+    return param_logic.get().split(',')
 
 def drop_label(labeled_fmla):
     return labeled_fmla.formula if hasattr(labeled_fmla,'formula') else labeled_fmla

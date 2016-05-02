@@ -365,7 +365,6 @@ def forward_image(pre_state,axioms,update):
 
 def action_failure(action):
     upd,tr,pre = action
-    print "action_failure upd: {}".format([str(x) for x in upd])
     return upd,pre,true_clauses()
 
 class ActionFailed(Exception):
@@ -544,12 +543,12 @@ class History(object):
         if _get_model_clauses is None:
             _get_model_clauses = small_model_clauses
 
-        print "axioms: {}".format(axioms)
+#        print "axioms: {}".format(axioms)
 
         # A model of the post-state embeds a valuation for each time
         # in the history.
         post = and_clauses(self.post,axioms)
-        print "post: {}".format(post)
+#        print "post: {}".format(post)
         print "bounded check {"
         model = _get_model_clauses(post)
         print "} bounded check"
@@ -582,7 +581,7 @@ class History(object):
             except StopIteration:
                 break
         uvs = model.universes(numerals=use_numerals())
-        print "uvs: {}".format(uvs)
+#        print "uvs: {}".format(uvs)
         return uvs, [pure_state(clauses) for clauses in reversed(states)]
 
 

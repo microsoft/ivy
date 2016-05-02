@@ -51,6 +51,8 @@
    "include"
    "progress"
    "rely"
+   "mixord"
+   "extract"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

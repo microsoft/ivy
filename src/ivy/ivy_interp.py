@@ -366,10 +366,10 @@ class fail_action(Action):
     def __str__(self):
         return "fail " + str(self.action)
     def update(self,domain,in_scope):
-        print "action_failure action: {}".format(pretty(str(self.action)))
+#        print "action_failure action: {}".format(pretty(str(self.action)))
         return action_failure(self.action.update(domain,in_scope))
     def int_update(self,domain,in_scope):
-        print "action_failure action: {}".format(pretty(str(self.action)))
+#        print "action_failure action: {}".format(pretty(str(self.action)))
         return action_failure(self.action.int_update(domain,in_scope))
     def decompose(self,pre,post):
         cases = self.action.decompose(pre,post,fail=True)

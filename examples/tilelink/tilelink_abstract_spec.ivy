@@ -334,61 +334,83 @@ module interface(ref,clnt,mngr,side) = {
     ########################################
     # Guarantees made on "perform" actions.
     #
+    # We split this specification into two parts: a guarantee by
+    # the client side and a guarantee by the manager side. This
+    # because the order of the assume/guarantee argument is opposite
+    # for the cleint-side and manager-side guarantees.
+
     # The client side promises to serialize only events for which it
-    # has the appropriate ownership state. The manager side promises to serialize
-    # only events that have been passed by "request".
+    # has the appropriate ownership state.
 
-    action perform(lt:ltime, sid:id) = { 
-       local a:addr,d:data,mo:otype,eid:id {
-           a := ref.evs(lt).addr_;
-	   d := ref.evs(lt).data_;
-	   mo := ref.evs(lt).type_;
-           eid := ref.evs(lt).id_;
+    action perform_client(lt:ltime, sid:id) = { 
+	if side(sid) = client {  
 
-	   assert ~ref.evs(lt).serialized;
-	   if side(eid) = client {
 
-	      ########################################
-	      # client event serialized on client side. client
-	      # promises to serialize only with appropriate ownership
-	      # and in order
-
-	      if side(sid) = client {  
-		  assert mo = read -> excl_p(a) | shrd_p(a);
-		  assert mo = write -> excl_p(a);
-		  assert mo = cas -> excl_p(a);
-		  assert ~ref.prevents(T1,lt);
-		  if mo ~= read {
-		      dirt_p(a) := true  # if modified, mark as dirty
-		  } 
-	      }	       
-
-	      ########################################
-	      # client event serialized on manager side. manager
-	      # promises to serialize only requested events in order
-
-	      else {  
-		 assert to_ser(lt);
-		 assert ~(to_ser(T1) & ref.prevents(T1,lt))
-	      }
-	   }
-
-	   ########################################
-	   # manager event serialized on manager side. manager
-	   # promises to serialize only events for which client does
-	   # not have conflicting ownership (and in order)
-
-	   else {
-	      assert side(sid) = manager; # can't serialize a manager side event on client side
-	      assert mo = read -> ~excl_p(a);
-	      assert mo = write -> ~excl_p(a) & ~shrd_p(a);
-	      assert mo = cas -> ~excl_p(a) & ~shrd_p(a);
-	      assert ~ref.prevents(T1,lt)
-	   }
-        }
+	    local a:addr,d:data,mo:otype,eid:id {
+		a := ref.evs(lt).addr_;
+		d := ref.evs(lt).data_;
+		mo := ref.evs(lt).type_;
+		eid := ref.evs(lt).id_;
+		
+		assert ~ref.evs(lt).serialized;
+		
+		assert side(eid) = client; # client side can only serialize client side events
+		
+		########################################
+		# client event serialized on client side. client
+		# promises to serialize only with appropriate ownership
+		# and in order
+		
+		assert mo = read -> excl_p(a) | shrd_p(a);
+		assert mo = write -> excl_p(a);
+		assert mo = cas -> excl_p(a);
+		assert ~ref.prevents(T1,lt);
+		if mo ~= read {
+		    dirt_p(a) := true  # if modified, mark as dirty
+		} 
+	    }	       
+	}
     }
 
-    mixin perform before ref.perform
+    mixin perform_client before ref.perform
+
+    # The manager side promises to serialize
+    # only events that have been passed by "request".
+
+    action perform_manager(lt:ltime, sid:id) = { 
+	if side(sid) = manager {  
+	    local a:addr,d:data,mo:otype,eid:id {
+		a := ref.evs(lt).addr_;
+		d := ref.evs(lt).data_;
+		mo := ref.evs(lt).type_;
+		eid := ref.evs(lt).id_;
+
+		assert ~ref.evs(lt).serialized;
+		if side(eid) = client {
+
+		    ########################################
+		    # client event serialized on manager side. manager
+		    # promises to serialize only requested events in order
+
+		    assert to_ser(lt);
+		    assert ~(to_ser(T1) & ref.prevents(T1,lt))
+		}
+
+		########################################
+		# manager event serialized on manager side. manager
+		# promises to serialize only events for which client does
+		# not have conflicting ownership (and in order)
+
+		else {
+		    assert mo = read -> ~excl_p(a);
+		    assert mo = write -> ~excl_p(a) & ~shrd_p(a);
+		    assert mo = cas -> ~excl_p(a) & ~shrd_p(a);
+		    assert ~ref.prevents(T1,lt)
+		}
+            }
+	}
+    }
+    mixin perform_manager before ref.perform
 
     ########################################
     # Guarantees made on "fuse" actions.

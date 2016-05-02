@@ -303,6 +303,11 @@ def p_top_rely_atom_arrow_atom(p):
     p[0] = p[1]
     p[0].declare(RelyDecl(Implies(p[3],p[5])))
 
+def p_top_mixord_callatom_arrow_callatom(p):
+    'top : top MIXORD callatom ARROW callatom'
+    p[0] = p[1]
+    p[0].declare(MixOrdDecl(Implies(p[3],p[5])))
+
 def p_top_rely_atom(p):
     'top : top RELY atom'
     p[0] = p[1]
@@ -314,7 +319,7 @@ def p_top_concept_cdefns(p):
     p[0].declare(ConceptDecl(*p[3]))
 
 def p_top_init_fmla(p):
-    'top : top INIT fmla'
+    'top : top INIT labeledfmla'
     p[0] = p[1]
     d = InitDecl(p[3])
     d.lineno = get_lineno(p,2)
@@ -524,13 +529,17 @@ else:
 if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):
         'top : top MIXIN callatom BEFORE callatom'
-        d = MixinDecl(MixinBeforeDef(p[3],p[5]))
+        m = MixinBeforeDef(p[3],p[5])
+        m.lineno = get_lineno(p,2)
+        d = MixinDecl(m)
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_mixin_callatom_after_callatom(p):
         'top : top MIXIN callatom AFTER callatom'
-        d = MixinDecl(MixinAfterDef(p[3],p[5]))
+        m = MixinAfterDef(p[3],p[5])
+        m.lineno = get_lineno(p,2)
+        d = MixinDecl(m)
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
@@ -548,18 +557,41 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+    def p_top_extract_callatom_eq_callatoms(p):
+        'top : top EXTRACT callatom EQ callatoms'
+        d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
+        d.args[0].with_args = len(p[5])
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
     def p_top_export_callatom(p):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
-    def p_top_delegate_callatom(p):
-        'top : top DELEGATE callatoms'
-        d = DelegateDecl(*[DelegateDef(s) for s in p[3]])
+    def p_optdelegee(p):
+        'optdelegee :'
+        p[0] = None
+    def p_optdelegee_callatom(p):
+        'optdelegee : ARROW callatom'
+        p[0] = p[2]
+    def p_top_delegate_callatom_opt(p):
+        'top : top DELEGATE callatoms optdelegee'
+        if p[4] is not None:
+            d = DelegateDecl(*[DelegateDef(s,p[4]) for s in p[3]])
+        else:
+            d = DelegateDecl(*[DelegateDef(s) for s in p[3]])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+
+    # def p_top_delegate_callatom(p):
+    #     'top : top DELEGATE callatoms ARROW callatom'
+    #     d = DelegateDecl(*[DelegateDef(s,p[5]) for s in p[3]])
+    #     d.lineno = get_lineno(p,2)
+    #     p[0] = p[1]
+    #     p[0].declare(d)
 
 def p_top_state_symbol_eq_state_expr(p):
     'top : top STATE SYMBOL EQ state_expr'

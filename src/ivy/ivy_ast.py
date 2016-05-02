@@ -5,8 +5,9 @@
 Ivy abstract syntax trees.
 """
 
-from ivy_utils import flatten, gen_to_set, UniqueRenamer, compose_names, split_name
+from ivy_utils import flatten, gen_to_set, UniqueRenamer, compose_names, split_name, IvyError
 import ivy_utils as iu
+import ivy_logic
 import re
 
 class AST(object):
@@ -446,6 +447,12 @@ class RelyDecl(Decl):
     def defines(self):
         return []
 
+class MixOrdDecl(Decl):
+    def name(self):
+        return 'mixord'
+    def defines(self):
+        return []
+
 class ConceptDecl(Decl):
     def name(self):
         return 'concept'
@@ -494,10 +501,16 @@ class MixinDecl(Decl):
     def defines(self):
         return []
     
-class MixinBeforeDef(AST):
+class MixinDef(AST):
+    def mixer(self):
+        return self.args[0].relname
+    def mixee(self):
+        return self.args[1].relname
+    
+class MixinBeforeDef(MixinDef):
     pass
     
-class MixinAfterDef(AST):
+class MixinAfterDef(MixinDef):
     pass
 
 class IsolateDecl(Decl):    
@@ -541,8 +554,15 @@ class DelegateDecl(Decl):
 class DelegateDef(AST):
     def delegated(self):
         return self.args[0].relname
+    def delegee(self):
+        if len(self.args) > 1:
+            return self.args[1].relname
+        return None
     def __repr__(self):
-        return self.delegated()
+        s = self.delegated()
+        if len(self.args) > 1:
+            s += ' -> ' + self.delegee
+        return s
 
 class TypeDef(Definition):
     def __init__(self,name,sort):
@@ -710,7 +730,7 @@ def ast_rewrite(x,rewrite):
     if isinstance(x,LabeledFormula):
         arg0 = x.args[0]
         if x.args[0] == None:
-            if isinstance(rewrite,AstRewriteSubstPrefix):
+            if isinstance(rewrite,AstRewriteSubstPrefix) and rewrite.pref != None:
                 arg0 = Atom(rewrite.pref,[])
         else:
             arg0 = rewrite.rewrite_atom(x.args[0])
@@ -801,3 +821,20 @@ class Range(AST):
     @property
     def card(self):
         return int(self.hi) - int(self.lo) + 1
+
+class ASTContext(object):
+    """ ast compiling context, handles line numbers """
+    def __init__(self,ast):
+        self.ast = ast
+    def __enter__(self):
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        if isinstance(exc_val,ivy_logic.Error):
+#            assert False
+            raise IvyError(self.ast,str(exc_val))
+        if exc_type == IvyError and exc_val.lineno == None and hasattr(self.ast,'lineno'):
+            if isinstance(self.ast.lineno,tuple):
+                exc_val.filename, exc_val.lineno = self.ast.lineno
+            else:
+                exc_val.lineno = self.ast.lineno
+        return False # don't block any exceptions

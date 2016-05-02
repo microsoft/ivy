@@ -34,6 +34,8 @@ def solver_name(symbol):
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
         name += ':' + sort
+    if name in ivy_logic.sig.interp:
+        return None
     return name
 
 # S = z3.DeclareSort("S")
@@ -64,7 +66,7 @@ def sorts(name):
 
 def parse_int_params(name):
     things = name.split('[')[1:]
-    print "things:".format(things)
+#    print "things:".format(things)
     if not all(t.endswith(']') for t in things):
         raise SyntaxError()
     return [int(t[:-1]) for t in things]
@@ -103,10 +105,15 @@ def functions(name):
 def is_solver_op(name):
     return relations(name) != None or functions(name) != None
 
-z3_sorts = dict()
-z3_predicates = {ivy_logic.equals : my_eq}
-z3_constants = dict()
-z3_functions = dict()
+
+def clear():
+    global z3_sorts, z3_predicates, z3_constants, z3_functions
+    z3_sorts = dict()
+    z3_predicates = {ivy_logic.equals : my_eq}
+    z3_constants = dict()
+    z3_functions = dict()
+
+clear()    
 
 #z3_sorts_inv = dict((get_id(z3sort),ivysort) for ivysort,z3sort in z3_sorts.iteritems())
 z3_sorts_inv = {}
@@ -148,7 +155,7 @@ def lookup_native(thing,table,kind):
             if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
                 z3val = table(thing.name)
                 if z3val == None:
-                    raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
+                    raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
                 return z3val
         return None
     if isinstance(z3name,ivy_logic.EnumeratedSort):
@@ -161,10 +168,10 @@ def lookup_native(thing,table,kind):
 def check_native_compat_sym(sym):
     table,kind = (relations,"relation") if sym.is_relation() else (functions,"function") 
     thing = lookup_native(sym,table,kind)
-    print "check_native_compat_sym: {} {}".format(sym,thing)
+#    print "check_native_compat_sym: {} {}".format(sym,thing)
     try:
         if thing != None:
-            print "check_native_compat_sym: {} {}".format(sym,thing)
+#            print "check_native_compat_sym: {} {}".format(sym,thing)
             z3args = []
             for ds in sym.sort.dom:
                 z3sort = lookup_native(ds,sorts,"sort")
@@ -217,9 +224,15 @@ def numeral_to_z3(num):
     if z3sort == None:
         return z3.Const(num.name,num.sort.to_z3()) # uninterpreted sort
     try:
-        return z3sort.cast(num.name)
+        return z3sort.cast(str(int(num.name,0))) # allow 0x,0b, etc
     except:
-        raise IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,tn))
+        raise ivy_utils.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
+
+# Enumerated sorts can be interpreted as numeric types. However, we have to
+# check that the constants actually fit in the type.
+
+def enumerated_to_numeral(term):
+    raise ivy_utils.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
 
 def term_to_z3(term):
     if not term.args:
@@ -247,6 +260,8 @@ def term_to_z3(term):
 #                print "{} : {}".format(term,term.rep)
             if term.is_numeral():
                 res = numeral_to_z3(term.rep)
+            elif ivy_logic.is_enumerated(term) and ivy_logic.is_interpreted_sort(term.sort):
+                res = enumerated_to_numeral(term)
             else:
                 iso = term.rep.sort
                 # TODO: this is dangerous
@@ -478,7 +493,8 @@ def collect_model_values(sort,model,sym):
     return nums
 
 def mine_interpreted_constants(model,vocab):
-    sort_values = dict((sort,set()) for sort in ivy_logic.interpreted_sorts())
+    sorts = ivy_logic.interpreted_sorts()
+    sort_values = dict((sort,set()) for sort in sorts)
     for s in vocab:
         sort = s.sort.rng
         if sort in sort_values:
@@ -558,11 +574,18 @@ class HerbrandModel(object):
     def eval_constant(self,c):
         return get_model_constant(self.model,c)
 
+    def eval_to_constant(self,t):
+        return constant_from_z3(t.sort,self.model.eval(term_to_z3(t),model_completion=True))
+    
 # TODO: need to map Z3 sorts back to ivy sorts
 def sort_from_z3(s):
     return z3_sorts_inv[get_id(s)]
 
 def constant_from_z3(sort,c):
+    if z3.is_true(c):
+        return ivy_logic.And()
+    if z3.is_false(c):
+        return ivy_logic.Or()
     return ivy_logic.Constant(ivy_logic.Symbol(repr(c),sort))
 
 def get_model_constant(m,t):

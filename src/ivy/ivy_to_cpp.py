@@ -14,6 +14,8 @@ import ivy_solver as slv
 import ivy_transrel as tr
 import ivy_logic_utils as ilu
 import ivy_compiler as ic
+import ivy_isolate as iso
+import itertools
 
 from collections import defaultdict
 
@@ -202,7 +204,7 @@ public:
     impl.append('add("(assert (and\\\n')
     constraints = [im.module.init_cond.to_formula()]
     for a in im.module.axioms:
-        constraints.append(a.to_formula())
+        constraints.append(a)
     for df in im.module.concepts:
         constraints.append(df.to_constraint())
     for c in constraints:
@@ -386,6 +388,8 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     rs = action.formal_returns
     if not body:
         header.append('    ')
+    if not body and target.get() != "gen":
+        header.append('virtual ')
     if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
@@ -425,7 +429,7 @@ def emit_some_action(header,impl,name,action,classname):
 def init_method():
     asserts = [ia.AssertAction(im.module.init_cond.to_formula())]
     for a in im.module.axioms:
-        asserts.append(ia.AssertAction(a.to_formula()))
+        asserts.append(ia.AssertAction(a))
     res = ia.Sequence(*asserts)
     res.formal_params = []
     res.formal_returns = []
@@ -539,29 +543,47 @@ def module_to_cpp_class(classname):
     for df in im.module.concepts:
         is_derived.add(df.defines())
 
+    # remove the actions not reachable from exported
+        
+    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
+    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
+
     header = []
-    header.append('extern void ivy_assert(bool);\n')
-    header.append('extern void ivy_assume(bool);\n')
-    header.append('extern void ivy_check_progress(int,int);\n')
-    header.append('extern int choose(int,int);\n')
-    header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
+    if target.get() == "gen":
+        header.append('extern void ivy_assert(bool);\n')
+        header.append('extern void ivy_assume(bool);\n')
+        header.append('extern void ivy_check_progress(int,int);\n')
+        header.append('extern int choose(int,int);\n')
+        header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
     header.append('#include <vector>\n')
     header.append('class ' + classname + ' {\n  public:\n')
     header.append('    std::vector<int> ___ivy_stack;\n')
-    header.append('    ivy_gen *___ivy_gen;\n')
+    if target.get() == "gen":
+        header.append('    ivy_gen *___ivy_gen;\n')
     header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
+    if target.get() != "gen":
+        header.append('    virtual void ivy_assert(bool){}\n')
+        header.append('    virtual void ivy_assume(bool){}\n')
+        header.append('    virtual void ivy_check_progress(int,int){}\n')
     
     impl = ['#include "' + classname + '.h"\n\n']
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("int " + classname)
-    impl.append(
+    if target.get() == "gen":
+        impl.append(
 """::___ivy_choose(int rng,const char *name,int id) {
         std::ostringstream ss;
         ss << name << ':' << id;;
         for (unsigned i = 0; i < ___ivy_stack.size(); i++)
             ss << ':' << ___ivy_stack[i];
         return ___ivy_gen->choose(rng,ss.str().c_str());
+    }
+""")
+    else:
+        impl.append(
+"""::___ivy_choose(int rng,const char *name,int id) {
+        return 0;
     }
 """)
     for sym in all_state_symbols():
@@ -592,27 +614,107 @@ def module_to_cpp_class(classname):
         for i,n in enumerate(il.sig.sorts[sortname].extension):
             impl.append('    {} = {};\n'.format(varname(n),i))
     for sortname in il.sig.interp:
-        impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
+        if sortname in il.sig.sorts:
+            impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
+    if target.get() != "gen":
+        emit_one_initial_state(impl)
     impl.append('}\n')
 
-    
-    emit_boilerplate1(header,impl)
-    emit_init_gen(header,impl,classname)
-    for name,action in im.module.actions.iteritems():
-        if name in im.module.public_actions:
-            emit_action_gen(header,impl,name,action)
+    if target.get() == "gen":
+        emit_boilerplate1(header,impl)
+        emit_init_gen(header,impl,classname)
+        for name,action in im.module.actions.iteritems():
+            if name in im.module.public_actions:
+                emit_action_gen(header,impl,name,action)
     return ''.join(header) , ''.join(impl)
 
+def assign_symbol_from_model(header,sym,m):
+    if slv.solver_name(sym) == None:
+        return # skip interpreted symbols
+    name, sort = sym.name,sym.sort
+    if hasattr(sort,'dom'):
+        for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
+            term = sym(*[il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)])
+            val = m.eval_to_constant(term)
+            header.append(varname(sym.name) + ''.join('['+str(a)+']' for a in args) + ' = ')
+            header.append(str(val) + ';\n')
+    else:
+        header.append(varname(sym.name) + ' = ' + m.eval_to_constant(sym) + ';\n')
+        
+
+def emit_one_initial_state(header):
+    m = slv.get_model_clauses(im.module.init_cond)
+    if m == None:
+        raise IvyError(None,'Initial condition is inconsistent')
+    for sym in all_state_symbols():
+        if sym not in is_derived:
+            assign_symbol_from_model(header,sym,m)
+
+
 def emit_constant(self,header,code):
+    if (isinstance(self,il.Symbol) and self.is_numeral() and self.sort.name in il.sig.interp
+        and il.sig.interp[self.sort.name].startswith('bv[')):
+        sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
+        code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
+        return
     code.append(varname(self.name))
 
 il.Symbol.emit = emit_constant
 il.Variable.emit = emit_constant
 
+def parse_int_params(name):
+    spl = name.split('[')
+    name,things = spl[0],spl[1:]
+#    print "things:".format(things)
+    if not all(t.endswith(']') for t in things):
+        raise SyntaxError()
+    return name,[int(t[:-1]) for t in things]
+
+def emit_special_op(self,op,header,code):
+    if op == 'concat':
+        sort_name = il.sig.interp[self.args[1].sort.name]
+        sname,sparms = parse_int_params(sort_name)
+        if sname == 'bv' and len(sparms) == 1:
+            code.append('(')
+            self.args[0].emit(header,code)
+            code.append(' << {} | '.format(sparms[0]))
+            self.args[1].emit(header,code)
+            code.append(')')
+            return
+    if op.startswith('bfe['):
+        opname,opparms = parse_int_params(op)
+        mask = (1 << (opparms[0]-opparms[1]+1)) - 1
+        code.append('(')
+        self.args[0].emit(header,code)
+        code.append(' >> {} & {})'.format(opparms[1],mask))
+        return
+    raise iu.IvyError(self,"operator {} cannot be emitted as C++".format(op))
+
+def emit_bv_op(self,header,code):
+    sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
+    code.append('(')
+    code.append('(')
+    self.args[0].emit(header,code)
+    code.append(' {} '.format(self.func.name))
+    self.args[1].emit(header,code)
+    code.append(') & {})'.format((1 << sparms[0])-1))
+
+def is_bv_term(self):
+    return (il.is_first_order_sort(self.sort)
+            and self.sort.name in il.sig.interp
+            and il.sig.interp[self.sort.name].startswith('bv['))
+
 def emit_app(self,header,code):
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
+        if self.func.name in il.sig.interp:
+            op = il.sig.interp[self.func.name]
+            emit_special_op(self,op,header,code)
+            return
         assert len(self.args) == 2 # handle only binary ops for now
+        if is_bv_term(self):
+            emit_bv_op(self,header,code)
+            return
         code.append('(')
         self.args[0].emit(header,code)
         code.append(' {} '.format(self.func.name))
@@ -1143,11 +1245,13 @@ public:
 """)
 
 
+target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
+
 if __name__ == "__main__":
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
-    ic.set_create_big_action(False)
-    ic.set_interpret_all_sorts(True)
+    iso.set_create_big_action(False)
+    iso.set_interpret_all_sorts(True)
     with im.Module():
         ivy.ivy_init()
 

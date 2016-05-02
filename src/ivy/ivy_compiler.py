@@ -19,6 +19,8 @@ import ivy_utils as iu
 import ivy_actions as ia
 import ivy_alpha
 import ivy_module as im
+import ivy_theory as ith
+import ivy_isolate as iso
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -31,24 +33,10 @@ class IvyDeclInterp(object):
                     for x in decl.args:
                         getattr(self,n)(x)
 
+from ivy_ast import ASTContext
+
 # ast compilation
 
-class ASTContext(object):
-    """ ast compiling context, handles line numbers """
-    def __init__(self,ast):
-        self.ast = ast
-    def __enter__(self):
-        return self
-    def __exit__(self,exc_type, exc_val, exc_tb):
-        if isinstance(exc_val,ivy_logic.Error):
-#            assert False
-            raise IvyError(self.ast,str(exc_val))
-        if exc_type == IvyError and exc_val.lineno == None and hasattr(self.ast,'lineno'):
-            if isinstance(self.ast.lineno,tuple):
-                exc_val.filename, exc_val.lineno = self.ast.lineno
-            else:
-                exc_val.lineno = self.ast.lineno
-        return False # don't block any exceptions
 
 ivy_ast.Variable.get_sort = lambda self: ivy_logic.find_sort(self.sort.rep)
 
@@ -258,7 +246,7 @@ def compile_action_def(a,sig):
         returns = [compile_const(v,sig) for v in a.formal_returns]
 #        print returns
         res = sortify(a.args[1])
-        assert hasattr(res,'lineno')
+        assert hasattr(res,'lineno'), res
         res.formal_params = formals
         res.formal_returns = returns
         return res
@@ -268,7 +256,6 @@ class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
     def axiom(self,ax):
-        print "axiom: {}".format(ax)
         self.domain.labeled_axioms.append(ax.compile())
     def schema(self,sch):
         self.domain.schemata[sch.defn.defines()] = sch
@@ -309,6 +296,8 @@ class IvyDomainSetup(IvyDeclInterp):
     def rely(self,df):
         df = sortify_with_inference(df)
         self.domain.rely.append(df)
+    def mixord(self,df):
+        self.domain.mixord.append(df)
     def concept(self,c):
         rel = c.args[0]
         with ASTContext(c):
@@ -355,282 +344,52 @@ class IvyConjectureSetup(IvyDeclInterp):
         self.domain.labeled_conjs.append(cax)
 
 class IvyARGSetup(IvyDeclInterp):
-    def __init__(self,ag):
-        self.ag = ag
-    def individual(self,v):
-        self.ag.pvars.append(sortify(v).rep)
+    def __init__(self,mod):
+        self.mod = mod
+#    def individual(self,v):
+#        self.mod.pvars.append(sortify(v).rep)
     def init(self,s):
-        s = sortify_with_inference(s)
+        la = s.compile()
+        self.mod.labeled_inits.append(la)
+#        s = sortify_with_inference(s)
 #        print "s:{}".format(s)
-        type_check(self.ag.domain,s)
-        c = formula_to_clauses_tseitin(s)
-        if not c:
-            raise IvyError(ax,"initial condition must be a clause")
-        im.module.init_cond = and_clauses(im.module.init_cond,c)
+#        type_check(self.mod,s)
+#         c = formula_to_clauses_tseitin(s)
+#        if not c:
+#            raise IvyError(ax,"initial condition must be a clause")
+        im.module.init_cond = and_clauses(im.module.init_cond,formula_to_clauses(la.formula))
     def action(self,a):
-        self.ag.actions[a.args[0].relname] = compile_action_def(a,self.ag.domain.sig)
-        self.ag.public_actions.add(a.args[0].relname)
+        self.mod.actions[a.args[0].relname] = compile_action_def(a,self.mod.sig)
+        self.mod.public_actions.add(a.args[0].relname)
     def state(self,a):
-        self.ag.predicates[a.args[0].relname] = a.args[1]
+        self.mod.predicates[a.args[0].relname] = a.args[1]
     def mixin(self,m):
         if any(a.args for a in m.args):
             raise IvyError(m,"mixins may not have parameters")
-        self.ag.mixins[m.args[1].relname].append(m)
+        self.mod.mixins[m.args[1].relname].append(m)
     def _assert(self,a):
         with ASTContext(a):
-            self.ag.assertions.append(type(a)(a.args[0],sortify_with_inference(a.args[1])))
+            self.mod.assertions.append(type(a)(a.args[0],sortify_with_inference(a.args[1])))
     def isolate(self,iso):
-        self.ag.isolates[iso.name()] = iso
+        self.mod.isolates[iso.name()] = iso
     def export(self,exp):
-        self.ag.exports.append(exp)
+        self.mod.exports.append(exp)
     def delegate(self,exp):
-        self.ag.delegates.append(exp)
+        self.mod.delegates.append(exp)
         
         
 def ivy_new(filename = None):
 #    d = Interp()
-    ag = AnalysisGraph()
     if filename:
         f = open(filename,'r')
         if not f:
             raise IvyError(None,"not found: %s" % filename)
-        ivy_load_file(f,ag)
+        ivy_load_file(f)
+    ag = AnalysisGraph(initializer=ivy_alpha.alpha)
     return ag
 
+isolate = iu.Parameter("isolate")    
 
-def lookup_action(ast,ag,name):
-    if name not in ag.actions:
-        raise IvyError(ast,"action {} undefined".format(name))
-    return ag.actions[name]
-
-isolate = iu.Parameter("isolate")
-
-def add_mixins(ag,actname,action2,assert_to_assume=lambda m:False,use_mixin=lambda:True,mod_mixin=lambda m:m):
-    # TODO: mixins need to be in a fixed order
-    assert hasattr(action2,'lineno'), action2
-    assert hasattr(action2,'formal_params'), action2
-    res = action2
-    for mixin in ag.mixins[actname]:
-        mixin_name = mixin.args[0].relname
-        action1 = lookup_action(mixin,ag,mixin_name)
-        assert hasattr(action1,'lineno')
-        assert hasattr(action1,'formal_params'), action1
-        if use_mixin(mixin_name):
-            if assert_to_assume(mixin):
-                action1 = action1.assert_to_assume()
-                assert hasattr(action1,'lineno')
-                assert hasattr(action1,'formal_params'), action1
-            action1 = mod_mixin(action1)
-            assert hasattr(action1,'lineno')
-            assert hasattr(action1,'formal_params'), action1
-        res = ivy_actions.apply_mixin(mixin,action1,res)
-    return res
-
-def summarize_action(action):
-    res = ivy_actions.Sequence()
-    res.lineno = action.lineno
-    res.formal_params = action.formal_params
-    res.formal_returns = action.formal_returns
-    return res
-
-# Delegation of assertions
-
-#    For purposes of compositional proofs, he precondition of an
-#    action can be treated as a requirement on the called or as
-#    a guarantee of the action when called. In the former case, we say
-#    the action *delegates* its precondition to the caller. 
-
-#    Normally, only preconditions equivalent to true can be guaranteed
-#    by the action. However, this is not the case in the presense of
-#    "before" mixins, since the precondition of the action may be
-#    implied by the predondition of the mixin.
-
-#    The default convention is that action *do not* delegate to their
-#    callers, but mixins *do*. This gives a way to separated what is
-#    guaranteed by the caller from what is guaranteed by the callee.
-
-#    This also means that "opaque" actions can be summarized (see
-#    below) since their preconditions must be true. 
-
-
-# Isolation of components. 
-
-# In each isolate, each component of the hierarchy has one of three
-# possible roles:
-
-# 1) Verified. Every assertion delegated to this component is checked.
-
-# 2) Present. Assertions delegated to this component are not checked,
-# but the component's actions are not summarized.
-
-# 3) Opaque. The state of this component is abstracted. Its actions are
-# summarized.
-
-# Rules for isolation.
-
-# 1) Calls from non-opaque to opaque components.
-
-#    a) are allowed only if the called action does not delegate its
-#    assertions to the caller. this is because it is not possible to
-#    verify the precondition of the action when its state components
-#    are abstracted.
-
-#    b) are allowed only if the called action does not transitively
-#    call any non-opaque action. this is because we cannot model the
-#    effect of such a call.
-
-#    c) are summarized by null actions
-
-# Conditions (a) and (b) are needed to assume that (c) is sound
-
-# 2) Globally exported actions of opaque components.
-
-#     These are summarized by a single globally exported action that
-#     non-deterministically calls all non-opaque actions that are
-#     transitively called by a globally exported opaque
-#     action. Assertions delegated to this summary action are not
-#     checked.
-
-# Rules for the collection of isolates
-
-#     Each assertion must be checked in all possible calling contexts,
-#     including external.
-
-#     To guarantee this, we require the following:
-
-#     1) Each non-delegating action must have the verified role in
-#     some isolate.
-
-#     2) Each *call* to a delegating action must have the verified role
-#     in some isolate.
-
-#     This means that a delegating action that is exported but not
-#     internally called will not have its assertions checked. 
-
-# Rules for global export of actions
-
-#     The external version of an action is exported from the isolate if:
-
-#     1) The action is originally globally exported and it is not opaque
-
-#     2) The action is not opaque and is called from any opaque action
-
-create_big_action = True
-
-def set_create_big_action(t):
-    global create_big_action
-    create_big_action = t
-
-interpret_all_sorts = False
-
-def set_interpret_all_sorts(t):
-    global interpret_all_sorts
-    interpret_all_sorts = t
-
-def startswith_some(s,prefixes):
-    return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
-
-def startswith_eq_some(s,prefixes):
-    return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
-
-def isolate_component(ag,isolate_name):
-    domain = ag.domain
-    if isolate_name not in ag.isolates:
-        raise IvyError(None,"undefined isolate: {}".format(isolate_name))
-    isolate = ag.isolates[isolate_name]
-    verified = set(a.relname for a in isolate.verified())
-    present = set(a.relname for a in isolate.present())
-    present.update(verified)
-    if not interpret_all_sorts:
-        for type_name in list(ivy_logic.sig.interp):
-            if not startswith_eq_some(type_name,present):
-                del ivy_logic.sig.interp[type_name]
-    print "interp: {}".format(ivy_logic.sig.interp) 
-    delegates = set(s.delegated() for s in ag.delegates)
-    for name in present:
-        if name not in domain.hierarchy and name not in ivy_logic.sig.sorts:
-            raise IvyError(None,"{} is not a module instance".format(name))
-    
-    new_actions = {}
-    use_mixin = lambda name: startswith_some(name,present)
-    mod_mixin = lambda m: m if startswith_some(name,verified) else m.prefix_calls('ext:')
-    all_mixins = lambda m: True
-    no_mixins = lambda m: False
-    after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
-    before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
-    for actname,action in ag.actions.iteritems():
-        ver = startswith_some(actname,verified)
-        pre = startswith_some(actname,present)
-        if pre: 
-            if not ver:
-                assert hasattr(action,'lineno')
-                assert hasattr(action,'formal_params'), action
-                ext_action = action.assert_to_assume().prefix_calls('ext:')
-                assert hasattr(ext_action,'lineno')
-                assert hasattr(ext_action,'formal_params'), ext_action
-                if actname in delegates:
-                    int_action = action.prefix_calls('ext:')
-                    assert hasattr(int_action,'lineno')
-                    assert hasattr(int_action,'formal_params'), int_action
-                else:
-                    int_action = ext_action
-                    assert hasattr(int_action,'lineno')
-                    assert hasattr(int_action,'formal_params'), int_action
-            else:
-                int_action = ext_action = action
-                assert hasattr(int_action,'lineno')
-                assert hasattr(int_action,'formal_params'), int_action
-            # internal version of the action has mixins checked
-            new_actions[actname] = add_mixins(ag,actname,int_action,no_mixins,use_mixin,lambda m:m)
-            # external version of the action assumes mixins are ok
-            new_action = add_mixins(ag,actname,ext_action,before_mixins,use_mixin,mod_mixin)
-            new_actions['ext:'+actname] = new_action
-            # TODO: external version is public if action public *or* called from opaque
-            # public_actions.add('ext:'+actname)
-        else:
-            # TODO: here must check that summarized action does not
-            # have a call dependency on the isolated module
-            action = summarize_action(action)
-            new_actions[actname] = add_mixins(ag,actname,action,after_mixins,use_mixin,mod_mixin)
-            new_actions['ext:'+actname] = add_mixins(ag,actname,action,all_mixins,use_mixin,mod_mixin)
-
-
-    # figure out what is exported:
-    exported = set()
-    for e in ag.exports:
-        if not e.scope() and startswith_some(e.exported(),present): # global scope
-            exported.add('ext:' + e.exported())
-    for actname,action in ag.actions.iteritems():
-        if not startswith_some(actname,present):
-            for c in action.iter_calls():
-                if startswith_some(c,present):
-                    exported.add('ext:' + c)
-#    print "exported: {}".format(exported)
-
-    if create_big_action:
-        ext_act = ia.ChoiceAction(*[new_actions[x] for x in sorted(exported)])
-        exported.add('ext');
-        new_actions['ext'] = ext_act;
-
-    # filter the conjectures
-
-    new_conjs = [c for c in domain.labeled_conjs if startswith_eq_some(str(c.label),present)]
-    del domain.labeled_conjs[:]
-    domain.labeled_conjs.extend(new_conjs)
-
-    print "conjectures:"
-    for c in domain.labeled_conjs:
-        print c
-
-    ag.public_actions.clear()
-    ag.public_actions.update(exported)
-    ag.actions.clear()
-    ag.actions.update(new_actions)
-
-    print "actions:"
-    for x,y in ag.actions.iteritems():
-        print iu.pretty("action {} = {}".format(x,y))
-    
 # collect actions in case of forward reference
 def collect_actions(decls):
     res = {}
@@ -640,83 +399,36 @@ def collect_actions(decls):
                 res[a.defines()] = a.formal_returns
     return res
 
-def ivy_compile(ag,decls):
-    with ag.domain.sig:
+def ivy_compile(decls,mod=None,create_isolate=True):
+    mod = mod or im.module
+    with mod.sig:
         for name in decls.defined:
-            ag.domain.add_to_hierarchy(name)
+            mod.add_to_hierarchy(name)
         with TopContext(collect_actions(decls.decls)):
-            IvyDomainSetup(ag.domain)(decls)
-            IvyConjectureSetup(ag.domain)(decls)
-            IvyARGSetup(ag)(decls)
-        ag.domain.macros = decls.macros
+            IvyDomainSetup(mod)(decls)
+            IvyConjectureSetup(mod)(decls)
+            IvyARGSetup(mod)(decls)
+        mod.macros = decls.macros
         # progress properties are not state symbols -- remove from sig
-        for p in ag.domain.progress:
+        for p in mod.progress:
             remove_symbol(p.defines())
-        ag.domain.type_check()
+        mod.type_check()
         # try instantiating all the actions to type check them
-        for name,action in ag.actions.iteritems():
+        for name,action in mod.actions.iteritems():
 #            print "checking: {} = {}".format(name,action)
-            type_check_action(action,ag.domain)
+            type_check_action(action,mod)
             if not hasattr(action,'lineno'):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
-
-        # HACK: code beyond here really does not belong in compile
-
-        # Construct an isolate
-
-        iso = isolate.get()
-        if iso:
-            isolate_component(ag,iso)
-        else:
-            # apply all the mixins in no particular order
-            for name,mixins in ag.mixins.iteritems():
-                for mixin in mixins:
-                    action1,action2 = (lookup_action(mixin,ag,a.relname) for a in mixin.args)
-                    mixed = ivy_actions.apply_mixin(mixin,action1,action2)
-                    ag.actions[mixin.args[1].relname] = mixed
-            # find the globally exported actions (all if none specified, for compat)
-            if ag.exports:
-                ag.public_actions.clear()
-                for e in ag.exports:
-                    if not e.scope(): # global export
-                        ag.public_actions.add(e.exported())
-            else:
-                for a in ag.actions:
-                    ag.public_actions.add(a)
-
-        # Check native interpretations of symbols
-
-        slv.check_compat()
-
-        # Make concept spaces from the conjecture
-
-        for i,cax in enumerate(ag.domain.labeled_conjs):
-            fmla = cax.formula
-            csname = 'conjecture:'+ str(i)
-            variables = list(lu.used_variables_ast(fmla))
-            sort = ivy_logic.RelationSort([v.sort for v in variables])
-            sym = ivy_logic.Symbol(csname,sort)
-            space = NamedSpace(ivy_logic.Literal(0,fmla))
-            ag.domain.concept_spaces.append((sym(*variables),space))
-
+    
             # print "actions:"
-            # for x,y in ag.actions.iteritems():
+            # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
-        if not ag.states:
-            ac = ag.context
-            with ac:
-                if ag.predicates:
-                    if not im.module.init_cond.is_true():
-                        raise IvyError(None,"init and state declarations are not compatible");
-                    for n,p in ag.predicates.iteritems():
-                        s = eval_state_facts(p)
-                        if s is not None:
-                            s.label = n
-                else:
-                    ag.add_initial_state(im.module.init_cond,ivy_alpha.alpha)
 
-    ivy_logic.sig = ag.domain.sig # TODO: make this an environment
+        if create_isolate:
+            iso.create_isolate(isolate.get(),mod)
+
+
 
 def clear_rules(modname):
     import sys
@@ -765,13 +477,12 @@ def import_module(name):
         mod = read_module(f,nested=True)
     return mod
 
-def ivy_load_file(f,ag):
+def ivy_load_file(f,**kwargs):
     decls = read_module(f)
-    ivy_compile(ag,decls)
+    ivy_compile(decls,**kwargs)
 
-def ivy_from_string(string):
-    ag = ivy_new()
+def ivy_from_string(string,**kwargs):
     import StringIO
     sio = StringIO.StringIO(string)
-    ivy_load_file(sio,ag)
-    return ag
+    ivy_load_file(sio,**kwargs)
+    return ivy_new()

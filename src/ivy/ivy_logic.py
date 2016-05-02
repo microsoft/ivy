@@ -361,14 +361,59 @@ def is_ea(term):
         return is_ae(term.args[0])
     return is_qf(term)
 
-logics = ["epr","fo"]
+logics = ["epr","qf"]
 
-def is_in_logic(term,logic):
+def subterms(term):
+    yield term
+    for a in term.args:
+        for b in subterms(a):
+            yield b
+
+def seg_var_pat(t):
+    return ((x if isinstance(x,lg.Var) else None) for x in t.args)
+
+def is_segregated(fmla):
+    fmla = drop_existentials(fmla)
+    vs = lu.used_variables(fmla)
+    apps = list(t for t in subterms(fmla) if isinstance(t,lg.Apply) and lu.used_variables(t))
+    byname = iu.partition(apps,lambda self:self.func.name)
+    for name,terms in byname.iteritems():
+        pat = seg_var_pat(terms[0])
+        pvs = set(x for x in pat if x != None)
+        if pvs != vs:
+            reason_text = "{} is not segrated (not all variables appear)".format(name)
+            return False
+        for t in terms[1:]:
+            if seg_var_pat(t) != pat:
+                reason_text = "{} is not segrated (variable positions differ)".format(name)
+                return False
+    return True
+            
+def reason():
+    global reason_text
+    return reason_text
+
+def is_in_logic(term,logic,unstrat = False):
+    global reason_text
     assert logic in logics
     if logic == "epr":
-        if lu.free_variables(term):
-            return is_prenex_universal(term)
-        return is_ea(term)
+        # ok = (is_prenex_universal(term)
+        #       if lu.free_variables(term) else is_ea(term))
+        # if not ok:
+        #     reason_text = "of quantifier alternation"
+        #     return False
+        cs = lu.used_constants(term)
+        for s in cs:
+            if s.name in sig.interp:
+                reason_text = "'{}' is iterpreted".format(s)
+                return False
+        if unstrat:
+            if not is_segregated(term):
+                reason_text = "formula is unsegregated"
+                return False
+        return True
+    elif logic == "qf":
+        return is_qf(term)
 
 
 def Constant(sym):
@@ -713,10 +758,13 @@ def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
 
 def interpreted_sorts():
-    return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name in sig.interp]
+    return [s for s in sig.sorts.values() if is_interpreted_sort(s)]
+
+def is_uninterpreted_sort(s):
+    return isinstance(s,UninterpretedSort) and s.name not in sig.interp
 
 def is_interpreted_sort(s):
-    return isinstance(s,UninterpretedSort) and s.name in sig.interp
+    return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()

@@ -23,7 +23,7 @@ from ivy_logic_parser import *
 def p_error(token):
     raise LogicParseError(token,"syntax error")
 
-#formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab',errorlog=yacc.NullLogger())
-formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
+formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab',errorlog=yacc.NullLogger())
+#formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 term_parser = yacc.yacc(start = 'term', tabmodule='ivy_termtab',errorlog=yacc.NullLogger())
 

@@ -55,6 +55,6 @@ with ivy_module.Module():
     dui = ui.decompose_node(ui.node(1))
     cg = dui.view_state(dui.node(4))
     cg.show_relation(cg.relation('c(X,Y)'),'+')
-    ui.mainloop()
+#    ui.mainloop()
 
 

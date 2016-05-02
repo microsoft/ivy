@@ -118,6 +118,12 @@ def compose_maps(m1,m2):
     res.update((x,m2.get(y,y)) for x,y in m1.iteritems())
     return res
 
+def partition(things,key):
+    res = collections.defaultdict(list)
+    for t in things:
+        res[key(t)].append(t)
+    return res
+
 # unique name generation
 
 def constant_name_generator():
@@ -187,8 +193,8 @@ class IvyError(Exception):
         if isinstance(self.lineno,tuple):
             self.filename,self.lineno = self.lineno
         self.msg = msg
-#        print repr(self)
-#        assert False
+        print repr(self)
+        assert False
     def __repr__(self):
         pre = (self.filename + ': ') if hasattr(self,'filename') else ''
         pre += "line {}: ".format(self.lineno) if self.lineno else ''
@@ -277,6 +283,12 @@ class BooleanParameter(Parameter):
                            check = lambda s: (s == "true" or s == "false"),
                            process = lambda s: s == "true")
 
+class EnumeratedParameter(Parameter):
+    """ Parameter that takes "true" for True and "false" for False """
+    def __init__(self,key,vals,init_val=None):
+        Parameter.__init__(self,key,init_val,
+                           check = lambda s, vals=vals: (s in vals),
+                           process = lambda s: s)
     
 
 
@@ -336,6 +348,25 @@ def topological_sort(items,order,key=lambda x:x):
                 d.add(k)
                 l.append(i)
     return list(reversed(l))
+
+def reachable(items,iter_succ,key=lambda x:x):
+    """ items is a list, key maps list elements to hashable keys,
+    order is a set of pairs of items representing a pre-order.  Returns a
+    list of descendants of items."""
+    m,s,l,d = set(),list(items),[],set()
+    while len(s) > 0:
+        i = s.pop()
+        k = key(i)
+        if not k in d:
+            if k not in m:
+                s.append(i)
+                s.extend(x for x in iter_succ(k) if key(x) != k)
+                m.add(k)
+            else:
+                d.add(k)
+                l.append(i)
+    return list(reversed(l))
+
 
 class ErrorPrinter(object):
     """ Context Manager that handles exceptions and reports errors. """
@@ -430,3 +461,14 @@ polymorphic_symbols = set(
 use_numerals = BooleanParameter("use_numerals",True)
 use_new_ui = BooleanParameter("new_ui",False)
 
+
+def dbg(*exprs):
+    """Print expressions evaluated in the caller's frame."""
+    import inspect
+    frame = inspect.currentframe()
+    try:
+        locs = frame.f_back.f_locals
+        for e in exprs:
+            print "{}:{}".format(e,eval(e,globals(),locs))
+    finally:
+        del frame
