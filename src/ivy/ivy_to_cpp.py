@@ -1250,7 +1250,6 @@ target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
 if __name__ == "__main__":
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
-    iso.set_create_big_action(False)
     iso.set_interpret_all_sorts(True)
     with im.Module():
         ivy.ivy_init()

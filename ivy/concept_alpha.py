@@ -8,6 +8,7 @@
 import ivy_solver as slvr
 from logic import Or, Not
 import time
+import ivy_utils as iu
 
 def alpha(concept_domain, state, cache=None, projection=None):
     """
@@ -26,12 +27,15 @@ def alpha(concept_domain, state, cache=None, projection=None):
 
     slvr.solver_add(solver,state)
 
+    iu.dbg('state')
+
     if cache is None:
         cache = dict()
     result = []
     for tag, formula in facts:
         if tag in cache:
             value = cache[tag]
+#           print "cached: {} = {}".format(tag,value)
         else:
             # assert len(cache) == 0, tag
             solver.push()
@@ -39,6 +43,7 @@ def alpha(concept_domain, state, cache=None, projection=None):
             value = not slvr.is_sat(solver)
             solver.pop()
             cache[tag] = value
+#            print "computed: {} = {}".format(tag,value)
 
         result.append((tag, value))
 

@@ -88,7 +88,7 @@ class ConceptInteractiveSession(object):
         return None
             
     def recompute(self,projection = None):
-        projection = projection or (lambda x,y: True)
+        projection = projection or (lambda *args: True)
         self.abstract_value = alpha(self.domain, self._to_formula(), self.cache,
                                     projection = projection)
         if self.widget is not None:
@@ -219,6 +219,17 @@ class ConceptInteractiveSession(object):
                         facts.append(Not(self.domain.concepts[nl](c)))
         return _normalize_facts(facts)
 
+    def _get_edge_fact(self,edge,source,target,polarity):
+        facts = []
+        edge_concept = self.domain.concepts[edge]
+        source_witnesses = self._get_witnesses(source)
+        target_witnesses = self._get_witnesses(target)
+        for source_c, target_c in product(source_witnesses, target_witnesses):
+            f = edge_concept(source_c, target_c)
+            facts.append(f if polarity else Not(f))
+
+        return _normalize_facts(facts)
+
     def get_edge_facts(self, edge, source, target, filter_polarity=None):
         """
         Returns a list of facts used by gather
@@ -245,15 +256,24 @@ class ConceptInteractiveSession(object):
         if filter_polarity is not None and filter_polarity != polarity:
             return []
 
-        facts = []
-        edge_concept = self.domain.concepts[edge]
-        source_witnesses = self._get_witnesses(source)
-        target_witnesses = self._get_witnesses(target)
-        for source_c, target_c in product(source_witnesses, target_witnesses):
-            f = edge_concept(source_c, target_c)
-            facts.append(f if polarity else Not(f))
+        return _get_edge_fact(edge,source,target,polarity)
 
-        return _normalize_facts(facts)
+    def get_facts(self,projection=None):
+        """
+        Returns a list of facts used by gather
+        """
+
+        facts = []
+        for node in self.domain.concepts['nodes']:
+            facts.extend(self.get_node_facts(node))
+        
+        for tag,value in self.abstract_value:
+            if value:
+                if tag[0] == 'edge_info' and tag[1] in ('none_to_none','all_to_all'):
+                    if projection is None or projection(tag[2],'edges',tag[1]):
+                        facts.extend(self._get_edge_fact(tag[2],tag[3],tag[4],tag[1]=='all_to_all'))
+
+        return facts
 
     def save_domain(self, name):
         self.analysis_session[name] = self.domain.copy()

@@ -61,7 +61,7 @@ def get_label_pos(element):
 # Remove formatting characters
 
 def get_label_text(element):
-    return get_label(element).replace('\\l', '')
+    return get_label(element).replace('\\l', '\n').replace('-[','{').replace(']-','}')
 
 def octagon_points(x0,y0,x1,y1):
     cut = 1.0 - (1.0 / (2.4142135623730951))

@@ -102,7 +102,7 @@ def concepts_from_sig(symbols,concepts):
         elif il.is_first_order_sort(rng):
             if len(dom) == 0:
                 add_domain_concept_fmla(concepts,Equals(Variable('X', rng),c))
-            elif len(dom == 1):
+            elif len(dom) == 1:
                 fmla = Equals(c(Variable('X', dom[0])),Variable('Y', rng))
                 add_domain_concept_fmla(concepts,fmla)
     
@@ -383,7 +383,7 @@ def is_numeral_concept(c):
 class Graph(object):
     def __init__(self,sorts,parent_state=None):
         self.parent_state = parent_state
-        concept_domain = initial_concept_domain(sorts)
+        self.sorts = sorts
 
         # dict mapping edge names to widget tuples
         self.edge_display_checkboxes = defaultdict(
@@ -394,8 +394,19 @@ class Graph(object):
             lambda: dict((x, Option()) for x in _node_label_display_checkboxes)
         )
 
-        self.concept_session = cis.ConceptInteractiveSession(concept_domain,And(),And(),cache={},recompute=True)
+        self.reset()
         render_concept_graph(self)
+
+    def reset(self):
+        
+        concept_domain = initial_concept_domain(self.sorts)
+        self.concept_session = cis.ConceptInteractiveSession(concept_domain,And(),And(),cache={},recompute=True)
+
+        if hasattr(self.parent_state,'universe'):
+            for n in self.nodes:
+                if n.sort in self.parent_state.universe:
+                    self.splatter(n,self.parent_state.universe[n.sort])
+
 
     @property
     def constraints(self):
@@ -418,7 +429,8 @@ class Graph(object):
         """ Return ids of all the concepts that need check-boxes """
         concepts = self.concept_domain.concepts
         nls = [n for n in concepts['node_labels'] if not is_numeral_concept(concepts[n])]
-        return (concepts['edges'] + nls + concepts['enum'])
+        rels = concepts['edges'] + nls + concepts['enum']
+        return sorted(rels,key=lambda r: self.concept_label(self.concept_from_id(r)))
 
     @property
     def default_labels(self):
@@ -515,11 +527,15 @@ class Graph(object):
         if recomp:
             self.recompute()
 
-    def set_state(self,clauses,recomp=True,clear_constraints=False):
+    def set_state(self,clauses,recomp=True,clear_constraints=False,reset=False):
         self.state = clauses        
-        self.concept_session.state = ilu.clauses_to_formula(clauses)
+        iu.dbg('self.concept_session.state')
+        
         if clear_constraints:
             self.concept_session.suppose_constraints = []
+        if reset:
+            self.reset()
+        self.concept_session.state = ilu.clauses_to_formula(clauses)
         self.state_changed(recomp)
 
     def set_concrete(self,clauses):
@@ -529,25 +545,10 @@ class Graph(object):
         self.concept_session.recompute(self.projection)
         self.cy_elements = dot_layout(render_concept_graph(self),subgraph_boxes=True)
 
-    # TODO: this seems to be unused -- remove?
     def get_facts(self,rels,definite=True):
-        clauses = []
-        if not definite:
-            clauses += [[~lit for lit in n.fmla] for n in self.all_nodes if n.status == "false"]
-            clauses += [rela_fact(1,equals,n,n)
-                        for n in self.all_nodes
-                        if (n.status != "false" and not n.summary and not any(is_equality_lit(lit) for lit in n.fmla))]
-        for n in self.all_nodes:
-            if n.status == 'true':
-                wit = get_witness(n)
-                if wit != None:
-                    fmla = substitute_clause(n.fmla,{'X':(wit)})
-                    clauses += [[lit] for lit in fmla if not is_taut_equality_lit(lit)]
-        names = set(n.name for n in self.all_nodes if (n.status == "true" if definite else n.status != "false"))
-        for (r,tvals) in rels:
-            if tvals:
-                clauses += r.get_definite_facts(names,tvals) if definite else r.get_facts(names,tvals)
-        return clauses
+        facts = self.concept_session.get_facts(self.projection)
+        iu.dbg('facts')
+        self.concept_session.suppose_constraints = facts
 
     def set_checkbox(self,obj,idx,val):
 
@@ -569,11 +570,18 @@ class Graph(object):
     def get_transitive_reduction(self):
         return [] # TODO: implement
         
-    def projection(self,concept_name,concept_class):
+    def projection(self,concept_name,concept_class,concept_combiner=None):
+        if concept_combiner is not None:
+            print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
         if concept_class in ('node_labels','edges'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
-            return any(boxes[i].value for i in boxes if i != 'transitive')
+            if concept_combiner is None:
+                res = any(boxes[i].value for i in boxes if i != 'transitive')
+            else:
+                res = boxes[concept_combiner].value
+                iu.dbg('res')
+            return res
         return True
 
     def copy(self):
@@ -615,6 +623,7 @@ class Graph(object):
             concepts[name].append(c1.name)
         self.concept_session.domain.split(node.name,name)
         self.recompute()
+        
 
     def add_constraints(self,cnstrs,recompute=True):
         self.concept_session.suppose_constraints.extend(cnstrs)
@@ -699,13 +708,9 @@ class GraphStack(object):
 def standard_graph(parent_state=None):
 
     sorts = [s for s in il.sig.sorts.values() if il.is_first_order_sort(s)]
-
+    
     g = Graph(sorts,parent_state)
-
-    if hasattr(parent_state,'universe'):
-        for n in g. nodes:
-            if n.sort in parent_state.universe:
-                g.splatter(n,parent_state.universe[n.sort])
+    
     return GraphStack(g)
     
 

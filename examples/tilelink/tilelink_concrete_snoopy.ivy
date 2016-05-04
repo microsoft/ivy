@@ -363,7 +363,7 @@ conjecture b.pend_rls(H,W) <-> back.none_r(H,W)
 
 conjecture b.cache_excl(H,W) <-> back.excl_p(addr_cons(H,W))
 
-conjecture b.cache_shrd(H,W) <-> back.shrd_p(addr_cons(H,W))
+# conjecture b.cache_shrd(H,W) <-> back.shrd_p(addr_cons(H,W))
 
 conjecture b.pend_excl(H,W) -> back.excl_r(H) | back.excl_a(H)
 

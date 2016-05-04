@@ -53,7 +53,7 @@ if __name__ == "__main__":
                 continue # skip if nothing to verify
             iu.dbg('isolate')
             with im.module.copy():
-                ivy_isolate.create_isolate(isolate)
+                ivy_isolate.create_isolate(isolate,ext='ext')
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
                 with utl.ErrorPrinter():
                     with ivy_interp.EvalContext(check=False):

@@ -28,6 +28,30 @@ class GraphWidget(object):
     def g(self):
         return self.graph_stack.current
 
+    # This defines the menus items we provide. The actual menus might be
+    # tool buttons or other such things.
+
+    def menus(self):
+        return [("menu","Action",
+                 [("button","Undo",self.undo),
+                  ("button","Redo",self.redo),
+                  ("button","Concrete",self.concrete),
+                  ("button","Gather",self.gather),
+                  ("button","Reverse",self.reverse),
+                  ("button","Path reach",self.path_reach),
+                  ("button","Reach",self.reach),
+                  ("button","Conjecture",self.conjecture),
+                  ("button","Backtrack",self.backtrack),
+                  ("button","Recalculate",self.recalculate),
+                  ("button","Diagram",self.diagram),
+                  ("button","Remember",self.remember),
+                  ("button","Export",self.export),
+                  ]),
+                ("menu","View",
+                 [("button","Add relation",self.add_concept_from_string),
+                  ])]
+
+
     def set_update_callback(self,update_callback):
         self.update_callback = update_callback
 
@@ -203,8 +227,7 @@ class GraphWidget(object):
         self.checkpoint()
         g = self.g
         rels = [(rel,self.displayed_relation_values(rel)) for rel in self.g.relations]
-        clauses = self.g.get_facts(rels)
-        g.constraints = Clauses(clauses)
+        self.g.get_facts(rels)
         self.update()
 
     # Push the goal back to the the state's predecessor, if possible.
@@ -282,12 +305,16 @@ class GraphWidget(object):
         self.g.splatter(node)
         self.update()
 
-    # Change the parent state, keeping concepts
+    # Change the parent state. Keeps the display checkboxes. If
+    # "reset" is false, also keeps the concepts. If reset is true,
+    # reverts to the default concepts.
 
-    def set_parent_state(self,new_parent_state,clauses = None):
+    def set_parent_state(self,new_parent_state,clauses = None,reset=False):
         self.checkpoint()
         self.g.parent_state = new_parent_state
-        self.g.set_state(clauses if clauses else new_parent_state.clauses)
+        self.g.set_state(clauses if clauses else new_parent_state.clauses, reset=reset)
+        iu.dbg('self.g.relation_ids')
+        self.update_relations()
         self.update()
                          
     # Check whether the goal is reachable in one step from
@@ -313,6 +340,8 @@ class GraphWidget(object):
     def set_state(self,clauses):
         self.checkpoint()
         self.g.set_state(clauses)
+        iu.dbg('self.g.relation_ids')
+        self.update_relations()
         self.update()
 
     # Check reachability of the goal along the path the current state.

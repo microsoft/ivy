@@ -7,6 +7,7 @@ import pickle
 import string
 from ivy_compiler import IvyError, ivy_new, ivy_load_file
 from tk_ui import ui_main_loop
+from ivy_ui import get_default_ui_compile_kwargs
 from ivy_utils import Parameter, set_parameters
 import ivy_logic
 import proof as pf
@@ -93,7 +94,7 @@ def ivy_init():
         fn,f = files.pop(0)
         if not fn.endswith('.ivy') and not fn.endswith('.dfy'):
             usage()
-        source_file(fn,f)
+        source_file(fn,f,**get_default_ui_compile_kwargs())
 
         if ag:
             ag.update_module()

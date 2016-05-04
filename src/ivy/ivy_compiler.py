@@ -385,7 +385,7 @@ def ivy_new(filename = None):
         if not f:
             raise IvyError(None,"not found: %s" % filename)
         ivy_load_file(f)
-    ag = AnalysisGraph(initializer=ivy_alpha.alpha)
+    ag = AnalysisGraph()
     return ag
 
 isolate = iu.Parameter("isolate")    
@@ -399,7 +399,7 @@ def collect_actions(decls):
                 res[a.defines()] = a.formal_returns
     return res
 
-def ivy_compile(decls,mod=None,create_isolate=True):
+def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
         for name in decls.defined:
@@ -426,7 +426,7 @@ def ivy_compile(decls,mod=None,create_isolate=True):
             #     print iu.pretty("action {} = {}".format(x,y))
 
         if create_isolate:
-            iso.create_isolate(isolate.get(),mod)
+            iso.create_isolate(isolate.get(),mod,**kwargs)
 
 
 

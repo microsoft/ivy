@@ -12,6 +12,7 @@ import ivy_actions
 import ivy_graph_ui
 import ivy_alpha
 from ivy_art import AnalysisGraph, AnalysisSubgraph
+from ivy_graph_ui import GraphWidget
 import ivy_ui_util as uu
 import ivy_utils as iu
 
@@ -25,7 +26,7 @@ import ivy_utils as iu
 modes = ["abstract","concrete","bounded","induction"]
 default_mode = iu.Parameter("mode","abstract",lambda s: s in modes)
 
-class AnalysisGraphWidget(object):
+class AnalysisGraphUI(object):
 
     # This defines the menus items we provide. The actual menus might be
     # tool buttons or other such things.
@@ -52,6 +53,21 @@ class AnalysisGraphWidget(object):
     @property 
     def mode(self):
         return self.radiobutton('mode')
+
+    # This is called on startup of the ui. We initialize by creating an intitial
+    # node in the ART. Whether we abstract or not depends on the mode. For historical
+    # reasons, abstract mode uses a concrete initial state.
+
+    def start(self):
+        self.g.initialize(self.init_alpha())
+
+    def init_alpha(self):
+        if 'mode' in self.radios:
+            return (None if (self.mode.get() == "concrete" or self.mode.get() == "abstract")
+                    else ivy_alpha.alpha if self.mode.get() == "induction"
+                    else top_alpha)
+        return top_alpha
+        
 
     # Save the current arg and maybe concept graph in a file
 
@@ -101,13 +117,13 @@ class AnalysisGraphWidget(object):
 
     # Show a state in the current concept graph, or create a concept graph
 
-    def view_state(self,n,clauses = None):
+    def view_state(self,n,clauses = None, reset=False):
         clauses = clauses or n.clauses
         print "state: {}".format(clauses)
         if hasattr(self,'current_concept_graph'):
            #  and self.current_concept_graph.winfo_exists():
             print "current cg: {}".format(type(self.current_concept_graph))
-            self.current_concept_graph.set_parent_state(n,clauses)
+            self.current_concept_graph.set_parent_state(n,clauses,reset=reset)
             return
         sg = self.g.concept_graph(n,clauses)
         self.current_concept_graph = self.show_graph(sg)
@@ -521,6 +537,9 @@ class AnalysisGraphWidget(object):
             return
         self.ui_parent.add(res)
 
+    def CGUI(self):
+        # This returns the default Concept Graph UI class
+        return GraphWidget
 
 def state_equation_label(se):
     ac = se.args[0]
@@ -528,13 +547,35 @@ def state_equation_label(se):
     return al if ac is None else al + ' -> ' + str(se.args[0])
 
 class IvyUI(object):
-    pass
+
+    # This returns the default Analysis Graph UI class
+    def AGUI(self):
+        return AnalysisGraphUI
 
 ui = None
 
 def ui_main_loop(art, tk = None, frame = None):
     ui_create(art,tk,frame)
     ui.tk.mainloop()
+
+default_ui = iu.Parameter("ui",None)
+
+compile_kwargs = {}
+
+def get_default_ui_module():
+    defui = default_ui.get()
+    if defui is None:
+        return sys.modules[__name__]
+    return __import__(defui)
+    
+def get_default_ui_class():
+    mod = get_default_ui_module()
+    return mod.IvyUI
+
+def get_default_ui_compile_kwargs():
+    mod = get_default_ui_module()
+    return mod.compile_kwargs
+    
 
 
 if __name__ == '__main__':

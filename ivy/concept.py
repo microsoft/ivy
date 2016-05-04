@@ -220,6 +220,8 @@ class ConceptDomain(object):
         ]
 
                 
+    # TODO: this ignores projection
+
     def get_comb_facts(self,combination_name, combiner_class, concept_names, facts):
         combiner_names = _resolve_name(self.combiners, combiner_class)
         for concept_combo in product(*concept_names):

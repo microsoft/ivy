@@ -37,7 +37,7 @@ class RunContext(object):
 # ARG's. There is a single window on the right hand side displaying a
 # concept graph (usually the current proof goal or concrete state).
 
-class TkUI(ivy_ui.IvyUI):
+class TkUI(object):
 
     def __init__(self,tk=None,frame=None):
         if tk == None:
@@ -54,6 +54,8 @@ class TkUI(ivy_ui.IvyUI):
         self.tab_counter = 0
         self.tabs = 0
         self.answers = []
+        self.analysisGraphWidgetClass = type('AGWC',(TkAnalysisGraphWidget,self.AGUI()),{})
+
         
     # run the ui
 
@@ -87,7 +89,7 @@ class TkUI(ivy_ui.IvyUI):
         hbar.pack(side=BOTTOM,fill=X)
         vbar=Scrollbar(frame,orient=VERTICAL)
         vbar.pack(side=RIGHT,fill=Y)
-        gw = TkAnalysisGraphWidget(tk,art,frame)
+        gw = self.analysisGraphWidgetClass(tk,art,frame)
         gw.state_frame=state_frame
         gw.ui_parent = self
         gw.ui_tab_name = name
@@ -97,6 +99,7 @@ class TkUI(ivy_ui.IvyUI):
         for sg in art.state_graphs:
             tk_graph_ui.show_graph(sg,tk,parent=gw,frame=state_frame,ui_parent=this)
         nb.raise_page(name)
+        gw.start()
         return gw
 
     def remove(self,art):
@@ -128,8 +131,8 @@ class TkUI(ivy_ui.IvyUI):
     # selects "Cancel", on_cancel is called. If on_cancel is None
     # no "Cancel" button is provided.
 
-    def listbox_dialog(self,msg,items,command=lambda:None,on_cancel=lambda:None):
-        uu.listbox_dialog(self.tk,self.frame,msg,items,command,on_cancel)
+    def listbox_dialog(self,msg,items,command=lambda:None,on_cancel=lambda:None,multiple=False):
+        uu.listbox_dialog(self.tk,self.frame,msg,items,command,on_cancel,multiple)
 
     # Create a dialog showing a message and some text.  The command is
     # called when the user selects "OK". If the user selects "Cancel",
@@ -190,33 +193,15 @@ class TkUI(ivy_ui.IvyUI):
         return self.answers.pop() if self.answers else None
         
 
-class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
+class TkAnalysisGraphWidget(tk_cy.TkCyCanvas,uu.WithMenuBar):
 
     def __init__(self,tk,g,root=None,toplevel=None):
         if root == None:
             root = tk
         if toplevel==None:
             toplevel=root
-        self.radios = {}
 
-        menubar = uu.MenuBar(root)
-        menubar.pack(side=TOP,fill=X)
-        for mtype,mname,mcontents in self.menus():
-            menu = menubar.add(mname)
-            for mitem in mcontents:
-                itype = mitem[0]
-                if itype == "button":
-                    menu.add_command(label=mitem[1],command=mitem[2])
-                elif itype == "separator":
-                    menu.add_separator()
-                elif itype == "radiobuttons":
-                    ivar = StringVar(root,mitem[2])
-                    self.radios[mitem[1]] = ivar
-                    for rblabel,rbvalue in mitem[3]:
-                        menu.add("radiobutton",label=rblabel,variable=ivar,value=rbvalue)
-                else:
-                    assert False,itype
-
+        uu.WithMenuBar.__init__(self,root)
         Canvas.__init__(self,root)
         self.g = g
         self.tk = tk
@@ -224,10 +209,8 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
         self.mark = None
 #        tk.eval('package require Tcldot')
         self.pack(fill=BOTH,expand=1)
+        self.graphWidgetClass = type('GWC',(tk_graph_ui.TkGraphWidget,self.CGUI()),{})
         self.rebuild()
-
-    def radiobutton(self,name):
-        return self.radios[name]
 
     # Get styles for nodes
 
@@ -305,8 +288,14 @@ class TkAnalysisGraphWidget(ivy_ui.AnalysisGraphWidget,tk_cy.TkCyCanvas):
                      for f in (get_source_obj,get_obj,get_label,get_target_obj))
 
 
-def new_ui():
-    ivy_ui.ui = TkUI()
+# Tricky. Rather that have seprate "ui" and "gui" objects that call
+# eachother, we treat the gui objects as mixins. This function takes a
+# ui class, mixes it with the gui and instantiates.
+
+def new_ui(ui_class = None):
+    ui_class = ui_class or ivy_ui.get_default_ui_class()
+    tkui_class = type('TkUImixed',(TkUI,ui_class),{})
+    ivy_ui.ui = tkui_class()
     return ivy_ui.ui
     
 def ui_main_loop(art):

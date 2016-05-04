@@ -19,6 +19,32 @@ class MenuBar(Frame):
         w.config(menu=m)
         return m
 
+class WithMenuBar(object):
+    def __init__(self,root):
+
+        self.radios = {}
+
+        menubar = MenuBar(root)
+        menubar.pack(side=TOP,fill=X)
+        for mtype,mname,mcontents in self.menus():
+            menu = menubar.add(mname)
+            for mitem in mcontents:
+                itype = mitem[0]
+                if itype == "button":
+                    menu.add_command(label=mitem[1],command=mitem[2])
+                elif itype == "separator":
+                    menu.add_separator()
+                elif itype == "radiobuttons":
+                    ivar = StringVar(root,mitem[2])
+                    self.radios[mitem[1]] = ivar
+                    for rblabel,rbvalue in mitem[3]:
+                        menu.add("radiobutton",label=rblabel,variable=ivar,value=rbvalue)
+                else:
+                    assert False,itype
+
+    def radiobutton(self,name):
+        return self.radios[name]
+
 class FileBrowser(Frame):
     def __init__(self,root):
         Frame.__init__(self,root)
@@ -83,16 +109,16 @@ def destroy_then_aux(dlg,command):
 def destroy_then(dlg,command):
     return functools.partial(destroy_then_aux,dlg,command)
 
-def destroy_then_command_on_selection_aux(dlg,lbox,command):
+def destroy_then_command_on_selection_aux(dlg,lbox,command,mult):
     sel = map(int, lbox.curselection())
     dlg.destroy()
     if sel:
-        command(sel[0])
+        command(sel if mult else sel[0])
 
-def destroy_then_command_on_selection(dlg,lbox,command):
-    return functools.partial(destroy_then_command_on_selection_aux,dlg,lbox,command)
+def destroy_then_command_on_selection(dlg,lbox,command,mult):
+    return functools.partial(destroy_then_command_on_selection_aux,dlg,lbox,command,mult)
 
-def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None):
+def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None,multiple=False):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
     S = Scrollbar(dlg)
@@ -103,7 +129,7 @@ def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None):
     T.config(yscrollcommand=S.set)
     for item in items:
         T.insert(END, item)
-    b = Button(dlg, text="OK", command=destroy_then_command_on_selection(dlg,T,command))
+    b = Button(dlg, text="OK", command=destroy_then_command_on_selection(dlg,T,command,multiple))
     b.pack(padx=5,side=TOP)
     if on_cancel != None:
         b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
@@ -180,6 +206,7 @@ def buttons_dialog_cancel(tk,root,msg,button_commands,on_cancel=lambda:None):
     b.pack(padx=5,side=TOP)
     center_window_on_window(dlg,root)
     tk.wait_window(dlg)
+
 
 class RunContext(object):
     """ Context Manager that handles exceptions and reports errors. """

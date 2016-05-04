@@ -136,11 +136,6 @@ def summarize_action(action):
 
 
 
-create_big_action = True
-
-def set_create_big_action(t):
-    global create_big_action
-    create_big_action = t
 
 interpret_all_sorts = False
 
@@ -235,11 +230,6 @@ def isolate_component(mod,isolate_name):
                     exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
-    if create_big_action:
-        ext_act = ia.ChoiceAction(*[new_actions[x] for x in sorted(exported)])
-        exported.add('ext');
-        new_actions['ext'] = ext_act;
-
 
     # We allow objects to reference any symbols in global scope, and
     # we keep axioms declared in global scope. Because of the way
@@ -333,7 +323,9 @@ def get_mixin_order(iso,mod):
         mod.mixins[action] = mixins
         
 
-def create_isolate(iso,mod = None):
+ext_action = iu.Parameter("ext",None)
+
+def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
 
@@ -375,6 +367,14 @@ def create_isolate(iso,mod = None):
             else:
                 for a in mod.actions:
                     mod.public_actions.add(a)
+
+        # Create one big external action if requested
+
+        ext = kwargs['ext'] if 'ext' in kwargs else ext_action.get()
+        if 'ext' is not None:
+            ext_act = ia.ChoiceAction(*[mod.actions[x] for x in sorted(mod.public_actions)])
+            mod.public_actions.add(ext);
+            mod.actions[ext] = ext_act;
 
         # Check native interpretations of symbols
 

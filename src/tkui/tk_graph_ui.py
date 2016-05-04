@@ -26,15 +26,15 @@ edge_styles = {
     'edge_unknown' : {'width' : 2, 'dash' : (2,2)},
     }
 
-class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
+class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
 
     def __init__(self,tk,gs,root=None,ui_parent=None):
         if root == None:
             root = tk
+        uu.WithMenuBar.__init__(self,root)
         Canvas.__init__(self,root)
         self.graph_stack = gs
         self.tk = tk
-        self.pack(fill=BOTH,expand=1)
         self.root = root
         self.rel_enabled = dict()
         self.update_callback = None
@@ -150,8 +150,20 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
                 bb = self.bbox(ALL)
                 if not bb or bb == None: # what does bbox return if canvas is empty?
                     bb = (3,3,3,3) # put text somewhere if empty canvas
-                text = ['Constraints:\n' + '\n'.join(str(clause) for clause in g.constraints.conjuncts())]
-                self.create_text((bb[0],bb[3]),anchor=NW,text=text)
+                x,y = (bb[0],bb[3] + 5)
+                item = self.create_text((x,y),anchor=NW,text='Constraints:')
+                y = self.bbox(item)[3]
+                self.selected_constraints = [True for idx in g.constraints.conjuncts()]
+                for idx,clause in enumerate(g.constraints.conjuncts()):
+                    tag = 'cnst{}'.format(idx)
+                    item = self.create_text((x,y),anchor=NW,text=str(clause),tags=tag)
+                    action = lambda y, idx=idx, item=item: self.left_click_constraint (idx,item)
+                    self.tag_bind(tag, "<Button-1>", action)
+                    y = self.bbox(item)[3]
+                    
+                # text = ['Constraints:\n' + '\n'.join(str(clause) for clause in g.constraints.conjuncts())]
+                # item = self.create_text((x,y),anchor=NW,text=text)
+                # iu.dbg('self.bbox(item)')
 
             # set the scroll region
 
@@ -159,6 +171,22 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,TkCyCanvas):
 
             # TODO: isn't this the same as above???
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
+
+
+    def left_click_constraint(self,idx,item):
+        self.selected_constraints[idx] = not self.selected_constraints[idx]
+        self.itemconfig(item,fill='black' if self.selected_constraints[idx] else 'grey')
+
+    def get_active_facts(self):
+        """
+        Return a list of the selected facts
+        """
+        facts = self.g.constraints.conjuncts()
+        if hasattr(self,'selected_constraints'):
+            sc = self.selected_constraints
+            if len(sc) == len(facts): # paranoia
+                facts = [x for x,y in zip(facts,sc) if y]
+        return facts
 
 
     def show_mark(self,on=True):
@@ -212,13 +240,17 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
     legend = Frame(frame)
 #    legend = Tix.ScrolledWindow(frame, scrollbar=Y) # just the vertical scrollbar
     legend.pack(side=RIGHT,fill=Y)
-    menubar = uu.MenuBar(frame)
-    menubar.pack(side=TOP,fill=X)
+    
+
+#    menubar = uu.MenuBar(frame)
+#    menubar.pack(side=TOP,fill=X)
+    gw = parent.graphWidgetClass(tk,g,frame,ui_parent=ui_parent)
     hbar=Scrollbar(frame,orient=HORIZONTAL)
     hbar.pack(side=BOTTOM,fill=X)
     vbar=Scrollbar(frame,orient=VERTICAL)
     vbar.pack(side=RIGHT,fill=Y)
-    gw = TkGraphWidget(tk,g,frame,ui_parent=ui_parent)
+    gw.pack(fill=BOTH,expand=1)
+
     gw.parent = parent
     hbar.config(command=gw.xview)
     vbar.config(command=gw.yview)
@@ -230,27 +262,6 @@ def show_graph(g,tk=None,frame=None,parent=None,ui_parent=None):
     update_relbuttons(gw,relbuttons)
     gw.set_update_callback(functools.partial(update_relbuttons,gw,relbuttons))
 
-#    menubar = Menu(frame)
-    actionmenu = menubar.add("Action")
-#    actionmenu = Menu(menubar, tearoff=0)
-    actionmenu.add_command(label="Undo",command=gw.undo)
-    actionmenu.add_command(label="Redo",command=gw.redo)
-    actionmenu.add_command(label="Concrete",command=gw.concrete)
-    actionmenu.add_command(label="Gather",command=gw.gather)
-    actionmenu.add_command(label="Reverse",command=gw.reverse)
-    actionmenu.add_command(label="Path reach",command=gw.path_reach)
-    actionmenu.add_command(label="Reach",command=gw.reach)
-    actionmenu.add_command(label="Conjecture",command=gw.conjecture)
-    actionmenu.add_command(label="Backtrack",command=gw.backtrack)
-    actionmenu.add_command(label="Recalculate",command=gw.recalculate)
-    actionmenu.add_command(label="Diagram",command=gw.diagram)
-    actionmenu.add_command(label="Remember",command=gw.remember)
-    actionmenu.add_command(label="Export",command=gw.export)
-#    menubar.add_cascade(label="Action", menu=actionmenu)
-    viewmenu = menubar.add("View")
-    viewmenu.add_command(label="Add relation",command=gw.add_concept_from_string)
-#    menubar.add_cascade(label="View", menu=viewmenu)
-#    frame.config(menu=menubar)
     return gw
 
     # undo = Button(legend,text="Undo",command=gw.undo)
@@ -291,7 +302,8 @@ def update_relbuttons(gw,relbuttons):
     foo.grid(row = 0, column = 2)
     foo = Label(btns,text = 'T')
     foo.grid(row = 0, column = 4)
-    rels = list(sorted(enumerate(gw.g.relation_ids),key=lambda r:r[1]))
+#    rels = list(sorted(enumerate(gw.g.relation_ids),key=lambda r:r[1]))
+    rels = enumerate(list(gw.g.relation_ids))
     line_color = gw.line_color
     for idx,(num,rel) in enumerate(rels):
         label = gw.g.concept_label(gw.g.concept_from_id(rel))

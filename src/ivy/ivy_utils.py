@@ -147,7 +147,7 @@ def unused_name_with_base(base,used_names):
     
 
 class UniqueRenamer(object):
-    def __init__(self,prefix,used):
+    def __init__(self,prefix='',used=[]):
         self.prefix, self.used = prefix, set(str(s) for s in used)
     def __call__(self,name = ''):
         thing = self.prefix+name
