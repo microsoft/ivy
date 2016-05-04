@@ -7,6 +7,8 @@ import ivy_logic_utils as ilu
 import logic_util as lu
 import ivy_utils as iu
 import ivy_graph_ui
+import ivy_actions as ia
+
 from concept import (get_initial_concept_domain,
                      get_diagram_concept_domain,
                      get_structure_concept_domain,
@@ -128,6 +130,8 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                                    '\n'.join(str(conj) for conj in self.conjectures))
         return True
 
+
+
     def set_states(self,s0,s1):
         iu.dbg('s0.universe')
         sui = self.view_state(s0, reset=True)
@@ -159,6 +163,7 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                   ("button","Gather",self.gather),
                   ("button","Conjecture",self.conjecture),
                   ("button","Strengthen",self.strengthen),
+                  ("button","Bounded check",self.bmc_conjecture),
                   ("button","Export",self.export),
                   ]),
                 ("menu","View",
@@ -219,3 +224,74 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
     def conjecture(self):
         print self.get_selected_conjecture()
+
+
+    def bmc_conjecture(self, button=None, bound = None, conjecture=None, verbose=False, add_to_crg=True):
+        import ivy_transrel
+        import ivy_solver
+        from proof import ProofGoal
+        from ivy_logic_utils import Clauses, and_clauses, dual_clauses
+
+        # get the bound, if not specified
+
+        if bound is None:
+            c = lambda b: self.bmc_conjecture(button=button, bound=b, conjecture=conjecture,
+                                              verbose=verbose, add_to_crg=add_to_crg)
+            self.ui_parent.int_dialog('Number of steps to check:',
+                                        command = c, minval=0)
+            return
+
+        # TODO: get from somewhere else
+        step_action = im.module.actions['ext']
+        
+        n_steps = bound
+
+        if conjecture is None:
+            conj = self.get_selected_conjecture()
+        else:
+            conj = conjecture
+
+        assert conj.is_universal_first_order()
+        used_names = frozenset(x.name for x in il.sig.symbols.values())
+        def witness(v):
+            c = lg.Const('@' + v.name, v.sort)
+            assert c.name not in used_names
+            return c
+        clauses = dual_clauses(conj, witness)
+
+        ag = self.parent.new_ag()
+        with ag.context as ac:
+            post = ac.new_state(ag.init_cond)
+        if 'initialize' in im.module.actions:
+            init_action = im.module.actions['initialize']
+            post = ag.execute(init_action, None, None, 'initialize')
+
+        for n in range(n_steps + 1):
+            res = ag.bmc(post, clauses)
+            if verbose:
+                if res is None:
+                    msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                else:
+                    msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
+                        n,
+                        str(conj.to_formula()),
+                    )
+                print '\n' + msg + '\n'
+            if res is not None:
+#                ta.step()
+                self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
+                                           str(conj.to_formula()),
+                                           command = lambda: self.ui_parent.add(res),
+                                           command_label = 'View')
+                return True
+            post = ag.execute(step_action, None, None, 'ext')
+
+        self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
+                                   str(conj.to_formula()),
+                                   on_cancel = None)
+                                   
+        return False
+

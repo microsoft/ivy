@@ -139,8 +139,16 @@ class TkUI(object):
     # on_cancel is called. If on_cancel is None no "Cancel" button is
     # provided. Parameter command_label is alternative text for "OK".
 
-    def text_dialog(self,msg,text,command=lambda:None,on_cancel=lambda:None,command_label=None):
-        uu.text_dialog(self.tk,self.frame,msg,text,command,on_cancel,command_label,ans=self.getans())
+    def text_dialog(self,msg,text,**kwargs):
+        uu.text_dialog(self.tk,self.frame,msg,text,ans=self.getans(),**kwargs)
+
+    # Create a dialog showing a message and requesting an integer input. The command is
+    # called when the user selects "OK". If the user selects "Cancel",
+    # on_cancel is called. If on_cancel is None no "Cancel" button is
+    # provided. Parameter command_label is alternative text for "OK".
+
+    def int_dialog(self,msg,**kwargs):
+        uu.int_dialog(self.tk,self.frame,msg,**kwargs)
 
     # Create a dialog showing a message and antry.  The command is
     # called with the entry contents when the user selects "OK". If

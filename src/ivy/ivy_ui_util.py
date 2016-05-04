@@ -177,6 +177,18 @@ def entry_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,command_l
     center_window_on_window(dlg,root)
     tk.wait_window(dlg)
 
+def _convert_to_int(s,minval,maxval):
+    try:
+        v = int(s)
+    except:
+        raise IvyError(None,'Entered value "{}" is not an integer'.format(s))
+    if (minval and v < minval) or (maxval and v > maxval):
+        raise IvyError(None,'Entered value "{}" is out of range'.format(v))
+    return v
+
+def int_dialog(tk,root,msg,minval=None,maxval=None,command=lambda:None,**kwargs):
+    action = lambda s: command(_convert_to_int(s,minval,maxval))
+    entry_dialog(tk,root,msg,command=action,**kwargs)
 
 def ok_cancel_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None):
     dlg = Toplevel(root)
