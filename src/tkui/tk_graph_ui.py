@@ -173,8 +173,8 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
             tk.eval(self._w + ' configure -scrollregion [' + self._w + ' bbox all]')
 
 
-    def left_click_constraint(self,idx,item):
-        self.selected_constraints[idx] = not self.selected_constraints[idx]
+    def left_click_constraint(self,idx,item,val=None):
+        self.selected_constraints[idx] = val if val is not None else not self.selected_constraints[idx]
         self.itemconfig(item,fill='black' if self.selected_constraints[idx] else 'grey')
 
     def get_active_facts(self):
@@ -188,6 +188,12 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
                 facts = [x for x,y in zip(facts,sc) if y]
         return facts
 
+    def select_fact(self,fact,val=None):
+        if hasattr(self,'selected_constraints'):
+            for idx,f in enumerate(self.g.constraints.conjuncts()):
+                if f == fact and idx < len(self.selected_constraints):
+                    for item in self.find_withtag('cnst{}'.format(idx)):
+                        self.left_click_constraint(idx,item,val)
 
     def show_mark(self,on=True):
         if hasattr(self,'mark'):

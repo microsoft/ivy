@@ -162,10 +162,12 @@ def text_dialog(tk,root,msg,text,command=lambda:None,on_cancel=lambda:None,comma
         return
     tk.wait_window(dlg)
 
-def entry_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,command_label=None):
+def entry_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,command_label=None,initval=None):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
     e = Entry(dlg)
+    if initval is not None:
+        e.insert(0,str(initval))
     e.focus()
     e.pack()
     action = destroy_then(dlg,lambda command=command, e=e: command(e.get()))

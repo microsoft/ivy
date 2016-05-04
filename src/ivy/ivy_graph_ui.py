@@ -230,6 +230,21 @@ class GraphWidget(object):
         self.g.get_facts(rels)
         self.update()
 
+    # Set the current facts
+    
+    def set_facts(self,facts):
+        self.checkpoint()
+        self.g.set_facts(facts)
+        self.update()
+        
+    # Find a current fact whose printed form is "text"
+
+    def fact(self,text):
+        for fact in self.g.constraints.conjuncts():
+            if str(fact) == text:
+                return fact
+        raise KeyError
+
     # Push the goal back to the the state's predecessor, if possible.
     # If infeasible, refine the abstract domain with an interpolant.
     # Sets the current goal as a backtrack point.
@@ -479,10 +494,13 @@ class GraphWidget(object):
 
     # tick a checkbox on a concept
 
-    def show_relation(self,concept,boxes='+',value=True):
+    def show_relation(self,concept,boxes='+',value=True,update=True):
+        iu.dbg('concept')
         for box in boxes:
             self.show_edge(concept,box,value)
-        self.update()
+        if update:
+            self.update()
+
 
 if __name__ == '__main__':
     nodes = [("p",to_clause("[]"))]

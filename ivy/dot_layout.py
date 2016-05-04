@@ -176,7 +176,7 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     for e in elements:
         if e["group"] == "edges":
 #            kwargs = {'weight': weight.get(e["data"]["obj"], 0)},
-            kwargs = {'label':e["data"]["label"]}  if edge_labels else {}
+            kwargs = {'label':e["data"]["label"]}  if edge_labels else {'label':' fooooooooo '}
             g.add_edge(
                 e["data"]["source"],
                 e["data"]["target"],

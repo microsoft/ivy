@@ -515,6 +515,9 @@ class Graph(object):
                     il.add_symbol(str(c),c.sort)
             return concept_from_formula(ilu.to_formula(text))
 
+    def formula_to_concept(self,fmla):
+        return concept_from_formula(fmla)
+
     def new_relation(self,concept):
         add_domain_concept(self.concept_domain.concepts,concept)
             
@@ -548,6 +551,9 @@ class Graph(object):
     def get_facts(self,rels,definite=True):
         facts = self.concept_session.get_facts(self.projection)
         iu.dbg('facts')
+        self.concept_session.suppose_constraints = facts
+
+    def set_facts(self,facts):
         self.concept_session.suppose_constraints = facts
 
     def set_checkbox(self,obj,idx,val):

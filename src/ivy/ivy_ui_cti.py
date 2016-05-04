@@ -45,9 +45,12 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
     def start(self):
         ivy_ui.AnalysisGraphUI.start(self)
         self.transitive_relations = []
-        self.relations_to_minimize = Thing('')
+        self.transitive_relation_concepts = []
+        self.relations_to_minimize = Thing('relations to minimize')
         self.conjectures = im.module.conjs
         self.view_state(self.node(0))
+        self.autodetect_transitive()
+        
 
 
     def CGUI(self):
@@ -57,6 +60,38 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         from ivy_art import AnalysisGraph
         ag = AnalysisGraph()
         return ag
+
+    def autodetect_transitive(self):
+        import logic as lg
+        from ivy_logic_utils import Clauses
+        from ivy_solver import clauses_imply
+        from concept import Concept
+
+#        self.edge_display_checkboxes['=']['transitive'].value = True
+#        self.edge_display_checkboxes['=']['all_to_all'].value = True
+
+        self.transitive_relations = []
+        self.transitive_relation_concepts = []
+
+        axioms = im.module.background_theory()
+        for c in il.sig.symbols.values():
+            if (type(c.sort) is lg.FunctionSort and
+                c.sort.arity == 2 and
+                c.sort.domain[0] == c.sort.domain[1] and
+                c.sort.range == lg.Boolean):
+                X = lg.Var('X', c.sort.domain[0])
+                Y = lg.Var('Y', c.sort.domain[0])
+                Z = lg.Var('Z', c.sort.domain[0])
+                transitive = lg.ForAll([X, Y, Z], lg.Or(lg.Not(c(X,Y)), lg.Not(c(Y,Z)), c(X,Z)))
+                defined_symmetry = lg.ForAll([X, Y], lg.Or(c(X,X), lg.Not(c(Y,Y))))
+                t = Clauses([transitive, defined_symmetry])
+                if clauses_imply(axioms, t):
+                    self.transitive_relations.append(c.name)
+                    concept = self.current_concept_graph.g.formula_to_concept(c(X,Y))
+                    self.transitive_relation_concepts.append(concept)
+                    self.current_concept_graph.show_relation(concept,'T')
+        if self.transitive_relations:
+            self.current_concept_graph.update()
 
     def check_inductiveness(self, button=None):
         import ivy_transrel
@@ -115,10 +150,12 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 assert len(res.states) == 2
                 rels = self.current_concept_graph.g.relations
                 used = lu.used_constants(clauses.to_formula())
+#                self.set_states(res.states[0], res.states[1])
+                self.cti = self.ui_parent.add(res)
                 for rel in rels:
                     if any(c in used for c in lu.used_constants(rel.formula)):
-                        self.current_concept_graph.show_relation(rel,'+')
-                self.set_states(res.states[0], res.states[1])
+                        self.cti.current_concept_graph.show_relation(rel,'+',update=False)
+                self.cti.current_concept_graph.update()
                 #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                 self.show_result('The following conjecture is not inductive:\n{}'.format(
                     str(conj.to_formula()),
@@ -134,8 +171,8 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
     def set_states(self,s0,s1):
         iu.dbg('s0.universe')
-        sui = self.view_state(s0, reset=True)
-
+        self.cg = self.view_state(s0, reset=True)
+        
     def show_result(self,res):
         print res
 
@@ -161,9 +198,11 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                  [("button","Undo",self.undo),
                   ("button","Redo",self.redo),
                   ("button","Gather",self.gather),
-                  ("button","Conjecture",self.conjecture),
-                  ("button","Strengthen",self.strengthen),
                   ("button","Bounded check",self.bmc_conjecture),
+                  ("button","Minimize",self.minimize_conjecture),
+                  ("button","Check sufficient",self.is_sufficient),
+                  ("button","Check relative induction",self.is_inductive),
+                  ("button","Strengthen",self.strengthen),
                   ("button","Export",self.export),
                   ]),
                 ("menu","View",
@@ -235,16 +274,17 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         # get the bound, if not specified
 
         if bound is None:
+            iv = self.current_bound if hasattr(self,'current_bound') else None
             c = lambda b: self.bmc_conjecture(button=button, bound=b, conjecture=conjecture,
                                               verbose=verbose, add_to_crg=add_to_crg)
             self.ui_parent.int_dialog('Number of steps to check:',
-                                        command = c, minval=0)
+                                        command = c, minval=0, initval=iv)
             return
 
-        # TODO: get from somewhere else
         step_action = im.module.actions['ext']
         
         n_steps = bound
+        self.current_bound = bound
 
         if conjecture is None:
             conj = self.get_selected_conjecture()
@@ -294,4 +334,140 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                                    on_cancel = None)
                                    
         return False
+
+    def minimize_conjecture(self, button=None, bound=None):
+        import ivy_transrel
+        import ivy_solver
+        from proof import ProofGoal
+        from ivy_logic_utils import Clauses, and_clauses, dual_clauses, used_symbols_clauses, negate
+        from ivy_solver import unsat_core
+        from logic_util import free_variables, substitute
+
+        if self.bmc_conjecture(bound=bound):
+            # found a BMC counter-example
+            return
+
+        step_action = im.module.actions['ext']
+
+        n_steps = self.current_bound
+
+        ag = self.parent.new_ag()
+        with ag.context as ac:
+            post = ac.new_state(ag.init_cond)
+        if 'initialize' in im.module.actions:
+            init_action = im.module.actions['initialize']
+            post = ag.execute(init_action, None, None, 'initialize')
+        for n in range(n_steps):
+            post = ag.execute(step_action, None, None, 'ext')
+        axioms = im.module.background_theory()
+        post_clauses = and_clauses(post.clauses, axioms)
+
+        used_names = (
+            frozenset(x.name for x in il.sig.symbols.values()) |
+            frozenset(x.name for x in used_symbols_clauses(post_clauses))
+        )
+        facts = self.get_active_facts()
+        assert not any(
+            c.is_skolem() and c.name in used_names for c in lu.used_constants(*facts)
+        )
+        core = unsat_core(Clauses(facts), post_clauses)
+        assert core is not None, "bmc_conjecture returned False but unsat core is None"
+        core_formulas = frozenset(core.fmlas)
+        self.set_facts([fact for fact in facts if fact in core_formulas])
+        self.highlight_selected_facts()
+        self.ui_parent.text_dialog("BMC found the following possible conjecture:",
+                                   str(self.get_selected_conjecture()))
+
+    def highlight_selected_facts(self):
+            pass # TODO
+
+    def is_sufficient(self, button=None):
+        """
+        Check if the active conjecture is sufficient to imply the current
+        CTI conjecture at the next step
+
+        TODO: this has a lot in common with check_inductiveness,
+        should refactor common parts out
+        """
+        import ivy_transrel
+        import ivy_solver
+        import tactics_api as ta
+        from proof import ProofGoal
+        from ivy_logic_utils import Clauses, and_clauses, dual_clauses
+        from random import randrange
+
+        conj = self.get_selected_conjecture()
+        target_conj = self.parent.current_conjecture
+
+        ag = self.parent.new_ag()
+
+        pre = State()
+        pre.clauses = and_clauses(conj, *self.parent.conjectures)
+
+        action = im.module.actions['ext']
+        post = ag.execute(action, pre, None, 'ext')
+        post.clauses = ilu.true_clauses()
+
+        assert target_conj.is_universal_first_order()
+        used_names = frozenset(x.name for x in il.sig.symbols.values())
+        def witness(v):
+            c = lg.Const('@' + v.name, v.sort)
+            assert c.name not in used_names
+            return c
+        clauses = dual_clauses(target_conj, witness)
+        res = ag.bmc(post, clauses)
+
+        text = '(1) ' + str(conj.to_formula()) + '\n(2) ' + str(target_conj.to_formula())
+        if res is not None:
+            self.ui_parent.text_dialog('(1) does not imply (2) at the next time. View counterexample?',
+                                       text,command_label='View',command = lambda: self.ui_parent.add(res))
+            return False
+        else:
+            self.ui_parent.text_dialog('(1) implies (2) at the next time:',text,on_cancel=None)
+            return True
+
+
+    def is_inductive(self, button=None):
+        """
+        Check if the active conjecture implies itself at the next step
+
+        TODO: this has a lot in common with check_inductiveness and is_sufficient,
+        should refactor common parts out
+        """
+        import ivy_transrel
+        import ivy_solver
+        import tactics_api as ta
+        from proof import ProofGoal
+        from ivy_logic_utils import Clauses, and_clauses, dual_clauses
+        from random import randrange
+
+        conj = self.get_selected_conjecture()
+        target_conj = conj
+
+        ag = self.parent.new_ag()
+
+        pre = State()
+        pre.clauses = and_clauses(conj, *self.parent.conjectures)
+
+        action = im.module.actions['ext']
+        post = ag.execute(action, pre, None, 'ext')
+        post.clauses = ilu.true_clauses()
+
+        assert target_conj.is_universal_first_order()
+        used_names = frozenset(x.name for x in il.sig.symbols.values())
+        def witness(v):
+            c = lg.Const('@' + v.name, v.sort)
+            assert c.name not in used_names
+            return c
+        clauses = dual_clauses(target_conj, witness)
+        res = ag.bmc(post, clauses)
+
+        text = '(1) ' + str(conj.to_formula()) 
+        if res is not None:
+            self.ui_parent.text_dialog('(1) is not relatively inductive. View counterexample?',
+                                       text,command_label='View',command = lambda: self.ui_parent.add(res))
+            return False
+        else:
+            self.ui_parent.text_dialog('(1) is relatively inductive:',text,on_cancel=None)
+            return True
 
