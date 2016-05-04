@@ -46,7 +46,7 @@ conjecture (X = Z | ~c(X,Y) | ~c(Z,Y))
 """
 
 with ivy_module.Module():
-    iu.set_parameters({'ui':'test_ui','ext':'ext'})
+    iu.set_parameters({'ui':'cti','ext':'ext'})
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
     ui.check_inductiveness()
