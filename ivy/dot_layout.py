@@ -15,6 +15,8 @@ from pygraphviz import AGraph
 
 from ivy_utils import topological_sort
 
+import ivy_utils as iu
+
 import pygraphviz
 
 def cubic_bezier_point(p0, p1, p2, p3, t):
@@ -126,7 +128,7 @@ def _to_coord_list(st):
     return map(_to_position,pairs)
 
 
-def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
+def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda X,y:False):
     """
     Get a CyElements object and augment it (in-place) with positions,
     widths, heights, and spline data from a dot based layout.
@@ -138,7 +140,8 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     """
     elements = cy_elements.elements
 
-    g = AGraph(directed=True, strict=False)
+#    g = AGraph(directed=True, strict=False)
+    g = AGraph(directed=True, strict=False, forcelabels=True)
 
     # make transitive relations appear top to bottom
 
@@ -176,14 +179,24 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
     for e in elements:
         if e["group"] == "edges":
 #            kwargs = {'weight': weight.get(e["data"]["obj"], 0)},
-            kwargs = {'label':e["data"]["label"]}  if edge_labels else {'label':' fooooooooo '}
-            g.add_edge(
-                e["data"]["source"],
-                e["data"]["target"],
-                e["data"]["id"],
-                **kwargs
-                #constraint=constraint.get(e["data"]["obj"], True),
-            )
+            kwargs = {'label':e["data"]["label"]}  if edge_labels else {'label':'     '}
+            if node_gt(e["data"]["source_obj"],e["data"]["target_obj"]):
+                g.add_edge(
+                    e["data"]["target"],
+                    e["data"]["source"],
+                    e["data"]["id"],
+                    dir = 'back',
+                    **kwargs
+                    #constraint=constraint.get(e["data"]["obj"], True),
+                    )
+            else:
+                g.add_edge(
+                    e["data"]["source"],
+                    e["data"]["target"],
+                    e["data"]["id"],
+                    **kwargs
+                    #constraint=constraint.get(e["data"]["obj"], True),
+                    )
 
     # add clusters
     clusters = defaultdict(list)
@@ -194,6 +207,7 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
         g.add_subgraph(
             name='cluster_{}'.format(i),
             nbunch=clusters[k],
+            rank='min',
         )
 
     # now get positions, heights, widths, and bsplines
@@ -226,11 +240,21 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False):
             e["data"]["height"] = 72 * float(attr['height'])
 
         elif e["group"] == "edges":
-            attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
-            e["data"].update(_to_edge_position(attr['pos']))
+            if node_gt(e["data"]["source_obj"],e["data"]["target_obj"]):
+                attr = g.get_edge(e["data"]["target"], e["data"]["source"], e["data"]["id"]).attr
+                pos = attr['pos']
+                pe = pos.split()
+                ppe = pe[1:]
+                ppe.reverse()
+                pos = ' '.join([pe[0].replace('s','e')] + ppe)
+            else:
+                attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
+                pos = attr['pos']
+            iu.dbg("attr['pos']")
+            e["data"].update(_to_edge_position(pos))
             if edge_labels and e["data"]["label"] != '':
                 e["data"]["lp"] = _to_position(attr['lp'])
-#    g.draw('g.png')
+    g.draw('g.png')
 
     if subgraph_boxes:
         for sg in g.subgraphs():

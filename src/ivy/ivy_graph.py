@@ -216,6 +216,9 @@ def render_concept_graph(widget):
 
     # add nodes
     non_existing_nodes = set()
+
+    iu.dbg('nodes')
+
     for node in nodes:
         if a[('node_info', 'none', node)]:
             non_existing_nodes.add(node)
@@ -362,6 +365,10 @@ def render_concept_graph(widget):
         )
 
     return g
+
+def node_gt(n1,n2):
+    iu.dbg('n1')
+    return n1 > n2
 
 # In concept labels, we drop the variable X from formulas
 # of the form p(X), X=e and f(X)=e where e is ground.
@@ -546,7 +553,7 @@ class Graph(object):
 
     def recompute(self):
         self.concept_session.recompute(self.projection)
-        self.cy_elements = dot_layout(render_concept_graph(self),subgraph_boxes=True)
+        self.cy_elements = dot_layout(render_concept_graph(self),subgraph_boxes=True,node_gt = node_gt)
 
     def get_facts(self,rels,definite=True):
         facts = self.concept_session.get_facts(self.projection)
