@@ -281,14 +281,10 @@ def isolate_component(mod,isolate_name):
 class SortOrder(object):
     def __init__(self,arcs):
         self.arcs = arcs
-        iu.dbg('arcs')
     def __call__(self,x,y):
         x = x.args[0].relname
         y = y.args[0].relname
-        iu.dbg('x')
-        iu.dbg('y')
         res =  -1 if y in self.arcs[x] else 1 if x in self.arcs[y] else 0   
-        iu.dbg('res')
         return res
 
 # class SortOrder(object):
@@ -307,7 +303,6 @@ def get_mixin_order(iso,mod):
     for action in actions:
         mixins = mod.mixins[action]
         mixers = iu.topological_sort(list(set(m.mixer() for m in mixins)),arcs)
-        iu.dbg('mixers')
         keymap = dict((x,y) for y,x in enumerate(mixers))
         key = lambda m: keymap[m.mixer()]
         before = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinBeforeDef)],key=key)

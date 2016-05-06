@@ -124,7 +124,7 @@ def listbox_dialog(tk,root,msg,items,command=lambda:None,on_cancel=lambda:None,m
     S = Scrollbar(dlg)
     T = Listbox(dlg, height=8, width=50, selectmode=SINGLE)
     S.pack(side=RIGHT, fill=Y)
-    T.pack(side=LEFT, fill=Y)
+    T.pack(side=LEFT, fill=BOTH,expand=1)
     S.config(command=T.yview)
     T.config(yscrollcommand=S.set)
     for item in items:

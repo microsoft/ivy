@@ -27,7 +27,7 @@ def alpha(concept_domain, state, cache=None, projection=None):
 
     slvr.solver_add(solver,state)
 
-    iu.dbg('state')
+#    iu.dbg('state')
 
     if cache is None:
         cache = dict()
@@ -35,7 +35,7 @@ def alpha(concept_domain, state, cache=None, projection=None):
     for tag, formula in facts:
         if tag in cache:
             value = cache[tag]
-#           print "cached: {} = {}".format(tag,value)
+#            print "cached: {} = {}".format(tag,value)
         else:
             # assert len(cache) == 0, tag
             solver.push()

@@ -60,6 +60,7 @@ class AnalysisGraphUI(object):
 
     def start(self):
         self.g.initialize(self.init_alpha())
+        self.rebuild()
 
     def init_alpha(self):
         if 'mode' in self.radios:
@@ -119,10 +120,10 @@ class AnalysisGraphUI(object):
 
     def view_state(self,n,clauses = None, reset=False):
         clauses = clauses or n.clauses
-        print "state: {}".format(clauses)
+#        print "state: {}".format(clauses)
         if hasattr(self,'current_concept_graph'):
            #  and self.current_concept_graph.winfo_exists():
-            print "current cg: {}".format(type(self.current_concept_graph))
+#            print "current cg: {}".format(type(self.current_concept_graph))
             self.current_concept_graph.set_parent_state(n,clauses,reset=reset)
             return
         sg = self.g.concept_graph(n,clauses)

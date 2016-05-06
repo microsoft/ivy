@@ -217,8 +217,6 @@ def render_concept_graph(widget):
     # add nodes
     non_existing_nodes = set()
 
-    iu.dbg('nodes')
-
     for node in nodes:
         if a[('node_info', 'none', node)]:
             non_existing_nodes.add(node)
@@ -367,7 +365,6 @@ def render_concept_graph(widget):
     return g
 
 def node_gt(n1,n2):
-    iu.dbg('n1')
     return n1 > n2
 
 # In concept labels, we drop the variable X from formulas
@@ -453,6 +450,10 @@ class Graph(object):
         """ Get a relational concept from its id """
         return concept.name
 
+    def edge_cy_id(self,edge):
+        """Get the cy_elements id of an edge """
+        return self.cy_elements.edge_id[tuple(self.id_from_concept(c) for c in edge)]
+
     @property
     def relations(self):
         """ Returns all the concepts that need check-boxes """
@@ -478,7 +479,7 @@ class Graph(object):
         if len(concept.variables) == 1:
             v = concept.variables[0]
             if can_abbreviate_formula(v,fmla):
-                res = str(ilu.substitute_ast(fmla,{v.rep:Variable('',v.sort)}))
+                res = il.fmla_to_str_ambiguous(ilu.substitute_ast(fmla,{v.rep:Variable('',v.sort)}))
                 return res.replace(' ','').replace('()','')
         return str(fmla)
 
@@ -539,7 +540,6 @@ class Graph(object):
 
     def set_state(self,clauses,recomp=True,clear_constraints=False,reset=False):
         self.state = clauses        
-        iu.dbg('self.concept_session.state')
         
         if clear_constraints:
             self.concept_session.suppose_constraints = []
@@ -557,7 +557,6 @@ class Graph(object):
 
     def get_facts(self,rels,definite=True):
         facts = self.concept_session.get_facts(self.projection)
-        iu.dbg('facts')
         self.concept_session.suppose_constraints = facts
 
     def set_facts(self,facts):
@@ -593,7 +592,6 @@ class Graph(object):
                 res = any(boxes[i].value for i in boxes if i != 'transitive')
             else:
                 res = boxes[concept_combiner].value
-                iu.dbg('res')
             return res
         return True
 

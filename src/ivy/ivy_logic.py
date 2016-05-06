@@ -205,6 +205,9 @@ lg.Apply.relname = property(lambda self: self.func)
 for cls in [lg.Apply] + lg_ops:
     cls.is_numeral = lambda self: False
 
+def is_numeral(term):
+    return isinstance(term,Symbol) and term.is_numeral()
+
 for cls in [lg.Const, lg.Var, lg.Apply]:
     cls.get_sort = lambda self: self.sort
 
@@ -720,25 +723,43 @@ def nary_str(op,args):
 
 infix_symbols = set(['<','<=','+','-','*','/'])
 
+to_str_ambiguous = False
+
+# This converts to string leaving variables and numerals without type decorations
+
+def fmla_to_str_ambiguous(term):
+    global to_str_ambiguous
+    to_str_ambiguous = True
+    res = str(term)
+    to_str_ambiguous = False
+    return res
+
 def app_arg_str(self,poly):
-    if not poly or not is_variable(self):
+    if to_str_ambiguous or not poly or (not is_variable(self) and not is_numeral(self)):
         return str(self)
     return self.name + ':' + str(self.sort)
 
 def app_str(self):
     name = self.func.name
     poly = name in polymorphic_symbols
+    if poly and any(not(is_variable(a) or is_numeral(a)) for a in self.args):
+        poly = false
     args = [app_arg_str(a,poly) for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)
     if len(args) == 0:
         return name
     return name + '(' + ','.join(args) + ')'
+
+def eq_args_str(self):
+    poly = not any(not(is_variable(a) or is_numeral(a)) for a in self.args)
+    return [app_arg_str(a,poly) for a in self.args]
+
     
-lg.Eq.__str__ = lambda self: '{} = {}'.format(self.t1, self.t2)
+lg.Eq.__str__ = lambda self: '{} = {}'.format(*eq_args_str(self))
 lg.And.__str__ = lambda self: nary_str('&',self.args) if self.args else 'true'
 lg.Or.__str__ = lambda self: nary_str('|',self.args) if self.args else 'false'
-lg.Not.__str__ = lambda self: ('{} ~= {}'.format(self.body.t1, self.body.t2)
+lg.Not.__str__ = lambda self: ('{} ~= {}'.format(*eq_args_str(self.body))
                                if type(self.body) is lg.Eq
                                else '~{}'.format(self.body))
 lg.Implies.__str__ = lambda self: '{} -> {}'.format(self.t1, self.t2)

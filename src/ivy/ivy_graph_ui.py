@@ -230,12 +230,28 @@ class GraphWidget(object):
         self.g.get_facts(rels)
         self.update()
 
+    def clear_elem_selection(self):
+        self.node_selection = set()
+        self.edge_selection = set()
+
+    def highlight_selected_facts(self):
+        self.clear_elem_selection()
+        if hasattr(self,'fact_elems'):
+            for fact in self.get_active_facts():
+                for elem in self.fact_elems[fact]:
+                    concepts = map(self.g.concept_from_id,elem)
+                    if len(elem) == 1: # a node
+                        self.select_node(concepts[0],True)
+                    elif len(elem) == 3: # an edge
+                        self.select_edge(concepts,True)
+
     # Set the current facts
     
     def set_facts(self,facts):
         self.checkpoint()
         self.g.set_facts(facts)
         self.update()
+            
         
     # Find a current fact whose printed form is "text"
 
@@ -328,7 +344,6 @@ class GraphWidget(object):
         self.checkpoint()
         self.g.parent_state = new_parent_state
         self.g.set_state(clauses if clauses else new_parent_state.clauses, reset=reset)
-        iu.dbg('self.g.relation_ids')
         self.update_relations()
         self.update()
                          
@@ -355,7 +370,6 @@ class GraphWidget(object):
     def set_state(self,clauses):
         self.checkpoint()
         self.g.set_state(clauses)
-        iu.dbg('self.g.relation_ids')
         self.update_relations()
         self.update()
 
@@ -495,7 +509,6 @@ class GraphWidget(object):
     # tick a checkbox on a concept
 
     def show_relation(self,concept,boxes='+',value=True,update=True):
-        iu.dbg('concept')
         for box in boxes:
             self.show_edge(concept,box,value)
         if update:

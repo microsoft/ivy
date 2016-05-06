@@ -100,6 +100,7 @@ class TkCyCanvas(Canvas):
     def create_elements(self,cy_elements):
 #        print 'cy_elements" {}'.format(cy_elements.elements)
         self.elem_ids = {}
+        self.edge_points = {}
         for idx,elem in enumerate(cy_elements.elements):
             eid = get_id(elem)
             group = get_group(elem)
@@ -115,6 +116,7 @@ class TkCyCanvas(Canvas):
             elif group == 'edges':
                 coords = get_bspline(elem)
                 styles = self.get_edge_styles(elem)
+                self.edge_points[eid] = coords
                 line = self.create_line(*coords,tags=eid,smooth="bezier",**styles)
                 arrow = self.create_line(*get_arrowend(elem),tags=eid,arrow=LAST,**styles)
                 lp = get_label_pos(elem)
@@ -162,3 +164,14 @@ class TkCyCanvas(Canvas):
         # display the popup menu 
         edge = self.edge_from_cy_elem(elem)
         self.make_popup(event,self.get_edge_actions(edge,click=click),edge)
+
+    def highlight_edge(self,eid,val=True):
+        tag = eid + 'h'
+        for item in self.find_withtag(tag):
+            self.delete(item)
+        if val:
+            item = self.create_line(*self.edge_points[eid],tags=tag,
+                                     smooth="bezier",width=6,capstyle=ROUND,fill='grey')
+            self.tag_lower(item)
+
+            

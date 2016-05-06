@@ -128,7 +128,7 @@ def _to_coord_list(st):
     return map(_to_position,pairs)
 
 
-def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda X,y:False):
+def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=None):
     """
     Get a CyElements object and augment it (in-place) with positions,
     widths, heights, and spline data from a dot based layout.
@@ -157,12 +157,27 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda
         "transitive" in e["data"] and
         e["data"]["transitive"]
     ]
-    print "order: {}".format(order)
     elements = topological_sort(elements, order, lambda e: e["data"]["id"])
+
+    # get the node id's and stable sort them by cluster
+    # the idea here is to convert the graph into a dag by sorting
+    # the nodes, then reversing the back edges. In particular, we try to make
+    # all the edges between two clusters go in the same direction so clustering
+    # doesn't result in horizontal edges, which dot renders badly.
+
+    sorted_nodes = [e["data"]["id"] for e in elements if e["group"] == "nodes"]
+    sorted_nodes = sorted(enumerate(sorted_nodes),key = lambda x: (nodes_by_id[x[1]]["data"]["cluster"],x[0]))
+    sorted_nodes = [y for idx,y in sorted_nodes]
+    node_key = dict((id,idx) for idx,id in enumerate(sorted_nodes))
+
+    if node_gt is None:
+        node_gt = lambda X,y:False
+    else:
+        node_gt = lambda x,y: node_key[x] > node_key[y] 
 
     # add nodes to the graph
     for e in elements:
-        if e["group"] == "nodes":
+        if e["group"] == "nodes" and e["classes"]  != 'non_existing':
             g.add_node(e["data"]["id"], label=e["data"]["label"].replace('\n', '\\n'))
 
     # TODO: remove this, it's specific to leader_demo
@@ -179,8 +194,8 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda
     for e in elements:
         if e["group"] == "edges":
 #            kwargs = {'weight': weight.get(e["data"]["obj"], 0)},
-            kwargs = {'label':e["data"]["label"]}  if edge_labels else {'label':'     '}
-            if node_gt(e["data"]["source_obj"],e["data"]["target_obj"]):
+            kwargs = {'label':e["data"]["label"]}  if edge_labels else {}
+            if node_gt(e["data"]["source"],e["data"]["target"]):
                 g.add_edge(
                     e["data"]["target"],
                     e["data"]["source"],
@@ -201,7 +216,7 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda
     # add clusters
     clusters = defaultdict(list)
     for e in elements:
-        if e["group"] == "nodes" and e["data"]["cluster"] is not None:
+        if e["group"] == "nodes" and e["data"]["cluster"] is not None and e["classes"]  != 'non_existing':
             clusters[e["data"]["cluster"]].append(e["data"]["id"])
     for i, k in enumerate(sorted(clusters.keys())):
         g.add_subgraph(
@@ -233,14 +248,14 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda
                 y_origin = top
 
     for e in elements:
-        if e["group"] == "nodes":
+        if e["group"] == "nodes" and e["classes"]  != 'non_existing':
             attr = g.get_node(e["data"]["id"]).attr
             e["position"] = _to_position(attr['pos'])
             e["data"]["width"] = 72 * float(attr['width'])
             e["data"]["height"] = 72 * float(attr['height'])
 
         elif e["group"] == "edges":
-            if node_gt(e["data"]["source_obj"],e["data"]["target_obj"]):
+            if node_gt(e["data"]["source"],e["data"]["target"]):
                 attr = g.get_edge(e["data"]["target"], e["data"]["source"], e["data"]["id"]).attr
                 pos = attr['pos']
                 pe = pos.split()
@@ -250,11 +265,10 @@ def dot_layout(cy_elements,edge_labels=False,subgraph_boxes=False,node_gt=lambda
             else:
                 attr = g.get_edge(e["data"]["source"], e["data"]["target"], e["data"]["id"]).attr
                 pos = attr['pos']
-            iu.dbg("attr['pos']")
             e["data"].update(_to_edge_position(pos))
             if edge_labels and e["data"]["label"] != '':
                 e["data"]["lp"] = _to_position(attr['lp'])
-    g.draw('g.png')
+#    g.draw('g.png')
 
     if subgraph_boxes:
         for sg in g.subgraphs():

@@ -36,20 +36,24 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         return [("menu","File",
                  [
                   ("button","Remove tab",lambda self=self: self.ui_parent.remove(self)),
+                  ("button","Save invariant",self.save_conjectures),
                   ("button","Exit", lambda self=self: self.ui_parent.exit()),]),
-                ("menu","Action",
+                ("menu","Invariant",
                  [("button","Check induction",self.check_inductiveness),
                   ("button","Weaken",self.weaken),
                   ])]
 
     def start(self):
         ivy_ui.AnalysisGraphUI.start(self)
+        self.node(0).clauses = ilu.false_clauses() # just to make CG empty initially
         self.transitive_relations = []
         self.transitive_relation_concepts = []
         self.relations_to_minimize = Thing('relations to minimize')
         self.conjectures = im.module.conjs
         self.view_state(self.node(0))
-        self.autodetect_transitive()
+        with self.ui_parent.run_context():
+            self.autodetect_transitive()
+
         
 
 
@@ -96,81 +100,82 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
     def check_inductiveness(self, button=None):
         import ivy_transrel
         from ivy_solver import get_small_model
-        import tactics_api as ta
         from proof import ProofGoal
         from ivy_logic_utils import Clauses, and_clauses, dual_clauses
         from random import randrange
+        
+        with self.ui_parent.run_context():
 
-        ag = self.new_ag()
+            ag = self.new_ag()
 
-        pre = State()
-        pre.clauses = and_clauses(*self.conjectures)
+            pre = State()
+            pre.clauses = and_clauses(*self.conjectures)
 
-        action = im.module.actions['ext']
-        post = ag.execute(action, pre, None, 'ext')
-        post.clauses = ilu.true_clauses()
+            action = im.module.actions['ext']
+            post = ag.execute(action, pre, None, 'ext')
+            post.clauses = ilu.true_clauses()
 
-        to_test = list(self.conjectures)
-        while len(to_test) > 0:
-            # choose randomly, so the user can get another result by
-            # clicking again
-            conj = to_test.pop(randrange(len(to_test)))
-            assert conj.is_universal_first_order()
-            used_names = frozenset(x.name for x in il.sig.symbols.values())
-            def witness(v):
-                c = lg.Const('@' + v.name, v.sort)
-                assert c.name not in used_names
-                return c
-            clauses = dual_clauses(conj, witness)
-            history = ag.get_history(post)
+            to_test = list(self.conjectures)
+            while len(to_test) > 0:
+                # choose randomly, so the user can get another result by
+                # clicking again
+                conj = to_test.pop(randrange(len(to_test)))
+                assert conj.is_universal_first_order()
+                used_names = frozenset(x.name for x in il.sig.symbols.values())
+                def witness(v):
+                    c = lg.Const('@' + v.name, v.sort)
+                    assert c.name not in used_names
+                    return c
+                clauses = dual_clauses(conj, witness)
+                history = ag.get_history(post)
 
-            # TODO: this is still a bit hacky, and without nice error reporting
-            if self.relations_to_minimize.value == 'relations to minimize':
-                self.relations_to_minimize.value = ' '.join(sorted(
-                    k for k, v in il.sig.symbols.iteritems()
-                    if (type(v.sort) is lg.FunctionSort and
-                        v.sort.range == lg.Boolean and
-                        v.name not in self.transitive_relations and
-                        '.' not in v.name
-                    )
+                # TODO: this is still a bit hacky, and without nice error reporting
+                if self.relations_to_minimize.value == 'relations to minimize':
+                    self.relations_to_minimize.value = ' '.join(sorted(
+                        k for k, v in il.sig.symbols.iteritems()
+                        if (type(v.sort) is lg.FunctionSort and
+                            v.sort.range == lg.Boolean and
+                            v.name not in self.transitive_relations and
+                            '.' not in v.name
+                        )
+                    ))
+
+                res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
+                    clauses,
+                    sorted(il.sig.sorts.values()),
+                    [
+                        # TODO: this is still a bit hacky, and without nice error reporting
+                        history.maps[0].get(relation, relation)
+                        for x in self.relations_to_minimize.value.split()
+                        for relation in [il.sig.symbols[x]]
+                    ],
                 ))
+                if res is not None:
+                    self.current_conjecture = conj
+                    assert len(res.states) == 2
+                    rels = self.current_concept_graph.g.relations
+                    used = lu.used_constants(clauses.to_formula())
+    #                self.set_states(res.states[0], res.states[1])
+    #                self.cti = self.ui_parent.add(res)
+                    self.g = res
+                    self.rebuild()
+                    self.view_state(self.g.states[0], reset=True)
+                    for rel in rels:
+                        if any(c in used and not c.name.startswith('@')
+                               for c in lu.used_constants(rel.formula)):
+                            self.current_concept_graph.show_relation(rel,'+',update=False)
+                    self.current_concept_graph.update()
+                    #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
+                    self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
+                                               str(conj.to_formula()),on_cancel=None)
+                    return False
 
-            res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
-                clauses,
-                sorted(il.sig.sorts.values()),
-                [
-                    # TODO: this is still a bit hacky, and without nice error reporting
-                    history.maps[0].get(relation, relation)
-                    for x in self.relations_to_minimize.value.split()
-                    for relation in [il.sig.symbols[x]]
-                ],
-            ))
-            if res is not None:
-                self.current_conjecture = conj
-                assert len(res.states) == 2
-                rels = self.current_concept_graph.g.relations
-                used = lu.used_constants(clauses.to_formula())
-#                self.set_states(res.states[0], res.states[1])
-                self.cti = self.ui_parent.add(res)
-                for rel in rels:
-                    if any(c in used for c in lu.used_constants(rel.formula)):
-                        self.cti.current_concept_graph.show_relation(rel,'+',update=False)
-                self.cti.current_concept_graph.update()
-                #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
-                self.show_result('The following conjecture is not inductive:\n{}'.format(
-                    str(conj.to_formula()),
-                ))
-                return False
-
-#        self.set_states(False, False)
-        self.ui_parent.text_dialog('Inductive invariant found:',
-                                   '\n'.join(str(conj) for conj in self.conjectures))
-        return True
-
-
+    #        self.set_states(False, False)
+            self.ui_parent.text_dialog('Inductive invariant found:',
+                                       '\n'.join(str(conj) for conj in self.conjectures))
+            return True
 
     def set_states(self,s0,s1):
-        iu.dbg('s0.universe')
         self.cg = self.view_state(s0, reset=True)
         
     def show_result(self,res):
@@ -184,20 +189,55 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
             cmd = lambda sel: self.weaken([udc[idx] for idx in sel])
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd,multiple=True)
         else:
-            iu.dbg('conjs')
             for conj in conjs:
                 self.conjectures.remove(conj)
             self.ui_parent.text_dialog('Removed the following conjectures:',
                                        '\n'.join(str(conj) for conj in conjs))
 
-    pass
+    def save_conjectures(self):
+        f = self.ui_parent.saveas_dialog('Save invariant as...',[('ivy files', '.ivy')])
+        if f:
+
+            old_conjs_set = set(str(c) for c in im.module.conjs)
+            new_conjs_set = set(str(c) for c in self.conjectures)
+
+            old_kept = [lc for lc in im.module.labeled_conjs if str(lc.formula) in new_conjs_set]
+            old_dropped = [lc for lc in im.module.labeled_conjs if str(lc.formula) not in new_conjs_set]
+            new = [conj for conj in self.conjectures if str(conj) not in old_conjs_set]
+
+            f.write('# This file was generated by ivy.\n\n')
+
+            if old_kept:
+                f.write('\n# original conjectures kept\n\n')
+                for lc in old_kept:
+                    _write_conj(f,lc.label,lc.formula)
+
+            if old_dropped:
+                f.write('\n# original conjectures dropped\n\n')
+                for lc in old_dropped:
+                    f.write('# ')
+                    _write_conj(f,lc.label,lc.formula)
+                    
+            if new:
+                f.write('\n# new conjectures\n\n')
+                for conj in new:
+                    _write_conj(f,None,conj)
+
+            f.close()
+
+def _write_conj(f,lab,fmla):
+    fmla = il.drop_universals(fmla)
+    if lab:
+        f.write("conjecture [{}] {}\n".format(lab,str(fmla)))
+    else:
+        f.write("conjecture {}\n".format(str(fmla)))
 
 class ConceptGraphUI(ivy_graph_ui.GraphWidget):
     def menus(self):
-        return [("menu","Action",
+        return [("menu","Conjecture",
                  [("button","Undo",self.undo),
                   ("button","Redo",self.redo),
-                  ("button","Gather",self.gather),
+                  ("button","Gather",self.gather_facts),
                   ("button","Bounded check",self.bmc_conjecture),
                   ("button","Minimize",self.minimize_conjecture),
                   ("button","Check sufficient",self.is_sufficient),
@@ -209,6 +249,18 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                  [("button","Add relation",self.add_concept_from_string),
                   ])]
 
+
+    def get_node_actions(self,node,click='left'):
+        if click == 'left':
+            return [("<>",self.select_node)]
+        else:
+            return [] # nothing on right click
+
+    def get_edge_actions(self,node,click='left'):
+        if click == 'left':
+            return [("<>",self.select_edge)]
+        else:
+            return [] # nothing on right click
 
     def get_selected_conjecture(self):
         """
@@ -281,59 +333,62 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                                         command = c, minval=0, initval=iv)
             return
 
-        step_action = im.module.actions['ext']
-        
-        n_steps = bound
-        self.current_bound = bound
 
-        if conjecture is None:
-            conj = self.get_selected_conjecture()
-        else:
-            conj = conjecture
+        with self.ui_parent.run_context():
 
-        assert conj.is_universal_first_order()
-        used_names = frozenset(x.name for x in il.sig.symbols.values())
-        def witness(v):
-            c = lg.Const('@' + v.name, v.sort)
-            assert c.name not in used_names
-            return c
-        clauses = dual_clauses(conj, witness)
+            step_action = im.module.actions['ext']
 
-        ag = self.parent.new_ag()
-        with ag.context as ac:
-            post = ac.new_state(ag.init_cond)
-        if 'initialize' in im.module.actions:
-            init_action = im.module.actions['initialize']
-            post = ag.execute(init_action, None, None, 'initialize')
+            n_steps = bound
+            self.current_bound = bound
 
-        for n in range(n_steps + 1):
-            res = ag.bmc(post, clauses)
-            if verbose:
-                if res is None:
-                    msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
-                        n,
-                        str(conj.to_formula()),
-                    )
-                else:
-                    msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
-                        n,
-                        str(conj.to_formula()),
-                    )
-                print '\n' + msg + '\n'
-            if res is not None:
-#                ta.step()
-                self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
-                                           str(conj.to_formula()),
-                                           command = lambda: self.ui_parent.add(res),
-                                           command_label = 'View')
-                return True
-            post = ag.execute(step_action, None, None, 'ext')
+            if conjecture is None:
+                conj = self.get_selected_conjecture()
+            else:
+                conj = conjecture
 
-        self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
-                                   str(conj.to_formula()),
-                                   on_cancel = None)
-                                   
-        return False
+            assert conj.is_universal_first_order()
+            used_names = frozenset(x.name for x in il.sig.symbols.values())
+            def witness(v):
+                c = lg.Const('@' + v.name, v.sort)
+                assert c.name not in used_names
+                return c
+            clauses = dual_clauses(conj, witness)
+
+            ag = self.parent.new_ag()
+            with ag.context as ac:
+                post = ac.new_state(ag.init_cond)
+            if 'initialize' in im.module.actions:
+                init_action = im.module.actions['initialize']
+                post = ag.execute(init_action, None, None, 'initialize')
+
+            for n in range(n_steps + 1):
+                res = ag.bmc(post, clauses)
+                if verbose:
+                    if res is None:
+                        msg = 'BMC with bound {} did not find a counter-example to:\n{}'.format(
+                            n,
+                            str(conj.to_formula()),
+                        )
+                    else:
+                        msg = 'BMC with bound {} found a counter-example to:\n{}'.format(
+                            n,
+                            str(conj.to_formula()),
+                        )
+                    print '\n' + msg + '\n'
+                if res is not None:
+    #                ta.step()
+                    self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
+                                               str(conj.to_formula()),
+                                               command = lambda: self.ui_parent.add(res),
+                                               command_label = 'View')
+                    return True
+                post = ag.execute(step_action, None, None, 'ext')
+
+#            self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
+#                                       str(conj.to_formula()),
+#                                       on_cancel = None)
+
+            return False
 
     def minimize_conjecture(self, button=None, bound=None):
         import ivy_transrel
@@ -347,39 +402,43 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
             # found a BMC counter-example
             return
 
-        step_action = im.module.actions['ext']
+        with self.ui_parent.run_context():
+            step_action = im.module.actions['ext']
 
-        n_steps = self.current_bound
+            n_steps = self.current_bound
 
-        ag = self.parent.new_ag()
-        with ag.context as ac:
-            post = ac.new_state(ag.init_cond)
-        if 'initialize' in im.module.actions:
-            init_action = im.module.actions['initialize']
-            post = ag.execute(init_action, None, None, 'initialize')
-        for n in range(n_steps):
-            post = ag.execute(step_action, None, None, 'ext')
-        axioms = im.module.background_theory()
-        post_clauses = and_clauses(post.clauses, axioms)
+            ag = self.parent.new_ag()
+            with ag.context as ac:
+                post = ac.new_state(ag.init_cond)
+            if 'initialize' in im.module.actions:
+                init_action = im.module.actions['initialize']
+                post = ag.execute(init_action, None, None, 'initialize')
+            for n in range(n_steps):
+                post = ag.execute(step_action, None, None, 'ext')
+            axioms = im.module.background_theory()
+            post_clauses = and_clauses(post.clauses, axioms)
 
-        used_names = (
-            frozenset(x.name for x in il.sig.symbols.values()) |
-            frozenset(x.name for x in used_symbols_clauses(post_clauses))
-        )
-        facts = self.get_active_facts()
-        assert not any(
-            c.is_skolem() and c.name in used_names for c in lu.used_constants(*facts)
-        )
-        core = unsat_core(Clauses(facts), post_clauses)
-        assert core is not None, "bmc_conjecture returned False but unsat core is None"
-        core_formulas = frozenset(core.fmlas)
-        self.set_facts([fact for fact in facts if fact in core_formulas])
-        self.highlight_selected_facts()
-        self.ui_parent.text_dialog("BMC found the following possible conjecture:",
-                                   str(self.get_selected_conjecture()))
+            used_names = (
+                frozenset(x.name for x in il.sig.symbols.values()) |
+                frozenset(x.name for x in used_symbols_clauses(post_clauses))
+            )
+            facts = self.get_active_facts()
+            assert not any(
+                c.is_skolem() and c.name in used_names for c in lu.used_constants(*facts)
+            )
+            core = unsat_core(Clauses(facts), post_clauses)
+            if core is None:
+                core = Clauses([]) ## can happen if we are proving true
+#            assert core is not None, "bmc_conjecture returned False but unsat core is None"
+            core_formulas = frozenset(core.fmlas)
+            self.set_facts([fact for fact in facts if fact in core_formulas])
+            self.highlight_selected_facts()
+            self.ui_parent.text_dialog("BMC found the following possible conjecture:",
+                                       str(self.get_selected_conjecture()))
 
-    def highlight_selected_facts(self):
-            pass # TODO
+
+#    def highlight_selected_facts(self):
+#            pass # TODO
 
     def is_sufficient(self, button=None):
         """
@@ -391,40 +450,41 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         """
         import ivy_transrel
         import ivy_solver
-        import tactics_api as ta
         from proof import ProofGoal
         from ivy_logic_utils import Clauses, and_clauses, dual_clauses
         from random import randrange
 
-        conj = self.get_selected_conjecture()
-        target_conj = self.parent.current_conjecture
+        with self.ui_parent.run_context():
 
-        ag = self.parent.new_ag()
+            conj = self.get_selected_conjecture()
+            target_conj = self.parent.current_conjecture
 
-        pre = State()
-        pre.clauses = and_clauses(conj, *self.parent.conjectures)
+            ag = self.parent.new_ag()
 
-        action = im.module.actions['ext']
-        post = ag.execute(action, pre, None, 'ext')
-        post.clauses = ilu.true_clauses()
+            pre = State()
+            pre.clauses = and_clauses(conj, *self.parent.conjectures)
 
-        assert target_conj.is_universal_first_order()
-        used_names = frozenset(x.name for x in il.sig.symbols.values())
-        def witness(v):
-            c = lg.Const('@' + v.name, v.sort)
-            assert c.name not in used_names
-            return c
-        clauses = dual_clauses(target_conj, witness)
-        res = ag.bmc(post, clauses)
+            action = im.module.actions['ext']
+            post = ag.execute(action, pre, None, 'ext')
+            post.clauses = ilu.true_clauses()
 
-        text = '(1) ' + str(conj.to_formula()) + '\n(2) ' + str(target_conj.to_formula())
-        if res is not None:
-            self.ui_parent.text_dialog('(1) does not imply (2) at the next time. View counterexample?',
-                                       text,command_label='View',command = lambda: self.ui_parent.add(res))
-            return False
-        else:
-            self.ui_parent.text_dialog('(1) implies (2) at the next time:',text,on_cancel=None)
-            return True
+            assert target_conj.is_universal_first_order()
+            used_names = frozenset(x.name for x in il.sig.symbols.values())
+            def witness(v):
+                c = lg.Const('@' + v.name, v.sort)
+                assert c.name not in used_names
+                return c
+            clauses = dual_clauses(target_conj, witness)
+            res = ag.bmc(post, clauses)
+
+            text = '(1) ' + str(conj.to_formula()) + '\n(2) ' + str(target_conj.to_formula())
+            if res is not None:
+                self.ui_parent.text_dialog('(1) does not imply (2) at the next time. View counterexample?',
+                                           text,command_label='View',command = lambda: self.ui_parent.add(res))
+                return False
+            else:
+                self.ui_parent.text_dialog('(1) implies (2) at the next time:',text,on_cancel=None)
+                return True
 
 
     def is_inductive(self, button=None):
@@ -436,38 +496,150 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         """
         import ivy_transrel
         import ivy_solver
-        import tactics_api as ta
         from proof import ProofGoal
         from ivy_logic_utils import Clauses, and_clauses, dual_clauses
         from random import randrange
 
-        conj = self.get_selected_conjecture()
-        target_conj = conj
+        with self.ui_parent.run_context():
+            conj = self.get_selected_conjecture()
+            target_conj = conj
 
-        ag = self.parent.new_ag()
+            ag = self.parent.new_ag()
 
-        pre = State()
-        pre.clauses = and_clauses(conj, *self.parent.conjectures)
+            pre = State()
+            pre.clauses = and_clauses(conj, *self.parent.conjectures)
 
-        action = im.module.actions['ext']
-        post = ag.execute(action, pre, None, 'ext')
-        post.clauses = ilu.true_clauses()
+            action = im.module.actions['ext']
+            post = ag.execute(action, pre, None, 'ext')
+            post.clauses = ilu.true_clauses()
 
-        assert target_conj.is_universal_first_order()
-        used_names = frozenset(x.name for x in il.sig.symbols.values())
-        def witness(v):
-            c = lg.Const('@' + v.name, v.sort)
-            assert c.name not in used_names
-            return c
-        clauses = dual_clauses(target_conj, witness)
-        res = ag.bmc(post, clauses)
+            assert target_conj.is_universal_first_order()
+            used_names = frozenset(x.name for x in il.sig.symbols.values())
+            def witness(v):
+                c = lg.Const('@' + v.name, v.sort)
+                assert c.name not in used_names
+                return c
+            clauses = dual_clauses(target_conj, witness)
+            res = ag.bmc(post, clauses)
 
-        text = '(1) ' + str(conj.to_formula()) 
-        if res is not None:
-            self.ui_parent.text_dialog('(1) is not relatively inductive. View counterexample?',
-                                       text,command_label='View',command = lambda: self.ui_parent.add(res))
-            return False
-        else:
-            self.ui_parent.text_dialog('(1) is relatively inductive:',text,on_cancel=None)
-            return True
+            text = '(1) ' + str(conj.to_formula()) 
+            if res is not None:
+                self.ui_parent.text_dialog('(1) is not relatively inductive. View counterexample?',
+                                           text,command_label='View',command = lambda: self.ui_parent.add(res))
+                return False
+            else:
+                self.ui_parent.text_dialog('(1) is relatively inductive:',text,on_cancel=None)
+                return True
+
+    # TODO: this is not used yet
+
+    def unused_highlight_selected_facts(self):
+        """
+        Add custom node labels and edges to reflect the selected
+        conjecture in pre_graph
+        """
+        # first collect all atoms that appear in the facts
+        atoms = []
+        def collect_atoms(x):
+            if type(x) in (lg.Apply, lg.Eq):
+                atoms.append(x)
+            else:
+                for y in x:
+                    collect_atoms(y)
+        collect_atoms(self.get_active_facts())
+
+        # now collect relevant edges and node labels elements
+        self.g.concept_session.widget = None
+        self.g.concept_session.domain.concepts['edges'] = []
+        self.g.concept_session.domain.concepts['node_labels'] = []
+        nodes = frozenset(self.g.concept_session.domain.concepts['nodes'])
+        for atom in atoms:
+            if type(atom) is lg.Eq:
+                assert type(atom.t2) is lg.Const
+                if type(atom.t1) is lg.Const:
+                    n1 = atom.t1.name
+                    n2 = atom.t2.name
+                    if n1 in nodes and n2 in nodes:
+                        self.g.concept_session.add_custom_edge('=', n1, n2)
+                    elif n1 in nodes:
+                        label_name = '={}'.format(n2)
+                        assert label_name in self.g.concept_session.domain.concepts, atom
+                        self.g.concept_session.add_custom_node_label(n1, label_name)
+                    else:
+                        # TODO
+                        # assert False, atom
+                        pass
+                else:
+                    assert type(atom.t1) is lg.Apply
+                    if atom.t1.func.sort.arity == 1:
+                        assert type(atom.t1.terms[0]) is lg.Const
+                        self.g.concept_session.add_custom_edge(
+                            atom.t1.func.name,
+                            atom.t1.terms[0].name,
+                            atom.t2.name,
+                        )
+                    else:
+                        # TODO: support higher arity
+                        pass
+            elif type(atom) is lg.Apply:
+                if atom.func.sort.arity == 1:
+                    self.g.concept_session.add_custom_node_label(atom.terms[0].name, atom.func.name)
+                elif atom.func.sort.arity == 2:
+                    self.g.concept_session.add_custom_edge(*(c.name for c in atom))
+                else:
+                    # TODO: support higher arity
+                    pass
+            else:
+                assert False, lit
+        self.g.recompute()
+#        self.g.pre_graph.selected = tuple(set(chain(*(elements for fact, elements in self.g.facts_list.value))))
+
+
+    def gather_facts(self, button=None):
+        """
+        Gather only based on selected nodes, taking all visible edges.
+        """
+        g = self.g
+        facts = [] # list of pairs (formula, graph_elements)
+        selected_nodes = sorted(self.node_selection)
+        # if nothing is selected, use all nodes
+        if not selected_nodes:
+            selected_nodes = [n.name for n in g.nodes]
+        for node in selected_nodes:
+            elements = ((node,),)
+            facts += [(formula, elements) for formula in g.concept_session.get_node_facts(node)]
+        selected_nodes = frozenset(selected_nodes)
+        edges = set(
+            tag[-3:]
+            for tag, value in g.concept_session.abstract_value
+            if tag[0] == 'edge_info' and
+            tag[-2] in selected_nodes and
+            tag[-1] in selected_nodes
+        )
+        for edge, source, target in sorted(edges):
+            elements = ((source,), (target,), (edge,source,target))
+            if (g.edge_display_checkboxes[edge]['all_to_all'].value):
+                if g.edge_display_checkboxes[edge]['transitive'].value and source==target:
+                    continue # don't use reflective edges for orders
+                facts += [(formula, elements) for formula in
+                          g.concept_session.get_edge_facts(edge, source, target, True)]
+            if g.edge_display_checkboxes[edge]['none_to_none'].value or edge == '=':
+                # get dis-equalities, don't get other negative
+                # transitive facts unless checkboxed
+                facts += [(formula, elements) for formula in
+                          g.concept_session.get_edge_facts(edge, source, target, False)]
+        # filter double equalities and self-edges of reflexive relations
+        facts = [(f, elements) for f, elements in facts if not (
+            #(type(f) is Eq and f.t1 >= f.t2) or
+            (type(f) is lg.Not and type(f.body) is lg.Eq and f.body.t1 >= f.body.t2) #or
+            # (
+            #     type(f) is Apply and
+            #     g.edge_display_checkboxes[f.func.name]['transitive'].value and
+            #     f.terms[0] == f.terms[1]
+            # )
+        )]
+        g.set_facts([x for x,y in facts])
+        self.fact_elems = dict(facts)
+        self.update()
+        self.highlight_selected_facts()
 

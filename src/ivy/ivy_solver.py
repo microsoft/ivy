@@ -508,8 +508,8 @@ class HerbrandModel(object):
         self.constants = dict((sort_from_z3(s),model.get_universe(s))
                               for s in model.sorts())
         self.constants.update(mine_interpreted_constants(model,vocab))
-        print "model: %s" % model
-        print "univ: %s" % self.constants
+#        print "model: %s" % model
+#        print "univ: %s" % self.constants
 
     def sorts(self):
         return [s for s in self.constants]
@@ -696,8 +696,8 @@ def clause_model_simp(m,c):
         if not is_ground_lit(l):
             res.append(l)
             continue
-        if isinstance(l.atom,ivy_logic.And):
-            print "clause_model_simp: {}".format(c)
+#        if isinstance(l.atom,ivy_logic.And):
+#            print "clause_model_simp: {}".format(c)
         v = m.eval(literal_to_z3(l))
         if z3.is_true(v):
             return [l]
@@ -746,7 +746,7 @@ def relation_size_constraint(relation, size):
         ))
         for cs in consts
     ))
-    print "relation_size_constraint: {}".format(result)
+#    print "relation_size_constraint: {}".format(result)
     return result
 
 
@@ -878,7 +878,7 @@ def numeral_assign(clauses,h):
     used = set()
 #    print "starting: foom = {}".format(foom)
     for s in h.sorts():
-        print "na sort: {}".format(repr(s))
+#        print "na sort: {}".format(repr(s))
         if ivy_logic.is_interpreted_sort(s):
             print "interpreted"
             continue
@@ -925,7 +925,7 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
                  for s in h.sorts() for c in h.sort_universe(s))
     res = substitute_constants_clauses(res,m)
 #    print "core after rename: {} ".format(unsat_core(res,true_clauses()))
-    print "clauses_model_to_clauses res = {}".format(res)
+#    print "clauses_model_to_clauses res = {}".format(res)
     return res
 
 def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None,axioms=None,weaken=True):
@@ -933,13 +933,13 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
     provided, returns true for symbols that should be ignored in the
     diagram.
     """
-    print "clauses_model_to_diagram clauses1 = {}".format(clauses1)
+#    print "clauses_model_to_diagram clauses1 = {}".format(clauses1)
     if axioms == None:
         axioms = true_clauses
     h = model_if_none(and_clauses(clauses1,axioms),implied,model)
     ignore = ignore if ignore != None else lambda x: False
     res = model_facts(h,(lambda x: False),clauses1,upclose=True) # why not pass axioms?
-    print "clauses_model_to_diagram res = {}".format(res)
+#    print "clauses_model_to_diagram res = {}".format(res)
     # find representative elements
     # find representatives of universe elements
     reps = dict()
@@ -953,33 +953,33 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
         for e in h.sort_universe(s):
             if e.rep not in reps:
                 reps[e.rep] = e.rep.skolem()()
-    print "clauses_model_to_diagram reps = {}".format(reps)
+#    print "clauses_model_to_diagram reps = {}".format(reps)
     # filter out clauses using universe elements without reps
 #    res = [cls for cls in res if all(c in reps for c in used_constants_clause(cls))]
     # replace universe elements with their reps
-    print "clauses_model_to_diagram res = {}".format(res)
+#    print "clauses_model_to_diagram res = {}".format(res)
     res = substitute_constants_clauses(res,reps)
     # filter defined skolems
     # this caused a bug in the leader example. the generated diagram did not satisfy clauses1
     res.fmlas = [f for f in res.fmlas if not any((x.is_skolem() and x in clauses1.defidx) for x in used_symbols_ast(f))]
-    print "clauses_model_to_diagram res = {}".format(res)
+#    print "clauses_model_to_diagram res = {}".format(res)
     uc = Clauses([[ivy_logic._eq_lit(ivy_logic.Variable('X',c.get_sort()),reps[c.rep])
                    for c in h.sort_universe(s)] for s in h.sorts()])
-    print "clauses_model_to_diagram uc = {}".format(uc)
+#    print "clauses_model_to_diagram uc = {}".format(uc)
 
     #    uc = true_clauses()
     if weaken:
         res = unsat_core(res,and_clauses(uc,axioms),clauses1) # implied not used here
-    print "clauses_model_to_diagram res = {}".format(res)
+#    print "clauses_model_to_diagram res = {}".format(res)
 
 #    print "foo = {}".format(unsat_core(and_clauses(uc,axioms),true_clauses(),clauses1))
 
     # filter out non-rep skolems
     repset = set(c.rep for e,c in reps.iteritems())
-    print "clauses_model_to_diagram repset = {}".format(repset)
+#    print "clauses_model_to_diagram repset = {}".format(repset)
     ign = lambda x,ignore=ignore: (ignore(x) and not x in repset)
     res = Clauses([cl for cl in res.fmlas if not any(ign(c) for c in used_symbols_ast(cl))])
-    print "clauses_model_to_diagram res = {}".format(res)
+#    print "clauses_model_to_diagram res = {}".format(res)
     return res
 
 def relation_model_to_clauses(h,r,n):

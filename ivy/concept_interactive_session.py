@@ -256,7 +256,7 @@ class ConceptInteractiveSession(object):
         if filter_polarity is not None and filter_polarity != polarity:
             return []
 
-        return _get_edge_fact(edge,source,target,polarity)
+        return self._get_edge_fact(edge,source,target,polarity)
 
     def get_facts(self,projection=None):
         """

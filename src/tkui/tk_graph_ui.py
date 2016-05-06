@@ -40,6 +40,8 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
         self.update_callback = None
         self.ui_parent = ui_parent
         self.elem_ids = {}
+        self.node_selection = set()
+        self.edge_selection = set()
         self.rebuild()
 
     # This is in case the widget is detroyed by the user. We could
@@ -142,6 +144,9 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
             if hasattr(self,'mark'):
                 del self.mark
 
+            # clear the selection (TODO: keep it and redraw it)
+            self.clear_elem_selection()
+
             self.create_elements(g.cy_elements)
 
             # show the constraint if there is one
@@ -205,6 +210,33 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
                 if 'shape' in self.gettags(item):
                     self.itemconfig(item,fill=('red' if on else ''))
 
+    def select_node(self,node,val=None):
+        cid = self.g.id_from_concept(node)
+        tag = self.elem_ids[cid]
+        ns = self.node_selection
+        newval = val if val is not None else cid not in ns
+        ns.discard(cid)
+        if newval:
+            ns.add(cid)
+        for item in self.find_withtag(tag):
+            if 'shape' in self.gettags(item):
+                self.itemconfig(item,fill=('grey' if newval else ''))
+
+    def select_edge(self,edge,val=None):
+        cid = tuple(self.g.id_from_concept(c) for c in edge)
+
+        es = self.edge_selection
+        newval = val if val is not None else cid not in es
+        es.discard(cid)
+        if newval:
+            es.add(cid)
+#        for item in self.find_withtag(tag):
+#            self.itemconfig(item,fill=('grey' if newval else 'black'))
+        try:
+            tag = self.g.edge_cy_id(edge)
+            self.highlight_edge(tag,newval)
+        except KeyError:
+            pass
 
     # Export the display in DOT format. This also depends on tcldot.
 
