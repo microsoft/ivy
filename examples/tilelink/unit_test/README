@@ -34,9 +34,9 @@ These are unit testers. Run then like this:
 
 ./test_L2HellaCacheBank <options> [seed]
 
-Where seed is a seed for the random number generator and options are:
+Where seed is a seed for the random number generator. To see a list of
+options, use -h.
 
--r    Delay voluntary Releases to work around issue 20
 
 
 Bugs found by randomized testing
