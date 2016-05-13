@@ -122,7 +122,7 @@ class TkGraphWidget(ivy_graph_ui.GraphWidget,Canvas):
                             i += 1
                             rl = ~r.rel_lit if status == 'false' else r.rel_lit
                             handle_to_edge[handle] = (rl,x.name,y.name)
-            print(tk.eval('$graph render ' + self._w  + ' DOT'))
+#            print(tk.eval('$graph render ' + self._w  + ' DOT'))
             tk.eval('eval [$graph render ' + self._w  + ' DOT]')
             if not g.constraints.is_true():
                 bb = self.bbox(ALL)
