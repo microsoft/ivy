@@ -18,19 +18,38 @@ Check out unit-testing branch:
 $ cd uncore
 $ git checkout unit-testing
 
+TEMPORARY: the above probably won't work because the unit-testing
+branch is out-of-date. It is recommended to try this instead for
+testing the L2 cache:
+
+$ cd uncore
+$ get remote set-url origin https://github.com/kenmcmil/uncore.git
+$ git fetch origin unit-testing-ref-l2:unit-testing-ref-l2
+$ git checkout unit-testing-ref-l2
+
+or this for testing the broadcast hub:c
+
+$ cd uncore
+$ get remote set-url origin https://github.com/kenmcmil/uncore.git
+$ git fetch origin broadcast-hub-test-uncached:broadcast-hub-test-uncached
+$ git checkout broadcast-hub-test-uncached
+
+There are some other branches that test different configurations.
+
+At this point you might be able to merge other branches.
+
 Set the ROCKETCHIP environment variable to point to the rocket-chip
 directory.
 
 Back in this directory, do this:
 
-make
+make test_L2HellaCacheBank
 
-This should create two binaries:
+or 
 
-test_L2HellaCacheBank
-test_L2BroadcastHub
+make test_L2BroadcastHub
 
-These are unit testers. Run then like this:
+These are unit testers. Run them like this:
 
 ./test_L2HellaCacheBank <options> [seed]
 
