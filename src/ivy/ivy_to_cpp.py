@@ -545,8 +545,10 @@ def module_to_cpp_class(classname):
 
     # remove the actions not reachable from exported
         
-    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
-    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
+# TODO: may want to call internal actions from testbench
+
+#    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
+#    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = []
     if target.get() == "gen":

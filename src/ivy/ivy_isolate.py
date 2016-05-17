@@ -261,10 +261,11 @@ def isolate_component(mod,isolate_name):
 
     # filter the signature
 
-    new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
-    for s in list(mod.sig.symbols):
-        if s not in new_syms:
-            del mod.sig.symbols[s]
+    # TODO: need a better way to filter signature
+    # new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
+    # for s in list(mod.sig.symbols):
+    #     if s not in new_syms:
+    #         del mod.sig.symbols[s]
 
     # filter the inits
 

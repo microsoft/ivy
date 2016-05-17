@@ -36,8 +36,8 @@ void usage(){
     std::cerr << "  -r          delay voluntary releases\n";
     std::cerr << "  -a          delay uncached acquire if vol release\n";
     std::cerr << "  -u          one uncached client\n";
-    std::cerr << "  -d          inject random delays for progress testing";
-    std::cerr << "  -f <int>    mean time to delay injections";
+    std::cerr << "  -d          inject random delays for progress testing\n";
+    std::cerr << "  -f <int>    mean time to delay injections\n";
     exit(1);
 }
 
