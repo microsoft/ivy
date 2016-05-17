@@ -35,9 +35,9 @@ void usage(){
     std::cerr << "  -t <int>    max number of traces\n";
     std::cerr << "  -r          delay voluntary releases\n";
     std::cerr << "  -a          delay uncached acquire if vol release\n";
-    std::cerr << "  -u          one uncached client\n";
     std::cerr << "  -d          inject random delays for progress testing\n";
     std::cerr << "  -f <int>    mean time to delay injections\n";
+    std::cerr << "  -s          address stride in blocks\n";
     exit(1);
 }
 
@@ -79,10 +79,10 @@ int main(int argc, const char **argv){
     bool delay_rels = false;
     bool delay_acqs = false;
     bool inject_delays = false;
-    bool uncached_client = false;
     int max_cycles = 1000;
     int max_traces = 1;
     int mtbf = 200;
+    int stride = -1;
 
     while (arg < argc) {
         // option -c: max clock cycles per trace
@@ -110,15 +110,15 @@ int main(int argc, const char **argv){
             arg++;
             inject_delays = true;
         }
-        // option -u: one uncached and one cached client
-        else if (argv[arg] == std::string("-u")) {
-            arg++;
-            uncached_client = true;
-        }
         // option -f: mean time to delay failure
         else if (arg < argc - 1 && argv[arg] == std::string("-f")) {
             arg++;
             mtbf = atoi(argv[arg++]);
+        }
+        // option -s: address stride in blocks
+        else if (arg < argc - 1 && argv[arg] == std::string("-s")) {
+            arg++;
+            stride = atoi(argv[arg++]);
         }
         else break;
     }        
@@ -139,7 +139,7 @@ int main(int argc, const char **argv){
     for (int j = 0; j < max_traces; j++) {
 
         tilelink_coherence_manager_tester tb;
-        tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
+        tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut(stride);
         tilelink_two_port_dut &dut = *dut_ptr;
 
         init_gen ig;
@@ -158,13 +158,16 @@ int main(int argc, const char **argv){
             break;
         }
 
-	// For now, make all the memory cached on front
+	// Tell the spec which clients are cached Currently, for each
+        // client, whole address space is cached or whole address
+        // space is uncached. Also, the low client ID's are cached.
 
+        int ccl = dut.cached_clients();
         for (int cl = 0; cl < 2; cl++){
             for (int a = 0; a < 4; a++) 
-                tb.front__cached[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
+                tb.front__cached[cl][a] = 1 ? (cl < ccl) : 0;
             for (int a = 0; a < 2; a++)
-                tb.front__cached_hi[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
+                tb.front__cached_hi[cl][a] = 1 ? (cl < ccl) : 0;
         }
 
         // Assume front interface is ordered

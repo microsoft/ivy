@@ -13,49 +13,140 @@ Build rocket-chip following directions here:
 
 https://github.com/ucb-bar/rocket-chip
 
-Check out unit-testing branch:
+TEMPORARY: The configurations for unit testing of tilelink components
+are not currently merged with the uncore repository. To test uncore,
+additionally do the following:
 
 $ cd uncore
-$ git checkout unit-testing
+$ git fetch https://github.com/kenmcmil/uncore.git master:test-branch
+$ git checkout test-branch
 
-TEMPORARY: the above probably won't work because the unit-testing
-branch is out-of-date. It is recommended to try this instead for
-testing the L2 cache:
+(you can use any name you want for "test-branch"). You could also try
+bringing this branch up to date like this (though you might run into
+incompatibilities):
 
-$ cd uncore
-$ get remote set-url origin https://github.com/kenmcmil/uncore.git
-$ git fetch origin unit-testing-ref-l2:unit-testing-ref-l2
-$ git checkout unit-testing-ref-l2
-
-or this for testing the broadcast hub:c
-
-$ cd uncore
-$ get remote set-url origin https://github.com/kenmcmil/uncore.git
-$ git fetch origin broadcast-hub-test-uncached:broadcast-hub-test-uncached
-$ git checkout broadcast-hub-test-uncached
-
-There are some other branches that test different configurations.
-
-At this point you might be able to merge other branches.
+$ git merge master
 
 Set the ROCKETCHIP environment variable to point to the rocket-chip
 directory.
 
-Back in this directory, do this:
+Configuration
+=============
 
-make test_L2HellaCacheBank
+Configurations for unit testing live in:
 
-or 
+uncore/src/main/scala/builder.scala
 
-make test_L2BroadcastHub
+You can change parameters such as the number of cache sets and ways,
+and the number of cached clients. Some others, in particular the
+number of Acquire trackers, shouldn't be changed, since these are
+fixed in the test bench. To get started, you should use the
+configurations defined at the end of the file.
 
-These are unit testers. Run them like this:
+The number of clients is fixed in the test bench at two (you can
+change this in tilelink_coherence_manager_tester.ivy). By default
+these are both cached clients, but you can set the number of cached
+clients (N_CACHE_CLIENTS) to test uncached Acquires.
+
+Build
+=====
+
+To build the tester, edit the parameters in Makefile (if desired), then do:
+
+$ make
+
+This builds the following two tester binaries:
+
+test_L2HellaCacheBank
+test_L2BroadcastHub
+
+Run
+===
+
+To run (for example) the L2 cache tester, do this:
 
 ./test_L2HellaCacheBank <options> [seed]
 
 Where seed is a seed for the random number generator. To see a list of
 options, use -h.
 
+The important options are:
+
+-c <num>    Set the number of clock cycles per trace
+-t <num>    Set the number of traces
+-s          Set the adress stride
+
+This last parameter requires some explanation. To produce as many
+address clashes as possible the tester uses only a small number of
+addresses (two by default, but this can be changes in
+tilelink_coherence_manager_tester.ivy). The "stride" determines the
+distance between these address in cache blocks. Setting the stride to
+be the number of sets times the number of cache banks will cause all
+addresses to hit the same set, which will maximize collisions (this is
+the default). To see any cache evictions with just two addresses, you
+should need to set the number of ways to one. You can set the stride
+to a different number of blocks to see fewer collisions (so, for
+example, four addresses and a stride set to half the default value
+would give a collision rate of 1/2).
+
+To check for deadlocks, you can additionally use this option:
+
+-d          inject random delays for progress testing
+
+This causes incoming messages to be randomly delayed. A failure to
+meet a progress guarantee is detected when a required output does not
+appear within a fixed delay value. This is not a completely reliable
+way to detect progress issues, but in practice it works fairy well.
+Without the -d option, slow outputs are not flagged. You can adjust
+the mean number of clock cycles between delay injections (on a
+per-port basis) with this option:
+
+-f <int>    mean time to delay injections
+
+Tester output
+============
+
+The tester produces some spew on stdout that looks roughly like this:
+
+====clock 0====
+====clock 1====
+====clock 2====
+====clock 3====
+gen: acquire{cid = 1, id_ = 1, addr_hi = 0, word = 1, own = 1, op = 1, data_ = 0, block = 0, ltime_ = 3}
+====clock 4====
+input: acquire{cid = 1, id_ = 1, addr_hi = 0, word = 1, own = 1, op = 1, data_ = 0, block = 0, ltime_ = 3}
+gen: acquire{cid = 0, id_ = 2, addr_hi = 0, word = 1, own = 1, op = 2, data_ = 0, block = 0, ltime_ = 3}
+====clock 5====
+inner prb blocked
+====clock 6====
+output: probe{cid = 0, id_ = 32767, addr_hi = 0}
+====clock 7====
+gen: release{cid = 0, id_ = 1, voluntary = 0, addr_hi = 0, word = 0, dirty = 0, data_ = 0}
+====clock 8====
+input: release{cid = 0, id_ = 1, voluntary = 0, addr_hi = 0, word = 0, dirty = 0, data_ = 0}
+====clock 9====
+output: acquire{cid = 0, id_ = 1, addr_hi = 0, word = 0, own = 0, op = 0, data_ = 0, block = 1, ltime_ = 3}
+gen: grant{cid = 0, clnt_txid = 1, mngr_txid = 0, word = 0, own = 0, relack = 0, data_ = 0, addr_hi = 0, ltime_ = 0}
+====clock 10====
+
+...
+
+====clock 26====
+====clock 27====
+input: grant{cid = 0, clnt_txid = 1, mngr_txid = 0, word = 0, own = 0, relack = 0, data_ = 0, addr_hi = 0, ltime_ = 0}
+output: grant{cid = 1, clnt_txid = 1, mngr_txid = 1, word = 0, own = 2, relack = 0, data_ = 676834339, addr_hi = 0, ltime_ = 3}
+assert failed
+
+In this trace, "gen" indicates a messages has been generated by the
+test bench and enqueued, but not yet sent to the DUT, "input"
+indicates a message that has been accepted by the DUT, and "output"
+indicates a message produced by the DUT and accepted by the test
+bench. The "assert failed" at the end means that the last output
+violates the protocol specification. When an assertion fails, the
+tester exits with code 1. The tester also produces an VCD trace named
+"dump.vcd" that can be used to diagnose the failure. In the VCD file,
+each clock cycle is 2 "picoseconds".  As a last resort, you can run
+the tester under gdb to debug the failure.
 
 
 Bugs found by randomized testing
