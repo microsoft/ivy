@@ -3,8 +3,8 @@
 
 #L2Config = DefaultL2Config
 
- L2Config = W1Cached1WaysConfig
-# L2Config = W1Cached2WaysConfig
+#L2Config = W1Cached1WaysConfig
+ L2Config = W1Cached2WaysConfig
 # L2Config = W2Cached1WaysConfig
 # L2Config = W2Cached2WaysConfig
 

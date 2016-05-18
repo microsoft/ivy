@@ -396,6 +396,17 @@ int main(int argc, const char **argv){
           }
 	  if (gnt_send & gnt_ready){
             std::cout << "output: " << gnt_m << std::endl;
+            if (gnt_m.own == 0 && !gnt_m.relack && !tb.ref__evs__serialized[gnt_m.ltime_]){
+                // TEMPORARY: we don't know when the DUT actually
+                // serializes an operation. If we get a grant for the
+                // operation and it isn't serialized yet, we assume
+                // the DUT has performed it internally, and serialize
+                // it now. This could fail (giving us a bogus
+                // assertion failure) if the DUT returns grants out of
+                // order.
+                tb.ref__perform(gnt_m.ltime_,tb.buf_id);
+                std::cout << "performed: " << gnt_m.ltime_ << std::endl;
+            }
 	    tb.ext__b__grant(gnt_m.cid,gnt_m.clnt_txid,gnt_m.mngr_txid,gnt_m.word,gnt_m.own,gnt_m.relack,gnt_m.data_,gnt_m.addr_hi,gnt_m.ltime_);
           }
 	  if (prb_send & prb_ready){
@@ -423,18 +434,18 @@ void my_error() {
     exit(1);
 }
 
-void ivy_assert(bool c){
+void ivy_assert(bool c, const char *msg){
     if (!c) {
-        std::cerr << "assert failed\n";
-        std::cout << "assert failed\n";
+        std::cerr << msg << ": assert failed\n";
+        std::cout << msg << ": assert failed\n";
         my_error();
     }
 }
 
-void ivy_assume(bool c){
+void ivy_assume(bool c, const char *msg){
     if (!c) {
-        std::cerr << "assume failed\n";
-        std::cout << "assume failed\n";
+        std::cerr << msg << ": assume failed\n";
+        std::cout << msg << ": assume failed\n";
         my_error();
     }
 }

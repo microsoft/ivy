@@ -360,8 +360,10 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
 
 #ifdef HAS_TAG_ARRAY
 
-      std::cout << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[0].values[0]) & 0x3) 
-                << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[1].values[0]) & 0x3)
+      std::cout
+          // TODO: metadata array seems to get different names for no reason
+          // << "s0 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[0].values[0]) & 0x3) 
+          // << " s1 = " << ((dut.L2Unit_managerEndpoint_meta_meta__T4.contents[1].values[0]) & 0x3)
                 << " d0 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[0].values[0]))
                 << " d1 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[1].values[0]))
                 << " d2 = " << ((dut.L2Unit_managerEndpoint_data__array.contents[2].values[0]))
