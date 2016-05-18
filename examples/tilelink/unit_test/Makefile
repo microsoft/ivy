@@ -1,9 +1,9 @@
 ################################################################################
 # Parameters you can set
 
-L2Config = DefaultL2Config
+#L2Config = DefaultL2Config
 
-# L2Config = W1Cached1WaysConfig
+ L2Config = W1Cached1WaysConfig
 # L2Config = W1Cached2WaysConfig
 # L2Config = W2Cached1WaysConfig
 # L2Config = W2Cached2WaysConfig
@@ -32,7 +32,7 @@ L2HellaCacheBank/L2HellaCacheBank.prms.h: L2HellaCacheBank/L2HellaCacheBank.o
 tilelink_coherence_manager_hella.cpp: tilelink_coherence_manager.cpp 
 	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2HellaCacheBank_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_hella.cpp
 
-test_L2HellaCacheBank: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_hella.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_hella_cache.cpp L2HellaCacheBank/L2HellaCacheBank.h L2HellaCacheBank/L2HellaCacheBank.o L2HellaCacheBank/L2HellaCacheBank.prms.h
+test_L2HellaCacheBank: tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp tilelink_coherence_manager_hella.cpp hash.h hash.cpp main.cpp tilelink_two_port_dut.h tilelink_hella_cache.cpp L2HellaCacheBank/L2HellaCacheBank.o L2HellaCacheBank/L2HellaCacheBank.prms.h
 	g++ -g -I $(Z3DIR)/include -I L2HellaCacheBank -L $(Z3DIR)/lib -o test_L2HellaCacheBank main.cpp tilelink_coherence_manager_tester.cpp hash.cpp tilelink_hella_cache.cpp L2HellaCacheBank/L2HellaCacheBank.o -lz3
 
 # Make L2BroadcastHub emulator

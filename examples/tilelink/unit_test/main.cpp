@@ -24,7 +24,7 @@ void mutate_memory(tilelink_coherence_manager_tester & tb){
         int data = rand() % tb.__CARD__data;
         tb.ref__mem[addr] = data;
         tb.front__dirt_p[client][addr] = 1;
-        std::cout << "write(cid = " << client << ", addr = " << addr << ", data = " << data << "\n";
+        std::cout << "write(cid = " << client << ", addr = " << addr << ", data = " << data << ")\n";
     }
 }
 
@@ -38,6 +38,7 @@ void usage(){
     std::cerr << "  -d          inject random delays for progress testing\n";
     std::cerr << "  -f <int>    mean time to delay injections\n";
     std::cerr << "  -s          address stride in blocks\n";
+    std::cerr << "  -p          disable PutAtomic\n";
     exit(1);
 }
 
@@ -83,7 +84,8 @@ int main(int argc, const char **argv){
     int max_traces = 1;
     int mtbf = 200;
     int stride = -1;
-
+    int supports_uncached_atomic = 1;
+                                                
     while (arg < argc) {
         // option -c: max clock cycles per trace
         if (arg < argc - 1 && argv[arg] == std::string("-c")) {
@@ -119,6 +121,11 @@ int main(int argc, const char **argv){
         else if (arg < argc - 1 && argv[arg] == std::string("-s")) {
             arg++;
             stride = atoi(argv[arg++]);
+        }
+        // option -d: disable PutAtomic
+        else if (argv[arg] == std::string("-p")) {
+            arg++;
+            supports_uncached_atomic = 0;
         }
         else break;
     }        
@@ -174,6 +181,10 @@ int main(int argc, const char **argv){
 
         tb.front__ordered = 1;
         
+        // Do we allow PutAtomic on front?
+
+        tb.front__supports_uncached_atomic = supports_uncached_atomic; 
+
 #if 0
 	tb.back__cached[0] = 0;
 	tb.back__cached[1] = 0;
@@ -393,11 +404,11 @@ int main(int argc, const char **argv){
           }
 
           tb.back_acq_rdy = acq_ready || !acq_send; 
-          if (!tb.back_acq_rdy) std::cout << "outer acq blocked";
+          if (!tb.back_acq_rdy) std::cout << "outer acq blocked\n";
           tb.front_gnt_rdy = gnt_ready || !gnt_send;
-          if (!tb.front_gnt_rdy) std::cout << "inner gnt blocked";
+          if (!tb.front_gnt_rdy) std::cout << "inner gnt blocked\n";
           tb.front_prb_rdy = prb_ready || !prb_send;
-          if (!tb.front_prb_rdy) std::cout << "inner prb blocked";
+          if (!tb.front_prb_rdy) std::cout << "inner prb blocked\n";
 
           tb.__tick(30);
 

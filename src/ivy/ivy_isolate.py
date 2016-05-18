@@ -318,7 +318,7 @@ def get_mixin_order(iso,mod):
     for action in actions:
         mixins = mod.mixins[action]
         mixers = iu.topological_sort(list(set(m.mixer() for m in mixins)),arcs)
-        iu.dbg('mixers')
+#        iu.dbg('mixers')
         keymap = dict((x,y) for y,x in enumerate(mixers))
         key = lambda m: keymap[m.mixer()]
         before = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinBeforeDef)],key=key)

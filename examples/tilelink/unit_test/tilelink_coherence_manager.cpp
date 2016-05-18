@@ -307,8 +307,8 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
     }
     void set_grant(bool send, const grant &a){
         int own = client_txid_to_own[a.clnt_txid];
-        if (send)
-            std::cout << "own: " << own << "\n";
+        //        if (send)
+        //    std::cout << "own: " << own << "\n";
         dut.L2Unit__io_outer_grant_valid = LIT<1>(send);
         dut.L2Unit__io_outer_grant_bits_is_builtin_type = LIT<1>(own == 0);
         dut.L2Unit__io_outer_grant_bits_addr_beat = LIT<2>(a.word);
@@ -319,7 +319,7 @@ class tilelink_coherence_manager : public tilelink_two_port_dut {
         dut.L2Unit__io_outer_grant_bits_g_type = LIT<3>(to_g_type(own,client_txid_to_op[a.clnt_txid]));
         dut.L2Unit__io_outer_grant_bits_data = LIT<128>(a.data_);
         if(send){
-            std::cout << "grant type = " << dut.L2Unit__io_outer_grant_bits_g_type.values[0] << "\n";
+            //            std::cout << "grant type = " << dut.L2Unit__io_outer_grant_bits_g_type.values[0] << "\n";
             manager_txid_to_addr_hi[a.mngr_txid] = a.addr_hi;
             manager_txid_to_word[a.mngr_txid] = a.word;
             manager_txid_to_own[a.mngr_txid] = own;
