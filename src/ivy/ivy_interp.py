@@ -463,20 +463,20 @@ def decompose_action_app(state2,expr):
     action = eval_action(expr.rep)
     state1 = eval_state(expr.args[0])
     comps = action.decompose(state1.value,state2.value)
-    print "comps:"
-    for comp in comps:
-        for a in comp[1]:
-            print a
-        print ""
+#    print "comps:"
+#    for comp in comps:
+#        for a in comp[1]:
+#            print a
+#        print ""
     bg = state1.domain.background_theory(state1.in_scope)
     for pre,acts,post in comps:
-        print "pre core: {} ".format(unsat_core(and_clauses(pre[1],bg),true_clauses()))
-        print "post core: {} ".format(unsat_core(and_clauses(post[1],bg),true_clauses()))
+#        print "pre core: {} ".format(unsat_core(and_clauses(pre[1],bg),true_clauses()))
+#        print "post core: {} ".format(unsat_core(and_clauses(post[1],bg),true_clauses()))
         upds = [act.int_update(state1.domain,state1.in_scope) for act in acts]
         h = History(pre)
 #        print "h.post: {}".format(h.post)
         for upd in upds:
-            print "upd: {}".format(upd)
+#            print "upd: {}".format(upd)
             h = h.forward_step(bg,upd)
 #            print "h.post: {}".format(h.post)
         h = h.assume(post)
@@ -566,8 +566,8 @@ def eval_assert_rhs(rhs,domain):
         return eval_state(rhs)
 
 def eval_state_order(lhs,rhs):
-    print "lhs = {}".format(lhs)
-    print "rhs = {}".format(rhs)
+#    print "lhs = {}".format(lhs)
+#    print "rhs = {}".format(rhs)
     state = eval_state(lhs)
     if is_state_join(rhs):
         return any(state.domain.order(state,eval_state(r)) for r in rhs.args)
