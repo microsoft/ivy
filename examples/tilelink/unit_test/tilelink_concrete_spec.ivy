@@ -30,6 +30,9 @@
 # TODO: We allow a probe to be handled in the middle of a voluntary release,
 # so that some beats are voluntary ans some involuntary. This could be made
 # mode strict.
+#
+# TODO: BroadcastHub does not support PutAtomic
+#
 ################################################################################
 
 include tilelink_abstract_spec
@@ -183,6 +186,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     # if true, this interface does not allowed reordering of messages
 
     relation ordered
+
+    ########################################
+    # if true, this interface supports PutAtomic messages
+
+    relation supports_uncached_atomic
 
     ########################################
     # An Acquire has three phases: requested, accepted and finishing
@@ -346,6 +354,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		# (8) Must be in uncached address space
 
 		assert ~cached_hi(c,hi);
+
+
+		# TODO: HACK: some components do not support PutAtomic
+
+		assert o = cas -> supports_uncached_atomic;
 
 		########################################
 		# mark the acquire as requested

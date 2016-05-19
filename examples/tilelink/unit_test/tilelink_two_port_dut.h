@@ -138,9 +138,10 @@ struct tilelink_two_port_dut {
   virtual client_port *cp() = 0;
   virtual manager_port *mp() = 0;
   virtual void clock() = 0;
+  virtual unsigned cached_clients() = 0;
   virtual ~tilelink_two_port_dut() {};
 };
 
 
-tilelink_two_port_dut *create_tilelink_two_port_dut();
+tilelink_two_port_dut *create_tilelink_two_port_dut(int stride);
 

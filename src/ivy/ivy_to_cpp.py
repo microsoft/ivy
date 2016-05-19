@@ -545,13 +545,15 @@ def module_to_cpp_class(classname):
 
     # remove the actions not reachable from exported
         
-    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
-    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
+# TODO: may want to call internal actions from testbench
+
+#    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
+#    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = []
     if target.get() == "gen":
-        header.append('extern void ivy_assert(bool);\n')
-        header.append('extern void ivy_assume(bool);\n')
+        header.append('extern void ivy_assert(bool,const char *);\n')
+        header.append('extern void ivy_assume(bool,const char *);\n')
         header.append('extern void ivy_check_progress(int,int);\n')
         header.append('extern int choose(int,int);\n')
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
@@ -890,7 +892,7 @@ def emit_assert(self,header):
     indent(code)
     code.append('ivy_assert(')
     il.close_formula(self.args[0]).emit(header,code)
-    code.append(');\n')    
+    code.append(', "{}");\n'.format(iu.lineno_str(self)))    
     header.extend(code)
 
 ia.AssertAction.emit = emit_assert
@@ -900,7 +902,7 @@ def emit_assume(self,header):
     indent(code)
     code.append('ivy_assume(')
     il.close_formula(self.args[0]).emit(header,code)
-    code.append(');\n')    
+    code.append(', "{}");\n'.format(iu.lineno_str(self)))    
     header.extend(code)
 
 ia.AssumeAction.emit = emit_assume

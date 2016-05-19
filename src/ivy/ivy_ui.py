@@ -155,7 +155,6 @@ class AnalysisGraphUI(object):
 
     def node_execute_commands(self,n):
         state_equations = self.g.state_actions(n)
-        print "eqns: {}".format([type(q) for q in state_equations])
         return [(state_equation_label(a), functools.partial(self.do_state_action,a))
                 for a in sorted(state_equations, key=state_equation_label)]
 
@@ -222,7 +221,6 @@ class AnalysisGraphUI(object):
     # Evaluate a state equation to generate a new node
 
     def do_state_action(self,a,node=None):
-        print "a: {}".format(type(a))
         with self.ui_parent.run_context():
             with EvalContext(check=False):
                 print "action {"

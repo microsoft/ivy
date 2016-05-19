@@ -24,7 +24,7 @@ void mutate_memory(tilelink_coherence_manager_tester & tb){
         int data = rand() % tb.__CARD__data;
         tb.ref__mem[addr] = data;
         tb.front__dirt_p[client][addr] = 1;
-        std::cout << "write(cid = " << client << ", addr = " << addr << ", data = " << data << "\n";
+        std::cout << "write(cid = " << client << ", addr = " << addr << ", data = " << data << ")\n";
     }
 }
 
@@ -35,9 +35,10 @@ void usage(){
     std::cerr << "  -t <int>    max number of traces\n";
     std::cerr << "  -r          delay voluntary releases\n";
     std::cerr << "  -a          delay uncached acquire if vol release\n";
-    std::cerr << "  -u          one uncached client\n";
-    std::cerr << "  -d          inject random delays for progress testing";
-    std::cerr << "  -f <int>    mean time to delay injections";
+    std::cerr << "  -d          inject random delays for progress testing\n";
+    std::cerr << "  -f <int>    mean time to delay injections\n";
+    std::cerr << "  -s          address stride in blocks\n";
+    std::cerr << "  -p          disable PutAtomic\n";
     exit(1);
 }
 
@@ -79,11 +80,12 @@ int main(int argc, const char **argv){
     bool delay_rels = false;
     bool delay_acqs = false;
     bool inject_delays = false;
-    bool uncached_client = false;
     int max_cycles = 1000;
     int max_traces = 1;
     int mtbf = 200;
-
+    int stride = -1;
+    int supports_uncached_atomic = 1;
+                                                
     while (arg < argc) {
         // option -c: max clock cycles per trace
         if (arg < argc - 1 && argv[arg] == std::string("-c")) {
@@ -110,15 +112,20 @@ int main(int argc, const char **argv){
             arg++;
             inject_delays = true;
         }
-        // option -u: one uncached and one cached client
-        else if (argv[arg] == std::string("-u")) {
-            arg++;
-            uncached_client = true;
-        }
         // option -f: mean time to delay failure
         else if (arg < argc - 1 && argv[arg] == std::string("-f")) {
             arg++;
             mtbf = atoi(argv[arg++]);
+        }
+        // option -s: address stride in blocks
+        else if (arg < argc - 1 && argv[arg] == std::string("-s")) {
+            arg++;
+            stride = atoi(argv[arg++]);
+        }
+        // option -d: disable PutAtomic
+        else if (argv[arg] == std::string("-p")) {
+            arg++;
+            supports_uncached_atomic = 0;
         }
         else break;
     }        
@@ -139,7 +146,7 @@ int main(int argc, const char **argv){
     for (int j = 0; j < max_traces; j++) {
 
         tilelink_coherence_manager_tester tb;
-        tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut();
+        tilelink_two_port_dut *dut_ptr = create_tilelink_two_port_dut(stride);
         tilelink_two_port_dut &dut = *dut_ptr;
 
         init_gen ig;
@@ -158,19 +165,26 @@ int main(int argc, const char **argv){
             break;
         }
 
-	// For now, make all the memory cached on front
+	// Tell the spec which clients are cached Currently, for each
+        // client, whole address space is cached or whole address
+        // space is uncached. Also, the low client ID's are cached.
 
+        int ccl = dut.cached_clients();
         for (int cl = 0; cl < 2; cl++){
             for (int a = 0; a < 4; a++) 
-                tb.front__cached[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
+                tb.front__cached[cl][a] = 1 ? (cl < ccl) : 0;
             for (int a = 0; a < 2; a++)
-                tb.front__cached_hi[cl][a] = 1 ? (cl == 0 || !uncached_client) : 0;
+                tb.front__cached_hi[cl][a] = 1 ? (cl < ccl) : 0;
         }
 
         // Assume front interface is ordered
 
         tb.front__ordered = 1;
         
+        // Do we allow PutAtomic on front?
+
+        tb.front__supports_uncached_atomic = supports_uncached_atomic; 
+
 #if 0
 	tb.back__cached[0] = 0;
 	tb.back__cached[1] = 0;
@@ -382,6 +396,17 @@ int main(int argc, const char **argv){
           }
 	  if (gnt_send & gnt_ready){
             std::cout << "output: " << gnt_m << std::endl;
+            if (gnt_m.own == 0 && !gnt_m.relack && !tb.ref__evs__serialized[gnt_m.ltime_]){
+                // TEMPORARY: we don't know when the DUT actually
+                // serializes an operation. If we get a grant for the
+                // operation and it isn't serialized yet, we assume
+                // the DUT has performed it internally, and serialize
+                // it now. This could fail (giving us a bogus
+                // assertion failure) if the DUT returns grants out of
+                // order.
+                tb.ref__perform(gnt_m.ltime_,tb.buf_id);
+                std::cout << "performed: " << gnt_m.ltime_ << std::endl;
+            }
 	    tb.ext__b__grant(gnt_m.cid,gnt_m.clnt_txid,gnt_m.mngr_txid,gnt_m.word,gnt_m.own,gnt_m.relack,gnt_m.data_,gnt_m.addr_hi,gnt_m.ltime_);
           }
 	  if (prb_send & prb_ready){
@@ -390,11 +415,11 @@ int main(int argc, const char **argv){
           }
 
           tb.back_acq_rdy = acq_ready || !acq_send; 
-          if (!tb.back_acq_rdy) std::cout << "outer acq blocked";
+          if (!tb.back_acq_rdy) std::cout << "outer acq blocked\n";
           tb.front_gnt_rdy = gnt_ready || !gnt_send;
-          if (!tb.front_gnt_rdy) std::cout << "inner gnt blocked";
+          if (!tb.front_gnt_rdy) std::cout << "inner gnt blocked\n";
           tb.front_prb_rdy = prb_ready || !prb_send;
-          if (!tb.front_prb_rdy) std::cout << "inner prb blocked";
+          if (!tb.front_prb_rdy) std::cout << "inner prb blocked\n";
 
           tb.__tick(30);
 
@@ -409,18 +434,18 @@ void my_error() {
     exit(1);
 }
 
-void ivy_assert(bool c){
+void ivy_assert(bool c, const char *msg){
     if (!c) {
-        std::cerr << "assert failed\n";
-        std::cout << "assert failed\n";
+        std::cerr << msg << ": assert failed\n";
+        std::cout << msg << ": assert failed\n";
         my_error();
     }
 }
 
-void ivy_assume(bool c){
+void ivy_assume(bool c, const char *msg){
     if (!c) {
-        std::cerr << "assume failed\n";
-        std::cout << "assume failed\n";
+        std::cerr << msg << ": assume failed\n";
+        std::cout << msg << ": assume failed\n";
         my_error();
     }
 }

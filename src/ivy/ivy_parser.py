@@ -12,20 +12,41 @@ import copy
 import ply.yacc as yacc
 import string
 
-precedence = (
-    ('left', 'SEMI'),
-    ('left', 'IF'),
-    ('left', 'ELSE'),
-    ('left', 'OR'),
-    ('left', 'AND'),
-    ('left', 'TILDA'),
-    ('left', 'EQ','LE','LT','GE','GT'),
-    ('left', 'TILDAEQ'),
-    ('left', 'COLON'),
-    ('left', 'PLUS'),
-    ('left', 'MINUS'),
-    ('left', 'TIMES'),
-)
+if not (iu.get_numeric_version() <= [1,2]):
+
+    precedence = (
+        ('left', 'SEMI'),
+        ('left', 'IF'),
+        ('left', 'ELSE'),
+        ('left', 'OR'),
+        ('left', 'AND'),
+        ('left', 'TILDA'),
+        ('left', 'EQ','LE','LT','GE','GT'),
+        ('left', 'TILDAEQ'),
+        ('left', 'COLON'),
+        ('left', 'PLUS'),
+        ('left', 'MINUS'),
+        ('left', 'TIMES'),
+    )
+
+else:
+
+    # This is for versio 1.2 and older, where * is used 
+    # in "concept space" descriptions, but not terms
+
+    precedence = (
+        ('left', 'SEMI'),
+        ('left', 'IF'),
+        ('left', 'ELSE'),
+        ('left', 'OR'),
+        ('left', 'AND'),
+        ('left', 'PLUS'),
+        ('left', 'TIMES'),
+        ('left', 'TILDA'),
+        ('left', 'EQ','LE','LT','GE','GT'),
+        ('left', 'TILDAEQ'),
+        ('left', 'COLON'),
+    )
 
 
 class ParseError(Exception):
@@ -929,7 +950,7 @@ def p_state_expr_true(p):
 
 def p_state_expr_false(p):
     'state_expr : FALSE'
-    p[0] = OR()
+    p[0] = Or()
 
 def p_state_expr_symbol(p):
     'state_expr : SYMBOL'

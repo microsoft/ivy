@@ -59,20 +59,22 @@ def p_term_var(p):
     'term : var'
     p[0] = p[1]
 
-def p_term_term_PLUS_term(p):
-    'term : term PLUS term'
-    p[0] = App(p[2],p[1],p[3])
-    p[0].lineno = get_lineno(p,2)
-    
-def p_term_term_MINUS_term(p):
-    'term : term MINUS term'
-    p[0] = App(p[2],p[1],p[3])
-    p[0].lineno = get_lineno(p,2)
+if not (iu.get_numeric_version() <= [1,2]):
 
-def p_term_term_TIMES_term(p):
-    'term : term TIMES term'
-    p[0] = App(p[2],p[1],p[3])
-    p[0].lineno = get_lineno(p,2)
+    def p_term_term_PLUS_term(p):
+        'term : term PLUS term'
+        p[0] = App(p[2],p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+
+    def p_term_term_MINUS_term(p):
+        'term : term MINUS term'
+        p[0] = App(p[2],p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+
+    def p_term_term_TIMES_term(p):
+        'term : term TIMES term'
+        p[0] = App(p[2],p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
 
 
 def p_terms(p):

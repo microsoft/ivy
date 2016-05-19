@@ -717,11 +717,8 @@ class GraphStack(object):
         del self.redo_stack[:]
 
 def standard_graph(parent_state=None):
-
     sorts = [s for s in il.sig.sorts.values() if il.is_first_order_sort(s)]
-    
     g = Graph(sorts,parent_state)
-    
     return GraphStack(g)
     
 
