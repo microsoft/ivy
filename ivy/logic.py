@@ -179,7 +179,7 @@ class Eq(recstruct('Eq', [], ['t1', 't2'])):
     sort = Boolean
     @classmethod
     def _preprocess_(cls, t1, t2):
-        if TopS in (t1.sort, t2.sort):
+        if type(t1.sort) == TopSort or type(t2.sort) == TopSort:
             pass
         elif t1.sort != t2.sort:
             raise SortError("Cannot compare different sorts: {}:{} == {}:{}".format(t1,t1.sort,t2,t2.sort))

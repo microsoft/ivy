@@ -183,6 +183,7 @@ def sortify_with_inference(ast):
         res = sort_infer(res)
     return res
 
+
 ivy_ast.AST.compile_with_sort_inference = sortify_with_inference
 
 def compile_const(v,sig):

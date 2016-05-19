@@ -367,7 +367,7 @@ def create_isolate(iso,mod = None,**kwargs):
         # Create one big external action if requested
 
         ext = kwargs['ext'] if 'ext' in kwargs else ext_action.get()
-        if 'ext' is not None:
+        if ext is not None:
             ext_act = ia.ChoiceAction(*[mod.actions[x] for x in sorted(mod.public_actions)])
             mod.public_actions.add(ext);
             mod.actions[ext] = ext_act;

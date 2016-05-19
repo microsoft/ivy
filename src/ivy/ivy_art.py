@@ -104,14 +104,11 @@ class AnalysisGraph(object):
         if ic == None:
             ic = im.init_cond
         s = self.domain.new_state(ic)
-        if option_abs_init.get():
-            s2 = self.domain.new_state(ic)
-            self.add(s2,s)
-            if abstractor:
-                abstractor(s2)
-                print "initial state: {}".format(s2)
-        else:
-            self.add(s)
+        s2 = self.domain.new_state(ic)
+        self.add(s2,s)
+        if abstractor:
+            abstractor(s2)
+        print "initial state: {}".format(s2)
 
     def initialize(self, abstractor):
         ac = self.context
@@ -130,6 +127,7 @@ class AnalysisGraph(object):
     def state_actions(self,state):
         if hasattr(state,'label') and state.label != None:
             return [state_equation(post,expr) for post,e in self.predicates.iteritems() for expr in eval_state_actions(e,state)]
+        iu.dbg('self.public_actions')
         return [state_equation(None,action_app(a,state)) for a in self.actions if a in self.public_actions]
 
     def do_state_action(self,equation,abstractor):

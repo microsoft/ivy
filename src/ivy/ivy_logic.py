@@ -267,7 +267,7 @@ def find_polymorphic_symbol(symbol_name):
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
     if symbol_name[0].isdigit():
-        return Symbol(symbol_name,lg.TopSort())
+        return Symbol(symbol_name,alpha)
     return find_symbol(symbol_name)
 
 class UnionSort(object):
@@ -663,7 +663,7 @@ def sort_infer(term):
     res = concretize_sorts(term)
     for x in chain(lu.used_variables(res),lu.used_constants(res)):
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
-            raise IvyError(None,"cannot infer sort of {}".format(x))
+            raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
 #    print "sort_infer: res = {!r}".format(res)
     return res
 
@@ -743,7 +743,7 @@ def app_str(self):
     name = self.func.name
     poly = name in polymorphic_symbols
     if poly and any(not(is_variable(a) or is_numeral(a)) for a in self.args):
-        poly = false
+        poly = False
     args = [app_arg_str(a,poly) for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)

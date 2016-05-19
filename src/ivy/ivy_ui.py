@@ -59,7 +59,8 @@ class AnalysisGraphUI(object):
     # reasons, abstract mode uses a concrete initial state.
 
     def start(self):
-        self.g.initialize(self.init_alpha())
+        if len(self.g.states) == 0:
+            self.g.initialize(self.init_alpha())
         self.rebuild()
 
     def init_alpha(self):
