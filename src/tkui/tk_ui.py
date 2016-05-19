@@ -224,7 +224,7 @@ class TkAnalysisGraphWidget(tk_cy.TkCyCanvas,uu.WithMenuBar):
 
     def get_node_styles(self,elem):
         res = {'width' : 2}
-        res['fill'] = ''
+        res['fill'] = 'black' if get_classes(elem) == 'bottom_state' else ''
         res['outline'] = 'black'
         return res
         

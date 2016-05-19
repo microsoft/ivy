@@ -202,11 +202,8 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
 
     def show_mark(self,on=True):
         if hasattr(self,'mark'):
-            print "show_mark"
             tag = self.elem_ids[self.g.id_from_concept(self.mark)]
-            print "tag: {}".format(tag)
             for item in self.find_withtag(tag):
-                print "item: {}".format(item)
                 if 'shape' in self.gettags(item):
                     self.itemconfig(item,fill=('red' if on else ''))
 

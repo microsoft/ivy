@@ -507,7 +507,6 @@ class AnalysisGraphUI(object):
     # Refines the abstract domain by adding a new concept space.
 
     def refine(self,concept):
-        print "concept: {}".format(concept)
         self.g.domain.concept_spaces.append((concept[0],concept[1]))
 
     # Get a label for an ARG node

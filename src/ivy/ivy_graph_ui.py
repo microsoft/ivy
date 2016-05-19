@@ -160,7 +160,9 @@ class GraphWidget(object):
 
     # get the edge menu actions
 
-    def get_edge_actions(self,edge):
+    def get_edge_actions(self,edge,click='left'):
+        if click != 'left':
+            return []
         return [
             ("Empty",self.empty_edge),
             ("Materialize",self.materialize_edge),
@@ -173,7 +175,7 @@ class GraphWidget(object):
         return next(n for n in self.g.all_nodes if n.name == name)
 
     def checkpoint(self,set_backtrack_point=False):
-        self.graph_stack.checkpoint(set_backtrack_point=False)
+        self.graph_stack.checkpoint(set_backtrack_point)
 #        self.g.enabled_relations = set(x.name for x in self.visible_relations())
 
     def undo(self):

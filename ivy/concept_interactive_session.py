@@ -5,6 +5,7 @@
 """
 
 from itertools import product
+import copy
 
 from concept_alpha import alpha
 from logic import Var, Const, And, Not, ForAll, Eq, TopSort, SortError
@@ -60,7 +61,7 @@ class ConceptInteractiveSession(object):
             self.suppose_constraints[:],
             self.widget,
             self.analysis_session,
-            self.cache,
+            copy.copy(self.cache),  # make shallow copy of cache!
             recompute
         )
         result.undo_stack = self.undo_stack[:]

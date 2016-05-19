@@ -495,7 +495,7 @@ class Graph(object):
         for elem in self.cy_elements.elements:
             if elem['group'] == 'nodes':
                 nlabs = set(elem['data']['label'].split('\n'))
-                if all(l in nlabs for l in labels):
+                if all((l in nlabs or l.startswith('!') and l[1:] not in nlabs) for l in labels):
                     return self.concept_domain.concepts[elem['data']['obj']]
 
     # find a relation with the given label
@@ -533,7 +533,8 @@ class Graph(object):
         cs = self.concept_session
         cs.cache.clear()
         vocab = list(ilu.used_symbols_asts([c.formula for c in self.nodes]))
-        vocab += list(all_symbols()) + list(ilu.used_symbols_ast(cs._to_formula()))
+        fsyms = list(s for s in ilu.used_symbols_ast(cs._to_formula()) if not s.is_skolem())
+        vocab += list(all_symbols()) + fsyms
         cs.domain = replace_concept_domain_vocabulary(cs.domain,set(vocab))
         if recomp:
             self.recompute()
@@ -583,8 +584,8 @@ class Graph(object):
         return [] # TODO: implement
         
     def projection(self,concept_name,concept_class,concept_combiner=None):
-        if concept_combiner is not None:
-            print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
+#        if concept_combiner is not None:
+#            print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
         if concept_class in ('node_labels','edges'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
@@ -597,6 +598,7 @@ class Graph(object):
 
     def copy(self):
         c = Graph([])
+        c.state = self.state.copy()
         c.cy_elements = self.cy_elements
         c.concept_session = self.concept_session.clone(recompute=False)
         c.parent_state = self.parent_state

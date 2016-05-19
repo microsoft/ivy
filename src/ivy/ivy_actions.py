@@ -420,7 +420,7 @@ class NullFieldAction(Action):
     def name(self):
         return 'null_field'
     def __str__(self):
-        return str(self.args[0]) + '.' + self.args[1] + ' := null'
+        return str(self.args[0]) + '.' + str(self.args[1]) + ' := null'
     def action_update(self,domain,pvars):
         l,f = self.args
         return make_field_update(self,l,f,lambda v: Or(),domain,pvars)
