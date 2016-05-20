@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Ivy by Microsoft</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">Ivy</h1>
+        <p class="header">IVy is a research tool intended to allow interactive development of protocols and their proofs of correctness and to provide a platform for developing and experimenting with automated proof techniques. In particular, IVy provides interactive visualization of automated proofs, and supports a use model in which the human protocol designer and the automated tool interact to expose errors and prove correctness.</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/Microsoft/ivy/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/Microsoft/ivy/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/Microsoft/ivy">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/Microsoft">Microsoft</a></p>
+
+
+      </header>
+      <section>
+        <h1>
+<a id="ivy" class="anchor" href="#ivy" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>ivy</h1>
+
+<p>IVy is a research tool intended to allow interactive development of
+protocols and their proofs of correctness and to provide a platform
+for developing and experimenting with automated proof techniques. In
+particular, IVy provides interactive visualization of automated
+proofs, and supports a use model in which the human protocol designer
+and the automated tool interact to expose errors and prove
+correctness.</p>
+
+<h2>
+<a id="prerequisites" class="anchor" href="#prerequisites" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>prerequisites</h2>
+
+<h3>
+<a id="python-27" class="anchor" href="#python-27" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>python 2.7</h3>
+
+<p>Get it from <a href="https://www.python.org/downloads">here</a> or as part of
+your Linux distribution.</p>
+
+<h3>
+<a id="z3" class="anchor" href="#z3" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Z3</h3>
+
+<p>Following the instructions <a href="https://github.com/Z3Prover/z3">here</a> to
+install Z3. Set the environment variable Z3DIR to the prefix at which
+you installed Z3. By defult this is /usr/local, in which case:</p>
+
+<pre><code>$ export Z3DIR = /usr/local
+</code></pre>
+
+<h3>
+<a id="python-packages" class="anchor" href="#python-packages" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Python packages</h3>
+
+<p>Install the python packages ply and pygraphviz. On Ubuntu, install them
+like this:</p>
+
+<pre><code>$ sudo apt-get install python-ply python-pygraphviz
+</code></pre>
+
+<h3>
+<a id="tcltktcldot" class="anchor" href="#tcltktcldot" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>tcl/tk/tcldot</h3>
+
+<p>To use the Tk-based user interface, you need to install the python
+package tk, the tix widget set, and the tcldot package (part of
+graphviz). On Ubuntu, install them all like this:</p>
+
+<pre><code>$ sudo apt-get install python-tk tix libgv-tcl
+</code></pre>
+
+<h2>
+<a id="install" class="anchor" href="#install" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>install</h2>
+
+<p>Get the source like this:</p>
+
+<pre><code>$ git clone https://github.com/Microsoft/ivy.git
+</code></pre>
+
+<p>Set the environment variable IVYDIR to point to the root of Ivy's
+source tree, like this:</p>
+
+<pre><code>$ cd ivy
+$ export IVYDIR=`pwd`
+</code></pre>
+
+<p>Add Ivy's bin directory to your path, like this:</p>
+
+<pre><code>$ export PATH=`pwd`/bin:$PATH
+</code></pre>
+
+<h2>
+<a id="run" class="anchor" href="#run" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>run</h2>
+
+<p>Run Ivy on an example, using the Tcl/Tk user interface:</p>
+
+<pre><code>$ cd examples/ivy
+$ ivy client_server.ivy
+</code></pre>
+
+<h2>
+<a id="emacs-mode" class="anchor" href="#emacs-mode" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>emacs mode</h2>
+
+<p>An emacs major mode for Ivy is available in lib/emacs/ivy-mode.el. Put this file
+somewhere in your emacs load path and add the following code to your
+.emacs:</p>
+
+<pre><code>(add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
+(autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
+</code></pre>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
