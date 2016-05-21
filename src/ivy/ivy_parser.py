@@ -95,11 +95,14 @@ def do_insts(ivy,insts):
             fparams = defn.args[0].args
             if len(aparams) != len(fparams):
                 raise iu.IvyError(instantiation,"wrong number of arguments to module {}".format(inst.relname))
-            subst = dict((x.rep,y.rep) for x,y in zip(fparams,aparams))
+            subst = dict((x.rep,y.rep) for x,y in zip(fparams,aparams) if not isinstance(y,Variable))
+            vsubst = dict((x.rep,y) for x,y in zip(fparams,aparams) if isinstance(y,Variable))
             module = defn.args[1]
             for decl in module.decls:
 #                print "before: %s" % (decl)
                 idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+                if vsubst:
+                    idecl = substitute_constants_ast(idecl,vsubst)
                 if isinstance(idecl,ActionDecl):
                     for foo in idecl.args:
                         if not hasattr(foo.args[1],'lineno'):
@@ -187,6 +190,16 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
     d = Definition(app_to_atom(p[3]),p[6])
     p[0].declare(ModuleDecl(d))
     p[0].modules[d.defines()] = d
+    stack.pop()
+
+def p_top_object_symbol_eq_lcb_top_rcb(p):
+    'top : top OBJECT SYMBOL EQ LCB top RCB'
+    p[0] = p[1]
+    module = p[6]
+    pref = Atom(p[3],[])
+    for decl in module.decls:
+        idecl = subst_prefix_atoms_ast(decl,{},pref,module.defined)
+        p[0].declare(idecl)
     stack.pop()
 
 def p_top_macro_atom_eq_lcb_action_rcb(p):

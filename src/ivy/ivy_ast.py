@@ -770,6 +770,18 @@ def substitute_ast(ast,subs):
         copy_attributes_ast(ast,res)
         return res
 
+def substitute_constants_ast(ast,subs):
+    """
+    Substitute terms for variables in an ast. Here, subs is
+    a dict from string names of variables to terms.
+    """
+    if (isinstance(ast, Atom) or isinstance(ast,App)) and not ast.args:
+        return subs.get(ast.rep,ast)
+    else:
+        res = ast.clone([substitute_constants_ast(x,subs) for x in ast.args])
+        copy_attributes_ast(ast,res)
+        return res
+
 def variables_distinct_ast(ast1,ast2):
     """ rename variables in ast1 so they don't occur in ast2. 
     """

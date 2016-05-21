@@ -36,14 +36,17 @@ tokens = (
 reserved = all_reserved = {
    'relation' : 'RELATION',
    'individual' : 'INDIV',
+   'function' : 'INDIV',
    'axiom' : 'AXIOM',
    'conjecture' : 'CONJECTURE',
    'schema' : 'SCHEMA',
    'instantiate' : 'INSTANTIATE',
+   'instance' : 'INSTANTIATE',
    'derived' : 'DERIVED',
    'concept' : 'CONCEPT',
    'init' : 'INIT',
    'action' : 'ACTION',
+   'method' : 'ACTION',
    'state' : 'STATE',
    'assume' : 'ASSUME',
    'assert' : 'ASSERT',
@@ -62,6 +65,8 @@ reserved = all_reserved = {
    'false' : 'FALSE',
    'fresh' : 'FRESH',
    'module' : 'MODULE',
+   'object' : 'OBJECT',
+   'class' : 'MODULE',
    'type' : 'TYPE',
    'if' : 'IF',
    'else' : 'ELSE',
@@ -75,6 +80,7 @@ reserved = all_reserved = {
    'exists' : 'EXISTS',
    'returns' : 'RETURNS',
    'mixin' : 'MIXIN',
+   'execute' : 'MIXIN',
    'before' : 'BEFORE',
    'after' : 'AFTER',
    'isolate' : 'ISOLATE',
@@ -166,6 +172,11 @@ class LexerVersion(object):
                     del reserved[s]
         else:
             for s in ['state','set','null','match']:
+                if s in reserved:
+                    del reserved[s]
+        if self.version <= [1,4]:
+            for s in ['function','class','object','method','execute']:
+#                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]
         return self

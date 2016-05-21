@@ -668,7 +668,7 @@ of arbitrary but fixed size.
 If `x` is of type `bar`, we can treat `c(x)` as we would any object,
 for example:
 
-    call c(x).down
+    call c(x).down;
     if c(x).is_zero {
         call c(x).up
     }
@@ -683,6 +683,7 @@ For example:
        action my_id returns (x:id_t) = {
             x := id
        }
+    }
 
     instance c(X:id_t) : thing(X)
 

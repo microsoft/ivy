@@ -1,0 +1,59 @@
+#lang ivy1.5
+
+module counter(t) = {
+    
+    individual val : t
+    init val = 0
+    
+    action up = {
+        val := val + 1
+    }
+    
+    action down = {
+        val := val - 1
+    }
+    
+    action is_zero returns(z : bool) = {
+        z := (val = 0)
+    }
+}
+
+
+type foo
+
+instance d : counter(foo)
+
+type bar
+
+instance c(X:bar) : counter(foo)
+
+# action a(x:bar) = {
+#     call c(x).down;
+#     if c(x).is_zero {
+#         call c(x).up
+#     }
+
+# }
+
+module counter_prop(c) = {
+
+    relation was_up
+    init ~was_up 
+
+    action up = {
+        was_up := true
+    }
+    execute up after c.up
+
+    action down = {
+        was_up := false
+    }
+    execute down after c.down
+
+    action is_zero returns (z:bool) = {
+        assert was_up -> ~z
+    }
+    execute is_zero after c.is_zero
+}
+
+instance cp : counter_prop(d)

@@ -555,9 +555,6 @@ class IfAction(Action):
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
-    def cmpl(self):
-        args = [self.args[0].compile_with_sort_inference()] + [a.compile() for a in self.args[1:]]
-        return self.clone(args)
 
 
 local_action_ctr = 0

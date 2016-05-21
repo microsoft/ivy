@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -86,10 +86,20 @@ class Context(object):
 
 class ExprContext(Context):
     """ Context Manager for compiling an expression. """
-    def __init__(self,code,local_syms):
+    def __init__(self,code=[],local_syms=[],lineno=None):
         self.code = code
         self.local_syms = local_syms
+        self.lineno = lineno
         self.name = 'expr_context'
+    def extract(self):
+        for c in self.code:
+            c.lineno = self.lineno
+        if len(self.code) == 1:
+            return self.code[0]
+        res = LocalAction(*(self.local_syms + [Sequence(*self.code)]))
+        res.lineno = self.lineno
+        return res
+
 
 class TopContext(Context):
     """ Context Manager for compiling an expression. """
@@ -113,14 +123,14 @@ def compile_app(self):
             for sort in sorts:
                 res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
                 expr_context.local_syms.append(res)
-                ress.append(res)
+                ress.append(res())
             expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
             return ivy_ast.Tuple(*ress)
         sort = find_sort(returns[0].sort)
         res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
         expr_context.local_syms.append(res)
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
-        return res
+        return res()
     return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
     
 
@@ -227,6 +237,28 @@ def compile_assign(self):
 
 AssignAction.cmpl = compile_assign
 
+def compile_if_action(self):
+    ctx = ExprContext(lineno = self.lineno)
+    with ctx:
+        cond = sortify_with_inference(self.args[0])
+    rest = [a.compile() for a in self.args[1:]]
+    ctx.code.append(self.clone([cond]+rest))
+    res = ctx.extract()
+    return res
+
+IfAction.cmpl = compile_if_action
+
+def compile_assert_action(self):
+    ctx = ExprContext(lineno = self.lineno)
+    with ctx:
+        cond = sortify_with_inference(self.args[0])
+    ctx.code.append(self.clone([cond]))
+    res = ctx.extract()
+    return res
+
+AssertAction.cmpl = compile_assert_action
+AssumeAction.cmpl = compile_assert_action
+
 def compile_action_def(a,sig):
     sig = sig.copy()
     if not hasattr(a.args[1],'lineno'):
@@ -237,7 +269,6 @@ def compile_action_def(a,sig):
         pformals = [v.to_const('prm:') for v in params] 
         if params:
             subst = dict((x.rep,y) for x,y in zip(params,pformals))
-#            print subst
             a = ivy_ast.substitute_ast(a,subst)
             assert hasattr(a.args[1],'lineno')
 #            a = ivy_ast.subst_prefix_atoms_ast(a,subst,None,None)
