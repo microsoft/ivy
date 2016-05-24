@@ -1,0 +1,42 @@
+This direcory can be builds into a web site using Jekyll
+(jekyllrb.com).
+
+Viewing the site locally:
+
+$ jekyll serve --port 8989
+
+Deploying the site to github pages:
+
+Clone the repository into some directory $WEBSITE, check out the
+gh-pages branch.
+
+$ pushd some/other/directory
+$ git clone https://github.com/Microsoft/ivy.git
+$ cd ivy
+$ git checkout gh-pages
+$ WEBSITE=`pwd`
+
+Copy the contents of this directory into the
+clone's root directory:
+
+$ pushd
+$ cp -a * $WEBSITE
+
+Now go back to the website directory, commit the changes and push
+them:
+
+$ pushd
+$ git commit -a -m 'copied from master'
+$ git push origin gh-pages
+
+GitHub should automatically update the web site after the push.
+
+There is a script in this directory that will accomplish all of the above:
+
+$ ./deploy
+
+
+
+
+
+

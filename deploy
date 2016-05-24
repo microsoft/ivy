@@ -1,0 +1,25 @@
+#/bin/bash
+
+TMPDIR=`mktemp -d /tmp/tmp.XXXXXX`
+echo Checking out sources in $TMPDIR
+
+pushd $TMPDIR
+git clone https://github.com/Microsoft/ivy.git
+cd ivy
+git checkout gh-pages
+git rm -r *
+WEBSITE=`pwd`
+
+pushd
+cp -a * $WEBSITE
+
+pushd
+rm *~
+rm -rf _site
+git add *
+git status
+git commit -m 'copied from master'
+git push origin gh-pages
+
+
+
