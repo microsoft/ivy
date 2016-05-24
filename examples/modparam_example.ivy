@@ -1,0 +1,16 @@
+#lang ivy1.5
+
+type id_t
+
+module thing(id) = {
+    action my_id returns (x:id_t) = {
+        x := id
+    }
+}    
+
+instance c(X:id_t) : thing(X)
+    
+
+action a(id:id_t) = {
+    assert c(id).my_id = id
+}
