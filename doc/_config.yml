@@ -1,0 +1,24 @@
+# Welcome to Jekyll!
+#
+# This config file is meant for settings that affect your whole blog, values
+# which you are expected to set up once and rarely need to edit after that.
+# For technical reasons, this file is *NOT* reloaded automatically when you use
+# 'jekyll serve'. If you change this file, please restart the server process.
+
+# Site settings
+title: "IVy"
+description: > # this means to ignore newlines until "baseurl:"
+
+  IVy is a research tool intended to allow interactive development of
+  protocols and their proofs of correctness and to provide a platform
+  for developing and experimenting with automated proof techniques. In
+  particular, IVy provides interactive visualization of automated
+  proofs, and supports a use model in which the human protocol
+  designer and the automated tool interact to expose errors and prove
+  correctness.
+
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "http://microsoft.github.io/ivy" # the base hostname & protocol for your site
+
+# Build settings
+markdown: kramdown

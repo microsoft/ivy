@@ -1,6 +1,7 @@
 ---
 layout: page
-title: IVy
+title: Home
+tags: "top-nav"
 ---
 
 
