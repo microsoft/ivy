@@ -337,16 +337,16 @@ class AnalysisGraph(object):
             state.universe = universe
         return other_art
 
-    def check_bounded_safety(self,state):
+    def check_bounded_safety(self,state,_get_model_clauses=None):
         postcond = get_state_assertions(state)
         if postcond != None:
-            res = self.bmc(state,postcond)
+            res = self.bmc(state,postcond,_get_model_clauses=_get_model_clauses)
             if res != None:
                 return res
         # currently checks failure only in last action
         if state.expr != None:
             fail = State(expr = fail_expr(state.expr))
-            res = self.bmc(fail,true_clauses())
+            res = self.bmc(fail,true_clauses(),_get_model_clauses=_get_model_clauses)
             return res
         return True
 

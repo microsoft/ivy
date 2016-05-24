@@ -804,16 +804,19 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
     """
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
-
-    if s.check() == z3.unsat:
+    
+    res = s.check()
+    if res == z3.unsat:
         return None
 
     print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):
         for n in itertools.count(1):
             s.push()
-            s.add(formula_to_z3(size_constraint(x, n)))
-            if s.check() == z3.sat:
+            sc = size_constraint(x, n)
+            s.add(formula_to_z3(sc))
+            res = s.check()
+            if res == z3.sat:
                 break
             else:
                 s.pop()

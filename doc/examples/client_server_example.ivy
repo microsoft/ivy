@@ -30,5 +30,5 @@ export test
 
 # concept c1(X,Y,Z) = (link(X,Z) * ~X = Y * link(Y,Z))
 
-conjecture (X = Z | ~link(X,Y) | ~link(Z,Y))
-conjecture link(X,Y) -> ~semaphore(Y)
+#conjecture (X = Z | ~link(X,Y) | ~link(Z,Y))
+#conjecture link(X,Y) -> ~semaphore(Y)

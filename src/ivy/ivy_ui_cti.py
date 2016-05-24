@@ -1,7 +1,7 @@
 import ivy_ui
 import ivy_logic as il
 import logic as lg
-from ivy_interp import State
+from ivy_interp import State,EvalContext
 import ivy_module as im
 import ivy_logic_utils as ilu
 import logic_util as lu
@@ -112,22 +112,22 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
             pre.clauses = and_clauses(*self.conjectures)
 
             action = im.module.actions['ext']
-            post = ag.execute(action, pre, None, 'ext')
+            with EvalContext(check=False): # don't check safety
+                post = ag.execute(action, pre, None, 'ext')
             post.clauses = ilu.true_clauses()
 
-            to_test = list(self.conjectures)
+            to_test = list(self.conjectures) + [None]  # None = check safety
+
             while len(to_test) > 0:
                 # choose randomly, so the user can get another result by
                 # clicking again
                 conj = to_test.pop(randrange(len(to_test)))
-                assert conj.is_universal_first_order()
+                assert conj == None or conj.is_universal_first_order()
                 used_names = frozenset(x.name for x in il.sig.symbols.values())
                 def witness(v):
                     c = lg.Const('@' + v.name, v.sort)
                     assert c.name not in used_names
                     return c
-                clauses = dual_clauses(conj, witness)
-                history = ag.get_history(post)
 
                 # TODO: this is still a bit hacky, and without nice error reporting
                 if self.relations_to_minimize.value == 'relations to minimize':
@@ -140,16 +140,30 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                         )
                     ))
 
-                res = ag.bmc(post, clauses, None, None, lambda clauses: get_small_model(
-                    clauses,
-                    sorted(il.sig.sorts.values()),
-                    [
+                if conj == None: # check safety
+                    clauses = ilu.true_clauses()
+                    rels_to_min = [il.sig.symbols[x] for x in self.relations_to_minimize.value.split()]
+                else:
+                    clauses = dual_clauses(conj, witness)
+                    history = ag.get_history(post)
+                    rels_to_min = [
                         # TODO: this is still a bit hacky, and without nice error reporting
                         history.maps[0].get(relation, relation)
                         for x in self.relations_to_minimize.value.split()
                         for relation in [il.sig.symbols[x]]
                     ],
-                ))
+
+                _get_model_clauses = lambda clauses: get_small_model(
+                    clauses,
+                    sorted(il.sig.sorts.values()),
+                    rels_to_min
+                )
+
+                if conj == None:
+                    res = ag.check_bounded_safety(post, _get_model_clauses)
+                else:
+                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
+
                 if res is not None:
                     self.current_conjecture = conj
                     assert len(res.states) == 2
@@ -166,8 +180,11 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                             self.current_concept_graph.show_relation(rel,'+',update=False)
                     self.current_concept_graph.update()
                     #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
-                    self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
-                                               str(conj.to_formula()),on_cancel=None)
+                    if conj == None:
+                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action observe the failing execution. ')
+                    else:
+                        self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
+                                                   str(conj.to_formula()),on_cancel=None)
                     return False
 
     #        self.set_states(False, False)

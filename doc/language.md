@@ -1,4 +1,7 @@
-# The IVy language
+---
+layout: page
+title: The IVy language
+---
 
 IVy's language is designed to let you to model systems in a way that
 is both convenient and conducive to automated
