@@ -2,6 +2,6 @@
 {% for item in include.items %}
   {% assign item_url = item | prepend:"/" | append:".html" %}
   {% assign p = site.pages | where:"url", item_url | first %}
-  <li class="{% if item_url == page.url %}current{% endif %}"><a href="{{ p.url }}">{{ p.title }}</a></li>
+  <li class="{% if item_url == page.url %}current{% endif %}"><a href="{{ p.url | prepend: site.github.url }}">{{ p.title }}</a></li>
 {% endfor %}
 </ul>
