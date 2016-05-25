@@ -7,33 +7,20 @@ $ jekyll serve --port 8989
 
 Deploying the site to github pages:
 
-Clone the repository into some directory $WEBSITE, check out the
+The script "deply" with do the following:
+
+1) Clone the repository into a temp directory and check out the
 gh-pages branch.
 
-$ pushd some/other/directory
-$ git clone https://github.com/Microsoft/ivy.git
-$ cd ivy
-$ git checkout gh-pages
-$ WEBSITE=`pwd`
+2) Remove all the files from git and copy this directory into the project.
 
-Copy the contents of this directory into the
-clone's root directory:
+3) Add all the files to git, commit the changes and push to github.
 
-$ pushd
-$ cp -a * $WEBSITE
+This has the odd effect that all the files are freshly created in git
+each time you deploy, but it works around the problem then github
+project web sites use a separate branch for the site content instead
+of a directory.
 
-Now go back to the website directory, commit the changes and push
-them:
-
-$ pushd
-$ git commit -a -m 'copied from master'
-$ git push origin gh-pages
-
-GitHub should automatically update the web site after the push.
-
-There is a script in this directory that will accomplish all of the above:
-
-$ ./deploy
 
 
 
