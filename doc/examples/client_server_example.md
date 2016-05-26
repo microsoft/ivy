@@ -183,6 +183,148 @@ When we click OK, we see the counter-example to induction:
 ![IVy screenshot](images/client_server9.png)
 
 IVy has already displayed the `link` relation, since it occurs in the
-conjecture.
+conjecture. What we can see so far, however, is not a bad pattern. It
+has just one client connected to the server, which is what we expect
+from the protocol. To find out what's wrong with this state, we need
+to reveal more information.  Checking the box to view the `sempahore`
+relation, we observe the following:
+
+![IVy screenshot](images/client_server10.png)
+
+Notice that the `server` node is now labeled with `semaphore`, meaning
+that `semaphore` is true for this node (if it were false, the label would
+be `~semaphore`. This is clearly the problem. When a client is connected,
+the semaphore should be down. We do `Gather` again to collect the visible facts,
+which gives us the following:
+
+![IVy screenshot](images/client_server11.png)
+
+These facts describe the bad pattern: there are two distinct nodes,
+one of which is connected to the server and the server's semaphore is up.
+We again do `Strengthen` to turn this pattern into a conjecture:
+
+![IVy screenshot](images/client_server12.png)
+
+Again, we have a universally quantified formula that rules out the given pattern.
+With our new conjecture, we try `Check induction` again, and see the following:
+
+![IVy screenshot](images/client_server13.png)
+
+We now have a proof that our program is safe. Of course, we want to
+save that proof so we can use it again later. We select `Save invariant` from
+the `File` menu and enter a file name:
+
+![IVy screenshot](images/client_server14.png)
+
+Here is the content of the file:
+
+    # new conjectures
+
+    conjecture ~(link(CL0,SE0) & link(CL1,SE0) & CL0:client ~= CL1:client)
+    conjecture ~(link(CL0,SE0) & semaphore(SE0) & CL0:client ~= CL1:client)
+
+If we add this text to the input file and run IVy again, IVy will use
+these conjectures and immediately observe that they are inductive.
+
+# Generalization tools
+
+Let's consider the procees we just used to arrive at an inductive
+invariant. We took the following steps:
+
+- Find a simple counterexample to induction
+
+- Identify relevant facts about the counter-example
+
+- Generalize to form a universally quantified conjecture
+
+The first and last steps were done automatically by IVy. However, we
+performed the second step manually, by select whichy relations to
+display. 
+
+There are several ways in which we can get some automated help with
+this task. Let's go back to the counterexample in which one client is
+connected, but the semaphore is up:
+
+![IVy screenshot](images/client_server11.png)
+
+This pattern actually contains an irrelevant fact. That is, our bad
+pattern requires that there are two distinct nodes, `0` and `1`. In
+fact, we do need two nodes to have a safety violation (that is, to
+have two nodes connected to one server). Notice, though, that if we drop
+this fact from the pattern, we still have a pattern that we can rule out,
+that is, `semaphore(0)` and `link(0,0)`. 
+
+To check this idea, we remove the irrelevant fact from the pattern by clicking on it.
+The unwanted fact becomes gray:
+
+![IVy screenshot](images/client_server15.png)
+
+When we strengthen using this pattern, we get this:
+
+![IVy screenshot](images/client_server16.png)
+
+That is, our new conjecture says that no client can be connected to a
+server with the semaphore up, but it doesn't depend on the existence
+of any other client. We can verify that with this conjecture, we still
+have an inductive invariant.
+
+This illustrates an important point about inductive invariants: there
+are many of them.  This give us the flexibility to find a simple one.
+By dropping a fact from the bad pattern, we effectively generalized
+it.  That is, we ruled out a larger class of states, so in effect we
+made a *stronger* conjecture. 
+
+IVy can often discover automatically that a bad pattern can be
+generalized.  One way to do this is to use *bounded
+reachability*. After `Gather`, Instead of manually eliminating the
+unwanted facts, we can select `Minimize` from the `Conjecture`
+menu. IVy ask for the number of steps to check. Somewhat arbitarily,
+we choose four. This is the result we get:
+
+![IVy screenshot](images/client_server17.png)
+
+IVy has recognized that there is a more general pattern that can be
+ruled out if we consider only four steps of execution of the protocol.
+Its conjecture is that if any client is connected to a server, that
+server's semaphore is down. This fact is definitely true after four
+steps of execution, but it's still a conjecture. If we're suspicious
+that it might not be invariantly true, we could try five steps, six
+steps, and so on until we are convinced, or until the IVy gets too
+slow.
+
+We can add IVY's generalized conjecture to our set using `Strengthen`,
+which completes the proof.
+
+# Things that go wrong
+
+At some point, we will make a conjecture that is just plain wrong, in
+the sense that it is not always true. Before clicking `Strengthen`, it's a good
+idea to try `Bounded check` to see if the proposed bad pattern can actually
+occur within some fixed number of steps. 
+
+To see how this goes, suppose we get into this situation:
+
+![IVy screenshot](images/client_server18.png)
+
+Here, we didn't consider the semaphore and we conjectured a bad
+pattern in which there is a client connected to a server. Obviously
+(or hopefully) this is acually reachable. To see why this is a bad conjecture,
+we can select `Bounded check` from the `Conjecture` menu. Here's what we see when we choose
+one step:
+
+![IVy screenshot](images/client_server19.png)
+
+
+IVy tried the conjecture that noe client is connected to any server
+for one step and found it false. If we click `View`, here is what we see:
+
+![IVy screenshot](images/client_server20.png)
+
+IVy has created a new tab in the interface with a trace consisting of
+two steps. The arrow represents a transition from state `0` to state
+`1` using the `ext` action. This represents any action that can be
+externally called.
+
+
 
 

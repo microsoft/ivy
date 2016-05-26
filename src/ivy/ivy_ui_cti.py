@@ -394,6 +394,7 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                     print '\n' + msg + '\n'
                 if res is not None:
     #                ta.step()
+                    iu.dbg('res.states[0]')
                     self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
                                                str(conj.to_formula()),
                                                command = lambda: self.ui_parent.add(res),

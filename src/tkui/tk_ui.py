@@ -119,12 +119,12 @@ class TkUI(object):
     # Show a message and get "OK"
 
     def ok_dialog(self,msg):
-        uu.ok_dialog(self.tk,self.frame,msg)
+        uu.ok_dialog(self.tk,self.frame,msg,ans=self.getans())
 
     # Show a message and get "OK" or cancel
 
     def ok_cancel_dialog(self,msg,cmd):
-        uu.ok_cancel_dialog(self.tk,self.frame,msg,cmd)
+        uu.ok_cancel_dialog(self.tk,self.frame,msg,cmd,ans=self.getans())
 
     # Create a dialog letting user choose from a list of string items.
     # The command is called with the chosen item index. If the user

@@ -10,7 +10,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
-from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming
+from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming, dbg
 import ivy_ast
 from ivy_ast import AST, compose_atoms, MixinAfterDef
 import ivy_module
@@ -526,7 +526,8 @@ class ChoiceAction(Action):
             return ite.int_update(domain,pvars)
         result = [], false_clauses(), false_clauses()
         for a in self.args:
-            result = join_action(result, a.int_update(domain, pvars), domain.relations)
+            foo = a.int_update(domain, pvars)
+            result = join_action(result, foo, domain.relations)
         return result
     def __repr__(self):
         if hasattr(self, 'label'):

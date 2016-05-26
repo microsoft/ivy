@@ -50,16 +50,16 @@ with ivy_module.Module():
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
     ui.check_inductiveness()
-    ui = ui.cti
+#    ui = ui.cti
     cg = ui.current_concept_graph
     iu.dbg('type(cg)')
     cg.show_relation(cg.relation('s'),'+')
-    cg.gather()
-    cg.select_fact(cg.fact('1 ~= 0'),False)
-    cg.select_fact(cg.fact('0 ~= 1'),False)
-    cg.is_inductive()
+    cg.gather() 
+#    cg.select_fact(cg.fact('1 ~= 0'),False)
+#    cg.select_fact(cg.fact('0 ~= 1'),False)
+#    cg.is_inductive()
 #    cg.is_sufficient()
-#    cg.minimize_conjecture(bound=2)
+    cg.minimize_conjecture(bound=2)
     ui.mainloop()
 
 

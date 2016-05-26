@@ -86,9 +86,9 @@ class Context(object):
 
 class ExprContext(Context):
     """ Context Manager for compiling an expression. """
-    def __init__(self,code=[],local_syms=[],lineno=None):
-        self.code = code
-        self.local_syms = local_syms
+    def __init__(self,code=None,local_syms=None,lineno=None):
+        self.code = code if code != None else []
+        self.local_syms = local_syms if local_syms != None else []
         self.lineno = lineno
         self.name = 'expr_context'
     def extract(self):

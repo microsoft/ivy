@@ -192,33 +192,48 @@ def int_dialog(tk,root,msg,minval=None,maxval=None,command=lambda:None,**kwargs)
     action = lambda s: command(_convert_to_int(s,minval,maxval))
     entry_dialog(tk,root,msg,command=action,**kwargs)
 
-def ok_cancel_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None):
+def ok_cancel_dialog(tk,root,msg,command=lambda:None,on_cancel=lambda:None,ans=None):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
+    buttons = {}
     b = Button(dlg, text="OK", command=destroy_then(dlg,command))
     b.pack(padx=5,side=TOP)
+    buttons["OK"] = b
     b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
     b.pack(padx=5,side=TOP)
+    buttons["Cancel"] = b
     center_window_on_window(dlg,root)
+    if ans:
+        buttons[ans].invoke()
+        return
     tk.wait_window(dlg)
 
-def ok_dialog(tk,root,msg):
+def ok_dialog(tk,root,msg,ans=None):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
     b = Button(dlg, text="OK", command=dlg.destroy)
     b.pack(padx=5,side=TOP)
     center_window_on_window(dlg,root)
+    if ans:
+        b.invoke()
+        return
     tk.wait_window(dlg)
 
-def buttons_dialog_cancel(tk,root,msg,button_commands,on_cancel=lambda:None):
+def buttons_dialog_cancel(tk,root,msg,button_commands,on_cancel=lambda:None,ans=None):
     dlg = Toplevel(root)
     Label(dlg, text=msg).pack()
+    buttons = {}
     for text,command in button_commands:
         b = Button(dlg, text=text, command=destroy_then(dlg,command))
         b.pack(padx=5,side=TOP)
+        buttons[text] = b
     b = Button(dlg, text="Cancel", command=destroy_then(dlg,on_cancel))
     b.pack(padx=5,side=TOP)
+    buttons["Cancel"]=b
     center_window_on_window(dlg,root)
+    if ans:
+        buttons[ans].invoke()
+        return
     tk.wait_window(dlg)
 
 
