@@ -321,6 +321,11 @@ def get_mixin_order(iso,mod):
 
 ext_action = iu.Parameter("ext",None)
 
+def hide_action_params(action):
+    params = action.formal_params + action.formal_returns
+    res = ia.LocalAction(*(params + [action]))
+    return res
+
 def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
@@ -366,9 +371,11 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # Create one big external action if requested
 
+
         ext = kwargs['ext'] if 'ext' in kwargs else ext_action.get()
         if ext is not None:
-            ext_act = ia.ChoiceAction(*[mod.actions[x] for x in sorted(mod.public_actions)])
+            ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
+            ext_act = ia.EnvAction(*ext_acts)
             mod.public_actions.add(ext);
             mod.actions[ext] = ext_act;
 

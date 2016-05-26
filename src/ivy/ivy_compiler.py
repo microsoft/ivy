@@ -281,6 +281,7 @@ def compile_action_def(a,sig):
         assert hasattr(res,'lineno'), res
         res.formal_params = formals
         res.formal_returns = returns
+        res.label = a.args[0].relname
         return res
     
     
@@ -391,8 +392,9 @@ class IvyARGSetup(IvyDeclInterp):
 #            raise IvyError(ax,"initial condition must be a clause")
         im.module.init_cond = and_clauses(im.module.init_cond,formula_to_clauses(la.formula))
     def action(self,a):
-        self.mod.actions[a.args[0].relname] = compile_action_def(a,self.mod.sig)
-        self.mod.public_actions.add(a.args[0].relname)
+        name = a.args[0].relname
+        self.mod.actions[name] = compile_action_def(a,self.mod.sig)
+        self.mod.public_actions.add(name)
     def state(self,a):
         self.mod.predicates[a.args[0].relname] = a.args[1]
     def mixin(self,m):

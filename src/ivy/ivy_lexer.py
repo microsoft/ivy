@@ -149,7 +149,7 @@ def t_error(t):
     print "Illegal character '%s'" % t.value[0]
     t.lexer.skip(1)
 
-lexer = lex.lex()
+lexer = lex.lex(errorlog=lex.NullLogger())
 
 class LexerVersion(object):
     """ Context Manager that sets the lexer based on the given language version

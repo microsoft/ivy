@@ -54,9 +54,15 @@ class TkUI(object):
         self.tab_counter = 0
         self.tabs = 0
         self.answers = []
-        self.analysisGraphWidgetClass = type('AGWC',(TkAnalysisGraphWidget,self.AGUI()),{})
+        # pre-compile the default AnalysysGraphUI
+        self.analysisGraphWidgetClass = self.wrap_art_ui(self.AGUI())
 
         
+    # Wrap a subclass of  AnaysisGraphiUI class in a Tk interface.
+
+    def wrap_art_ui(self,ag_ui):
+        return type('AGWC',(TkAnalysisGraphWidget,ag_ui),{})
+
     # run the ui
 
     def mainloop(self):
@@ -69,7 +75,7 @@ class TkUI(object):
 
     # Add a new AnalysisGraph to the UI
 
-    def add(self,art,name=None,label=None):
+    def add(self,art,name=None,label=None,ui_class=None):
         self.tab_counter += 1
         self.tabs += 1
         if name == None:
@@ -89,7 +95,8 @@ class TkUI(object):
         hbar.pack(side=BOTTOM,fill=X)
         vbar=Scrollbar(frame,orient=VERTICAL)
         vbar.pack(side=RIGHT,fill=Y)
-        gw = self.analysisGraphWidgetClass(tk,art,frame)
+        tk_ag_ui = self.wrap_art_ui(ui_class) if ui_class else self.analysisGraphWidgetClass
+        gw = tk_ag_ui(tk,art,frame)
         gw.state_frame=state_frame
         gw.ui_parent = self
         gw.ui_tab_name = name

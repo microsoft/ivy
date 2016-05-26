@@ -537,6 +537,24 @@ class ChoiceAction(Action):
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.args]
 
+class EnvAction(ChoiceAction):
+    """ This represents an action of the environment. It is
+    similar to ChoiceAction above, but appears differently in the UI """
+
+    # This is the same as in ChoiceAction, but the paramters
+    # of the child actions are hidden.
+
+    def int_update(self,domain,pvars):
+        if determinize and len(self.args) == 2:
+            cond = bool_const('___branch:' + str(self.unique_id))
+            ite = IfAction(cond,self.args[0],self.args[1])
+            return ite.update(domain,pvars)
+        result = [], false_clauses(), false_clauses()
+        for a in self.args:
+            foo = a.update(domain, pvars)
+            result = join_action(result, foo, domain.relations)
+        return result
+
 class IfAction(Action):
     def name(self):
         return 'if'

@@ -51,7 +51,6 @@ if __name__ == "__main__":
         for isolate in isolates:
             if len(im.module.isolates[isolate].verified()) == 0:
                 continue # skip if nothing to verify
-            iu.dbg('isolate')
             with im.module.copy():
                 ivy_isolate.create_isolate(isolate,ext='ext')
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)

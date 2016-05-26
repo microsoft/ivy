@@ -53,6 +53,6 @@ with ivy_module.Module():
     cg.gather()
     main_ui.answer("View")
     cg.bmc_conjecture(bound=1)
-    main_ui.mainloop()
+#    main_ui.mainloop()
 
 

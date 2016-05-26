@@ -334,6 +334,8 @@ def drop_universals(term):
         return drop_universals(term.body)
     if isinstance(term,lg.Not):
         return lg.Not(drop_existentials(term.args[0]))
+    if isinstance(term,lg.And) and len(term.args) == 1:
+        return drop_universals(term.args[0])
     return term
 
 def drop_existentials(term):

@@ -268,7 +268,7 @@ class AnalysisGraphUI(object):
             art = self.g.decompose_edge(transition)
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
-            return self.ui_parent.add(art)
+            return self.ui_parent.add(art,ui_class=AnalysisGraphUI)
 
     # Decompose incoming edge of a node into smaller actions
 
@@ -277,7 +277,7 @@ class AnalysisGraphUI(object):
             art = self.g.decompose_state(node)
             if art == None:
                 raise IvyError(None,'Cannot decompose action')
-            return self.ui_parent.add(art)
+            return self.ui_parent.add(art,ui_class=AnalysisGraphUI)
 
     # Browse the source of an edge
 

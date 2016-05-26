@@ -201,7 +201,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
     def weaken(self, conjs = None, button=None):
         if conjs == None:
             udc = self.conjectures
-            udc_text = [str(conj.to_formula()) for conj in udc]
+            udc_text = [str(il.drop_universals(conj.to_formula())) for conj in udc]
             msg = "Select conjecture to remove:"
             cmd = lambda sel: self.weaken([udc[idx] for idx in sel])
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd,multiple=True)
@@ -394,10 +394,10 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                     print '\n' + msg + '\n'
                 if res is not None:
     #                ta.step()
-                    iu.dbg('res.states[0]')
+                    cmd = lambda: self.ui_parent.add(res,ui_class=ivy_ui.AnalysisGraphUI)
                     self.ui_parent.text_dialog('BMC with bound {} found a counter-example to:'.format(n),
                                                str(conj.to_formula()),
-                                               command = lambda: self.ui_parent.add(res),
+                                               command = cmd,
                                                command_label = 'View')
                     return True
                 post = ag.execute(step_action, None, None, 'ext')

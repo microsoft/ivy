@@ -127,7 +127,6 @@ class AnalysisGraph(object):
     def state_actions(self,state):
         if hasattr(state,'label') and state.label != None:
             return [state_equation(post,expr) for post,e in self.predicates.iteritems() for expr in eval_state_actions(e,state)]
-        iu.dbg('self.public_actions')
         return [state_equation(None,action_app(a,state)) for a in self.actions if a in self.public_actions]
 
     def do_state_action(self,equation,abstractor):
@@ -435,6 +434,8 @@ class AnalysisGraph(object):
         return dot_layout(render_rg(self),edge_labels=True)
 
 def label_from_action(action):
+    if hasattr(action,'label'):
+        return action.label
     return iu.pretty(str(action),max_lines=4)
 
 class AnalysisSubgraph(object):

@@ -104,12 +104,12 @@ This produces the following rather uninformative display:
 Since we didn't specify any conjectured invariant formulas in the
 input file, IVy starts with the empty set of conjectures. This
 trivially satisfies the initiation and consecution conditions, but
-probably won't satisfy the saftey condition. We'll try anyway and see
-what goes wrong. We select the "check inductiveness" operation, like this:
+probably won't satisfy the safety condition. We'll try anyway and see
+what goes wrong. We select the `Check induction` operation, like this:
 
 ![IVy screenshot](images/client_server2.png)
 
-Here's what IVY says:
+Here's what IVy says:
 
 ![IVy screenshot](images/client_server3.png)
 
@@ -119,12 +119,12 @@ When we click OK, we see the following display:
 
 On the left-hand side of the display, we see a transition of the
 program from a state labeled `0` to a state labeled `1`. The action
-labeling the transition arrow can tell us seomthing about hwo we get
+labeling the transition arrow can tell us something about how we get
 from state `0` to state `1` (an in particular, how the assertion in
 our program fails). For the moment, though, let's concentrate on the
 right-hand side. Here, we see a representation of state `0`, the one just
-before the asertion failure. It shows one server (arbitrarily numbered `0`)
-and two clients (numbered `0` and `1`). The checkboxes on the right allow us to
+before the assertion failure. It shows one server (arbitrarily numbered `0`)
+and two clients (numbered `0` and `1`). The check-boxes on the right allow us to
 display further information about the state. For example, let's check the box
 next to `link(X,Y)` under the label `+`. Here's what we get:
 
@@ -137,7 +137,7 @@ action is executed.
 
 This situation is unrealistic. That is, a cluster of two clients and a
 server as shown should never occur. We will conjecture that in fact
-thsi 'bad pattern' never occurs. To do this we select the `Gather` option
+this 'bad pattern' never occurs. To do this we select the `Gather` option
 from the `Conjecture` menu. When then see the following:
 
 ![IVy screenshot](images/client_server6.png)
@@ -146,7 +146,7 @@ IVy has collect three facts about the displayed state, shown under the
 heading 'Constraints'. These facts are a logical representation of the
 bad pattern we observed graphically. Two of them are obvious: the facts
 `link(0,0)` and `link(1,0)` say that both clients are linked to the server.
-Implicit in the grpahic, though, is a third fact: `0:client ~= 1:client`. 
+Implicit in the graphic, though, is a third fact: `0:client ~= 1:client`. 
 This says that `0` and `1` name distinct clients. 
 
 Also notice that the nodes and the arcs in the graph have been highlighted
@@ -164,7 +164,7 @@ IVy is suggesting to add this fact to the list of conjectured invariants:
 
 This says that there is are no clients `CL0` and `CL1` and server
 `SE0` matching our bad pattern.  In other words, the bad pattern
-occurrs nowhere in our program state, no matter how many clients and
+occurs nowhere in our program state, no matter how many clients and
 servers there are. This is a simple generalization from our
 counterexample.
 
@@ -186,7 +186,7 @@ IVy has already displayed the `link` relation, since it occurs in the
 conjecture. What we can see so far, however, is not a bad pattern. It
 has just one client connected to the server, which is what we expect
 from the protocol. To find out what's wrong with this state, we need
-to reveal more information.  Checking the box to view the `sempahore`
+to reveal more information.  Checking the box to view the `semaphore`
 relation, we observe the following:
 
 ![IVy screenshot](images/client_server10.png)
@@ -228,7 +228,7 @@ these conjectures and immediately observe that they are inductive.
 
 # Generalization tools
 
-Let's consider the procees we just used to arrive at an inductive
+Let's consider the process we just used to arrive at an inductive
 invariant. We took the following steps:
 
 - Find a simple counterexample to induction
@@ -238,7 +238,7 @@ invariant. We took the following steps:
 - Generalize to form a universally quantified conjecture
 
 The first and last steps were done automatically by IVy. However, we
-performed the second step manually, by select whichy relations to
+performed the second step manually, by select which relations to
 display. 
 
 There are several ways in which we can get some automated help with
@@ -278,7 +278,7 @@ IVy can often discover automatically that a bad pattern can be
 generalized.  One way to do this is to use *bounded
 reachability*. After `Gather`, Instead of manually eliminating the
 unwanted facts, we can select `Minimize` from the `Conjecture`
-menu. IVy ask for the number of steps to check. Somewhat arbitarily,
+menu. IVy ask for the number of steps to check. Somewhat arbitrarily,
 we choose four. This is the result we get:
 
 ![IVy screenshot](images/client_server17.png)
@@ -308,22 +308,118 @@ To see how this goes, suppose we get into this situation:
 
 Here, we didn't consider the semaphore and we conjectured a bad
 pattern in which there is a client connected to a server. Obviously
-(or hopefully) this is acually reachable. To see why this is a bad conjecture,
+(or hopefully) this is actually reachable. To see why this is a bad conjecture,
 we can select `Bounded check` from the `Conjecture` menu. Here's what we see when we choose
 one step:
 
 ![IVy screenshot](images/client_server19.png)
 
 
-IVy tried the conjecture that noe client is connected to any server
+IVy tried the conjecture that node client is connected to any server
 for one step and found it false. If we click `View`, here is what we see:
 
 ![IVy screenshot](images/client_server20.png)
 
 IVy has created a new tab in the interface with a trace consisting of
 two steps. The arrow represents a transition from state `0` to state
-`1` using the `ext` action. This represents any action that can be
-externally called.
+`1` using the `ext` action. This represents an action of the environment.
+Clicking on state `0`, and checking the `link` and `semaphore` relations,
+we see the following:
+
+![IVy screenshot](images/client_server21.png)
+
+That is, in the initial state there are two clients and one server, the
+semaphore of the server is up and there are no links.
+
+Now, clicking on state `1`, we see our proposed bad pattern. This
+means that the pattern can actually occur.
+
+![IVy screenshot](images/client_server22.png)
+
+# Debugging
+
+To see details of the execution path, we left-click on the action
+`ext` and select `Decompose`. This breaks down an action into smaller
+actions. In this case, we see that the environment has decided to call
+the exported action `connect`:
+
+![IVy screenshot](images/client_server23.png)
+
+Applying `Decompose` to this action we see:
+
+![IVy screenshot](images/client_server24.png)
+
+This shows us that `connect` is made up of a sequence of three smaller
+actions. If we left-click on one of these and choose `Show source`,
+the corresponding source line is display. By single-clicking on a state,
+we can display it graphically:
+
+![IVy screenshot](images/client_server25.png)
+
+This is state 2, which is after the link is created, but before the
+semaphore is lowered. The two identifiers `fml:x` and `fml:y` represent
+the formal parameters of action `connect`. We can see which client is `x`
+at this point in the code by checking the `+` box for `fml:x`:
+
+![IVy screenshot](images/client_server26.png)
+
+As we decompose actions, we build up a sequence of tabs,
+corresponding to something like a stack trace of the program's
+execution. Tabs can be removed by choosing `Remove tab` from the
+`File menu`.
+
+Whenever you see a counterexample to induction or a bounded checking
+counterexample, you can decompose the actions to see the execution
+path that led to the failure.
+
+# Removing a failed conjecture
+
+Even with bounded checking, it is still possible that we could mistakenly
+strengthen the invariant with a conjecture that isn't true. If this happens,
+or if we regret a conjecture for any other reason, we can remove it using
+the `Weaken` operation in the `Invariant` menu:
+
+![IVy screenshot](images/client_server27.png)
+
+This dialog can be resized to see long formulas. 
+
+# Summary
+
+To debug an inductive invariant, we generate *counterexamples to induction* using the
+`Check induction` operation. IVy tries to generate the simplest possible counterexample.
+
+A CTI can be eliminated by strengthening the proposed inductive invariant. To do this,
+we identify a bad pattern in the CTI. This is done in the following steps:
+
+- Use the check boxes to display relevant information
+- `Gather` the displayed facts
+- Select relevant facts by clicking to enable or disable them.
+- `Strengthen` the invariant by generalizing the bad pattern.
+
+You can get some help from IVy in this process:
+
+- Use `Bounded check` to see if the bad pattern is reachable in a given number of steps.
+- Use `Minimize` to generalize the pattern by dropping un-needed facts.
+
+To debug a counterexample, left-click on an action and choose
+`Decompose`. The `View source` operation can be used to find the
+action in the source file.
+
+When you are convinced that a bad pattern should be ruled out, use `Strengthen` to
+generalize it to a universal conjecture and add it to the proposed invariant.
+To remove a conjecture from the proposed invariant, use `Weaken`.
+
+When `Check induction` produces no CTI, the conjectured invariant is
+in fact a safety invariant. You can save it for future use with the
+`Save invariant` operation.
+
+
+
+
+
+
+
+
 
 
 
