@@ -56,7 +56,6 @@ with ivy_module.Module():
     cg.reverse()
     cg.backtrack()
     cg.recalculate()
-    ui.mainloop()
     ui.execute_action(ui.node(1),"connect")
     ui.mark_node(ui.node(1))
     ui.cover_node(ui.node(2))

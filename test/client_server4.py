@@ -70,6 +70,6 @@ with ivy_module.Module():
     assert ui.node(3).is_bottom(), "state 3 should be bottom"
     ui.mark_node(ui.node(1))
     ui.cover_node(ui.node(2))
-    ui.mainloop()
+#    ui.mainloop()
 
 

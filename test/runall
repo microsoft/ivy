@@ -1,12 +1,18 @@
 #!/bin/bash
 
-tests='enum1 client_server1'
+tests='enum1 client_server1  client_server4  detect_transitive
+client_server2  client_server5  enum1
+client_server3  client_server6  transitive'
 
+errors=0
 for x in $tests; do
     echo $x ...
-    if ivy_test $x.py; then
+    if timeout 10 ivy_test $x.py > $x.log 2>&1 ; then
         echo PASS
     else
         echo FAIL
+        (( errors += 1 )) 
     fi
 done
+
+echo "errors: $errors"

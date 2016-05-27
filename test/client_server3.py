@@ -49,17 +49,27 @@ with ivy_module.Module():
     iu.set_parameters({'ui':'cti','ext':'ext'})
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
+    main_ui.answer("OK")
     ui.check_inductiveness()
 #    ui = ui.cti
     cg = ui.current_concept_graph
-    iu.dbg('type(cg)')
     cg.show_relation(cg.relation('s'),'+')
     cg.gather() 
-#    cg.select_fact(cg.fact('1 ~= 0'),False)
-#    cg.select_fact(cg.fact('0 ~= 1'),False)
-#    cg.is_inductive()
-#    cg.is_sufficient()
+    cg.select_fact(cg.fact('1:client ~= 0:client'),False)
+    cg.select_fact(cg.fact('0:client ~= 1:client'),False)
+    main_ui.answer("OK")
+    assert cg.is_inductive(), "should have been relatively inductive"
+    main_ui.answer("OK")
+    assert cg.is_sufficient(), "should have been sufficient"
+    cg.select_fact(cg.fact('1:client ~= 0:client'),True)
+    cg.select_fact(cg.fact('0:client ~= 1:client'),True)
+    main_ui.answer("OK")
     cg.minimize_conjecture(bound=2)
-    ui.mainloop()
+    main_ui.answer("OK")
+    cg.strengthen()
+    main_ui.answer("OK")
+    assert ui.check_inductiveness(), "should have been inductive"
+    
+#    ui.mainloop()
 
 

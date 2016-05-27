@@ -27,6 +27,6 @@ with ivy_module.Module():
     cg.split(cg.relation('=y'),cg.node('~=x'))
     cg.show_relation(cg.relation('=y'),'-')
     cg.split(cg.relation('=z'),cg.node('~=x','~=y'))
-    ui.mainloop()
+#    ui.mainloop()
 
 
