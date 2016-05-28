@@ -17,7 +17,7 @@ from ivy_logic_utils import used_variables_clause, used_variables_ast, variables
    is_ground_lit, used_constants_clauses, substitute_constants_clauses, eq_atom, \
    functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast, sym_placeholders, used_symbols_clauses
 from ivy_core import minimize_core
-import ivy_utils
+import ivy_utils as iu
 import ivy_unitres as ur
 import logic as lg
 
@@ -29,7 +29,7 @@ def set_use_native_enums(t):
 
 def solver_name(symbol):
     name = symbol.name
-    if name in ivy_utils.polymorphic_symbols:
+    if name in iu.polymorphic_symbols:
         sort = symbol.sort.domain[0].name
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
@@ -150,19 +150,19 @@ ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.do
 def lookup_native(thing,table,kind):
     z3name = ivy_logic.sig.interp.get(thing.name)
     if z3name == None:
-        if thing.name in ivy_utils.polymorphic_symbols:
+        if thing.name in iu.polymorphic_symbols:
             sort = thing.sort.domain[0].name
             if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
                 z3val = table(thing.name)
                 if z3val == None:
-                    raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
+                    raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
                 return z3val
         return None
     if isinstance(z3name,ivy_logic.EnumeratedSort):
         return z3name.to_z3()
     z3val = table(z3name)
     if z3val == None:
-        raise ivy_utils.IvyError(None,'{} is not a supported Z3 {}'.format(z3name,kind))
+        raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(z3name,kind))
     return z3val
 
 def check_native_compat_sym(sym):
@@ -176,17 +176,17 @@ def check_native_compat_sym(sym):
             for ds in sym.sort.dom:
                 z3sort = lookup_native(ds,sorts,"sort")
                 if z3sort == None:
-                    raise ivy_utils.IvyError(None,'domain sort "{}" is uninterpreted'.format(ds))
+                    raise iu.IvyError(None,'domain sort "{}" is uninterpreted'.format(ds))
                 z3args.append(z3sort.cast("0"))
             z3val = thing(*z3args)
             z3sort = z3val.sort()
             ns = lookup_native(sym.sort.rng,sorts,"sort")
             if ns == None:
-                raise ivy_utils.IvyError(None,'range sort "{}" is uninterpreted'.format(sym.sort.rng))
+                raise iu.IvyError(None,'range sort "{}" is uninterpreted'.format(sym.sort.rng))
             if ns != z3sort:
-                raise ivy_utils.IvyError(None,'range sort {}={} does not match {}'.format(sym.sort.rng,ns,z3sort))
+                raise iu.IvyError(None,'range sort {}={} does not match {}'.format(sym.sort.rng,ns,z3sort))
     except Exception as e:
-        raise ivy_utils.IvyError(None,'cannot interpret {} as {}: {}'.format(sym,ivy_logic.sig.interp[sym.name],e))
+        raise iu.IvyError(None,'cannot interpret {} as {}: {}'.format(sym,ivy_logic.sig.interp[sym.name],e))
 
 def check_compat():
     for name,value in ivy_logic.sig.interp.iteritems():
@@ -226,13 +226,13 @@ def numeral_to_z3(num):
     try:
         return z3sort.cast(str(int(num.name,0))) # allow 0x,0b, etc
     except:
-        raise ivy_utils.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
+        raise iu.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
 
 # Enumerated sorts can be interpreted as numeric types. However, we have to
 # check that the constants actually fit in the type.
 
 def enumerated_to_numeral(term):
-    raise ivy_utils.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
+    raise iu.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
 
 def term_to_z3(term):
     if not term.args:
@@ -656,7 +656,7 @@ def clauses_sat(clauses1):
 def remove_duplicates_clauses(clauses):
     # tricky: store all z3 fmlas in list so not GC'd until all id's computed!
     z3fs = [(c,formula_to_z3(c)) for c in clauses.fmlas]
-    return Clauses(list(ivy_utils.unique2((x,get_id(y)) for x,y in z3fs)),clauses.defs)
+    return Clauses(list(iu.unique2((x,get_id(y)) for x,y in z3fs)),clauses.defs)
 
 def clauses_case(clauses1):
     """ Drop literals in a clause set while maintaining satisfiability.
@@ -779,13 +779,22 @@ def model_if_none(clauses1,implied,model):
                 print "model = {}, size = {}".format(m,sort_size)
 ##        print "clauses1 = {}".format(clauses1)
 ##        print "z3c = {}".format(str(z3c))
-                h = HerbrandModel(s,m,used_symbols_clauses(clauses1).update(used_symbols_clauses(implied)))
+                syms = used_symbols_clauses(clauses1)
+                if implied != None:
+                    syms.update(used_symbols_clauses(implied))
+                h = HerbrandModel(s,m,syms)
                 s.pop()
                 return h
             sort_size += 1
             s.pop()
     return h
 
+
+def decide(s):
+    res = s.check()
+    if res == z3.unknown:
+        raise iu.IvyError(None,"Solver produced inconclusive result")
+    return res
 
 def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
     """
@@ -805,7 +814,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
     
-    res = s.check()
+    res = decide(s)
     if res == z3.unsat:
         return None
 
@@ -815,7 +824,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
             s.push()
             sc = size_constraint(x, n)
             s.add(formula_to_z3(sc))
-            res = s.check()
+            res = decide(s)
             if res == z3.sat:
                 break
             else:
@@ -837,7 +846,7 @@ def model_universe_facts(h,sort,upclose):
         uc = [[ivy_logic._eq_lit(ivy_logic.Variable('X',c.sort),c) for c in elems]]
     # universe elements are distinct
     dc = [[ivy_logic._neq_lit(c1,c2)]
-          for (c1,c2) in ivy_utils.distinct_unordered_pairs(elems)]
+          for (c1,c2) in iu.distinct_unordered_pairs(elems)]
     return uc+dc
 
 
@@ -931,31 +940,34 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
 #    print "clauses_model_to_clauses res = {}".format(res)
     return res
 
-def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None,axioms=None,weaken=True):
+def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None,axioms=None,weaken=True,numerals=True):
     """ Return a diagram of a model of clauses1 or None.  The function "ignore", if
     provided, returns true for symbols that should be ignored in the
     diagram.
     """
 #    print "clauses_model_to_diagram clauses1 = {}".format(clauses1)
     if axioms == None:
-        axioms = true_clauses
+        axioms = true_clauses()
     h = model_if_none(and_clauses(clauses1,axioms),implied,model)
     ignore = ignore if ignore != None else lambda x: False
     res = model_facts(h,(lambda x: False),clauses1,upclose=True) # why not pass axioms?
 #    print "clauses_model_to_diagram res = {}".format(res)
     # find representative elements
     # find representatives of universe elements
-    reps = dict()
-    for c in used_constants_clauses(clauses1):
-#        print "constant: {}".format(c)
-        mc = get_model_constant(h.model,ivy_logic.Constant(c))
-#        print "value: {}".format(mc)
-        if mc.rep not in reps or reps[mc.rep].rep.is_skolem() and not c.is_skolem():
-            reps[mc.rep] = ivy_logic.Constant(c)
-    for s in h.sorts():
-        for e in h.sort_universe(s):
-            if e.rep not in reps:
-                reps[e.rep] = e.rep.skolem()()
+    if numerals:
+        reps = numeral_assign(res,h)
+    else:
+        reps = dict()
+        for c in used_constants_clauses(clauses1):
+    #        print "constant: {}".format(c)
+            mc = get_model_constant(h.model,ivy_logic.Constant(c))
+    #        print "value: {}".format(mc)
+            if mc.rep not in reps or reps[mc.rep].rep.is_skolem() and not c.is_skolem():
+                reps[mc.rep] = ivy_logic.Constant(c)
+        for s in h.sorts():
+            for e in h.sort_universe(s):
+                if e.rep not in reps:
+                    reps[e.rep] = e.rep.skolem()()
 #    print "clauses_model_to_diagram reps = {}".format(reps)
     # filter out clauses using universe elements without reps
 #    res = [cls for cls in res if all(c in reps for c in used_constants_clause(cls))]

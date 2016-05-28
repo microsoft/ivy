@@ -1,7 +1,7 @@
 import ivy_ui
 import ivy_logic as il
 import logic as lg
-from ivy_interp import State,EvalContext
+from ivy_interp import State,EvalContext,reverse
 import ivy_module as im
 import ivy_logic_utils as ilu
 import logic_util as lu
@@ -40,6 +40,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                   ("button","Exit", lambda self=self: self.ui_parent.exit()),]),
                 ("menu","Invariant",
                  [("button","Check induction",self.check_inductiveness),
+                  ("button","Diagram",self.diagram),
                   ("button","Weaken",self.weaken),
                   ])]
 
@@ -53,7 +54,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         self.view_state(self.node(0))
         with self.ui_parent.run_context():
             self.autodetect_transitive()
-
+        self.have_cti = False
         
 
 
@@ -167,30 +168,56 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 if res is not None:
                     self.current_conjecture = conj
                     assert len(res.states) == 2
-                    rels = self.current_concept_graph.g.relations
-                    used = lu.used_constants(clauses.to_formula())
     #                self.set_states(res.states[0], res.states[1])
     #                self.cti = self.ui_parent.add(res)
                     self.g = res
                     self.rebuild()
                     self.view_state(self.g.states[0], reset=True)
-                    for rel in rels:
-                        if any(c in used and not c.name.startswith('@')
-                               for c in lu.used_constants(rel.formula)):
-                            self.current_concept_graph.show_relation(rel,'+',update=False)
-                    self.current_concept_graph.update()
+                    self.show_used_relations(clauses)
                     #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                     if conj == None:
                         self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action observe the failing execution. ')
                     else:
                         self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
                                                    str(conj.to_formula()),on_cancel=None)
+                    self.have_cti = True
                     return False
 
     #        self.set_states(False, False)
             self.ui_parent.text_dialog('Inductive invariant found:',
                                        '\n'.join(str(conj) for conj in self.conjectures))
+            self.have_cti = False
             return True
+
+    def show_used_relations(self,clauses,both=False):
+        rels = self.current_concept_graph.g.relations
+        used = lu.used_constants(clauses.to_formula()) 
+        for rel in rels:
+            if any(c in used and not c.name.startswith('@')
+                   for c in lu.used_constants(rel.formula)):
+                self.current_concept_graph.show_relation(rel,'+',update=False)
+                if both:
+                    self.current_concept_graph.show_relation(rel,'-',update=False)
+        self.current_concept_graph.update()
+
+    def diagram(self):
+        from ivy_solver import clauses_model_to_diagram, get_model_clauses
+        from ivy_transrel import is_skolem, reverse_image
+        if not self.have_cti:
+            if self.check_inductiveness() or len(self.g.states) != 2:
+                return
+        conj = self.current_conjecture
+        post = ilu.dual_clauses(conj) if conj != None else ilu.true_clauses()
+        pre = self.g.states[0].clauses
+        axioms = im.module.background_theory()
+        rev = ilu.and_clauses(reverse_image(post,axioms,self.g.states[1].update), axioms)
+        clauses = ilu.and_clauses(pre,rev)
+        mod = get_model_clauses(clauses)
+        assert mod != None
+        diag = clauses_model_to_diagram(rev,is_skolem,model=mod)
+        self.g.states[0].clauses = diag
+        self.view_state(self.g.states[0], reset=True)
+        self.show_used_relations(diag,both=True)
 
     def set_states(self,s0,s1):
         self.cg = self.view_state(s0, reset=True)
@@ -207,6 +234,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd,multiple=True)
         else:
             for conj in conjs:
+                self.have_cti = False
                 self.conjectures.remove(conj)
             self.ui_parent.text_dialog('Removed the following conjectures:',
                                        '\n'.join(str(conj) for conj in conjs))
@@ -323,10 +351,14 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         return result
 
 
+    def add_conjecture(self,conj):
+        self.parent.have_cti = False
+        self.parent.conjectures.append(conj)
+
     def strengthen(self, button=None):
         conj = self.get_selected_conjecture()
         self.ui_parent.text_dialog('Add the following conjecture:',str(conj.to_formula()),
-                                   command = lambda : self.parent.conjectures.append(conj))
+                                   command = lambda : self.add_conjecture(conj))
 
 
 

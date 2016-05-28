@@ -233,6 +233,17 @@ def reverse_update_concrete_clauses(state,clauses=None):
         raise UnsatCoreWithInterpolant(*fi)
     return and_clauses(reverse_image(clauses,axioms,state.update), axioms)
 
+def reverse(state,clauses=None):
+    """ Reverse an update concretely (compute concrete pre). If unsat,
+    throw UnsatCoreWithInterpolant.
+    
+    """
+
+    assert(state.pred != None and state.update != None) # can't reverse if no predecessor
+    if clauses == None:
+        clauses = state.clauses
+    axioms = state.domain.background_theory(state.in_scope)
+    return and_clauses(reverse_image(clauses,axioms,state.update), axioms)
 
 def reverse_join_concrete_clauses(state,join_of,clauses=None):
     if clauses == None:
