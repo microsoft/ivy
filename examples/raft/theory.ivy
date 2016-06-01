@@ -1,0 +1,16 @@
+#lang ivy1.5
+
+# in a prefix order, the prefixes of any element are totally ordered
+
+module prefix_strict_order(t,r) = {
+    axiom ~(r(X:t,Y) & r(Y,X))
+    axiom r(X:t,Y) & r(Y,Z) -> r(X,Z)
+    axiom r(X:t,Z) & r(Y,Z) -> (r(X,Y) | X = Y | r(Y,X))
+}
+
+module total_strict_order(t,r) = {
+    axiom ~(r(X:t,Y) & r(Y,X))
+    axiom r(X:t,Y) & r(Y,Z) -> r(X,Z)
+    axiom X:t = Y | X < Y | Y < X
+}
+
