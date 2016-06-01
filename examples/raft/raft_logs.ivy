@@ -11,32 +11,33 @@ type log
 
 relation (X:log < Y:log)
 
-instantiate partial_strict_order(log,<)
+instantiate prefix_strict_order(log,<)
 
 # a measure function on logs, totally ordered
 
 type weight
 
 relation (X:log < Y:log)
-instantiate total_strict_order(log,<)
+instantiate total_strict_order(weight,<)
 
 individual meas(X:log) : weight
 
 axiom (X:log < Y:log) -> (meas(X) < meas(Y))
+axiom meas(X) = meas(Y) -> X = Y
 
 # protocol nodes and sets of nodes
 
 type node
 
 type node_set
-relation in(N:node,S:node_set)
+relation mem(N:node,S:node_set)
 
 # is a set a majority?
 
 relation maj(S:node_set)
 
 # two majorities must have a node in common
-axiom maj(S1) & maj(S2) -> exists N: in(N,S1) & in(N,S2)
+axiom maj(S1) & maj(S2) -> exists N. mem(N,S1) & mem(N,S2)
 
 # abstract operations on logs
 
@@ -44,7 +45,7 @@ type elem
 
 object logs = {
     
-    action extend(l:log,e:elem) returns(lp:log) {
+    action extend(l:log,e:elem) returns(lp:log) = {
 	assert l < lp 
     }
 
@@ -57,47 +58,51 @@ object proto = {
 
     action extend(leader:node, dominated:node_set, e:elem) = {
 	assume maj(dominated);
-	assume in(X,dominated) -> (X < leader | X = leader);
+	assume mem(X,dominated) -> (meas(node_logs(X)) < meas(node_logs(leader)) 
+                                    | meas(node_logs(X)) = meas(node_logs(leader)));
 	node_logs(leader) := logs.extend(node_logs(leader),e)
     }
     
     action send_log(leader:node, dominated:node_set) = {
 	assume maj(dominated);
-	assume in(X,dominated) -> (X < leader | X = leader);
-	abs_net.send_log(leader,node_logs(leader))
+	assume mem(X,dominated) -> (meas(node_logs(X)) < meas(node_logs(leader)) 
+                                    | meas(node_logs(X)) = meas(node_logs(leader)));
+	call abs_net.send_log(leader,node_logs(leader))
     }	
 
-    receive receive_log(dst:node, leader:node, l:log) = {
-	if meas(node_logs(dst)) < meas(l:log) {
+    action receive_log(dst:node, leader:node, l:log) = {
+	if meas(node_logs(dst)) < meas(l) {
 	    node_logs(dst) := l;
-	    abs_net.send_ack(dst,l)
+	    call abs_net.send_ack(dst,l)
 	}
     }
 
     # This means log L has been committed by majority S
-    relation committed(L:log,S:nodes)
+    relation committed(L:log,S:node_set)
     init ~committed(L,S)
 
     # to commit a log, we mus have a majority of nodes
-    # that agree with it an 
+    # that agree with the leader
 
-    action commit(l:log, nodes:node_set) = {
-	assume maj(nodes);
-	assume in(N,nodes) -> l < node_logs(N);
-	assume in(N,nodes) & ~(l < node_logs(M)) -> meas(M) < meas(N)
-	commited(l,nodes) := true;
+    action commit(leader:node, dominated:node_set) = {
+	assume maj(dominated);
+	assume mem(X,dominated) -> node_logs(X) = node_logs(leader);
+	committed(node_logs(leader),dominated) := true
     }
 
-    conjecture commited(L,S) -> maj(S)
-    conjecture commited(L,S) & in(N,nodes) -> L < node_logs(N)
-    conjecture commited(L,S) & in(N,nodes) ~(L < node_logs(M)) -> meas(M) < meas(N)
+
+    conjecture committed(L,S) -> maj(S)
+    conjecture committed(L,S) & mem(N,S) -> (L < node_logs(N) | L = node_logs(N))
+    conjecture committed(L:log,S:node_set) & mem(N:node,S) & ~(L < node_logs(M:node) | L = node_logs(M:node)) -> meas(node_logs(M:node)) < meas(node_logs(N:node))
+    conjecture ~(meas(node_logs(NO0)) < meas(LO1) & abs_net.sent(NO0,LO1))
+    conjecture committed(L:log,S:node_set) & mem(N:node,S) & abs_net.sent(M,L2) &  ~(L < L2 | L = L2) -> meas(L2) < meas(node_logs(N:node))
 
 }
 
 object abs_net = {
 
     # this says leader N has sent log L
-    sent(N:node,L:log)
+    relation sent(N:node,L:log)
     init ~(sent(N,L))
 
     action send_log(leader:node, l:log) = {
@@ -108,9 +113,16 @@ object abs_net = {
 	# TODO: fill this in
     }
 
-    action receive_log(dst:node, leader:node, l:log){
-	assert sent(leader,log)
+    action receive_log(dst:node, leader:node, l:log) = {
+	assert sent(leader,l)
     }
     execute receive_log before proto.receive_log
 }
     
+export proto.extend
+export proto.send_log
+export proto.receive_log
+export proto.commit
+
+isolate iso_p = proto with abs_net,logs
+
