@@ -240,7 +240,7 @@ def isolate_component(mod,isolate_name):
     keep_sym = lambda name: (iu.ivy_compose_character not in name
                             or startswith_eq_some(name,present))
     
-    keep_ax = lambda name: (name is None or startswith_eq_some(str(name),present))
+    keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present))
 
 
     # filter the conjectures
@@ -394,7 +394,7 @@ def create_isolate(iso,mod = None,**kwargs):
             space = ics.NamedSpace(ivy_logic.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
 
-        ith.check_theory()
+        # ith.check_theory()
 
         if show_compiled.get():
             for x,y in mod.actions.iteritems():

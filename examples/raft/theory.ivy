@@ -14,3 +14,10 @@ module total_strict_order(t,r) = {
     axiom X:t = Y | X < Y | Y < X
 }
 
+module total_strict_order_with_zero(t,r,z) = {
+    axiom ~(r(X:t,Y) & r(Y,X))
+    axiom r(X:t,Y) & r(Y,Z) -> r(X,Z)
+    axiom X:t = Y | X < Y | Y < X
+    axiom X:t = 0 | z < X
+}
+

@@ -684,14 +684,6 @@ class CallAction(Action):
         res = hide(formal_params+formal_returns,res)
 #        print "after hide: {}".format(res)
         return res
-    def cmpl(self):
-        mas = [a.cmpl() for a in self.args[0].args]
-        n = self.args[0].rep
-#        print self.args
-        res = CallAction(*([ivy_ast.Atom(n,mas)] + [a.cmpl() for a in self.args[1:]]))
-        res.lineno = self.lineno
-#        print "compiled call action: {}".format(res)
-        return res
     def prefix_calls(self,pref):
         res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
         res.lineno = self.lineno

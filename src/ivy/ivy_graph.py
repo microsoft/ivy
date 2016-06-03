@@ -73,6 +73,7 @@ class enum_concepts(co.ConceptSet,list):
         self.name = name
         self.variables = variables
         self.formula = formula
+        self.sorts = [v.sort for v in variables] if variables != None else []
 
 # This creates concepts and concept sets from the signature. 
 
@@ -404,6 +405,7 @@ class Graph(object):
     def reset(self):
         
         concept_domain = initial_concept_domain(self.sorts)
+        self.new_relations = []
         self.concept_session = cis.ConceptInteractiveSession(concept_domain,And(),And(),cache={},recompute=True)
 
         if hasattr(self.parent_state,'universe'):
@@ -516,10 +518,10 @@ class Graph(object):
         sig = il.sig.copy()
         with sig:
             for c in ilu.used_constants_clauses(self.state):
-                if not isinstance(c.sort,ivy_logic.EnumeratedSort):
-                    ivy_logic.add_symbol(str(c),c.sort)
-            for c in ilu.used_constants_clauses(self.constraints):
-                if not isinstance(c.sort,ivy_logic.EnumeratedSort):
+                if not isinstance(c.sort,il.EnumeratedSort) and not c.is_numeral():
+                    il.add_symbol(str(c),c.sort)
+            for c in ilu.used_constants_clauses(self.constraints) and not c.is_numeral():
+                if not isinstance(c.sort,il.EnumeratedSort):
                     il.add_symbol(str(c),c.sort)
             return concept_from_formula(ilu.to_formula(text))
 
@@ -528,6 +530,7 @@ class Graph(object):
 
     def new_relation(self,concept):
         add_domain_concept(self.concept_domain.concepts,concept)
+        self.new_relations.append(concept)
             
     def state_changed(self,recomp=True):
         cs = self.concept_session
@@ -536,6 +539,8 @@ class Graph(object):
         fsyms = list(s for s in ilu.used_symbols_ast(cs._to_formula()) if not s.is_skolem())
         vocab += list(all_symbols()) + fsyms
         cs.domain = replace_concept_domain_vocabulary(cs.domain,set(vocab))
+        for concept in self.new_relations:
+            add_domain_concept(self.concept_domain.concepts,concept)
         if recomp:
             self.recompute()
 

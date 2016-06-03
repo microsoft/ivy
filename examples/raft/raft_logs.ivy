@@ -39,28 +39,39 @@ relation maj(S:node_set)
 # two majorities must have a node in common
 axiom maj(S1) & maj(S2) -> exists N. mem(N,S1) & mem(N,S2)
 
+
+# term numbers
+
+type term
+relation (X:term < Y:term)
+instantiate total_strict_order_with_zero(term,<,0)
+
 # abstract operations on logs
 
 type elem
 
 object logs = {
-    
-    action extend(l:log,e:elem) returns(lp:log) = {
-	assert l < lp 
+
+    individual get_term(l:log) : term
+
+    action extend(l:log,e:elem,t:term) returns(lp:log) = {
+	assert l < lp & get_term(lp) = term
     }
 
 }
 
-
 object proto = {
     
     individual node_logs(X:node) : log
+    individual node_terms(X:node) : term
+    relation leader(T:term,X:node)
+    
+    init ~leader(T,X)
+    init node_terms(X) = 0
 
-    action extend(leader:node, dominated:node_set, e:elem) = {
-	assume maj(dominated);
-	assume mem(X,dominated) -> (meas(node_logs(X)) < meas(node_logs(leader)) 
-                                    | meas(node_logs(X)) = meas(node_logs(leader)));
-	node_logs(leader) := logs.extend(node_logs(leader),e)
+    action extend(n:node, e:elem) = {
+	assume leader(node_terms(n),n);
+	node_logs(n) := logs.extend(node_logs(n),e,node_terms(n))
     }
     
     action send_log(leader:node, dominated:node_set) = {

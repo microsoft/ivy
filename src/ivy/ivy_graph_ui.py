@@ -306,7 +306,7 @@ class GraphWidget(object):
         else:
             with self.ui_parent.run_context():  # to catch errors
                 lit = self.g.string_to_concept(text)
-            self.add_concept(lit)
+                self.add_concept(lit)
 
     # Record the current goal with a string name
 
@@ -464,7 +464,8 @@ class GraphWidget(object):
             sorts = tuple(self.g.node_sort(x) for x in [self.mark,node])
             print "sorts: {}".format(sorts)
             for r in self.g.relations:
-                print "{} : {}".format(r,r.sorts)
+                print "{}".format(r)
+                print ": {}".format(r.sorts)
             rels = [r for r in self.g.relations if r.sorts == sorts]
             items = [self.g.concept_label(r) for r in rels]
             msg = "Materialize this relation from selected node:"

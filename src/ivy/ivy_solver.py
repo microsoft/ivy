@@ -359,7 +359,6 @@ def formula_to_z3_int(fmla):
     assert False
 
 def formula_to_z3(fmla):
-#    print "formula_to_z3: {}".format(fmla)
     z3_formula = formula_to_z3_int(fmla)
     variables = sorted(used_variables_ast(fmla))
     if len(variables) == 0:
@@ -709,7 +708,10 @@ def get_model_clauses(clauses1):
     s = z3.Solver()
     z3c = clauses_to_z3(clauses1)
     s.add(z3c)
-    if s.check() == z3.unsat:
+    iu.dbg('"before check"')
+    res = s.check()
+    iu.dbg('"after check"')
+    if res == z3.unsat:
         return None
     m = get_model(s)
     return HerbrandModel(s,m,used_symbols_clauses(clauses1))
@@ -791,7 +793,9 @@ def model_if_none(clauses1,implied,model):
 
 
 def decide(s):
+#    iu.dbg('"before decide"')
     res = s.check()
+#    iu.dbg('"after decide"')
     if res == z3.unknown:
         raise iu.IvyError(None,"Solver produced inconclusive result")
     return res

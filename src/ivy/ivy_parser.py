@@ -97,12 +97,21 @@ def do_insts(ivy,insts):
                 raise iu.IvyError(instantiation,"wrong number of arguments to module {}".format(inst.relname))
             subst = dict((x.rep,y.rep) for x,y in zip(fparams,aparams) if not isinstance(y,Variable))
             vsubst = dict((x.rep,y) for x,y in zip(fparams,aparams) if isinstance(y,Variable))
+            pvars = set(x.rep for x in pref.args) if pref != None else set()
+            for v in vsubst.values():
+                if v.rep not in pvars:
+                    raise iu.IvyError(instantiation,"variable {} is unbound".format(v))
             module = defn.args[1]
             for decl in module.decls:
 #                print "before: %s" % (decl)
-                idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
                 if vsubst:
-                    idecl = substitute_constants_ast(idecl,vsubst)
+                    map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
+                    vpref = substitute_ast(pref,map1)
+                    vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
+                    idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined)
+                    idecl = substitute_constants_ast(idecl,vvsubst)
+                else:
+                    idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
                 if isinstance(idecl,ActionDecl):
                     for foo in idecl.args:
                         if not hasattr(foo.args[1],'lineno'):

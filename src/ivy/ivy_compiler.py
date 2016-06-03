@@ -237,6 +237,22 @@ def compile_assign(self):
 
 AssignAction.cmpl = compile_assign
 
+def compile_call(self):
+    ctx = ExprContext(lineno = self.lineno)
+    with ctx:
+        mas = [a.cmpl() for a in self.args[0].args]
+    n = self.args[0].rep
+#        print self.args
+    res = CallAction(*([ivy_ast.Atom(n,mas)] + [a.cmpl() for a in self.args[1:]]))
+    res.lineno = self.lineno
+    ctx.code.append(res)
+    res = ctx.extract()
+#    print "compiled call action: {}".format(res)
+    return res
+
+CallAction.cmpl = compile_call
+
+
 def compile_if_action(self):
     ctx = ExprContext(lineno = self.lineno)
     with ctx:

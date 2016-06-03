@@ -202,10 +202,10 @@ class IvyError(Exception):
         if isinstance(self.lineno,tuple):
             self.filename,self.lineno = self.lineno
         self.msg = msg
-#        print repr(self)
-#        assert False
+        print repr(self)
+        assert False
     def __repr__(self):
-        pre = (self.filename + ': ') if hasattr(self,'filename') else ''
+        pre = (self.filename + ': ') if hasattr(self,'filename') and self.filename else ''
         pre += "line {}: ".format(self.lineno) if self.lineno else ''
         return (pre + 'error: ' + self.msg)
     __str__ = __repr__

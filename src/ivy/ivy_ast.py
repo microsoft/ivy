@@ -626,7 +626,7 @@ def is_enumerated(term):
     return isinstance(term.get_sort(),EnumeratedSort)
 
 def app_to_atom(app):
-    if isinstance(app,Old) or isinstance(app,Quantifier):
+    if isinstance(app,Old) or isinstance(app,Quantifier) or isinstance(app,Ite):
         return app
     res = Atom(app.rep,app.args)
     if hasattr(app,'lineno'):
@@ -686,15 +686,15 @@ class AstRewriteSubstPrefix(object):
         self.subst,self.pref,self.to_pref = subst,pref,to_pref
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
-    def rewrite_atom(self,atom):
-        return compose_atoms(self.pref,atom) if self.pref and (self.to_pref == None or atom.rep in self.to_pref) else atom
+    def rewrite_atom(self,atom,always=False):
+        return compose_atoms(self.pref,atom) if self.pref and (always or self.to_pref == None or atom.rep in self.to_pref) else atom
 
 class AstRewritePostfix(object):
     def __init__(self,post):
         self.post = post
     def rewrite_name(self,name):
         return name
-    def rewrite_atom(self,atom):
+    def rewrite_atom(self,atom,always=False):
         return compose_atoms(atom,self.post)
 
 class AstRewriteAddParams(object):
@@ -702,7 +702,7 @@ class AstRewriteAddParams(object):
         self.params = params
     def rewrite_name(self,name):
         return name
-    def rewrite_atom(self,atom):
+    def rewrite_atom(self,atom,always=False):
         return atom.clone(atom.args + self.params)
 
 def ast_rewrite(x,rewrite):
@@ -731,9 +731,9 @@ def ast_rewrite(x,rewrite):
         arg0 = x.args[0]
         if x.args[0] == None:
             if isinstance(rewrite,AstRewriteSubstPrefix) and rewrite.pref != None:
-                arg0 = Atom(rewrite.pref,[])
+                arg0 = rewrite.pref
         else:
-            arg0 = rewrite.rewrite_atom(x.args[0])
+            arg0 = rewrite.rewrite_atom(x.args[0],always=True)
         res = x.clone([arg0,ast_rewrite(x.args[1],rewrite)])
         return res
     if hasattr(x,'args'):
