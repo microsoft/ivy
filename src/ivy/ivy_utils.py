@@ -202,8 +202,9 @@ class IvyError(Exception):
         if isinstance(self.lineno,tuple):
             self.filename,self.lineno = self.lineno
         self.msg = msg
-        print repr(self)
-        assert False
+        if not catch.get():
+            print repr(self)
+            assert False
     def __repr__(self):
         pre = (self.filename + ': ') if hasattr(self,'filename') and self.filename else ''
         pre += "line {}: ".format(self.lineno) if self.lineno else ''
@@ -469,6 +470,7 @@ polymorphic_symbols = set(
 
 use_numerals = BooleanParameter("use_numerals",True)
 use_new_ui = BooleanParameter("new_ui",False)
+catch = BooleanParameter("catch",True)
 
 
 def dbg(*exprs):
@@ -481,3 +483,5 @@ def dbg(*exprs):
             print "{}:{}".format(e,eval(e,globals(),locs))
     finally:
         del frame
+
+

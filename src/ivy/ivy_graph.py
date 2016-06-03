@@ -28,9 +28,9 @@ def concept_from_formula(fmla):
 def add_domain_concept(concepts,con,kind=None):
     arity = con.arity
     name = con.name
-    if 1 <= arity and arity <= 2:
+    concepts[name] = con
+    if kind or (1 <= arity and arity <= 2):
         kind = kind or ('node_labels' if arity==1 else 'edges')
-        concepts[name] = con
         concepts[kind].append(name)
  
 def add_domain_concept_fmla(concepts,fmla,kind=None):
@@ -96,15 +96,16 @@ def concepts_from_sig(symbols,concepts):
 
         elif il.is_boolean_sort(rng):
             # TODO: we have no way to display boolean constants
-            if len(dom) in [1,2]:
-                vs = [Variable(n,s) for n,s in zip(['X','Y'],dom)]
+            if len(dom) in [1,2,3]:
+                vs = [Variable(n,s) for n,s in zip(['X','Y','Z'],dom)]
                 add_domain_concept_fmla(concepts,c(*vs))
 
         elif il.is_first_order_sort(rng):
             if len(dom) == 0:
                 add_domain_concept_fmla(concepts,Equals(Variable('X', rng),c))
-            elif len(dom) == 1:
-                fmla = Equals(c(Variable('X', dom[0])),Variable('Y', rng))
+            elif len(dom) in [1,2]:
+                vs = [Variable(n,s) for n,s in zip(['X','Y','Z'],dom+(rng,))]
+                fmla = Equals(c(*vs[0:-1]),vs[-1])
                 add_domain_concept_fmla(concepts,fmla)
     
 # replace the signature concepts in a concept domain

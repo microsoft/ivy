@@ -533,8 +533,8 @@ class AnalysisGraphUI(object):
         if res == None:
             msg = "The condition is unreachable along the given path"
             self.ui_parent.ok_dialog(msg)
-            return
-        self.ui_parent.add(res)
+            return None
+        return self.ui_parent.add(res)
 
     def CGUI(self):
         # This returns the default Concept Graph UI class

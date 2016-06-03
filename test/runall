@@ -2,12 +2,15 @@
 
 tests='enum1 client_server1  client_server4  detect_transitive
 client_server2  client_server5  enum1
-client_server3  client_server6  transitive'
+client_server3  client_server6  transitive
+projections'
+
+trap '{ echo "Exiting on SIGINT." ; exit 1; }' INT
 
 errors=0
 for x in $tests; do
     echo $x ...
-    if timeout 10 ivy_test $x.py > $x.log 2>&1 ; then
+    if timeout 100 ivy_test $x.py > $x.log 2>&1 ; then
         echo PASS
     else
         echo FAIL

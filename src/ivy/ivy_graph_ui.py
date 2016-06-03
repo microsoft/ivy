@@ -152,11 +152,13 @@ class GraphWidget(object):
 
     def get_node_projection_actions(self,node):
         projs = self.g.get_projections(node)
+        res = []
         if len(projs) > 0:
             res.append(("Add projection...",None))
+            res.append(("---",None))
             for (name,p) in projs:
-                    res.append((name,lambda p=p: self.project(p)))
-        return projs
+                    res.append((name,lambda n,p=p: self.add_concept(p)))
+        return res
 
     # get the edge menu actions
 
@@ -380,7 +382,7 @@ class GraphWidget(object):
     def path_reach(self):
         if self.parent != None and self.g.parent_state != None:
             cnstr = self.g.constraints if not self.g.constraints.is_true() else self.g.state
-            self.parent.bmc(self.g.parent_state,cnstr)
+            return self.parent.bmc(self.g.parent_state,cnstr)
 
     # Conjecture an invariant the separates known reachable states and
     # current goal. TODO: we shouldn't be computing the goal from the
