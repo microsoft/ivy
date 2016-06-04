@@ -5,7 +5,7 @@
 ########################
 # Python Lex Yacc files
 ########################
-concept_space_parsetab.py
+*_parsetab.py
 ivy_formulatab.py
 ivy_parsetab.py
 ivy_termtab.py
@@ -19,3 +19,6 @@ ivy_termtab.py
 *.out
 *.snm
 *.toc
+
+# Python setup creates this
+ms_ivy.egg-info

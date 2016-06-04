@@ -30,7 +30,7 @@ def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])
     sys.exit(1)
 
-if __name__ == "__main__":
+def main():
     ivy.read_params()
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
@@ -61,4 +61,8 @@ if __name__ == "__main__":
                         if cex is not None:
                             display_cex("safety failed",cex)
     print "OK"
+
+
+if __name__ == "__main__":
+    main()
 

@@ -482,7 +482,10 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
 
 def clear_rules(modname):
     import sys
-    d = sys.modules[modname].__dict__
+    if modname in sys.modules:
+        d = sys.modules[modname].__dict__
+    else:
+        d = sys.modules['ivy.' + modname].__dict__
     for s in list(d):
         if s.startswith('p_'):
             del d[s]

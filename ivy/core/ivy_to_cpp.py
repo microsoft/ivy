@@ -1249,7 +1249,7 @@ public:
 
 target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
 
-if __name__ == "__main__":
+def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
@@ -1266,4 +1266,8 @@ if __name__ == "__main__":
         f = open(classname+'.cpp','w')
         f.write(impl)
         f.close()
+
+
+if __name__ == "__main__":
+    main()
         

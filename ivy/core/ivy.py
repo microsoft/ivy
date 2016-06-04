@@ -2,7 +2,16 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
+
 import sys
+
+# pick up some paths if were are run as main
+if __name__ == "__main__":
+    mypath = sys.path[0]
+    sys.path.insert(0,mypath+'/..')
+    sys.path.insert(0,mypath+'/../tkui')
+#    print "path: {}".format(sys.path)
+
 import pickle
 import string
 from ivy_compiler import IvyError, ivy_new, ivy_load_file
@@ -103,8 +112,10 @@ def ivy_init():
 
     return ag
 
-if __name__ == "__main__":
+def main():
     with ivy_module.Module():
         ui_main_loop(ivy_init())
 
+if __name__ == "__main__":
+    main()
 
