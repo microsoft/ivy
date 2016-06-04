@@ -1,5 +1,0 @@
-#/bin/sh
-
-export PYTHONPATH=$Z3DIR/bin:$IVYDIR/src/ivy:$IVYDIR/ivy
-
-python $IVYDIR/ivy/core/ivy_to_cpp.py $@ 
