@@ -22,3 +22,5 @@ ivy_termtab.py
 
 # Python setup creates this
 ms_ivy.egg-info
+build
+dist

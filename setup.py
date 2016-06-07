@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(name='ms_ivy',
       version='0.1',
@@ -7,7 +7,8 @@ setup(name='ms_ivy',
       author='IVy team',
       author_email='nomail@example.com',
       license='MIT',
-      packages=['ivy'],
+      packages=find_packages(),
+      include_package_data=True,
       install_requires=[
           'ply',
           'pygraphviz',
