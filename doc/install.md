@@ -97,6 +97,81 @@ somewhere in your emacs load path and add the following code to your
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
     (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
 
+## Windows notes
+
+Installing on windows can be a bit challenging, but here are a few
+suggestions that may get you throuhg it.
+
+### Installing Python and Python packages
+
+Install Python 2.7.11 in the normal way. Before installing packages, you may also
+need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
+
+### Installing Z3
+
+After installing Z3, you need to make sure Python can find it. You can try setting
+the PYTHONPATH environment variable to point to the Z3 `bin` directory. It might
+help to make sure Z3 is installed in a directory without spaces in the name. As a
+last resort, you can just copy the '.py' and '.dll' files into your Python installation.
+If you installed Python in `c:/Python27`, then copy the files into:
+
+    c:/Python27/lib/site-packages/
+
+If things are installed correctly, the following should produce no errors:
+
+    > python
+    >>> import z3
+    >>> z3.init('libz3.dll')
+
+### Installing Graphviz
+
+Get `graphviz-2.38` from [graphviz.org](http://graphviz.org). This site is often down,
+so you may have to be patient. Versions downloaded from alternative sites may be broken.
+Install into some directory without spaces in the name, for example `c:/Graphviz`.
+
+### Using scripts
+
+The `pip` package installation utility is found in `c:/Python27/Scripts`. You should put
+this directory in your PATH, since the IVY command line scripts will also be installed there
+by default. Try installing the `tarjan` and `ply` packages like this:
+
+    > pip install tarjan
+    > pip install ply
+
+### Installing Pygraphviz
+
+You can try installing `pygraphviz` like this:
+
+    > pip install pygraphviz
+
+However, this is likely to fail as pip will not find the graphviz
+headers and libraries. As an alternative, download the release 1.3 of
+pygraphviz from
+[here](https://github.com/pygraphviz/pygraphviz/releases). After unpacking
+the sources, do this:
+
+    > cd pygraphviz-pygraphviz-1.3
+    > python setup.py install --include-path=c:/Graphviz/include --library-path=c:/Graphviz/lib/debug/lib
+
+This tells explicitly where you installed the graphviz headers and libraries. If this seems to
+work, you can test it like this:
+
+    > python
+    >>> import pygraphviz.agraph
+
+### Installing Ivy
+
+Now you can now try to install Ivy, like this:
+
+    > git clone https://github.com/Microsoft/ivy.git
+    > cd ivy
+    > python setup.py install
+
+If you have put `c:/Python27/Scripts` in your `PATH`, you should now be able to run IVy like this:
+
+    > ivy ui=cti doc/examples/client_server_example.ivy
 
 
 
+
+ 
