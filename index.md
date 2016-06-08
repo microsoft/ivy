@@ -72,5 +72,5 @@ From composable specifications, Ivy can generate test benches and
 tests oracles that can be used to test design components rigorously
 against their specifications. Such testers can reveal latent bugs
 in component implementations that do not appear in integration tests or
-ad-hoc unint testing.
+ad-hoc unit testing.
 
