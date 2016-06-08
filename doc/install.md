@@ -2,6 +2,12 @@
 layout: page
 title: Installing IVy
 ---
+
+This document describes the steps need to install IVy from the github
+repository. The specific commands given apply to Ubuntu Linux version
+14.04. Windows and Mac users should also refer to the Windows and Mac
+notes below.
+ 
 ## Prerequisites
 
 ### Python 2.7
@@ -11,8 +17,9 @@ your Linux distribution. You should make sure to get the `pip`
 utility.  This is standard on versions from 2.7.9.
 
 You can install IVy in a python virtual environment if you don't want
-to pollute your local python setup. Before the following instructions,
-do this:
+to pollute your local python setup. If you want to use a virtual
+environment, do the following before following the remaining
+installation instructions:
 
     $ pip install virtualenv
     $ virtualenv ivy_env
@@ -21,7 +28,7 @@ do this:
 
 ### Z3
 
-Following the instructions [here](https://github.com/Z3Prover/z3) to
+Follow the instructions [here](https://github.com/Z3Prover/z3) to
 install Z3. You can test whether Z3 is correctly installed like this:
 
     $ python
@@ -100,7 +107,7 @@ somewhere in your emacs load path and add the following code to your
 ## Windows notes
 
 Installing on windows can be a bit challenging, but here are a few
-suggestions that may get you throuhg it.
+suggestions that may get you through it.
 
 ### Installing Python and Python packages
 
@@ -171,7 +178,45 @@ If you have put `c:/Python27/Scripts` in your `PATH`, you should now be able to 
 
     > ivy ui=cti doc/examples/client_server_example.ivy
 
+## Mac notes
 
+There are two options for Mac users: using the native Aqua interface
+or X11. Here we will describe the X11 approach.
 
+### XQuartz
+
+Intstall [XQuartz](https://www.xquatrz.org).
+
+### MacPorts
+
+Install [MacPorts](https://www.macports.org).
+
+### Install prerequisites
+
+    $ sudo port install graphviz python27 py27-pip py27-pygraphviz py27-ply py27-tkinter tix git
+    $ sudo pip install tarjan
+
+### Install Z3
+
+    $ unzip z3-4.4.1-x64-osx-10.11.zip
+    $ export PYTHONPATH=`pwd`/z3-4.4.1-x64-osx-10.11/bin:
+
+### Install IVy
+
+    $ git clone https://github.com/Microsoft/ivy.git
+    $ cd ivy
+    $ sudo python2.7 setupy.py install
+    $ export PATH="/opt/local/Library/Frameworks/Python.framework/Versions/2.7/bin:$PATH"
+
+The last command is to make the ivy command-line scripts
+available. For some reason, the first time you run ivy, it takes
+several minutes to start.
+
+### Aqua Python
+
+In principle, it is also possible to use the native Aqua interface by
+installing an appropriate python package. In this case, you might
+install graphviz using MacPorts, and then install pygraphviz from
+source as in the Windows notes above. This is untested, however.
 
  
