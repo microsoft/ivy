@@ -5,6 +5,8 @@ client_server2  client_server5  enum1
 client_server3  client_server6  transitive
 projections'
 
+sh_tests='tilelink_unit_test.sh'
+
 trap '{ echo "Exiting on SIGINT." ; exit 1; }' INT
 
 errors=0
@@ -17,5 +19,17 @@ for x in $tests; do
         (( errors += 1 )) 
     fi
 done
+
+
+for x in $sh_tests; do
+    echo $x ...
+    if timeout 100 ./$x ; then
+        echo PASS
+    else
+        echo FAIL
+        (( errors += 1 )) 
+    fi
+done
+
 
 echo "errors: $errors"
