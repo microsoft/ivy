@@ -261,7 +261,7 @@ def emit_randomize(header,symbol):
 #    indent(header)
 #    header.append('randomize("{}");\n'.format(slv.solver_name(symbol)))
 
-def emit_action_gen(header,impl,name,action):
+def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
     upd = action.update(im.module,None)
@@ -315,7 +315,7 @@ def emit_action_gen(header,impl,name,action):
 }
 """)
 
-def emit_action_gen(header,impl,name,action):
+def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
     upd = action.update(im.module,None)
@@ -368,7 +368,7 @@ def emit_action_gen(header,impl,name,action):
     return res;
 }
 """)
-def emit_derived(header,impl,df):
+def emit_derived(header,impl,df,classname):
     name = df.defines().name
     sort = df.defines().sort
     retval = il.Symbol("ret:val",sort)
@@ -596,7 +596,7 @@ def module_to_cpp_class(classname):
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
     for df in im.module.concepts:
-        emit_derived(header,impl,df)
+        emit_derived(header,impl,df,classname)
 
     # declare one counter for each progress obligation
     # TRICKY: these symbols are boolean but we create a C++ int
@@ -627,7 +627,7 @@ def module_to_cpp_class(classname):
         emit_init_gen(header,impl,classname)
         for name,action in im.module.actions.iteritems():
             if name in im.module.public_actions:
-                emit_action_gen(header,impl,name,action)
+                emit_action_gen(header,impl,name,action,classname)
     return ''.join(header) , ''.join(impl)
 
 def assign_symbol_from_model(header,sym,m):

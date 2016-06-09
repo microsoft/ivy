@@ -271,7 +271,7 @@ def isolate_component(mod,isolate_name):
     mod.labeled_axioms = [a for a in mod.labeled_axioms if keep_ax(a.label)]
 
     # filter definitions
-    mod.concepts = [c for c in mod.concepts if keep_ax(c.args[0].func.name)]
+    mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present)]
 
     mod.public_actions.clear()
     mod.public_actions.update(exported)

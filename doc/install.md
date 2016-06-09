@@ -85,7 +85,7 @@ directory. For example:
 
     $ python setup install --home=~
 
-See the [python documenation](https://docs.python.org/2/install/) for
+See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
 
 ## Run
@@ -185,7 +185,7 @@ or X11. Here we will describe the X11 approach.
 
 ### XQuartz
 
-Intstall [XQuartz](https://www.xquatrz.org).
+Install [XQuartz](https://www.xquartz.org).
 
 ### MacPorts
 
@@ -205,7 +205,7 @@ Install [MacPorts](https://www.macports.org).
 
     $ git clone https://github.com/Microsoft/ivy.git
     $ cd ivy
-    $ sudo python2.7 setupy.py install
+    $ sudo python2.7 setup.py install
     $ export PATH="/opt/local/Library/Frameworks/Python.framework/Versions/2.7/bin:$PATH"
 
 The last command is to make the ivy command-line scripts
