@@ -1257,7 +1257,8 @@ def main():
         ivy.ivy_init()
 
         classname = im.module.name
-        header,impl = module_to_cpp_class(classname)
+        with iu.ErrorPrinter():
+            header,impl = module_to_cpp_class(classname)
 #        print header
 #        print impl
         f = open(classname+'.h','w')
