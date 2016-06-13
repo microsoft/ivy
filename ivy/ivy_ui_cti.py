@@ -154,10 +154,11 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                         for relation in [il.sig.symbols[x]]
                     ],
 
-                _get_model_clauses = lambda clauses: get_small_model(
+                _get_model_clauses = lambda clauses, final_cond=False: get_small_model(
                     clauses,
                     sorted(il.sig.sorts.values()),
-                    rels_to_min
+                    rels_to_min,
+                    final_cond = final_cond
                 )
 
                 if conj == None:
