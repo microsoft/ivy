@@ -120,7 +120,7 @@ z3_sorts_inv = {}
 
 def uninterpretedsort(us):
     s = z3_sorts.get(us.rep,None)
-    if s: return s
+    if s is not None: return s
     s = lookup_native(us,sorts,"sort")
     if s == None:
         s = z3.DeclareSort(us.rep)
@@ -240,7 +240,7 @@ def term_to_z3(term):
             sorted = hasattr(term,'sort')
             sksym = term.rep + ':' + str(term.sort) if sorted else term.rep
             res = z3_constants.get(sksym)
-            if res: return res
+            if res is not None: return res
 #            print str(term.sort)
             sig = lookup_native(term.sort,sorts,"sort") if sorted else S
             if sig == None:
@@ -255,7 +255,7 @@ def term_to_z3(term):
             z3_constants[sksym] = res
             return res
         res = z3_constants.get(term.rep)
-        if not res:
+        if res is None:
 #            if isinstance(term.rep,str):
 #                print "{} : {}".format(term,term.rep)
             if term.is_numeral():
@@ -797,6 +797,7 @@ def decide(s):
     res = s.check()
 #    iu.dbg('"after decide"')
     if res == z3.unknown:
+        print s.to_smt2()
         raise iu.IvyError(None,"Solver produced inconclusive result")
     return res
 
