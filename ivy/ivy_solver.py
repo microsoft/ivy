@@ -273,9 +273,9 @@ def term_to_z3(term):
         return z3.If(formula_to_z3_int(term.args[0]),term_to_z3(term.args[1]),term_to_z3(term.args[2]))
     else:
         fun = z3_functions.get(term.rep)
-        if not fun:
+        if fun is None:
             fun = lookup_native(term.rep,functions,"function")
-            if not fun:
+            if fun is None:
                 sig = term.rep.sort.to_z3()
                 fun = z3.Function(term.rep.name, *sig)
             z3_functions[term.rep] = fun
@@ -801,7 +801,7 @@ def decide(s):
         raise iu.IvyError(None,"Solver produced inconclusive result")
     return res
 
-def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
+def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None):
     """
     Return a HerbrandModel with a "small" model of clauses.
 
@@ -822,6 +822,12 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
     res = decide(s)
     if res == z3.unsat:
         return None
+
+    if final_cond is not None:
+        s.add(clauses_to_z3(final_cond))
+        res = decide(s)
+        if res == z3.unsat:
+            return None
 
     print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):

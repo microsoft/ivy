@@ -563,10 +563,11 @@ def new_history(state):
 def history_forward_step(history,state):
     return history.forward_step(state.pred.domain.background_theory(state.pred.in_scope),state.update)
 
-def history_satisfy(history,state,_get_model_clauses=None):
+def history_satisfy(history,state,_get_model_clauses=None,final_cond=None):
     return history.satisfy(
         state.domain.background_theory(state.in_scope),
-        _get_model_clauses
+        _get_model_clauses,
+        final_cond
     )
     
 def eval_assert_rhs(rhs,domain):

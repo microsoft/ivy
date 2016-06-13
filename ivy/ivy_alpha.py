@@ -67,14 +67,14 @@ class ProgressiveDomain(object):
     def test_cube(self,cube):
         canon_cube = canonize_clause(cube)
         if log:
-            print "cube: {}".format(canon_cube)
+            print "cube: {}".format([str(c) for c in canon_cube])
         my_id = self.cube_id(canon_cube)
         if my_id in self.inhabited_cubes:
             if log:
-                print "cached: %s" % cube
+                print "cached: %s" % [str(c) for c in cube]
             return self.inhabited_cubes[my_id]
         if log:
-            print "test: %s" % cube
+            print "test: %s" % [str(c) for c in cube]
         cube = rename_clause(cube,self.new_sym)
         vs = used_variables_clause(cube)
         # TODO: these constants need to have right sorts
@@ -86,7 +86,7 @@ class ProgressiveDomain(object):
         else:
             self.inferred.append([~lit for lit in cube])
             if log:
-                print "uninhabited: %s" % canon_cube
+                print "uninhabited: %s" % [str(c) for c in canon_cube]
             self.inhabited_cubes[my_id] = False
         return res
 
@@ -98,7 +98,8 @@ class ProgressiveDomain(object):
         self.z3_cubes = []
         self.memo = dict()
         if log:
-            print "concrete state: %s,%s" % (theory,background_theory)
+            print "concrete state: %s" % theory
+            print "background: %s" % background_theory
         add_clauses(self.solver, and_clauses(theory,background_theory))
         self.unsat = self.solver.check() == z3.unsat
         if self.unsat:
@@ -114,11 +115,11 @@ class ProgressiveDomain(object):
                 print "concept space: %s" % atom
             concepts = cs.enumerate(self.memo,self.test_cube)
             if log:
-                print "result: {}".format(concepts)
+                print "result: {}".format([str(c) for c in concepts])
             self.memo[atom.relname] = ([t.rep for t in atom.args], concepts)
         res = self.inferred
         if log:
-            print "inferred: {}".format(res)
+            print "inferred: {}".format([[str(c) for c in cls] for cls in res])
         del self.inferred
         return Clauses(res)
 
