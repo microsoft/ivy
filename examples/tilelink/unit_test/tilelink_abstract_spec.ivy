@@ -1,12 +1,10 @@
-#lang ivy1.3
+#lang ivy1.5
 
 ################################################################################
 #
 # This is the abstract specification of the tilelink protocol. It defines
 # the consistency reference model (reference) and abstract interface protocol
-# (interface). It includes generic client and manager models for building
-# test benches.
-#
+# (interface). 
 ################################################################################
 
 
@@ -29,10 +27,6 @@ module total_order(carrier) = {
     # could add <= as derived relation here
 }
 
-########################################
-# type of global time
-type time
-instantiate total_order(time)
 
 ########################################
 # type of local time
@@ -48,11 +42,11 @@ type data
 type addr
 
 ########################################
-# type of message types
-type mtype = { grant_t, release_t, request_t, response_t}
-
-########################################
 # type of ownership state
+# 
+# Note, this is the abstract ownership state associated with the
+# interface and is not necessarily the same as the cache protocol
+# state.
 type ownership = { none, shrd, excl }
 
 ########################################
@@ -61,14 +55,21 @@ type side = {client,manager}
 
 ########################################
 # type of memory ops
-type otype = {read, write, cas}
+#
+# This just gives the general class of the operation for the purposes
+# of determining the happens-before relation.
+
+type otype = {read, write, amo}
 
 ########################################
-# id's of protocol agents
+# Global ID's of protocol components
 type id
 
 ########################################
 # type of client id
+#
+# ID of a client on a particular tilelink
+# interface. This is not the global id.
 type client_id
 
 
@@ -77,29 +78,26 @@ type client_id
 module memev = {
     individual type_ : otype
     individual addr_ : addr
-    individual data_  : data # data for write and cas
-    relation result(D:data)  # value for read and cas 
+    individual data_  : data # data for write and amo
     individual id_ : id      # process id of op
     relation serialized
     relation fused
-    individual time_ :time   # serialized time if any
-
-    axiom result(T) & result(U) -> T = U
 
     # TEMPORARY: no atomic ops!
-    init ~serialized & ~fused & type_ ~= cas
+    # This is because atomic ops haven't been defined yet.
+    init ~serialized & ~fused & type_ ~= amo
 }
 
 ################################################################################
 #
 # Reference specification
 #
-# This module describes a set of memory events ordered by local
-# time. It provides actions that assign global time to events in
-# increasing order. The pre-conditions of these actions enforce the
-# consistency model (that is, what orderings in local time must be
-# preserved in global time). This ordering condition is determined by
-# the relation "prevents" (see below).
+# This module defines the memory semantics. It contains a map from
+# local time to memory events produced by the CPU's. The action
+# "serialize" is used to serialize a memory event at the current
+# physical time. This operation will fail if the happens-before
+# relation prevents the operation being serialized at the current
+# time.
 #
 ################################################################################
 
@@ -112,49 +110,44 @@ module reference = {
     instantiate evs(T:ltime) : memev 
 
     ########################################
-    # current global time
-
-    individual gt : time
-
-    ########################################
     # global memory state 
     # obeys partial function axiom
 
-    individual mem(A:addr) : data
+    function mem(A:addr) : data
 
     ########################################
-    # event T1 prevents T2 if it must come before T2 according to the
-    # ordering conditions but is not yet serialized. The definition
-    # here is strong enough to imply release consistency (reads and
-    # writes to different addresses commute, but nothing commutes with
-    # cas)
+    # Event T1 happens before T2 if it must come before T2 according
+    # to the ordering constraints. This definition says that T1
+    # happens before T2 if both are operations of the same CPU and if
+    # T1's locally happens before T2, and if either they have the same
+    # address, or one of the two is an atomic operation. The actual
+    # happens-before relation is the transitive closure of
+    # happens_before.
 
-    derived prevents(T1,T2) =
-    	~evs(T1).serialized 
-    	& T1 < T2
+    derived happens_before(T1,T2) =
+    	T1 < T2
     	& evs(T1).id_ = evs(T2).id_
-    	& (evs(T1).addr_ = evs(T2).addr_ | evs(T1).type_ = cas | evs(T2).type_ = cas)
+    	& (evs(T1).addr_ = evs(T2).addr_ | evs(T1).type_ = amo | evs(T2).type_ = amo)
+    
+    # An event T1 prevents T2 if T1 happens before T2 and is not yet
+    # serialized
+    
+    derived prevents(T1,T2) = 
+        ~evs(T1).serialized & happens_before(T1,T2)
+
     
     ########################################
     # serialize an event lt at current global time. The "id"
     # parameter tells us what process is serializing the event.
     # 
 
-    action perform(lt:ltime, id_:id) = {
+    action serialize(lt:ltime, id_:id) = {
 
        # serialization must be appropriately ordered
-       # assert ~prevents(T1,A1,lt,A2)
+       assert ~prevents(T1,lt);
 
        # serialize at current global time
        evs(lt).serialized := true;
-#       evs(lt).time_ := gt;
-
-       # advance global time
-#       local ngt : time {
-#           ngt := *;
-#           assume gt < ngt; # TODO: without "assume?"
-#           gt := ngt
-#       };
 
        # update the global memory state
        local a : addr, d : data {
@@ -167,14 +160,14 @@ module reference = {
 	      if evs(lt).type_ = write {
 		 mem(a) := d
 	      }			
-	      else {  # cas operation
+	      else {  # amo operation
 		 evs(lt).data_ := mem(a);
 		 mem(a) := d
 	      }
 	   }
        }
     }        
-    delegate perform
+    delegate serialize  # this says caller is responsible for assertions
 
     ########################################
     # this serializes an event by combining it with another event at
@@ -200,7 +193,7 @@ module reference = {
 	   # This says there are no unfused events that must be ordered between e1 and e2
 
 	   assert ~(e1 < T & T < e2 & evs(T).id_ = eid &
-		    (evs(T).addr_ = a | evs(T).type_ = cas) & ~evs(T).fused);
+		    (evs(T).addr_ = a | evs(T).type_ = amo) & ~evs(T).fused);
 
 	   # event must not already be serialized
 
@@ -213,292 +206,7 @@ module reference = {
        evs(e2).fused := true;
        evs(e2).data_ := evs(e1).data_  # copy the data from write to read
     }
-    delegate fuse
+    delegate fuse   # this says caller is responsible for assertions
 }
 
-################################################################################
-#
-# TileLink interface specification
-#
-# This describes the semantics of the interface in relation to the reference
-# specification. The function "side" tells us whether a given process id is on
-# the client or the manager side of this interface.
-#
-################################################################################
-
-module interface(ref,clnt,mngr,side,cmap) = {
-
-    ########################################
-    # client side ownership state of address
-
-    relation excl_p(C:client_id, A:addr)   # client as exclusive priv
-    relation shrd_p(C:client_id, A:addr)   # client as shared priv
-    relation dirt_p(C:client_id, A:addr)   # client has modified data
-
-    ########################################
-    # client side events to serialize on manager side
-
-    relation to_ser(T:ltime) 
-
-    ########################################
-    # set of cached addresses at this interface.
-    # for each client
-
-    relation cached(C:client_id, A:addr)
-
-    ########################################
-    # initial state of interface. nothing owned, nothing to serialize
-
-    init ~excl_p(C,A) & ~shrd_p(C,A) & ~dirt_p(C,A) & ~to_ser(T)
-
-    
-    ########################################
-    # specification of release messages
-
-    action release(c:client_id, a:addr, d:data, o:ownership) = {
-       assert cached(c,a);
-       assert o ~= none;
-       # cannot release priviledges you don't have
-       assert o = shrd -> shrd_p(c,a);
-       assert o = excl -> excl_p(c,a);
-#       assert o = excl -> ref.mem(a) = d;  # excl release transfers correct data
-       assert ref.mem(a) = d;  # all releases transfer correct data
-       if o = excl {
-           excl_p(c,a) := false;
-	   dirt_p(c,a) := false      # after release the line is clean 
-       } else {
-           shrd_p(c,a) := false 
-       }
-    }
-    mixin release before mngr.release
-
-    ########################################
-    # specification of grant messages
-
-    action grant(c:client_id, a:addr, d:data, o:ownership) = {
-       assert cached(c,a);
-       assert o ~= none;
-       assert ~dirt_p(c,a) -> ref.mem(a) = d;   # grant has correct data if not dirty already
-       if o = excl {
-#           assert ~excl_p(c,a);
-           excl_p(c,a) := true
-       } else {
-#           assert ~shrd_p(c,a);
-           shrd_p(c,a) := true
-       }
-    }
-    mixin grant before clnt.grant
-
-    ########################################
-    # specification of request messages
-    # 
-    # these model acquire/op. note they have ghost parameter "lt"
-    # representing the local time of the event. a request has the
-    # effect of marking an event to serialize on the manager side.
-    # note the last assert says we must order the events on the
-    # interface.
-
-    action request(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {
-       local rid:id {
-           rid := ref.evs(lt).id_;
-	   assert ~cached(c,a);
-	   assert ~ref.evs(lt).serialized & ~to_ser(lt);
-	   assert side(rid) = client;
-	   assert ref.evs(lt).addr_ = a;
-	   assert ref.evs(lt).data_ = d;
-	   assert mo = ref.evs(lt).type_;
-	   assert ~excl_p(c,a) & ~shrd_p(c,a); # TODO: shouldn't matter
-	   assert ~(ref.prevents(T1,lt) & ~to_ser(T1));
-	   to_ser(lt) := true
-       }
-    }
-    mixin request before mngr.request
-
-    ########################################
-    # specification of request messages
-    # 
-    # these model grants that respond to acquire/op. they also have
-    # ghost parameter "lt" representing the local time of the event. a
-    # response indicates the given event has been serialized and returns
-    # the result of the operation if any.
-
-    action response(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {
-       local rid:id {
-           rid := ref.evs(lt).id_;
-	   
-	   assert ~cached(c,a);
-	   assert side(rid) = client;
-	   assert ref.evs(lt).addr_ = a;
-	   assert ref.evs(lt).data_ = d;
-	   assert mo = ref.evs(lt).type_;
-	   assert ~excl_p(c,a) & ~shrd_p(c,a); # TODO: shouldn't matter
-	   assert to_ser(lt);
-	   assert ref.evs(lt).serialized
-       }
-    }
-    mixin response before clnt.response
-
-    ########################################
-    # Guarantees made on "perform" actions.
-    #
-    # The client side promises to serialize only events for which it
-    # has the appropriate ownership state. The manager side promises to serialize
-    # only events that have been passed by "request".
-
-    action perform(lt:ltime, sid:id) = { 
-       local a:addr,d:data,mo:otype,eid:id {
-           a := ref.evs(lt).addr_;
-	   d := ref.evs(lt).data_;
-	   mo := ref.evs(lt).type_;
-           eid := ref.evs(lt).id_;
-
-	   assert ~ref.evs(lt).serialized;
-	   if side(eid) = client {
-
-	      ########################################
-	      # client event serialized on client side. client
-	      # promises to serialize only with appropriate ownership
-	      # and in order
-
-	      if side(sid) = client {  
-		  assert mo = read -> excl_p(cmap(sid),a) | shrd_p(cmap(sid),a);
-		  assert mo = write -> excl_p(cmap(sid),a);
-		  assert mo = cas -> excl_p(cmap(sid),a);
-		  assert ~ref.prevents(T1,lt);
-		  if mo ~= read {
-		      dirt_p(cmap(sid),a) := true  # if modified, mark as dirty
-		  } 
-	      }	       
-
-	      ########################################
-	      # client event serialized on manager side. manager
-	      # promises to serialize only requested events in order
-
-	      else {  
-		 assert to_ser(lt);
-		 assert ~(to_ser(T1) & ref.prevents(T1,lt))
-	      }
-	   }
-
-	   ########################################
-	   # manager event serialized on manager side. manager
-	   # promises to serialize only events for which client does
-	   # not have conflicting ownership (and in order)
-
-	   else {
-	      assert side(sid) = manager; # can't serialize a manager side event on client side
-	      assert mo = read -> ~excl_p(cmap(sid),a);
-	      assert mo = write -> ~excl_p(cmap(sid),a) & ~shrd_p(cmap(sid),a);
-	      assert mo = cas -> ~excl_p(cmap(sid),a) & ~shrd_p(cmap(sid),a);
-	      assert ~ref.prevents(T1,lt)
-	   }
-        }
-    }
-
-    mixin perform before ref.perform
-
-    ########################################
-    # Guarantees made on "fuse" actions.
-    #
-    # Fusing of a client side message is done on manager side iff
-    # the read has been requested.
-
-    action fuse(e1:ltime, e2:ltime, sid:id) = {
-       local eid : id {
-          eid := ref.evs(e2).id_;
-	  assert side(sid) = manager <-> (to_ser(e2) |  side(eid) = manager)
-       }
-    }
-    mixin fuse before ref.fuse
-
-    ################################################################################
-    #
-    # Conjectured invariants of interface state
-    #
-    ################################################################################
-
-    # can only be dirty if exclusive
-
-    conjecture dirt_p(C,A) -> excl_p(C,A)
-
-    # can only have privs if cached
-
-    conjecture (excl_p(C,A) | shrd_p(C,A)) -> cached(C,A)
-
-    # to_ser only if uncached
-
-    # TODO: not true anymore
-    # conjecture ~(to_ser(T) & cached(ref.evs(T).addr_))
-
-    # nothing to_ser if prevented by event not to_ser
-
-    conjecture ~(ref.prevents(T1,T2) & ~to_ser(T1) & to_ser(T2))
-
-    # only client side events are to_ser    
-
-    conjecture to_ser(T) -> side(ref.evs(T).id_) = client
-
-}
-
-################################################################################
-#
-# Generic model of a client. This performs arbitrary client actions, except
-# the it guarantees to use only ID's from the "client" side of the interface
-# as defined by its parameter "side".
-#
-# TODO: should be able to generate this
-#
-################################################################################
-
-module generic_client(mngr,ref,side) = {
-   action response(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {
-   }
-   action grant(c:client_id, a:addr, d:data, o:ownership) = {
-   }
-   action step = {
-     local c:client_id, a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime  {
-        assume side(sid) = client;
-        if * {
-           call mngr.release(c, a, d, o)
-        } else if * {
-	   call mngr.request(c, a, d, mo, lt)
-        } else if * {
-	   call ref.perform(lt,sid)
-        } else {
-	   call ref.fuse(lt,lt1,sid)
-        }
-     }
-   }
-}
-
-################################################################################
-#
-# Generic model of a manager. This performs arbitrary manager actions, except
-# the it guarantees to use only ID's from the "manager" side of the interface
-# as defined by its parameter "side".
-#
-# TODO: should be able to generate this
-#
-################################################################################
-
-module generic_manager(clnt,ref,side) = {
-   action request(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {
-   }
-   action release(c:client_id, a:addr, d:data, o:ownership) = {
-   }
-   action step = {
-     local c:client_id, a:addr, d:data, mo:otype, lt:ltime, o:ownership, sid:id, lt1:ltime {
-        assume side(sid) = manager;
-        if * {
-           call clnt.grant(c, a, d, o)
-        } else if * {
-	   call clnt.response(c, a, d, mo, lt)
-        } else if * {
-	   call ref.perform(lt,sid)
-        } else {
-	   call ref.fuse(lt,lt1,sid)
-        }
-     }
-   }
-}
 

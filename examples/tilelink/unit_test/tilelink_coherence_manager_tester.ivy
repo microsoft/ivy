@@ -1,4 +1,4 @@
-#lang ivy1.3
+#lang ivy1.5
 
 ################################################################################
 # 
@@ -98,9 +98,9 @@ module tl_generic_client_gen(mngr,ref,side) = {
 
    instantiate generic_client_intf(mngr)
 
-   action perform(lt:ltime, sid:id) = {
+   action serialize(lt:ltime, sid:id) = {
        assume side(sid) = client;
-       call ref.perform(lt,sid)
+       call ref.serialize(lt,sid)
    }
 
    action fuse(lt:ltime, lt1:ltime, sid:id) = {
@@ -174,9 +174,9 @@ module tl_generic_manager_gen(clnt,ref,side) = {
  
    instantiate generic_manager_intf(clnt)
 
-   action perform(lt:ltime, sid:id) = {
+   action serialize(lt:ltime, sid:id) = {
        assume side(sid) = manager;
-       call ref.perform(lt,sid)
+       call ref.serialize(lt,sid)
    }
 
    action fuse(lt:ltime, lt1:ltime, sid:id) = {
@@ -209,7 +209,7 @@ instantiate m : tl_generic_manager_gen(b,ref,bside)
 export c.acquire
 export c.finish
 export c.release
-export c.perform
+export c.serialize
 export m.grant
 export m.probe
 export b.acquire
@@ -335,7 +335,6 @@ rely front_prb_rdy_io
 #
 ################################################################################
 
-interpret time -> bv[2]
 interpret ltime -> bv[2]
 interpret data -> {0..1}
 interpret addr -> {0..3}

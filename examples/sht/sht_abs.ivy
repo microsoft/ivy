@@ -327,7 +327,7 @@ module server_top(ref,me,net) = {
 
     # Delegated shards have correct data
 
-    conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S) -> shard_value(S,K) = ref.hash(K)
+#    conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S) -> shard_value(S,K) = ref.hash(K)
 
 }
 

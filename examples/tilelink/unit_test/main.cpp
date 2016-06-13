@@ -153,7 +153,7 @@ int main(int argc, const char **argv){
         ext__c__acquire_gen cag;
         ext__c__finish_gen cfg;
         ext__c__release_gen crg;
-        ext__c__perform_gen cpg;
+        ext__c__serialize_gen cpg;
         ext__m__grant_gen mgg;
         ext__m__probe_gen mpg;
 
@@ -171,8 +171,6 @@ int main(int argc, const char **argv){
 
         int ccl = dut.cached_clients();
         for (int cl = 0; cl < 2; cl++){
-            for (int a = 0; a < 4; a++) 
-                tb.front__cached[cl][a] = 1 ? (cl < ccl) : 0;
             for (int a = 0; a < 2; a++)
                 tb.front__cached_hi[cl][a] = 1 ? (cl < ccl) : 0;
         }
@@ -379,10 +377,10 @@ int main(int argc, const char **argv){
 	  if (acq_send & acq_ready){
 	    std::cout << "output: " << acq_c << std::endl;
             if (acq_c.own == 0 && !acq_c.block){
-                // TEMPORARY: treat non-block memory ops as uncached and perform them
+                // TEMPORARY: treat non-block memory ops as uncached and serialize them
                 // on behalf of the DUT (in principle, DUT should do this). We need a better
                 // way to distinguish ops from uncached clients.
-                tb.ref__perform(acq_c.ltime_,tb.buf_id);
+                tb.ref__serialize(acq_c.ltime_,tb.buf_id);
             }
             tb.ext__b__acquire(acq_c.cid,acq_c.id_,acq_c.addr_hi,acq_c.word,acq_c.own,acq_c.op,acq_c.data_,acq_c.block,acq_c.ltime_);
           }
@@ -400,12 +398,12 @@ int main(int argc, const char **argv){
                 // TEMPORARY: we don't know when the DUT actually
                 // serializes an operation. If we get a grant for the
                 // operation and it isn't serialized yet, we assume
-                // the DUT has performed it internally, and serialize
+                // the DUT has serializeed it internally, and serialize
                 // it now. This could fail (giving us a bogus
                 // assertion failure) if the DUT returns grants out of
                 // order.
-                tb.ref__perform(gnt_m.ltime_,tb.buf_id);
-                std::cout << "performed: " << gnt_m.ltime_ << std::endl;
+                tb.ref__serialize(gnt_m.ltime_,tb.buf_id);
+                std::cout << "serialized: " << gnt_m.ltime_ << std::endl;
             }
 	    tb.ext__b__grant(gnt_m.cid,gnt_m.clnt_txid,gnt_m.mngr_txid,gnt_m.word,gnt_m.own,gnt_m.relack,gnt_m.data_,gnt_m.addr_hi,gnt_m.ltime_);
           }

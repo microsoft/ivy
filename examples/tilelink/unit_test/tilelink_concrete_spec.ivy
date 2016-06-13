@@ -1,12 +1,9 @@
-#lang ivy1.3
+#lang ivy1.5
 
 ################################################################################
 #
 # This is a (more) concrete specification of the tilelink protocol. It specifies
 # the low-level messages with reference to the abstract spec. 
-#
-# The concrete model introduces Acquire and Finish messages, requester ID's,
-# and other fields that indicate the address range to operate on, and so on.
 #
 ################################################################################
 
@@ -155,22 +152,12 @@ module prb = {
 type prb_id
 instantiate prbs(X:prb_id) : prb
 
-########################################
-# Stub actions for mixins
-
-module interface_stubs = {
-    action release(c:client_id, a:addr, d:data, o:ownership) = {}
-    action grant(c:client_id, a:addr, d:data, o:ownership) = {}
-    action request(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {}
-    action response(c:client_id, a:addr, d:data, mo:otype, lt:ltime) = {}
-}
-
 
 ################################################################################
 #
 # This module describes the TileLink interface. It uses mixins to specify the
 # interaction between a client (clnt) a manager (mngr) and a reference model (ref).
-# The funciton "side" tells us, for each component ID, which side of the interface
+# The function "side" tells us, for each component ID, which side of the interface
 # the component is on ("client" or "manager"). 
 # 
 ################################################################################
@@ -178,12 +165,32 @@ module interface_stubs = {
 module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     ########################################
+    # client side ownership state of address
+    #
+    # Ownership status is by address, not by cache line. This is
+    # because we need to be able to serialize an operation on the
+    # critical word when it arrives, and not wait for the whole cache
+    # line to be granted.
+    
+    relation excl_p(C:client_id, A:addr)   # client as exclusive priv
+    relation shrd_p(C:client_id, A:addr)   # client as shared priv
+    relation dirt_p(C:client_id, A:addr)   # client has modified data
+
+    ########################################
+    # client side events to serialize on manager side
+    #
+    # An event is added to "to_ser" when the corresponding
+    # non-cached acquire occurs.
+
+    relation to_ser(T:ltime) 
+
+    ########################################
     # whether a line is cached by given client
 
     relation cached_hi(C:client_id,X:tl_addrhi)
 
     ########################################
-    # if true, this interface does not allowed reordering of messages
+    # if true, this interface does not allow reordering of messages
 
     relation ordered
 
@@ -199,7 +206,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     # of the three phases, for each type: exclusive, shared and uncached.
     #
     # Note, this is cache protcol dependent. We might want to parameterize
-    # this on an arbitraru set of possible cache line priviledges.
+    # this on an arbitrary set of possible cache line priviledges.
 
     relation excl_r(C:client_id,A:tl_addrhi)               # there is a requested excl acquire for line
     relation shrd_r(C:client_id,A:tl_addrhi)               # there is a requested shrd acquire for line
@@ -277,6 +284,11 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     ########################################
     # Initial condition of interface
     #
+
+    # Nothing is owned, nothing to serialize
+
+    init ~excl_p(C,A) & ~shrd_p(C,A) & ~dirt_p(C,A) & ~to_ser(T)
+
     # Nothing is requested, accepted, finished or granted.
 
     init    ~excl_r(C,H) & ~shrd_r(C,H) & ~unc_r(C,H,W) 
@@ -328,7 +340,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		# which would be violated by reordering lock operations.
 
 		assert ~(to_ser(E) & ~granted(E) & 
-		        (ref.evs(E).type_ = cas | ref.evs(lt).type_ = cas)
+		        (ref.evs(E).type_ = amo | ref.evs(lt).type_ = amo)
 			 & ref.evs(E).id_ = ref.evs(lt).id_);
 
 		# (5) No two operations request or accepted on same address for the same
@@ -358,7 +370,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		# TODO: HACK: some components do not support PutAtomic
 
-		assert o = cas -> supports_uncached_atomic;
+		assert o = amo -> supports_uncached_atomic;
 
 		########################################
 		# mark the acquire as requested
@@ -374,7 +386,18 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	        # Perform abstract operation
 	        #
 
-		call abs.request(c,addr_cons(hi,lo),d,o,lt)
+		local rid:id, a:addr {
+		    rid := ref.evs(lt).id_;
+		    a := addr_cons(hi,lo);
+		    assert ~ref.evs(lt).serialized & ~to_ser(lt);
+		    assert side(rid) = client;
+		    assert ref.evs(lt).addr_ = a;
+		    assert ref.evs(lt).data_ = d;
+		    assert o = ref.evs(lt).type_;
+		    assert ~excl_p(c,a) & ~shrd_p(c,a); # TODO: shouldn't matter
+		    assert ~(ref.prevents(T1,lt) & ~to_ser(T1));
+		    to_ser(lt) := true
+		}
 	    }
 
 	    else {
@@ -443,7 +466,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local c:client_id, hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
+        local c:client_id, hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, maddr:addr, ow:ownership, lt:ltime {
 	
 	    c :=  gnts(msg).cid;
 	    hi := gnts(msg).addr_hi;  # this field is aux
@@ -588,8 +611,14 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	        ########################################
 		# Abstract semantics of grant
 
-		if ow ~= none {    	                       # cached: perform an abstract grant
-		    call abs.grant(c,maddr,gnts(msg).data_,ow);
+		if ow ~= none {    	                            # cached: perform an abstract grant
+		    # grant has correct data if not dirty already
+		    assert ~dirt_p(c,maddr) -> ref.mem(maddr) = gnts(msg).data_;
+		    if ow = excl {
+			excl_p(c,maddr) := true
+		    } else {
+			shrd_p(c,maddr) := true
+		    };
 
 		    g_beats(lo) := false;                       # mark the beat completed
 
@@ -607,7 +636,15 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 		}
 
 		else {		                                       # uncached: perform an abstract response
-		    call abs.response(c,maddr,gnts(msg).data_,ref.evs(lt).type_,lt);
+		    local rid:id {
+			rid := ref.evs(lt).id_;
+			assert side(rid) = client;
+			assert ref.evs(lt).addr_ = maddr;
+			assert ref.evs(lt).data_ = gnts(msg).data_;
+			assert ~excl_p(c,maddr) & ~shrd_p(c,maddr); # TODO: shouldn't matter
+			assert to_ser(lt);
+			assert ref.evs(lt).serialized
+		    };
 		    granted(gnts(msg).ltime_) := true
 		}
             }
@@ -791,18 +828,19 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 	    
 	    if rlss(msg).dirty	{
 	        if excl_p(c,a) {
-		   call abs.release(c,a,d,excl)
+		    assert ref.mem(a) = d;  # correct data
+		    excl_p(c,a) := false;
+		    dirt_p(c,a) := false    # clean after relase
                 };
 	        if shrd_p(c,a) {
-		   call abs.release(c,a,d,shrd)
-                }
+		    assert ref.mem(a) = d;  # correct data
+		    shrd_p(c,a) := false 
+		}
 	    }
 	    else {
 	        # TRICKY: to invalidate the entire block we go outside of EPR
 		# We need inverse functions for addr_cons, but Ivy doesn't
-		# support this yet. Also, we don't call the abstract spec here
-		# because it doesn't support releasing a set of addresses (yet).
-
+		# support this yet.  
 		excl_p(c,A) := excl_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W));
 		shrd_p(c,A) := shrd_p(c,A) & ~exists W:tl_addrlo. (A = addr_cons(hi,W))
 	    }
@@ -845,23 +883,81 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     }
     mixin tl_Probe before clnt.tl_Probe
 
+
     ########################################
-    # 
-    # Instantiate the abstract interface specification
+    # Guarantees made on "serialize" actions.
     #
+    # The client side promises to serialize only events for which it
+    # has the appropriate ownership state. The manager side promises to serialize
+    # only events that have been passed by "request".
+
+    action serialize(lt:ltime, sid:id) = { 
+       local a:addr,d:data,mo:otype,eid:id {
+           a := ref.evs(lt).addr_;
+	   d := ref.evs(lt).data_;
+	   mo := ref.evs(lt).type_;
+           eid := ref.evs(lt).id_;
+
+	   assert ~ref.evs(lt).serialized;
+	   if side(eid) = client {
+
+	      ########################################
+	      # client event serialized on client side. client
+	      # promises to serialize only with appropriate ownership
+	      # and in order
+
+	      if side(sid) = client {  
+		  assert mo = read -> excl_p(cmap(sid),a) | shrd_p(cmap(sid),a);
+		  assert mo = write -> excl_p(cmap(sid),a);
+		  assert mo = amo -> excl_p(cmap(sid),a);
+		  assert ~ref.prevents(T1,lt);
+		  if mo ~= read {
+		      dirt_p(cmap(sid),a) := true  # if modified, mark as dirty
+		  } 
+	      }	       
+
+	      ########################################
+	      # client event serialized on manager side. manager
+	      # promises to serialize only requested events in order
+
+	      else {  
+		 assert to_ser(lt);
+		 assert ~(to_ser(T1) & ref.prevents(T1,lt))
+	      }
+	   }
+
+	   ########################################
+	   # manager event serialized on manager side. manager
+	   # promises to serialize only events for which client does
+	   # not have conflicting ownership (and in order)
+
+	   else {
+	      assert side(sid) = manager; # can't serialize a manager side event on client side
+	      assert mo = read -> ~excl_p(cmap(sid),a);
+	      assert mo = write -> ~excl_p(cmap(sid),a) & ~shrd_p(cmap(sid),a);
+	      assert mo = amo -> ~excl_p(cmap(sid),a) & ~shrd_p(cmap(sid),a);
+	      assert ~ref.prevents(T1,lt)
+	   }
+        }
+    }
+
+    mixin serialize before ref.serialize
+
     ########################################
-
-
-    instantiate abs : interface_stubs
-    instantiate interface(ref,abs,abs,side,cmap)
-
-    ########################################
-    # 
-    # All or none of a line is cached
+    # Guarantees made on "fuse" actions.
     #
-    ########################################
+    # Fusing of a client side message is done on manager side iff
+    # the read has been requested.
 
-    axiom cached(C,addr_cons(H,L)) <-> cached_hi(C,H)
+    action fuse(e1:ltime, e2:ltime, sid:id) = {
+       local eid : id {
+          eid := ref.evs(e2).id_;
+	  assert side(sid) = manager <-> (to_ser(e2) |  side(eid) = manager)
+       }
+    }
+    mixin fuse before ref.fuse
+
+
 
 
     ################################################################################
@@ -870,6 +966,22 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
     #
     ################################################################################
     
+    # can only be dirty if exclusive
+
+    conjecture dirt_p(C,A) -> excl_p(C,A)
+
+    # can only have privs if cached
+
+    conjecture (excl_p(C,A) | shrd_p(C,A)) & A = addr_cons(H,L) -> cached_hi(C,H)
+
+    # nothing to_ser if prevented by event not to_ser
+
+    conjecture ~(ref.prevents(T1,T2) & ~to_ser(T1) & to_ser(T2))
+
+    # only client side events are to_ser    
+
+    conjecture to_ser(T) -> side(ref.evs(T).id_) = client
+
     # A cached acquire must be in cached space, uncached in uncached space
 
     conjecture (excl_r(C,H) | excl_a(C,H) | excl_f(C,H) |
@@ -942,7 +1054,7 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
     conjecture ~(to_ser(E1) & to_ser(E2) & ~granted(E1) & ~granted(E2) & E1 ~= E2 &
 		 ref.evs(E1).id_ = ref.evs(E2).id_
-		 & (ref.evs(E1).type_ = cas | ref.evs(E1).type_ = cas))
+		 & (ref.evs(E1).type_ = amo | ref.evs(E1).type_ = amo))
 
     # (5) No two operations pending on same address for the same
     # client. This is required for release consistency,
@@ -1012,9 +1124,9 @@ module tl_generic_client(mngr,ref,side) = {
    action release(f:rls_id) = {
        call mngr.tl_Release(f)
    }
-   action perform(lt:ltime, sid:id) = {
+   action serialize(lt:ltime, sid:id) = {
        assume side(sid) = client;
-       call ref.perform(lt,sid)
+       call ref.serialize(lt,sid)
    }
 
    action fuse(lt:ltime, lt1:ltime, sid:id) = {
@@ -1033,7 +1145,7 @@ module tl_generic_client(mngr,ref,side) = {
         } else if * {
 	   call release(r)
         } else if * {
-	   call perform(lt,sid)
+	   call serialize(lt,sid)
         } else {
 	   call fuse(lt,lt1,sid)
         }
@@ -1067,9 +1179,9 @@ module tl_generic_manager(clnt,ref,side) = {
       call clnt.tl_Probe(g)
    }
 
-   action perform(lt:ltime, sid:id) = {
+   action serialize(lt:ltime, sid:id) = {
        assume side(sid) = manager;
-       call ref.perform(lt,sid)
+       call ref.serialize(lt,sid)
    }
 
    action fuse(lt:ltime, lt1:ltime, sid:id) = {
@@ -1084,7 +1196,7 @@ module tl_generic_manager(clnt,ref,side) = {
         } else if * {
 	   call probe(p)
         } else if * {
-	   call perform(lt,sid)
+	   call serialize(lt,sid)
         } else {
 	   call fuse(lt,lt1,sid)
         }
@@ -1239,7 +1351,7 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     # specification of Grant message
 
     action tl_Grant(msg:gnt_id) = {
-        local hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, reqt:time, maddr:addr, ow:ownership, lt:ltime {
+        local hi:tl_addrhi, lo:tl_addrlo, c_txid: id, m_txid: id, maddr:addr, ow:ownership, lt:ltime {
 	
 	    hi := gnts(msg).addr_hi;  # this field is aux
 	    lo := gnts(msg).word;
@@ -1357,9 +1469,9 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
     mixin tl_Probe before clnt.tl_Probe
 
     ########################################
-    # specification of perform (serialization)
+    # specification of serialize (serialization)
 
-    action perform(lt:ltime, sid:id) = { 
+    action serialize(lt:ltime, sid:id) = { 
 
        # nothing can be serialized on the manager (main memory) side
        # serializing write or atomic dirties the address
@@ -1376,5 +1488,5 @@ module tl_mm_interface(ref,clnt,mngr,side) = {
 	   } 
        }	       
     }
-    mixin perform before ref.perform
+    mixin serialize before ref.serialize
 }

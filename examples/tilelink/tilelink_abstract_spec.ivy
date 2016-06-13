@@ -29,13 +29,13 @@ module total_order(carrier) = {
     # could add <= as derived relation here
 }
 
-########################################
-# type of global time
-type time
-instantiate total_order(time)
 
 ########################################
 # type of local time
+#
+# Every memory operation is assigned a unique local time
+#
+
 type ltime
 instantiate total_order(ltime)
 
@@ -48,10 +48,6 @@ type data
 type addr
 
 ########################################
-# type of message types
-type mtype = { grant_t, release_t, request_t, response_t}
-
-########################################
 # type of ownership state
 type ownership = { none, shrd, excl }
 
@@ -61,7 +57,7 @@ type side = {client,manager}
 
 ########################################
 # type of memory ops
-type otype = {read, write, cas}
+type otype = {read, write, amo}
 
 ########################################
 # id's of protocol agents
@@ -69,17 +65,20 @@ type id
 
 ########################################
 # structure of memory events to serialize
+#
+# A memory event has operation, address, data and an id indicating
+# which CPU produced the event. It also has flags indicating whether
+# the even thas been serialized or fused. Initially, all events are
+# unserialized.
+########################################
+
 module memev = {
     individual type_ : otype
     individual addr_ : addr
-    individual data_  : data # data for write and cas
-    relation result(D:data)  # value for read and cas 
-    individual id_ : id      # process id of op
-    relation serialized
-    relation fused
-    individual time_ :time   # serialized time if any
-
-    axiom result(T) & result(U) -> T = U
+    individual data_  : data      # data for write and amo
+    individual id_ : id           # process id of op
+    individual serialized : bool  # has this event been serialized?
+    relation fused : bool         # has this event been fused?
 
     init ~serialized & ~fused
 }
@@ -88,12 +87,12 @@ module memev = {
 #
 # Reference specification
 #
-# This module describes a set of memory events ordered by local
-# time. It provides actions that assign global time to events in
-# increasing order. The pre-conditions of these actions enforce the
-# consistency model (that is, what orderings in local time must be
-# preserved in global time). This ordering condition is determined by
-# the relation "prevents" (see below).
+# This module defines the memory semantics. It contains a map from local time
+# to memory events produced by the CPU's. The action "serialize" is used to
+# serialize a memory event at the current physical time. This operation will
+# fail if the happens-before relation prevents the operation being serialized
+# at the current time.
+#
 #
 ################################################################################
 
@@ -101,54 +100,51 @@ module reference = {
 
     ########################################
     # memory events by local time
-    # TODO: can we export this read-only?
 
     instantiate evs(T:ltime) : memev 
 
-    ########################################
-    # current global time
-
-    individual gt : time
 
     ########################################
     # global memory state 
-    # obeys partial function axiom
-
-    individual mem(A:addr) : data
-
-    ########################################
-    # event T1 prevents T2 if it must come before T2 according to the
-    # ordering conditions but is not yet serialized. The definition
-    # here is strong enough to imply release consistency (reads and
-    # writes to different addresses commute, but nothing commutes with
-    # cas)
-
-    derived prevents(T1,T2) =
-    	~evs(T1).serialized 
-    	& T1 < T2
-    	& evs(T1).id_ = evs(T2).id_
-    	& (evs(T1).addr_ = evs(T2).addr_ | evs(T1).type_ = cas | evs(T2).type_ = cas)
-    
-    ########################################
-    # serialize an event lt at current global time. The "id"
-    # parameter tells us what process is serializing the event.
     # 
+    # This represents the state of memory after all the serialized events
 
-    action perform(lt:ltime, id_:id) = {
+    function mem(A:addr) : data
 
-       # serialization must be appropriately ordered
-       # assert ~prevents(T1,A1,lt,A2)
+    ########################################
+    # Event T1 happens before T2 if it must come before T2 according to the
+    # ordering constraints. This definition says that T1 happens before T2
+    # if both are operations of the same CPU and if T1's locally happens before T2,
+    # and if either they have the same address, or one of the two is 
+    # an atomic operation. The actual happens-before relation is the transitive
+    # closure of happens_before.
 
-       # serialize at current global time
+    derived happens_before(T1,T2) =
+    	T1 < T2
+    	& evs(T1).id_ = evs(T2).id_
+    	& (evs(T1).addr_ = evs(T2).addr_ | evs(T1).type_ = amo | evs(T2).type_ = amo)
+    
+    # An event T1 prevents T2 if T1 happens before T2 and is not yet serialized
+    
+    derived prevents(T1,T2) = 
+        ~evs(T1).serialized & happens_before(T1,T2)
+
+    ########################################
+    # serialize an event lt at current global time. The "id" parameter
+    # tells us what component is serializing the event.  Note the
+    # serializing component is not usually the originating component
+    # of the event.
+
+    action serialize(lt:ltime, id_:id) = {
+
+       # Serialization must be appropriately ordered
+       # That is, every event the happens before the
+       # specified event lt must already be serialized
+
+       assert happens_before(T1,lt) -> evs(T1).serialized
+
+       # serialize at current physical time
        evs(lt).serialized := true;
-       evs(lt).time_ := gt;
-
-       # advance global time
-       local ngt : time {
-           ngt := *;
-           assume gt < ngt; # TODO: without "assume?"
-           gt := ngt
-       };
 
        # update the global memory state
        local a : addr, d : data {
@@ -161,19 +157,27 @@ module reference = {
 	      if evs(lt).type_ = write {
 		 mem(a) := d
 	      }			
-	      else {  # cas operation
+	      else {  # AMO
+		 # TODO: we need a specification of AMO's
+		 # Probably this should be a ghost module
+		 # The following is just a stand-in for the actual spec
 		 evs(lt).data_ := mem(a);
 		 mem(a) := d
 	      }
 	   }
        }
     }        
-    delegate perform
+    delegate serialize
 
     ########################################
     # this serializes an event by combining it with another event at
     # the same location into an atomic event. For now, we assume first
     # event is a write and second event a read.
+    #
+    # The fuse action would be useful, for example, to a store buffer
+    # that forwards read data fron buffered writes. The read a re
+    # write can be fused into an atomic operation, so we guarantee the
+    # are serialized consecutively.
 
     action fuse(e1:ltime, e2:ltime, s:id) = {
 
@@ -194,7 +198,7 @@ module reference = {
 	   # This says there are no unfused events that must be ordered between e1 and e2
 
 	   assert ~(e1 < T & T < e2 & evs(T).id_ = eid &
-		    (evs(T).addr_ = a | evs(T).type_ = cas) & ~evs(T).fused);
+		    (evs(T).addr_ = a | evs(T).type_ = amo) & ~evs(T).fused);
 
 	   # event must not already be serialized
 
@@ -301,7 +305,7 @@ module interface(ref,clnt,mngr,side) = {
 	   assert ref.evs(lt).data_ = d;
 	   assert mo = ref.evs(lt).type_;
 	   assert ~excl_p(a) & ~shrd_p(a); # TODO: shouldn't matter
-	   assert ~(ref.prevents(T1,lt) & ~to_ser(T1));
+	   assert ~(ref.happens_before(T1,lt) & ~ref.evs(T1).serialized & ~to_ser(T1));
 	   to_ser(lt) := true
        }
     }
@@ -332,7 +336,7 @@ module interface(ref,clnt,mngr,side) = {
     mixin response before clnt.response
 
     ########################################
-    # Guarantees made on "perform" actions.
+    # Guarantees made on "serialize" actions.
     #
     # We split this specification into two parts: a guarantee by
     # the client side and a guarantee by the manager side. This
@@ -342,7 +346,7 @@ module interface(ref,clnt,mngr,side) = {
     # The client side promises to serialize only events for which it
     # has the appropriate ownership state.
 
-    action perform_client(lt:ltime, sid:id) = { 
+    action serialize_client(lt:ltime, sid:id) = { 
 	if side(sid) = client {  
 
 
@@ -363,8 +367,8 @@ module interface(ref,clnt,mngr,side) = {
 		
 		assert mo = read -> excl_p(a) | shrd_p(a);
 		assert mo = write -> excl_p(a);
-		assert mo = cas -> excl_p(a);
-		assert ~ref.prevents(T1,lt);
+		assert mo = amo -> excl_p(a);
+		assert ~(ref.happens_before(T1,lt) & ~ref.evs(T1).serialized);
 		if mo ~= read {
 		    dirt_p(a) := true  # if modified, mark as dirty
 		} 
@@ -372,12 +376,12 @@ module interface(ref,clnt,mngr,side) = {
 	}
     }
 
-    mixin perform_client before ref.perform
+    mixin serialize_client before ref.serialize
 
     # The manager side promises to serialize
     # only events that have been passed by "request".
 
-    action perform_manager(lt:ltime, sid:id) = { 
+    action serialize_manager(lt:ltime, sid:id) = { 
 	if side(sid) = manager {  
 	    local a:addr,d:data,mo:otype,eid:id {
 		a := ref.evs(lt).addr_;
@@ -393,7 +397,7 @@ module interface(ref,clnt,mngr,side) = {
 		    # promises to serialize only requested events in order
 
 		    assert to_ser(lt);
-		    assert ~(to_ser(T1) & ref.prevents(T1,lt))
+		    assert ~(to_ser(T1) & ref.happens_before(T1,lt) & ~ref.evs(T1).serialized)
 		}
 
 		########################################
@@ -404,13 +408,13 @@ module interface(ref,clnt,mngr,side) = {
 		else {
 		    assert mo = read -> ~excl_p(a);
 		    assert mo = write -> ~excl_p(a) & ~shrd_p(a);
-		    assert mo = cas -> ~excl_p(a) & ~shrd_p(a);
-		    assert ~ref.prevents(T1,lt)
+		    assert mo = amo -> ~excl_p(a) & ~shrd_p(a);
+		    assert ~(ref.happens_before(T1,lt) & ~evs(T1).serialized)
 		}
             }
 	}
     }
-    mixin perform_manager before ref.perform
+    mixin serialize_manager before ref.serialize
 
     ########################################
     # Guarantees made on "fuse" actions.
@@ -446,7 +450,7 @@ module interface(ref,clnt,mngr,side) = {
 
     # nothing to_ser if prevented by event not to_ser
 
-    conjecture ~(ref.prevents(T1,T2) & ~to_ser(T1) & to_ser(T2))
+    conjecture ~(ref.happens_before(T1,T2) & ~ref.evs(T1).serialized & ~to_ser(T1) & to_ser(T2))
 
     # only client side events are to_ser    
 
@@ -456,7 +460,7 @@ module interface(ref,clnt,mngr,side) = {
 
 ################################################################################
 #
-# Generic model of a client. This performs arbitrary client actions, except
+# Generic model of a client. This serializes arbitrary client actions, except
 # the it guarantees to use only ID's from the "client" side of the interface
 # as defined by its parameter "side".
 #
@@ -477,7 +481,7 @@ module generic_client(mngr,ref,side) = {
         } else if * {
 	   call mngr.request(a, d, mo, lt)
         } else if * {
-	   call ref.perform(lt,sid)
+	   call ref.serialize(lt,sid)
         } else {
 	   call ref.fuse(lt,lt1,sid)
         }
@@ -487,7 +491,7 @@ module generic_client(mngr,ref,side) = {
 
 ################################################################################
 #
-# Generic model of a manager. This performs arbitrary manager actions, except
+# Generic model of a manager. This serializes arbitrary manager actions, except
 # the it guarantees to use only ID's from the "manager" side of the interface
 # as defined by its parameter "side".
 #
@@ -508,7 +512,7 @@ module generic_manager(clnt,ref,side) = {
         } else if * {
 	   call clnt.response(a, d, mo, lt)
         } else if * {
-	   call ref.perform(lt,sid)
+	   call ref.serialize(lt,sid)
         } else {
 	   call ref.fuse(lt,lt1,sid)
         }
