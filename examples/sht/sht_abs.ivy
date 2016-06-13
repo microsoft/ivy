@@ -52,7 +52,7 @@ instantiate total_non_strict_order(key)
 
 ########################################
 # type of message types
-type mtype = { get_t, put_t, reply_t, delegate_t}
+type mtype = {request_t, reply_t, delegate_t}
 
 ########################################
 # type of hash table ops
@@ -152,6 +152,8 @@ object reference = {
     # 
 
     action serialize(lt:ltime, id_:id) = {
+
+	assert ~evs(lt).serialized;
 
 	# serialize at current global time
 	evs(lt).serialized := true;
@@ -388,6 +390,81 @@ module net_top(ref,proto) = {
     }
     execute recv_delegate before proto.recv_delegate
 }
+
+
+
+module net_impl(ref,proto,me,lower) = {
+
+    instance mq(D:id) : message_queue_top(D)
+    individual recv_seq(S:id) : seq_num
+
+    init recv_seq(S) = 0
+
+    action send_request(dst:id,rq:req) = {
+	local msg : net_msg, seq : seq_num {
+	    msg := encoder.mk_req(me,dst,rq,mq(dst).next_seq());
+	    mq(dst).enqueue(msg);
+	    lower.send(msg)
+        }
+    }
+
+    action send_delegate(dst:id,sh:shard) = {
+	local msg : net_msg, seq : seq_num {
+	    msg := encoder.mk_delegate(me,dst,sh,mq(dst).next_seq());
+	    mq(dst).enqueue(msg);
+	    lower.send(msg)
+        }
+    }
+
+    action recv_msg(msg:net_msg) = {
+	local src:id,seq:seq_num {
+	    seq := net_msg_seq_num(msg);
+	    src := net_msg_src(msg);
+	    if seq <= recv_seq(src) & net_msg_mtype(msg) ~= ack_t  {
+		lower.send_msg(encoder.mk_ack(me,src,seq))
+	    }
+	    if seq = recv_seq(src) {
+		recv_seq(src) := seq_nums.next(recv_seq(src));
+		if net_msg_mtype(msg) = request_t {
+		    proto.recv_request(me,net_msg_req(msg))
+		}
+		else if net_msg_mtype(msg) = delegate_t {
+		    proto.recv_delegate(me,net_msg_delegate(msg))
+		}
+		else if net_msg_mtype(msg) = ack_t {
+		    mq(src).delete_all(seq)
+		}
+	    }
+	}
+    }
+
+    action timeout = {
+	if exists D:id. ~mq(D).empty {
+	    local dst:id, msg:net_msg {
+		assume ~mq(dst).empty;
+		msg := mq(dst).pick_one;
+		lower.send_msg(msg);
+	    }
+	}
+    }
+}
+
+module lower(net_impl) = {
+
+    relation sent(M:net_msg)
+    
+    init ~sent(M)
+
+    action send_msg(msg:net_msg) = {
+	sent(msg) := true;
+    }
+
+    action recv_msg(dst:id, msg:net_msg) = {
+	assert sent(msg)
+    }
+    execute recv_msg before net_impl.recv_msg
+}
+
 
 ################################################################################
 #
