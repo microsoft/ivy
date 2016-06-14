@@ -413,6 +413,9 @@ def is_in_logic(term,logic,unstrat = False):
                 reason_text = "'{}' is iterpreted".format(s)
                 return False
         if unstrat:
+            reason_text = "functions are not stratified"
+            return False
+            
             if not is_segregated(term):
                 reason_text = "formula is unsegregated"
                 return False

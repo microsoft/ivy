@@ -353,6 +353,8 @@ def create_isolate(iso,mod = None,**kwargs):
         if iso:
             isolate_component(mod,iso)
         else:
+            if mod.isolates:
+                raise iu.IvyError(None,'no isolate specified on command line')
             # apply all the mixins in no particular order
             for name,mixins in mod.mixins.iteritems():
                 for mixin in mixins:
@@ -394,7 +396,7 @@ def create_isolate(iso,mod = None,**kwargs):
             space = ics.NamedSpace(ivy_logic.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
 
-        # ith.check_theory()
+        ith.check_theory()
 
         if show_compiled.get():
             for x,y in mod.actions.iteritems():

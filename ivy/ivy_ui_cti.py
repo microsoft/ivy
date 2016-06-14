@@ -162,6 +162,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 )
 
                 if conj == None:
+                    print "check safety"
                     res = ag.check_bounded_safety(post, _get_model_clauses)
                 else:
                     res = ag.bmc(post, clauses, None, None, _get_model_clauses)
@@ -300,7 +301,10 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         if click == 'left':
             return [("<>",self.select_node)]
         else:
-            return [] # nothing on right click
+            return [
+                ("Projections...",None),
+                ("---",None),
+                ] + self.get_node_projection_actions(node)
 
     def get_edge_actions(self,node,click='left'):
         if click == 'left':

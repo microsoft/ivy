@@ -143,6 +143,11 @@ class Quantifier(Formula):
     def __init__(self, bounds, body):
         self.bounds = bounds
         self.args = [body]
+    def clone(self,args):
+        res = type(self)(self.bounds,*args)
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
 class Forall(Quantifier):
     pass
@@ -778,7 +783,8 @@ def substitute_constants_ast(ast,subs):
     if (isinstance(ast, Atom) or isinstance(ast,App)) and not ast.args:
         return subs.get(ast.rep,ast)
     else:
-        res = ast.clone([substitute_constants_ast(x,subs) for x in ast.args])
+        new_args = [substitute_constants_ast(x,subs) for x in ast.args]
+        res = ast.clone(new_args)
         copy_attributes_ast(ast,res)
         return res
 

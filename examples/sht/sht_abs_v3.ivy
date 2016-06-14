@@ -10,8 +10,6 @@
 ## A bug was observed in the lower network layer specification, which
 ## did not promise to deliver a message only to its destination.
 
-## Forgot to include seq_nums object in iso_n
-
 ################################################################################
 #
 # This is the abstract specification of the sharded hash table protocol. It defines
@@ -651,5 +649,5 @@ isolate iso_s = servers with reference,net
 
 # Verify the network implementation, using its upper and lower specifications
 
-isolate iso_n = neti with net,low,seq_nums,encoder
+isolate iso_n = neti with net,low
 
