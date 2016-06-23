@@ -120,7 +120,7 @@ z3_sorts_inv = {}
 
 def uninterpretedsort(us):
     s = z3_sorts.get(us.rep,None)
-    if s: return s
+    if s is not None: return s
     s = lookup_native(us,sorts,"sort")
     if s == None:
         s = z3.DeclareSort(us.rep)
@@ -240,7 +240,7 @@ def term_to_z3(term):
             sorted = hasattr(term,'sort')
             sksym = term.rep + ':' + str(term.sort) if sorted else term.rep
             res = z3_constants.get(sksym)
-            if res: return res
+            if res is not None: return res
 #            print str(term.sort)
             sig = lookup_native(term.sort,sorts,"sort") if sorted else S
             if sig == None:
@@ -255,7 +255,7 @@ def term_to_z3(term):
             z3_constants[sksym] = res
             return res
         res = z3_constants.get(term.rep)
-        if not res:
+        if res is None:
 #            if isinstance(term.rep,str):
 #                print "{} : {}".format(term,term.rep)
             if term.is_numeral():
@@ -273,9 +273,9 @@ def term_to_z3(term):
         return z3.If(formula_to_z3_int(term.args[0]),term_to_z3(term.args[1]),term_to_z3(term.args[2]))
     else:
         fun = z3_functions.get(term.rep)
-        if not fun:
+        if fun is None:
             fun = lookup_native(term.rep,functions,"function")
-            if not fun:
+            if fun is None:
                 sig = term.rep.sort.to_z3()
                 fun = z3.Function(term.rep.name, *sig)
             z3_functions[term.rep] = fun
@@ -797,10 +797,11 @@ def decide(s):
     res = s.check()
 #    iu.dbg('"after decide"')
     if res == z3.unknown:
+        print s.to_smt2()
         raise iu.IvyError(None,"Solver produced inconclusive result")
     return res
 
-def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
+def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None):
     """
     Return a HerbrandModel with a "small" model of clauses.
 
@@ -821,6 +822,12 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize):
     res = decide(s)
     if res == z3.unsat:
         return None
+
+    if final_cond is not None:
+        s.add(clauses_to_z3(final_cond))
+        res = decide(s)
+        if res == z3.unsat:
+            return None
 
     print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):

@@ -322,8 +322,8 @@ class AnalysisGraph(object):
 
     def bmc(self,state,error_cond,other_art=None,bound=None,_get_model_clauses=None):
         history = self.get_history(state, bound)
-        history = history.assume(error_cond)
-        bmc_res = history_satisfy(history,state,_get_model_clauses)
+#        history = history.assume(error_cond)
+        bmc_res = history_satisfy(history,state,_get_model_clauses,final_cond=error_cond)
         if bmc_res == None:
             return None
         universe,path = bmc_res

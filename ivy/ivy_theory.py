@@ -58,7 +58,6 @@ def get_sort_sccs(arcs):
 def get_unstratified_funs(assumes,asserts):
     arcs = list(get_sort_arcs(assumes,asserts))
 
-
     sccs = get_sort_sccs(arcs)
     scc_map = dict((name,idx) for idx,scc in enumerate(sccs) for name in scc)
     scc_arcs = [[] for x in sccs]
@@ -69,6 +68,7 @@ def get_unstratified_funs(assumes,asserts):
             scc_arcs[scc_map[ds.name]].append(ast)
             
     fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs) if y]
+
     return fun_sccs
 
 
@@ -120,9 +120,9 @@ def check_theory():
 
             for a in asserts:
                 check_can_assert(logic,*a,unstrat=unstrat)
+            return
         except iu.IvyError as err:
             errs.append(err)
-        return
 
     # if we got here, all logics had errors
 

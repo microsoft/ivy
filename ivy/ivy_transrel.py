@@ -494,9 +494,9 @@ def interp_from_unsat_core(clauses1,clauses2,core,interpreted):
 #    print "interp_from_unsat_core res = {}".format(res)
     return res
 
-def small_model_clauses(cls):
+def small_model_clauses(cls,final_cond=None):
     # Don't try to shrink the integers!
-    return get_small_model(cls,ivy_logic.uninterpreted_sorts(),[])
+    return get_small_model(cls,ivy_logic.uninterpreted_sorts(),[],final_cond=final_cond)
 
 class History(object):
     """ A history is a symbolically represented sequence of states. """
@@ -535,7 +535,7 @@ class History(object):
 #        print "ignore: {} = {}".format(s,res)
         return res
 
-    def satisfy(self, axioms, _get_model_clauses=None):
+    def satisfy(self, axioms, _get_model_clauses=None, final_cond=None):
         """ Produce a state sequence if the symbolic history contains
         one. Returns the sort universes and a sequence of states, or
         None if the history is vacuous. """
@@ -547,10 +547,11 @@ class History(object):
 
         # A model of the post-state embeds a valuation for each time
         # in the history.
+#        print "concrete state: {}".format(self.post)
+#        print "background: {}".format(axioms)
         post = and_clauses(self.post,axioms)
-#        print "post: {}".format(post)
         print "bounded check {"
-        model = _get_model_clauses(post)
+        model = _get_model_clauses(post,final_cond=final_cond)
         print "} bounded check"
         if model == None:
 #            print "core = {}".format(unsat_core(post,true_clauses()))

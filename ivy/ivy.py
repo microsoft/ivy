@@ -31,11 +31,12 @@ def usage():
     sys.exit(1)
 
 def open_read(fn):
-    f = open(fn,'r')
-    if not f:
+    try:
+        f = open(fn,'r')
+        return f
+    except:
         print "not found: %s" % fn
         sys.exit(1)
-    return f
 
 def read_params():
     ps = dict()

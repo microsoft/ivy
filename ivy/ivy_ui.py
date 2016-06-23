@@ -409,7 +409,7 @@ class AnalysisGraphUI(object):
                 self.bmc(node,dual)
             else:
                 sg = self.g.concept_graph(node)
-                sg.add_constraints(dual.clauses)
+                sg.current.add_constraints(dual.clauses)
                 self.show_graph(sg)
 
     # Set up to prove a remembered subgoal. If no goal is given, display a list

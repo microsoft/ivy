@@ -1,16 +1,10 @@
 #lang ivy1.5
 
 ## This file contains a first attempt at refining the network model to
-## a sort of toy TCP. 
-
-## Two conjectures were added about the messages in
+## a sort of toy TCP. Two conjectures were added about the messages in
 ## the lower (UDP) network layer (that is, they must obey the same
 ## invariants are the message in the transport layer messages queues.
 
-## A bug was observed in the lower network layer specification, which
-## did not promise to deliver a message only to its destination.
-
-## Forgot to include seq_nums object in iso_n
 
 ################################################################################
 #
@@ -605,8 +599,7 @@ module lower(net_impl) = {
     }
 
     action recv_msg(dst:id, msg:net_msg) = {
-	## added fact that only deliver to destination
-	assert sent(msg) & dst = net_msg_dst(msg)
+	assert sent(msg)
     }
     execute recv_msg before net_impl.recv_msg
 }
@@ -651,5 +644,5 @@ isolate iso_s = servers with reference,net
 
 # Verify the network implementation, using its upper and lower specifications
 
-isolate iso_n = neti with net,low,seq_nums,encoder
+isolate iso_n = neti with net,low
 
