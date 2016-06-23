@@ -329,7 +329,7 @@ module interface(ref,clnt,mngr,side,cmap) = {
 	   assert ~cached(c,a);
 	   assert side(rid) = client;
 	   assert ref.evs(lt).addr_ = a;
-	   assert ref.evs(lt).data_ = d;
+	   assert ref.evs(lt).type_ ~= write -> ref.evs(lt).data_ = d;
 	   assert mo = ref.evs(lt).type_;
 	   assert ~excl_p(c,a) & ~shrd_p(c,a); # TODO: shouldn't matter
 	   assert to_ser(lt);
