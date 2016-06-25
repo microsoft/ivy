@@ -324,6 +324,14 @@ class IvyDomainSetup(IvyDeclInterp):
         sym = compile_const(v,self.domain.sig)
 #        print "sym: {!r}".format(sym)
         self.domain.functions[sym] = len(v.args)
+        return sym
+    def destructor(self,v):
+        sym = self.individual(v)
+        dom = sym.sort.dom
+        if not dom:
+            raise IvyError(v,"A destructor must have at least one parameter")
+        self.domain.destructor_sorts[sym.name] = dom[0]
+        self.domain.sort_destructors[dom[0].name].append(sym)
     def derived(self,df):
         try:
             rel = df.args[0]

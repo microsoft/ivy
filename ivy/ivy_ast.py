@@ -434,6 +434,10 @@ class ConstantDecl(Decl):
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
 
+class DestructorDecl(ConstantDecl):
+    def name(self):
+        return 'destructor'
+
 class DerivedDecl(Decl):
     def name(self):
         return 'derived'

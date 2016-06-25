@@ -327,18 +327,44 @@ class AssignAction(Action):
 #            print "rhs: %s: %s" % (rhs,type(rhs))
             raise IvyError(self,"sort mismatch in assignment to {}".format(lhs.rep))
 
-        new_n = new(n)
-        args = lhs.args
-        dlhs = new_n(*sym_placeholders(n))
-        vs = dlhs.args
-        eqs = [eq_atom(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
-        rn = dict((a.rep,v) for v,a in zip(vs,args) if isinstance(a,Variable))
-        drhs = substitute_ast(rhs,rn)
-        if eqs:
-            drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
-        new_clauses = Clauses([],[Definition(dlhs,drhs)])
+        # For a destructor assignment, we actually mutate the first argument
+
+        if n.name in ivy_module.module.destructor_sorts:
+            mut = lhs.args[0]
+            rest = list(lhs.args[1:])
+            mut_n = mut.rep
+            nondet = mut_n.suffix("_nd").skolem()
+            new_clauses = mk_assign_clauses(mut_n,nondet(*sym_placeholders(mut_n)))
+            fmlas = []
+            nondet_lhs = lhs.rep(*([nondet(*mut.args)]+rest))
+            fmlas.append(equiv_ast(nondet_lhs,rhs))
+            vs = sym_placeholders(n)
+            dlhs = n(*([nondet(*mut.args)] + vs[1:]))
+            drhs = n(*([mut] + vs[1:]))
+            eqs = [eq_atom(v,a) for (v,a) in zip(vs,lhs.args)[1:] if not isinstance(a,Variable)]
+            if eqs:
+                fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
+            new_clauses = and_clauses(new_clauses,Clauses(fmlas))
+            dbg('new_clauses')
+            return ([mut_n], new_clauses, false_clauses())
+
+        new_clauses = mk_assign_clauses(lhs,rhs)
 #        print "assign new_clauses = {}".format(new_clauses)
         return ([n], new_clauses, false_clauses())
+
+def mk_assign_clauses(lhs,rhs):
+    n = lhs.rep
+    new_n = new(n)
+    args = lhs.args
+    dlhs = new_n(*sym_placeholders(n))
+    vs = dlhs.args
+    eqs = [eq_atom(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
+    rn = dict((a.rep,v) for v,a in zip(vs,args) if isinstance(a,Variable))
+    drhs = substitute_ast(rhs,rn)
+    if eqs:
+        drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
+    new_clauses = Clauses([],[Definition(dlhs,drhs)])
+    return new_clauses
 
 
 def sign(polarity,atom):

@@ -93,6 +93,7 @@ reserved = all_reserved = {
    'rely' : 'RELY',
    'mixord' : 'MIXORD',
    'extract' : 'EXTRACT',
+   'destructor' : 'DESTRUCTOR'
 }
 
 tokens += tuple(all_reserved.values())
@@ -175,7 +176,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,4]:
-            for s in ['function','class','object','method','execute']:
+            for s in ['function','class','object','method','execute','destructor']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]
