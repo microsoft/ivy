@@ -583,17 +583,16 @@ module net_impl(ref,proto,me,lower) = {
 
     # Following added due to counterexamples
 
-    # A sent non-ack message with seq num >= receiver must be in the
-    # corresponding queue
+    # A sent message must with seq num >= receiver must be pending
 
     conjecture low.sent(M) & net_msg_src(M) = S & net_msg_dst(M) = D
-      & neti(D).recv_seq(S) <= net_msg_seq_num(M) & net_msg_mtype(M) ~= ack_t
-      -> neti(S).mq(D).contents(M)
-
-    # If an ack is sent, the receiving seq_num must be greater
+      & neti(D).recv_seq(S) <= net_msg_seq_num(M)
+      & net_msg_mtype(M) = request_t -> net.requested(D,net_msg_req(M))
 
     conjecture low.sent(M) & net_msg_src(M) = S & net_msg_dst(M) = D
-      & net_msg_mtype(M) = ack_t -> ~(neti(S).recv_seq(D) <= net_msg_seq_num(M))
+      & neti(D).recv_seq(S) <= net_msg_seq_num(M)
+      & net_msg_mtype(M) = delegate_t -> net.delegated(D,net_msg_shard(M))
+
 }
 
 module lower(net_impl) = {
