@@ -254,13 +254,24 @@ CallAction.cmpl = compile_call
 
 
 def compile_if_action(self):
-    ctx = ExprContext(lineno = self.lineno)
-    with ctx:
-        cond = sortify_with_inference(self.args[0])
-    rest = [a.compile() for a in self.args[1:]]
-    ctx.code.append(self.clone([cond]+rest))
-    res = ctx.extract()
-    return res
+    if isinstance(self.args[0],ivy_ast.Some):
+        sig = ivy_logic.sig.copy()
+        with sig:
+            ls = self.args[0].args[0:-1]
+            fmla = self.args[0].args[-1]
+            cls = [compile_const(v,sig) for v in ls]
+            sfmla = sortify_with_inference(fmla)
+            args = [self.args[0].clone(cls+[sfmla]),self.args[1].compile()]
+        args += [a.compile() for a in self.args[2:]]
+        return self.clone(args)
+    else:
+        ctx = ExprContext(lineno = self.lineno)
+        with ctx:
+            cond = sortify_with_inference(self.args[0])
+        rest = [a.compile() for a in self.args[1:]]
+        ctx.code.append(self.clone([cond]+rest))
+        res = ctx.extract()
+        return res
 
 IfAction.cmpl = compile_if_action
 

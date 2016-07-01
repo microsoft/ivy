@@ -302,6 +302,10 @@ class Predicate(object):
         assert len(terms) == self.arity
         return Literal(1, Atom(self.name, terms))
 
+class Some(AST):
+    def __repr__(self):
+        return 'some ' +  ','.join(str(a) for a in self.args[0:-1]) + '. ' + str(self.args[-1])
+    
 
 class Sort(AST):
     pass

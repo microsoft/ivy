@@ -753,15 +753,49 @@ def p_action_if_fmla_lcb_action_rcb(p):
     p[0] = IfAction(p[2],p[4])
     p[0].lineno = get_lineno(p,1)
 
-def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
-    'action : IF fmla LCB action RCB ELSE action'
-    p[0] = IfAction(p[2],p[4],p[7])
-    p[0].lineno = get_lineno(p,1)
+if iu.get_numeric_version() <= [1,4]:
 
-def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
-    'action : IF TIMES LCB action RCB ELSE action'
-    p[0] = ChoiceAction(p[4],p[7])
-    p[0].lineno = get_lineno(p,1)
+    def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
+        'action : IF fmla LCB action RCB ELSE action'
+        p[0] = IfAction(p[2],p[4],p[7])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
+        'action : IF TIMES LCB action RCB ELSE action'
+        p[0] = ChoiceAction(p[4],p[7])
+        p[0].lineno = get_lineno(p,1)
+
+else:
+
+    def p_somefmla_fmla(p):
+        'somefmla : fmla'
+        p[0] = p[1]
+
+    def p_somefmla_some_params_dot_fmla(p):
+        'somefmla : SOME params DOT fmla'
+        lsyms = [s.prefix('loc:') for s in p[2]]
+        subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
+        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
+        p[0] = Some(*(lsyms+[fmla]))
+        p[0].lineno = get_lineno(p,1)
+    
+    def fix_if_part(cond,part):
+        if isinstance(cond,Some):
+            args = cond.args[:-1]
+            subst = dict((x.rep[4:],x.rep) for x in args)
+            part = subst_prefix_atoms_ast(part,subst,None,None)
+        return part
+
+    def p_action_if_somefmla_lcb_action_rcb(p):
+        'action : IF somefmla LCB action RCB'
+        p[0] = IfAction(p[2],fix_if_part(p[2],p[4]))
+        p[0].lineno = get_lineno(p,1)
+
+    def p_action_if_somefmla_lcb_action_rcb_else_LCB_action_RCB(p):
+        'action : IF somefmla LCB action RCB ELSE action'
+        p[0] = IfAction(p[2],fix_if_part(p[2],p[4]),p[7])
+        p[0].lineno = get_lineno(p,1)
+
 
 if iu.get_numeric_version() <= [1,2]:
     def p_action_field_assign_term(p):
