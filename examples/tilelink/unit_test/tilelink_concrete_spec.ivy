@@ -44,6 +44,11 @@ type tl_addrhi
 type tl_addrlo
 
 ########################################
+# order relation on beats
+
+relation (X:tl_addrlo <= Y:tl_addrlo)
+
+########################################
 # construct adresses from high- and low-order bits
 
 individual addr_cons(X:tl_addrhi,Y:tl_addrlo) : addr
@@ -739,6 +744,14 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert rlss(msg).dirty <-> excl_p(c,a);
 
+		# (7) A voluntary release beat must be the least word
+		# of the block not already released. In other words,
+		# voluntary release beats must be in order starting
+		# from word zero.
+
+
+		assert ~none_r(c,hi,W) -> lo <= W;
+
 		########################################
 		# Mark release as request, record txid
 		#
@@ -767,9 +780,16 @@ module tl_interface(ref,clnt,mngr,side,cmap) = {
 
 		assert ~none_r(c,hi,X);
 
-		# Release with data iff exclusive 
+		# (3) Release with data iff exclusive 
 
 		assert rlss(msg).dirty <-> excl_p(c,a);
+
+		# (4) An involuntary release beat must be the least word
+		# of the block not already released. In other words,
+		# in voluntary release beats must be in order starting
+		# from word zero.
+
+		assert prb_addr(c,hi,W) -> lo <= W;
 
 		########################################
 		# Mark the probe completed. If no data returned,
