@@ -1,7 +1,7 @@
 
-import ivy_module
-from ivy_compiler import ivy_from_string
-from tk_ui import new_ui
+import ivy.ivy_module as ivy_module
+from ivy.ivy_compiler import ivy_from_string
+from ivy.tk_ui import new_ui
 
 prog = """#lang ivy1
 
