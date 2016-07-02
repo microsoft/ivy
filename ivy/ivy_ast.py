@@ -304,7 +304,29 @@ class Predicate(object):
 
 class Some(AST):
     def __repr__(self):
-        return 'some ' +  ','.join(str(a) for a in self.args[0:-1]) + '. ' + str(self.args[-1])
+        return 'some ' +  ','.join(str(a) for a in self.params()) + '. ' + str(self.fmla()) + self.extra()
+    def params(self):
+        return list(self.args[0:-1])
+    def fmla(self):
+        return self.args[-1]
+    def extra(self):
+        return ''
+    
+class SomeMinMax(Some):
+    def params(self):
+        return list(self.args[0:-2])
+    def fmla(self):
+        return self.args[-2]
+    def index(self):
+        return self.args[-1]
+
+class SomeMin(SomeMinMax):
+    def extra(self):
+        return ' minimizing ' + str(self.index())
+
+class SomeMax(SomeMinMax):
+    def extra(self):
+        return ' maximizing ' + str(self.index())
     
 
 class Sort(AST):

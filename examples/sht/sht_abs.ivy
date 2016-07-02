@@ -233,7 +233,7 @@ module hash_top(key,value) = {
 # Specification of delegation map
 #
 
-module delegation_map = {
+module delegation_map_spec(impl) = {
 
     # The delegation map has to be specified with a relation, since as
     # a function it would be unstratified.
@@ -245,9 +245,37 @@ module delegation_map = {
 	map(K,X) := (X = dst) & (lo <= K & K <= hi)
 	            | map(K,X) & ~(lo <= K & K <= hi)
     }
+    execute set before impl.set
 
     action get(k:key) returns (val:id) = {
 	assume map(k,val)   # assume not assign because this code is ghost
+    }
+    execute get after impl.get
+}
+
+################################################################################
+#
+# Implementation of delegation map
+#
+
+module delegation_map() = {
+
+    relation entries(K:key, X:id)
+    init ~entries(K,X)
+
+    action set_(lo:key,hi:key,dst:id) = {
+	
+	entries(K,X) := (X = dst) & (lo <= K & K <= hi)
+	            | entries(K,X) & ~(lo <= K & K <= hi)
+    }
+
+    action get(k:key) returns (val:id) = {
+	if some glb:key, gid:id. glb <= k & entries(glb,gid) maximizing glb {
+	    val := gid
+	}
+	else {
+	    val = 0
+        }
     }
 }
 

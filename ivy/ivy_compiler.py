@@ -257,11 +257,14 @@ def compile_if_action(self):
     if isinstance(self.args[0],ivy_ast.Some):
         sig = ivy_logic.sig.copy()
         with sig:
-            ls = self.args[0].args[0:-1]
-            fmla = self.args[0].args[-1]
+            ls = self.args[0].params()
+            fmla = self.args[0].fmla()
             cls = [compile_const(v,sig) for v in ls]
             sfmla = sortify_with_inference(fmla)
-            args = [self.args[0].clone(cls+[sfmla]),self.args[1].compile()]
+            sargs = cls+[sfmla]
+            if isinstance(self.args[0],ivy_ast.SomeMinMax):
+                sargs.append(sortify_with_inference(self.args[0].index()))
+            args = [self.args[0].clone(sargs),self.args[1].compile()]
         args += [a.compile() for a in self.args[2:]]
         return self.clone(args)
     else:

@@ -779,9 +779,27 @@ else:
         p[0] = Some(*(lsyms+[fmla]))
         p[0].lineno = get_lineno(p,1)
     
+    def p_somefmla_some_params_dot_fmla_minimizing_term(p):
+        'somefmla : SOME params DOT fmla MINIMIZING term'
+        lsyms = [s.prefix('loc:') for s in p[2]]
+        subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
+        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
+        index = subst_prefix_atoms_ast(p[6],subst,None,None)
+        p[0] = SomeMin(*(lsyms+[fmla,index]))
+        p[0].lineno = get_lineno(p,1)
+
+    def p_somefmla_some_params_dot_fmla_maximizing_term(p):
+        'somefmla : SOME params DOT fmla MAXIMIZING term'
+        lsyms = [s.prefix('loc:') for s in p[2]]
+        subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
+        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
+        index = subst_prefix_atoms_ast(p[6],subst,None,None)
+        p[0] = SomeMax(*(lsyms+[fmla,index]))
+        p[0].lineno = get_lineno(p,1)
+
     def fix_if_part(cond,part):
         if isinstance(cond,Some):
-            args = cond.args[:-1]
+            args = cond.params()
             subst = dict((x.rep[4:],x.rep) for x in args)
             part = subst_prefix_atoms_ast(part,subst,None,None)
         return part

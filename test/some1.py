@@ -13,7 +13,7 @@ individual x:foo,y:bar
 function f(X:foo) : bar
 
 action a = {
-    if some z:foo. f(z) = y {
+    if some z:foo. f(z) = y minimizing z {
         x := z
     }
 }
