@@ -49,6 +49,26 @@ module total_non_strict_order(carrier) = {
 }
 
 ########################################
+# Maps. This module provides a relational model of a map from a type
+# dom to a type rng. Initially, everything is mapped to the element zero.
+
+module map(dom,rng,zero) = {
+    relation map(X:dom,Y:rng)
+    init map(X,Y) <-> Y = zero
+    action set_(x:dom,y:rng) = {
+	map(x,Y) := Y = y
+    }
+    action set_closed_interval(lo:dom,hi:dom,val:rng) = {
+#	map(X,Y) := (Y = val) if lo <= X & X <= hi else map(X,Y)
+	map(X,Y) := (Y = val) & lo <= X & X <= hi
+                    | map(X,Y) & ~(lo <= X & X <= hi)
+    }
+    action get(x:dom) returns (y:rng) = {
+	assume map(x,y)
+    }
+}
+
+########################################
 # type of local time
 type ltime
 instantiate total_order(ltime)
@@ -61,6 +81,18 @@ type data
 # type of hash table keys
 type key
 instantiate total_non_strict_order(key)
+
+object keys = {
+    action max returns (x:key) = {
+	assume X <= x
+    }
+    action next(x:key) returns (y:key) = {
+	assert exists Z. ~(Z <= x);
+	assume x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
+    }
+}
+
+axiom 0 <= K:key
 
 ########################################
 # type of message types
@@ -233,7 +265,7 @@ module hash_top(key,value) = {
 # Specification of delegation map
 #
 
-module delegation_map_spec(impl) = {
+module delegation_map_spec = {
 
     # The delegation map has to be specified with a relation, since as
     # a function it would be unstratified.
@@ -245,12 +277,12 @@ module delegation_map_spec(impl) = {
 	map(K,X) := (X = dst) & (lo <= K & K <= hi)
 	            | map(K,X) & ~(lo <= K & K <= hi)
     }
-    execute set before impl.set
+#    execute set before impl.set
 
     action get(k:key) returns (val:id) = {
 	assume map(k,val)   # assume not assign because this code is ghost
     }
-    execute get after impl.get
+#    execute get after impl.get
 }
 
 ################################################################################
@@ -261,22 +293,58 @@ module delegation_map_spec(impl) = {
 module delegation_map() = {
 
     relation entries(K:key, X:id)
-    init ~entries(K,X)
+    init entries(K,X) <-> K = 0 & X = 0
+    instantiate kmap : map(key,key,0) # ghost
+    relation has_entry(K:key) # ghost
+
+    action update_kmap(nkey:key,nid:id) = {
+	local v:key {
+	    if some lub:key, lid:id. ~(lub <= nkey) & entries(lub,lid) minimizing lub {
+		v := lub
+	    }
+	    else {
+		v := 0
+	    };
+	    call kmap.set_(nkey,v)
+	};
+	if some glb:key, gid:id. ~(nkey <= glb) & entries(glb,gid) maximizing glb {
+	    call kmap.set_(glb,nkey)
+	};
+	has_entry(nkey) := true
+    }
 
     action set_(lo:key,hi:key,dst:id) = {
-	
-	entries(K,X) := (X = dst) & (lo <= K & K <= hi)
-	            | entries(K,X) & ~(lo <= K & K <= hi)
+	if hi ~= keys.max {
+	    local nkey:key, nid:id {
+		nkey := keys.next(hi);
+		nid := get(nkey);
+		entries(nkey,nid) := true;
+		call update_kmap(nkey,nid) #ghost
+	    }
+	};
+	entries(K,X) := entries(K,X) & ~(lo <= K & K <= hi);
+	has_entry(K) := has_entry(K) & ~(lo <= K & K <= hi);
+	entries(lo, dst) := true;
+	call update_kmap(lo,dst) #ghost
     }
 
     action get(k:key) returns (val:id) = {
 	if some glb:key, gid:id. glb <= k & entries(glb,gid) maximizing glb {
+	    local succ:key, succ_val:id {
+		succ := kmap.get(glb); # ghost
+		assume has_entry(succ) -> entries(succ,succ_val) # ghost
+	    };
 	    val := gid
 	}
 	else {
-	    val = 0
+	    val := 0
         }
     }
+
+    conjecture kmap.map(K,L) & kmap.map(K,M) -> L = M
+    conjecture dma.map(me,K,V) & dma.map(me,K,W) -> V = W
+    conjecture entries(K,V) & kmap.map(K,L) & L ~= 0 -> has_entry(L)
+    conjecture entries(K,V) & kmap.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~entries(M,W) & dma.map(me,K,V)
 }
 
 ################################################################################
@@ -342,13 +410,13 @@ module server_top(ref,me,net) = {
 
 
     # If I own this key, then my has table data matches the reference
-    conjecture dm.map(K,me) -> hash.hash(K) = ref.hash(K)
+    conjecture dma(me).map(K,me) -> hash.hash(K) = ref.hash(K)
 
     # If I own this key, then no one else does
-    conjecture dm.map(K,me) & X ~= me -> ~servers(X).dm.map(K,X)
+    conjecture dma(me).map(K,me) & X ~= me -> ~dma(X).map(K,X)
 
     # If I own this key, then no delegated shard does
-    conjecture dm.map(K,me) -> ~(net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S))
+    conjecture dma(me).map(K,me) -> ~(net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S))
 
     # No two delegated shards have keys in common
     conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S)
@@ -652,6 +720,11 @@ instance servers(X:id) : server_top(reference,X,net)
 # make one top level network
 instance net : net_top(reference,servers)
 
+# delegation map spec
+instance dma(X:id) : delegation_map_spec
+execute dma.set_ before servers.dm.set_
+execute dma.get after servers.dm.get
+
 # network implementation
 instance neti(X:id) : net_impl(reference,servers,X,low)
 
@@ -683,3 +756,6 @@ isolate iso_s = servers with reference,net
 
 isolate iso_n = neti with net,low,seq_nums,encoder
 
+# Verify the delegation map implementation
+
+isolate iso_d = servers.dm with dma,keys

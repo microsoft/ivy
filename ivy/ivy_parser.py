@@ -748,12 +748,13 @@ def p_action_term_assign_times(p):
     p[0] = HavocAction(p[1])
     p[0].lineno = get_lineno(p,2)
 
-def p_action_if_fmla_lcb_action_rcb(p):
-    'action : IF fmla LCB action RCB'
-    p[0] = IfAction(p[2],p[4])
-    p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,4]:
+
+    def p_action_if_fmla_lcb_action_rcb(p):
+        'action : IF fmla LCB action RCB'
+        p[0] = IfAction(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
 
     def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
         'action : IF fmla LCB action RCB ELSE action'
