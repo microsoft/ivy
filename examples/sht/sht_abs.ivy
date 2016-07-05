@@ -776,4 +776,4 @@ isolate iso_n = neti with net,low,seq_nums,encoder
 
 # Verify the delegation map implementation
 
-isolate iso_d = servers.dm with dma,keys
+isolate iso_d = servers(me).dm with dma(me),keys

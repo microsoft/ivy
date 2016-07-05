@@ -608,6 +608,8 @@ class Sig(object):
         res._default_sort = self._default_sort
         res.default_numeric_sort = self.default_numeric_sort
         return res
+    def __str__(self):
+        return sig_to_str(self)
 
 alpha = lg.TopSort('alpha')
 
@@ -794,6 +796,27 @@ def is_interpreted_sort(s):
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()
+
+def sig_to_str(self):
+    res = ''
+    for name,sort in self.sorts.iteritems():
+        if name == 'bool':
+            continue
+        res += 'type {}'.format(name)
+        if not isinstance(sort,UninterpretedSort):
+            res += ' = {}'.format(sort)
+        res += '\n'
+    for name,sym in self.symbols.iteritems():
+        sorts = sym.sort.sorts if isinstance(sym.sort,UnionSort) else [sym.sort]
+        for sort in sorts:
+            res +=  'relation ' if sort.is_relational() else 'function ' if sort.dom else 'individual '
+            res += name
+            if sort.dom:
+                res += '(' + ','.join('V{}:{}'.format(idx,s) for idx,s in enumerate(sort.dom)) + ')'
+            if not sort.is_relational():
+                res += ' : {}'.format(sort.rng)
+            res += '\n'
+    return res
 
 if __name__ == '__main__':
     V1 = Variable('V1')

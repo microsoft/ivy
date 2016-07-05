@@ -581,6 +581,12 @@ class EnvAction(ChoiceAction):
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
         return result
+    @property
+    def formal_params(self):
+        return []
+    @property
+    def formal_returns(self):
+        return []
 
 class IfAction(Action):
     def name(self):
@@ -824,4 +830,20 @@ def apply_mixin(decl,action1,action2):
     res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns
+    return res
+
+def params_to_str(params):
+    return '(' + ','.join('{}:{}'.format(p.name,p.sort) for p in params) + ')'
+
+def action_def_to_str(name,action):
+    res = "action {}".format(name)
+    if action.formal_params:
+        res += params_to_str(action.formal_params)
+    if action.formal_returns:
+        res += ' returns' + params_to_str(action.formal_returns)
+    res += ' = '
+    if isinstance(action,Sequence):
+        res += str(action)
+    else:
+        res += '{' + str(action) + '}'
     return res
