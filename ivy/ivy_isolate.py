@@ -149,6 +149,54 @@ def startswith_some(s,prefixes):
 def startswith_eq_some(s,prefixes):
     return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
 
+def get_strip_params(name,args,strip_map,strip_binding):
+    for prefix in strip_map:
+        if name.startswith(prefix+iu.ivy_compose_character):
+            strip_params = strip_map[prefix]
+            if not(len(args) >= len(strip_params)):
+                raise iu.IvyError(action,"cannot strip isolate parameters from {}",name)
+            for sp,ap in zip(strip_params,args):
+                if ap not in strip_binding or strip_binding[ap] != sp:
+                    raise iu.IvyError(action,"cannot strip parameter {} from {}",ap,name)
+            return strip_params
+    return []
+
+def strip_action(ast,strip_map,strip_binding):
+    if is_instance(ast,ivy_logic.CallAction):
+        name = ast.args[0].rep
+        args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args[0].args]
+        strip_params = get_strip_params(name,args,strip_map,strip_binding)
+        call = ast.args[0].clone(args[len(strip_params):])
+        return ast.clone([call]+[strip_action(arg,strip_map,strip_binding) for arg in ast.args[1:]])
+    if ivy_logic.is_constant(ast) and ast in strip_binding:
+        return ivy_logic.Symbol('strip:'+strip_binding[ast].name,ast.sort)
+    args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args]
+    if ivy_logic.is_app(ast):
+        name = ast.rep.name
+        strip_params = get_strip_params(name,args,strip_map,strip_binding)
+        if strip_params:
+            new_sort = ivy_logic.FunctionSort(ast.rep.sort.dom[len(strip_params):],ast.rep.sort.rng)
+            return ivy_logic.Symbol(name,new_sort)(*args[len(strip_params):])
+    return ast.clone(args)
+                
+
+def strip_isolate(mod,isolate):
+    strip_map = {}
+    for atom in isolate.verified + isolate.present:
+        name = atom.relname
+        if atom.args:
+            if not(all isinstance(Variable,v) for v in atom.args):
+                raise iu.IvyError(atom,"isolate parameters must be variables")
+            strip_map[name] = atom.args
+    for name,action in mod.actions.iteritems():
+        for prefix in strip_map:
+            if name.startswith(prefix+iu.ivy_compose_character):
+                strip_params = strip_map[prefix]
+                if not (hasattr(action,'formal_params') and len(action.formal_params) >= len(strip_params)):
+                    raise iu.IvyError(action,"cannot strip isolate parameters from {}",name)
+                strip_binding = dict(zip(action.formal_params,strip_params))
+                new_action = strip_action(action,strip_map,strip_binding)
+
 
 def isolate_component(mod,isolate_name):
     if isolate_name not in mod.isolates:
