@@ -56,6 +56,9 @@ module map(dom,rng,zero) = {
     relation map(X:dom,Y:rng)
     init map(X,Y) <-> Y = zero
     action set_(x:dom,y:rng) = {
+	local oldval:rng {
+	    assume map(x,oldval)
+	};
 	map(x,Y) := Y = y
     }
     action set_closed_interval(lo:dom,hi:dom,val:rng) = {
@@ -280,7 +283,7 @@ module delegation_map_spec = {
 #    execute set before impl.set
 
     action get(k:key) returns (val:id) = {
-	assume map(k,val)   # assume not assign because this code is ghost
+	assert map(k,val)   # assume not assign because this code is ghost
     }
 #    execute get after impl.get
 }
@@ -296,6 +299,7 @@ module delegation_map() = {
     init entries(K,X) <-> K = 0 & X = 0
     instantiate kmap : map(key,key,0) # ghost
     relation has_entry(K:key) # ghost
+    init has_entry(K) <-> K = 0
 
     action update_kmap(nkey:key,nid:id) = {
 	local v:key {
@@ -308,24 +312,33 @@ module delegation_map() = {
 	    call kmap.set_(nkey,v)
 	};
 	if some glb:key, gid:id. ~(nkey <= glb) & entries(glb,gid) maximizing glb {
+	    local succ:key, succ_val:id {
+		succ := kmap.get(glb); # ghost
+		assume has_entry(succ) -> entries(succ,succ_val) # ghost
+	    };
 	    call kmap.set_(glb,nkey)
+#	    local v:id {
+#		v := get(glb) # this is to witness the succesor of glb
+#	    }
 	};
 	has_entry(nkey) := true
     }
 
     action set_(lo:key,hi:key,dst:id) = {
-	if hi ~= keys.max {
-	    local nkey:key, nid:id {
-		nkey := keys.next(hi);
-		nid := get(nkey);
-		entries(nkey,nid) := true;
-		call update_kmap(nkey,nid) #ghost
-	    }
-	};
-	entries(K,X) := entries(K,X) & ~(lo <= K & K <= hi);
-	has_entry(K) := has_entry(K) & ~(lo <= K & K <= hi);
-	entries(lo, dst) := true;
-	call update_kmap(lo,dst) #ghost
+	if lo <= hi {
+	    if hi ~= keys.max {
+		local nkey:key, nid:id {
+		    nkey := keys.next(hi);
+		    nid := get(nkey);
+		    entries(nkey,nid) := true;
+		    call update_kmap(nkey,nid) #ghost
+		}
+	    };
+	    entries(K,X) := entries(K,X) & ~(lo <= K & K <= hi);
+	    has_entry(K) := has_entry(K) & ~(lo <= K & K <= hi);
+	    entries(lo, dst) := true;
+	    call update_kmap(lo,dst) #ghost
+	}
     }
 
     action get(k:key) returns (val:id) = {
@@ -337,14 +350,19 @@ module delegation_map() = {
 	    val := gid
 	}
 	else {
-	    val := 0
+	    local zero_val:id {
+		assume has_entry(0) -> entries(0,zero_val) # ghost
+	    }
         }
     }
 
     conjecture kmap.map(K,L) & kmap.map(K,M) -> L = M
     conjecture dma.map(me,K,V) & dma.map(me,K,W) -> V = W
-    conjecture entries(K,V) & kmap.map(K,L) & L ~= 0 -> has_entry(L)
-    conjecture entries(K,V) & kmap.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~entries(M,W) & dma.map(me,K,V)
+    conjecture entries(K,V) -> has_entry(K)
+    conjecture entries(K,V) & kmap.map(K,L) & L ~= 0 -> ~(L <= K) & has_entry(L)
+    conjecture entries(K,V) & kmap.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~entries(M,W)
+    conjecture entries(K,V) & kmap.map(K,L) & K <= M & (L = 0 | ~(L <= M)) -> dma.map(me,M,V)
+    conjecture has_entry(0)
 }
 
 ################################################################################

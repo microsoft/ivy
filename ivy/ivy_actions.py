@@ -600,19 +600,21 @@ class IfAction(Action):
                 idx = self.args[0].index()
                 if idx not in ps:
                     raise IvyError(self,'cannot optimize non-parameter {}'.format(idx))
-                operator = Symbol('<',RelationSort([idx.sort,idx.sort]))
+#                operator = Symbol('<',RelationSort([idx.sort,idx.sort]))
+                leqsym = Symbol('<=',RelationSort([idx.sort,idx.sort]))
+                operator = lambda x,y: And(leqsym(x,y),Not(Equals(x,y)))
                 ivar = next(v for p,v in zip(ps,vs) if p == idx)
                 comp = operator(ivar,idx) if isinstance(self.args[0],ivy_ast.SomeMin) else operator(idx,ivar)
                 fmla = And(fmla,Not(And(sfmla,comp)))
             if_part = LocalAction(*(ps+[Sequence(AssumeAction(fmla),self.args[1])]))
             else_action = self.args[2] if len(self.args) >= 3 else Sequence()
-            else_part = Sequence(AssumeAction(dual_formula(sfmla)),else_action)
+            else_part = Sequence(AssumeAction(Not(sfmla)),else_action)
+#            iu.dbg('if_part')
+#            iu.dbg('else_part')
         else:
             if_part = Sequence(AssumeAction(self.args[0]),self.args[1])
             else_action = self.args[2] if len(self.args) >= 3 else Sequence()
             else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
-        iu.dbg('if_part')
-        iu.dbg('else_part')
         return if_part,else_part
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
