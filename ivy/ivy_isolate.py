@@ -161,10 +161,6 @@ def get_strip_params(name,args,strip_map,strip_binding,ast):
         raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(name))
     for sp,ap in zip(strip_params,args):
         if ap not in strip_binding or strip_binding[ap] != sp:
-            iu.dbg('ast')
-            iu.dbg('strip_binding')
-            iu.dbg('sp')
-            iu.dbg('ap')
             raise iu.IvyError(ast,"cannot strip parameter {} from {}".format(ap,name))
     return strip_params
 
@@ -194,10 +190,6 @@ def strip_action(ast,strip_map,strip_binding):
             new_sort = strip_sort(ast.rep.sort,strip_params)
             new_args = args[len(strip_params):]
             new_symbol = ivy_logic.Symbol(name,new_sort)
-            iu.dbg('new_sort')
-            iu.dbg('new_sort.dom')
-            iu.dbg('new_args')
-            iu.dbg('new_symbol')
             return new_symbol(*new_args)
     return ast.clone(args)
                 
@@ -217,7 +209,6 @@ def strip_labeled_fmla(lfmla,strip_map):
     fmla = lfmla.formula
     strip_binding = {}
     get_strip_binding(fmla,strip_map,strip_binding)
-    iu.dbg('strip_binding')
     fmla = strip_action(fmla,strip_map,strip_binding)
     lbl = lfmla.label
     if lbl:
@@ -234,8 +225,6 @@ def strip_isolate(mod,isolate):
     for atom in isolate.verified() + isolate.present():
         name = atom.relname
         if atom.args:
-            for a in atom.args:
-                print type(a)
             if not all(isinstance(v,ivy_ast.App) and not v.args for v in atom.args):
                 raise iu.IvyError(atom,"bad isolate parameter")
             for a in atom.args:
@@ -245,10 +234,7 @@ def strip_isolate(mod,isolate):
     # strip the actions
     new_actions = {}
     for name,action in mod.actions.iteritems():
-        iu.dbg('name')
-        iu.dbg('action')
         strip_params = strip_map_lookup(name[4:] if name.startswith('ext:') else name,strip_map)
-        iu.dbg('strip_params')
         if not(len(action.formal_params) >= len(strip_params)):
             raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
@@ -256,7 +242,6 @@ def strip_isolate(mod,isolate):
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
         new_actions[name] = new_action
-        iu.dbg('new_action')
     mod.actions.clear()
     mod.actions.update(new_actions)
 
@@ -273,7 +258,6 @@ def strip_isolate(mod,isolate):
             new_sort = strip_sort(sym.sort,strip_params)
             sym =  ivy_logic.Symbol(name,new_sort)
         new_symbols[name] = sym
-        iu.dbg('sym')
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
 
