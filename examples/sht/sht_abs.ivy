@@ -69,6 +69,9 @@ module map(dom,rng,zero) = {
     action get(x:dom) returns (y:rng) = {
 	assume map(x,y)
     }
+
+    conjecture map(K,L) & map(K,M) -> L = M
+
 }
 
 ########################################
@@ -286,6 +289,71 @@ module delegation_map_spec = {
 	assert map(k,val)   # assume not assign because this code is ghost
     }
 #    execute get after impl.get
+
+    conjecture map(K,V) & map(K,W) -> V = W
+
+}
+
+################################################################################
+#
+# Ordered set representation
+#
+# This is intended to be implemented using the STL set template.
+#
+# Ordered sets assume the element type has a total non-strict order,
+# with a least element 0.  They provide insertion of elements (in log
+# time), deletion of ranges (in n log(n) time) and finding greatest
+# lower bounds (log n).
+# 
+# For help with proofs, this module also provides an auxiliary map
+# "succ" that gives the successor of every element in the set.
+
+module ordered_set(key) = {
+
+    relation s(K:key)
+    init s(K) <-> K = 0
+
+    instantiate succ : map(key,key,0) # ghost
+
+    # insert one element
+    action insert(nkey:key) = {
+	s(nkey) := true;
+
+	# following is ghost code to update the successor relation
+	local v:key {
+	    if some lub:key. ~(lub <= nkey) & s(lub) minimizing lub {
+		v := lub
+	    }
+	    else {
+		v := 0
+	    };
+	    call succ.set_(nkey,v)
+	};
+	if some glb:key. ~(nkey <= glb) & s(glb) maximizing glb {
+	    local the_succ:key, succ_val:id {
+		the_succ := succ.get(glb) # lemma
+	    };
+	    call succ.set_(glb,nkey)
+	}
+    }
+    
+    # erase elements in a closed interval
+    action erase(lo:key,hi:key) = {
+	s(K) := s(K) & ~(lo <= K & K <= hi)
+    }
+
+    # the the greatest element <= k
+    action get_glb(k:key) returns (res:key) = {
+	if some glb:key. glb <= k & s(glb) maximizing glb {
+	    local the_succ:key, succ_val:id {
+		the_succ := succ.get(glb) # lemma
+	    };
+	    res := glb
+	}
+    }
+
+    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
+    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
 }
 
 ################################################################################
@@ -295,34 +363,9 @@ module delegation_map_spec = {
 
 module delegation_map() = {
 
-    relation entries(K:key, X:id)
-    init entries(K,X) <-> K = 0 & X = 0
-    instantiate kmap : map(key,key,0) # ghost
-    relation has_entry(K:key) # ghost
-    init has_entry(K) <-> K = 0
-
-    action update_kmap(nkey:key,nid:id) = {
-	local v:key {
-	    if some lub:key, lid:id. ~(lub <= nkey) & entries(lub,lid) minimizing lub {
-		v := lub
-	    }
-	    else {
-		v := 0
-	    };
-	    call kmap.set_(nkey,v)
-	};
-	if some glb:key, gid:id. ~(nkey <= glb) & entries(glb,gid) maximizing glb {
-	    local succ:key, succ_val:id {
-		succ := kmap.get(glb); # ghost
-		assume has_entry(succ) -> entries(succ,succ_val) # ghost
-	    };
-	    call kmap.set_(glb,nkey)
-#	    local v:id {
-#		v := get(glb) # this is to witness the succesor of glb
-#	    }
-	};
-	has_entry(nkey) := true
-    }
+    function entries(K:key) :id
+    init entries(0) = 0
+    instance has : ordered_set(key)
 
     action set_(lo:key,hi:key,dst:id) = {
 	if lo <= hi {
@@ -330,39 +373,22 @@ module delegation_map() = {
 		local nkey:key, nid:id {
 		    nkey := keys.next(hi);
 		    nid := get(nkey);
-		    entries(nkey,nid) := true;
-		    call update_kmap(nkey,nid) #ghost
+		    entries(nkey) := nid;
+		    call has.insert(nkey)
 		}
 	    };
-	    entries(K,X) := entries(K,X) & ~(lo <= K & K <= hi);
-	    has_entry(K) := has_entry(K) & ~(lo <= K & K <= hi);
-	    entries(lo, dst) := true;
-	    call update_kmap(lo,dst) #ghost
+	    call has.erase(lo,hi);
+	    entries(lo) := dst;
+	    call has.insert(lo) #ghost
 	}
     }
 
     action get(k:key) returns (val:id) = {
-	if some glb:key, gid:id. glb <= k & entries(glb,gid) maximizing glb {
-	    local succ:key, succ_val:id {
-		succ := kmap.get(glb); # ghost
-		assume has_entry(succ) -> entries(succ,succ_val) # ghost
-	    };
-	    val := gid
-	}
-	else {
-	    local zero_val:id {
-		assume has_entry(0) -> entries(0,zero_val) # ghost
-	    }
-        }
+	val := entries(has.get_glb(k))
     }
 
-    conjecture kmap.map(K,L) & kmap.map(K,M) -> L = M
-    conjecture dma.map(me,K,V) & dma.map(me,K,W) -> V = W
-    conjecture entries(K,V) -> has_entry(K)
-    conjecture entries(K,V) & kmap.map(K,L) & L ~= 0 -> ~(L <= K) & has_entry(L)
-    conjecture entries(K,V) & kmap.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~entries(M,W)
-    conjecture entries(K,V) & kmap.map(K,L) & K <= M & (L = 0 | ~(L <= M)) -> dma.map(me,M,V)
-    conjecture has_entry(0)
+    conjecture has.s(K) & has.succ.map(K,L) & K <= M & (L = 0 | ~(L <= M)) -> dma.map(me,M,entries(K))
+    conjecture has.s(0)
 }
 
 ################################################################################
@@ -774,6 +800,8 @@ isolate iso_s = servers with reference,net
 
 isolate iso_n = neti with net,low,seq_nums,encoder
 
-# Verify the delegation map implementation
+# Verify the delegation map implementation. Notice here that
+# we can focus on just one server called "me", since the operations
+# on delegation maps of different servers don't interfere.
 
 isolate iso_d = servers(me).dm with dma(me),keys
