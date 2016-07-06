@@ -12,6 +12,8 @@
 
 ## Forgot to include seq_nums object in iso_n
 
+include std
+
 ################################################################################
 #
 # This is the abstract specification of the sharded hash table protocol. It defines
@@ -26,52 +28,49 @@
 #
 ################################################################################
 
-########################################
-# total order theory
-
-module total_order(carrier) = {
-    relation (T:carrier < U:carrier)
-    # note: because < is polymorphic, we need to use the type here
-    axiom (T:carrier < U & U < V) -> (T < V)
-    axiom ~(T:carrier < U & U < T)
-    axiom T:carrier < U | T = U | U < T
-    # could add <= as derived relation here
-}
-
-module total_non_strict_order(carrier) = {
-    relation (T:carrier <= U:carrier)
-    # note: because <= is polymorphic, we need to use the type here
-    axiom (T:carrier <= U & U <= V) -> (T <= V)
-    axiom T:carrier <= T
-    axiom (T:carrier <= U & U <= T) -> T = U
-    axiom T:carrier <= U | U <= T
-    # could add <= as derived relation here
-}
 
 ########################################
 # type of local time
+
 type ltime
 instantiate total_order(ltime)
 
 ########################################
 # type of hash table data
+
 type data
 
 ########################################
 # type of hash table keys
+
 type key
 instantiate total_non_strict_order(key)
 
+object keys = {
+    action max returns (x:key) = {
+	assume X <= x
+    }
+    action next(x:key) returns (y:key) = {
+	assert exists Z. ~(Z <= x);
+	assume x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
+    }
+}
+
+axiom 0 <= K:key
+
 ########################################
 # type of message types
+
 type mtype = {request_t, reply_t, delegate_t, ack_t}
 
 ########################################
 # type of hash table ops
+
 type otype = {read, write}
 
 ########################################
 # id's of protocol agents
+
 type id
 
 ########################################
@@ -144,7 +143,6 @@ object reference = {
 
     ########################################
     # memory events by local time
-    # TODO: can we export this read-only?
 
     instantiate evs(T:ltime) : hashev 
 
@@ -233,7 +231,7 @@ module hash_top(key,value) = {
 # Specification of delegation map
 #
 
-module delegation_map = {
+module delegation_map_spec = {
 
     # The delegation map has to be specified with a relation, since as
     # a function it would be unstratified.
@@ -245,10 +243,56 @@ module delegation_map = {
 	map(K,X) := (X = dst) & (lo <= K & K <= hi)
 	            | map(K,X) & ~(lo <= K & K <= hi)
     }
+#    execute set before impl.set
 
     action get(k:key) returns (val:id) = {
-	assume map(k,val)   # assume not assign because this code is ghost
+	assert map(k,val)   # assume not assign because this code is ghost
     }
+#    execute get after impl.get
+
+    conjecture map(K,V) & map(K,W) -> V = W
+
+}
+
+
+################################################################################
+#
+# Implementation of delegation map
+#
+
+module delegation_map() = {
+
+    function entries(K:key) :id
+    init entries(0) = 0
+    instance has : ordered_set(key)
+
+    action set_(lo:key,hi:key,dst:id) = {
+	if lo <= hi {
+	    if hi ~= keys.max {
+		local nkey:key, nid:id {
+		    nkey := keys.next(hi);
+		    nid := get(nkey);
+		    entries(nkey) := nid;
+		    call has.insert(nkey)
+		}
+	    };
+	    call has.erase(lo,hi);
+	    entries(lo) := dst;
+	    call has.insert(lo)
+	}
+    }
+
+    action get(k:key) returns (val:id) = {
+	val := entries(has.get_glb(k))
+    }
+
+    # The value of every key between K and its successor is the same as K's value.
+
+    conjecture has.s(K) & has.succ.map(K,L) & K <= M & (L = 0 | ~(L <= M)) -> dma.map(me,M,entries(K))
+
+    # We always have an entry for key zero. 
+
+    conjecture has.s(0)
 }
 
 ################################################################################
@@ -314,13 +358,13 @@ module server_top(ref,me,net) = {
 
 
     # If I own this key, then my has table data matches the reference
-    conjecture dm.map(K,me) -> hash.hash(K) = ref.hash(K)
+    conjecture dma(me).map(K,me) -> hash.hash(K) = ref.hash(K)
 
     # If I own this key, then no one else does
-    conjecture dm.map(K,me) & X ~= me -> ~servers(X).dm.map(K,X)
+    conjecture dma(me).map(K,me) & X ~= me -> ~dma(X).map(K,X)
 
     # If I own this key, then no delegated shard does
-    conjecture dm.map(K,me) -> ~(net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S))
+    conjecture dma(me).map(K,me) -> ~(net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S))
 
     # No two delegated shards have keys in common
     conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S)
@@ -624,6 +668,11 @@ instance servers(X:id) : server_top(reference,X,net)
 # make one top level network
 instance net : net_top(reference,servers)
 
+# delegation map spec
+instance dma(X:id) : delegation_map_spec
+execute dma.set_ before servers.dm.set_
+execute dma.get after servers.dm.get
+
 # network implementation
 instance neti(X:id) : net_impl(reference,servers,X,low)
 
@@ -655,3 +704,8 @@ isolate iso_s = servers with reference,net
 
 isolate iso_n = neti with net,low,seq_nums,encoder
 
+# Verify the delegation map implementation. Notice here that
+# we can focus on just one server called "me", since the operations
+# on delegation maps of different servers don't interfere.
+
+isolate iso_d = servers(me).dm with dma(me),keys

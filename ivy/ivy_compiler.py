@@ -217,15 +217,20 @@ def compile_assign(self):
     code = []
     local_syms = []
     with ExprContext(code,local_syms):
-        args = [sortify_with_inference(a) for a in self.args]
-        if isinstance(args[0],ivy_ast.Tuple):
+        if isinstance(self.args[0],ivy_ast.Tuple):
+            args = [sortify_with_inference(a) for a in self.args]
             if not isinstance(args[1],ivy_ast.Tuple) or len(args[0].args) != len(args[1].args):
                 raise IvyError(self,"wrong number of values in assignment");
             for lhs,rhs in zip(args[0].args,args[1].args):
                 code.append(AssignAction(lhs,rhs))
-        elif isinstance(args[1],ivy_ast.Tuple):
-            raise IvyError(self,"wrong number of values in assignment");
         else:
+            with top_sort_as_default():
+                args = [a.compile() for a in self.args]
+            if isinstance(args[1],ivy_ast.Tuple):
+                raise IvyError(self,"wrong number of values in assignment");
+            with ASTContext(self):
+                teq = sort_infer(Equals(*args))
+            args = list(teq.args)
             code.append(AssignAction(*args))
         for c in code:
             c.lineno = self.lineno
@@ -254,13 +259,27 @@ CallAction.cmpl = compile_call
 
 
 def compile_if_action(self):
-    ctx = ExprContext(lineno = self.lineno)
-    with ctx:
-        cond = sortify_with_inference(self.args[0])
-    rest = [a.compile() for a in self.args[1:]]
-    ctx.code.append(self.clone([cond]+rest))
-    res = ctx.extract()
-    return res
+    if isinstance(self.args[0],ivy_ast.Some):
+        sig = ivy_logic.sig.copy()
+        with sig:
+            ls = self.args[0].params()
+            fmla = self.args[0].fmla()
+            cls = [compile_const(v,sig) for v in ls]
+            sfmla = sortify_with_inference(fmla)
+            sargs = cls+[sfmla]
+            if isinstance(self.args[0],ivy_ast.SomeMinMax):
+                sargs.append(sortify_with_inference(self.args[0].index()))
+            args = [self.args[0].clone(sargs),self.args[1].compile()]
+        args += [a.compile() for a in self.args[2:]]
+        return self.clone(args)
+    else:
+        ctx = ExprContext(lineno = self.lineno)
+        with ctx:
+            cond = sortify_with_inference(self.args[0])
+        rest = [a.compile() for a in self.args[1:]]
+        ctx.code.append(self.clone([cond]+rest))
+        res = ctx.extract()
+        return res
 
 IfAction.cmpl = compile_if_action
 

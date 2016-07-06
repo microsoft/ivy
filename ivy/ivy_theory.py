@@ -82,7 +82,7 @@ def get_assumes_and_asserts():
             if isinstance(sa,ia.AssertAction):
                 asserts.append((sa.args[0],sa))
             if isinstance(sa,ia.IfAction):
-                asserts.append((sa.args[0],sa))
+                asserts.append((sa.get_cond(),sa))
 
     # TODO: check axioms, inits, conjectures
 

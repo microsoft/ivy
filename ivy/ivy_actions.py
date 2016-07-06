@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -14,6 +14,7 @@ from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renamin
 import ivy_ast
 from ivy_ast import AST, compose_atoms, MixinAfterDef
 import ivy_module
+import ivy_utils as iu
 
 class Schema(AST):
     def __init__(self,defn,fresh):
@@ -580,6 +581,12 @@ class EnvAction(ChoiceAction):
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
         return result
+    @property
+    def formal_params(self):
+        return []
+    @property
+    def formal_returns(self):
+        return []
 
 class IfAction(Action):
     def name(self):
@@ -589,9 +596,31 @@ class IfAction(Action):
         else_part = ('\nelse {' + str(self.args[2]) + '}') if len(self.args) >= 3 else ''
         return if_part + else_part
     def subactions(self) :
-        if_part = Sequence(AssumeAction(self.args[0]),self.args[1])
-        else_action = self.args[2] if len(self.args) >= 3 else Sequence()
-        else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
+        if isinstance(self.args[0],ivy_ast.Some):
+            ps = list(self.args[0].params())
+            fmla = self.args[0].fmla()
+            vs = [Variable('V{}'.format(idx),x.sort) for idx,x in enumerate(ps)]
+            subst = dict((c,v) for c,v in zip(ps,vs))
+            sfmla = substitute_constants_ast(fmla,subst)
+            if isinstance(self.args[0],ivy_ast.SomeMinMax):
+                idx = self.args[0].index()
+                if idx not in ps:
+                    raise IvyError(self,'cannot optimize non-parameter {}'.format(idx))
+#                operator = Symbol('<',RelationSort([idx.sort,idx.sort]))
+                leqsym = Symbol('<=',RelationSort([idx.sort,idx.sort]))
+                operator = lambda x,y: And(leqsym(x,y),Not(Equals(x,y)))
+                ivar = next(v for p,v in zip(ps,vs) if p == idx)
+                comp = operator(ivar,idx) if isinstance(self.args[0],ivy_ast.SomeMin) else operator(idx,ivar)
+                fmla = And(fmla,Not(And(sfmla,comp)))
+            if_part = LocalAction(*(ps+[Sequence(AssumeAction(fmla),self.args[1])]))
+            else_action = self.args[2] if len(self.args) >= 3 else Sequence()
+            else_part = Sequence(AssumeAction(Not(sfmla)),else_action)
+#            iu.dbg('if_part')
+#            iu.dbg('else_part')
+        else:
+            if_part = Sequence(AssumeAction(self.args[0]),self.args[1])
+            else_action = self.args[2] if len(self.args) >= 3 else Sequence()
+            else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
         return if_part,else_part
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
@@ -600,6 +629,17 @@ class IfAction(Action):
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
+    def get_cond(self):
+        if isinstance(self.args[0],ivy_ast.Some):
+            ps = list(self.args[0].params())
+            fmla = self.args[0].fmla()
+            vs = [Variable('V{}'.format(idx),x.sort) for idx,x in enumerate(ps)]
+            subst = dict((c,v) for c,v in zip(ps,vs))
+            sfmla = substitute_constants_ast(fmla,subst)
+            return Exists(vs,sfmla)
+        else:
+            return self.args[0]
+
 
 
 local_action_ctr = 0
@@ -790,4 +830,20 @@ def apply_mixin(decl,action1,action2):
     res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns
+    return res
+
+def params_to_str(params):
+    return '(' + ','.join('{}:{}'.format(p.name,p.sort) for p in params) + ')'
+
+def action_def_to_str(name,action):
+    res = "action {}".format(name)
+    if action.formal_params:
+        res += params_to_str(action.formal_params)
+    if action.formal_returns:
+        res += ' returns' + params_to_str(action.formal_returns)
+    res += ' = '
+    if isinstance(action,Sequence):
+        res += str(action)
+    else:
+        res += '{' + str(action) + '}'
     return res
