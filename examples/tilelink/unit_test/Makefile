@@ -22,12 +22,12 @@ tilelink_coherence_manager_tester.h tilelink_coherence_manager_tester.cpp:  tile
 
 srcdir = $(shell pwd)
 
-L2HellaCacheBank/L2HellaCacheBank.o: $(ROCKETCHIP)/uncore/src/main/scala/builder.scala
+L2HellaCacheBank/L2HellaCacheBank.o: $(ROCKETCHIP)/uncore/src/main/scala/Builder.scala
 	install -d L2HellaCacheBank
-	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run L2HellaCacheBank $(L2Config) --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2HellaCacheBank"
+	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run agents.L2HellaCacheBank $(L2Config) --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2HellaCacheBank"
 
 L2HellaCacheBank/L2HellaCacheBank.prms.h: L2HellaCacheBank/L2HellaCacheBank.o
-	sed -e 's/(/#define /' -e 's/,/ /' -e 's/)//' L2HellaCacheBank/L2HellaCacheBank.prm > L2HellaCacheBank/L2HellaCacheBank.prms.h
+	sed -e 's/(/#define /' -e 's/,/ /' -e 's/)//' L2HellaCacheBank/agents.L2HellaCacheBank.prm > L2HellaCacheBank/L2HellaCacheBank.prms.h
 
 tilelink_coherence_manager_hella.cpp: tilelink_coherence_manager.cpp 
 	sed -e 's/managerEndpoint_//g' -e 's/L2Unit_/L2HellaCacheBank_/g' tilelink_coherence_manager.cpp > tilelink_coherence_manager_hella.cpp
@@ -37,12 +37,12 @@ test_L2HellaCacheBank: tilelink_coherence_manager_tester.h tilelink_coherence_ma
 
 # Make L2BroadcastHub emulator
 
-L2BroadcastHub/L2BroadcastHub.o: $(ROCKETCHIP)/uncore/src/main/scala/builder.scala
+L2BroadcastHub/L2BroadcastHub.o: $(ROCKETCHIP)/uncore/src/main/scala/Builder.scala
 	install -d L2BroadcastHub
-	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run L2BroadcastHub $(L2Config) --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2BroadcastHub"
+	export CXX='g++ -g' && cd $(ROCKETCHIP) && sbt "project uncore" "run agents.L2BroadcastHub $(L2Config) --backend c --genHarness --compile --debug --vcd --ioDebug --targetDir $(srcdir)/L2BroadcastHub"
 
 L2BroadcastHub/L2BroadcastHub.prms.h: L2BroadcastHub/L2BroadcastHub.o
-	sed -e 's/(/#define /' -e 's/,/ /' -e 's/)//' L2BroadcastHub/L2BroadcastHub.prm > L2BroadcastHub/L2BroadcastHub.prms.h
+	sed -e 's/(/#define /' -e 's/,/ /' -e 's/)//' L2BroadcastHub/agents.L2BroadcastHub.prm > L2BroadcastHub/L2BroadcastHub.prms.h
 
 #L2BroadcastHub/L2BroadcastHub_fixed.o: L2BroadcastHub/L2BroadcastHub_fixed.cpp
 #	g++ -g -c -o L2BroadcastHub/L2BroadcastHub_fixed.o -I L2BroadcastHub -I $(ROCKETCHIP)/csrc L2BroadcastHub/L2BroadcastHub_fixed.cpp
