@@ -392,11 +392,11 @@ class AnalysisGraphUI(object):
     # user to choose from. Also browses the source code of the
     # conjecture. The proof method depends on the current mode.
 
-    def try_conjecture(self,node,conj=None):
+    def try_conjecture(self,node,conj=None,msg=None):
         if conj == None:
             udc = undecided_conjectures(node)
             udc_text = [repr(clauses_to_formula(conj)) for conj in udc]
-            msg = "Choose a conjecture to prove:"
+            msg = msg or "Choose a conjecture to prove:"
             cmd = lambda idx: self.try_conjecture(node,udc[idx])
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd)
         else:
@@ -409,7 +409,7 @@ class AnalysisGraphUI(object):
                 self.bmc(node,dual)
             else:
                 sg = self.g.concept_graph(node)
-                sg.current.add_constraints(dual.clauses)
+                sg.current.add_constraints(dual.conjuncts)
                 self.show_graph(sg)
 
     # Set up to prove a remembered subgoal. If no goal is given, display a list

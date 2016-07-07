@@ -600,7 +600,7 @@ def get_model_constant(m,t):
         print "warning: model doesn't give a value for enumerated term {}. returning {}.".format(t,res)
         return res
 #        assert False # model doesn't give a value for enumerated term
-    return constant_from_z3(s,m.eval(term_to_z3(t)))
+    return constant_from_z3(s,m.eval(term_to_z3(t),model_completion=True))
 
 
 

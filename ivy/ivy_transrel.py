@@ -566,7 +566,8 @@ class History(object):
             img = set(renaming[s] for s in renaming if not s.is_skolem())
             ignore = lambda s: self.ignore(s,img,renaming)
             # get the sub-mode for the given past time as a formula
-            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals=use_numerals())
+            all_clauses = and_clauses(post,final_cond) if final_cond != None else post
+            clauses = clauses_model_to_clauses(all_clauses,ignore = ignore, model = model, numerals=use_numerals())
             # map this formula into the past using inverse map
             clauses = rename_clauses(clauses,inverse_map(renaming))
             # remove tautology equalities, TODO: not sure if this is correct here
