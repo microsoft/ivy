@@ -26,6 +26,13 @@ def display_cex(msg,ag):
         ui.ui_main_loop(ag)
     exit(1)
     
+# def check_conjectures(msg,ag,state):
+#     failed = itp.undecided_conjectures(state)
+#     if failed:
+#         print "{} failed.".format(msg)
+#         if diagnose.get():
+            
+    
 def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])
     sys.exit(1)
