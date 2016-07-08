@@ -580,6 +580,18 @@ class ExportDef(AST):
     def __repr__(self):
         return self.exported() + (' from {}'.format(self.scope()) if self.scope() else '')
 
+class PrivateDecl(Decl):    
+    def name(self):
+        return 'private'
+    def defines(self):
+        return []
+    
+class PrivateDef(AST):
+    def privatized(self):
+        return self.args[0].relname
+    def __repr__(self):
+        return 'private {}'.format(self.args[0])
+
 class DelegateDecl(Decl):    
     def name(self):
         return 'delegate'

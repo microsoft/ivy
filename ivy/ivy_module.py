@@ -51,6 +51,7 @@ class Module(object):
         self.mixord = [] # list of mixin order relations
         self.destructor_sorts = {}
         self.sort_destructors = defaultdict(list)
+        self.privates = set() # set of string (names of private actions)
 
         self.sig = il.sig.copy() # capture the current signature
 

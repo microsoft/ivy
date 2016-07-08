@@ -90,7 +90,9 @@ def do_insts(ivy,insts):
         pref, inst = instantiation.args
         defn = stack_lookup(inst.relname)
         if defn:
-#            print "instantiating %s" % inst.relname
+#            print "instantiating %s" % inst
+            if pref != None:
+                ivy.define((pref.rep,inst.lineno))
             aparams = inst.args
             fparams = defn.args[0].args
             if len(aparams) != len(fparams):
@@ -206,6 +208,7 @@ def p_top_object_symbol_eq_lcb_top_rcb(p):
     p[0] = p[1]
     module = p[6]
     pref = Atom(p[3],[])
+    p[0].define((pref.rep,get_lineno(p,2)))
     for decl in module.decls:
         idecl = subst_prefix_atoms_ast(decl,{},pref,module.defined)
         p[0].declare(idecl)
@@ -614,6 +617,12 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_export_callatom(p):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
+    def p_top_private_callatom(p):
+        'top : top PRIVATE callatom'
+        d = PrivateDecl(PrivateDef(p[3]))
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)

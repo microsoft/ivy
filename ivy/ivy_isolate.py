@@ -143,11 +143,22 @@ def set_interpret_all_sorts(t):
     global interpret_all_sorts
     interpret_all_sorts = t
 
-def startswith_some(s,prefixes):
-    return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
+#def startswith_some(s,prefixes):
+#    return any(s.startswith(name+iu.ivy_compose_character) for name in prefixes)
 
-def startswith_eq_some(s,prefixes):
-    return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
+def startswith_some(s,prefixes,mod):
+    if s in mod.privates:
+        return False
+    parts = s.rsplit(iu.ivy_compose_character,1)
+    return len(parts)==2 and startswith_eq_some(parts[0],prefixes,mod)
+
+#def startswith_eq_some(s,prefixes):
+#    return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
+
+def startswith_eq_some(s,prefixes,mod):
+    if s in prefixes:
+        return True
+    return startswith_some(s,prefixes,mod)
 
 def strip_map_lookup(name,strip_map,with_dot=True):
     for prefix in strip_map:
@@ -271,7 +282,7 @@ def isolate_component(mod,isolate_name):
     present.update(verified)
     if not interpret_all_sorts:
         for type_name in list(ivy_logic.sig.interp):
-            if not startswith_eq_some(type_name,present):
+            if not startswith_eq_some(type_name,present,mod):
                 del ivy_logic.sig.interp[type_name]
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
@@ -284,17 +295,17 @@ def isolate_component(mod,isolate_name):
             raise iu.IvyError(None,"{} is not a module instance, sort, definition, or interpreted function".format(name))
     
     new_actions = {}
-    use_mixin = lambda name: startswith_some(name,present)
-    mod_mixin = lambda m: m if startswith_some(name,verified) else m.prefix_calls('ext:')
+    use_mixin = lambda name: startswith_some(name,present,mod)
+    mod_mixin = lambda m: m if startswith_some(name,verified,mod) else m.prefix_calls('ext:')
     all_mixins = lambda m: True
     no_mixins = lambda m: False
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
-    delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified)
+    delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified,mod)
     ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
     for actname,action in mod.actions.iteritems():
-        ver = startswith_some(actname,verified)
-        pre = startswith_some(actname,present)
+        ver = startswith_some(actname,verified,mod)
+        pre = startswith_some(actname,present,mod)
         if pre: 
             if not ver:
                 assert hasattr(action,'lineno')
@@ -333,12 +344,12 @@ def isolate_component(mod,isolate_name):
     # figure out what is exported:
     exported = set()
     for e in mod.exports:
-        if not e.scope() and startswith_some(e.exported(),present): # global scope
+        if not e.scope() and startswith_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
     for actname,action in mod.actions.iteritems():
-        if not startswith_some(actname,present):
+        if not startswith_some(actname,present,mod):
             for c in action.iter_calls():
-                if startswith_some(c,present):
+                if startswith_some(c,present,mod):
                     exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
@@ -352,7 +363,7 @@ def isolate_component(mod,isolate_name):
     keep_sym = lambda name: (iu.ivy_compose_character not in name
                             or startswith_eq_some(name,present))
     
-    keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present))
+    keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present,mod))
 
 
     # filter the conjectures
@@ -361,16 +372,7 @@ def isolate_component(mod,isolate_name):
     del mod.labeled_conjs[:]
     mod.labeled_conjs.extend(new_conjs)
 
-    # filter the signature
-
-    # TODO: need a better way to filter signature
-    # new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
-    # for s in list(mod.sig.symbols):
-    #     if s not in new_syms:
-    #         del mod.sig.symbols[s]
-
     # filter the inits
-
 
     new_inits = [c for c in mod.labeled_inits if keep_ax(c.label)]
     del mod.labeled_inits[:]
@@ -380,12 +382,35 @@ def isolate_component(mod,isolate_name):
     mod.labeled_axioms = [a for a in mod.labeled_axioms if keep_ax(a.label)]
 
     # filter definitions
-    mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present)]
+    mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present,mod)]
 
     mod.public_actions.clear()
     mod.public_actions.update(exported)
     mod.actions.clear()
     mod.actions.update(new_actions)
+
+    # filter the signature
+    # keep only the symbols referenced in the remaining
+    # formulas
+
+    asts = []
+    for x in [mod.labeled_axioms,mod.labeled_inits,mod.labeled_conjs]:
+        asts += [y.formula for y in x]
+    asts += mod.concepts
+    asts += [action for action in mod.actions.values()]
+    sym_names = set(x.name for x in lu.used_symbols_asts(asts))
+    old_syms = list(mod.sig.symbols)
+    for sym in old_syms:
+        if sym not in sym_names:
+            del mod.sig.symbols[sym]
+
+    # TODO: need a better way to filter signature
+    # new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
+    # for s in list(mod.sig.symbols):
+    #     if s not in new_syms:
+    #         del mod.sig.symbols[s]
+
+
 
     # strip the isolate parameters
 
@@ -394,7 +419,7 @@ def isolate_component(mod,isolate_name):
     # collect the initial condition
 
     init_cond = ivy_logic.And(*(lf.formula for lf in mod.labeled_inits))
-    im.module.init_cond = lu.formula_to_clauses(init_cond)
+    mod.init_cond = lu.formula_to_clauses(init_cond)
 
 
 

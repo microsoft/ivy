@@ -163,7 +163,7 @@ object reference = {
 
     action serialize(lt:ltime, id_:id) = {
 
-	assert ~evs(lt).serialized;
+#	assert ~evs(lt).serialized;
 
 	# serialize at current global time
 	evs(lt).serialized := true;
@@ -312,6 +312,7 @@ module server_top(ref,me,net) = {
     # The server's delegation map
 
     instance dm : delegation_map
+    private dm
 
     action handle_request(rq:req) = {
 	local src:id, k:key, op:otype, d:data, lt:ltime, ow:id {
@@ -357,7 +358,7 @@ module server_top(ref,me,net) = {
     }
 
 
-    # If I own this key, then my has table data matches the reference
+    # If I own this key, then my hash table data matches the reference
     conjecture dma(me).map(K,me) -> hash.hash(K) = ref.hash(K)
 
     # If I own this key, then no one else does
@@ -698,7 +699,7 @@ export neti.timeout
 # This says verify all the actions of "servers", keeping "ref" and "net"
 # concrete. 
 
-isolate iso_s = servers with reference,net
+isolate iso_s = servers with reference,net,dma
 
 # Verify the network implementation, using its upper and lower specifications
 

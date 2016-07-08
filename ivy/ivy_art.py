@@ -108,7 +108,7 @@ class AnalysisGraph(object):
         self.add(s2,s)
         if abstractor:
             abstractor(s2)
-        print "initial state: {}".format(s2)
+#        print "initial state: {}".format(s2)
 
     def initialize(self, abstractor):
         ac = self.context

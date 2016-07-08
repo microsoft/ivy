@@ -451,6 +451,8 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.isolates[iso.name()] = iso
     def export(self,exp):
         self.mod.exports.append(exp)
+    def private(self,pvt):
+        self.mod.privates.add(pvt.privatized())
     def delegate(self,exp):
         self.mod.delegates.append(exp)
         

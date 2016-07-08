@@ -550,9 +550,9 @@ class History(object):
 #        print "concrete state: {}".format(self.post)
 #        print "background: {}".format(axioms)
         post = and_clauses(self.post,axioms)
-        print "bounded check {"
+#        print "bounded check {"
         model = _get_model_clauses(post,final_cond=final_cond)
-        print "} bounded check"
+#        print "} bounded check"
         if model == None:
 #            print "core = {}".format(unsat_core(post,true_clauses()))
             return None

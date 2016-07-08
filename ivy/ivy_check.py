@@ -60,25 +60,28 @@ def check_module():
         if isolate:
             print "Checking isolate {}...".format(isolate)
         with im.module.copy():
-            ivy_isolate.create_isolate(isolate,ext='ext')
+            ivy_isolate.create_isolate(isolate) # ,ext='ext'
             ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
-            with utl.ErrorPrinter():
-                with ivy_interp.EvalContext(check=False):
-                    check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-                    ag.execute_action('ext')
+            with ivy_interp.EvalContext(check=False):
+                check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
+                for a in sorted(im.module.public_actions):
+                    print "trying {}...".format(a)
+                    ag.execute_action(a,prestate=ag.states[0])
                     cex = ag.check_bounded_safety(ag.states[-1])
                     if cex is not None:
                         display_cex("safety failed",cex)
-                    check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[1])
+                    check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
 
 
 def main():
     ivy.read_params()
+    iu.set_parameters({'mode':'induction'})
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
     with im.Module():
-        ivy.source_file(sys.argv[1],ivy.open_read(sys.argv[1]),create_isolate=False)
-        check_module()
+        with utl.ErrorPrinter():
+            ivy.source_file(sys.argv[1],ivy.open_read(sys.argv[1]),create_isolate=False)
+            check_module()
     print "OK"
 
 
