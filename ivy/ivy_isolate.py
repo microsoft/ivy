@@ -273,6 +273,75 @@ def strip_isolate(mod,isolate):
     ivy_logic.sig.symbols.update(new_symbols)
 
 
+def get_calls_mods(mod,summarized_actions,actname,calls,mods):
+    if actname in calls or actname not in summarized_actions:
+        return
+    action = mod.actions[actname]
+    acalls = set()
+    amods = set()
+    calls[actname] = acalls
+    mods[actname] = amods
+    for sub in action.iter_subactions():
+        if isinstance(sub,AssignAction):
+            sym = sub.args[0].rep
+            if sym.name in mod.sig.symbols:
+                amods.add(sym.name)
+        elif isinstance(sub,CallAction):
+            calledname = sub.args[0].rep
+            acalls.add(calledname)
+            get_calls_mods(mod,summarized_actions,calledname,calls,mods)
+            acalls.update(calls[calledname])
+            amods.update(mods[calledname])
+
+def get_callouts_action(mod,summarized_actions,callouts,action,acallouts,head,tail):
+    if isinstance(action,ia.Sequence):
+        for idx,sub in action.args:
+            get_callouts_action(mod,summarized_actions,callouts,sub,acallouts,
+                                head and idx==0, tail and idx == len(action.args)-1)
+    elif isinstance(action,ia.CallAction):
+        calledname = action.args[0].rep
+        if calledname in summarized_actions:
+            acallouts[(3 if tail else 1) if head else (2 if tail else 0)].add(calledname)
+        else:
+            get_callouts(mod,summarized_actions,calledname,callouts)
+            # TODO update acallouts correctly
+            for a,b in zip(acallouts,callouts[calledname]):
+                a.update(b)
+    else:
+        for sub in action.args:
+            if isinstance(sub,Action):
+                get_callouts_action(mod,summarized_actions,callouts,sub,acallouts,head,tail)
+        
+
+def get_callouts(mod,summarized_actions,actname,callouts):
+    if actname in callouts or actname in summarized_actions:
+        return
+    action = mod.actions[actname]
+    acallouts = (set(),set(),set())
+    callouts[actname] = acallouts
+    get_callouts_action(mod,summarized_actions,callouts,action,acallouts,True,True)
+    
+
+def check_interference(mod,new_actions,summarized_actions):
+    calls = dict()
+    mods = dict()
+    for actname in summarized_actions:
+        get_calls_mods(mod,summarized_actions,actname,calls,mods)
+    callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
+    for actname in new_actions:
+        get_callouts(mod,summarized_actions,actname,callouts)
+    for actname,action in new_actions.iteritems():
+        if actname not in summarized_actions:
+            for called in action.iter_calls():
+                if called in sumarized_actions:
+                    cmods = mods[called]
+                    if cmods:
+                        things = ','.join(sorted(cmods))
+                        raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
+                                          .format(actname,things))
+                    
+
+
 def isolate_component(mod,isolate_name):
     if isolate_name not in mod.isolates:
         raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
@@ -303,6 +372,7 @@ def isolate_component(mod,isolate_name):
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
     delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified,mod)
     ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
+    summarized_actions = set()
     for actname,action in mod.actions.iteritems():
         ver = startswith_some(actname,verified,mod)
         pre = startswith_some(actname,present,mod)
@@ -336,10 +406,12 @@ def isolate_component(mod,isolate_name):
         else:
             # TODO: here must check that summarized action does not
             # have a call dependency on the isolated module
+            summarized_actions.add(actname)
             action = summarize_action(action)
             new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = add_mixins(mod,actname,action,all_mixins,use_mixin,mod_mixin)
 
+#    check_interference(mod,new_actions,summarized_actions)
 
     # figure out what is exported:
     exported = set()
