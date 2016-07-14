@@ -702,7 +702,7 @@ class CallAction(Action):
         v = context.get(name)
 #        print "v: {}".format(v)
         if not v:
-            raise IvyError(self.args[0],"no value for {}".format(name))
+            raise IvyError(self,"no value for {}".format(name))
         return v
     def int_update(self,domain,pvars):
 #        print "got here!"
@@ -801,8 +801,16 @@ def entry(ensures = And()):
     return RME(And(),[],ensures)
 
 class TypeCheckConext(ActionContext):
+    # if we're just type-checking actions, replace a called action
+    # with a null action having the same formals.
     def get(self,x):
-        return null_update()
+        a = ActionContext.get(self,x)
+        if a == None:
+            return None
+        res = Sequence()
+        res.formal_params = a.formal_params
+        res.formal_returns = a.formal_returns
+        return res
 
 def type_check_action(action,domain,pvars = []):
     with TypeCheckConext(domain):

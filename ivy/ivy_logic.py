@@ -111,6 +111,7 @@ class top_sort_as_default(object):
 Symbol = lg.Const
 
 Symbol.rep = property(lambda self: self)
+Symbol.relname = property(lambda self: self)
 
 # this is just not needed, as it is implemented exactly the same
 # in logic.py
@@ -140,6 +141,7 @@ Symbol.args = property(lambda self : [])
 Symbol.is_numeral  = lambda self : self.name[0].isdigit()
 Symbol.clone = lambda self,args : self
 
+BooleanSort = lg.BooleanSort
 
 class AST(object):
     """
@@ -215,10 +217,10 @@ lg.Eq.rep = property(lambda self: equals)
 
 App = lg.Apply
 def Atom(rel,args):
-    return Equals(*args) if rel == equals else lg.Apply(rel,*args)
+    return Equals(*args) if rel == equals else lg.Apply(rel,*args) if args else rel
 
 def is_atom(term):
-    return isinstance(term,App) and term.sort == lg.Boolean or isinstance(term,lg.Eq)
+    return (isinstance(term,App) or isinstance(term,Symbol)) and term.sort == lg.Boolean or isinstance(term,lg.Eq)
 
 # note: ivy1 treats instances of a constant in a formula as an app
 def is_app(term):
@@ -556,18 +558,26 @@ FunctionSort.dom = FunctionSort.domain
 FunctionSort.defines = lambda self: []
 FunctionSort.is_relational = lambda self: self.rng == lg.Boolean
 
+lg.BooleanSort.is_relational = lambda self: True
+lg.BooleanSort.rng = property(lambda self: self)
+lg.BooleanSort.dom = property(lambda self: [])
+
+
 def is_enumerated_sort(s):
     return isinstance(s,EnumeratedSort)
 
 def is_boolean_sort(s):
     return s == lg.Boolean
 
+def is_boolean(term):
+    return term.sort == lg.Boolean
+
 # TODO: arguably boolean and enumerated are first-order sorts
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
 
 def RelationSort(dom):
-    return FunctionSort(*(list(dom) + [lg.Boolean]))
+    return FunctionSort(*(list(dom) + [lg.Boolean])) if len(dom) else lg.Boolean
 
 def apply(symbol,args):
     return App(symbol,*args)

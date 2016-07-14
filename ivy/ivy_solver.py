@@ -144,6 +144,7 @@ def enumeratedsort(es):
 ivy_logic.UninterpretedSort.to_z3 = uninterpretedsort
 ivy_logic.FunctionSort.to_z3 = functionsort
 ivy_logic.EnumeratedSort.to_z3 = enumeratedsort
+ivy_logic.BooleanSort.to_z3 = lambda self: z3.BoolSort()
 ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())
 
 
@@ -212,6 +213,9 @@ def native_symbol(sym):
     return z3.Function(sym.rep, *(name.sort.to_z3()))
 
 def apply_z3_func(pred,tup):
+    if isinstance(pred,z3.BoolRef):
+        assert not tup
+        return pred
     if not isinstance(pred,z3.FuncDeclRef):
         return pred(*tup)
     _args, sz = z3._to_ast_array(tup)
@@ -235,6 +239,8 @@ def enumerated_to_numeral(term):
     raise iu.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
 
 def term_to_z3(term):
+    if ivy_logic.is_boolean(term):
+        return formula_to_z3_int(term)
     if not term.args:
         if isinstance(term,ivy_logic.Variable):
             sorted = hasattr(term,'sort')
@@ -291,7 +297,7 @@ def atom_to_z3(atom):
 #        print "atom: {}, rep: {}, rep.sort: {}".format(atom,atom.rep,atom.rep.sort)
         if not rel:
             sig = atom.rep.sort.to_z3()
-            rel = z3.Function(solver_name(atom.rep), *sig)
+            rel = z3.Function(solver_name(atom.rep), *sig) if isinstance(sig,list) else z3.Const(solver_name(atom.rep),sig)
         z3_predicates[atom.relname] = rel
 #    return z3_predicates[atom.relname](
 #        *[term_to_z3(t) for t in atom.args])
@@ -1074,6 +1080,9 @@ def binenc(m,n):
     return [(z3.BoolVal(True) if m & (1 << (n-1-i)) else z3.BoolVal(False))
             for i in range(n)]
 
+def z3_function(name,sig):
+    return z3.Function(name, *sig) if isinstance(sig,list) else z3.Const(name,sig)
+
 def encode_term(t,n,sort):
     if isinstance(t,ivy_logic.Ite):
         cond = formula_to_z3_int(t.args[0])
@@ -1093,7 +1102,8 @@ def encode_term(t,n,sort):
         args = [term_to_z3(arg) for arg in t.args]
 #        print "encode_term t={}".format(t)
         sig = ivy_logic.RelationSort(t.rep.sort.dom).to_z3()
-        res = [apply_z3_func(z3.Function(t.rep.name + ':' + str(n-1-i),*sig),args)
+
+        res = [apply_z3_func(z3_function(t.rep.name + ':' + str(n-1-i),sig),args)
                for i in range(n)]
 #        print "encode_term res={}".format(res)
         return res

@@ -282,44 +282,48 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods):
     calls[actname] = acalls
     mods[actname] = amods
     for sub in action.iter_subactions():
-        if isinstance(sub,AssignAction):
+        if isinstance(sub,ia.AssignAction):
             sym = sub.args[0].rep
             if sym.name in mod.sig.symbols:
                 amods.add(sym.name)
-        elif isinstance(sub,CallAction):
+                iu.dbg('"{}: mods: {} lineno: {}".format(actname,sym.name,sub.lineno)')
+                iu.dbg('action')
+        elif isinstance(sub,ia.CallAction):
             calledname = sub.args[0].rep
             acalls.add(calledname)
             get_calls_mods(mod,summarized_actions,calledname,calls,mods)
-            acalls.update(calls[calledname])
-            amods.update(mods[calledname])
+            if calledname in calls:
+                acalls.update(calls[calledname])
+                amods.update(mods[calledname])
+    iu.dbg('"{}: calls: {} mods: {}".format(actname,acalls,amods)')
 
-def get_callouts_action(mod,summarized_actions,callouts,action,acallouts,head,tail):
+def get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acallouts,head,tail):
     if isinstance(action,ia.Sequence):
-        for idx,sub in action.args:
-            get_callouts_action(mod,summarized_actions,callouts,sub,acallouts,
+        for idx,sub in enumerate(action.args):
+            get_callouts_action(mod,new_actions,summarized_actions,callouts,sub,acallouts,
                                 head and idx==0, tail and idx == len(action.args)-1)
     elif isinstance(action,ia.CallAction):
         calledname = action.args[0].rep
         if calledname in summarized_actions:
             acallouts[(3 if tail else 1) if head else (2 if tail else 0)].add(calledname)
         else:
-            get_callouts(mod,summarized_actions,calledname,callouts)
+            get_callouts(mod,new_actions,summarized_actions,calledname,callouts)
             # TODO update acallouts correctly
             for a,b in zip(acallouts,callouts[calledname]):
                 a.update(b)
     else:
         for sub in action.args:
-            if isinstance(sub,Action):
-                get_callouts_action(mod,summarized_actions,callouts,sub,acallouts,head,tail)
+            if isinstance(sub,ia.Action):
+                get_callouts_action(mod,new_actions,summarized_actions,callouts,sub,acallouts,head,tail)
         
 
-def get_callouts(mod,summarized_actions,actname,callouts):
+def get_callouts(mod,new_actions,summarized_actions,actname,callouts):
     if actname in callouts or actname in summarized_actions:
         return
-    action = mod.actions[actname]
     acallouts = (set(),set(),set())
     callouts[actname] = acallouts
-    get_callouts_action(mod,summarized_actions,callouts,action,acallouts,True,True)
+    action = new_actions[actname]
+    get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acallouts,True,True)
     
 
 def check_interference(mod,new_actions,summarized_actions):
@@ -329,16 +333,16 @@ def check_interference(mod,new_actions,summarized_actions):
         get_calls_mods(mod,summarized_actions,actname,calls,mods)
     callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
     for actname in new_actions:
-        get_callouts(mod,summarized_actions,actname,callouts)
+        get_callouts(mod,new_actions,summarized_actions,actname,callouts)
     for actname,action in new_actions.iteritems():
         if actname not in summarized_actions:
             for called in action.iter_calls():
-                if called in sumarized_actions:
+                if called in summarized_actions:
                     cmods = mods[called]
                     if cmods:
                         things = ','.join(sorted(cmods))
                         raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
-                                          .format(actname,things))
+                                          .format(called,things))
                     
 
 
@@ -411,8 +415,6 @@ def isolate_component(mod,isolate_name):
             new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = add_mixins(mod,actname,action,all_mixins,use_mixin,mod_mixin)
 
-#    check_interference(mod,new_actions,summarized_actions)
-
     # figure out what is exported:
     exported = set()
     for e in mod.exports:
@@ -475,6 +477,10 @@ def isolate_component(mod,isolate_name):
     for sym in old_syms:
         if sym not in sym_names:
             del mod.sig.symbols[sym]
+
+#    iu.dbg('list(summarized_actions)')
+#    check_interference(mod,new_actions,summarized_actions)
+
 
     # TODO: need a better way to filter signature
     # new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
