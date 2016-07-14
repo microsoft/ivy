@@ -1073,7 +1073,9 @@ def p_error(token):
         report_error(ParseError(None,None,'unexpected end of input'));
 
 # Build the parsers
-parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger())
+import os
+tabdir = os.path.dirname(os.path.abspath(__file__))
+parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir)
 #parser = yacc.yacc(start='top',tabmodule='ivy_parsetab')
 # formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 

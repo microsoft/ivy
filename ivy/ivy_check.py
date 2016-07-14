@@ -29,14 +29,15 @@ def display_cex(msg,ag):
 def check_conjectures(kind,msg,ag,state):
     failed = itp.undecided_conjectures(state)
     if failed:
-        print "{} failed.".format(kind)
         if diagnose.get():
+            print "{} failed.".format(kind)
             gui = ui.new_ui()
             agui = gui.add(ag)
             gui.tk.update_idletasks() # so that dialog is on top of main window
             agui.try_conjecture(state,msg="{}\nChoose one to see counterexample.".format(msg))
             gui.tk.mainloop()
-        exit(1)
+            exit(1)
+        raise iu.IvyError(None,"{} failed.".format(kind))
     
 def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])

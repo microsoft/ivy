@@ -34,9 +34,15 @@ export inst.set_me
 """
 
 with im.Module():
-    iu.set_parameters({'mode':'induction','diagnose':'true','show_compiled':'true'})
+    iu.set_parameters({'mode':'induction','show_compiled':'true'})
     ivy_from_string(prog,create_isolate=False)
-    ick.check_module()
+    try:
+        ick.check_module()
+        assert False,"property should have been false"
+    except iu.IvyError as e:
+        print str(e)
+        assert str(e) == 'error: Consecution failed.'
+
 
 #     main_ui.answer("OK")
 #     ui.check_inductiveness()

@@ -273,29 +273,47 @@ def strip_isolate(mod,isolate):
     ivy_logic.sig.symbols.update(new_symbols)
 
 
-def get_calls_mods(mod,summarized_actions,actname,calls,mods):
+def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     if actname in calls or actname not in summarized_actions:
         return
     action = mod.actions[actname]
     acalls = set()
     amods = set()
+    amixins = set()
     calls[actname] = acalls
     mods[actname] = amods
+    mixins[actname] = amixins
     for sub in action.iter_subactions():
         if isinstance(sub,ia.AssignAction):
             sym = sub.args[0].rep
             if sym.name in mod.sig.symbols:
                 amods.add(sym.name)
-                iu.dbg('"{}: mods: {} lineno: {}".format(actname,sym.name,sub.lineno)')
-                iu.dbg('action')
+#                iu.dbg('"{}: mods: {} lineno: {}".format(actname,sym.name,sub.lineno)')
+#                iu.dbg('action')
         elif isinstance(sub,ia.CallAction):
             calledname = sub.args[0].rep
-            acalls.add(calledname)
-            get_calls_mods(mod,summarized_actions,calledname,calls,mods)
+            if calledname not in summarized_actions:
+                acalls.add(calledname)
+            get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins)
             if calledname in calls:
                 acalls.update(calls[calledname])
+                acalls.update(mixins[calledname]) # tricky -- mixins of callees count as callees
                 amods.update(mods[calledname])
-    iu.dbg('"{}: calls: {} mods: {}".format(actname,acalls,amods)')
+    for mixin in mod.mixins[actname]:
+        calledname = mixin.args[0].relname
+        if calledname not in summarized_actions:
+            amixins.add(calledname)
+        get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins)
+        if calledname in calls:
+            acalls.update(calls[calledname])
+            amixins.update(mixins[calledname]) # mixins of mixins count as mixins
+            amods.update(mods[calledname])
+        
+#    iu.dbg('"{}: calls: {} mods: {}".format(actname,acalls,amods)')
+
+def has_unsummarized_mixins(mod,actname,summarized_actions,kind):
+    return any(isinstance(mixin,kind) and mixin.args[0].relname not in summarized_actions
+               for mixin in mod.mixins[actname])
 
 def get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acallouts,head,tail):
     if isinstance(action,ia.Sequence):
@@ -305,6 +323,10 @@ def get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acall
     elif isinstance(action,ia.CallAction):
         calledname = action.args[0].rep
         if calledname in summarized_actions:
+            if has_unsummarized_mixins(mod,calledname,summarized_actions,ivy_ast.MixinBeforeDef):
+                head = False
+            if has_unsummarized_mixins(mod,calledname,summarized_actions,ivy_ast.MixinAfterDef):
+                tail = False
             acallouts[(3 if tail else 1) if head else (2 if tail else 0)].add(calledname)
         else:
             get_callouts(mod,new_actions,summarized_actions,calledname,callouts)
@@ -320,7 +342,7 @@ def get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acall
 def get_callouts(mod,new_actions,summarized_actions,actname,callouts):
     if actname in callouts or actname in summarized_actions:
         return
-    acallouts = (set(),set(),set())
+    acallouts = (set(),set(),set(),set())
     callouts[actname] = acallouts
     action = new_actions[actname]
     get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acallouts,True,True)
@@ -329,11 +351,13 @@ def get_callouts(mod,new_actions,summarized_actions,actname,callouts):
 def check_interference(mod,new_actions,summarized_actions):
     calls = dict()
     mods = dict()
+    mixins = dict()
     for actname in summarized_actions:
-        get_calls_mods(mod,summarized_actions,actname,calls,mods)
+        get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins)
     callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
     for actname in new_actions:
         get_callouts(mod,new_actions,summarized_actions,actname,callouts)
+#    iu.dbg('callouts')
     for actname,action in new_actions.iteritems():
         if actname not in summarized_actions:
             for called in action.iter_calls():
@@ -343,7 +367,15 @@ def check_interference(mod,new_actions,summarized_actions):
                         things = ','.join(sorted(cmods))
                         raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
                                           .format(called,things))
-                    
+            if actname in callouts:
+                for midcall in sorted(callouts[actname][0]):
+                    if midcall in calls:
+                        callbacks = calls[midcall]
+                        if callbacks:
+                            raise iu.IvyError(action,"Call to {} may cause interfering callback to {}"
+                                              .format(midcall,','.join(callbacks)))
+                
+                
 
 
 def isolate_component(mod,isolate_name):
@@ -458,10 +490,6 @@ def isolate_component(mod,isolate_name):
     # filter definitions
     mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present,mod)]
 
-    mod.public_actions.clear()
-    mod.public_actions.update(exported)
-    mod.actions.clear()
-    mod.actions.update(new_actions)
 
     # filter the signature
     # keep only the symbols referenced in the remaining
@@ -471,16 +499,28 @@ def isolate_component(mod,isolate_name):
     for x in [mod.labeled_axioms,mod.labeled_inits,mod.labeled_conjs]:
         asts += [y.formula for y in x]
     asts += mod.concepts
-    asts += [action for action in mod.actions.values()]
+    asts += [action for action in new_actions.values()]
     sym_names = set(x.name for x in lu.used_symbols_asts(asts))
     old_syms = list(mod.sig.symbols)
     for sym in old_syms:
         if sym not in sym_names:
             del mod.sig.symbols[sym]
 
-#    iu.dbg('list(summarized_actions)')
-#    check_interference(mod,new_actions,summarized_actions)
+#    for x,y in new_actions.iteritems():
+#        print iu.pretty(ia.action_def_to_str(x,y))
 
+    # check for interference
+
+#    iu.dbg('list(summarized_actions)')
+    check_interference(mod,new_actions,summarized_actions)
+
+
+    # After checking, we can put in place the new action definitions
+
+    mod.public_actions.clear()
+    mod.public_actions.update(exported)
+    mod.actions.clear()
+    mod.actions.update(new_actions)
 
     # TODO: need a better way to filter signature
     # new_syms = set(s for s in mod.sig.symbols if keep_sym(s))
