@@ -682,47 +682,49 @@ def has_assertions(mod,callee):
     return any(isinstance(action,ia.AssertAction) for action in mod.actions[callee].iter_subactions())
 
 def check_isolate_completeness(mod = None):
-    return
     mod = mod or im.module
     checked = set()
     checked_context = defaultdict(set) # maps action name to set of delegees
+    delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
+    delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
     for iso_name,isolate in mod.isolates.iteritems():
         verified = set(a.relname for a in isolate.verified())
         present = set(a.relname for a in isolate.present())
         present.update(verified)
         verified_actions = set(a for a in mod.actions if startswith_eq_some(a,verified,mod))
         present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
-        delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
-        delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
         for a in verified_actions:
             if a not in delegates:
                 checked.add(a)
         for a in present_actions:
-            if a in delegates:
-                checked_context[a].update(verified)
+            checked_context[a].update(verified_actions)
     missing = []
     for actname,action in mod.actions.iteritems():
         for callee in action.iter_calls():
-            if not (callee in checked or not has_assertions(mod,callee) or actname in checked_context[callee]):
-                missing.append((actname,callee))
+            if not (callee in checked or not has_assertions(mod,callee)
+                    or callee in delegates and actname in checked_context[callee]):
+                missing.append((actname,callee,None))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname
                 if not has_assertions(mod,mixed):
                     continue
                 verifier = actname if isinstance(mixin,ivy_ast.MixinBeforeDef) else callee
                 if verifier not in checked_context[mixed]:
-                        missing.append((actname,mixed))
-    for callee in mod.public_actions:
+                        missing.append((actname,mixin,None))
+    for e in mod.exports:
+        if e.scope(): # global export
+            continue
+        callee = e.exported()
         if not (callee in checked or not has_assertions(mod,callee) or actname in delegates):
-            missing.append(("external",callee))
+            missing.append(("external",callee,None))
         for mixin in mod.mixins[callee]:
             mixed = mixin.args[0].relname
             if has_assertions(mod,mixed) and not isinstance(mixin,ivy_ast.MixinBeforeDef):
-                missing.append(("external",mixed))
+                missing.append(("external",mixin,None))
         
     if missing:
         print "the following assertions are not checked:"
-        for x,y in missing:
-            print "context: {}, action: {}".format(x,y)
+        for x,y,z in missing:
+            print "context: {}, action: {}".format(x,y) + (" mixin: {}".format(z) if z else '')
 
             

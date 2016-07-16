@@ -54,6 +54,7 @@ object keys = {
 	assert exists Z. ~(Z <= x);
 	assume x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
     }
+    delegate next
 }
 
 axiom 0 <= K:key
@@ -163,7 +164,7 @@ object reference = {
 
     action serialize(lt:ltime, id_:id) = {
 
-#	assert ~evs(lt).serialized;
+	assert ~evs(lt).serialized;
 
 	# serialize at current global time
 	evs(lt).serialized := true;
@@ -381,7 +382,7 @@ module server_top(ref,me,neti) = {
 
     # All forwarded requests have been generated
 
-    conjecture net.requested(D,R) -> io_spec.generated(req_ltime(R))
+    conjecture net.requested(D,R) -> io_spec.generated(req_ltime(R)) & ~ref.evs(req_ltime(R)).serialized
 
     # No two forwarded requests with the same ltime
 
@@ -392,6 +393,7 @@ module server_top(ref,me,neti) = {
 
     conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S) -> shard_value(S,K) = ref.hash(K)
 
+    conjecture ref.evs(T).serialized -> io_spec.generated(T)
 }
 
 

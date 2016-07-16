@@ -543,9 +543,13 @@ class MixinDef(AST):
         return self.args[1].relname
     
 class MixinBeforeDef(MixinDef):
+    def __str__(self):
+        return self.mixer() + " before " + self.mixee()
     pass
     
 class MixinAfterDef(MixinDef):
+    def __str__(self):
+        return self.mixer() + " after " + self.mixee()
     pass
 
 class IsolateDecl(Decl):    
