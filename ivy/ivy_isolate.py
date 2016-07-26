@@ -377,7 +377,6 @@ def check_interference(mod,new_actions,summarized_actions):
                 
                 
 
-
 def isolate_component(mod,isolate_name):
     if isolate_name not in mod.isolates:
         raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
@@ -597,6 +596,18 @@ def labeled_fmlas_to_str(kwd,lfmlas):
         res += str(f.formula) + '\n'
     return res
 
+def get_cone(mod,action_name,cone):
+    if action_name not in cone:
+        cone.add(action_name)
+        for a in mod.actions[action_name].iter_calls():
+            get_cone(mod,a,cone)
+
+def get_mod_cone(mod):
+    cone = set()
+    for a in mod.public_actions:
+        get_cone(mod,a,cone)
+    return cone
+
 def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
@@ -668,6 +679,15 @@ def create_isolate(iso,mod = None,**kwargs):
             mod.concept_spaces.append((sym(*variables),space))
 
         ith.check_theory()
+
+        # get rid of useless actions
+
+        cone = get_mod_cone(mod)
+        for a in list(mod.actions):
+            if a not in cone:
+                del mod.actions[a]
+
+        # show the compiled code if requested
 
         if show_compiled.get():
             print ivy_logic.sig

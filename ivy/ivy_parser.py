@@ -84,6 +84,13 @@ def stack_lookup(name):
             return ivy.modules[name]
     return None
 
+
+def stack_action_lookup(name):
+    for ivy in reversed(stack):
+        if name in ivy.actions:
+            return ivy.actions[name]
+    return None
+
 def do_insts(ivy,insts):
     others = []
     for instantiation in insts:
@@ -132,6 +139,7 @@ class Ivy(object):
         self.defined = dict()
         self.modules = dict()
         self.macros = dict()
+        self.actions = dict()
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
@@ -141,6 +149,9 @@ class Ivy(object):
         if isinstance(decl,MacroDecl):
             for d in decl.args:
                 self.macros[d.defines()] = d
+        if isinstance(decl,ActionDecl):
+            for d in decl.args:
+                self.actions[d.defines()] = d
 
     def define(self,df):
         name,lineno = df
@@ -576,23 +587,44 @@ else:
         p[8].lineno = get_lineno(p,7)
     p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[8],formals=p[4],returns=p[5])))
 
+def handle_mixin(kind,mixer,mixee,ivy):
+    cls = MixinBeforeDef if kind == 'before' else MixinAfterDef
+    m = cls(mixer,mixee)
+    m.lineno = mixer.lineno
+    d = MixinDecl(m)
+    d.lineno = mixer.lineno
+    ivy.declare(d)
+
+
+def handle_before_after(kind,atom,action,ivy):
+    mixee = stack_action_lookup(atom.relname)
+    if not action:
+        report_error(IvyError(atom,"no matching action for {}".format(atom.relname)))
+    elif atom.args:  # no args -- we get them from the matching action
+        report_error(IvyError(atom,"syntax error"))
+    else:
+        formals,returns = mixee.formals()
+        mixer = atom.suffix('.'+kind)
+        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=formals,returns=returns)))
+        handle_mixin(kind,mixer,mixee.args[0],ivy)
+    
 if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):
         'top : top MIXIN callatom BEFORE callatom'
-        m = MixinBeforeDef(p[3],p[5])
-        m.lineno = get_lineno(p,2)
-        d = MixinDecl(m)
-        d.lineno = get_lineno(p,2)
         p[0] = p[1]
-        p[0].declare(d)
+        handle_mixin("before",p[3],p[5],p[0])
+    def p_top_before_callatom_lcb_action_rcb(p):
+        'top : top BEFORE callatom LCB action RCB'
+        p[0] = p[1]
+        handle_before_after("before",p[3],p[5],p[0])
     def p_top_mixin_callatom_after_callatom(p):
         'top : top MIXIN callatom AFTER callatom'
-        m = MixinAfterDef(p[3],p[5])
-        m.lineno = get_lineno(p,2)
-        d = MixinDecl(m)
-        d.lineno = get_lineno(p,2)
         p[0] = p[1]
-        p[0].declare(d)
+        handle_mixin("after",p[3],p[5],p[0])
+    def p_top_after_callatom_lcb_action_rcb(p):
+        'top : top AFTER callatom LCB action RCB'
+        p[0] = p[1]
+        handle_before_after("after",p[3],p[5],p[0])
     def p_top_isolate_callatom_eq_callatoms(p):
         'top : top ISOLATE callatom EQ callatoms'
         d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))

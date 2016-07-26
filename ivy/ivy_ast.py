@@ -176,6 +176,13 @@ class Atom(Formula):
         return False
     def prefix(self,s):
         return Atom(s+self.rep,*self.args)
+    def suffix(self,s):
+        res = self.clone(self.args)
+        res.rep = res.rep + s
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
+        
     # following for backward compat
     @property
     def terms(self):
@@ -225,6 +232,12 @@ class App(Term):
         return self.rep.rep[0].isdigit()
     def prefix(self,s):
         res = App(s + self.rep)
+        if hasattr(self,'sort'):
+            res.sort = self.sort
+        return res
+    def drop_prefix(self,s):
+        assert self.rep.startswith(s)
+        res = App(self.rep[len(s):],*self.args)
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
@@ -649,6 +662,9 @@ class ActionDef(Definition):
         if hasattr(self,'formal_returns'):
             res.formal_returns = [rewrite_param(p,rewrite) for p in self.formal_returns]
         return res
+    def formals(self):
+        return ([s.drop_prefix('fml:') for s in self.formal_params],
+                [s.drop_prefix('fml:') for s in self.formal_returns])
 
 def rewrite_param(p,rewrite):
     res = App(p.rep)

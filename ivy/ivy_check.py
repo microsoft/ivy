@@ -54,10 +54,11 @@ def check_module():
         isolates = sorted(list(im.module.isolates))
         if len(isolates) == 0:
             isolates = [None]
-        ivy_isolate.check_isolate_completeness()
+        else:
+            ivy_isolate.check_isolate_completeness()
 
     for isolate in isolates:
-        if len(im.module.isolates[isolate].verified()) == 0:
+        if isolate != None and len(im.module.isolates[isolate].verified()) == 0:
             continue # skip if nothing to verify
         if isolate:
             print "Checking isolate {}...".format(isolate)
