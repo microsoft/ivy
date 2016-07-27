@@ -758,6 +758,8 @@ class CallAction(Action):
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
         return res        
+    def callee(self):
+        return self.args[0].relname
     def iter_calls(self):
         yield self.args[0].relname
     def decompose(self,pre,post,fail=False):

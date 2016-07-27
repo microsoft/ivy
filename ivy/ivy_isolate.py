@@ -708,6 +708,18 @@ def create_isolate(iso,mod = None,**kwargs):
 def has_assertions(mod,callee):
     return any(isinstance(action,ia.AssertAction) for action in mod.actions[callee].iter_subactions())
 
+def find_some_assertion(mod,actname):
+    for action in mod.actions[actname].iter_subactions():
+        if isinstance(action,ia.AssertAction):
+            return action
+    return None
+
+def find_some_call(mod,actname,callee):
+    for action in mod.actions[actname].iter_subactions():
+        if isinstance(action,ia.CallAction) and action.callee() == callee:
+            return action
+    return None
+
 def check_isolate_completeness(mod = None):
     mod = mod or im.module
     checked = set()
@@ -750,8 +762,12 @@ def check_isolate_completeness(mod = None):
                 missing.append(("external",mixin,None))
         
     if missing:
-        print "the following assertions are not checked:"
         for x,y,z in missing:
-            print "context: {}, action: {}".format(x,y) + (" mixin: {}".format(z) if z else '')
-
-            
+            mixer = y.mixer() if isinstance(y,ivy_ast.MixinDef) else y
+            mixee = y.mixee() if isinstance(y,ivy_ast.MixinDef) else y
+            print iu.IvyError(find_some_assertion(mod,mixer),"assertion is not checked")
+            if mixee != mixer:
+                print iu.IvyError(mod.actions[mixee],"...in action {}".format(mixee))
+            print iu.IvyError(find_some_call(mod,x,mixee),"...when called from {}".format(x))
+    
+    return missing

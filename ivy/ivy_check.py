@@ -47,6 +47,8 @@ def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
     # are specificied in the file, check all, else check globally.
 
+    missing = []
+
     isolate = ivy_compiler.isolate.get()
     if isolate != None:
         isolates = [isolate]
@@ -55,7 +57,10 @@ def check_module():
         if len(isolates) == 0:
             isolates = [None]
         else:
-            ivy_isolate.check_isolate_completeness()
+            missing = ivy_isolate.check_isolate_completeness()
+            
+    if missing:
+        raise iu.IvyError(None,"Some assertions are not checked")
 
     for isolate in isolates:
         if isolate != None and len(im.module.isolates[isolate].verified()) == 0:
