@@ -165,8 +165,8 @@ def p_top(p):
     p[0] = Ivy()
     stack.append(p[0])
 
-def p_top_import_symbol(p):
-    'top : top IMPORT SYMBOL'
+def p_top_using_symbol(p):
+    'top : top USING SYMBOL'
     p[0] = p[1]
     pref = Atom(p[3],[])
     module = importer(p[3])
@@ -580,15 +580,27 @@ if iu.get_numeric_version() <= [1,1]:
         p[7].lineno = get_lineno(p,6)
     p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[7])))
 else:
+
+  def p_optactiondef(p):
+    'optactiondef : '
+    p[0] = Sequence()
+
+  def p_optactiondef_eq_LCB_optaction_rcb(p):
+    'optactiondef : EQ LCB optaction RCB'
+    p[0] = p[3]
+    if not hasattr(p[0],'lineno'):
+        p[0].lineno = get_lineno(p,2)
+
   def p_top_action_symbol_optargs_optreturns_eq_action(p):
-    'top : top ACTION SYMBOL optargs optreturns EQ LCB optaction RCB'
+    'top : top ACTION SYMBOL optargs optreturns optactiondef'
     p[0] = p[1]
-    if not hasattr(p[8],'lineno'):
-        p[8].lineno = get_lineno(p,7)
-    p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[8],formals=p[4],returns=p[5])))
+    adef = p[6]
+    if not hasattr(adef,'lineno'):
+        adef.lineno = get_lineno(p,3)
+    p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),adef,formals=p[4],returns=p[5])))
 
 def handle_mixin(kind,mixer,mixee,ivy):
-    cls = MixinBeforeDef if kind == 'before' else MixinAfterDef
+    cls = (MixinBeforeDef if kind == 'before' else MixinAfterDef if kind == 'after' else MixinImplementDef)
     m = cls(mixer,mixee)
     m.lineno = mixer.lineno
     d = MixinDecl(m)
@@ -598,7 +610,7 @@ def handle_mixin(kind,mixer,mixee,ivy):
 
 def handle_before_after(kind,atom,action,ivy):
     mixee = stack_action_lookup(atom.relname)
-    if not action:
+    if not mixee:
         report_error(IvyError(atom,"no matching action for {}".format(atom.relname)))
     elif atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
@@ -625,6 +637,10 @@ if not (iu.get_numeric_version() <= [1,1]):
         'top : top AFTER callatom LCB action RCB'
         p[0] = p[1]
         handle_before_after("after",p[3],p[5],p[0])
+    def p_top_implement_callatom_lcb_action_rcb(p):
+        'top : top IMPLEMENT callatom LCB action RCB'
+        p[0] = p[1]
+        handle_before_after("implement",p[3],p[5],p[0])
     def p_top_isolate_callatom_eq_callatoms(p):
         'top : top ISOLATE callatom EQ callatoms'
         d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
@@ -649,6 +665,12 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_export_callatom(p):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
+    def p_top_import_callatom(p):
+        'top : top IMPORT callatom'
+        d = ImportDecl(ImportDef(p[3],Atom('')))
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)

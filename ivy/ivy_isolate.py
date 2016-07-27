@@ -454,8 +454,9 @@ def isolate_component(mod,isolate_name):
     for actname,action in mod.actions.iteritems():
         if not startswith_some(actname,present,mod):
             for c in action.iter_calls():
-                if startswith_some(c,present,mod):
-                    exported.add('ext:' + c)
+                if (startswith_some(c,present,mod)
+                    or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
+                        exported.add('ext:' + c)
 #    print "exported: {}".format(exported)
 
 
@@ -564,6 +565,10 @@ def get_mixin_order(iso,mod):
     actions = mod.mixins.keys()
     for action in actions:
         mixins = mod.mixins[action]
+        implements = [m for m in mixins if isinstance(m,ivy_ast.MixinImplementDef)]
+        if len(implements) > 1:
+            raise iu.IvyError(implements[1],'Multiple implementations for {}'.format(action))
+        mixins = [m for m in mixins if not isinstance(m,ivy_ast.MixinImplementDef)]
         mixers = iu.topological_sort(list(set(m.mixer() for m in mixins)),arcs)
         keymap = dict((x,y) for y,x in enumerate(mixers))
         key = lambda m: keymap[m.mixer()]
@@ -573,7 +578,7 @@ def get_mixin_order(iso,mod):
 #        before = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinBeforeDef)],order)
 #        after = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinAfterDef)],order)
         before.reverse() # add the before mixins in reverse order
-        mixins = before + after
+        mixins = implements + before + after
 #        print 'mixin order for action {}:'
 #        for m in mixins:
 #            print m.args[0]
@@ -691,10 +696,12 @@ def create_isolate(iso,mod = None,**kwargs):
 
         if show_compiled.get():
             print ivy_logic.sig
+            thing = ''
             for kwd,lst in [('axiom',mod.labeled_axioms),
                             ('init',mod.labeled_inits),
                             ('conjecture',mod.labeled_conjs),]:
-                print labeled_fmlas_to_str(kwd,lst)
+                thing += labeled_fmlas_to_str(kwd,lst)
+            print thing
             for x,y in mod.actions.iteritems():
                 print iu.pretty(ia.action_def_to_str(x,y))
 

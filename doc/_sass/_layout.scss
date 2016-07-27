@@ -250,8 +250,8 @@ aside {
     text-transform: uppercase;
     font-size: 14px;
     font-weight: 700;
-    padding: 0 0 10px 30px;
-    margin-left: -30px;
+    padding: 0 0 10px 0px;
+    margin-left: 0px;
     display: inline-block;
     border-bottom: 1px solid #888;
   }
@@ -279,7 +279,7 @@ aside {
       width: 0;
       height: 0;
       position: absolute;
-      top: 0;
+      top: -2px;
       left: -15px;
     }
   }

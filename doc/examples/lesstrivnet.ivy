@@ -1,0 +1,48 @@
+#lang ivy1.5
+type packet
+
+object intf = {
+    action send(x:packet)
+    action recv(x:packet)
+}
+
+
+object spec = {
+    relation sent(X:packet)
+    init ~sent(X)
+
+    before intf.send {
+	sent(x) := true
+    }
+
+    before intf.recv {
+	assert sent(x)
+    }
+}
+
+
+object protocol = {
+    individual full : bool
+    individual contents : packet
+    init ~full
+
+    implement intf.send {
+	full := true;
+	contents := x
+    }
+
+    action async = {
+	if full {
+	    full := false;
+	    call intf.recv(contents)
+	}
+    }
+}
+
+conjecture protocol.full -> spec.sent(protocol.contents)
+
+
+import intf.recv
+export intf.send
+export protocol.async
+

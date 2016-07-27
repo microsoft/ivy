@@ -560,6 +560,11 @@ class MixinBeforeDef(MixinDef):
         return self.mixer() + " before " + self.mixee()
     pass
     
+class MixinImplementDef(MixinBeforeDef):
+    def __str__(self):
+        return self.mixer() + " implement " + self.mixee()
+    pass
+
 class MixinAfterDef(MixinDef):
     def __str__(self):
         return self.mixer() + " after " + self.mixee()
@@ -596,6 +601,20 @@ class ExportDef(AST):
         return self.args[1].relname
     def __repr__(self):
         return self.exported() + (' from {}'.format(self.scope()) if self.scope() else '')
+
+class ImportDecl(Decl):    
+    def name(self):
+        return 'import'
+    def defines(self):
+        return []
+    
+class ImportDef(AST):
+    def imported(self):
+        return self.args[0].relname
+    def scope(self):
+        return self.args[1].relname
+    def __repr__(self):
+        return self.imported() + (' from {}'.format(self.scope()) if self.scope() else '')
 
 class PrivateDecl(Decl):    
     def name(self):

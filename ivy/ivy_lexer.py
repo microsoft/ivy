@@ -88,6 +88,7 @@ reserved = all_reserved = {
    'export' : 'EXPORT',
    'delegate' : 'DELEGATE',
    'import' : 'IMPORT',
+   'using' : 'USING',
    'include' : 'INCLUDE',
    'progress' : 'PROGRESS',
    'rely' : 'RELY',
@@ -97,7 +98,8 @@ reserved = all_reserved = {
    'some' : 'SOME',
    'maximizing' : 'MAXIMIZING',
    'minimizing' : 'MINIMIZING',
-   'private' : 'PRIVATE'
+   'private' : 'PRIVATE',
+   'implement' : 'IMPLEMENT',
 }
 
 tokens += tuple(all_reserved.values())
@@ -181,7 +183,7 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
-                      'some','maximizing','maximizing','private']:
+                      'some','maximizing','maximizing','private','implement','using']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

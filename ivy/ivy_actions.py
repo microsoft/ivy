@@ -816,6 +816,10 @@ def type_check_action(action,domain,pvars = []):
     with TypeCheckConext(domain):
         action.int_update(domain,pvars)
 
+def concat_actions(action1,action2):
+    al1,al2 = ((a.args if isinstance(a,Sequence) else [a]) for a in (action1,action2))
+    return Sequence(*(al1+al2))
+
 def apply_mixin(decl,action1,action2):
     assert hasattr(action1,'lineno')
     assert  hasattr(action2,'lineno')
@@ -832,15 +836,16 @@ def apply_mixin(decl,action1,action2):
     action1_renamed = substitute_constants_ast(action1,subst)
 #    print "action1_renamed: {}".format(action1_renamed)
     if isinstance(decl,MixinAfterDef):
-        res = Sequence(action2,action1_renamed)
+        res = concat_actions(action2,action1_renamed)
     else:
-        res = Sequence(action1_renamed,action2)
+        res = concat_actions(action1_renamed,action2)
     res.lineno = action1.lineno
     res.formal_params = action2.formal_params
     res.formal_returns = action2.formal_returns
     return res
 
 def params_to_str(params):
+    params = [(s.drop_prefix('fml:') if s.name.startswith('fml:') else s) for s in params]
     return '(' + ','.join('{}:{}'.format(p.name,p.sort) for p in params) + ')'
 
 def action_def_to_str(name,action):
@@ -850,6 +855,11 @@ def action_def_to_str(name,action):
     if action.formal_returns:
         res += ' returns' + params_to_str(action.formal_returns)
     res += ' = '
+    subs = dict()
+    for s in action.formal_params + action.formal_returns:
+        if s.name.startswith('fml:'):
+            subs[s] = s.drop_prefix('fml:')
+    action = rename_ast(action,subs)
     if isinstance(action,Sequence):
         res += str(action)
     else:

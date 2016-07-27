@@ -7,7 +7,7 @@ $ jekyll serve --port 8989
 
 Deploying the site to github pages:
 
-The script "deply" with do the following:
+The script "deploy" will do the following:
 
 1) Clone the repository into a temp directory and check out the
 gh-pages branch.
@@ -17,7 +17,7 @@ gh-pages branch.
 3) Add all the files to git, commit the changes and push to github.
 
 This has the odd effect that all the files are freshly created in git
-each time you deploy, but it works around the problem then github
+each time you deploy, but it works around the problem that github
 project web sites use a separate branch for the site content instead
 of a directory.
 
