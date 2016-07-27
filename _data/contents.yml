@@ -5,3 +5,4 @@
 - title: IVy by example
   docs:
   - examples/client_server_example
+  - examples/specification
