@@ -427,11 +427,19 @@ def p_targs_lparen_tsyms_rparen(p):
     'targs : LPAREN tsyms RPAREN'
     p[0] = p[2]
 
+# if iu.get_numeric_version() <= [1,5]:
+#     def p_param_term_colon_symbol(p):
+#         'param : SYMBOL COLON SYMBOL'
+#         p[0] = App(p[1])
+#         p[0].lineno = get_lineno(p,1)
+#         p[0].sort = p[3]
+# else:
 def p_param_term_colon_symbol(p):
     'param : SYMBOL COLON SYMBOL'
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
     p[0].sort = p[3]
+
 
 def p_params_param(p):
     'params : param'
@@ -447,7 +455,7 @@ def p_optargs(p):
     p[0] = []
 
 def p_optargs_params(p):
-    'optargs : LPAREN params RPAREN'
+    'optargs : LPAREN lparams RPAREN'
     p[0] = p[2]
 
 def p_optreturns(p):
@@ -487,7 +495,7 @@ def p_tterm_term(p):
     p[0] = p[1]
 
 def p_tterm_term_colon_symbol(p):
-    'tterm : tapp COLON SYMBOL'
+    'tterm : tapp COLON atype'
     p[0] = p[1]
     p[0].sort = p[3]
 
@@ -959,8 +967,24 @@ def p_action_action_semi_action(p):
         p[0] = Sequence(p[1],p[3])
         p[0].lineno = p[1].lineno
 
+def p_lparam_variable_colon_symbol(p):
+    'lparam : SYMBOL COLON atype'
+    p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+    p[0].sort = p[3]
+
+def p_lparams_lparam(p):
+    'lparams : lparam'
+    p[0] = [p[1]]
+
+def p_lparams_lparams_comma_lparam(p):
+    'lparams : lparams COMMA lparam'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+
 def p_action_local_params_lcb_action_rcb(p):
-    'action : LOCAL params LCB action RCB'
+    'action : LOCAL lparams LCB action RCB'
     # we rename the locals to avoid name capture
     lsyms = [s.prefix('loc:') for s in p[2]]
     subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))

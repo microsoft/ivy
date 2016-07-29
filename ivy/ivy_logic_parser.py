@@ -36,13 +36,32 @@ else:
         p[0] = compose_atoms(p[1],App(p[3]))
         p[0].lineno = get_lineno(p,2)
 
+def p_atype_symbol(p):
+    'atype : SYMBOL'
+    p[0] = p[1]
+
+if not (iu.get_numeric_version() <= [1,4]):
+    def p_atype_atype_dot_symbol(p):
+        'atype : atype DOT SYMBOL'
+        p[0] = p[1] + '.' + p[3]
+
 def p_var_variable(p):
     'var : VARIABLE'
     p[0] = Variable(p[1],universe)
     p[0].lineno = get_lineno(p,1)
 
 def p_var_variable_colon_symbol(p):
-    'var : VARIABLE COLON SYMBOL'
+    'var : VARIABLE COLON atype'
+    p[0] = Variable(p[1],p[3])
+    p[0].lineno = get_lineno(p,1)
+
+def p_simplevar_variable(p):
+    'simplevar : VARIABLE'
+    p[0] = Variable(p[1],universe)
+    p[0].lineno = get_lineno(p,1)
+
+def p_simplevar_variable_colon_symbol(p):
+    'simplevar : VARIABLE COLON SYMBOL'
     p[0] = Variable(p[1],p[3])
     p[0].lineno = get_lineno(p,1)
 
@@ -105,6 +124,15 @@ def p_vars_var(p):
 
 def p_vars_vars_comma_var(p):
     'vars : vars COMMA var'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_simplevars_simplevar(p):
+    'simplevars : simplevar'
+    p[0] = [p[1]]
+
+def p_simplevars_simplevars_comma_simplevar(p):
+    'simplevars : simplevars COMMA simplevar'
     p[0] = p[1]
     p[0].append(p[3])
 
@@ -276,11 +304,11 @@ def p_fmla_fmla_iff_fmla(p):
     p[0].lineno = get_lineno(p,2)
 
 def p_fmla_forall_vars_dot_fmla(p):
-    'fmla : FORALL vars DOT fmla'
+    'fmla : FORALL simplevars DOT fmla'
     p[0] = Forall(p[2],p[4])
     p[0].lineno = get_lineno(p,1)
 
 def p_fmla_exists_vars_dot_fmla(p):
-    'fmla : EXISTS vars DOT fmla'
+    'fmla : EXISTS simplevars DOT fmla'
     p[0] = Exists(p[2],p[4])
     p[0].lineno = get_lineno(p,1)

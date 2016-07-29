@@ -407,6 +407,8 @@ def isolate_component(mod,isolate_name):
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
     delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified,mod)
     ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
+    int_assumes = lambda m: after_mixins(m) and not delegated_to_verified(m.mixer())
+    ext_assumes_no_ver = lambda m: not delegated_to_verified(m.mixer())
     summarized_actions = set()
     for actname,action in mod.actions.iteritems():
         ver = startswith_some(actname,verified,mod)
@@ -431,10 +433,12 @@ def isolate_component(mod,isolate_name):
                 assert hasattr(int_action,'lineno')
                 assert hasattr(int_action,'formal_params'), int_action
             # internal version of the action has mixins checked
-            new_actions[actname] = add_mixins(mod,actname,int_action,no_mixins,use_mixin,lambda m:m)
+            ea = no_mixins if ver else int_assumes
+            new_actions[actname] = add_mixins(mod,actname,int_action,ea,use_mixin,lambda m:m)
             # external version of the action assumes mixins are ok, unless they
             # are delegated to a currently verified object
-            new_action = add_mixins(mod,actname,ext_action,ext_assumes,use_mixin,mod_mixin)
+            ea = ext_assumes if ver else ext_assumes_no_ver
+            new_action = add_mixins(mod,actname,ext_action,ea,use_mixin,mod_mixin)
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
             # public_actions.add('ext:'+actname)

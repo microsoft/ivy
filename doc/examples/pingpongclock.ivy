@@ -1,0 +1,99 @@
+#lang ivy1.6
+
+object clock = {
+    type t
+    relation (X:t < Y:t)
+
+    axiom X:t < Y & Y < Z -> X < Z
+#    axiom ~(X:t < Y & Y < X)
+
+    action incr(inp:t) returns (out:t)
+
+    object spec = {
+	after incr {
+	    assert inp < out
+	}
+    }
+}
+
+object intf = {
+    action ping(x:clock.t)
+    action pong(x:clock.t)
+}
+
+type side_t = {left,right}
+
+object spec = {
+    individual side : side_t
+    individual time : clock.t
+    init side = left & time = 0
+
+    before intf.ping {
+	assert side = left & time < x;
+	side := right;
+	time := x
+    }
+
+    before intf.pong {
+	assert side = right & time < x;
+	side := left;
+	time := x
+    }
+}
+
+
+object left_player = {
+    individual ball : bool
+    individual time : clock.t
+    init ball & time = 0
+
+    action hit = {
+	if ball {
+	    call intf.ping(clock.incr(time));
+	    ball := false
+	}
+    }
+
+    implement intf.pong {
+	ball := true;
+	time := x
+    }
+
+    conjecture ball -> (spec.side = left & spec.time <= time)
+}
+
+object right_player = {
+    individual ball : bool
+    individual time : clock.t
+    init ~ball
+
+    action hit = {
+	if ball {
+	    call intf.pong(clock.incr(time));
+	    ball := false
+	}
+    }
+
+    implement intf.ping {
+	ball := true;
+	time := x
+    }
+
+    conjecture ball -> (spec.side = right & spec.time <= time)
+}
+
+# object clock_impl = {
+#     interpret clock.t -> int
+
+#     implement clock.incr {
+# 	out := in + 1
+#     }
+# }
+
+
+
+export left_player.hit
+export right_player.hit
+
+isolate iso_l = left_player with spec, clock
+isolate iso_r = right_player with spec, clock

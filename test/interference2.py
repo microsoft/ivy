@@ -46,6 +46,9 @@ export q.b
 with im.Module():
     iu.set_parameters({'mode':'induction'})
     ivy_from_string(prog,create_isolate=False)
-    ick.check_module()
+    try:
+        ick.check_module()
+    except iu.IvyError as e:
+        assert str(e) == "error: Some assertions are not checked","should have been an error"
 
 

@@ -19,6 +19,8 @@ import ivy_isolate
 import sys
 
 diagnose = iu.BooleanParameter("diagnose",False)
+coverage = iu.BooleanParameter("coverage",True)
+
 
 def display_cex(msg,ag):
     print msg
@@ -57,7 +59,8 @@ def check_module():
         if len(isolates) == 0:
             isolates = [None]
         else:
-            missing = ivy_isolate.check_isolate_completeness()
+            if coverage.get():
+                missing = ivy_isolate.check_isolate_completeness()
             
     if missing:
         raise iu.IvyError(None,"Some assertions are not checked")

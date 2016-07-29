@@ -9,6 +9,7 @@ import itertools
 from itertools import chain
 from collections import defaultdict
 import re
+import functools
 
 import z3
 import ivy_logic
@@ -289,6 +290,20 @@ def term_to_z3(term):
         res = apply_z3_func(fun,args)
     return res
 
+def lt_pred(sort):
+    sym = ivy_logic.Symbol('<',sort)
+    sig = sym.sort.to_z3()
+    return z3.Function(solver_name(sym), *sig)
+    
+polymacs = {
+    '<=' : lambda s,x,y: z3.Or(x == y,lt_pred(s)(x,y)),
+    '>' : lambda s,x,y: lt_pred(s)(y,x),
+    '>=' : lambda s,x,y: z3.Or(x == y,lt_pred(s)(y,x)),
+}
+
+def get_polymacs(op):
+    return functools.partial(polymacs[op.name],op.sort)
+
 def atom_to_z3(atom):
     if ivy_logic.is_equals(atom.rep) and ivy_logic.is_enumerated(atom.args[0]) and not use_z3_enums:
         return encode_equality(*atom.args)
@@ -296,8 +311,11 @@ def atom_to_z3(atom):
         rel = lookup_native(atom.relname,relations,"relation")
 #        print "atom: {}, rep: {}, rep.sort: {}".format(atom,atom.rep,atom.rep.sort)
         if not rel:
-            sig = atom.rep.sort.to_z3()
-            rel = z3.Function(solver_name(atom.rep), *sig) if isinstance(sig,list) else z3.Const(solver_name(atom.rep),sig)
+            if atom.rep.name in polymacs and iu.ivy_use_polymorphic_macros:
+                rel = get_polymacs(atom.rep)
+            else:
+                sig = atom.rep.sort.to_z3()
+                rel = z3.Function(solver_name(atom.rep), *sig) if isinstance(sig,list) else z3.Const(solver_name(atom.rep),sig)
         z3_predicates[atom.relname] = rel
 #    return z3_predicates[atom.relname](
 #        *[term_to_z3(t) for t in atom.args])

@@ -355,6 +355,8 @@ class EnumeratedSort(Sort):
         return self.extension
     def range(self):
         return self
+    def rename(self,name):
+        return self
 
 class ConstantSort(Sort):
     def __init__(self,rep,prover_sort = None):
@@ -371,6 +373,12 @@ class ConstantSort(Sort):
         return []
     def range(self):
         return self
+    @property
+    def args(self):
+        return []
+    def rename(self,name):
+        return ConstantSort(name,self.prover_sort)
+        
 
 UninterpretedSort = ConstantSort
 
@@ -687,7 +695,7 @@ class ActionDef(Definition):
 
 def rewrite_param(p,rewrite):
     res = App(p.rep)
-    res.sort = ast_rewrite(p.sort,rewrite)
+    res.sort = rewrite_sort(rewrite,p.sort)
     return res
 
 class StateDef(Definition):
@@ -791,6 +799,11 @@ class AstRewriteAddParams(object):
     def rewrite_atom(self,atom,always=False):
         return atom.clone(atom.args + self.params)
 
+def rewrite_sort(rewrite,sort):
+    sort = rewrite.rewrite_name(sort)
+    sort = rewrite.rewrite_atom(Atom(sort)).rep
+    return sort
+
 def ast_rewrite(x,rewrite):
     if isinstance(x,str):
         return rewrite.rewrite_name(x)
@@ -799,13 +812,13 @@ def ast_rewrite(x,rewrite):
     if isinstance(x,tuple):
         return tuple(ast_rewrite(e,rewrite) for e in x)
     if isinstance(x,Variable):
-        return Variable(x.rep,rewrite.rewrite_name(x.sort))
+        return Variable(x.rep,rewrite_sort(rewrite,x.sort))
     if isinstance(x,Atom) or isinstance(x,App):
 #        print "rewrite: x = {!r}, type(x.rep) = {!r}".format(x,type(x.rep))
         atom = type(x)(rewrite.rewrite_name(x.rep),ast_rewrite(x.args,rewrite))
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
-            atom.sort = rewrite.rewrite_name(x.sort)
+            atom.sort = rewrite_sort(rewrite,x.sort)
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
         return Literal(x.polarity,ast_rewrite(x.atom,rewrite))
@@ -822,6 +835,12 @@ def ast_rewrite(x,rewrite):
             arg0 = rewrite.rewrite_atom(x.args[0],always=True)
         res = x.clone([arg0,ast_rewrite(x.args[1],rewrite)])
         return res
+    if isinstance(x,TypeDef):
+        atom = rewrite.rewrite_atom(Atom(x.args[0]))
+        if atom.args:
+            raise iu.IvyError(x,'Types cannot have parameters: {}'.format(atom))
+        name = atom.rep
+        return TypeDef(name,x.args[1].rename(name))
     if hasattr(x,'args'):
         return x.clone(ast_rewrite(x.args,rewrite)) # yikes!
     print "wtf: {} {}".format(x,type(x))

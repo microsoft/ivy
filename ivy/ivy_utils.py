@@ -418,18 +418,21 @@ def p_error(token):
         report_error(ParseError(None,None,'unexpected end of input'));
 
 # the default language version is the latest
-ivy_latest_language_version = '1.3'
+ivy_latest_language_version = '1.6'
 ivy_language_version = ivy_latest_language_version
 ivy_compose_character = '.'
 ivy_have_polymorphism = True
+ivy_use_polymorphic_macros = False
 
 def set_string_version(version):
     global ivy_language_version
     global ivy_compose_character
     global ivy_have_polymorphism
+    global ivy_use_polymorphic_macros
     ivy_language_version = version
     ivy_compose_character = ':' if get_numeric_version() <= [1,1] else '.'
     ivy_have_polymorphism = not get_numeric_version() <= [1,2]
+    ivy_use_polymorphic_macros = not get_numeric_version() <= [1,5]
     
 def get_string_version():
     return ivy_language_version

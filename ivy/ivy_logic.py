@@ -626,6 +626,8 @@ alpha = lg.TopSort('alpha')
 polymorphic_symbols_list = [
     ('<' , [alpha,alpha,lg.Boolean]),
     ('<=' , [alpha,alpha,lg.Boolean]),
+    ('>' , [alpha,alpha,lg.Boolean]),
+    ('>=' , [alpha,alpha,lg.Boolean]),
     ('+' , [alpha,alpha,alpha]),
     ('*' , [alpha,alpha,alpha]),
     ('-' , [alpha,alpha,alpha]),
