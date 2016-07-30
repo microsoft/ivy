@@ -257,7 +257,7 @@ def strip_isolate(mod,isolate):
     mod.actions.update(new_actions)
 
     # strip the axioms and conjectures
-    for x in [mod.labeled_axioms,mod.labeled_conjs,mod.labeled_inits]:
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_conjs,mod.labeled_inits]:
         strip_labeled_fmlas(x,strip_map)
     # strip the signature
     new_symbols = {}
@@ -386,7 +386,7 @@ def isolate_component(mod,isolate_name):
     present.update(verified)
     if not interpret_all_sorts:
         for type_name in list(ivy_logic.sig.interp):
-            if not startswith_eq_some(type_name,present,mod):
+            if not (type_name in present or any(startswith_eq_some(itp.label.rep,present,mod) for itp in mod.interps[type_name] if itp.label)):
                 del ivy_logic.sig.interp[type_name]
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
@@ -474,7 +474,7 @@ def isolate_component(mod,isolate_name):
                             or startswith_eq_some(name,present))
     
     keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present,mod))
-
+    check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
 
     # filter the conjectures
 
@@ -490,6 +490,11 @@ def isolate_component(mod,isolate_name):
     
     # filter the axioms
     mod.labeled_axioms = [a for a in mod.labeled_axioms if keep_ax(a.label)]
+    mod.labeled_props = [a for a in mod.labeled_props if keep_ax(a.label)]
+
+    # convert the properties not being verified to axioms
+    mod.labeled_axioms.extend([a for a in mod.labeled_props if not check_pr(a.label)])
+    mod.labeled_props =  [a for a in mod.labeled_props if check_pr(a.label)]
 
     # filter definitions
     mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present,mod)]
@@ -500,7 +505,7 @@ def isolate_component(mod,isolate_name):
     # formulas
 
     asts = []
-    for x in [mod.labeled_axioms,mod.labeled_inits,mod.labeled_conjs]:
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
         asts += [y.formula for y in x]
     asts += mod.concepts
     asts += [action for action in new_actions.values()]
@@ -702,9 +707,12 @@ def create_isolate(iso,mod = None,**kwargs):
             print ivy_logic.sig
             thing = ''
             for kwd,lst in [('axiom',mod.labeled_axioms),
+                            ('property',mod.labeled_props),
                             ('init',mod.labeled_inits),
                             ('conjecture',mod.labeled_conjs),]:
                 thing += labeled_fmlas_to_str(kwd,lst)
+            for tn in sorted(mod.sig.interp):
+                thing += "interp {} -> {}\n".format(tn,mod.sig.interp[tn])
             print thing
             for x,y in mod.actions.iteritems():
                 print iu.pretty(ia.action_def_to_str(x,y))
@@ -727,6 +735,7 @@ def find_some_call(mod,actname,callee):
 def check_isolate_completeness(mod = None):
     mod = mod or im.module
     checked = set()
+    checked_props = set()
     checked_context = defaultdict(set) # maps action name to set of delegees
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
@@ -741,6 +750,12 @@ def check_isolate_completeness(mod = None):
                 checked.add(a)
         for a in present_actions:
             checked_context[a].update(verified_actions)
+        for prop in mod.labeled_props:
+            if prop.label:
+                label = prop.label.relname
+                if startswith_eq_some(label,verified,mod):
+                    checked_props.add(label)
+            
     missing = []
     for actname,action in mod.actions.iteritems():
         for callee in action.iter_calls():
@@ -774,4 +789,13 @@ def check_isolate_completeness(mod = None):
                 print iu.IvyError(mod.actions[mixee],"...in action {}".format(mixee))
             print iu.IvyError(find_some_call(mod,x,mixee),"...when called from {}".format(x))
     
+    done = set()
+    for prop in mod.labeled_props:
+        if prop.label:
+            label = prop.label.relname
+            if label not in checked_props and label not in done:
+                print iu.IvyError(prop,"property {} not checked".format(label))
+                missing.append((label,None,None))
+                done.add(label)
+        
     return missing

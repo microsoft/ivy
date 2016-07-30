@@ -400,7 +400,6 @@ class AnalysisGraphUI(object):
             cmd = lambda idx: self.try_conjecture(node,udc[idx])
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd)
         else:
-            print "type(conj) = {}".format(type(conj))
             if hasattr(conj,'lineno'):
                 filename,lineno = conj.lineno
                 self.ui_parent.browse(filename,lineno)
@@ -550,6 +549,29 @@ class IvyUI(object):
     # This returns the default Analysis Graph UI class
     def AGUI(self):
         return AnalysisGraphUI
+
+    # Set up to prove a background property. If no property
+    # is given, display a list of not-yet-proven properties for the
+    # user to choose from. Also browses the source code of the
+    # property. The proof method depends on the current mode.
+
+    def try_property(self,prop=None):
+        if prop == None:
+            udc = false_properties()
+            udc_text = [str(prop) for prop in udc]
+            msg = "Choose a property to see counterexample:"
+            cmd = lambda idx: self.try_property(udc[idx])
+            self.listbox_dialog(msg,udc_text,command=cmd)
+        else:
+            print "type(prop) = {}".format(type(prop))
+            if hasattr(prop,'lineno'):
+                filename,lineno = prop.lineno
+                self.browse(filename,lineno)
+            dual = dual_clauses(formula_to_clauses(prop.formula))
+            ag = AnalysisGraph(initializer=top_alpha)
+            oag = ag.bmc(ag.states[0],dual)
+            self.add(oag)
+
 
 ui = None
 

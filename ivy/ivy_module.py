@@ -27,6 +27,7 @@ class Module(object):
         self.all_relations = [] # this includes both base and derived relations in declaration order
         self.concepts = []  # TODO: these are actually "derived" relations
         self.labeled_axioms = []
+        self.labeled_props = []
         self.labeled_inits = []
         self.init_cond = lu.true_clauses()
         self.relations = dict()  # TODO: this is redundant, remove
@@ -52,6 +53,7 @@ class Module(object):
         self.destructor_sorts = {}
         self.sort_destructors = defaultdict(list)
         self.privates = set() # set of string (names of private actions)
+        self.interps = defaultdict(list) # maps type names to lists of labeled interpretions
 
         self.sig = il.sig.copy() # capture the current signature
 
@@ -94,6 +96,9 @@ class Module(object):
             pref,suff = string.rsplit(name,iu.ivy_compose_character,1)
             self.add_to_hierarchy(pref)
             self.hierarchy[pref].add(suff)
+
+    def add_object(self,name):
+        self.hierarchy[name]
 
     @property
     def axioms(self):

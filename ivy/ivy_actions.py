@@ -545,7 +545,7 @@ class ChoiceAction(Action):
     def name(self):
         return 'choice'
     def __str__(self):
-        return '{' + '| '.join(str(x) for x in self.args) + '}'
+        return ''.join('if * ' + bracket_action(x) + '\nelse ' for x in self.args[0:-1]) + bracket_action(self.args[-1])
     def int_update(self,domain,pvars):
         if determinize and len(self.args) == 2:
             cond = bool_const('___branch:' + str(self.unique_id))
@@ -588,12 +588,15 @@ class EnvAction(ChoiceAction):
     def formal_returns(self):
         return []
 
+def bracket_action(action):
+    return ('{' + str(action) + '}') if not isinstance(action,Sequence) else str(action)
+
 class IfAction(Action):
     def name(self):
         return 'if'
     def __str__(self):
-        if_part  = 'if ' + str(self.args[0]) + ' {' + str(self.args[1]) + '}'
-        else_part = ('\nelse {' + str(self.args[2]) + '}') if len(self.args) >= 3 else ''
+        if_part  = 'if ' + str(self.args[0]) + ' ' + bracket_action(self.args[1])
+        else_part = ('\nelse ' + bracket_action(self.args[2])) if len(self.args) >= 3 else ''
         return if_part + else_part
     def subactions(self) :
         if isinstance(self.args[0],ivy_ast.Some):
@@ -654,7 +657,7 @@ class LocalAction(Action):
     def name(self):
         return 'local'
     def __str__(self):
-        return 'local ' + ','.join(str(a) for a in self.args[0:-1]) + ' {' + str(self.args[-1]) + '}'
+        return 'local ' + ','.join(str(a) for a in self.args[0:-1]) + ' ' + bracket_action(self.args[-1])
     def int_update(self,domain,pvars):
         update = self.args[-1].int_update(domain,pvars)
 #        syms = used_symbols_asts(self.args[0:-1])
@@ -673,7 +676,7 @@ class LetAction(Action):
     def name(self):
         return 'local'
     def __str__(self):
-        return 'let ' + ','.join(str(a) for a in self.args[0:-1]) + ' {' + str(self.args[-1]) + '}'
+        return 'let ' + ','.join(str(a) for a in self.args[0:-1]) + ' ' + bracket_action(self.args[-1])
     def int_update(self,domain,pvars):
         update = self.args[-1].int_update(domain,pvars)
 #        syms = used_symbols_asts(self.args[0:-1])

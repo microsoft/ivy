@@ -100,6 +100,7 @@ def do_insts(ivy,insts):
 #            print "instantiating %s" % inst
             if pref != None:
                 ivy.define((pref.rep,inst.lineno))
+                ivy.declare(ObjectDecl(pref))
             aparams = inst.args
             fparams = defn.args[0].args
             if len(aparams) != len(fparams):
@@ -199,6 +200,13 @@ def p_top_axiom_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_top_property_labeledfmla(p):
+    'top : top PROPERTY labeledfmla'
+    p[0] = p[1]
+    d = PropertyDecl(p[3])
+    d.lineno = get_lineno(p,2)
+    p[0].declare(d)
+
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
     p[0] = p[1]
@@ -220,6 +228,7 @@ def p_top_object_symbol_eq_lcb_top_rcb(p):
     module = p[6]
     pref = Atom(p[3],[])
     p[0].define((pref.rep,get_lineno(p,2)))
+    p[0].declare(ObjectDecl(pref))
     for decl in module.decls:
         idecl = subst_prefix_atoms_ast(decl,{},pref,module.defined)
         p[0].declare(idecl)
@@ -732,7 +741,7 @@ def p_top_assert_symbol_arrow_assert_rhs(p):
     p[0].declare(AssertDecl(thing))
 
 def p_oper_symbol(p):
-    'oper : SYMBOL'
+    'oper : atype'
     p[0] = p[1]
 
 def p_oper_relop(p):
@@ -746,14 +755,14 @@ def p_oper_infix(p):
 def p_top_interpret_symbol_arrow_symbol(p):
     'top : top INTERPRET oper ARROW oper'
     p[0] = p[1]
-    thing = InterpretDecl(Implies(Atom(p[3],[]),Atom(p[5],[])))
+    thing = InterpretDecl(LabeledFormula(None,Implies(Atom(p[3],[]),Atom(p[5],[]))))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
 def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
-    thing = InterpretDecl(Implies(Atom(p[3],[]),Range(p[6],p[8])))
+    thing = InterpretDecl(LabeledFormula(None,Implies(Atom(p[3],[]),Range(p[6],p[8]))))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 

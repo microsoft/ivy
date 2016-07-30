@@ -435,6 +435,13 @@ class MacroDecl(Decl):
     def __repr__(self):
         return 'macro ' + ','.join(repr(d.args[0]) + ' = {\n' + repr(d.args[1]) + '\n}' for d in self.args)
 
+class ObjectDecl(Decl):
+    def name(self):
+        return 'object'
+    def defines(self):
+#        return [(c.relname,lineno(c)) for c in self.args]
+        return []
+
 class LabeledFormula(AST):
     @property
     def label(self):
@@ -448,6 +455,10 @@ class LabeledFormula(AST):
 class AxiomDecl(Decl):
     def name(self):
         return 'axiom'
+
+class PropertyDecl(AxiomDecl):
+    def name(self):
+        return 'property'
 
 class ConjectureDecl(Decl):
     def name(self):

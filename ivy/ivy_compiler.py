@@ -323,8 +323,12 @@ def compile_action_def(a,sig):
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
+    def object(self,atom):
+        self.domain.add_object(atom.rep)
     def axiom(self,ax):
         self.domain.labeled_axioms.append(ax.compile())
+    def property(self,ax):
+        self.domain.labeled_props.append(ax.compile())
     def schema(self,sch):
         self.domain.schemata[sch.defn.defines()] = sch
     def instantiate(self,inst):
@@ -392,7 +396,8 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.sig.symbols[c] = sym
             self.domain.sig.constructors.add(sym)
     def interpret(self,thing):
-        lhs,rhs = (a.rep for a in thing.args)
+        lhs,rhs = (a.rep for a in thing.formula.args)
+        self.domain.interps[lhs].append(thing)
         sig = self.domain.sig
         interp = sig.interp
         if lhs in interp:

@@ -27,7 +27,7 @@ the values. Here is a possible specification of this type in IVy:
         type t
         relation (X:t < Y:t)
 
-        property [transitivity] X:t < Y & Y < Z -> X < Y
+        property [transitivity] X:t < Y & Y < Z -> X < Z
         property [antisymmetry] ~(X:t < Y & Y < X)
     }
 
@@ -46,14 +46,14 @@ add some content to object `clock` to specify this operation:
         type t
         relation (X:t < Y:t)
 
-        property [transitivity] X:t < Y & Y < Z -> X < Y
+        property [transitivity] X:t < Y & Y < Z -> X < Z
         property [antisymmetry] ~(X:t < Y & Y < X)
-        
-        action incr(in:t) returns (out:t)
+
+        action incr(inp:t) returns (out:t)
 
         object spec = {
             after incr {
-                assert in < out
+                assert inp < out
             }
         }
     }
@@ -70,8 +70,6 @@ specification to make statements about the output values of actions.
 As an example of using an abstract datatype, let's make our [ping-pong
 game](/examples/specification.html) a little more interesting by
 attaching a clock value to the ball. Here is the new interface definition:
-
-    #lang ivy1.6
 
     object intf = {
         action ping(x:clock.t)
@@ -202,24 +200,29 @@ implementation of `clock.incr` that simply adds one to its argument.
 
 Now let's apply assume-guarantee reasoning to our abstract datatype:
 
-    isolate iso_ci = clock_impl with clock
+    isolate iso_ci = clock with clock_impl
 
 First, let's see what we're actually verifying:
 
     $ ivy_show isolate=iso_ci pingpongclock.ivy
 
     type clock.t
-    interpret clock.t->int
+    type side_t = {left,right}
+    relation (V0:clock.t < V1:clock.t)
 
-    action ext:clock.incr(in:clock.t) returns (out:clock.t) = {
-        out := in + 1;
-        assert in < out
+    property [clock.transitivity] (X:clock.t < Y:clock.t & Y:clock.t < Z:clock.t) -> X:clock.t < Z:clock.t
+    property [clock.antisymmetry] ~(X:clock.t < Y:clock.t & Y:clock.t < X:clock.t)
+    interp clock.t -> int
+
+    action ext:clock.incr(inp:clock.t) returns(out:clock.t) = {
+        out := inp + 1;
+        assert inp < out
     }
 
 Notice that the `after` specification for `clock.incr` has been
 inserted at the *end* of the implemention and is a *guarantee* for
-`clock_impl`. In general, `after` specifications for actions are
-guarantees for the objects that implement them.
+object `clock`. In general, `after` specifications for actions are
+guarantees for the objects that define them.
 
 Now let's verify this isolate using IVy:
 
@@ -228,38 +231,23 @@ Now let's verify this isolate using IVy:
     trying ext:clock.incr
     OK
 
-IVy use the built-in theory of integer arithmetic of the Z3 theorem
-prover to prove the assertion. As an experiment, try taking out the
-`interpret` declaration to see what happens). 
+IVy used the built-in theory of integer arithmetic of the Z3 theorem
+prover to prove the assertion, and also to prove the two properties of
+clocks.  As an experiment, try taking out the `interpret` declaration
+to see what happens.
 
-Now that we have a full implementation, we expect that IVY can verify
-the full program.  All is not well, however:
-
-    $ ivy_check pingpongclock.ivy
-    pingpongclock.ivy, line XXX: error: property [transitivity] is not checked
-
-We have forgotten to check that the integers actually have the
-properties we specified for clock values. We can do this in one of two
-ways. One way is to isolate `clock`, like this:
-
-    isolate iso_c = clock with clock_impl
-
-The other is to merge both verification obligations into the same isolate, like this:
-
-    isolate iso_ci = clock,clock_impl
-
-Either way, IVy can use the integer theory in Z3 to prove that clock
-values are partially ordered:
+Now that we have a full implementation, we can verify
+the full program:
 
     $ ivy_check pingpongclock.ivy
     Checking isolate iso_ci...
-    trying clock.transitivity...    
-    trying clock.antisymmetry...    
     trying ext:clock.incr...
     Checking isolate iso_l...
+    trying ext:clock.incr...
     trying ext:intf.pong...
     trying ext:left_player.hit...
     Checking isolate iso_r...
+    trying ext:clock.incr...
     trying ext:intf.ping...
     trying ext:right_player.hit...
     OK

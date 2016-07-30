@@ -4,8 +4,8 @@ object clock = {
     type t
     relation (X:t < Y:t)
 
-    axiom X:t < Y & Y < Z -> X < Z
-#    axiom ~(X:t < Y & Y < X)
+    property [transitivity] X:t < Y & Y < Z -> X < Z
+    property [antisymmetry] ~(X:t < Y & Y < X)
 
     action incr(inp:t) returns (out:t)
 
@@ -82,13 +82,13 @@ object right_player = {
     conjecture ball -> (spec.side = right & spec.time <= time)
 }
 
-# object clock_impl = {
-#     interpret clock.t -> int
+object clock_impl = {
+    interpret clock.t -> int
 
-#     implement clock.incr {
-# 	out := in + 1
-#     }
-# }
+    implement clock.incr {
+	out := inp + 1
+    }
+}
 
 
 
@@ -97,3 +97,4 @@ export right_player.hit
 
 isolate iso_l = left_player with spec, clock
 isolate iso_r = right_player with spec, clock
+isolate iso_ci = clock with clock_impl

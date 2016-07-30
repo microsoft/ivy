@@ -28,6 +28,19 @@ def display_cex(msg,ag):
         ui.ui_main_loop(ag)
     exit(1)
     
+def check_properties():
+    if itp.false_properties():
+        if diagnose.get():
+            print "Some properties failed."
+            gui = ui.new_ui()
+            gui.tk.update_idletasks() # so that dialog is on top of main window
+            gui.try_property()
+            gui.mainloop()
+            exit(1)
+        raise iu.IvyError(None,"Some properties failed.")
+    im.module.labeled_axioms.extend(im.module.labeled_props)
+
+
 def check_conjectures(kind,msg,ag,state):
     failed = itp.undecided_conjectures(state)
     if failed:
@@ -72,6 +85,7 @@ def check_module():
             print "Checking isolate {}...".format(isolate)
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
+            check_properties()
             ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
             with ivy_interp.EvalContext(check=False):
                 check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
