@@ -939,20 +939,27 @@ def elim_definitions(clauses,dead):
     defs = [d for d in clauses.defs if d.defines() not in deadset]
     return Clauses(fmlas,defs)
 
-def elim_dead_definitions(args):
+def rename_symbols(rn,clauses1,to_rename):
+    map1 = dict((s,s.rename(rn)) for s in to_rename)
+    return rename_clauses(clauses1,map1)
+
+
+def elim_dead_definitions(rn,args):
     """ If a symbol defined in one arg occurs free in another,
     then eliminate the definition by converting it to clauses """
     defd = set(d.defines() for a in args for d in a.defs)
     occurs = [set(a.symbols()) for a in args]
-    dead = [sym for sym in defd
-            if not sym.is_skolem() and any (sym not in a.defidx for a in args)]
+    captured = [sym for sym in defd if any (sym not in a.defidx for a in args)]
+    dead = [sym for sym in captured if not sym.is_skolem()]
+    to_rename = [sym for sym in captured if sym.is_skolem()]
+    args = [rename_symbols(rn,arg,to_rename) for arg in args]
 #    print "args = {}, dead = {}".format(args,dead)
     res = [elim_definitions(a,dead) for a in args]
     return res
 
 def or_clauses_int(rn,args):
 #    print "or_clauses_int: args = {}".format(args)
-    args = elim_dead_definitions(args)
+    args = elim_dead_definitions(rn,args)
 #    print "or_clauses_int: args = {}".format(args)
     vs = [bool_const(rn()) for a in args]
     fmlas = ([Or(*vs)]
