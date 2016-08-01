@@ -213,7 +213,7 @@ That is, to show that when `async` executes, the received packet has
 been sent, we need to know that the packet in the buffer has been
 sent. The reader might want to try to produce this invariant using the
 [interactive invariant generation
-techniques](/examples/client_server_example.html) supported by IVy.
+techniques](client_server_example.html) supported by IVy.
 
 ### Assume-Guarantee reasoning in IVy
 
