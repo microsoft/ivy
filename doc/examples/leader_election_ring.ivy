@@ -47,16 +47,17 @@ module total_order = {
 #
 ################################################################################
 
-module ring = {
+module ring_topology = {
     type t
 
     individual head:t  # ring head
     individual tail:t  # ring tail
 
-    # Axioms that ensure that le is a total order, with head the
+    # Axioms that ensure that t is totally ordered with head the
     # minimal element and tail the maximal element.
 
     instantiate total_order_axioms(t)   # t is totally ordered
+
     axiom head <= X              # head is minimal
     axiom X <= tail              # tail is maximal
 
@@ -85,7 +86,7 @@ module ring = {
 instance id : total_order
 
 # A ring topology of nodes
-instance node : ring
+instance node : ring_topology
 
 ################################################################################
 #
@@ -94,18 +95,19 @@ instance node : ring
 ################################################################################
 
 object trans = {
+
     relation pending(V:id.t, N:node.t) # The identity V is pending at node N
     init ~pending(V, N)
     
-    action send(v:id.t, n:node.t)
-    action recv(v:id.t, n:node.t)
+    action send(dst:node.t, v:id.t)
+    action recv(dst:node.t, v:id.t)
 
     object spec = {
 	before send {
-	    pending(v,n) := true
+	    pending(v,dst) := true
 	}
 	before recv {
-	    assert pending(v,n)
+	    assert pending(v,dst)
 	}
     }
 }
@@ -118,11 +120,16 @@ object trans = {
 
 
 object serv = {
-    action claim_leadership(v:id.t)
+
+    function pid(X:node.t) : id.t          # map each node to an id
+
+    instantiate injectivity_axioms(pid)    # id's are unique
+
+    action elect(v:node.t)                 # called when v is elected leader
 
     object spec = {
-	before claim_leadership {
-	    assert v >= app(X).pid  # only the max pid can claim leadership
+	before elect {
+	    assert pid(v) >= pid(X)        # only the max pid can be elected
 	}
     }
 }
@@ -133,44 +140,36 @@ object serv = {
 #
 ################################################################################
 
-module process(me) = {
-
-    individual pid : id.t          # the id of this process
+module process(me,pid) = {
 
     action send = {
-	call trans.send(pid,node.get_next(me))
+	call trans.send(node.get_next(me),pid(me))
     }
 
     implement trans.recv {
-        if v = pid {  # Found a leader
-            call serv.claim_leadership(me)
+        if v = pid(me) {  # Found a leader
+            call serv.elect(me)
         }
-	else if v > pid  { # pass message to next node
-	    call trans.send(v,node.get_next(me))
+	else if v > pid(me)  { # pass message to next node
+	    call trans.send(node.get_next(me),v)
         }
     }
 
-    # The safety property:
-#    conjecture leader & app(Y).leader -> me = Y  # at most one leader
-#    conjecture leader -> pid >= app.pid(Y)       # leader has highest id
+    # conjecture ~(pid(N1) <= pid(N0) & trans.pending(pid(N1),N1) & pid(N1) ~= pid(N0))
+    # conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N2 <= N0 & N0 ~= N2 & N1 ~= N0)
+    # conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N1 <= N2 & N1 ~= N0)
+    # conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N1 <= N2 & N2 <= N0 & N0 ~= N2)
+
 }
 
 # instantiate one process per ring element
 
-instance app(R:node.t) : process(R)
+instance app(R:node.t) : process(R,serv.pid)
 
-# We have to assume that all the processes have unique ids
-
-# instantiate injectivity_axioms(app.pid)
-
-import serv.claim_leadersip
+import serv.elect
+import trans.send
 export app.send
 export trans.recv
 
 isolate iso_app = app with node,id,trans,serv
 
-# conjectures obtained via CTI's
-# conjecture ~(le(idn(N1),idn(N0)) & pending(idn(N1),N1) & idn(N1) ~= idn(N0))
-# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N0,N1) & ring.le(N2,N0) & N0 ~= N2 & N1 ~= N0)
-# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N0,N1) & ring.le(N1,N2) & N1 ~= N0)
-# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N1,N2) & ring.le(N2,N0) & N0 ~= N2)

@@ -10,15 +10,19 @@ type foo
 type bar
 
 individual x : foo
-individual y : foo
+# individual y : foo
 
-action a = {
+action a(z:foo,y:foo) = {
   x := y
 }
 
-after a {
-  assert x = y
+module m(me) = {
+    after a {
+       assert x = y | x = me
+    }
 }
+
+instance i(X:foo) : m(X)
 
 export a
 """

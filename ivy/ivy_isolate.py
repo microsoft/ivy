@@ -652,6 +652,7 @@ def create_isolate(iso,mod = None,**kwargs):
             if mod.isolates:
                 raise iu.IvyError(None,'no isolate specified on command line')
             # apply all the mixins in no particular order
+            iu.dbg('"got here"')
             for name,mixins in mod.mixins.iteritems():
                 for mixin in mixins:
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)

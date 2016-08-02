@@ -260,7 +260,7 @@ def p_insts_insts_comma_inst(p):
     p[0].append(p[3])
 
 def p_pname_symbol(p):
-    'pname : SYMBOL'
+    'pname : atype'
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
 
@@ -625,17 +625,25 @@ def handle_mixin(kind,mixer,mixee,ivy):
     ivy.declare(d)
 
 
+# def handle_before_after(kind,atom,action,ivy):
+#     mixee = stack_action_lookup(atom.relname)
+#     if not mixee:
+#         report_error(IvyError(atom,"no matching action for {}".format(atom.relname)))
+#     elif atom.args:  # no args -- we get them from the matching action
+#         report_error(IvyError(atom,"syntax error"))
+#     else:
+#         formals,returns = mixee.formals()
+#         mixer = atom.suffix('.'+kind)
+#         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=formals,returns=returns)))
+#         handle_mixin(kind,mixer,mixee.args[0],ivy)
+
 def handle_before_after(kind,atom,action,ivy):
-    mixee = stack_action_lookup(atom.relname)
-    if not mixee:
-        report_error(IvyError(atom,"no matching action for {}".format(atom.relname)))
-    elif atom.args:  # no args -- we get them from the matching action
+    if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
-        formals,returns = mixee.formals()
         mixer = atom.suffix('.'+kind)
-        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=formals,returns=returns)))
-        handle_mixin(kind,mixer,mixee.args[0],ivy)
+        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=[],returns=[])))
+        handle_mixin(kind,mixer,atom,ivy)
     
 if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):

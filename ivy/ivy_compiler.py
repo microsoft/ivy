@@ -21,6 +21,7 @@ import ivy_alpha
 import ivy_module as im
 import ivy_theory as ith
 import ivy_isolate as iso
+from collections import defaultdict
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -446,8 +447,8 @@ class IvyARGSetup(IvyDeclInterp):
     def state(self,a):
         self.mod.predicates[a.args[0].relname] = a.args[1]
     def mixin(self,m):
-        if any(a.args for a in m.args):
-            raise IvyError(m,"mixins may not have parameters")
+#        if any(a.args for a in m.args):
+#            raise IvyError(m,"mixins may not have parameters")
         self.mod.mixins[m.args[1].relname].append(m)
     def _assert(self,a):
         with ASTContext(a):
@@ -483,11 +484,40 @@ def collect_actions(decls):
                 res[a.defines()] = a.formal_returns
     return res
 
+def infer_parameters(decls):
+    mixees = defaultdict(list)
+    actdecls = dict()
+    for d in decls:
+        if d.name() == "mixin":
+            for a in d.args:
+                mixees[a.args[0].relname].append(a.args[1].relname)
+        if d.name() == "action":
+            for a in d.args:
+                actdecls[a.defines()] = a
+    for d in decls:
+        if d.name() == "action":
+            for a in d.args:
+                am = mixees[a.defines()]
+                if len(am) == 1 and am[0] in actdecls:
+                    mixin = a.args[1]
+                    mixee = actdecls[am[0]]
+                    nparms = len(a.args[0].args)
+                    if (len(a.formal_params) + nparms <= len(mixee.formal_params)
+                        and len(a.formal_returns) <= len(mixee.formal_returns)):
+                        xtraps = mixee.formal_params[len(a.formal_params)+nparms:]
+                        xtrars = mixee.formal_returns[len(a.formal_returns):]
+                        if xtraps or xtrars:
+                            a.formal_params.extend(xtraps)
+                            a.formal_returns.extend(xtrars)
+                            subst = dict((x.drop_prefix('fml:').rep,x.rep) for x in (xtraps + xtrars))
+                            a.args[1] = ivy_ast.subst_prefix_atoms_ast(a.args[1],subst,None,None)
+
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
         for name in decls.defined:
             mod.add_to_hierarchy(name)
+        infer_parameters(decls.decls)
         with TopContext(collect_actions(decls.decls)):
             IvyDomainSetup(mod)(decls)
             IvyConjectureSetup(mod)(decls)
