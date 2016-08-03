@@ -272,6 +272,11 @@ def find_polymorphic_symbol(symbol_name):
         return Symbol(symbol_name,alpha)
     return find_symbol(symbol_name)
 
+def normalize_symbol(symbol):
+    if iu.ivy_use_polymorphic_macros and symbol.name in polymorphic_macros_map:
+        return Symbol(polymorphic_macros_map[symbol.name],symbol.sort)
+    return symbol
+
 class UnionSort(object):
     def __init__(self):
         self.sorts = []
@@ -635,6 +640,12 @@ polymorphic_symbols_list = [
 ]
 
 polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymorphic_symbols_list)
+
+polymorphic_macros_map = {
+    '<=' : '<',
+    '>' : '<',
+    '>=' : '<',
+}
 
 def default_sort():
     ds = sig._default_sort

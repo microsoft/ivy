@@ -78,8 +78,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         self.transitive_relations = []
         self.transitive_relation_concepts = []
 
+                    
         axioms = im.module.background_theory()
-        for c in il.sig.symbols.values():
+        for c in il.all_symbols():
             if (type(c.sort) is lg.FunctionSort and
                 c.sort.arity == 2 and
                 c.sort.domain[0] == c.sort.domain[1] and
@@ -136,8 +137,8 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                         k for k, v in il.sig.symbols.iteritems()
                         if (type(v.sort) is lg.FunctionSort and
                             v.sort.range == lg.Boolean and
-                            v.name not in self.transitive_relations and
-                            '.' not in v.name
+                            v.name not in self.transitive_relations 
+#                            and '.' not in v.name
                         )
                     ))
 
@@ -147,13 +148,12 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 else:
                     clauses = dual_clauses(conj, witness)
                     history = ag.get_history(post)
-                    rels_to_min = [
-                        # TODO: this is still a bit hacky, and without nice error reporting
-                        history.maps[0].get(relation, relation)
-                        for x in self.relations_to_minimize.value.split()
-                        for relation in [il.sig.symbols[x]]
-                    ],
-
+                    rels_to_min = []
+                    for x in self.relations_to_minimize.value.split():
+                        relation = il.sig.symbols[x]
+                        relation = history.maps[0].get(relation, relation)
+                        rels_to_min.append(relation)
+                        
                 _get_model_clauses = lambda clauses, final_cond=False: get_small_model(
                     clauses,
                     sorted(il.sig.sorts.values()),
@@ -192,8 +192,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
             return True
 
     def show_used_relations(self,clauses,both=False):
+        self.current_concept_graph.clear_edges()
         rels = self.current_concept_graph.g.relations
-        used = lu.used_constants(clauses.to_formula()) 
+        used = set(il.normalize_symbol(s) for s in lu.used_constants(clauses.to_formula()))
         for rel in rels:
             if any(c in used and not c.name.startswith('@')
                    for c in lu.used_constants(rel.formula)):
@@ -212,14 +213,15 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         post = ilu.dual_clauses(conj) if conj != None else ilu.true_clauses()
         pre = self.g.states[0].clauses
         axioms = im.module.background_theory()
-        rev = ilu.and_clauses(reverse_image(post,axioms,self.g.states[1].update), axioms)
-        clauses = ilu.and_clauses(pre,rev)
+#        rev = ilu.and_clauses(reverse_image(post,axioms,self.g.states[1].update), axioms)
+        rev = reverse_image(post,axioms,self.g.states[1].update)
+        clauses = ilu.and_clauses(ilu.and_clauses(pre,rev),axioms)
         mod = get_model_clauses(clauses)
         assert mod != None
-        diag = clauses_model_to_diagram(rev,is_skolem,model=mod)
-        self.g.states[0].clauses = diag
-        self.view_state(self.g.states[0], reset=True)
+        diag = clauses_model_to_diagram(rev,is_skolem,model=mod,axioms=axioms)
+        self.view_state(self.g.states[0], clauses=diag, reset=True)
         self.show_used_relations(diag,both=True)
+        self.current_concept_graph.gather_facts()
 
     def set_states(self,s0,s1):
         self.cg = self.view_state(s0, reset=True)

@@ -637,12 +637,12 @@ def handle_mixin(kind,mixer,mixee,ivy):
 #         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=formals,returns=returns)))
 #         handle_mixin(kind,mixer,mixee.args[0],ivy)
 
-def handle_before_after(kind,atom,action,ivy):
+def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
         mixer = atom.suffix('.'+kind)
-        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=[],returns=[])))
+        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=optargs,returns=optreturns)))
         handle_mixin(kind,mixer,atom,ivy)
     
 if not (iu.get_numeric_version() <= [1,1]):
@@ -650,22 +650,28 @@ if not (iu.get_numeric_version() <= [1,1]):
         'top : top MIXIN callatom BEFORE callatom'
         p[0] = p[1]
         handle_mixin("before",p[3],p[5],p[0])
-    def p_top_before_callatom_lcb_action_rcb(p):
-        'top : top BEFORE callatom LCB action RCB'
-        p[0] = p[1]
-        handle_before_after("before",p[3],p[5],p[0])
     def p_top_mixin_callatom_after_callatom(p):
         'top : top MIXIN callatom AFTER callatom'
         p[0] = p[1]
         handle_mixin("after",p[3],p[5],p[0])
+    def p_top_before_callatom_lcb_action_rcb(p):
+        'top : top BEFORE atype optargs optreturns LCB action RCB'
+        p[0] = p[1]
+        atom = Atom(p[3])
+        atom.lineno = get_lineno(p,3)
+        handle_before_after("before",atom,p[7],p[0],p[4],p[5])
     def p_top_after_callatom_lcb_action_rcb(p):
-        'top : top AFTER callatom LCB action RCB'
+        'top : top AFTER atype optargs optreturns LCB action RCB'
         p[0] = p[1]
-        handle_before_after("after",p[3],p[5],p[0])
+        atom = Atom(p[3])
+        atom.lineno = get_lineno(p,3)
+        handle_before_after("after",atom,p[7],p[0],p[4],p[5])
     def p_top_implement_callatom_lcb_action_rcb(p):
-        'top : top IMPLEMENT callatom LCB action RCB'
+        'top : top IMPLEMENT atype optargs optreturns LCB action RCB'
         p[0] = p[1]
-        handle_before_after("implement",p[3],p[5],p[0])
+        atom = Atom(p[3])
+        atom.lineno = get_lineno(p,3)
+        handle_before_after("implement",atom,p[7],p[0],p[4],p[5])
     def p_top_isolate_callatom_eq_callatoms(p):
         'top : top ISOLATE callatom EQ callatoms'
         d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))

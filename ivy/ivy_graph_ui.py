@@ -182,10 +182,12 @@ class GraphWidget(object):
 
     def undo(self):
         self.graph_stack.undo()
+        self.reverse_sync_checkboxes()
         self.update()
 
     def redo(self):
         self.graph_stack.redo()
+        self.reverse_sync_checkboxes()
         self.update()
 
     # Undo to the most recent backtrack point

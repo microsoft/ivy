@@ -398,6 +398,26 @@ def isolate_component(mod,isolate_name):
             and name not in ivy_logic.sig.interp):
             raise iu.IvyError(None,"{} is not a module instance, sort, definition, or interpreted function".format(name))
     
+    # delegate all the stub actions to their implementations
+    for ms in mod.mixins.values():
+        implements = [m for m in ms if isinstance(m,ivy_ast.MixinImplementDef)]
+        before_after = [m for m in ms if not isinstance(m,ivy_ast.MixinImplementDef)]
+        del ms[:]
+        ms.extend(before_after)
+        for m in implements:
+            for foo in (m.mixee(),m.mixer()):
+                if foo not in mod.actions:
+                    raise IvyError(m,'action {} not defined'.format(foo))
+            action = mod.actions[m.mixee()]
+            if not (isinstance(action,ia.Sequence) and len(action.args) == 0):
+                raise IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
+            action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
+            mod.actions[m.mixee()] = action
+            if startswith_eq_some(m.mixer(),verified,mod):
+                verified.add(m.mixee())
+            if startswith_eq_some(m.mixer(),present,mod):
+                present.add(m.mixee())
+
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present,mod)
     mod_mixin = lambda m: m if startswith_some(name,verified,mod) else m.prefix_calls('ext:')
@@ -411,8 +431,8 @@ def isolate_component(mod,isolate_name):
     ext_assumes_no_ver = lambda m: not delegated_to_verified(m.mixer())
     summarized_actions = set()
     for actname,action in mod.actions.iteritems():
-        ver = startswith_some(actname,verified,mod)
-        pre = startswith_some(actname,present,mod)
+        ver = startswith_eq_some(actname,verified,mod)
+        pre = startswith_eq_some(actname,present,mod)
         if pre: 
             if not ver:
                 assert hasattr(action,'lineno')

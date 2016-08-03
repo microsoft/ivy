@@ -96,18 +96,18 @@ instance node : ring_topology
 
 object trans = {
 
-    relation sent(V:id.t, N:node.t) # The identity V is sent at node N
-    init ~sent(V, N)
+    relation pending(V:id.t, N:node.t) # The identity V is pending at node N
+    init ~pending(V, N)
     
     action send(dst:node.t, v:id.t)
     action recv(dst:node.t, v:id.t)
 
     object spec = {
 	before send {
-	    sent(v,dst) := true
+	    pending(v,dst) := true
 	}
 	before recv {
-	    assert sent(v,dst)
+	    assert pending(v,dst)
 	}
     }
 }
@@ -140,13 +140,13 @@ object serv = {
 #
 ################################################################################
 
-module process(pid) = {
+module process(me,pid) = {
 
-    action send(me:node.t) = {
+    action send = {
 	call trans.send(node.get_next(me),pid(me))
     }
 
-    implement trans.recv(me:node.t) {
+    implement trans.recv {
         if v = pid(me) {  # Found a leader
             call serv.elect(me)
         }
@@ -155,16 +155,16 @@ module process(pid) = {
         }
     }
 
-    # conjecture ~(pid(N1) <= pid(N0) & trans.sent(pid(N1),N1) & pid(N1) ~= pid(N0))
-    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N0 <= N1 & N2 <= N0 & N0 ~= N2 & N1 ~= N0)
-    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N0 <= N1 & N1 <= N2 & N1 ~= N0)
-    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N1 <= N2 & N2 <= N0 & N0 ~= N2)
+    conjecture ~(pid(N1) <= pid(N0) & trans.pending(pid(N1),N1) & pid(N1) ~= pid(N0))
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N2 <= N0 & N0 ~= N2 & N1 ~= N0)
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N1 <= N2 & N1 ~= N0)
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N1 <= N2 & N2 <= N0 & N0 ~= N2)
 
 }
 
 # instantiate one process per ring element
 
-instance app: process(serv.pid)
+instance app(R:node.t) : process(R,serv.pid)
 
 import serv.elect
 import trans.send

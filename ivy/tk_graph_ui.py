@@ -77,6 +77,14 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
             for idx in range(4):
                 self.g.set_checkbox(rel,idx,idx==0)
 
+    # Copy checkbox state *from* the renderer
+
+    def reverse_sync_checkboxes(self):
+        for rel in self.g.relation_ids:
+            boxes = self.get_enabled(rel)
+            for idx,box in enumerate(boxes):
+                box.set(self.g.get_checkbox(rel,idx))
+    
     # Make a node label visible
 
     def show_node_label(self,concept):
@@ -89,6 +97,14 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
         boxes = self.get_enabled(concept.name)
         idx = {'+':0,'?':1,'-':2,'T':3}[box]
         boxes[idx].set(value)
+
+    # Clear all the relation checkboxes
+
+    def clear_edges(self):
+        for rel in self.g.relation_ids:
+            boxes = self.get_enabled(rel)
+            for box in boxes[:3]:
+                box.set(False)
 
     # Get styles for nodes
 

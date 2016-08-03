@@ -732,9 +732,7 @@ def get_model_clauses(clauses1):
     s = z3.Solver()
     z3c = clauses_to_z3(clauses1)
     s.add(z3c)
-    iu.dbg('"before check"')
     res = s.check()
-    iu.dbg('"after check"')
     if res == z3.unsat:
         return None
     m = get_model(s)
@@ -816,10 +814,8 @@ def model_if_none(clauses1,implied,model):
     return h
 
 
-def decide(s):
-#    iu.dbg('"before decide"')
-    res = s.check()
-#    iu.dbg('"after decide"')
+def decide(s,atoms=None):
+    res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
         raise iu.IvyError(None,"Solver produced inconclusive result")
@@ -901,8 +897,9 @@ def model_facts(h,ignore,clauses1,upclose=False):
 #    print "model_facts vc = {}".format(vc)
     # values of relations in formula
 #    print "used_relations_clauses = {}".format(used_relations_clauses(clauses1))
+    urc = dict((ivy_logic.normalize_symbol(r),n) for r,n in used_relations_clauses(clauses1).iteritems())
     vr = [[l]
-          for (r,n) in used_relations_clauses(clauses1).iteritems()
+          for (r,n) in urc.iteritems()
           if not ignore(r)
           for l in relation_model_to_clauses(h,r,n)]
     # values of functions in formula
@@ -975,6 +972,57 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
 #    print "clauses_model_to_clauses res = {}".format(res)
     return res
 
+def bound_quantifiers_clauses(h,clauses,reps):
+   """ Bound the universal quantifiers in "clauses" to just the terms in
+       Herbrand model h. This applies only to quantifiers in the constraints of
+       "clauses" and not to the definitions. The map reps gives representatives
+       for the terms in the Herbrand universe."""
+
+   def bdv(v):
+       """ Return a formula bounding a variable of ubninterpreted sort """
+       eqs = [ivy_logic.Equals(v,reps[c.rep]) for c in h.sort_universe(v.sort)]
+       return ivy_logic.Or(*eqs)
+
+   def bq(fmla):
+       """ Bound the free variables in fmla of uninterpeted sort """
+       vs = list(sorted(used_variables_ast(fmla)))
+       vs = [v for v in vs if not ivy_logic.is_interpreted_sort(v.sort)]
+       cnsts = [bdv(v) for v in vs]
+       bq_res = ivy_logic.Implies(ivy_logic.And(*cnsts),fmla) if cnsts else fmla
+       return bq_res
+
+   new_fmlas = map(bq,clauses.fmlas)
+   return Clauses(fmlas=new_fmlas,defs=list(clauses.defs))
+
+def filter_redundant_facts(clauses,axioms):
+    """ Filter out redundant constraints from "clauses", given the
+    "axioms".  Currently, this removes only negative formulas that are
+    implied by the positive formulas, so it should work well for facts
+    about total orders, for example. """
+    
+    fmlas = clauses.fmlas
+    pos_fmlas = [fmla for fmla in fmlas if not isinstance(fmla,ivy_logic.Not)]
+    neg_fmlas = [fmla for fmla in fmlas if isinstance(fmla,ivy_logic.Not)]
+    s2 = z3.Solver()
+    alits = [z3.Const("__c%s" % n, z3.BoolSort()) for n,c in enumerate(neg_fmlas)]
+    cc = [z3.Or(z3.Not(a),z3.Not(formula_to_z3(c))) for a,c in zip(alits,neg_fmlas)]
+    s2.add(clauses_to_z3(axioms))
+    for d in clauses.defs:
+        s2.add(formula_to_z3(d.to_constraint()))
+    for fmla in pos_fmlas:
+        s2.add(formula_to_z3(fmla))
+    for c in cc:
+        s2.add(c)
+    keep = []
+    for fmla,alit in zip(neg_fmlas,alits):
+        if decide(s2,[alit]) == z3.sat:
+            keep.append(fmla)
+#    print "unsat_core res = {}".format(res)
+    return Clauses(pos_fmlas+keep,list(clauses.defs))
+
+
+
+
 def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None,axioms=None,weaken=True,numerals=True):
     """ Return a diagram of a model of clauses1 or None.  The function "ignore", if
     provided, returns true for symbols that should be ignored in the
@@ -1010,16 +1058,19 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
 #    print "clauses_model_to_diagram res = {}".format(res)
     res = substitute_constants_clauses(res,reps)
     # filter defined skolems
-    # this caused a bug in the leader example. the generated diagram did not satisfy clauses1
+   # this caused a bug in the leader example. the generated diagram did not satisfy clauses1
     res.fmlas = [f for f in res.fmlas if not any((x.is_skolem() and x in clauses1.defidx) for x in used_symbols_ast(f))]
 #    print "clauses_model_to_diagram res = {}".format(res)
     uc = Clauses([[ivy_logic._eq_lit(ivy_logic.Variable('X',c.get_sort()),reps[c.rep])
                    for c in h.sort_universe(s)] for s in h.sorts()])
 #    print "clauses_model_to_diagram uc = {}".format(uc)
 
-    #    uc = true_clauses()
+    res = filter_redundant_facts(res,axioms)
+
+    uc = true_clauses()
     if weaken:
-        res = unsat_core(res,and_clauses(uc,axioms),clauses1) # implied not used here
+        clauses1_weak = bound_quantifiers_clauses(h,clauses1,reps)
+        res = unsat_core(res,and_clauses(uc,axioms),clauses1_weak) # implied not used here
 #    print "clauses_model_to_diagram res = {}".format(res)
 
 #    print "foo = {}".format(unsat_core(and_clauses(uc,axioms),true_clauses(),clauses1))

@@ -14,6 +14,7 @@ import concept_interactive_session as cis
 from dot_layout import dot_layout
 from cy_elements import CyElements
 import ivy_utils as iu
+from copy import deepcopy
 
 # This creates a concept from a formula with free variables, using the
 # variables in alphabetical order.  A canonical concept name is
@@ -539,6 +540,7 @@ class Graph(object):
         vocab = list(ilu.used_symbols_asts([c.formula for c in self.nodes]))
         fsyms = list(s for s in ilu.used_symbols_ast(cs._to_formula()) if not s.is_skolem())
         vocab += list(all_symbols()) + fsyms
+        vocab = [il.normalize_symbol(s) for s in vocab]
         cs.domain = replace_concept_domain_vocabulary(cs.domain,set(vocab))
         for concept in self.new_relations:
             add_domain_concept(self.concept_domain.concepts,concept)
@@ -586,6 +588,28 @@ class Graph(object):
         if idx < len(_node_label_display_checkboxes):
             self.node_label_display_checkboxes[obj][_node_label_display_checkboxes[idx]] = val
 
+    def get_checkbox(self,obj,idx):
+
+        # if object is a concept set, set boxes for all elements
+
+        concept = self.concept_domain.concepts[obj]
+        if isinstance(concept,co.ConceptSet):
+            for sobj in concept:
+                return self.get_checkbox(sobj,idx)
+            return
+
+        # HACK: can't tell if it's edge or node_label so get from one
+        if idx < len(_edge_display_checkboxes):
+            return self.edge_display_checkboxes[obj][_edge_display_checkboxes[idx]].value
+        if idx < len(_node_label_display_checkboxes):
+            return self.node_label_display_checkboxes[obj][_node_label_display_checkboxes[idx]].value
+        assert False,'graph checkbox problem'
+
+    def show_checkboxes(self):
+        def thing(n,c):
+            return (str(n) + ':' + str(set(x for x,y in c.iteritems() if y.value)))
+        return '\n'.join(thing(n,c) for n,c in self.edge_display_checkboxes.iteritems())
+
     def get_transitive_reduction(self):
         return [] # TODO: implement
         
@@ -603,7 +627,7 @@ class Graph(object):
         return True
 
     def copy(self):
-        c = Graph([])
+        c = Graph(list(self.sorts))
         c.state = self.state.copy()
         c.cy_elements = self.cy_elements
         c.concept_session = self.concept_session.clone(recompute=False)
@@ -611,6 +635,9 @@ class Graph(object):
         c.attributes = list(self.attributes)
         if hasattr(self,'reverse_result'):
             c.reverse_result = list(self.reverse_result)
+        # dict mapping edge names to widget tuples
+        c.edge_display_checkboxes = deepcopy(self.edge_display_checkboxes)
+        c.node_label_display_checkboxes = deepcopy(self.node_label_display_checkboxes)
         return c
 
     def split_n_way(self,node,ps):

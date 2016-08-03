@@ -465,6 +465,8 @@ def pretty(s,max_lines=None):
 polymorphic_symbols = set(
     ['<',
     '<=',
+    '>',
+    '>=',
     '+',
     '*',
     '-',
