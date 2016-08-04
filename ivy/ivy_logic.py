@@ -456,16 +456,6 @@ Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
 Variable.rename = lambda self,name: Variable(name,self.sort)
 
-show_variable_sorts = False
-
-Variable.__str__ = lambda self: (self.name+':'+self.sort.name) if show_variable_sorts else self.name
-
-def to_str_with_var_sorts(t):
-    global show_variable_sorts
-    show_variable_sorts = True
-    res = str(t)
-    show_variable_sorts = False
-    return res
     
 class Literal(AST):
     """
@@ -747,56 +737,129 @@ sig = Sig()
 
 # string conversions
 
-def nary_str(op,args):
-    res = (' ' + op + ' ').join([repr(a) for a in args])
-    return ('(' + res + ')') if len(args) > 1 else res
+infix_symbols = set(['<','<=','>','>=','+','-','*','/'])
 
-infix_symbols = set(['<','<=','+','-','*','/'])
+show_variable_sorts = True
+show_numeral_sorts = True
 
-to_str_ambiguous = False
+# This converts to string with all type decorations
 
-# This converts to string leaving variables and numerals without type decorations
-
-def fmla_to_str_ambiguous(term):
-    global to_str_ambiguous
-    to_str_ambiguous = True
-    res = str(term)
-    to_str_ambiguous = False
+def to_str_with_var_sorts(t):
+    res = t.ugly()
     return res
 
-def app_arg_str(self,poly):
-    if to_str_ambiguous or not poly or (not is_variable(self) and not is_numeral(self)):
-        return str(self)
-    return self.name + ':' + str(self.sort)
+# This converts to string with no type decorations
 
-def app_str(self):
+def fmla_to_str_ambiguous(term):
+    global show_variable_sorts
+    global show_numeral_sorts
+    show_variable_sorts = False
+    show_numeral_sorts = False
+    res = term.ugly()
+    show_variable_sorts = True
+    show_numeral_sorts = True
+    return res
+
+def app_ugly(self):
     name = self.func.name
-    poly = name in polymorphic_symbols
-    if poly and any(not(is_variable(a) or is_numeral(a)) for a in self.args):
-        poly = False
-    args = [app_arg_str(a,poly) for a in self.args]
+    args = [a.ugly() for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)
-    if len(args) == 0:
+    if len(args) == 0:  # shouldn't happen
         return name
     return name + '(' + ','.join(args) + ')'
-
-def eq_args_str(self):
-    poly = not any(not(is_variable(a) or is_numeral(a)) for a in self.args)
-    return [app_arg_str(a,poly) for a in self.args]
-
     
-lg.Eq.__str__ = lambda self: '{} = {}'.format(*eq_args_str(self))
-lg.And.__str__ = lambda self: nary_str('&',self.args) if self.args else 'true'
-lg.Or.__str__ = lambda self: nary_str('|',self.args) if self.args else 'false'
-lg.Not.__str__ = lambda self: ('{} ~= {}'.format(*eq_args_str(self.body))
-                               if type(self.body) is lg.Eq
-                               else '~{}'.format(self.body))
-lg.Implies.__str__ = lambda self: '{} -> {}'.format(self.t1, self.t2)
-lg.Iff.__str__ = lambda self: '{} <-> {}'.format(self.t1, self.t2)
-lg.Ite.__str__ = lambda self:  '{} if {} else {}'.format(self.t_then, self.cond, self.t_else)
+def nary_ugly(op,args,parens = True):
+    res = (' ' + op + ' ').join([a.ugly() for a in args])
+    return ('(' + res + ')') if len(args) > 1 and parens else res
 
-lg.Apply.__str__ = app_str
+lg.Var.ugly = (lambda self: (self.name+':'+self.sort.name)
+                  if show_variable_sorts and not isinstance(self.sort,lg.TopSort) else self.name)
+lg.Const.ugly = (lambda self: (self.name+':'+self.sort.name)
+                    if show_numeral_sorts and self.is_numeral() and not isinstance(self.sort,lg.TopSort)
+                 else self.name)
+lg.Eq.ugly = lambda self: nary_ugly('=',self.args,parens=False)
+lg.And.ugly = lambda self: nary_ugly('&',self.args) if self.args else 'true'
+lg.Or.ugly = lambda self: nary_ugly('|',self.args) if self.args else 'false'
+lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
+                               if type(self.body) is lg.Eq
+                               else '~{}'.format(self.body.ugly()))
+lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
+lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
+lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[a.ugly() for a in self.args])
+
+lg.Apply.ugly = app_ugly
+
+
+# Drop the type annotations of variables and polymorphic
+# constants that can be inferred using the current signature. Here,
+# "inferred_sort" is the sort of fmla that has been inferred, or
+# None, and annotated_vars is the set of variable names that have
+# already been annotated.
+
+def var_drop_annotations(self,inferred_sort,annotated_vars):
+    if inferred_sort or self.name in annotated_vars:
+        annotated_vars.add(self.name)
+        return lg.Var(self.name,lg.TopS)
+    if not isinstance(self.sort,lg.TopSort):
+        annotated_vars.add(self.name)
+    return self
+
+lg.Var.drop_annotations = var_drop_annotations
+
+def const_drop_annotations(self,inferred_sort,annotated_vars):
+    if inferred_sort and self.is_numeral():
+        return lg.Const(self.name,lg.TopS)
+    return self
+
+lg.Const.drop_annotations = const_drop_annotations
+
+def eq_drop_annotations(self,inferred_sort,annotated_vars):
+    arg0 = self.args[0].drop_annotations(False,annotated_vars)
+    arg1 = self.args[1].drop_annotations(True,annotated_vars)
+    return lg.Eq(arg0,arg1)
+
+lg.Eq.drop_annotations = eq_drop_annotations
+
+def ite_drop_annotations(self,inferred_sort,annotated_vars):
+    arg0 = self.args[0].drop_annotations(True,annotated_vars)
+    arg1 = self.args[1].drop_annotations(inferred_sort,annotated_vars)
+    arg2 = self.args[2].drop_annotations(True,annotated_vars)
+    return lg.Ite(arg0,arg1,arg2)
+
+lg.Ite.drop_annotations = ite_drop_annotations
+
+def apply_drop_annotations(self,inferred_sort,annotated_vars):
+    name = self.func.name
+    if name in polymorphic_symbols:
+        arg0 = self.args[0].drop_annotations(inferred_sort and self.sort != lg.Boolean,annotated_vars)
+        rest = [arg.drop_annotations(True,annotated_vars) for arg in self.args[1:]]
+        return self.clone([arg0]+rest)
+    return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
+
+lg.Apply.drop_annotations = apply_drop_annotations
+
+def quant_drop_annotations(self,inferred_sort,annotated_vars):
+    body = self.body.drop_annotations(True,annotated_vars)
+    return type(self)([v.drop_annotations(False,annotated_vars) for v in self.variables],body)
+
+for cls in [lg.ForAll, lg.Exists]:
+    cls.drop_annotations = quant_drop_annotations
+
+def default_drop_annotations(self,inferred_sort,annotated_vars):
+    return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
+
+for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff]:
+    cls.drop_annotations = default_drop_annotations
+ 
+for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff,]:
+    cls.drop_annotations = default_drop_annotations
+
+for cls in [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists,
+            lg.Apply, lg.Var, lg.Const]:
+    cls.__str__ = lambda self: self.drop_annotations(False,set()).ugly()
+
+# end string conversion stuff
 
 def close_formula(fmla):
     variables = list(lu.free_variables(fmla))
