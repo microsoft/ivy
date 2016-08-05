@@ -786,9 +786,18 @@ lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
                                else '~{}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
-lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[a.ugly() for a in self.args])
+lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
 
 lg.Apply.ugly = app_ugly
+
+def quant_ugly(self):
+    res = 'forall ' if isinstance(self,lg.ForAll) else 'exists '
+    res += ','.join(v.ugly() for v in self.variables)
+    res += '. ' + self.body.ugly()
+    return res
+
+for cls in [lg.ForAll,lg.Exists]:
+    cls.ugly = quant_ugly
 
 
 # Drop the type annotations of variables and polymorphic
@@ -822,9 +831,9 @@ def eq_drop_annotations(self,inferred_sort,annotated_vars):
 lg.Eq.drop_annotations = eq_drop_annotations
 
 def ite_drop_annotations(self,inferred_sort,annotated_vars):
-    arg0 = self.args[0].drop_annotations(True,annotated_vars)
     arg1 = self.args[1].drop_annotations(inferred_sort,annotated_vars)
     arg2 = self.args[2].drop_annotations(True,annotated_vars)
+    arg0 = self.args[0].drop_annotations(True,annotated_vars)
     return lg.Ite(arg0,arg1,arg2)
 
 lg.Ite.drop_annotations = ite_drop_annotations
@@ -855,9 +864,13 @@ for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff]:
 for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff,]:
     cls.drop_annotations = default_drop_annotations
 
+def pretty_fmla(self):
+    d = self.drop_annotations(False,set())
+    return d.ugly()
+
 for cls in [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists,
             lg.Apply, lg.Var, lg.Const]:
-    cls.__str__ = lambda self: self.drop_annotations(False,set()).ugly()
+    cls.__str__ = pretty_fmla
 
 # end string conversion stuff
 

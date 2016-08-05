@@ -9,11 +9,18 @@ from ivy import ivy_logic as il
 prog = """#lang ivy1.5
 
 type t
+type p
+
+relation sent(X:p,Y:t)
+function pid(X:t):p
 
 axiom X:t = X
 axiom X:t < Y & Y < Z -> X < Z
 axiom X:t = Y + 0
 axiom X:t = Y + Z
+axiom X = (Y:t + 1) if (Y = Z) else 0
+axiom forall X,Y,Z. X:t < Y & Y < Z -> X < Z
+axiom forall NO0:t,NO1:t. ~(pid(NO0:t) < pid(NO1:t) & sent(pid(NO0:t),NO0:t))
 """
 
 with im.Module():
@@ -21,7 +28,10 @@ with im.Module():
     ivy_from_string(prog,create_isolate=False)
     for adecl in im.module.labeled_axioms:
         f = adecl.args[1]
+        print
         print str(f)
+        print il.to_str_with_var_sorts(f)
+        print il.fmla_to_str_ambiguous(f)
 
 #     main_ui.answer("OK")
 #     ui.check_inductiveness()

@@ -279,16 +279,59 @@ its service specification `serv` , assuming the specifications of `trans`,
 
 isolate iso_p = app with node,id,trans,serv
 
-The `before` specification of `serv.elect` is a guarantee for `proto`
-when if calls `serv.elect`. This is the property that we are trying to
-prove (i.e., that any node calling `serv.elect` in fact has the
-highest `id`).
+We are trying to prove that, when any node calls `serv.elect`, it in
+fact has the highest `id`. That is, the `before` specification of
+`serv.elect` is a guarantee of `proto` when it calls `serv.elect`.
 
-Obviously, we will need an inductive invariant for this. We will try
-to discover one using IVy's [CTI method](client_server_example.html).
-We start IVy using this command:
+To get a sense of what we're proving, let's have a look at the
+isolate:
 
-    $ ivy ui=cti leader_election_ring.ivy
+    $ ivy_show isolate=iso_app leader_election_ring.ivy
+
+    ... various declarations ...
+
+    action trans.send(dst:node.t,v:id.t) = {
+	trans.sent(v,dst) := true
+    }
+
+    action ext:trans.recv(dst:node.t,v:id.t) = {
+	assume trans.sent(v,dst);
+	if v = serv.pid(dst) {
+	    call serv.elect(dst)
+	}
+	else {
+	    if v > serv.pid(dst) {
+		local loc[0] {
+		    call loc[0] := node.get_next(dst);
+		    call trans.send(loc[0], v)
+		}
+	    }
+	}
+    }
+
+    action serv.elect(v:node.t) = {
+	assert serv.pid(v) >= serv.pid(X)
+    }
+
+    action ext:app.send(me:node.t) = {
+	local loc[0] {
+	    call loc[0] := node.get_next(me);
+	    call trans.send(loc[0], serv.pid(me))
+	}
+    }
+
+    action node.get_next(x:node.t) returns(y:node.t) = {
+	assume ((x < y & ~(Z:node.t < y & x < Z)) | (x = node.tail & y = node.head))
+    }
+
+Notice that the assertion in `serv.elect` is preserved as a guarantee. However,
+the other assertions have become assumptions.
+
+Obviously, we will need an inductive invariant at this point. We will
+try to discover one using IVy's [CTI
+method](client_server_example.html).  We start IVy using this command:
+
+    $ ivy ui=cti isolate=iso_app leader_election_ring.ivy
 
 
 

@@ -691,6 +691,8 @@ def create_isolate(iso,mod = None,**kwargs):
         # Create one big external action if requested
 
 
+        for name in mod.public_actions:
+            mod.actions[name].label = name
         ext = kwargs['ext'] if 'ext' in kwargs else ext_action.get()
         if ext is not None:
             ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]

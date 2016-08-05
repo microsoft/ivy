@@ -375,7 +375,7 @@ class fail_action(Action):
         if hasattr(self.action,'lineno'):
             self.lineno = self.action.lineno
     def __str__(self):
-        return "fail " + str(self.action)
+        return "fail " + (self.action.label if hasattr(self.action,'label') else str(self.action))
     def update(self,domain,in_scope):
 #        print "action_failure action: {}".format(pretty(str(self.action)))
         return action_failure(self.action.update(domain,in_scope))

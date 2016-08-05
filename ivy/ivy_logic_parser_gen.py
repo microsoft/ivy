@@ -27,7 +27,7 @@ def p_error(token):
 
 import os
 tabdir = os.path.dirname(os.path.abspath(__file__))
-formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab',errorlog=yacc.NullLogger(),outputdir=tabdir)
+formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab',errorlog=yacc.NullLogger(),outputdir=tabdir,debug=None)
 #formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
-term_parser = yacc.yacc(start = 'term', tabmodule='ivy_termtab',errorlog=yacc.NullLogger(),outputdir=tabdir)
+term_parser = yacc.yacc(start = 'term', tabmodule='ivy_termtab',errorlog=yacc.NullLogger(),outputdir=tabdir,debug=None)
 

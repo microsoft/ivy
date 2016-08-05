@@ -272,11 +272,11 @@ def type_check(domain,ast):
 #                    raise IvyError(a,
 #                                   "symbol {} of enumerated type can only appear under equality"
 #                                   .format(a.rep))
-    for atom in eqs_ast(ast):
-            t0,t1 = [x.get_sort() for x in atom.args]
-            if t0 != t1:
-                raise IvyError(atom,
-                               "comparison of incompatible types")
+    # for atom in eqs_ast(ast):
+    #         t0,t1 = [x.get_sort() for x in atom.args]
+    #         if t0 != t1:
+    #             raise IvyError(atom,
+    #                            "comparison of incompatible types")
 
 
 def type_ast(domain,ast):
@@ -581,6 +581,8 @@ class EnvAction(ChoiceAction):
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
         return result
+    def __str__(self):
+        return '{' + ','.join(a.label for a in self.args) + '}'
     @property
     def formal_params(self):
         return []

@@ -181,7 +181,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                         self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action observe the failing execution. ')
                     else:
                         self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
-                                                   str(conj.to_formula()),on_cancel=None)
+                                                   str(il.drop_universals(conj.to_formula())),on_cancel=None)
                     self.have_cti = True
                     return False
 
@@ -328,11 +328,11 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
         sig_symbols = frozenset(il.sig.symbols.values())
         facts_consts = used_constants(*facts)
         subs = {}
-        rn = iu.UniqueRenamer()
+        rn = iu.VariableGenerator()
         for c in sorted(facts_consts, key=lambda c: c.name):
             if c.is_numeral() and il.is_uninterpreted_sort(c.sort):
-                prefix = str(c.sort)[:2].upper() + str(c)
-                subs[c] = lg.Var(rn(prefix), c.sort)
+#                prefix = str(c.sort)[:2].upper() + c.name
+                subs[c] = lg.Var(rn(c.sort.name), c.sort)
 
         literals = [negate(substitute(f, subs)) for f in facts]
         result = Clauses([lg.Or(*literals)])
@@ -364,7 +364,8 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
     def strengthen(self, button=None):
         conj = self.get_selected_conjecture()
-        self.ui_parent.text_dialog('Add the following conjecture:',str(conj.to_formula()),
+        f = il.drop_universals(conj.to_formula())
+        self.ui_parent.text_dialog('Add the following conjecture:',str(f),
                                    command = lambda : self.add_conjecture(conj))
 
 

@@ -166,6 +166,23 @@ def distinct_obj_renaming(names1,names2):
     rn = UniqueRenamer('',names2)
     return dict((s,s.rename(rn)) for s in names1)
 
+class VariableGenerator(object):
+    def __init__(self):
+        self.used = set()
+    def __call__(self,name = ''):
+        nchars = 1
+        firstchar = name[0].upper() if name else 'A'
+        while True:
+            while firstchar <= 'Z':
+                guess = nchars * firstchar
+                if firstchar != 'O' and guess not in self.used:
+                    self.used.add(guess)
+                    return guess
+                firstchar = chr(ord(firstchar) + 1)
+            firstchar = 'A'
+            nchars += 1
+
+
 class SourceFile(object):
     """ Context Manager that temporarily sets values of parameters by
     name.  See class "Parameter".
