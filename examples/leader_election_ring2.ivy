@@ -50,16 +50,27 @@ module total_order = {
 module ring_topology = {
     type t
 
+    individual head:t  # ring head
+    individual tail:t  # ring tail
+
     # Axioms that ensure that t is totally ordered with head the
     # minimal element and tail the maximal element.
 
     instantiate total_order_axioms(t)   # t is totally ordered
 
+    axiom head <= X              # head is minimal
+    axiom X <= tail              # tail is maximal
+
     action get_next(x:t) returns (y:t)
+    action get_prev(y:t) returns (x:t)
 
     object spec = {
 	after get_next {
-	    assert (y <= X & X <= x) | (x < y & ~ (x < Z & Z < y))
+	    assert (x = tail & y = head) | (x < y & ~ (x < Z & Z < y))
+	}
+
+	after get_prev {
+	    assert (x = tail & y = head) | (x < y & ~ (x < Z & Z < y))
 	}
     }
 }
@@ -85,18 +96,18 @@ instance node : ring_topology
 
 object trans = {
 
-    relation sent(V:id.t, N:node.t) # The identity V is sent at node N
-    init ~sent(V, N)
+    relation pending(V:id.t, N:node.t) # The identity V is pending at node N
+    init ~pending(V, N)
     
     action send(dst:node.t, v:id.t)
     action recv(dst:node.t, v:id.t)
 
     object spec = {
 	before send {
-	    sent(v,dst) := true
+	    pending(v,dst) := true
 	}
 	before recv {
-	    assert sent(v,dst)
+	    assert pending(v,dst)
 	}
     }
 }
@@ -129,13 +140,13 @@ object serv = {
 #
 ################################################################################
 
-module process(pid) = {
+module process(me,pid) = {
 
-    action async(me:node.t) = {
+    action send = {
 	call trans.send(node.get_next(me),pid(me))
     }
 
-    implement trans.recv(me:node.t) {
+    implement trans.recv {
         if v = pid(me) {  # Found a leader
             call serv.elect(me)
         }
@@ -144,20 +155,20 @@ module process(pid) = {
         }
     }
 
-    # conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-    # conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-    # conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-    # conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+    conjecture ~(pid(N1) <= pid(N0) & trans.pending(pid(N1),N1) & pid(N1) ~= pid(N0))
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N2 <= N0 & N0 ~= N2 & N1 ~= N0)
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N0 <= N1 & N1 <= N2 & N1 ~= N0)
+    conjecture ~(pid(N2) <= pid(N0) & trans.pending(pid(N2),N1) & N1 <= N2 & N2 <= N0 & N0 ~= N2)
 
 }
 
 # instantiate one process per ring element
 
-instance app: process(serv.pid)
+instance app(R:node.t) : process(R,serv.pid)
 
 import serv.elect
 import trans.send
-export app.async
+export app.send
 export trans.recv
 
 isolate iso_app = app with node,id,trans,serv

@@ -144,10 +144,15 @@ module process(pid) = {
         }
     }
 
-    # conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-    # conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-    # conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-    # conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+    conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
+    conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
+    conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
+    conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+
+    # conjecture ~(pid(N1) <= pid(N0) & trans.sent(pid(N1),N1) & pid(N1) ~= pid(N0))
+    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N0 <= N1 & N2 <= N0 & N0 ~= N2 & N1 ~= N0)
+    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N0 <= N1 & N1 <= N2 & N1 ~= N0)
+    # conjecture ~(pid(N2) <= pid(N0) & trans.sent(pid(N2),N1) & N1 <= N2 & N2 <= N0 & N0 ~= N2)
 
 }
 
