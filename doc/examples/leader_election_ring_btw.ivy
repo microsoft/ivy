@@ -49,17 +49,23 @@ module total_order = {
 
 module ring_topology = {
     type t
+    relation btw(X:t,Y:t,Z:t)
 
-    # Axioms that ensure that t is totally ordered with head the
-    # minimal element and tail the maximal element.
-
-    instantiate total_order_axioms(t)   # t is totally ordered
+    property btw(W, Y, Z) & btw(W, X, Y) -> btw(X, Y, Z)
+    property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, X, Y)
+    property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, Y, Z)
+    property btw(W, Y, Z) & btw(W, X, Y) -> btw(W, X, Z)
+    property W = X | btw(W, X, W)
+    property ~btw(X, X, Y)
+    property ~btw(X, Y, Y)
+    property btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y)
+    property btw(X,Y,Z) |  Y = X |  btw(Y,X,Z)
 
     action get_next(x:t) returns (y:t)
 
     object spec = {
 	after get_next {
-	    assert (y <= X & X <= x) | (x < y & ~ (x < Z & Z < y))
+	    assert ~btw(x,Z,y)
 	}
     }
 }
@@ -144,11 +150,9 @@ module process(pid) = {
         }
     }
 
-    # conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-    # conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-    # conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-    # conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
-
+    # conjecture ~(serv.pid(P) < serv.pid(N) & trans.sent(serv.pid(P),P))
+    # conjecture ~(serv.pid(N) < serv.pid(P) & serv.pid(Q) < serv.pid(N) & node.btw(Q,N,P)
+    #                  & trans.sent(serv.pid(N),Q))
 }
 
 # instantiate one process per ring element

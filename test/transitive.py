@@ -22,7 +22,7 @@ with ivy_module.Module():
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
     cg = ui.view_state(ui.node(0))
-    cg.show_relation(cg.relation('X:t < Y:t'),'+')
+    cg.show_relation(cg.relation('X:t < Y'),'+')
     cg.split(cg.relation('=x'),cg.node('t'))
     cg.show_relation(cg.relation('=x'),'-')
     cg.split(cg.relation('=y'),cg.node('~=x'))

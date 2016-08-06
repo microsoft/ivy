@@ -531,8 +531,9 @@ class Graph(object):
         return concept_from_formula(fmla)
 
     def new_relation(self,concept):
-        add_domain_concept(self.concept_domain.concepts,concept)
-        self.new_relations.append(concept)
+        if concept.name not in self.concept_domain.concepts:
+            add_domain_concept(self.concept_domain.concepts,concept)
+            self.new_relations.append(concept)
             
     def state_changed(self,recomp=True):
         cs = self.concept_session

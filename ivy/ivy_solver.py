@@ -17,7 +17,7 @@ from ivy_logic_utils import used_variables_clause, used_variables_ast, variables
    to_clauses, constants_clauses, used_relations_clauses, rel_inst, fun_eq_inst, \
    is_ground_lit, used_constants_clauses, substitute_constants_clauses, eq_atom, \
    functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast, sym_placeholders, used_symbols_clauses
-from ivy_core import minimize_core
+from ivy_core import minimize_core, biased_core
 import ivy_utils as iu
 import ivy_unitres as ur
 import logic as lg
@@ -392,13 +392,15 @@ def formula_to_z3(fmla):
         return z3.ForAll(z3_variables, z3_formula)
 
 
-def unsat_core(clauses1, clauses2, implies = None):
+def unsat_core(clauses1, clauses2, implies = None, unlikely=lambda x:False):
 #    print "unsat_core clauses1 = {}, clauses2 = {}".format(clauses1,clauses2)
 #    assert clauses1.defs == []
     fmlas = clauses1.fmlas
     s2 = z3.Solver()
     alits = [z3.Const("__c%s" % n, z3.BoolSort()) for n,c in enumerate(fmlas)]
     cc = [z3.Or(z3.Not(a),formula_to_z3(c)) for a,c in zip(alits,fmlas)]
+    foo = [(a,f) for a,f in zip(alits,fmlas) if unlikely(f)]
+    unlikely_lits = [a for a,f in foo]
     for d in clauses1.defs:
         s2.add(formula_to_z3(d.to_constraint()))
     for c in cc:
@@ -410,7 +412,10 @@ def unsat_core(clauses1, clauses2, implies = None):
     if is_sat == z3.sat:
 #        print "unsat_core model = {}".format(get_model(s2))
         return None
-    core = minimize_core(s2)
+    if unlikely_lits:
+        core = biased_core(s2,alits,unlikely_lits)
+    else:
+        core = minimize_core(s2)
     core_ids = [get_id(a) for a in core]
     res = [c for a,c in zip(alits,fmlas) if get_id(a) in core_ids]
 #    print "unsat_core res = {}".format(res)
@@ -1069,8 +1074,11 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
 
     uc = true_clauses()
     if weaken:
+        def unlikely(fmla):
+            # remove if possible the =constant predicates
+            return ivy_logic.is_eq(fmla) and ivy_logic.is_constant(fmla.args[0])
         clauses1_weak = bound_quantifiers_clauses(h,clauses1,reps)
-        res = unsat_core(res,and_clauses(uc,axioms),clauses1_weak) # implied not used here
+        res = unsat_core(res,and_clauses(uc,axioms),clauses1_weak,unlikely=unlikely) # implied not used here
 #    print "clauses_model_to_diagram res = {}".format(res)
 
 #    print "foo = {}".format(unsat_core(and_clauses(uc,axioms),true_clauses(),clauses1))

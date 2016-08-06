@@ -582,7 +582,10 @@ class EnvAction(ChoiceAction):
             result = join_action(result, foo, domain.relations)
         return result
     def __str__(self):
-        return '{' + ','.join(a.label for a in self.args) + '}'
+        if all(hasattr(a,'label') for a in self.args):
+            return '{' + ','.join(a.label for a in self.args) + '}'
+        return super(ChoiceAction, self).__str__()
+
     @property
     def formal_params(self):
         return []

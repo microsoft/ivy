@@ -384,7 +384,6 @@ class AnalysisGraph(object):
     def decompose_state(self,state):
         if hasattr(state,'expr') and state.expr != None:
             other_art = AnalysisGraph(self.domain)
-            print [a for a in other_art.actions]
             with AC(other_art):
                 res = decompose_action_app(state,state.expr)
                 if res != None:

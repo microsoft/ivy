@@ -1,7 +1,7 @@
 import ivy_ui
 import ivy_logic as il
 import logic as lg
-from ivy_interp import State,EvalContext,reverse
+from ivy_interp import State,EvalContext,reverse,decompose_action_app
 import ivy_module as im
 import ivy_logic_utils as ilu
 import logic_util as lu
@@ -105,6 +105,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         from proof import ProofGoal
         from ivy_logic_utils import Clauses, and_clauses, dual_clauses
         from random import randrange
+        from ivy_art import AnalysisGraph
         
         with self.ui_parent.run_context():
 
@@ -118,12 +119,13 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 post = ag.execute(action, pre, None, 'ext')
             post.clauses = ilu.true_clauses()
 
-            to_test = list(self.conjectures) + [None]  # None = check safety
+            to_test =  [None] + list(self.conjectures)  # None = check safety
 
             while len(to_test) > 0:
                 # choose randomly, so the user can get another result by
                 # clicking again
-                conj = to_test.pop(randrange(len(to_test)))
+#                conj = to_test.pop(randrange(len(to_test)))
+                conj = to_test.pop(0)
                 assert conj == None or conj.is_universal_first_order()
                 used_names = frozenset(x.name for x in il.sig.symbols.values())
                 def witness(v):
@@ -162,7 +164,6 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 )
 
                 if conj == None:
-                    print "check safety"
                     res = ag.check_bounded_safety(post, _get_model_clauses)
                 else:
                     res = ag.bmc(post, clauses, None, None, _get_model_clauses)
@@ -172,13 +173,14 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                     assert len(res.states) == 2
     #                self.set_states(res.states[0], res.states[1])
     #                self.cti = self.ui_parent.add(res)
+
                     self.g = res
                     self.rebuild()
                     self.view_state(self.g.states[0], reset=True)
                     self.show_used_relations(clauses)
                     #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                     if conj == None:
-                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action observe the failing execution. ')
+                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action to observe the failing execution. ')
                     else:
                         self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
                                                    str(il.drop_universals(conj.to_formula())),on_cancel=None)
@@ -201,6 +203,18 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 self.current_concept_graph.show_relation(rel,'+',update=False)
                 if both:
                     self.current_concept_graph.show_relation(rel,'-',update=False)
+        need_update_relations = False
+        for app in ilu.apps_clauses(clauses):
+            if len(app.args) == 3 and il.is_numeral(app.args[0]):
+                fmla = app.rep(app.args[0],il.Variable('X',app.args[1].sort),il.Variable('Y',app.args[2].sort))
+                concept = self.current_concept_graph.g.formula_to_concept(fmla)
+                self.current_concept_graph.g.new_relation(concept)
+                need_update_relations = True
+                self.current_concept_graph.show_relation(concept,'+',update=False)
+                if both:
+                    self.current_concept_graph.show_relation(concept,'-',update=False)
+        if need_update_relations:
+            self.current_concept_graph.update_relations()
         self.current_concept_graph.update()
 
     def diagram(self):
