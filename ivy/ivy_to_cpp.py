@@ -381,6 +381,21 @@ def emit_derived(header,impl,df,classname):
     action.formal_returns = [retval]
     emit_some_action(header,impl,name,action,classname)
 
+
+def native_declaration(atom):
+    res = varname(atom.rep)
+    for arg in atom.args:
+        res += '[' + str(sort_card(im.module.sig.sorts[arg.sort])) + ']'
+    return res
+
+def native_to_str(native):
+    fields = native.args[1].code.split('`')
+    fields = [(native_declaration(native.args[int(s)+2]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+    return ''.join(fields)
+
+def emit_native(header,impl,native,classname):
+    header.append(native_to_str(native))
+
 def emit_method_decl(header,name,action,body=False,classname=None):
     if not hasattr(action,"formal_returns"):
         print "bad name: {}".format(name)
@@ -564,8 +579,8 @@ def module_to_cpp_class(classname):
         header.append('    ivy_gen *___ivy_gen;\n')
     header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
     if target.get() != "gen":
-        header.append('    virtual void ivy_assert(bool){}\n')
-        header.append('    virtual void ivy_assume(bool){}\n')
+        header.append('    virtual void ivy_assert(bool,const char *){}\n')
+        header.append('    virtual void ivy_assume(bool,const char *){}\n')
         header.append('    virtual void ivy_check_progress(int,int){}\n')
     
     impl = ['#include "' + classname + '.h"\n\n']
@@ -598,6 +613,9 @@ def module_to_cpp_class(classname):
     for df in im.module.concepts:
         emit_derived(header,impl,df,classname)
 
+    for native in im.module.natives:
+        emit_native(header,impl,native,classname)
+
     # declare one counter for each progress obligation
     # TRICKY: these symbols are boolean but we create a C++ int
     for df in im.module.progress:
@@ -628,7 +646,24 @@ def module_to_cpp_class(classname):
         for name,action in im.module.actions.iteritems():
             if name in im.module.public_actions:
                 emit_action_gen(header,impl,name,action,classname)
+
+    if target.get() == "repl":
+        emit_repl_boilerplate1(header,impl,classname)
+        for actname in sorted(im.module.public_actions):
+            action = im.module.actions[actname]
+            getargs = ','.join('int_arg(args,0,ivy.__CARD__{})'.format(varname(x.sort.name)) for x in action.formal_params)
+            impl.append("""
+            if (action == "actname") {
+                check_arity(args,numargs,action);
+                ivy.baz__incr(getargs);
+            }
+            else
+""".replace('actname',actname).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
+        emit_repl_boilerplate2(header,impl,classname)
+        
     return ''.join(header) , ''.join(impl)
+
+
 
 def assign_symbol_from_model(header,sym,m):
     if slv.solver_name(sym) == None:
@@ -992,6 +1027,157 @@ def emit_choice(self,header):
 
 ia.ChoiceAction.emit = emit_choice
 
+def native_reference(atom):
+    res = varname(atom.rep)
+    for arg in atom.args:
+        res += '[' + varname(arg.rep) + ']'
+    return res
+
+def emit_native_action(self,header):
+    fields = self.args[0].code.split('`')
+    fields = [(native_reference(self.args[int(s)+1]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+    header.append(''.join(fields))
+
+ia.NativeAction.emit = emit_native_action
+
+
+def emit_repl_boilerplate1(header,impl,classname):
+    impl.append("""
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <sys/select.h>
+#include <string.h>
+#include <stdio.h>
+#include <string>
+
+// Override methods to implement low-level network service
+
+bool is_white(int c) {
+    return (c == ' ' || c == '\\t' || c == '\\n');
+}
+
+bool is_ident(int c) {
+    return c == '_' || c == '.' || (c >= 'A' &&  c <= 'Z')
+        || (c >= 'a' &&  c <= 'z')
+        || (c >= '0' &&  c <= '9');
+}
+
+void skip_white(const std::string& str, int &pos){
+    while (pos < str.size() && is_white(str[pos]))
+        pos++;
+}
+
+struct syntax_error {
+};
+
+struct out_of_bounds {
+    int idx;
+    out_of_bounds(int _idx) : idx(_idx) {}
+};
+
+std::string get_ident(const std::string& str, int &pos) {
+    std::string res = "";
+    while (pos < str.size() && is_ident(str[pos])) {
+        res.push_back(str[pos]);
+        pos++;
+    }
+    if (res.size() == 0)
+        throw syntax_error();
+    return res;
+}
+
+
+void parse_command(const std::string &cmd, std::string &action, std::vector<std::string> &args) {
+    int pos = 0;
+    skip_white(cmd,pos);
+    action = get_ident(cmd,pos);
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '(') {
+        pos++;
+        skip_white(cmd,pos);
+        args.push_back(get_ident(cmd,pos));
+        while(true) {
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                break;
+            pos++;
+            args.push_back(get_ident(cmd,pos));
+        }
+        if (!(pos < cmd.size() && cmd[pos] == ')'))
+            throw syntax_error();
+        pos++;
+    }
+    skip_white(cmd,pos);
+    if (pos != cmd.size())
+        throw syntax_error();
+}
+
+struct bad_arity {
+    std::string action;
+    int num;
+    bad_arity(std::string &_action, unsigned _num) : action(_action), num(_num) {}
+};
+
+void check_arity(std::vector<std::string> &args, unsigned num, std::string &action) {
+    if (args.size() != num)
+        throw bad_arity(action,num);
+}
+
+int int_arg(std::vector<std::string> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].c_str());
+    if (res < 0 || res >= bound)
+        throw out_of_bounds(idx);
+    return res;
+}
+
+int main(int argc, char **argv){
+
+    // if (argc != 2) {
+    //     std::cerr << "usage: classname <index>\\n";
+    //     return(1);
+    // }
+
+    // int my_id = atoi(argv[1]);
+
+    classname ivy;    
+
+    while(true) {
+        std::cout << "> ";
+        std::cout.flush();
+        std::string cmd;
+        std::cin >> cmd;
+        std::string action;
+        std::vector<std::string> args;
+        try {
+            parse_command(cmd,action,args);
+""".replace('classname',classname))
+
+
+def emit_repl_boilerplate2(header,impl,classname):
+    impl.append("""
+            {
+                std::cout << "undefined action: " << action << std::endl;
+            }
+        }
+        catch (syntax_error&) {
+            std::cout << "syntax error" << std::endl;
+        }
+        catch (out_of_bounds &err) {
+            std::cout << "argument " << err.idx + 1 << " out of bounds" << std::endl;
+        }
+        catch (bad_arity &err) {
+            std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
+        }
+        
+    }
+}
+""".replace('classname',classname))
+
+
 def emit_boilerplate1(header,impl):
     header.append("""
 #include <string>
@@ -1247,7 +1433,7 @@ public:
 """)
 
 
-target = iu.EnumeratedParameter("target",["impl","gen"],"gen")
+target = iu.EnumeratedParameter("target",["impl","gen","repl"],"gen")
 
 def main():
     ia.set_determinize(True)

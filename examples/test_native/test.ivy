@@ -1,0 +1,21 @@
+#lang ivy1.5
+
+module bar = {
+
+    object foo = {}
+
+    <<<
+        int `foo`;
+    >>>
+
+    action incr = {
+        <<<
+            `foo`++;
+        >>>
+    }
+
+}
+
+type t
+interpret t -> {0..1} 
+instance baz(X:t) : bar

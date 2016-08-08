@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -589,6 +589,12 @@ def p_optaction_action(p):
     'optaction : action'
     p[0] = p[1]
 
+def p_optaction_nativequote(p):
+    'optaction : NATIVEQUOTE'
+    text,bqs = parse_nativequote(p,1)
+    p[0] = NativeAction(*([text] + bqs))
+    p[0].lineno = get_lineno(p,1)
+
 if iu.get_numeric_version() <= [1,1]:
   def p_top_action_symbol_eq_loc_action_loc(p):
     'top : top ACTION SYMBOL loc EQ LCB optaction RCB loc'
@@ -779,6 +785,33 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     thing = InterpretDecl(LabeledFormula(None,Implies(Atom(p[3],[]),Range(p[6],p[8]))))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
+
+def parse_nativequote(p,n):
+    string = p[n][3:-3] # drop the quotation marks
+    fields = string.split('`')
+    bqs = [Atom(s) for idx,s in enumerate(fields) if idx % 2 == 1]
+    text = "`".join([(s if idx % 2 == 0 else str(idx/2)) for idx,s in enumerate(fields)])
+    eols = [sum(1 for c in s if c == '\n') for idx,s in enumerate(fields) if idx % 2 == 0]
+    seols = 0
+    filename,line = get_lineno(p,n)
+    for idx,e in enumerate(eols[:-1]):
+        seols += e
+        bqs[idx].lineno = (filename,line+seols)
+    if len(fields) %2 != 1:
+        thing = Atom("")
+        thing.lineno = (filename,line)
+        report_error(IvyError(thing,"unterminated back-quote"))
+    return NativeCode(text),bqs
+
+def p_top_nativequote(p):
+    'top : top NATIVEQUOTE'
+    p[0] = p[1]
+    text,bqs = parse_nativequote(p,2)
+    defn = NativeDef(*([None] + [text] + bqs))
+    defn.lineno = get_lineno(p,2)
+    thing = NativeDecl(defn)
+    thing.lineno = get_lineno(p,2)
+    p[0].declare(thing)   
 
 def p_loc(p):
     'loc : '

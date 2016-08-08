@@ -31,6 +31,7 @@ tokens = (
    'GT',
    'MINUS',
    'DOTS',
+   'NATIVEQUOTE',
 )
 
 reserved = all_reserved = {
@@ -151,6 +152,12 @@ def t_LABEL(t):
 def t_VARIABLE(t):
     r'[A-Z][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*'
     t.type = reserved.get(t.value,'VARIABLE')
+    return t
+
+def t_NATIVEQUOTE(t):
+    r'<<<[\s\S]*?>>>'
+    t.lexer.lineno += sum(1 for c in t.value if c == '\n')
+    t.type = reserved.get(t.value,'NATIVEQUOTE')
     return t
 
 def t_error(t):

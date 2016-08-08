@@ -54,6 +54,7 @@ class Module(object):
         self.sort_destructors = defaultdict(list)
         self.privates = set() # set of string (names of private actions)
         self.interps = defaultdict(list) # maps type names to lists of labeled interpretions
+        self.natives = [] # list of NativeDef
 
         self.sig = il.sig.copy() # capture the current signature
 

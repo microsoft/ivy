@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction, NativeAction
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -295,6 +295,8 @@ def compile_assert_action(self):
 AssertAction.cmpl = compile_assert_action
 AssumeAction.cmpl = compile_assert_action
 
+NativeAction.cmpl = lambda self: self
+
 def compile_action_def(a,sig):
     sig = sig.copy()
     if not hasattr(a.args[1],'lineno'):
@@ -461,6 +463,9 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.privates.add(pvt.privatized())
     def delegate(self,exp):
         self.mod.delegates.append(exp)
+    def native(self,native_def):
+        print native_def
+        self.mod.natives.append(native_def)
         
         
 def ivy_new(filename = None):

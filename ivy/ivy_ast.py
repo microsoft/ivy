@@ -666,6 +666,41 @@ class DelegateDef(AST):
             s += ' -> ' + self.delegee
         return s
 
+
+class NativeCode(AST):
+    def __init__(self,string):
+        self.args = []
+        self.code = string
+    def __str__(self):
+        return self.code
+    def clone(self,args):
+        return NativeCode(self.code)
+    
+
+def native_to_string(args):
+    res = '<<<'
+    fields = args[0].code.split('`')
+    fields = [(str(args[int(s)+1]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+    res += '`'.join(fields)
+    res += '>>>'
+    return res
+    
+
+class NativeDef(AST):
+    def name(self):
+        return 'native'
+    def __str__(self):
+        res = ('[' + str(self.args[0]) + '] ') if self.args[0] else ''
+        res += native_to_string(self.args[1:])
+        return res
+
+class NativeDecl(Decl):
+    def name(self):
+        return 'native'
+    def defines(self):
+        return []
+        
+
 class TypeDef(Definition):
     def __init__(self,name,sort):
         self.args = [name,sort]
@@ -837,14 +872,14 @@ def ast_rewrite(x,rewrite):
         return type(x)(ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
     if hasattr(x,'rewrite'):
         return x.rewrite(rewrite)
-    if isinstance(x,LabeledFormula):
+    if isinstance(x,LabeledFormula) or isinstance(x,NativeDef):
         arg0 = x.args[0]
         if x.args[0] == None:
             if isinstance(rewrite,AstRewriteSubstPrefix) and rewrite.pref != None:
                 arg0 = rewrite.pref
         else:
             arg0 = rewrite.rewrite_atom(x.args[0],always=True)
-        res = x.clone([arg0,ast_rewrite(x.args[1],rewrite)])
+        res = x.clone([arg0] + [ast_rewrite(y,rewrite) for y in x.args[1:]])
         return res
     if isinstance(x,TypeDef):
         atom = rewrite.rewrite_atom(Atom(x.args[0]))

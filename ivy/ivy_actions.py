@@ -690,6 +690,15 @@ class LetAction(Action):
 #        print "let res: {}".format(res)
         return res
 
+class NativeAction(Action):
+    """ Quote native code in an action """
+    def name(self):
+        return 'native'
+    def __str__(self):
+        return ivy_ast.native_to_string(self.args)
+    def int_update(self,domain,pvars):
+        return ([], true_clauses(), false_clauses())
+        
 call_action_ctr = 0
 
 class CallAction(Action):
