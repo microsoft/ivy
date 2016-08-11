@@ -45,6 +45,7 @@ class Module(object):
         self.public_actions = set()
         self.isolates = {}
         self.exports = []
+        self.imports = []
         self.delegates = []
         self.public_actions = set() # hash of the exported actions
         self.progress = []  # list of progress properties

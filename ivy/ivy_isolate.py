@@ -18,6 +18,7 @@ from ivy_ast import ASTContext
 from collections import defaultdict
 
 show_compiled = iu.BooleanParameter("show_compiled",False)
+cone_of_influence = iu.BooleanParameter("coi",True)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -524,16 +525,17 @@ def isolate_component(mod,isolate_name):
     # keep only the symbols referenced in the remaining
     # formulas
 
-    asts = []
-    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
-        asts += [y.formula for y in x]
-    asts += mod.concepts
-    asts += [action for action in new_actions.values()]
-    sym_names = set(x.name for x in lu.used_symbols_asts(asts))
-    old_syms = list(mod.sig.symbols)
-    for sym in old_syms:
-        if sym not in sym_names:
-            del mod.sig.symbols[sym]
+    if cone_of_influence.get():
+        asts = []
+        for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
+            asts += [y.formula for y in x]
+        asts += mod.concepts
+        asts += [action for action in new_actions.values()]
+        sym_names = set(x.name for x in lu.used_symbols_asts(asts))
+        old_syms = list(mod.sig.symbols)
+        for sym in old_syms:
+            if sym not in sym_names:
+                del mod.sig.symbols[sym]
 
 #    for x,y in new_actions.iteritems():
 #        print iu.pretty(ia.action_def_to_str(x,y))
@@ -718,10 +720,11 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # get rid of useless actions
 
-        cone = get_mod_cone(mod)
-        for a in list(mod.actions):
-            if a not in cone:
-                del mod.actions[a]
+        if cone_of_influence.get():
+            cone = get_mod_cone(mod)
+            for a in list(mod.actions):
+                if a not in cone:
+                    del mod.actions[a]
 
         # show the compiled code if requested
 

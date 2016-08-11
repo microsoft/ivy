@@ -1063,7 +1063,7 @@ def has_enumerated_sort(sig,sym):
                isinstance(sort,FunctionSort) and isinstance(sort.rng,EnumeratedSort))
 
 def var_to_skolem(pref,v):
-    return var_to_constant(v,pref + str(v))
+    return var_to_constant(v,pref + v.name)
 
 def var_to_constant(v,name):
     sym = Symbol(name,v.sort)

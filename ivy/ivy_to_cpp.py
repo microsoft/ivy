@@ -44,6 +44,23 @@ indent_level = 0
 def indent(header):
     header.append(indent_level * '    ')
 
+def get_indent(line):
+    lindent = 0
+    for char in line:
+        if char == ' ':
+            lindent += 1
+        elif char == '\t':
+            lindent = (lindent + 8) / 8 * 8
+        else:
+            break
+    return lindent
+
+def indent_code(header,code):
+    code = code.rstrip() # remove trailing whitespace
+    indent = min(get_indent(line) for line in code.split('\n') if line.strip() != "")
+    for line in code.split('\n'):
+        header.append((indent_level * 4 + get_indent(line) - indent) * ' ' + line.strip() + '\n')
+
 def declare_symbol(header,sym,c_type = None):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
@@ -374,6 +391,9 @@ def emit_derived(header,impl,df,classname):
     retval = il.Symbol("ret:val",sort)
     vs = df.args[0].args
     ps = [ilu.var_to_skolem('p:',v) for v in vs]
+    iu.dbg('name')
+    iu.dbg('ps')
+    iu.dbg('vs')
     mp = dict(zip(vs,ps))
     rhs = ilu.substitute_ast(df.args[1],mp)
     action = ia.AssignAction(retval,rhs)
@@ -382,15 +402,28 @@ def emit_derived(header,impl,df,classname):
     emit_some_action(header,impl,name,action,classname)
 
 
+def native_split(string):
+    split = string.split('\n',1)
+    if len(split) == 2:
+        tag = split[0].strip()
+        return ("member" if not tag else tag),split[1]
+    return "member",split[0]
+
+def native_type(native):
+    tag,code = native_split(native.args[1].code)
+    return tag
+
 def native_declaration(atom):
     res = varname(atom.rep)
     for arg in atom.args:
         res += '[' + str(sort_card(im.module.sig.sorts[arg.sort])) + ']'
     return res
 
-def native_to_str(native):
-    fields = native.args[1].code.split('`')
-    fields = [(native_declaration(native.args[int(s)+2]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+def native_to_str(native,reference=False):
+    tag,code = native_split(native.args[1].code)
+    fields = code.split('`')
+    f = native_reference if reference else native_declaration
+    fields = [(f(native.args[int(s)+2]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
     return ''.join(fields)
 
 def emit_native(header,impl,native,classname):
@@ -454,7 +487,7 @@ def open_loop(impl,vs):
     global indent_level
     for idx in vs:
         indent(impl)
-        impl.append('for (int ' + str(idx) + ' = 0; ' + str(idx) + ' < ' + str(sort_card(idx.sort)) + '; ' + str(idx) + '++) {\n')
+        impl.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
@@ -551,7 +584,6 @@ def emit_tick(header,impl,classname):
     indent(impl)
     impl.append('}\n')
 
-
 def module_to_cpp_class(classname):
     global is_derived
     is_derived = set()
@@ -573,6 +605,17 @@ def module_to_cpp_class(classname):
         header.append('extern int choose(int,int);\n')
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
     header.append('#include <vector>\n')
+
+    once_memo = set()
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "once":
+            code = native_to_str(native)
+            if code not in once_memo:
+                once_memo.add(code)
+                header.append(code)
+
+
     header.append('class ' + classname + ' {\n  public:\n')
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() == "gen":
@@ -614,7 +657,11 @@ def module_to_cpp_class(classname):
         emit_derived(header,impl,df,classname)
 
     for native in im.module.natives:
-        emit_native(header,impl,native,classname)
+        tag = native_type(native)
+        if tag not in ["member","init","once"]:
+            raise iu.IvyError(native,"syntax error at token {}".format(tag))
+        if tag == "member":
+            emit_native(header,impl,native,classname)
 
     # declare one counter for each progress obligation
     # TRICKY: these symbols are boolean but we create a C++ int
@@ -638,6 +685,18 @@ def module_to_cpp_class(classname):
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
     if target.get() != "gen":
         emit_one_initial_state(impl)
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "init":
+            vs = [il.Symbol(v.rep,im.module.sig.sorts[v.sort]) for v in native.args[0].args]
+            global indent_level
+            indent_level += 1
+            open_loop(impl,vs)
+            code = native_to_str(native,reference=True)
+            indent_code(impl,code)
+            close_loop(impl,vs)
+            indent_level -= 1
+
     impl.append('}\n')
 
     if target.get() == "gen":
@@ -648,17 +707,21 @@ def module_to_cpp_class(classname):
                 emit_action_gen(header,impl,name,action,classname)
 
     if target.get() == "repl":
+        emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
         for actname in sorted(im.module.public_actions):
             action = im.module.actions[actname]
-            getargs = ','.join('int_arg(args,0,ivy.__CARD__{})'.format(varname(x.sort.name)) for x in action.formal_params)
+            getargs = ','.join('int_arg(args,{},ivy.__CARD__{})'.format(idx,varname(x.sort.name)) for idx,x in enumerate(action.formal_params))
+            thing = "ivy.methodname(getargs)"
+            if action.formal_returns:
+                thing = "std::cout << " + thing + " << std::endl"
             impl.append("""
             if (action == "actname") {
                 check_arity(args,numargs,action);
-                ivy.baz__incr(getargs);
+                thing;
             }
             else
-""".replace('actname',actname).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
+""".replace('thing',thing).replace('actname',actname).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
         emit_repl_boilerplate2(header,impl,classname)
         
     return ''.join(header) , ''.join(impl)
@@ -874,7 +937,7 @@ def emit_assign(self,header):
     header.append(';\n')
     for idx in vs:
         indent(header)
-        header.append('for (int ' + str(idx) + ' = 0; ' + str(idx) + ' < ' + str(sort_card(idx.sort)) + '; ' + str(idx) + '++) {\n')
+        header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
     code = []
     indent(code)
@@ -888,7 +951,7 @@ def emit_assign(self,header):
         header.append('}\n')
     for idx in vs:
         indent(header)
-        header.append('for (int ' + str(idx) + ' = 0; ' + str(idx) + ' < ' + str(sort_card(idx.sort)) + '; ' + str(idx) + '++) {\n')
+        header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
     code = []
     indent(code)
@@ -1036,10 +1099,12 @@ def native_reference(atom):
 def emit_native_action(self,header):
     fields = self.args[0].code.split('`')
     fields = [(native_reference(self.args[int(s)+1]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
-    header.append(''.join(fields))
+    indent_code(header,''.join(fields))
 
 ia.NativeAction.emit = emit_native_action
 
+def emit_repl_imports(header,impl,classname):
+    pass
 
 def emit_repl_boilerplate1(header,impl,classname):
     impl.append("""
@@ -1054,6 +1119,52 @@ def emit_repl_boilerplate1(header,impl,classname):
 #include <stdio.h>
 #include <string>
 
+int ask_ret(int bound) {
+    int res;
+    while(true) {
+        std::cout << "? ";
+        std::cin >> res;
+        if (res >= 0 && res < bound) 
+            return res;
+        std::cout << "value out of range" << std::endl;
+    }
+}
+
+""")
+
+    impl.append("""
+
+    class classname_repl : public classname {
+
+    public:
+""".replace('classname',classname))
+    
+    for imp in im.module.imports:
+        name = imp.imported()
+        if not imp.scope() and name in im.module.actions:
+            action = im.module.actions[name]
+            emit_method_decl(impl,name,action);
+            impl.append('{\n    std::cout << "' + name + '"')
+            if action.formal_params:
+                impl.append(' << "("')
+                first = True
+                for arg in action.formal_params:
+                    if not first:
+                        impl.append(' << ","')
+                    first = False
+                    impl.append(' << {}'.format(varname(arg.rep.name)))
+                impl.append(' << ")"')
+            impl.append(' << std::endl;\n')
+            if action.formal_returns:
+                impl.append('    return ask_ret(__CARD__{});\n'.format(action.formal_returns[0].sort))
+            impl.append('}\n')
+
+    impl.append("""
+
+    };
+""")
+
+    impl.append("""
 // Override methods to implement low-level network service
 
 bool is_white(int c) {
@@ -1143,7 +1254,7 @@ int main(int argc, char **argv){
 
     // int my_id = atoi(argv[1]);
 
-    classname ivy;    
+    classname_repl ivy;    
 
     while(true) {
         std::cout << "> ";
@@ -1439,6 +1550,7 @@ def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
+    iu.set_parameters({'coi':'false'})
     with im.Module():
         ivy.ivy_init()
 

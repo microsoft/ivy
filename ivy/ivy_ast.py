@@ -623,7 +623,7 @@ class ExportDef(AST):
 
 class ImportDecl(Decl):    
     def name(self):
-        return 'import'
+        return 'import_'
     def defines(self):
         return []
     
