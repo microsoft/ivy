@@ -19,6 +19,7 @@ from collections import defaultdict
 
 show_compiled = iu.BooleanParameter("show_compiled",False)
 cone_of_influence = iu.BooleanParameter("coi",True)
+create_imports = iu.BooleanParameter("create_imports",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -662,6 +663,31 @@ def create_isolate(iso,mod = None,**kwargs):
             if dl.delegee() and dl.delegee() not in mod.hierarchy:
                 raise iu.IvyError(dl.args[1],"{} is not a module instance".format(name))
 
+        # create the import actions, if requested
+
+        if create_imports.get():
+            newimps = []
+            for imp in mod.imports:
+                if imp.args[1].rep == '':
+                    iu.dbg('imp')
+                    impname = imp.args[0].rep
+                    if impname not in mod.actions:
+                        raise IvyError(imp,"undefined action: {}".format(impname))
+                    action = mod.actions[impname]
+                    if not(type(action) == ia.Sequence and not action.args):
+                        raise IvyError(imp,"cannot import implemented action: {}".format(impname))
+                    extname = 'imp__' + impname
+                    call = ia.CallAction(*([ivy_ast.Atom(extname,action.formal_params)] + action.formal_returns))
+                    call.formal_params = action.formal_params
+                    call.formal_returns = action.formal_returns
+                    call.lineno = action.lineno
+                    mod.actions[impname] = call
+                    mod.actions[extname] = action
+                    newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),imp.args[1]))
+                else:
+                    newimps.append(imp)
+            mod.imports = newimps
+
         # Determine the mixin order (as a side effect on module.mixins)
 
         get_mixin_order(iso,mod)
@@ -671,7 +697,7 @@ def create_isolate(iso,mod = None,**kwargs):
         if iso:
             isolate_component(mod,iso)
         else:
-            if mod.isolates:
+            if mod.isolates and cone_of_influence.get():
                 raise iu.IvyError(None,'no isolate specified on command line')
             # apply all the mixins in no particular order
             for name,mixins in mod.mixins.iteritems():

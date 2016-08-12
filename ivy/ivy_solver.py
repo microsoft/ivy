@@ -929,7 +929,6 @@ def numeral_assign(clauses,h):
     for s in h.sorts():
 #        print "na sort: {}".format(repr(s))
         if ivy_logic.is_interpreted_sort(s):
-            print "interpreted"
             continue
 #        print "sort loop: sort = {}, foom = {}".format(s,foom)
         for num in num_by_sort[s]:

@@ -391,9 +391,6 @@ def emit_derived(header,impl,df,classname):
     retval = il.Symbol("ret:val",sort)
     vs = df.args[0].args
     ps = [ilu.var_to_skolem('p:',v) for v in vs]
-    iu.dbg('name')
-    iu.dbg('ps')
-    iu.dbg('vs')
     mp = dict(zip(vs,ps))
     rhs = ilu.substitute_ast(df.args[1],mp)
     action = ia.AssignAction(retval,rhs)
@@ -727,23 +724,32 @@ def module_to_cpp_class(classname):
     return ''.join(header) , ''.join(impl)
 
 
+def check_representable(sym,ast=None):
+    sort = sym.sort
+    if hasattr(sort,'dom'):
+        for domsort in sort.dom:
+            if sort_card(domsort) == None:
+                raise iu.IvyError(ast,'cannot compile "{}" because type {} is uninterpreted'.format(sym,domsort))
+
+cstr = il.fmla_to_str_ambiguous
 
 def assign_symbol_from_model(header,sym,m):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
     name, sort = sym.name,sym.sort
+    check_representable(sym)
     if hasattr(sort,'dom'):
         for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
             term = sym(*[il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)])
             val = m.eval_to_constant(term)
             header.append(varname(sym.name) + ''.join('['+str(a)+']' for a in args) + ' = ')
-            header.append(str(val) + ';\n')
+            header.append(cstr(val) + ';\n')
     else:
-        header.append(varname(sym.name) + ' = ' + m.eval_to_constant(sym) + ';\n')
+        header.append(varname(sym.name) + ' = ' + cstr(m.eval_to_constant(sym)) + ';\n')
         
 
 def emit_one_initial_state(header):
-    m = slv.get_model_clauses(im.module.init_cond)
+    m = slv.get_model_clauses(ilu.and_clauses(im.module.init_cond,im.module.background_theory()))
     if m == None:
         raise IvyError(None,'Initial condition is inconsistent')
     for sym in all_state_symbols():
@@ -1137,6 +1143,20 @@ int ask_ret(int bound) {
     class classname_repl : public classname {
 
     public:
+
+    virtual void ivy_assert(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assertion failed\\n";
+            exit(1);
+        }
+    }
+    virtual void ivy_assume(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assumption failed\\n";
+            exit(1);
+        }
+    }
+
 """.replace('classname',classname))
     
     for imp in im.module.imports:
@@ -1550,7 +1570,7 @@ def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
-    iu.set_parameters({'coi':'false'})
+    iu.set_parameters({'coi':'false',"create_imports":'true'})
     with im.Module():
         ivy.ivy_init()
 

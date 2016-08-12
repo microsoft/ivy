@@ -1,0 +1,29 @@
+#lang ivy1.6
+
+type money
+
+function (X:money + Y:money) : money
+
+object account = {
+
+    individual balance : money
+    init balance = 0
+
+    action deposit(x:money) = {
+	balance := balance + x
+    }
+
+    action withdraw(x:money) = {
+	balance := balance - x
+    }
+
+    action get_balance returns(x:money) = {
+	x := balance
+    }
+}
+
+export account.deposit
+export account.withdraw
+export account.get_balance
+
+interpret money -> bv[16]

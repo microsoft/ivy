@@ -614,13 +614,33 @@ else:
     if not hasattr(p[0],'lineno'):
         p[0].lineno = get_lineno(p,2)
 
-  def p_top_action_symbol_optargs_optreturns_eq_action(p):
-    'top : top ACTION SYMBOL optargs optreturns optactiondef'
+  def p_optimpex(p):
+      'optimpex : '
+      p[0] = None
+
+  def p_optimpex_export(p):
+      'optimpex : EXPORT'
+      p[0] = ExportDecl
+      
+  def p_optimpex_import(p):
+      'optimpex : IMPORT'
+      p[0] = ImportDecl
+
+  def p_top_optimpex_action_symbol_optargs_optreturns_eq_action(p):
+    'top : top optimpex ACTION SYMBOL optargs optreturns optactiondef'
     p[0] = p[1]
-    adef = p[6]
+    adef = p[7]
     if not hasattr(adef,'lineno'):
-        adef.lineno = get_lineno(p,3)
-    p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),adef,formals=p[4],returns=p[5])))
+        adef.lineno = get_lineno(p,4)
+    p[0].declare(ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6])))
+    if p[2]:
+        if p[2] == ExportDecl:
+            d = ExportDecl(ExportDef(Atom(p[4]),Atom('')))
+        else:
+            d = ImportDecl(ImportDef(Atom(p[4]),Atom('')))
+        d.lineno = get_lineno(p,4)
+        p[0].declare(d)
+
 
 def handle_mixin(kind,mixer,mixee,ivy):
     cls = (MixinBeforeDef if kind == 'before' else MixinAfterDef if kind == 'after' else MixinImplementDef)

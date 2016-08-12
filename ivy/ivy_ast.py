@@ -979,6 +979,8 @@ class Range(AST):
         self.lo, self.hi = lo,hi
     def __str__(self):
         return '{' + str(self.lo) + '..' + str(self.hi) + '}'
+    def clone(self,args):
+        return Range(self.lo,self.hi)
     @property
     def rep(self):
         return self

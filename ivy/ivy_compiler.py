@@ -494,12 +494,16 @@ def infer_parameters(decls):
     mixees = defaultdict(list)
     actdecls = dict()
     for d in decls:
-        if d.name() == "mixin":
-            for a in d.args:
-                mixees[a.args[0].relname].append(a.args[1].relname)
         if d.name() == "action":
             for a in d.args:
                 actdecls[a.defines()] = a
+    for d in decls:
+        if d.name() == "mixin":
+            for a in d.args:
+                mixeename = a.args[1].relname
+                if mixeename not in actdecls:
+                    raise IvyError(a,"undefined action: {}".format(mixeename))
+                mixees[a.args[0].relname].append(mixeename)
     for d in decls:
         if d.name() == "action":
             for a in d.args:
