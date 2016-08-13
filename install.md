@@ -83,7 +83,7 @@ If you don't want to do a system-wide install (and you aren't using a
 virtual environment) there are various ways to install in your home
 directory. For example:
 
-    $ python setup install --home=~
+    $ python setup.py install --home=~
 
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.

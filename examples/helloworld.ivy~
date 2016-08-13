@@ -1,0 +1,10 @@
+#lang ivy1.6
+
+action world
+
+action hello = {
+    world
+}
+
+export hello
+import word

@@ -1,0 +1,34 @@
+---
+layout: page
+title: Hello, world!
+---
+
+Having specified and verified a protocol or two, it's natural to want
+to try actually running a verified protocol. Ivy programs can be
+compiled into the C++ language and executed in various ways.
+
+The simplest way to try out an Ivy program is to generate a
+read-eval-print loop (REPL). We'll start with the closest thing we can
+write to the "Hello, World!" program in Ivy. Ivy programs are
+*reactive*, meaning that they ony do something when called upon by
+their environment.  This means we can't actually write a program that
+spontaneously prints a message. Here is an approximation:
+
+    #lang ivy1.6
+
+    action world
+
+    action hello = {
+        call world
+    }
+
+    export hello
+    import word
+    
+This program provides an action `hello` that calls action `world`
+provided by the environment. Let's try compiling and running this program:
+
+    $ ivy_to_cpp target=repl helloworld.ivy
+    $ ls helloworld*
+
+

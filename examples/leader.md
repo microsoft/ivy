@@ -88,30 +88,33 @@ others and it declares itself leader.
 
 We'll start with a service specification for this protocol:
 
+    object asgn = {
+
+	function pid(X:node.t) : id.t          # map each node to an id
+
+	axiom [injectivity] pid(X) = pid(Y) -> X = Y
+    }
+
     object serv = {
-
-        function pid(X:node.t) : id.t          # map each node to an id
-
-        axiom pid(X) = pid(Y) -> X=Y           # id's are unique
 
         action elect(v:node.t)                 # called when v is elected leader
 
-        object spec = {
+        object spec = {                        # only the max pid can be elected
             before elect {
-                assert pid(v) >= pid(X)        # only the max pid can be elected
+                assert asgn.pid(v) >= asgn.pid(X)  
             }
         }
     }
 
-This object is parameterized on an abstract datatype `node` that we
-will define shortly. Type `node.t` represents a reference to a process
-in our system. The service specification contains a function `pid` that
-maps each node to its unique `id` value. The fact that the `id` values
-are unique is guaranteed by the axiom.
+These two objects are parameterized on an abstract datatype `node`
+that we will define shortly. Type `node.t` represents a reference to a
+process in our system. The `asgn` object defines an assignment of `id`
+values to nodes, represented by the function `pid`.  The fact that the
+`id` values are unique is guaranteed by the axiom `injectivity`.
 
-The specification has one action `elect` which is called when a given
-node is elected leader. Its specification says that only the node with
-the maximum `id` value can be elected.
+The service specification `serv` defines one action `elect` which is
+called when a given node is elected leader. Its specification says
+that only the node with the maximum `id` value can be elected.
 
 Now that we know what the protocol is supposed to do, let's define the
 protocol itself.  First, we use the explicit parameter style:
@@ -119,14 +122,14 @@ protocol itself.  First, we use the explicit parameter style:
     object app = {
 
         action async(me:node.t) = {
-            call trans.send(node.get_next(me),serv.pid(me))
+            call trans.send(node.get_next(me),asgn.pid(me))
         }
 
         implement trans.recv(me:node.t,v:id.t) {
-            if v = serv.pid(me) {       # Found a leader!
+            if v = asgn.pid(me) {       # Found a leader!
                 call serv.elect(me)
             }
-            else if v > serv.pid(me)  { # pass message to next node
+            else if v > asgn.pid(me)  { # pass message to next node
                 call trans.send(node.get_next(me),v)
             }
         }
@@ -160,14 +163,14 @@ Here is the same object described in the implicit style:
     object app(me:node.t) = {
 
         action async = {
-            call trans.send(node.get_next(me),serv.pid(me))
+            call trans.send(node.get_next(me),asgn.pid(me))
         }
 
         implement trans.recv(v:id.t) {
-            if v = serv.pid(me) {       # Found a leader!
+            if v = asgn.pid(me) {       # Found a leader!
                 call serv.elect(me)
             }
-            else if v > serv.pid(me)  { # pass message to next node
+            else if v > asgn.pid(me)  { # pass message to next node
                 call trans.send(node.get_next(me),v)
             }
         }
@@ -268,11 +271,12 @@ messages, but cannot corrupt messages.
 
 ## Verifying the leader election protocol
 
-Now let's try to verify that our leader election protocol `app` guarantees
-its service specification `serv` , assuming the specifications of `trans`,
-`node` and `id`. Here is the isolate declaration:
+Now let's try to verify that our leader election protocol `app`
+guarantees its service specification `serv` , assuming the
+specifications of `trans`, `node`, `id` and `asgn`. Here is the
+isolate declaration:
 
-    isolate iso_p = app with node,id,trans,serv
+    isolate iso_p = app with node,id,trans,serv,asgn
 
 We are trying to prove that, when any node calls `serv.elect`, it in
 fact has the highest `id`. That is, the `before` specification of
@@ -291,11 +295,11 @@ isolate:
 
     action ext:trans.recv(dst:node.t,v:id.t) = {
         assume trans.sent(v,dst);
-        if v = serv.pid(dst) {
+        if v = asgn.pid(dst) {
             call serv.elect(dst)
         }
         else {
-            if v > serv.pid(dst) {
+            if v > asgn.pid(dst) {
                 local loc[0] {
                     call loc[0] := node.get_next(dst);
                     call trans.send(loc[0], v)
@@ -305,13 +309,13 @@ isolate:
     }
 
     action serv.elect(v:node.t) = {
-        assert serv.pid(v) >= serv.pid(X)
+        assert asgn.pid(v) >= asgn.pid(X)
     }
 
     action ext:app.send(me:node.t) = {
         local loc[0] {
             call loc[0] := node.get_next(me);
-            call trans.send(loc[0], serv.pid(me))
+            call trans.send(loc[0], asgn.pid(me))
         }
     }
 
@@ -359,7 +363,7 @@ IVy thinks might be relevant to the failure. Here's what we see:
 The arrow from id 0 to id 1 is depicting the relation `X:id.t < Y`.
 Because the arrow goes from `X` to `Y`, we interpret the arrow to mean
 `0:id.t < 1`.  Similarly, the arrow from node 0 to id 0 means that
-`serv.pid(0) = 0`.  That is, the id of node 0 is 0. We can also see
+`asgn.pid(0) = 0`.  That is, the id of node 0 is 0. We can also see
 that node 1's id is 1 and that `trans.sent(0,1)`, in other words, id 0
 has been sent to node 0. These facts are displayed below the graph
 under the heading "Constraints".
@@ -462,22 +466,22 @@ into our implementation object `app`, like this:
     object app = {
 
         action async(me:node.t) = {
-            call trans.send(node.get_next(me),serv.pid(me))
+            call trans.send(node.get_next(me),asgn.pid(me))
         }
 
         implement trans.recv(me:node.t,v:id.t) {
-            if v = serv.pid(me) {       # Found a leader!
+            if v = asgn.pid(me) {       # Found a leader!
                 call serv.elect(me)
             }
-            else if v > serv.pid(me)  { # pass message to next node
+            else if v > asgn.pid(me)  { # pass message to next node
                 call trans.send(node.get_next(me),v)
             }
         }
 
-        conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-        conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-        conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-        conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+        conjecture ~(asgn.pid(N) < asgn.pid(P) & trans.sent(asgn.pid(N),N))
+        conjecture ~(asgn.pid(P) < asgn.pid(Q) & N:node.t < P & P < Q & trans.sent(asgn.pid(P),N))
+        conjecture ~(asgn.pid(N) < asgn.pid(P) & N < P & P < Q & trans.sent(asgn.pid(N),Q))
+        conjecture ~(asgn.pid(Q) < asgn.pid(N) & N < P & P < Q & trans.sent(asgn.pid(Q),P))
     }
 
 Of course, if we don't want to mess up our pretty implementation with parts of the proof,
@@ -485,10 +489,10 @@ we can put the conjectures in a separate object and include that object in the i
 like this:
 
      object app_proof = {
-        conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-        conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-        conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-        conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+        conjecture ~(asgn.pid(N) < asgn.pid(P) & trans.sent(asgn.pid(N),N))
+        conjecture ~(asgn.pid(P) < asgn.pid(Q) & N:node.t < P & P < Q & trans.sent(asgn.pid(P),N))
+        conjecture ~(asgn.pid(N) < asgn.pid(P) & N < P & P < Q & trans.sent(asgn.pid(N),Q))
+        conjecture ~(asgn.pid(Q) < asgn.pid(N) & N < P & P < Q & trans.sent(asgn.pid(Q),P))
      }
 
     isolate iso_p = app with node,id,trans,serv,app_proof
