@@ -1266,22 +1266,45 @@ int int_arg(std::vector<std::string> &args, unsigned idx, int bound) {
     return res;
 }
 
-int main(int argc, char **argv){
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+};
 
-    // if (argc != 2) {
-    //     std::cerr << "usage: classname <index>\\n";
-    //     return(1);
-    // }
+class stdin_reader: public reader {
+    std::string buf;
 
-    // int my_id = atoi(argv[1]);
+    virtual int fdes(){
+        return 0;
+    }
+    virtual void read() {
+        char tmp[257];
+        int chars = ::read(0,tmp,256);
+        tmp[chars] = 0;
+        buf += std::string(tmp);
+        size_t pos;
+        while ((pos = buf.find('\\n')) != std::string::npos) {
+            std::string line = buf.substr(0,pos+1);
+            buf.erase(0,pos+1);
+            process(line);
+        }
+    }
+    virtual void process(const std::string &line) {
+        std::cout << line;
+    }
+};
 
-    classname_repl ivy;    
+class cmd_reader: public stdin_reader {
 
-    while(true) {
-        std::cout << "> ";
-        std::cout.flush();
-        std::string cmd;
-        std::cin >> cmd;
+public:
+    classname_repl &ivy;    
+
+    cmd_reader(classname_repl &_ivy) : ivy(_ivy) {
+        std::cout << "> "; std::cout.flush();
+    }
+
+    virtual void process(const std::string &cmd) {
         std::string action;
         std::vector<std::string> args;
         try {
@@ -1304,7 +1327,57 @@ def emit_repl_boilerplate2(header,impl,classname):
         catch (bad_arity &err) {
             std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
+        std::cout << "> "; std::cout.flush();
+    }
+};
+
+int main(int argc, char **argv){
+
+    // if (argc != 2) {
+    //     std::cerr << "usage: classname <index>\\n";
+    //     return(1);
+    // }
+
+    // int my_id = atoi(argv[1]);
+
+    classname_repl ivy;    
+
+    std::vector<reader *> readers;
+    readers.push_back(new cmd_reader(ivy));
+
+    while(true) {
+
+        fd_set rdfds;
+        FD_ZERO(&rdfds);
+        int maxfds = 0;
+
+        for (unsigned i = 0; i < readers.size(); i++) {
+            reader *r = readers[i];
+            int fds = r->fdes();
+            FD_SET(fds,&rdfds);
+            if (fds > maxfds)
+                maxfds = fds;
+        }
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+
+        if (foo < 0)
+            {perror("select failed"); exit(1);}
         
+        if (foo == 0){
+            // std::cout << "TIMEOUT\\n";            
+        }
+        else {
+            for (unsigned i = 0; i < readers.size(); i++) {
+                reader *r = readers[i];
+                if (FD_ISSET(r->fdes(),&rdfds))
+                    r->read();
+            }
+        }            
     }
 }
 """.replace('classname',classname))
