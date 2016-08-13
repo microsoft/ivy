@@ -174,22 +174,25 @@ When Ivy calls `ask`, the REPL prompts us for a return value with `?`.
 
 ## Running a protocol
 
-Now let's try running the [leader election ring
-protocol](leader.md). Recall that we used two abstract datatypes for
-this protocol: `node` and `id`.  To keep things simple, we'll
-implement both of these types with one-bit binary numbers. That means
-we'll have exactly two nodes and two id's. Here are the implementations:
+Now let's try running the [leader election ring protocol](leader.html).
+
+# Implementing the abstract datatypes
+
+Recall that we used two abstract datatypes for this protocol: `node`
+and `id`.  To keep things simple, we'll implement both of these types
+with one-bit binary numbers. That means we'll have exactly two nodes
+and two id's. Here are the implementations:
 
     object node_impl = {
-	interpret node.t -> bv[1]
+        interpret node.t -> bv[1]
 
-	implement node.get_next {
-	    y := x + 1 
+        implement node.get_next {
+            y := x + 1 
        }
     }
 
     object id_impl = {
-	interpret id.t -> bv[1]
+        interpret id.t -> bv[1]
     }
 
 Before going on, it would be a good idea to verify that these are
@@ -213,4 +216,132 @@ also that adding one gives the next node in the ring (this is because
     Checking isolate iso_id...
     OK
 
-Now that we have concrete datatypes, we want to 
+# Playing the environment
+
+Now that we have concrete datatypes, we should be able to execute the
+program. We compile the program and run the REPL like this:
+
+    $ ivy_to_cpp target=repl leader_election_ring_repl.ivy
+    $ g++ -o leader_election_ring_repl leader_election_ring_repl.cpp 
+    $ ./leader_election_ring_repl
+    >
+
+Being reactive, the program is waiting for us to do something. Recall the
+protocol object `app` has an action `async` that causes a node to transmit its id:
+
+    action async(me:node.t) = {
+        call trans.send(node.get_next(me),serv.pid(me))
+    }
+
+Let's call it. Since `node.t` is represented by one-bit integers, we
+can choose node 0 or node 1:
+
+    > app.async(0)
+    trans.send(1,1)
+    >
+
+The response was for node 0 to call the environment to send its id 1
+to node 1 (the id's were chosen arbitrary by IVy in a way that
+satisfies our axioms). Now the program is waiting again for us to do
+something. The network is part of the environment, and the environment
+is us, so let's deliver the packet:
+
+    > trans.recv(1,1)
+    trans.send(0,1)
+
+As a response, node 1 passed the id along to node 0. We could, for
+example, deliver this message:
+
+    > trans.recv(0,1)
+    serv.elect(0)
+    > 
+
+Node 0 sees its own id and elects itself leader, as it should.
+
+# Extracting the implementation
+
+ What happens if we, as the network, deliver a message that hasn't
+been sent yet:
+
+    > trans.recv(0,0)
+    leader_election_ring_repl.ivy: line 99: assertion failed
+    $
+
+This shows that the specification monitors in the program are
+active. If an assertion fails, the program exits. This is good for
+testing, but we wouldn't want the monitors to be executed in
+production, since this could be a significant overhead. We can remove
+the specifications from our program by declaring a special kind of
+isolate called an *extract*. This is just an isolate in which nothing
+is actually verified:
+
+    extract iso_impl = app, node_impl, id_impl
+
+In the extract, we include just the implementation objects, not the
+specification objects `serv`, `node` and `id`. We can compile and run
+this extract, using the command-line option `isolate=iso_impl`:
+
+    $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_repl.ivy
+    leader_election_ring_repl.ivy: line 90: error: relevant axiom not enforced
+
+Looks like we forgot something. Here is the line in question:
+
+    axiom [injectivity] pid(X) = pid(Y) -> X = Y
+
+We made an assumption about the id assignment but didn't include it in
+the extract. IVy is telling us that the properties we proved might not
+be true in the extract because of this. To fix this, we include `asgn` in the extract:
+
+   extract iso_impl = app, node_impl, id_impl, asgn
+
+Let's try again:
+
+    $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_repl.ivy
+    $ g++ -o leader_election_ring_repl leader_election_ring_repl.cpp 
+    $ ./leader_election_ring_repl
+    >
+
+So far, so good. Let's try some actions:
+
+    > app.async(0)
+    trans.send(1,1)
+    > trans.recv(1,1)
+    trans.send(0,1)
+    > trans.recv(0,1)
+    serv.elect(0)
+
+That looks fine.
+
+    > trans.recv(1,0)
+    serv.elect(1)
+
+Oops! We incorrectly delivered a message and it caused the service
+specification to be violated. This is expected, since we removed the
+specification monitors. This is the nature of assume-guarantee
+reasoning: after the assumptions fail, the guarantees no longer hold.
+
+Just as an experiment, let's try making a few more mistakes. Suppose we left
+the implementation of the `node` type out of the extract:
+
+    extract iso_impl = app, id_impl, asgn
+
+Here's what happens:
+
+    ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_repl.ivy
+    leader_election_ring_repl.ivy: error: No implementation for action node.get_next
+
+IVy can't compile the extract because it's missing an action
+implementation.  On the other hand, suppose we left the implementation
+of the `id` type out of the extract:
+
+    extract iso_impl = app, node_impl, asgn
+
+Here's what happens:
+
+    ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_repl.ivy
+    leader_election_ring_repl.ivy: line 11: error: property id.transitivity depends on abstracted object id_impl
+
+IVy is unhappy because it can't prove that the stated properties of
+`id.t` hold in the extract. This is because the proof depends on `id_impl`, which we left out.
+When we generate code for an extract, IVY makes sure that that
+guarantees of the extract hold, provided that the assumptions hold.

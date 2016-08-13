@@ -606,7 +606,12 @@ class IsolateDef(AST):
     def __repr__(self):
         return (','.join(repr(a) for a in self.verified()) +
                   (('with ' + ','.join(repr(a) for a in self.present())) if self.present() else ''))
-    
+    def add_with(extra_with):
+        res = self.clone(list(self.args))
+        res.with_args += len(extra_with)
+        res.args.extend(extra_with)
+        return res
+        
 class ExportDecl(Decl):    
     def name(self):
         return 'export'

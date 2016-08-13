@@ -20,6 +20,7 @@ from collections import defaultdict
 show_compiled = iu.BooleanParameter("show_compiled",False)
 cone_of_influence = iu.BooleanParameter("coi",True)
 create_imports = iu.BooleanParameter("create_imports",False)
+enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -379,11 +380,44 @@ def check_interference(mod,new_actions,summarized_actions):
                 
                 
 
-def isolate_component(mod,isolate_name):
+
+def ancestors(s):
+    while iu.ivy_compose_character in s:
+        yield s
+        s,_ = s.rsplit(iu.ivy_compose_character,1)
+    yield s
+
+def get_prop_dependencies(mod):
+    """ get a list of pairs (p,ds) where p is a property ds is a list
+    of objects its proof depends on """
+    depmap = defaultdict(list)
+    for iso in mod.isolates.values():
+        for v in iso.verified():
+            depmap[v.rep].extend(w.rep for w in iso.verified()+iso.present())
+    objs = set()
+    for ax in mod.labeled_axioms:
+        if ax.label:
+            for n in ancestors(ax.label.rep):
+                objs.add(n)
+    for itps in mod.interps.values():
+        for itp in itps:
+            if itp.label:
+                for n in ancestors(itp.label.rep):
+                    objs.add(n)        
+    res = []
+    for prop in mod.labeled_props:
+        if prop.label:
+            ds = []
+            for n in ancestors(prop.label.rep):
+                ds.extend(d for d in depmap[n] if d in objs)
+            res.append((prop,ds))
+    return res
+
+def isolate_component(mod,isolate_name,extra_with=[]):
     if isolate_name not in mod.isolates:
         raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
     isolate = mod.isolates[isolate_name]
-    verified = set(a.relname for a in isolate.verified())
+    verified = set(a.relname for a in (isolate.verified()+tuple(extra_with)))
     present = set(a.relname for a in isolate.present())
     present.update(verified)
     if not interpret_all_sorts:
@@ -397,8 +431,9 @@ def isolate_component(mod,isolate_name):
         if (name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
             and name not in derived
-            and name not in ivy_logic.sig.interp):
-            raise iu.IvyError(None,"{} is not a module instance, sort, definition, or interpreted function".format(name))
+            and name not in ivy_logic.sig.interp
+            and name not in mod.actions):
+            raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
     
     # delegate all the stub actions to their implementations
     for ms in mod.mixins.values():
@@ -475,7 +510,7 @@ def isolate_component(mod,isolate_name):
     # figure out what is exported:
     exported = set()
     for e in mod.exports:
-        if not e.scope() and startswith_some(e.exported(),present,mod): # global scope
+        if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
     for actname,action in mod.actions.iteritems():
         if not startswith_some(actname,present,mod):
@@ -498,6 +533,8 @@ def isolate_component(mod,isolate_name):
     keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present,mod))
     check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
 
+    prop_deps = get_prop_dependencies(mod)
+
     # filter the conjectures
 
     new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
@@ -511,6 +548,7 @@ def isolate_component(mod,isolate_name):
     mod.labeled_inits.extend(new_inits)
     
     # filter the axioms
+    dropped_axioms = [a for a in mod.labeled_axioms if not keep_ax(a.label)]
     mod.labeled_axioms = [a for a in mod.labeled_axioms if keep_ax(a.label)]
     mod.labeled_props = [a for a in mod.labeled_props if keep_ax(a.label)]
 
@@ -526,17 +564,42 @@ def isolate_component(mod,isolate_name):
     # keep only the symbols referenced in the remaining
     # formulas
 
+    asts = []
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
+        asts += [y.formula for y in x]
+    asts += mod.concepts
+    asts += [action for action in new_actions.values()]
+    sym_names = set(x.name for x in lu.used_symbols_asts(asts))
+
     if cone_of_influence.get():
-        asts = []
-        for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
-            asts += [y.formula for y in x]
-        asts += mod.concepts
-        asts += [action for action in new_actions.values()]
-        sym_names = set(x.name for x in lu.used_symbols_asts(asts))
         old_syms = list(mod.sig.symbols)
         for sym in old_syms:
             if sym not in sym_names:
                 del mod.sig.symbols[sym]
+
+    # check that any dropped axioms do not refer to the isolate's signature
+    # and any properties have dependencies present
+
+    def pname(s):
+        return s.label if s.label else ""
+
+    if enforce_axioms.get():
+        for a in dropped_axioms:
+            for x in lu.used_symbols_ast(a.formula):
+                if x.name in sym_names:
+                    raise iu.IvyError(a,"relevant axiom {} not enforced".format(pname(a)))
+        for actname,action in mod.actions.iteritems():
+            if startswith_eq_some(actname,present,mod):
+                for c in action.iter_calls():
+                    called = mod.actions[c]
+                    if not startswith_eq_some(c,present,mod):
+                        if not(type(called) == ia.Sequence and not called.args):
+                            raise iu.IvyError(None,"No implementation for action {}".format(c))
+        for p,ds in prop_deps:
+            for d in ds:
+                if not startswith_eq_some(d,present,mod):
+                    raise iu.IvyError(p,"property {} depends on abstracted object {}"
+                                      .format(pname(p),d))
 
 #    for x,y in new_actions.iteritems():
 #        print iu.pretty(ia.action_def_to_str(x,y))
@@ -665,11 +728,11 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # create the import actions, if requested
 
+        extra_with = []
         if create_imports.get():
             newimps = []
             for imp in mod.imports:
                 if imp.args[1].rep == '':
-                    iu.dbg('imp')
                     impname = imp.args[0].rep
                     if impname not in mod.actions:
                         raise IvyError(imp,"undefined action: {}".format(impname))
@@ -684,6 +747,8 @@ def create_isolate(iso,mod = None,**kwargs):
                     mod.actions[impname] = call
                     mod.actions[extname] = action
                     newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),imp.args[1]))
+                    extra_with.append(ivy_ast.Atom(impname))
+#                    extra_with.append(ivy_ast.Atom(extname))
                 else:
                     newimps.append(imp)
             mod.imports = newimps
@@ -695,7 +760,7 @@ def create_isolate(iso,mod = None,**kwargs):
         # Construct an isolate
 
         if iso:
-            isolate_component(mod,iso)
+            isolate_component(mod,iso,extra_with=extra_with)
         else:
             if mod.isolates and cone_of_influence.get():
                 raise iu.IvyError(None,'no isolate specified on command line')

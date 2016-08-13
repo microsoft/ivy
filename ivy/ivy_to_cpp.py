@@ -707,6 +707,7 @@ def module_to_cpp_class(classname):
         emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
         for actname in sorted(im.module.public_actions):
+            username = actname[4:] if actname.startswith("ext:") else actname
             action = im.module.actions[actname]
             getargs = ','.join('int_arg(args,{},ivy.__CARD__{})'.format(idx,varname(x.sort.name)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
@@ -718,7 +719,7 @@ def module_to_cpp_class(classname):
                 thing;
             }
             else
-""".replace('thing',thing).replace('actname',actname).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
+""".replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
         emit_repl_boilerplate2(header,impl,classname)
         
     return ''.join(header) , ''.join(impl)
@@ -1164,7 +1165,7 @@ int ask_ret(int bound) {
         if not imp.scope() and name in im.module.actions:
             action = im.module.actions[name]
             emit_method_decl(impl,name,action);
-            impl.append('{\n    std::cout << "' + name + '"')
+            impl.append('{\n    std::cout << "' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
                 first = True
@@ -1570,7 +1571,7 @@ def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
-    iu.set_parameters({'coi':'false',"create_imports":'true'})
+    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true'})
     with im.Module():
         ivy.ivy_init()
 

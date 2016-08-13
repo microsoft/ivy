@@ -79,6 +79,20 @@ instance node : ring_topology
 
 ################################################################################
 #
+#  The assignments of id's to nodes
+#
+################################################################################
+
+object asgn = {
+
+    function pid(X:node.t) : id.t          # map each node to an id
+
+    axiom [injectivity] pid(X) = pid(Y) -> X = Y
+}
+
+
+################################################################################
+#
 # The transport-layer service specification
 #
 ################################################################################
@@ -110,15 +124,11 @@ object trans = {
 
 object serv = {
 
-    function pid(X:node.t) : id.t          # map each node to an id
-
-    instantiate injectivity_axioms(pid)    # id's are unique
-
     action elect(v:node.t)                 # called when v is elected leader
 
     object spec = {
 	before elect {
-	    assert pid(v) >= pid(X)        # only the max pid can be elected
+	    assert asgn.pid(v) >= asgn.pid(X)   # only the max pid can be elected
 	}
     }
 }
@@ -144,23 +154,23 @@ module process(pid) = {
         }
     }
 
-    conjecture ~(serv.pid(N) < serv.pid(P) & trans.sent(serv.pid(N),N))
-    conjecture ~(serv.pid(P) < serv.pid(Q) & N:node.t < P & P < Q & trans.sent(serv.pid(P),N))
-    conjecture ~(serv.pid(N) < serv.pid(P) & N < P & P < Q & trans.sent(serv.pid(N),Q))
-    conjecture ~(serv.pid(Q) < serv.pid(N) & N < P & P < Q & trans.sent(serv.pid(Q),P))
+    conjecture ~(asgn.pid(N) < asgn.pid(P) & trans.sent(asgn.pid(N),N))
+    conjecture ~(asgn.pid(P) < asgn.pid(Q) & N:node.t < P & P < Q & trans.sent(asgn.pid(P),N))
+    conjecture ~(asgn.pid(N) < asgn.pid(P) & N < P & P < Q & trans.sent(asgn.pid(N),Q))
+    conjecture ~(asgn.pid(Q) < asgn.pid(N) & N < P & P < Q & trans.sent(asgn.pid(Q),P))
 
 }
 
 # instantiate one process per ring element
 
-instance app: process(serv.pid)
+instance app: process(asgn.pid)
 
 import serv.elect
 import trans.send
 export app.async
 export trans.recv
 
-isolate iso_app = app with node,id,trans,serv
+isolate iso_app = app with node,id,trans,serv,asgn
 
 object node_impl = {
     interpret node.t -> bv[1]
@@ -177,3 +187,5 @@ object id_impl = {
 }
 
 isolate iso_id = id with id_impl
+
+extract iso_impl = app,node_impl,id_impl,asgn
