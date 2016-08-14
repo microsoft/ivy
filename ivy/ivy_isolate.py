@@ -735,7 +735,7 @@ def create_isolate(iso,mod = None,**kwargs):
                 if imp.args[1].rep == '':
                     impname = imp.args[0].rep
                     if impname not in mod.actions:
-                        raise IvyError(imp,"undefined action: {}".format(impname))
+                        raise iu.IvyError(imp,"undefined action: {}".format(impname))
                     action = mod.actions[impname]
                     if not(type(action) == ia.Sequence and not action.args):
                         raise IvyError(imp,"cannot import implemented action: {}".format(impname))

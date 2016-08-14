@@ -693,7 +693,7 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom.lineno = get_lineno(p,3)
         handle_before_after("after",atom,p[7],p[0],p[4],p[5])
     def p_top_implement_callatom_lcb_action_rcb(p):
-        'top : top IMPLEMENT atype optargs optreturns LCB action RCB'
+        'top : top IMPLEMENT atype optargs optreturns LCB optaction RCB'
         p[0] = p[1]
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
@@ -723,12 +723,14 @@ if not (iu.get_numeric_version() <= [1,1]):
         'top : top EXPORT callatom'
         d = ExportDecl(ExportDef(p[3],Atom('')))
         d.lineno = get_lineno(p,2)
+        d.args[0].lineno = d.lineno
         p[0] = p[1]
         p[0].declare(d)
     def p_top_import_callatom(p):
         'top : top IMPORT callatom'
         d = ImportDecl(ImportDef(p[3],Atom('')))
         d.lineno = get_lineno(p,2)
+        d.args[0].lineno = d.lineno
         p[0] = p[1]
         p[0].declare(d)
     def p_top_private_callatom(p):

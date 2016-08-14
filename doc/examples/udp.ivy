@@ -1,0 +1,87 @@
+#lang ivy1.6
+
+module udp_wrapper(addr,pkt,me) = {
+
+    object rdr = {}
+
+    <<< header
+	class udp_reader;
+    >>>
+    <<< impl
+	class udp_reader : public reader {
+	    int sock;
+	    int my_id;
+	    ivy_class &parent;
+	  public:
+	    udp_reader(int _my_id, ivy_class &_p) : my_id(_my_id), parent(_p) {
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0)
+		    { std::cerr << "cannot create socket\n"; exit(1); }
+
+		struct sockaddr_in myaddr;
+		memset((char *)&myaddr, 0, sizeof(myaddr));
+		myaddr.sin_family = AF_INET;
+		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		myaddr.sin_port = htons(4990+my_id);
+		if (bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+		    { std::cerr << "bind failed\n"; exit(1); }
+
+	    }
+
+	    virtual int fdes() {
+		return sock;
+	    }
+	    virtual void read() {
+		int pkt;
+		//std::cout << "RECEIVING\n";
+		if (recvfrom(sock,&pkt,sizeof(int),0,0,0) < 0)
+		    { std::cerr << "recvfrom failed\n"; exit(1); }
+		parent.`recv`(my_id,pkt);
+	    }
+	    virtual void write(int dst, int pkt) {
+		struct sockaddr_in dstaddr;
+		memset((char *)&dstaddr, 0, sizeof(dstaddr));
+		dstaddr.sin_family = AF_INET;
+		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		dstaddr.sin_port = htons(4990+dst);
+
+		//std::cout << "SENDING\n";
+		if (sendto(sock,&pkt,sizeof(int),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+		     { std::cerr << "sendto failed\n"; exit(1); }
+	    }
+	};
+    >>>
+    <<< member
+	udp_reader *`rdr`;
+    >>>
+    <<< init
+	install_reader(`rdr` = new udp_reader(`me`,*this));
+    >>>
+
+    implement send(dst:addr,x:pkt) {
+	<<<
+	    `rdr`->write(`dst`,`x`);
+	>>>
+    }
+}
+
+module udp_simple(addr,pkt) = {
+
+    action recv(dst:a,x:pkt)
+    action send(src:a,dst:a,x:pkt)
+
+    instance impl(X:a) : udp_wrapper(a,t,X)
+}
+
+
+type a
+type t
+
+instance foo : udp_simple(a,t)
+
+interpret a -> bv[1]
+
+import foo.recv
+export foo.send
+
+extract iso_foo = foo(me)

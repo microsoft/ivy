@@ -606,7 +606,7 @@ def module_to_cpp_class(classname):
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
-        if tag == "once":
+        if tag == "header":
             code = native_to_str(native)
             if code not in once_memo:
                 once_memo.add(code)
@@ -626,6 +626,39 @@ def module_to_cpp_class(classname):
     impl = ['#include "' + classname + '.h"\n\n']
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
+    impl.append("""
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <sys/select.h>
+#include <string.h>
+#include <stdio.h>
+#include <string>
+#include <unistd.h>
+""")
+    impl.append("typedef {} ivy_class;\n".format(classname))
+    impl.append("""
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+};
+void install_reader(reader *);
+""")
+
+    once_memo = set()
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "impl":
+            code = native_to_str(native)
+            if code not in once_memo:
+                once_memo.add(code)
+                impl.append(code)
+
+
     impl.append("int " + classname)
     if target.get() == "gen":
         impl.append(
@@ -655,7 +688,7 @@ def module_to_cpp_class(classname):
 
     for native in im.module.natives:
         tag = native_type(native)
-        if tag not in ["member","init","once"]:
+        if tag not in ["member","init","header","impl"]:
             raise iu.IvyError(native,"syntax error at token {}".format(tag))
         if tag == "member":
             emit_native(header,impl,native,classname)
@@ -709,7 +742,10 @@ def module_to_cpp_class(classname):
         for actname in sorted(im.module.public_actions):
             username = actname[4:] if actname.startswith("ext:") else actname
             action = im.module.actions[actname]
-            getargs = ','.join('int_arg(args,{},ivy.__CARD__{})'.format(idx,varname(x.sort.name)) for idx,x in enumerate(action.formal_params))
+            def csortcard(s):
+                card = sort_card(s)
+                return "ivy.__CARD__{}".format(varname(s.name)) if card else "0"
+            getargs = ','.join('int_arg(args,{},{})'.format(idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
             if action.formal_returns:
                 thing = "std::cout << " + thing + " << std::endl"
@@ -1100,7 +1136,8 @@ ia.ChoiceAction.emit = emit_choice
 def native_reference(atom):
     res = varname(atom.rep)
     for arg in atom.args:
-        res += '[' + varname(arg.rep) + ']'
+        n = arg.name if hasattr(arg,'name') else arg.rep
+        res += '[' + varname(n) + ']'
     return res
 
 def emit_native_action(self,header):
@@ -1115,16 +1152,6 @@ def emit_repl_imports(header,impl,classname):
 
 def emit_repl_boilerplate1(header,impl,classname):
     impl.append("""
-#include <iostream>
-#include <stdlib.h>
-#include <sys/types.h>          /* See NOTES */
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/ip.h> 
-#include <sys/select.h>
-#include <string.h>
-#include <stdio.h>
-#include <string>
 
 int ask_ret(int bound) {
     int res;
@@ -1261,16 +1288,11 @@ void check_arity(std::vector<std::string> &args, unsigned num, std::string &acti
 
 int int_arg(std::vector<std::string> &args, unsigned idx, int bound) {
     int res = atoi(args[idx].c_str());
-    if (res < 0 || res >= bound)
+    if (bound && (res < 0 || res >= bound))
         throw out_of_bounds(idx);
     return res;
 }
 
-class reader {
-public:
-    virtual int fdes() = 0;
-    virtual void read() = 0;
-};
 
 class stdin_reader: public reader {
     std::string buf;
@@ -1331,6 +1353,14 @@ def emit_repl_boilerplate2(header,impl,classname):
     }
 };
 
+
+std::vector<reader *> readers;
+
+void install_reader(reader *r){
+    readers.push_back(r);
+}
+
+
 int main(int argc, char **argv){
 
     // if (argc != 2) {
@@ -1342,8 +1372,7 @@ int main(int argc, char **argv){
 
     classname_repl ivy;    
 
-    std::vector<reader *> readers;
-    readers.push_back(new cmd_reader(ivy));
+    install_reader(new cmd_reader(ivy));
 
     while(true) {
 

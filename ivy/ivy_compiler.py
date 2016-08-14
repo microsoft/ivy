@@ -295,7 +295,11 @@ def compile_assert_action(self):
 AssertAction.cmpl = compile_assert_action
 AssumeAction.cmpl = compile_assert_action
 
-NativeAction.cmpl = lambda self: self
+def compile_native_action(self):
+    args = [self.args[0]] + [a.clone(map(sortify_with_inference,a.args)) for a in self.args[1:]]
+    return self.clone(args)
+
+NativeAction.cmpl = compile_native_action
 
 def compile_action_def(a,sig):
     sig = sig.copy()
