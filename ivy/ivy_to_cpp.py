@@ -15,6 +15,7 @@ import ivy_transrel as tr
 import ivy_logic_utils as ilu
 import ivy_compiler as ic
 import ivy_isolate as iso
+import ivy_ast
 import itertools
 
 from collections import defaultdict
@@ -83,6 +84,8 @@ special_names = {
 
 def varname(name):
     global special_names
+    if not isinstance(name,str):
+        name = name.name
     if name in special_names:
         return special_names[name]
     name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('.','__')
@@ -413,18 +416,60 @@ def native_type(native):
 def native_declaration(atom):
     res = varname(atom.rep)
     for arg in atom.args:
-        res += '[' + str(sort_card(im.module.sig.sorts[arg.sort])) + ']'
+        sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
+        res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
     return res
+
+thunk_counter = 0
+
+def action_return_type(action):
+    return 'int' if action.formal_returns else 'void'
+
+def thunk_name(actname):
+    return 'thunk__' + varname(actname)
+
+def create_thunk(impl,actname,action,classname):
+    tc = thunk_name(actname)
+    impl.append('struct ' + tc + '{\n')
+    impl.append('    ' + classname + ' *__ivy' + ';\n')
+    
+    params = [p for p in action.formal_params if p.name.startswith('prm:')]
+    inputs = [p for p in action.formal_params if not p.name.startswith('prm:')]
+    for p in params:
+        declare_symbol(impl,p)
+    impl.append('    ')
+    emit_param_decls(impl,tc,params,extra = [ classname + ' *__ivy'])
+    impl.append(': __ivy(__ivy)' + ''.join(',' + varname(p) + '(' + varname(p) + ')' for p in params) + '{}\n')
+    impl.append('    ' + action_return_type(action) + ' ')
+    emit_param_decls(impl,'operator()',inputs);
+    impl.append(' const {\n        __ivy->' + varname(actname)
+                + '(' + ','.join(varname(p.name) for p in action.formal_params) + ');\n    }\n};\n')
+
+def native_typeof(arg):
+    if isinstance(arg,ivy_ast.Atom):
+        if arg.rep in im.module.actions:
+            return thunk_name(arg.rep)
+        raise IvyError(arg,'undefined action: ' + arg.rep)
+    return int + len(arg.sort.dom) * '[]'
 
 def native_to_str(native,reference=False):
     tag,code = native_split(native.args[1].code)
     fields = code.split('`')
     f = native_reference if reference else native_declaration
-    fields = [(f(native.args[int(s)+2]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+    def nfun(idx):
+        return native_typeof if fields[idx-1].endswith('%') else f
+    def dm(s):
+        return s[:-1] if s.endswith('%') else s
+    fields = [(nfun(idx)(native.args[int(s)+2]) if idx % 2 == 1 else dm(s)) for idx,s in enumerate(fields)]
     return ''.join(fields)
 
 def emit_native(header,impl,native,classname):
     header.append(native_to_str(native))
+
+def emit_param_decls(header,name,params,extra=[]):
+    header.append(varname(name) + '(')
+    header.append(', '.join(extra + ['int ' + varname(p.name) for p in params]))
+    header.append(')')
 
 def emit_method_decl(header,name,action,body=False,classname=None):
     if not hasattr(action,"formal_returns"):
@@ -443,12 +488,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
         header.append(classname + '::')
-    header.append(varname(name) + '(')
-    first = True
-    for p in action.formal_params:
-        header.append(('' if first else ', ') + 'int ' + varname(p.name))
-        first = False
-    header.append(')')
+    emit_param_decls(header,name,action.formal_params)
     
 def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
@@ -640,6 +680,21 @@ def module_to_cpp_class(classname):
 #include <unistd.h>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
+
+    native_exprs = []
+    for n in im.module.natives:
+        native_exprs.extend(n.args[2:])
+    for n in im.module.actions.values():
+        if isinstance(n,ia.NativeAction):
+            native_exprs.extend(n.args[1:])
+    callbacks = set()
+    for e in native_exprs:
+        if isinstance(e,ivy_ast.Atom) and e.rep in im.module.actions:
+            callbacks.add(e.rep)
+    for actname in sorted(callbacks):
+        action = im.module.actions[actname]
+        create_thunk(impl,actname,action,classname)
+
     impl.append("""
 class reader {
 public:
@@ -1134,6 +1189,10 @@ def emit_choice(self,header):
 ia.ChoiceAction.emit = emit_choice
 
 def native_reference(atom):
+    if isinstance(atom,ivy_ast.Atom) and atom.rep in im.module.actions:
+        res = thunk_name(atom.rep) + '(this'
+        res += ''.join(', ' + varname(arg.rep) for arg in atom.args) + ')'
+        return res
     res = varname(atom.rep)
     for arg in atom.args:
         n = arg.name if hasattr(arg,'name') else arg.rep

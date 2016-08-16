@@ -11,9 +11,10 @@ module udp_wrapper(addr,pkt,me) = {
 	class udp_reader : public reader {
 	    int sock;
 	    int my_id;
-	    ivy_class &parent;
+	    %`handle_recv` rcb;
 	  public:
-	    udp_reader(int _my_id, ivy_class &_p) : my_id(_my_id), parent(_p) {
+	    udp_reader(int _my_id, %`handle_recv` rcb)
+	        : my_id(_my_id), rcb(rcb) {
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 		if (sock < 0)
 		    { std::cerr << "cannot create socket\n"; exit(1); }
@@ -36,7 +37,7 @@ module udp_wrapper(addr,pkt,me) = {
 		//std::cout << "RECEIVING\n";
 		if (recvfrom(sock,&pkt,sizeof(int),0,0,0) < 0)
 		    { std::cerr << "recvfrom failed\n"; exit(1); }
-		parent.`recv`(my_id,pkt);
+		rcb(pkt);
 	    }
 	    virtual void write(int dst, int pkt) {
 		struct sockaddr_in dstaddr;
@@ -55,8 +56,12 @@ module udp_wrapper(addr,pkt,me) = {
 	udp_reader *`rdr`;
     >>>
     <<< init
-	install_reader(`rdr` = new udp_reader(`me`,*this));
+	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`));
     >>>
+
+    action handle_recv(x:pkt) = {
+	call recv(me,x)
+    }
 
     implement send(dst:addr,x:pkt) {
 	<<<
@@ -84,4 +89,4 @@ interpret a -> bv[1]
 import foo.recv
 export foo.send
 
-extract iso_foo = foo(me)
+# extract iso_foo = foo(me)

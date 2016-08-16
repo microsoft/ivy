@@ -301,6 +301,13 @@ def compile_native_action(self):
 
 NativeAction.cmpl = compile_native_action
 
+def compile_native_def(self):
+    def cna(arg):
+        return (sortify_with_inference(arg) if isinstance(arg,ivy_ast.Variable) else 
+                a.clone(map(sortify_with_inference,a.args)))
+    args = list(self.args[0:2]) + [cna(a) for a in self.args[2:]]
+    return self.clone(args)
+
 def compile_action_def(a,sig):
     sig = sig.copy()
     if not hasattr(a.args[1],'lineno'):
@@ -470,7 +477,7 @@ class IvyARGSetup(IvyDeclInterp):
     def delegate(self,exp):
         self.mod.delegates.append(exp)
     def native(self,native_def):
-        self.mod.natives.append(native_def)
+        self.mod.natives.append(compile_native_def(native_def))
         
         
 def ivy_new(filename = None):

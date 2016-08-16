@@ -439,8 +439,8 @@ class ObjectDecl(Decl):
     def name(self):
         return 'object'
     def defines(self):
-#        return [(c.relname,lineno(c)) for c in self.args]
-        return []
+        return [(c.relname,lineno(c)) for c in self.args]
+#        return []
 
 class LabeledFormula(AST):
     @property

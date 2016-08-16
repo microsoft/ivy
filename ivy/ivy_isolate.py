@@ -186,7 +186,7 @@ def strip_sort(sort,strip_params):
 
 def strip_action(ast,strip_map,strip_binding):
     if isinstance(ast,ia.CallAction):
-        name = ast.args[0].rep
+        name = canon_act(ast.args[0].rep)
         args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args[0].args]
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
@@ -195,6 +195,7 @@ def strip_action(ast,strip_map,strip_binding):
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
             ivy_logic.add_symbol(sname,ast.sort)
+            strip_added_symbols.append(ivy_logic.Symbol(sname,ast.sort))
         return ivy_logic.Symbol(sname,ast.sort)
     args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args]
     if ivy_logic.is_app(ast):
@@ -205,15 +206,21 @@ def strip_action(ast,strip_map,strip_binding):
             new_args = args[len(strip_params):]
             new_symbol = ivy_logic.Symbol(name,new_sort)
             return new_symbol(*new_args)
+    if isinstance(ast,ivy_ast.Atom):
+        name = ast.rep
+        strip_params = get_strip_params(name,ast.args,strip_map,strip_binding,ast)
+        if strip_params:
+            new_args = args[len(strip_params):]
+            return ast.clone(new_args)
     return ast.clone(args)
                 
 def get_strip_binding(ast,strip_map,strip_binding):
     [get_strip_binding(arg,strip_map,strip_binding) for arg in ast.args]
-    if ivy_logic.is_app(ast):
-        name = ast.rep.name
+    name = ast.rep.name if ivy_logic.is_app(ast) else ast.rep if isinstance(ast,ivy_ast.Atom) else None
+    if name:
         strip_params = strip_map_lookup(name,strip_map)
         if not(len(ast.args) >= len(strip_params)):
-            raise iu.IvyError(action,"cannot strip isolate parameters from {}",name)
+            raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(name))
         for sp,ap in zip(strip_params,ast.args):
             if ap in strip_binding and strip_binding[ap] != sp:
                 raise iu.IvyError(action,"cannot strip parameter {} from {}",ap,name)
@@ -234,7 +241,28 @@ def strip_labeled_fmlas(lfmlas,strip_map):
     del lfmlas[:]
     lfmlas.extend(new_lfmlas)
     
+def strip_native(native,strip_map):
+    strip_binding = {}
+    for a in native.args[2:]:
+        get_strip_binding(a,strip_map,strip_binding)
+    fmlas = [strip_action(fmla,strip_map,strip_binding) for fmla in native.args[2:]]
+    lbl = native.args[0]
+    if lbl:
+        lbl = lbl.clone(lbl.args[len(strip_map_lookup(lbl.rep,strip_map,with_dot=False)):])
+    return native.clone([lbl,native.args[1]] + fmlas)
+    
+def strip_natives(natives,strip_map):
+    iu.dbg('natives')
+    new_natives = [strip_native(f,strip_map) for f in natives]
+    del natives[:]
+    natives.extend(new_natives)
+
+def canon_act(name):
+    return name[4:] if name.startswith('ext:') else name
+
 def strip_isolate(mod,isolate):
+    global strip_added_symbols
+    strip_added_symbols = []
     strip_map = {}
     for atom in isolate.verified() + isolate.present():
         name = atom.relname
@@ -248,7 +276,7 @@ def strip_isolate(mod,isolate):
     # strip the actions
     new_actions = {}
     for name,action in mod.actions.iteritems():
-        strip_params = strip_map_lookup(name[4:] if name.startswith('ext:') else name,strip_map)
+        strip_params = strip_map_lookup(canon_act(name),strip_map)
         if not(len(action.formal_params) >= len(strip_params)):
             raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
@@ -262,6 +290,10 @@ def strip_isolate(mod,isolate):
     # strip the axioms and conjectures
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_conjs,mod.labeled_inits]:
         strip_labeled_fmlas(x,strip_map)
+
+    # strip the native quotes
+    strip_natives(mod.natives,strip_map)
+
     # strip the signature
     new_symbols = {}
     for name,sym in ivy_logic.sig.symbols.iteritems():
@@ -275,6 +307,8 @@ def strip_isolate(mod,isolate):
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
 
+    del mod.params[:]
+    mod.params.extend(strip_added_symbols)
 
 def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     if actname in calls or actname not in summarized_actions:

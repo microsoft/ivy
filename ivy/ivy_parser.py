@@ -99,7 +99,7 @@ def do_insts(ivy,insts):
         if defn:
 #            print "instantiating %s" % inst
             if pref != None:
-                ivy.define((pref.rep,inst.lineno))
+#                ivy.define((pref.rep,inst.lineno))
                 ivy.declare(ObjectDecl(pref))
             aparams = inst.args
             fparams = defn.args[0].args
@@ -227,7 +227,7 @@ def p_top_object_symbol_eq_lcb_top_rcb(p):
     p[0] = p[1]
     module = p[6]
     pref = Atom(p[3],[])
-    p[0].define((pref.rep,get_lineno(p,2)))
+#    p[0].define((pref.rep,get_lineno(p,2)))
     p[0].declare(ObjectDecl(pref))
     for decl in module.decls:
         idecl = subst_prefix_atoms_ast(decl,{},pref,module.defined)

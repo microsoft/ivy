@@ -56,6 +56,7 @@ class Module(object):
         self.privates = set() # set of string (names of private actions)
         self.interps = defaultdict(list) # maps type names to lists of labeled interpretions
         self.natives = [] # list of NativeDef
+        self.params = []
 
         self.sig = il.sig.copy() # capture the current signature
 
