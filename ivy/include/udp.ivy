@@ -72,21 +72,34 @@ module udp_wrapper(addr,pkt,me) = {
 
 module udp_simple(addr,pkt) = {
 
-    action recv(dst:a,x:pkt)
-    action send(src:a,dst:a,x:pkt)
+    action recv(dst:addr,v:pkt)
+    action send(src:addr,dst:addr,v:pkt)
 
-    instance impl(X:a) : udp_wrapper(a,t,X)
+    object spec = {
+        relation sent(V:pkt, N:addr)
+        init ~sent(V, N)
+    
+	before send {
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst)
+	}
+    }
+
+    instance impl(X:addr) : udp_wrapper(addr,pkt,X)
+    private impl
 }
 
 
-type a
-type t
+# type a
+# type t
 
-instance foo : udp_simple(a,t)
+# instance foo : udp_simple(a,t)
 
-interpret a -> bv[1]
+# interpret a -> bv[1]
 
-import foo.recv
-export foo.send
+# import foo.recv
+# export foo.send
 
-# extract iso_foo = foo(me)
+# extract iso_foo(me) = foo(me)

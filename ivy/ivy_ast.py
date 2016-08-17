@@ -602,6 +602,9 @@ class IsolateDef(AST):
         return self.args[1:len(self.args)-self.with_args]
     def present(self):
         return self.args[len(self.args)-self.with_args:]
+    def params(self):
+        return self.args[0].args
+        
 
     def __repr__(self):
         return (','.join(repr(a) for a in self.verified()) +
@@ -883,7 +886,8 @@ def ast_rewrite(x,rewrite):
             if isinstance(rewrite,AstRewriteSubstPrefix) and rewrite.pref != None:
                 arg0 = rewrite.pref
         else:
-            arg0 = rewrite.rewrite_atom(x.args[0],always=True)
+            atom = arg0.clone(ast_rewrite(arg0.args,rewrite))
+            arg0 = rewrite.rewrite_atom(atom,always=True)
         res = x.clone([arg0] + [ast_rewrite(y,rewrite) for y in x.args[1:]])
         return res
     if isinstance(x,TypeDef):

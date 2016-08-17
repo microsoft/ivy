@@ -449,7 +449,7 @@ def native_typeof(arg):
     if isinstance(arg,ivy_ast.Atom):
         if arg.rep in im.module.actions:
             return thunk_name(arg.rep)
-        raise IvyError(arg,'undefined action: ' + arg.rep)
+        raise iu.IvyError(arg,'undefined action: ' + arg.rep)
     return int + len(arg.sort.dom) * '[]'
 
 def native_to_str(native,reference=False):
@@ -753,14 +753,18 @@ void install_reader(reader *);
     for df in im.module.progress:
         declare_symbol(header,df.args[0].rep,c_type = 'int')
 
-    header.append('    ' + classname + '();\n');
+    header.append('    ');
+    emit_param_decls(header,classname,im.module.params)
+    header.append(';\n');
     im.module.actions['.init'] = init_method()
     for a in im.module.actions:
         emit_action(header,impl,a,classname)
     emit_tick(header,impl,classname)
     header.append('};\n')
 
-    impl.append(classname + '::' + classname + '(){\n')
+    impl.append(classname + '::')
+    emit_param_decls(impl,classname,im.module.params)
+    impl.append('{\n')
     enums = set(sym.sort.name for sym in il.sig.constructors)  
     for sortname in enums:
         for i,n in enumerate(il.sig.sorts[sortname].extension):
@@ -799,7 +803,7 @@ void install_reader(reader *);
             action = im.module.actions[actname]
             def csortcard(s):
                 card = sort_card(s)
-                return "ivy.__CARD__{}".format(varname(s.name)) if card else "0"
+                return str(card) if card else "0"
             getargs = ','.join('int_arg(args,{},{})'.format(idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
             if action.formal_returns:
@@ -812,6 +816,24 @@ void install_reader(reader *);
             else
 """.replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
         emit_repl_boilerplate2(header,impl,classname)
+        impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
+        impl.append('        std::cerr << "usage: {} {}\\n";\n'
+                    .format(classname,' '.join(map(varname,im.module.params))))
+        impl.append('        exit(1);\n    }\n')
+        impl.append('    std::vector<std::string> args;\n')
+        impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
+        for idx,s in enumerate(im.module.params):
+            impl.append('    int p__'+varname(s)+';\n')
+            impl.append('    try {\n')
+            impl.append('        p__'+varname(s)+' =  int_arg(args,{},{});\n'.format(idx,csortcard(s.sort)))
+            impl.append('    }\n    catch(out_of_bounds &) {\n')
+            impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+            impl.append('        exit(1);\n    }\n')
+        cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+        impl.append('    {}_repl ivy{};\n'
+                    .format(classname,cp))
+        emit_repl_boilerplate3(header,impl,classname)
+
         
     return ''.join(header) , ''.join(impl)
 
@@ -820,8 +842,11 @@ def check_representable(sym,ast=None):
     sort = sym.sort
     if hasattr(sort,'dom'):
         for domsort in sort.dom:
-            if sort_card(domsort) == None:
+            card = sort_card(domsort)
+            if card == None:
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is uninterpreted'.format(sym,domsort))
+            if card > 16:
+                raise iu.IvyError(ast,'cannot compile "{}" because type {} is large'.format(sym,domsort))
 
 cstr = il.fmla_to_str_ambiguous
 
@@ -845,7 +870,10 @@ def emit_one_initial_state(header):
     if m == None:
         raise IvyError(None,'Initial condition is inconsistent')
     for sym in all_state_symbols():
-        if sym not in is_derived:
+        if sym in im.module.params:
+            name = varname(sym)
+            header.append('    this->{} = {};\n'.format(name,name))
+        elif sym not in is_derived:
             assign_symbol_from_model(header,sym,m)
 
 
@@ -1243,8 +1271,10 @@ int ask_ret(int bound) {
             exit(1);
         }
     }
+    """.replace('classname',classname))
 
-""".replace('classname',classname))
+    emit_param_decls(impl,classname+'_repl',im.module.params)
+    impl.append(' : '+classname+'('+','.join(map(varname,im.module.params))+'){}\n')
     
     for imp in im.module.imports:
         name = imp.imported()
@@ -1266,8 +1296,9 @@ int ask_ret(int bound) {
                 impl.append('    return ask_ret(__CARD__{});\n'.format(action.formal_returns[0].sort))
             impl.append('}\n')
 
-    impl.append("""
+    
 
+    impl.append("""
     };
 """)
 
@@ -1421,16 +1452,10 @@ void install_reader(reader *r){
 
 
 int main(int argc, char **argv){
+""".replace('classname',classname))
 
-    // if (argc != 2) {
-    //     std::cerr << "usage: classname <index>\\n";
-    //     return(1);
-    // }
-
-    // int my_id = atoi(argv[1]);
-
-    classname_repl ivy;    
-
+def emit_repl_boilerplate3(header,impl,classname):
+    impl.append("""
     install_reader(new cmd_reader(ivy));
 
     while(true) {

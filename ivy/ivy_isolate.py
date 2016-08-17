@@ -163,9 +163,10 @@ def startswith_eq_some(s,prefixes,mod):
         return True
     return startswith_some(s,prefixes,mod)
 
-def strip_map_lookup(name,strip_map,with_dot=True):
+def strip_map_lookup(name,strip_map,with_dot=False):
+    name = canon_act(name)
     for prefix in strip_map:
-        if name.startswith(prefix+(iu.ivy_compose_character if with_dot else '')):
+        if (name+iu.ivy_compose_character).startswith(prefix+iu.ivy_compose_character):
             return strip_map[prefix]
     return []
 
@@ -191,6 +192,9 @@ def strip_action(ast,strip_map,strip_binding):
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
         return ast.clone([call]+[strip_action(arg,strip_map,strip_binding) for arg in ast.args[1:]])
+    if isinstance(ast,ia.AssignAction) and ast.args[0].rep in ivy_logic.sig.symbols:
+        if len(strip_map_lookup(ast.args[0].rep.name,strip_map)) != num_isolate_params:
+            raise iu.IvyError(ast,"assignment may be interfering")
     if (ivy_logic.is_constant(ast) or ivy_logic.is_variable(ast)) and ast in strip_binding:
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
@@ -252,7 +256,6 @@ def strip_native(native,strip_map):
     return native.clone([lbl,native.args[1]] + fmlas)
     
 def strip_natives(natives,strip_map):
-    iu.dbg('natives')
     new_natives = [strip_native(f,strip_map) for f in natives]
     del natives[:]
     natives.extend(new_natives)
@@ -260,8 +263,10 @@ def strip_natives(natives,strip_map):
 def canon_act(name):
     return name[4:] if name.startswith('ext:') else name
 
-def strip_isolate(mod,isolate):
+def strip_isolate(mod,isolate,impl_mixins):
     global strip_added_symbols
+    global num_isolate_params
+    num_isolate_params = len(isolate.params())
     strip_added_symbols = []
     strip_map = {}
     for atom in isolate.verified() + isolate.present():
@@ -273,13 +278,22 @@ def strip_isolate(mod,isolate):
                 if a.rep in ivy_logic.sig.symbols:
                     raise iu.IvyError(a,"isolate parameter redefines {}",a.rep)
             strip_map[name] = [a.rep for a in atom.args]
+    for ms in impl_mixins.values():
+        for m in ms:
+            if isinstance(m,ivy_ast.MixinImplementDef):
+                strip_params = strip_map_lookup(canon_act(m.mixer()),strip_map)
+                strip_map[m.mixee()] = strip_params
+    for imp in mod.imports:
+        strip_map[imp.imported()] = [a.rep for a in isolate.params()]
     # strip the actions
     new_actions = {}
     for name,action in mod.actions.iteritems():
-        strip_params = strip_map_lookup(canon_act(name),strip_map)
+        strip_params = strip_map_lookup(canon_act(name),strip_map,with_dot=False)
         if not(len(action.formal_params) >= len(strip_params)):
             raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
+        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
+            raise IvyError(None,'foreign function {} may be interfering'.format(name))
         new_action = strip_action(action,strip_map,strip_binding)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
@@ -308,7 +322,17 @@ def strip_isolate(mod,isolate):
     ivy_logic.sig.symbols.update(new_symbols)
 
     del mod.params[:]
-    mod.params.extend(strip_added_symbols)
+    add_map = dict((s.name,s) for s in strip_added_symbols)
+    used = set()
+    for s in isolate.params():
+        if not(isinstance(s,ivy_ast.App) and not s.args):
+            raise IvyError(isolate,"bad isolate parameter")
+        if s.rep in used:
+            raise IvyError(isolate,"repeated isolate parameter: {}".format(s.rep))
+        used.add(s.rep)
+        if s.rep not in add_map:
+            raise IvyError(isolate,"unused isolate parameter {}".format(s.rep))
+        mod.params.append(add_map[s.rep])
 
 def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     if actname in calls or actname not in summarized_actions:
@@ -469,9 +493,11 @@ def isolate_component(mod,isolate_name,extra_with=[]):
             and name not in mod.actions):
             raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
     
+    impl_mixins = defaultdict(list)
     # delegate all the stub actions to their implementations
-    for ms in mod.mixins.values():
+    for actname,ms in mod.mixins.iteritems():
         implements = [m for m in ms if isinstance(m,ivy_ast.MixinImplementDef)]
+        impl_mixins[actname].extend(implements)
         before_after = [m for m in ms if not isinstance(m,ivy_ast.MixinImplementDef)]
         del ms[:]
         ms.extend(before_after)
@@ -605,7 +631,7 @@ def isolate_component(mod,isolate_name,extra_with=[]):
     asts += [action for action in new_actions.values()]
     sym_names = set(x.name for x in lu.used_symbols_asts(asts))
 
-    if cone_of_influence.get():
+    if cone_of_influence.get() or True:
         old_syms = list(mod.sig.symbols)
         for sym in old_syms:
             if sym not in sym_names:
@@ -661,7 +687,7 @@ def isolate_component(mod,isolate_name,extra_with=[]):
 
     # strip the isolate parameters
 
-    strip_isolate(mod,isolate)
+    strip_isolate(mod,isolate,impl_mixins)
 
     # collect the initial condition
 
@@ -907,7 +933,15 @@ def check_isolate_completeness(mod = None):
                     checked_props.add(label)
             
     missing = []
+    trusted = set()
+    for n in mod.natives:
+        lbl = n.args[0]
+        if lbl:
+            trusted.add(lbl.rep)
+            
     for actname,action in mod.actions.iteritems():
+        if startswith_eq_some(actname,trusted,mod):
+            continue
         for callee in action.iter_calls():
             if not (callee in checked or not has_assertions(mod,callee)
                     or callee in delegates and actname in checked_context[callee]):

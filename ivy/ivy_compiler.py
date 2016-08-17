@@ -295,17 +295,21 @@ def compile_assert_action(self):
 AssertAction.cmpl = compile_assert_action
 AssumeAction.cmpl = compile_assert_action
 
+def compile_native_arg(arg):
+    if isinstance(arg,ivy_ast.Variable):
+        return sortify_with_inference(arg)
+    if arg.rep in ivy_logic.sig.symbols:
+        return sortify_with_inference(arg)
+    return arg.clone(map(sortify_with_inference,arg.args)) # handles action names
+
 def compile_native_action(self):
-    args = [self.args[0]] + [a.clone(map(sortify_with_inference,a.args)) for a in self.args[1:]]
+    args = [self.args[0]] + [compile_native_arg(a) for a in self.args[1:]]
     return self.clone(args)
 
 NativeAction.cmpl = compile_native_action
 
 def compile_native_def(self):
-    def cna(arg):
-        return (sortify_with_inference(arg) if isinstance(arg,ivy_ast.Variable) else 
-                a.clone(map(sortify_with_inference,a.args)))
-    args = list(self.args[0:2]) + [cna(a) for a in self.args[2:]]
+    args = list(self.args[0:2]) + [compile_native_arg(a) for a in self.args[2:]]
     return self.clone(args)
 
 def compile_action_def(a,sig):
@@ -533,9 +537,23 @@ def infer_parameters(decls):
                             subst = dict((x.drop_prefix('fml:').rep,x.rep) for x in (xtraps + xtrars))
                             a.args[1] = ivy_ast.subst_prefix_atoms_ast(a.args[1],subst,None,None)
 
+def check_instantiations(mod,decls):
+    schemata = set()
+    for decl in decls.decls:
+        if isinstance(decl,ivy_ast.SchemaDecl):
+            for inst in decl.args:
+                schemata.add(inst.defines())
+    for decl in decls.decls:
+        if isinstance(decl,ivy_ast.InstantiateDecl):
+            for inst in decl.args:
+                if inst.relname not in schemata:
+                    raise IvyError(inst,"{} undefined in instantiation".format(inst.relname))
+
+
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
+        check_instantiations(mod,decls)
         for name in decls.defined:
             mod.add_to_hierarchy(name)
         infer_parameters(decls.decls)
@@ -610,7 +628,11 @@ def import_module(name):
     try: 
         f = open(fname,'r')
     except Exception:
-        raise IvyError(None,"module {} not found in current directory".format(name))
+        inc = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
+        try:
+            f = open(inc,'r')
+        except Exception:
+            raise IvyError(None,"module {} not found in current directory or module path".format(name))
     with iu.SourceFile(fname):
         mod = read_module(f,nested=True)
     return mod
