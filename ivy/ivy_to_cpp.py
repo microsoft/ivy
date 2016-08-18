@@ -702,6 +702,12 @@ public:
     virtual void read() = 0;
 };
 void install_reader(reader *);
+class timer {
+public:
+    virtual int ms_delay() = 0;
+    virtual void timeout() = 0;
+};
+void install_timer(timer *);
 """)
 
     once_memo = set()
@@ -796,14 +802,14 @@ void install_reader(reader *);
                 emit_action_gen(header,impl,name,action,classname)
 
     if target.get() == "repl":
+        def csortcard(s):
+            card = sort_card(s)
+            return str(card) if card else "0"
         emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
         for actname in sorted(im.module.public_actions):
             username = actname[4:] if actname.startswith("ext:") else actname
             action = im.module.actions[actname]
-            def csortcard(s):
-                card = sort_card(s)
-                return str(card) if card else "0"
             getargs = ','.join('int_arg(args,{},{})'.format(idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
             if action.formal_returns:
@@ -864,8 +870,17 @@ def assign_symbol_from_model(header,sym,m):
     else:
         header.append(varname(sym.name) + ' = ' + cstr(m.eval_to_constant(sym)) + ';\n')
         
-
+def check_init_cond(kind,lfmlas):
+    params = set(im.module.params)
+    for lfmla in lfmlas:
+        if any(c in params for c in ilu.used_symbols_ast(lfmla.formula)):
+            raise iu.IvyError(lfmla,"{} depends on stripped parameter".format(kind))
+        
+    
 def emit_one_initial_state(header):
+    check_init_cond("initial condition",im.module.labeled_inits)
+    check_init_cond("axiom",im.module.labeled_axioms)
+        
     m = slv.get_model_clauses(ilu.and_clauses(im.module.init_cond,im.module.background_theory()))
     if m == None:
         raise IvyError(None,'Initial condition is inconsistent')
@@ -1450,6 +1465,12 @@ void install_reader(reader *r){
     readers.push_back(r);
 }
 
+std::vector<timer *> timers;
+
+void install_timer(timer *r){
+    timers.push_back(r);
+}
+
 
 int main(int argc, char **argv){
 """.replace('classname',classname))
@@ -1483,6 +1504,8 @@ def emit_repl_boilerplate3(header,impl,classname):
         
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
+           for (unsigned i = 0; i < timers.size(); i++)
+               timers[i]->timeout();
         }
         else {
             for (unsigned i = 0; i < readers.size(); i++) {

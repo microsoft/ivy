@@ -170,13 +170,16 @@ def strip_map_lookup(name,strip_map,with_dot=False):
             return strip_map[prefix]
     return []
 
+def presentable(name):
+    return str(name).split(':')[-1]
+
 def get_strip_params(name,args,strip_map,strip_binding,ast):
     strip_params = strip_map_lookup(name,strip_map)
     if not(len(args) >= len(strip_params)):
-        raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(name))
+        raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(presentable(name)))
     for sp,ap in zip(strip_params,args):
         if ap not in strip_binding or strip_binding[ap] != sp:
-            raise iu.IvyError(ast,"cannot strip parameter {} from {}".format(ap,name))
+            raise iu.IvyError(ast,"cannot strip parameter {} from {}".format(presentable(ap),presentable(name)))
     return strip_params
 
 def strip_sort(sort,strip_params):
@@ -192,9 +195,10 @@ def strip_action(ast,strip_map,strip_binding):
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
         return ast.clone([call]+[strip_action(arg,strip_map,strip_binding) for arg in ast.args[1:]])
-    if isinstance(ast,ia.AssignAction) and ast.args[0].rep in ivy_logic.sig.symbols:
-        if len(strip_map_lookup(ast.args[0].rep.name,strip_map)) != num_isolate_params:
-            raise iu.IvyError(ast,"assignment may be interfering")
+    if isinstance(ast,ia.AssignAction):
+        if ast.args[0].rep.name in ivy_logic.sig.symbols:
+            if len(strip_map_lookup(ast.args[0].rep.name,strip_map)) != num_isolate_params:
+                raise iu.IvyError(ast,"assignment may be interfering")
     if (ivy_logic.is_constant(ast) or ivy_logic.is_variable(ast)) and ast in strip_binding:
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
@@ -224,10 +228,10 @@ def get_strip_binding(ast,strip_map,strip_binding):
     if name:
         strip_params = strip_map_lookup(name,strip_map)
         if not(len(ast.args) >= len(strip_params)):
-            raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(name))
+            raise iu.IvyError(ast,"cannot strip isolate parameters from {}".format(presentable(name)))
         for sp,ap in zip(strip_params,ast.args):
             if ap in strip_binding and strip_binding[ap] != sp:
-                raise iu.IvyError(action,"cannot strip parameter {} from {}",ap,name)
+                raise iu.IvyError(action,"cannot strip parameter {} from {}",presentable(ap),presentable(name))
             strip_binding[ap] = sp
                 
 def strip_labeled_fmla(lfmla,strip_map):
@@ -263,7 +267,7 @@ def strip_natives(natives,strip_map):
 def canon_act(name):
     return name[4:] if name.startswith('ext:') else name
 
-def strip_isolate(mod,isolate,impl_mixins):
+def strip_isolate(mod,isolate,impl_mixins,extra_strip):
     global strip_added_symbols
     global num_isolate_params
     num_isolate_params = len(isolate.params())
@@ -283,12 +287,15 @@ def strip_isolate(mod,isolate,impl_mixins):
             if isinstance(m,ivy_ast.MixinImplementDef):
                 strip_params = strip_map_lookup(canon_act(m.mixer()),strip_map)
                 strip_map[m.mixee()] = strip_params
-    for imp in mod.imports:
-        strip_map[imp.imported()] = [a.rep for a in isolate.params()]
+    strip_map.update(extra_strip)
+#    for imp in mod.imports:
+#        strip_map[imp.imported()] = [a.rep for a in isolate.params()]
     # strip the actions
     new_actions = {}
     for name,action in mod.actions.iteritems():
         strip_params = strip_map_lookup(canon_act(name),strip_map,with_dot=False)
+        iu.dbg('strip_params')
+        iu.dbg('action.formal_params')
         if not(len(action.formal_params) >= len(strip_params)):
             raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
@@ -326,12 +333,12 @@ def strip_isolate(mod,isolate,impl_mixins):
     used = set()
     for s in isolate.params():
         if not(isinstance(s,ivy_ast.App) and not s.args):
-            raise IvyError(isolate,"bad isolate parameter")
+            raise iu.IvyError(isolate,"bad isolate parameter")
         if s.rep in used:
-            raise IvyError(isolate,"repeated isolate parameter: {}".format(s.rep))
+            raise iu.IvyError(isolate,"repeated isolate parameter: {}".format(s.rep))
         used.add(s.rep)
         if s.rep not in add_map:
-            raise IvyError(isolate,"unused isolate parameter {}".format(s.rep))
+            raise iu.IvyError(isolate,"unused isolate parameter {}".format(s.rep))
         mod.params.append(add_map[s.rep])
 
 def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
@@ -471,7 +478,7 @@ def get_prop_dependencies(mod):
             res.append((prop,ds))
     return res
 
-def isolate_component(mod,isolate_name,extra_with=[]):
+def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     if isolate_name not in mod.isolates:
         raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
     isolate = mod.isolates[isolate_name]
@@ -490,7 +497,8 @@ def isolate_component(mod,isolate_name,extra_with=[]):
             and name not in ivy_logic.sig.sorts
             and name not in derived
             and name not in ivy_logic.sig.interp
-            and name not in mod.actions):
+            and name not in mod.actions
+            and name not in ivy_logic.sig.symbols):
             raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
     
     impl_mixins = defaultdict(list)
@@ -687,7 +695,7 @@ def isolate_component(mod,isolate_name,extra_with=[]):
 
     # strip the isolate parameters
 
-    strip_isolate(mod,isolate,impl_mixins)
+    strip_isolate(mod,isolate,impl_mixins,extra_strip)
 
     # collect the initial condition
 
@@ -766,11 +774,26 @@ def get_mod_cone(mod):
     cone = set()
     for a in mod.public_actions:
         get_cone(mod,a,cone)
+    for n in mod.natives:
+        for a in n.args[2:]:
+            if isinstance(a,ivy_ast.Atom) and a.rep in mod.actions:
+                get_cone(mod,a.rep,cone)
     return cone
+
+def has_code(action):
+    return any(not isinstance(a,ia.Sequence) for a in action.iter_subactions())
 
 def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
+
+        # make an imaginary init operation:
+
+        init_action = ia.Sequence()
+        init_action.formal_params = []
+        init_action.formal_returns = []
+        init_action.lineno = None
+        mod.actions["init"] = init_action
 
         # check all mixin declarations
 
@@ -786,9 +809,16 @@ def create_isolate(iso,mod = None,**kwargs):
             if dl.delegee() and dl.delegee() not in mod.hierarchy:
                 raise iu.IvyError(dl.args[1],"{} is not a module instance".format(name))
 
+        # check all the export declarations
+        for exp in mod.exports:
+            expname = exp.args[0].rep
+            if expname not in mod.actions:
+                raise iu.IvyError(exp,"undefined action: {}".format(expname))
+
         # create the import actions, if requested
 
         extra_with = []
+        extra_strip = {}
         if create_imports.get():
             newimps = []
             for imp in mod.imports:
@@ -798,7 +828,7 @@ def create_isolate(iso,mod = None,**kwargs):
                         raise iu.IvyError(imp,"undefined action: {}".format(impname))
                     action = mod.actions[impname]
                     if not(type(action) == ia.Sequence and not action.args):
-                        raise IvyError(imp,"cannot import implemented action: {}".format(impname))
+                        raise iu.IvyError(imp,"cannot import implemented action: {}".format(impname))
                     extname = 'imp__' + impname
                     call = ia.CallAction(*([ivy_ast.Atom(extname,action.formal_params)] + action.formal_returns))
                     call.formal_params = action.formal_params
@@ -809,9 +839,18 @@ def create_isolate(iso,mod = None,**kwargs):
                     newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),imp.args[1]))
                     extra_with.append(ivy_ast.Atom(impname))
 #                    extra_with.append(ivy_ast.Atom(extname))
+                    if iso and iso in mod.isolates:
+                        ps = mod.isolates[iso].params()
+                        extra_strip[impname] = [a.rep for a in ps]
+                        extra_strip[extname] = [a.rep for a in ps]
                 else:
                     newimps.append(imp)
             mod.imports = newimps
+
+        mixers = set()
+        for ms in mod.mixins.values():
+            for m in ms:
+                mixers.add(m.mixer())
 
         # Determine the mixin order (as a side effect on module.mixins)
 
@@ -820,7 +859,7 @@ def create_isolate(iso,mod = None,**kwargs):
         # Construct an isolate
 
         if iso:
-            isolate_component(mod,iso,extra_with=extra_with)
+            isolate_component(mod,iso,extra_with=extra_with,extra_strip=extra_strip)
         else:
             if mod.isolates and cone_of_influence.get():
                 raise iu.IvyError(None,'no isolate specified on command line')
@@ -839,6 +878,11 @@ def create_isolate(iso,mod = None,**kwargs):
             else:
                 for a in mod.actions:
                     mod.public_actions.add(a)
+
+        mod.init_action = mod.actions.get('ext:.init',mod.actions['.init'])
+        del mod.actions['init']
+        del mod.actions['ext:.init']
+        iu.dbg('mod.init_action')
 
         # Create one big external action if requested
 
@@ -871,11 +915,18 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # get rid of useless actions
 
+        cone = get_mod_cone(mod)        
         if cone_of_influence.get():
-            cone = get_mod_cone(mod)
             for a in list(mod.actions):
                 if a not in cone:
                     del mod.actions[a]
+        else:
+            for a in list(mod.actions):
+                if a not in cone and not a.startswith('ext:') and a not in mixers:
+                    ea = 'ext:' + a
+                    if ea in mod.actions and ea not in cone:
+                        if has_code(mod.actions[a]):
+                            iu.warn(mod.actions[a],"action {} is never called".format(a))
 
         # show the compiled code if requested
 

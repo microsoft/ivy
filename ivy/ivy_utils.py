@@ -233,6 +233,9 @@ class IvyUndefined(IvyError):
         assert False
         super(IvyUndefined,self).__init__(ast,"undefined: " + name)
 
+def warn(ast,msg):
+    print str(IvyError(ast,msg)).replace('error: ','warning: ')
+
 # This module provides a generic parameter mechanism similar to
 # "parameterize" in racket. 
 #

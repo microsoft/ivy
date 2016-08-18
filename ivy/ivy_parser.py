@@ -91,6 +91,24 @@ def stack_action_lookup(name):
             return ivy.actions[name]
     return None
 
+def inst_mod(ivy,module,pref,subst,vsubst):
+    for decl in module.decls:
+#                print "before: %s" % (decl)
+        if vsubst:
+            map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
+            vpref = substitute_ast(pref,map1)
+            vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
+            idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined)
+            idecl = substitute_constants_ast(idecl,vvsubst)
+        else:
+            idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+        if isinstance(idecl,ActionDecl):
+            for foo in idecl.args:
+                if not hasattr(foo.args[1],'lineno'):
+                    print 'no lineno: {}'.format(foo)
+#                print "after: %s" % (idecl)
+        ivy.declare(idecl)
+
 def do_insts(ivy,insts):
     others = []
     for instantiation in insts:
@@ -112,22 +130,7 @@ def do_insts(ivy,insts):
                 if v.rep not in pvars:
                     raise iu.IvyError(instantiation,"variable {} is unbound".format(v))
             module = defn.args[1]
-            for decl in module.decls:
-#                print "before: %s" % (decl)
-                if vsubst:
-                    map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
-                    vpref = substitute_ast(pref,map1)
-                    vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
-                    idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined)
-                    idecl = substitute_constants_ast(idecl,vvsubst)
-                else:
-                    idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
-                if isinstance(idecl,ActionDecl):
-                    for foo in idecl.args:
-                        if not hasattr(foo.args[1],'lineno'):
-                            print 'no lineno: {}'.format(foo)
-#                print "after: %s" % (idecl)
-                ivy.declare(idecl)
+            inst_mod(ivy,module,pref,subst,vsubst)
         else:
             others.append(inst)
     if others:
@@ -223,15 +226,18 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
     stack.pop()
 
 def p_top_object_symbol_eq_lcb_top_rcb(p):
-    'top : top OBJECT SYMBOL EQ LCB top RCB'
+    'top : top OBJECT SYMBOL optargs EQ LCB top RCB'
     p[0] = p[1]
-    module = p[6]
-    pref = Atom(p[3],[])
+    module = p[7]
+    prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
+    pref = Atom(p[3],prefargs)
 #    p[0].define((pref.rep,get_lineno(p,2)))
     p[0].declare(ObjectDecl(pref))
-    for decl in module.decls:
-        idecl = subst_prefix_atoms_ast(decl,{},pref,module.defined)
-        p[0].declare(idecl)
+    vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
+    inst_mod(p[0],module,pref,{},vsubst)
+    # for decl in module.decls:
+    #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+    #     p[0].declare(idecl)
     stack.pop()
 
 def p_top_macro_atom_eq_lcb_action_rcb(p):
@@ -692,6 +698,12 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
         handle_before_after("after",atom,p[7],p[0],p[4],p[5])
+    def p_top_after_init_lcb_action_rcb(p):
+        'top : top AFTER INIT LCB action RCB'
+        p[0] = p[1]
+        atom = Atom("init")
+        atom.lineno = get_lineno(p,3)
+        handle_before_after("after",atom,p[5],p[0],[],[])
     def p_top_implement_callatom_lcb_action_rcb(p):
         'top : top IMPLEMENT atype optargs optreturns LCB optaction RCB'
         p[0] = p[1]

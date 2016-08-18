@@ -20,23 +20,23 @@ a module called `udp`. Here is the interface specification:
 
     module udp_simple(addr,pkt) = {
 
-	import action recv(dst:addr,v:pkt)
-	export action send(src:addr,dst:addr,v:pkt)
+        import action recv(dst:addr,v:pkt)
+        export action send(src:addr,dst:addr,v:pkt)
 
-	object spec = {
-	    relation sent(V:pkt, N:addr)
-	    init ~sent(V, N)
+        object spec = {
+            relation sent(V:pkt, N:addr)
+            init ~sent(V, N)
 
-	    before send {
-		sent(v,dst) := true
-	    }
-	    before recv {
-		assert sent(v,dst)
-	    }
-	}
+            before send {
+                sent(v,dst) := true
+            }
+            before recv {
+                assert sent(v,dst)
+            }
+        }
 
-	instance impl(X:addr) : udp_wrapper(addr,pkt,X)
-	private impl
+        instance impl(X:addr) : udp_wrapper(addr,pkt,X)
+        private impl
     }
 
 The interface is a module with two parameters: the type `addr` of
@@ -168,12 +168,391 @@ Now, let's send a packet from A to B:
     B: foo.recv(2)
 
 Notice that we omit the `src` parameter of `foo.send`, since that was
-given on the command line. Similarly, when terminal B receives the packet,
-it 
+given on the command line. Similarly, when terminal B receives the
+packet, it print `foo.recv(2)`, because the first parameter `dst` is
+implicit.
+
+We can, of course, send a packet in the opposite direction:
+
+    B: foo.send(0,3)
+    B: >
+
+    A: foo.recv(3)
+
+Also, one terminal can send a packet to itself:
+
+    A: foo.send(0,4)
+    A: > foo.recv(4)
+
+(again, the packet is received after the prompt is printed).
+
+IVy places some restriction on extracts with parameters. These
+restrictions guarantee that the parallel processes behave as if they
+were running sequentially in a single procees space (technically, the
+Ivy guarantees that the actions are
+[*serializable*](https://en.wikipedia.org/wiki/Serializability)). We'll
+discuss these restrictions shortly. For now let's look at using the
+`udp_simple` interface in our leader election protocol.
+
+# Running a distributed protocol
+
+Recall that the leader election protocol had an interface `trans` that
+represented the network. Since this interace has the same specification
+`udp_simple`, we can replace object `trans` with this code:
+
+    include udp
+    instance trans : udp_simple(node.t,id.t)
+
+Notice, we use `node.t` as the `addr` type and `id.t` as the `pkt`
+type. We also have to remove these declarations:
+
+    import trans.send
+    export trans.recv
+
+This is because `send` is now privided by `trans`, and `recv` is now
+called by `trans`. The environment is now just:
+
+    import serv.elect
+    export app.async
+
+Finally, we change the `extract` declaration to include the
+*implementation* of `trans`:
+
+    extract iso_impl(me) = app(me),trans.impl(me),node_impl,id_impl,asgn
+
+That is, we don't want the specification object `trans.spec` in the
+code we actually run. Notice that we strip the first parameter of bot
+`app` and `trans.impl`. We don't strip parameters from `node_impl`,
+`id_impl`, `asgn` because these objects provide functions without any
+state (they are a bit like static methods in a C++ class). We'll
+discuss this issue later in more detail.
+
+Before running the protocol, we ought to try to verify it:
+
+    $ ivy_check leader_election_ring_udp.ivy
+    Checking isolate iso_app...
+    trying ext:app.async...
+    trying ext:trans.recv...
+    Checking isolate iso_id...
+    Checking isolate iso_node...
+    trying ext:node.get_next...
+    OK
+
+The verification succeeds. This makes sense, since the specification
+of `trans` hasn't changed, so our inductive invariant is still good.
+We might ask why we didn't have to verify `trans.impl`. This is
+because this object is part of IVy's trusted code base. In fact,
+`udp_simple` is implemented in C++ and makes use of the operating
+system's API, which we can't formally verify. We can only verify this
+object by testing.
+
+For now, let's try to run our protol. As before, we compile it like this:
+
+    $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp.ivy
+    $ g++ -o leader_election_ring_udp leader_election_ring_udp.cpp 
+
+Recall that we interpret the type `node.t` as one-bit numbers. That
+means that we have two processes in our ring numbered 0 and 1. So let's
+create them in our terminals A and B:
+
+    A: $ ./leader_election_ring_udp 0
+    A: >
+
+    B: $ ./leader_election_ring_udp 1
+    B: >
+
+The protocol is running, but it hasn't done anything yet. We need to
+call the `async` action of one of the processes to get it to transmit its id:
+
+    A: > app.async
+    A: > serv.elect
+
+Notice again the the implicit `node.t` parameters of these actions are
+omitted. Obviously, node 0 has the highest id, since it elected
+itself.  What we didn't see was node 0's id being transmitted to node
+1, then being forwarded back to node 0, causing node 0 to be
+elected. Just to make sure things are working, let's try the
+following:
+
+    B: > app.async
+    B: >
+
+Clearly, node 1's id did not pass node 0, so node 1 is not elected.
+
+# The timeout interface
+
+Our protocol works, but is still unsatisfactory in at least one
+way. That is, it only does something in response to a call to
+`app.async`. We'd like `app.async` to be connected to some kind of
+system event to it repeasts at some interval. We can do this using the
+system `timeout` module. This contains the following interface:
+
+    module timeout_sec = {
+
+        import action timeout
+
+        object spec = {
+        }
+
+        instance impl : timeout_wrapper
+        private impl
+    }
+
+This interface is pretty simple. It calls imported action `timeout`
+without any specification. In fact, the implementation uses the
+operating system's facilities to call `timeout` approximately once
+per second.
+
+To test, this interface, let's write a simple program that just imports
+`timeout` from the REPL:
+
+    #lang ivy1.6
+
+    include timeout
+
+    instance foo : timeout_sec
+
+    import foo.timeout
+
+Here's what we get:
+
+    ivy_to_cpp target=repl timeout_test.ivy 
+    g++ -o timeout_test timeout_test.cpp
+    ./timeout_test
+    > foo.timeout
+    foo.timeout
+    foo.timeout
+    foo.timeout
+    ...
+
+The program prints `foo.timeout` once per second. Now let's modify the leader
+election program so the the `app.async` action is called once per second.
+
+First, we instantiate a timer for each process, like this:
+
+    include timeout
+    instance sec(X:node.t) : timeout_sec
+
+Then we modify the protocol so that it implements `sec.timeout`. That is, we change this line:
+
+        action async(me:node.t) = {
+
+to this:
+
+        implement sec.timeout(me:node.t) {
+
+Notice that the parameter doesn't change: we have one timer per
+process. We also have to remove this line, since action `app.async` no longer exists:
+
+    export app.async
+
+Finally, we include the implementation of `sec` in the extract:
+
+    extract iso_impl(me) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn
+
+Notice that `sec.impl` also has one parameter stripped, since we have
+one timer per process. We compile as before:
+
+    $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp2.ivy
+    $ g++ -o leader_election_ring_udp2 leader_election_ring_udp2.cpp 
+
+Now we run the processes in terminals A and B:
+
+    A: $ ./leader_election_ring_udp 0
+    A: >
+
+    B: $ ./leader_election_ring_udp 1
+    B: >
+
+    A:  serve.elect
+    A:  serve.elect
+    A:  serve.elect
+    ...
+
+Notice the nothing happens when we start node 0. It is sending packets
+once per second, but they are being dropped because no port is yet
+open to receive them. After we start node 1, it forwards node 0's
+packets, which causes node 0 to be elected (and to continues to be
+elected once per second).
+
+A note: suppose we had neglected to include `sec.impl` in the extract.
+The result would have been that `sec.timeout` was never called, so the
+protocol would do nothing. IVy would compile this extract, however,
+since the specification would still be satisfied (that is, it would
+never happen that the wrong node was elected, since no election would
+occur). This is a general problem with safety specifications: a
+protocol that does nothing always satisfies them. At length, we will
+deal with this problem when we consider
+[liveness](https://en.wikipedia.org/wiki/Liveness) specifications.
+IVy will however, warn us that there might be a problem:
+
+    ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp2.ivy
+    leader_election_ring_udp2.ivy: line 131: warning: action sec.timeout is never called
+
+## Serializability
+
+As mentioned above, IVy guarantees serializability. This means that
+actions executed by concurrent process produce the same input/output
+result as if the actions had been executed *in isolation* in some
+order. By isolation, we mean that each action completes before the next
+action begins.
+
+To guarantee serializability, IVy requires that processes be
+*non-interfering*.  This means that one process cannot have a
+side-effect that is visible to another process.
+
+As an example of interference, consider the following program:
+
+    #lang ivy1.6
+
+    type t
+
+    individual bit : bool
+
+    object foo(me:t) = {
+        action flip = {
+            bit := ~bit
+        }
+    }
+
+    export foo.flip
+
+    extract iso_foo(me) = foo(me)
+
+This program has one parallel process for each value of a type
+`t`. Each process provides a method that modifies a global variable
+`bit`. Obviously, this is not a distributed program, becuase the processes
+share a variable. Here's what happens when we try to compile the program:
+
+    ivy_to_cpp target=repl isolate=iso_foo interference2.ivy
+    interference2.ivy: line 9: error: assignment may be interfering
+
+If processes don't modify any state components in common, they are
+non-interfering. This means that if we execute action of distinct
+processes in parallel, the result is the same as if we had executed
+them sequentially in either order. Thus, the actions are serializable.
+
+We could fix the above program by creating one copy of the bit for each 
+process:
+
+    #lang ivy1.6
+
+    type t
+
+    individual bit(X:t) : bool
+
+    object foo(me:t) = {
+        action flip = {
+            bit(me) := ~bit(me)
+        }
+    }
+
+    export foo.flip
+
+    extract iso_foo(me) = foo(me),bit(me)
+
+This program compiles successfully. But what would happen if
+one process tried to access the variable of another process.
+Consider this program:
+
+    #lang ivy1.6
+
+    type t
+
+    individual bit(X:t) : bool
+
+    object foo(me:t) = {
+        action flip(x:t) = {
+            bit(me) := ~bit(x)
+        }
+    }
+
+    export foo.flip
+
+    extract iso_foo(me) = foo(me),bit(me)
+
+Here, object `foo(me)` accesses the `bit` of some process `x`,
+where `x` is an input. Here's what happens when we compile:
+
+    ivy_to_cpp target=repl isolate=iso_foo interference4.ivy
+    interference4.ivy: error: cannot strip parameter x from bit
+
+Ivy recognizes that `bit(me)` is an access to the current process'
+copy of `bit`, but it cannot compile `bit(x)`, because `x` might not
+be equal to `me`. 
+
+# Effects on the environment
+
+Of course, to communicate with each other, processes must have a
+visible effect on something. That something is the environment, which
+includes the operating system and the physical network. A call to
+`trans.send` has an an effect on the environment, namely sending a
+packet. The Ivy runtime guarantees, however, that actions remain
+serializable despite these effects, using [Lipton's theory of left-movers
+and right-movers](http://dl.acm.org/citation.cfm?id=361234). In the theory's terms,
+receiving a packet is right-mover, while sending a packet is a
+left-mover. Every action consists of zero or one receive events followed by
+any number of send events. The theory tells use that such actions are
+serializable.  That is, we can re-orer any concurrent execution by
+commuting left-movers and right-movers such that the result is an
+equivalent isolated execution.
+
+This, however, is an issue only for IVy's implementers. Users can
+simply rely on the fact that concurrent execution will appear
+equivalent to sequential execution, assuming the program passes
+`ivy_check`.
+
+# Immutable objects and initial states
+
+Ivy allows immutable objects (that is, read-only objects) such as the
+`pid` map in the leader protocol, to be shared between processes.
+Each process refers to its own local copy of the immutable object.  In
+the case of the `pid` map, IVy solved for a value of this function
+satisfying the given axiom that no to nodes have the same id. A table
+of this function was stored in the compiled process.
+
+Currently, IVy has some limitations in its ability to generate the
+immutable objects and also to generate initial states for paramterized
+processes. Consider, for example, this program:
+
+#lang ivy1.6
+
+    type t
+
+    object foo(me:t) = {
+	individual bit:bool
+	init ~bit
+
+	action get_bit returns (x:bool) = {
+	    x := bit
+	}
+    }
+
+    export foo.get_bit
+
+    extract iso_foo(me) = foo(me)
+
+IVy can compile this program and run it:
+
+    $ ./paraminit 0
+    > foo.get_bit
+    0
+    > 
+
+But suppose we change the initial condition so it depends on the stripped parameter:
+
+    init bit <-> me = 0
+
+That is, we want `bit` to be true initially only for process 0. Here's what happens when we try to comppile:
+
+    ivy_to_cpp target=repl isolate=iso_foo paraminit2.ivy 
+    paraminit2.ivy: line 7: error: initial condition depends on stripped parameter
+
+IVy isn't smart enough to compile an initial condition that is a
+function of the stripped parameter.
 
 
-
-
+# Aspects
 
 
 

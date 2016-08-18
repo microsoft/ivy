@@ -1,0 +1,20 @@
+#lang ivy1.6
+
+type t
+
+object foo = {
+    function bit(X:t):bool
+
+    after init {
+	bit(X) := (X = 0)
+    }
+
+    action get_bit (me:t) returns (x:bool) = {
+	x := bit(me)
+    }
+}
+
+export foo.get_bit
+
+extract iso_foo(me) = foo(me)
+

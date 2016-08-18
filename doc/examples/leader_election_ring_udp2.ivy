@@ -127,7 +127,7 @@ object serv = {
 
 module process(pid) = {
 
-    action async(me:node.t) = {
+    implement sec.timeout(me:node.t) {
 	call trans.send(me,node.get_next(me),pid(me))
     }
 
@@ -152,7 +152,6 @@ module process(pid) = {
 instance app: process(asgn.pid)
 
 import serv.elect
-export app.async
 
 isolate iso_app = app with node,id,trans,serv,asgn
 
@@ -172,4 +171,7 @@ object id_impl = {
 
 isolate iso_id = id with id_impl
 
-extract iso_impl(me) = app(me),trans.impl(me),node_impl,id_impl,asgn
+include timeout
+instance sec(X:node.t) : timeout_sec
+
+extract iso_impl(me) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn
