@@ -1,0 +1,15 @@
+#lang ivy1.6
+
+type a  # network addresses
+type p  # packets
+
+include udp
+instance foo : udp_simple(a,p)
+
+import foo.recv
+export foo.send
+
+interpret a->bv[1]
+interpret p->bv[16]
+
+extract iso_impl(me:a) = foo.impl(me)

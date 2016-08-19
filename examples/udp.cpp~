@@ -1,0 +1,352 @@
+#include "udp.h"
+
+#include <sstream>
+#include <algorithm>
+
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <sys/select.h>
+#include <string.h>
+#include <stdio.h>
+#include <string>
+#include <unistd.h>
+typedef udp ivy_class;
+struct thunk__foo__impl__handle_recv{
+    udp *__ivy;
+    int X;
+    thunk__foo__impl__handle_recv(udp *__ivy, int X): __ivy(__ivy),X(X){}
+    void operator()(int x) const {
+        __ivy->foo__impl__handle_recv(X,x);
+    }
+};
+
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+};
+void install_reader(reader *);
+	class udp_reader : public reader {
+	    int sock;
+	    int my_id;
+	    thunk__foo__impl__handle_recv rcb;
+	  public:
+	    udp_reader(int _my_id, thunk__foo__impl__handle_recv rcb)
+	        : my_id(_my_id), rcb(rcb) {
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0)
+		    { std::cerr << "cannot create socket\n"; exit(1); }
+
+		struct sockaddr_in myaddr;
+		memset((char *)&myaddr, 0, sizeof(myaddr));
+		myaddr.sin_family = AF_INET;
+		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		myaddr.sin_port = htons(4990+my_id);
+		if (bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+		    { std::cerr << "bind failed\n"; exit(1); }
+
+	    }
+
+	    virtual int fdes() {
+		return sock;
+	    }
+	    virtual void read() {
+		int pkt;
+		//std::cout << "RECEIVING\n";
+		if (recvfrom(sock,&pkt,sizeof(int),0,0,0) < 0)
+		    { std::cerr << "recvfrom failed\n"; exit(1); }
+		rcb(pkt);
+	    }
+	    virtual void write(int dst, int pkt) {
+		struct sockaddr_in dstaddr;
+		memset((char *)&dstaddr, 0, sizeof(dstaddr));
+		dstaddr.sin_family = AF_INET;
+		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		dstaddr.sin_port = htons(4990+dst);
+
+		//std::cout << "SENDING\n";
+		if (sendto(sock,&pkt,sizeof(int),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+		     { std::cerr << "sendto failed\n"; exit(1); }
+	    }
+	};
+    int udp::___ivy_choose(int rng,const char *name,int id) {
+        return 0;
+    }
+void udp::__init(){
+    {
+        ivy_assert(true, "");
+    }
+}
+void udp::foo__impl__send__implement(int X, int dst, int x){
+
+    foo__impl__rdr[X]->write(dst,x);
+}
+void udp::foo__impl__handle_recv(int X, int x){
+    ___ivy_stack.push_back(6);
+    foo__recv(X, x);
+    ___ivy_stack.pop_back();
+}
+void udp::imp__foo__recv(int dst, int x){
+    {
+    }
+}
+void udp::foo__send(int src, int dst, int x){
+    {
+
+        foo__impl__rdr[src]->write(dst,x);
+    }
+}
+void udp::foo__recv(int dst, int x){
+    ___ivy_stack.push_back(7);
+    imp__foo__recv(dst, x);
+    ___ivy_stack.pop_back();
+}
+void udp::__tick(int __timeout){
+}
+udp::udp(){
+    __CARD__a = 2;
+    for (int X = 0; X < 2; X++) {
+        install_reader(foo__impl__rdr[X] = new udp_reader(X,thunk__foo__impl__handle_recv(this, X)));
+    }
+}
+
+
+int ask_ret(int bound) {
+    int res;
+    while(true) {
+        std::cout << "? ";
+        std::cin >> res;
+        if (res >= 0 && res < bound) 
+            return res;
+        std::cout << "value out of range" << std::endl;
+    }
+}
+
+
+
+    class udp_repl : public udp {
+
+    public:
+
+    virtual void ivy_assert(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assertion failed\n";
+            exit(1);
+        }
+    }
+    virtual void ivy_assume(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assumption failed\n";
+            exit(1);
+        }
+    }
+
+    virtual void imp__foo__recv(int dst, int x){
+    std::cout << "foo.recv" << "(" << dst << "," << x << ")" << std::endl;
+}
+
+
+    };
+
+// Override methods to implement low-level network service
+
+bool is_white(int c) {
+    return (c == ' ' || c == '\t' || c == '\n');
+}
+
+bool is_ident(int c) {
+    return c == '_' || c == '.' || (c >= 'A' &&  c <= 'Z')
+        || (c >= 'a' &&  c <= 'z')
+        || (c >= '0' &&  c <= '9');
+}
+
+void skip_white(const std::string& str, int &pos){
+    while (pos < str.size() && is_white(str[pos]))
+        pos++;
+}
+
+struct syntax_error {
+};
+
+struct out_of_bounds {
+    int idx;
+    out_of_bounds(int _idx) : idx(_idx) {}
+};
+
+std::string get_ident(const std::string& str, int &pos) {
+    std::string res = "";
+    while (pos < str.size() && is_ident(str[pos])) {
+        res.push_back(str[pos]);
+        pos++;
+    }
+    if (res.size() == 0)
+        throw syntax_error();
+    return res;
+}
+
+
+void parse_command(const std::string &cmd, std::string &action, std::vector<std::string> &args) {
+    int pos = 0;
+    skip_white(cmd,pos);
+    action = get_ident(cmd,pos);
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '(') {
+        pos++;
+        skip_white(cmd,pos);
+        args.push_back(get_ident(cmd,pos));
+        while(true) {
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                break;
+            pos++;
+            args.push_back(get_ident(cmd,pos));
+        }
+        if (!(pos < cmd.size() && cmd[pos] == ')'))
+            throw syntax_error();
+        pos++;
+    }
+    skip_white(cmd,pos);
+    if (pos != cmd.size())
+        throw syntax_error();
+}
+
+struct bad_arity {
+    std::string action;
+    int num;
+    bad_arity(std::string &_action, unsigned _num) : action(_action), num(_num) {}
+};
+
+void check_arity(std::vector<std::string> &args, unsigned num, std::string &action) {
+    if (args.size() != num)
+        throw bad_arity(action,num);
+}
+
+int int_arg(std::vector<std::string> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].c_str());
+    if (bound && (res < 0 || res >= bound))
+        throw out_of_bounds(idx);
+    return res;
+}
+
+
+class stdin_reader: public reader {
+    std::string buf;
+
+    virtual int fdes(){
+        return 0;
+    }
+    virtual void read() {
+        char tmp[257];
+        int chars = ::read(0,tmp,256);
+        tmp[chars] = 0;
+        buf += std::string(tmp);
+        size_t pos;
+        while ((pos = buf.find('\n')) != std::string::npos) {
+            std::string line = buf.substr(0,pos+1);
+            buf.erase(0,pos+1);
+            process(line);
+        }
+    }
+    virtual void process(const std::string &line) {
+        std::cout << line;
+    }
+};
+
+class cmd_reader: public stdin_reader {
+
+public:
+    udp_repl &ivy;    
+
+    cmd_reader(udp_repl &_ivy) : ivy(_ivy) {
+        std::cout << "> "; std::cout.flush();
+    }
+
+    virtual void process(const std::string &cmd) {
+        std::string action;
+        std::vector<std::string> args;
+        try {
+            parse_command(cmd,action,args);
+
+            if (action == "foo.send") {
+                check_arity(args,3,action);
+                ivy.foo__send(int_arg(args,0,ivy.__CARD__a),int_arg(args,1,ivy.__CARD__a),int_arg(args,2,0));
+            }
+            else
+
+            {
+                std::cout << "undefined action: " << action << std::endl;
+            }
+        }
+        catch (syntax_error&) {
+            std::cout << "syntax error" << std::endl;
+        }
+        catch (out_of_bounds &err) {
+            std::cout << "argument " << err.idx + 1 << " out of bounds" << std::endl;
+        }
+        catch (bad_arity &err) {
+            std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
+        }
+        std::cout << "> "; std::cout.flush();
+    }
+};
+
+
+std::vector<reader *> readers;
+
+void install_reader(reader *r){
+    readers.push_back(r);
+}
+
+
+int main(int argc, char **argv){
+
+    // if (argc != 2) {
+    //     std::cerr << "usage: udp <index>\n";
+    //     return(1);
+    // }
+
+    // int my_id = atoi(argv[1]);
+
+    udp_repl ivy;    
+
+    install_reader(new cmd_reader(ivy));
+
+    while(true) {
+
+        fd_set rdfds;
+        FD_ZERO(&rdfds);
+        int maxfds = 0;
+
+        for (unsigned i = 0; i < readers.size(); i++) {
+            reader *r = readers[i];
+            int fds = r->fdes();
+            FD_SET(fds,&rdfds);
+            if (fds > maxfds)
+                maxfds = fds;
+        }
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+
+        if (foo < 0)
+            {perror("select failed"); exit(1);}
+        
+        if (foo == 0){
+            // std::cout << "TIMEOUT\n";            
+        }
+        else {
+            for (unsigned i = 0; i < readers.size(); i++) {
+                reader *r = readers[i];
+                if (FD_ISSET(r->fdes(),&rdfds))
+                    r->read();
+            }
+        }            
+    }
+}
