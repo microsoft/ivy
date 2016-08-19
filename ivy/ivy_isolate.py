@@ -20,6 +20,7 @@ import ivy_printer
 
 show_compiled = iu.BooleanParameter("show_compiled",False)
 cone_of_influence = iu.BooleanParameter("coi",True)
+filter_symbols = iu.BooleanParameter("filter_symbols",True)
 create_imports = iu.BooleanParameter("create_imports",False)
 enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
 
@@ -651,7 +652,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     asts += [action for action in new_actions.values()]
     sym_names = set(x.name for x in lu.used_symbols_asts(asts))
 
-    if cone_of_influence.get() or True:
+    if filter_symbols.get() or cone_of_influence.get():
         old_syms = list(mod.sig.symbols)
         for sym in old_syms:
             if sym not in sym_names:

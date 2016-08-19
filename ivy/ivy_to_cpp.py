@@ -1783,7 +1783,11 @@ def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
+    ivy.read_params()
     iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true'})
+    if target.get() == "gen":
+        iu.set_parameters({'filter_symbols':'false'})
+        
     with im.Module():
         ivy.ivy_init()
 
