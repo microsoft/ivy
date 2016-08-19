@@ -174,4 +174,4 @@ isolate iso_id = id with id_impl
 include timeout
 instance sec(X:node.t) : timeout_sec
 
-extract iso_impl(me) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn
+extract iso_impl(me:node.t) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn

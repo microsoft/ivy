@@ -692,6 +692,20 @@ For example:
 
 In this case, calling `c(id).my_id` will return `id`.
 
+An alternative way to write the above would be:
+
+    type id_t
+
+    object c(id:id_t) = {
+       action my_id returns (x:id_t) = {
+            x := id
+       }
+    }
+
+Notice that the object parameter is given as a logical constant rather
+than a variable. This constant can be referred to in the body of the
+object.
+
 ## Monitors
 
 While embedding assertions in code is a useful way to write
@@ -954,6 +968,81 @@ The guarantees are:
 Roughly speaking, this means that assertions about an object's inputs
 are assumptions for that object, while assertions about its outputs
 are guarantees.
+
+## Initializers
+
+In some cases it is awkward to give the initial condition as a
+formula. An alternative is to use an initializer. This is a special
+action that is executed once initially, before any exported actions
+are called. For example:
+
+    individual bit : bool
+
+    after init {
+        bit := false
+    }
+
+This behaves like a monitor after a special internal action called
+`init`. As the `after` implies, the initial condition prescribed by
+the `init` declarations is assumed to be established before any
+initializers are called. Initializers are executed in the order they
+are declared.
+
+Initializers may call other actions. For example, suppose we have a
+module `collection` representing a set of objects that is initially
+empty.  If we wanted a set that initially contained the value zero, we
+could use an initializer like this:
+
+    type t
+
+    object foo = {
+        instance myset : collection(t)
+
+        after init {
+            call myset.add(0)
+        }
+    }
+
+This action is called exactly once after `myset` is initialized.
+
+Parameterized objects can also have initializers. For example, we may
+want to have a collection of objects that each contain a bit, where initially
+only the bit of object 0 is true:
+
+    type t
+
+    object foo(self:t) = {
+        individual bit : bool
+
+        after init {
+            bit := (self = 0)
+        }
+    }
+
+There are some restrictions in initializers of parameterized objects,
+however. These are:
+
+- Conditions of `if` statements may not refer to the parameter, and
+
+- In assignments, the left-hand side must contain the parameter if the right-hand side does.
+
+For example, this initializer would not be legal:
+
+    type t
+
+    individual bit : bool
+
+    object foo(self:t) = {
+        after init {
+            bit := (self = 0)
+        }
+    }
+
+This is because the component `bit` being assigned is not
+parameterized.  This means it is in effect being assigned a different
+value for each value of `self`.  The restrictions guarantee that the
+result of the initializer does not depend on the order in which it is
+called for different parameter values.
 
 ## Interpreted types and theories
 

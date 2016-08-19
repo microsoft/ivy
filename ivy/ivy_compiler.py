@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction, NativeAction
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction, NativeAction, has_code
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -21,6 +21,7 @@ import ivy_alpha
 import ivy_module as im
 import ivy_theory as ith
 import ivy_isolate as iso
+import ivy_printer
 from collections import defaultdict
 
 class IvyDeclInterp(object):
@@ -552,6 +553,7 @@ def check_instantiations(mod,decls):
                     raise IvyError(inst,"{} undefined in instantiation".format(inst.relname))
 
 
+
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
@@ -582,7 +584,6 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
 
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
-
 
 
 def clear_rules(modname):

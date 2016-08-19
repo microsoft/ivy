@@ -4,42 +4,31 @@ from ivy.ivy_compiler import ivy_from_string
 from ivy.tk_ui import new_ui
 from ivy import ivy_utils as iu
 
-prog = """#lang ivy1.5
+prog = """#lang ivy1.6
 
-type foo
-type bar
+type t
 
-module mod(me) = {
-  relation r
-  individual x:foo
-  init x = me
+individual x(X:t) : t
 
-  action thing(y:foo) = {
-    x := me
-  }
-
-  action set_me(y:foo) = {
-    r := true;
-    call thing(y)
-  }
-
-  conjecture r -> x = me
+object foo(me:t) = {
+    after init {
+        x(me) := me;
+        assert false
+    }
 }
 
-instance inst(X:foo) : mod(X)
+isolate iso_foo(me:t) = foo(me) with x(me)
 
-axiom inst(X).r & inst(X).x = X
-
-isolate iso(me:foo) = inst(me)
-
-export inst.set_me
 """
 
 with im.Module():
-    iu.set_parameters({'ui':'cti','ext':'ext','isolate':'iso','show_compiled':'true'})
+    iu.set_parameters({'mode':'induction','isolate':'iso_foo','show_compiled':'true'})
     main_ui = new_ui()
     ui = main_ui.add(ivy_from_string(prog))
-#     main_ui.answer("OK")
+    main_ui.tk.update_idletasks()    
+    main_ui.answer("OK")
+    ui.check_safety_node(ui.node(0))
+    assert not ui.node(0).safe
 #     ui.check_inductiveness()
 # #    ui = ui.cti
 #     cg = ui.current_concept_graph
@@ -53,6 +42,6 @@ with im.Module():
 #     cg.gather()
 #     main_ui.answer("View")
 #     cg.bmc_conjecture(bound=1)
-# #    main_ui.mainloop()
+#    main_ui.mainloop()
 
 

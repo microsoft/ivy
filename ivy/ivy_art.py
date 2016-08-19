@@ -12,6 +12,7 @@ from string import *
 import copy
 import functools
 import pickle
+import ivy_actions
 
 
 ################################################################################
@@ -104,8 +105,17 @@ class AnalysisGraph(object):
         if ic == None:
             ic = im.init_cond
         s = self.domain.new_state(ic)
-        s2 = self.domain.new_state(ic)
-        self.add(s2,s)
+        if self.domain.initializers:
+            action = ivy_actions.Sequence(*[a for n,a in self.domain.initializers])
+            s = action_app(action,s)
+            with AC(self,no_add=True):
+                with EvalContext(check=False):
+                    s2 = eval_state(s)
+            s2.expr = s
+            self.add(s2)
+        else:
+            s2 = self.domain.new_state(ic)
+            self.add(s2,s)
         if abstractor:
             abstractor(s2)
 #        print "initial state: {}".format(s2)

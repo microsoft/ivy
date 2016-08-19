@@ -890,6 +890,9 @@ def emit_one_initial_state(header):
             header.append('    this->{} = {};\n'.format(name,name))
         elif sym not in is_derived:
             assign_symbol_from_model(header,sym,m)
+    action = ia.Sequence(*[a for n,a in im.module.initializers])
+    action.emit(header)
+
 
 
 def emit_constant(self,header,code):

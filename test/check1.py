@@ -28,7 +28,7 @@ module mod(me) = {
 
 instance inst(X:foo) : mod(X)
 
-isolate iso = inst(me)
+isolate iso(me:foo) = inst(me)
 
 export inst.set_me
 """

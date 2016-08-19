@@ -711,23 +711,23 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom.lineno = get_lineno(p,3)
         handle_before_after("implement",atom,p[7],p[0],p[4],p[5])
     def p_top_isolate_callatom_eq_callatoms(p):
-        'top : top ISOLATE callatom EQ callatoms'
-        d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
+        'top : top ISOLATE SYMBOL optargs EQ callatoms'
+        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6])))
         d.args[0].with_args = 0
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_isolate_callatom_eq_callatoms_with_callatoms(p):
-        'top : top ISOLATE callatom EQ callatoms WITH callatoms'
-        d = IsolateDecl(IsolateDef(*([p[3]] + p[5] + p[7])))
-        d.args[0].with_args = len(p[7])
+        'top : top ISOLATE SYMBOL optargs EQ callatoms WITH callatoms'
+        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6] + p[8])))
+        d.args[0].with_args = len(p[8])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
     def p_top_extract_callatom_eq_callatoms(p):
-        'top : top EXTRACT callatom EQ callatoms'
-        d = IsolateDecl(IsolateDef(*([p[3]] + p[5])))
-        d.args[0].with_args = len(p[5])
+        'top : top EXTRACT SYMBOL optargs EQ callatoms'
+        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6])))
+        d.args[0].with_args = len(p[6])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)

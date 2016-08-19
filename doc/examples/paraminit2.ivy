@@ -13,5 +13,5 @@ object foo(me:t) = {
 
 export foo.get_bit
 
-extract iso_foo(me) = foo(me)
+extract iso_foo(me:t) = foo(me)
 

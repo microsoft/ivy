@@ -7,7 +7,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
-    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const
+    used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const, used_variables_ast
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming, dbg
@@ -318,6 +318,10 @@ class AssignAction(Action):
                 rhs = eq_atom(extend[-1],add_parameters_ast(rhs,extend[0:-1]))
             else:
                 rhs = add_parameters_ast(rhs,extend)
+
+        lhs_vars = used_variables_ast(lhs)
+        if any(v not in lhs_vars for v in used_variables_ast(rhs)):
+            raise IvyError(self,"multiply assigned: {}".format(lhs.rep))
 
         type_check(domain,rhs)
         if is_individual_ast(lhs) != is_individual_ast(rhs):
@@ -884,3 +888,7 @@ def action_def_to_str(name,action):
     else:
         res += '{' + str(action) + '}'
     return res
+
+def has_code(action):
+    return any(not isinstance(a,Sequence) for a in action.iter_subactions())
+

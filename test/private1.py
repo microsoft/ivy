@@ -32,7 +32,7 @@ module mod(me) = {
 
 instance inst(X:foo) : mod(X)
 
-isolate iso = inst(me) with inst(me).baz
+isolate iso(me:foo) = inst(me) with inst(me).baz
 
 export inst.set_me
 """

@@ -12,4 +12,4 @@ object foo(me:t) = {
 
 export foo.flip
 
-extract iso_foo(me) = foo(me)
+extract iso_foo(me:t) = foo(me)

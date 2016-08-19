@@ -23,10 +23,10 @@ coverage = iu.BooleanParameter("coverage",True)
 
 
 def display_cex(msg,ag):
-    print msg
     if diagnose.get():
         ui.ui_main_loop(ag)
-    exit(1)
+        exit(1)
+    raise iu.IvyError(None,msg)
     
 def check_properties():
     if itp.false_properties():
@@ -87,6 +87,10 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             check_properties()
             ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
+            if im.module.initializers:
+                cex = ag.check_bounded_safety(ag.states[0])
+                if cex is not None:
+                    display_cex("safety failed in initializer",cex)
             with ivy_interp.EvalContext(check=False):
                 check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
                 for a in sorted(im.module.public_actions):

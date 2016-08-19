@@ -12,4 +12,4 @@ export foo.send
 interpret a->bv[1]
 interpret p->bv[16]
 
-extract iso_impl(me) = foo.impl(me)
+extract iso_impl(me:a) = foo.impl(me)

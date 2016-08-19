@@ -10,12 +10,12 @@ unsatisfactory. Ideally, we would like a real network to take this
 role.
 
 In this section, we'll see how to accomplish that. That is, we will
-implment a protocol as a collection of processes communicating over a
+implement a protocol as a collection of processes communicating over a
 network.
 
 ## A network interface
 
-Ivy provides a simple interface to the Unix Datagram protocol (UDP) in
+Ivy provides a simple interface to the Unix Datagram Protocol (UDP) in
 a module called `udp`. Here is the interface specification:
 
     module udp_simple(addr,pkt) = {
@@ -43,14 +43,14 @@ The interface is a module with two parameters: the type `addr` of
 network addresses, and the type `pkt` of packets.  It has two actions,
 `recv` and `send`.  These are very similar to actions of the abstract
 transport interface we used in the leader election protocol.  The only
-difference is that the `send` action the source address of the packet
-as a paramater as well as the destination address. We'll see the rason
+difference is that the `send` action takes the source address of the packet
+as a parameter as well as the destination address. We'll see the reason
 for this shortly. Action `recv` is imported by the interface (meaning
-the user must implement it) while `send` is exported (meaning that the
-module implements it).
+the user must implement it) while `send` is exported (meaning that `udp_simple`
+implements it).
 
 As in the leader example, the specification promises that only packets
-that have been sent wil be received (but packets may be dropped,
+that have been sent will be received (but packets may be dropped,
 duplicated or re-ordered). 
 
 For now, ignore the definition of object `impl`. We'll come back to it
@@ -78,7 +78,7 @@ Here, we define a type of network addresses `a` and a type of packets
 `p`. We include the `udp` module (which is part of IVy's system
 libraries). We then make an instance of `udp_simple`. To allow us to
 interact with this module, we import the `recv` action from the
-environment and export `send`.  Finally, we interp the types:
+environment and export `send`.  Finally, we interpret the types:
 addresses are one-bit numbers and packets are 16-bit numbers.  Since
 we don't want to compile the specification, we extract just the
 implementation of the interface, which is `foo.impl`.
@@ -86,7 +86,7 @@ implementation of the interface, which is `foo.impl`.
 We compile and run this program as follows:
 
     $ ivy_to_cpp target=repl isolate=iso_impl udp_test.ivy
-`   $ g++ -o udp_test udp_test.cpp
+    $ g++ -o udp_test udp_test.cpp
     $ ./udp_test
     >
 
@@ -95,10 +95,10 @@ Now we can send a packets:
     > foo.send(0,1,2)
     > foo.recv(1,2)
      
-What happend here? When we started the REPL, IVY bound addresses 0 and
-1 to two UDP port numbers. Call then ports A and B. We called
+What happened here? When we started the REPL, IVY bound addresses 0 and
+1 to two UDP port numbers. Call them ports A and B. We called
 `foo.send` to send a packet from address 0 to address 1 with content
-2. The module `foo` somehow marshalled the number 2 into a packet and
+2. The module `foo` somehow marshaled the number 2 into a packet and
 sent it out on port A.  It then printed a new prompt. At this point,
 the packet was received on the port B. This caused `foo.recv` to be
 called, resulting in the print-out `foo.recv(1,2)` after the prompt.
@@ -129,7 +129,7 @@ process performing the action. This is why `send` has the parameter
 
 We can extract just one process as follows:
 
-    extract iso_impl(me) = foo.impl(me)
+    extract iso_impl(me:a) = foo.impl(me)
 
 Here, `me` is a symbolic constant that represents the first parameter
 of of each action. The first parameter is "stripped" by replacing it
@@ -139,7 +139,7 @@ Before thinking about this too hard, let's just run it to see what
 happens. We compile as usual:
 
     $ ivy_to_cpp target=repl isolate=iso_impl udp_test2.ivy
-`   $ g++ -o udp_test2 udp_test2.cpp
+    $ g++ -o udp_test2 udp_test2.cpp
 
 Now, open up a new terminal that we'll call terminal A. In that
 terminal try to run `upd_test2`:
@@ -169,7 +169,7 @@ Now, let's send a packet from A to B:
 
 Notice that we omit the `src` parameter of `foo.send`, since that was
 given on the command line. Similarly, when terminal B receives the
-packet, it print `foo.recv(2)`, because the first parameter `dst` is
+packet, it prints `foo.recv(2)`, because the first parameter `dst` is
 implicit.
 
 We can, of course, send a packet in the opposite direction:
@@ -188,7 +188,7 @@ Also, one terminal can send a packet to itself:
 
 IVy places some restriction on extracts with parameters. These
 restrictions guarantee that the parallel processes behave as if they
-were running sequentially in a single procees space (technically, the
+were running sequentially in a single process space (technically, the
 Ivy guarantees that the actions are
 [*serializable*](https://en.wikipedia.org/wiki/Serializability)). We'll
 discuss these restrictions shortly. For now let's look at using the
@@ -197,20 +197,20 @@ discuss these restrictions shortly. For now let's look at using the
 # Running a distributed protocol
 
 Recall that the leader election protocol had an interface `trans` that
-represented the network. Since this interace has the same specification
+represented the network. Since this interface has the same specification
 `udp_simple`, we can replace object `trans` with this code:
 
     include udp
     instance trans : udp_simple(node.t,id.t)
 
-Notice, we use `node.t` as the `addr` type and `id.t` as the `pkt`
+Notice that we use `node.t` as the `addr` type and `id.t` as the `pkt`
 type. We also have to remove these declarations:
 
     import trans.send
     export trans.recv
 
-This is because `send` is now privided by `trans`, and `recv` is now
-called by `trans`. The environment is now just:
+This is because `send` is now provided by `trans`, and `recv` is now
+called by `trans`, not by the REPL. The environment is now just:
 
     import serv.elect
     export app.async
@@ -218,10 +218,10 @@ called by `trans`. The environment is now just:
 Finally, we change the `extract` declaration to include the
 *implementation* of `trans`:
 
-    extract iso_impl(me) = app(me),trans.impl(me),node_impl,id_impl,asgn
+    extract iso_impl(me:node.t) = app(me),trans.impl(me),node_impl,id_impl,asgn
 
 That is, we don't want the specification object `trans.spec` in the
-code we actually run. Notice that we strip the first parameter of bot
+code we actually run. Notice that we strip the first parameter of both
 `app` and `trans.impl`. We don't strip parameters from `node_impl`,
 `id_impl`, `asgn` because these objects provide functions without any
 state (they are a bit like static methods in a C++ class). We'll
@@ -243,10 +243,10 @@ of `trans` hasn't changed, so our inductive invariant is still good.
 We might ask why we didn't have to verify `trans.impl`. This is
 because this object is part of IVy's trusted code base. In fact,
 `udp_simple` is implemented in C++ and makes use of the operating
-system's API, which we can't formally verify. We can only verify this
-object by testing.
+system's API, which we can't formally verify. We can only verify
+`trans.impl` by testing.
 
-For now, let's try to run our protol. As before, we compile it like this:
+For now, let's try to run our protocol. As before, we compile it like this:
 
     $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp.ivy
     $ g++ -o leader_election_ring_udp leader_election_ring_udp.cpp 
@@ -284,7 +284,7 @@ Clearly, node 1's id did not pass node 0, so node 1 is not elected.
 Our protocol works, but is still unsatisfactory in at least one
 way. That is, it only does something in response to a call to
 `app.async`. We'd like `app.async` to be connected to some kind of
-system event to it repeasts at some interval. We can do this using the
+system event so it repeats at some interval. We can do this using the
 system `timeout` module. This contains the following interface:
 
     module timeout_sec = {
@@ -316,9 +316,9 @@ To test, this interface, let's write a simple program that just imports
 
 Here's what we get:
 
-    ivy_to_cpp target=repl timeout_test.ivy 
-    g++ -o timeout_test timeout_test.cpp
-    ./timeout_test
+    $ ivy_to_cpp target=repl timeout_test.ivy 
+    $ g++ -o timeout_test timeout_test.cpp
+    $ ./timeout_test
     > foo.timeout
     foo.timeout
     foo.timeout
@@ -348,7 +348,7 @@ process. We also have to remove this line, since action `app.async` no longer ex
 
 Finally, we include the implementation of `sec` in the extract:
 
-    extract iso_impl(me) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn
+    extract iso_impl(me:node.t) = app(me),trans.impl(me),sec.impl(me),node_impl,id_impl,asgn
 
 Notice that `sec.impl` also has one parameter stripped, since we have
 one timer per process. We compile as before:
@@ -358,10 +358,10 @@ one timer per process. We compile as before:
 
 Now we run the processes in terminals A and B:
 
-    A: $ ./leader_election_ring_udp 0
+    A: $ ./leader_election_ring_udp2 0
     A: >
 
-    B: $ ./leader_election_ring_udp 1
+    B: $ ./leader_election_ring_udp2 1
     B: >
 
     A:  serve.elect
@@ -369,7 +369,7 @@ Now we run the processes in terminals A and B:
     A:  serve.elect
     ...
 
-Notice the nothing happens when we start node 0. It is sending packets
+Notice that nothing happens when we start node 0. It is sending packets
 once per second, but they are being dropped because no port is yet
 open to receive them. After we start node 1, it forwards node 0's
 packets, which causes node 0 to be elected (and to continues to be
@@ -386,16 +386,16 @@ deal with this problem when we consider
 [liveness](https://en.wikipedia.org/wiki/Liveness) specifications.
 IVy will however, warn us that there might be a problem:
 
-    ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp2.ivy
+    $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp2.ivy
     leader_election_ring_udp2.ivy: line 131: warning: action sec.timeout is never called
 
 ## Serializability
 
 As mentioned above, IVy guarantees serializability. This means that
 actions executed by concurrent process produce the same input/output
-result as if the actions had been executed *in isolation* in some
-order. By isolation, we mean that each action completes before the next
-action begins.
+result as if the actions had been executed [*in isolation*](https://en.wikipedia.org/wiki/ACID) in some
+order. By isolation, we mean that each action completes before any other action
+begins.
 
 To guarantee serializability, IVy requires that processes be
 *non-interfering*.  This means that one process cannot have a
@@ -417,11 +417,11 @@ As an example of interference, consider the following program:
 
     export foo.flip
 
-    extract iso_foo(me) = foo(me)
+    extract iso_foo(me:t) = foo(me)
 
 This program has one parallel process for each value of a type
 `t`. Each process provides a method that modifies a global variable
-`bit`. Obviously, this is not a distributed program, becuase the processes
+`bit`. Obviously, this is not a distributed program, because the processes
 share a variable. Here's what happens when we try to compile the program:
 
     ivy_to_cpp target=repl isolate=iso_foo interference2.ivy
@@ -449,7 +449,7 @@ process:
 
     export foo.flip
 
-    extract iso_foo(me) = foo(me),bit(me)
+    extract iso_foo(me:t) = foo(me),bit(me)
 
 This program compiles successfully. But what would happen if
 one process tried to access the variable of another process.
@@ -469,7 +469,7 @@ Consider this program:
 
     export foo.flip
 
-    extract iso_foo(me) = foo(me),bit(me)
+    extract iso_foo(me:t) = foo(me),bit(me)
 
 Here, object `foo(me)` accesses the `bit` of some process `x`,
 where `x` is an input. Here's what happens when we compile:
@@ -487,13 +487,13 @@ Of course, to communicate with each other, processes must have a
 visible effect on something. That something is the environment, which
 includes the operating system and the physical network. A call to
 `trans.send` has an an effect on the environment, namely sending a
-packet. The Ivy runtime guarantees, however, that actions remain
+packet. The Ivy run-time guarantees, however, that actions remain
 serializable despite these effects, using [Lipton's theory of left-movers
 and right-movers](http://dl.acm.org/citation.cfm?id=361234). In the theory's terms,
 receiving a packet is right-mover, while sending a packet is a
 left-mover. Every action consists of zero or one receive events followed by
 any number of send events. The theory tells use that such actions are
-serializable.  That is, we can re-orer any concurrent execution by
+serializable.  That is, we can re-order any concurrent execution by
 commuting left-movers and right-movers such that the result is an
 equivalent isolated execution.
 
@@ -508,29 +508,29 @@ Ivy allows immutable objects (that is, read-only objects) such as the
 `pid` map in the leader protocol, to be shared between processes.
 Each process refers to its own local copy of the immutable object.  In
 the case of the `pid` map, IVy solved for a value of this function
-satisfying the given axiom that no to nodes have the same id. A table
+satisfying the given axiom that no two nodes have the same id. A table
 of this function was stored in the compiled process.
 
 Currently, IVy has some limitations in its ability to generate the
-immutable objects and also to generate initial states for paramterized
+immutable objects and also to generate initial states for parametrized
 processes. Consider, for example, this program:
 
-#lang ivy1.6
+    #lang ivy1.6
 
     type t
 
     object foo(me:t) = {
-	individual bit:bool
-	init ~bit
+        individual bit:bool
+        init ~bit
 
-	action get_bit returns (x:bool) = {
-	    x := bit
-	}
+        action get_bit returns (x:bool) = {
+            x := bit
+        }
     }
 
     export foo.get_bit
 
-    extract iso_foo(me) = foo(me)
+    extract iso_foo(me:t) = foo(me)
 
 IVy can compile this program and run it:
 
@@ -543,16 +543,50 @@ But suppose we change the initial condition so it depends on the stripped parame
 
     init bit <-> me = 0
 
-That is, we want `bit` to be true initially only for process 0. Here's what happens when we try to comppile:
+That is, we want `bit` to be true initially only for process 0. Here's what happens when we try to compile:
 
     ivy_to_cpp target=repl isolate=iso_foo paraminit2.ivy 
     paraminit2.ivy: line 7: error: initial condition depends on stripped parameter
 
 IVy isn't smart enough to compile an initial condition that is a
-function of the stripped parameter.
+function of the stripped parameter. We can work around this by
+providing this function explicitly, using an initializer:
+
+    #lang ivy1.6
+
+    type t
+
+    object foo(me:t) = {
+        function bit:bool
+
+        after init {
+            bit := (me = 0)
+        }
+
+        action get_bit returns (x:bool) = {
+            x := bit
+        }
+    }
+
+    export foo.get_bit
+
+    extract iso_foo(me:t) = foo(me)
+
+This version can be stripped and gives the expected result:
+
+    $ ivy_to_cpp target=repl isolate=iso_foo paraminit3.ivy 
+    $ g++ -o paraminit3 paraminit3.cpp
+    $ ./paraminit3 0
+    > foo.get_bit
+    1
+    >   ^C
+    $ ./paraminit3 1
+    > foo.get_bit
+    0
+    > 
 
 
-# Aspects
+
 
 
 
