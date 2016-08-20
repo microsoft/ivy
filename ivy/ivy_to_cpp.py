@@ -520,11 +520,11 @@ def init_method():
     res.formal_returns = []
     return res
 
-def open_loop(impl,vs):
+def open_loop(impl,vs,declare=True):
     global indent_level
     for idx in vs:
         indent(impl)
-        impl.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+        impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
@@ -534,6 +534,25 @@ def close_loop(impl,vs):
         indent(impl)
         impl.append('}\n')
         
+def open_scope(impl,newline=False,line=None):
+    global indent_level
+    if line != None:
+        indent(impl)
+        impl.append(line)
+    if newline:
+        impl.append('\n')
+        indent(impl)
+    impl.append('{\n')
+    indent_level += 1
+
+def open_if(impl,cond):
+    open_scope(impl,line='if('+(''.join(cond) if isinstance(cond,list) else cond)+')')
+    
+def close_scope(impl):
+    global indent_level
+    indent_level -= 1
+    indent(impl)
+    impl.append('}\n')
 
 # This generates the "tick" method, called by the test environment to
 # represent passage of time. For each progress property, if it is not
@@ -1020,8 +1039,56 @@ def emit_quant(variables,body,header,code,exists=False):
     header.append('}\n')
     code.append(res)    
 
+
 lg.ForAll.emit = lambda self,header,code: emit_quant(list(self.variables),self.body,header,code,False)
 lg.Exists.emit = lambda self,header,code: emit_quant(list(self.variables),self.body,header,code,True)
+
+def code_line(impl,line):
+    indent(impl)
+    impl.append(line+';\n')
+
+def code_asgn(impl,lhs,rhs):
+    code_line(impl,lhs + ' = ' + rhs)
+
+def code_eval(impl,expr):
+    code = []
+    expr.emit(impl,code)
+    return ''.join(code)
+
+def emit_some(self,header,code):
+    vs = [il.Variable('X__'+str(idx),p.sort) for idx,p in enumerate(self.params())]
+    subst = dict(zip(self.params(),vs))
+    fmla = ilu.substitute_constants_ast(self.fmla(),subst)
+    some = new_temp(header)
+    code_asgn(header,some,'0')
+    if isinstance(self,ivy_ast.SomeMinMax):
+        minmax = new_temp(header)
+    open_loop(header,vs)
+    open_if(header,code_eval(header,fmla))
+    if isinstance(self,ivy_ast.SomeMinMax):
+        index = new_temp(header)
+        idxfmla =  ilu.substitute_constants_ast(self.index(),subst)
+        code_asgn(header,index,code_eval(header,idxfmla))
+        open_if(header,some)
+        sort = self.index().sort
+        op = il.Symbol('<',il.RelationSort([sort,sort]))
+        idx = il.Symbol(index,sort)
+        mm = il.Symbol(minmax,sort)
+        pred = op(idx,mm) if isinstance(self,ivy_ast.SomeMin) else op(mm,idx)
+        open_if(header,code_eval(header,il.Not(pred)))
+        code_line(header,'continue')
+        close_scope(header)
+        close_scope(header)
+        code_asgn(header,minmax,index)
+    for p,v in zip(self.params(),vs):
+        code_asgn(header,varname(p),varname(v))
+    code_line(header,some+'= 1')
+    close_scope(header)
+    close_loop(header,vs)
+    code.append(some)
+
+ivy_ast.Some.emit = emit_some
+
 
 def emit_unop(self,header,code,op):
     code.append(op)
@@ -1172,25 +1239,36 @@ def emit_call(self,header):
 
 ia.CallAction.emit = emit_call
 
-def emit_local(self,header):
+def local_start(header,params,nondet_id=None):
     global indent_level
     indent(header)
     header.append('{\n')
     indent_level += 1
-    for p in self.args[0:-1]:
+    for p in params:
         indent(header)
         header.append('int ' + varname(p.name) + ';\n')
-        mk_nondet(header,p.name,sort_card(p.sort),p.name,self.unique_id)
-    self.args[-1].emit(header)
+        if nondet_id != None:
+            mk_nondet(header,p.name,sort_card(p.sort),p.name,nondet_id)
+
+def local_end(header):
+    global indent_level
     indent_level -= 1
     indent(header)
     header.append('}\n')
+
+
+def emit_local(self,header):
+    local_start(header,self.args[0:-1],self.unique_id)
+    self.args[-1].emit(header)
+    local_end(header)
 
 ia.LocalAction.emit = emit_local
 
 def emit_if(self,header):
     global indent_level
     code = []
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_start(header,self.args[0].params())
     indent(code)
     code.append('if(');
     self.args[0].emit(header,code)
@@ -1209,6 +1287,9 @@ def emit_if(self,header):
         indent_level -= 1
         indent(header)
         header.append('}\n')
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_end(header)
+
 
 ia.IfAction.emit = emit_if
 

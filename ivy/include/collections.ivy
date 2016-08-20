@@ -1,0 +1,157 @@
+#lang ivy1.6
+
+################################################################################
+#
+# Maps. 
+#
+# This module provides a relational model of a function from a type
+# dom to a type rng. Initially, everything is mapped to the element zero.
+# 
+# The key invariant of a map is that it is a function, i.e., for every
+# X there exists a Y such that map(X,Y). The module does not state
+# this invariant, however, since the quantifier alternation could
+# destroy stratification.  Instead it provides a "lemma" that allows
+# the user to instantiate Y for particular values of X.
+#
+# Parameters:
+#
+#  dom        The domain type
+#  rng        The range type
+#  zero       The initial value for every domain element
+
+module map(dom,rng,zero) = {
+
+    relation map(X:dom,Y:rng)
+    init map(X,Y) <-> Y = zero
+
+    # set the value of x to y
+    action set_(x:dom,y:rng) = {
+	local oldval:rng {
+	    assume map(x,oldval)
+	};
+	map(x,Y) := Y = y
+    }
+
+    # get the value of x
+    action get(x:dom) returns (y:rng) = {
+	assume map(x,y)
+    }
+
+    # prove there exists a value for x
+    action lemma(x:dom) = {
+	assume exists Y. map(x,Y)
+    }
+
+    conjecture map(K,L) & map(K,M) -> L = M
+
+}
+
+module set_wrapper(key) = {
+
+    object s = {}
+
+    <<< header
+	#include <set>
+    >>>
+
+    <<< member
+	std::set<int> `s`;
+    >>>
+
+    <<< init
+        `s`.insert(0);
+    >>>
+
+    implement insert(x:key) {
+	<<<
+	    `s`.insert(`x`);
+	>>>
+    }
+
+    implement erase(lo:key,hi:key) {
+	<<<
+            `s`.erase(`s`.lower_bound(`lo`),`s`.upper_bound(`hi`));
+	>>>
+    }
+
+    implement get_glb(k:key) returns (res:key) {
+	<<<
+            `res` = *(--`s`.upper_bound(`k`));
+	>>>
+	
+    }
+
+
+}
+
+################################################################################
+#
+# Ordered set representation
+#
+# This is intended to be implemented using the STL set template.
+#
+# Ordered sets assume the element type has a total non-strict order,
+# with a least element 0.  They provide insertion of elements (in log
+# time), deletion of ranges (in n log(n) time) and finding greatest
+# lower bounds (log n).
+# 
+# For help with proofs, this module also provides an auxiliary map
+# "succ" that gives the successor of every element in the set. The
+# "successor" of the maximal element in the set is 0.
+
+module ordered_set(key) = {
+
+    action insert(nkey:key)
+    action erase(lo:key,hi:key)
+    action get_glb(k:key) returns (res:key)
+
+    relation s(K:key)
+    init s(K) <-> K = 0
+
+    instantiate succ : map(key,key,0) # ghost
+
+    # insert one element
+    before insert {
+	s(nkey) := true;
+
+	# following is ghost code to update the successor relation
+	local v:key {
+	    if some lub:key. ~(lub <= nkey) & s(lub) minimizing lub {
+		v := lub
+	    }
+	    else {
+		v := 0
+	    };
+	    call succ.set_(nkey,v)
+	};
+	if some glb:key. ~(nkey <= glb) & s(glb) maximizing glb {
+	    call succ.lemma(glb); # instantiate succ(glb)
+	    call succ.set_(glb,nkey)
+	}
+    }
+    
+    # erase elements in a closed interval
+    before erase {
+	s(K) := s(K) & ~(lo <= K & K <= hi)
+    }
+
+    # the the greatest element <= k
+    after get_glb {
+	if some glb:key. glb <= k & s(glb) maximizing glb {
+	    call succ.lemma(glb); # instantiate succ(glb)
+	    assert res = glb
+	}
+    }
+
+    # Useful invariants of the "succ" relation. The successor of K is
+    # also in the set, and nothing between K and its successor is in
+    # the set. Here, if L = 0 it means K is the maximim element, so we
+    # have to treat this as a special case.
+
+    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
+    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
+
+    instance impl : set_wrapper(key)
+    private impl
+
+}
