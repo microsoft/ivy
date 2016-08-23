@@ -24,26 +24,25 @@ module map(dom,rng,zero) = {
     relation map(X:dom,Y:rng)
     init map(X,Y) <-> Y = zero
 
-    # set the value of x to y
-    action set_(x:dom,y:rng) = {
-	local oldval:rng {
-	    assume map(x,oldval)
-	};
-	map(x,Y) := Y = y
-    }
-
+    action set_(x:dom,y:rng)
     # get the value of x
-    action get(x:dom) returns (y:rng) = {
-	assume map(x,y)
-    }
-
+    action get(x:dom) returns (y:rng)
     # prove there exists a value for x
-    action lemma(x:dom) = {
-	assume exists Y. map(x,Y)
+    action lemma(x:dom)
+
+    object spec = {
+	implement set_(x:dom,y:rng) {
+	    call lemma(x);
+	    map(x,Y) := Y = y
+	}
+	implement get(x:dom) returns (y:rng) {
+	    assume map(x,y)
+	}
+	implement lemma(x:dom) {
+	    assume exists Y. map(x,Y)
+	}
     }
-
     conjecture map(K,L) & map(K,M) -> L = M
-
 }
 
 module set_wrapper(key) = {
@@ -110,36 +109,38 @@ module ordered_set(key) = {
 
     instantiate succ : map(key,key,0) # ghost
 
-    # insert one element
-    before insert {
-	s(nkey) := true;
+    object spec = {
+	# insert one element
+	before insert {
+	    s(nkey) := true;
 
-	# following is ghost code to update the successor relation
-	local v:key {
-	    if some lub:key. ~(lub <= nkey) & s(lub) minimizing lub {
-		v := lub
-	    }
-	    else {
-		v := 0
+	    # following is ghost code to update the successor relation
+	    local v:key {
+		if some lub:key. ~(lub <= nkey) & s(lub) minimizing lub {
+		    v := lub
+		}
+		else {
+		    v := 0
+		};
+		call succ.set_(nkey,v)
 	    };
-	    call succ.set_(nkey,v)
-	};
-	if some glb:key. ~(nkey <= glb) & s(glb) maximizing glb {
-	    call succ.lemma(glb); # instantiate succ(glb)
-	    call succ.set_(glb,nkey)
+	    if some glb:key. ~(nkey <= glb) & s(glb) maximizing glb {
+		call succ.lemma(glb); # instantiate succ(glb)
+		call succ.set_(glb,nkey)
+	    }
 	}
-    }
-    
-    # erase elements in a closed interval
-    before erase {
-	s(K) := s(K) & ~(lo <= K & K <= hi)
-    }
 
-    # the the greatest element <= k
-    after get_glb {
-	if some glb:key. glb <= k & s(glb) maximizing glb {
-	    call succ.lemma(glb); # instantiate succ(glb)
-	    assert res = glb
+	# erase elements in a closed interval
+	before erase {
+	    s(K) := s(K) & ~(lo <= K & K <= hi)
+	}
+
+	# the the greatest element <= k
+	after get_glb {
+	    if some glb:key. glb <= k & s(glb) maximizing glb {
+		call succ.lemma(glb); # instantiate succ(glb)
+		assert res = glb
+	    }
 	}
     }
 

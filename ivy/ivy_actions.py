@@ -652,6 +652,34 @@ class IfAction(Action):
         else:
             return self.args[0]
 
+class WhileAction(Action):
+    def name(self):
+        return 'while'
+    def __str__(self):
+        res = 'while ' + str(self.args[0]) + '\n'
+        for inv in self.args[2:]:
+            res += 'invariant ' + str(inv) + '\n'
+        res += bracket_action(self.args[1])
+        return res
+    def expand(self,domain,pvars):
+        modset,pre,post = self.args[1].int_update(domain,pvars)  # TODO:cheaper way to get modset
+        asserts = [AssertAction(fmla) for fmla in self.args[2:]]
+        assumes = [AssumeAction(fmla) for fmla in self.args[2:]]
+        havocs = [HavocAction(sym) for sym in modset]
+        for a in asserts + assumes:
+            a.lineno = self.lineno #TODO: get actual invariant lineno
+        return Sequence(*(
+                asserts +
+                havocs +
+                assumes +
+                [ChoiceAction(Sequence(),Sequence(*([self.args[1]]+asserts))),
+                AssumeAction(self.args[0])]))
+            
+    def int_update(self,domain,pvars):
+        return self.expand(domain,pvars).int_update(domain,pvars)
+    def decompose(self,pre,post,fail=False):
+        return self.expand(domain,pvars).decompose(pre,post,fail)
+
 
 
 local_action_ctr = 0

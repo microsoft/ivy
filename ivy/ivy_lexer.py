@@ -102,6 +102,8 @@ reserved = all_reserved = {
    'private' : 'PRIVATE',
    'implement' : 'IMPLEMENT',
    'property' : 'PROPERTY',
+   'while' : 'WHILE',
+   'invariant' : 'INVARIANT',
 }
 
 tokens += tuple(all_reserved.values())
@@ -191,7 +193,7 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
-                      'some','maximizing','maximizing','private','implement','using','property']:
+                      'some','maximizing','maximizing','private','implement','using','property','while','invariant']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

@@ -492,10 +492,19 @@ def get_prop_dependencies(mod):
             res.append((prop,ds))
     return res
 
+def set_privates(mod,isolate):
+    suff = "spec" if isinstance(isolate,ivy_ast.ExtractDef) else "impl"
+    for n,l in mod.hierarchy.iteritems():
+        if suff in l:
+            mod.privates.add(n+iu.ivy_compose_character+suff)
+
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
+    global implementation_map
+    implementation_map = {}
     if isolate_name not in mod.isolates:
         raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
     isolate = mod.isolates[isolate_name]
+    set_privates(mod,isolate)
     verified = set(a.relname for a in (isolate.verified()+tuple(extra_with)))
     present = set(a.relname for a in isolate.present())
     present.update(verified)
@@ -517,8 +526,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     
     impl_mixins = defaultdict(list)
     # delegate all the stub actions to their implementations
-    global implementation_map
-    implementation_map = {}
     for actname,ms in mod.mixins.iteritems():
         implements = [m for m in ms if isinstance(m,ivy_ast.MixinImplementDef)]
         impl_mixins[actname].extend(implements)
@@ -1035,7 +1042,10 @@ def check_isolate_completeness(mod = None):
             print iu.IvyError(find_some_assertion(mod,mixer),"assertion is not checked")
             if mixee != mixer:
                 print iu.IvyError(mod.actions[mixee],"...in action {}".format(mixee))
-            print iu.IvyError(find_some_call(mod,x,mixee),"...when called from {}".format(x))
+            if x == "external":
+                print "error: ...when called from the environment"
+            else:
+                print iu.IvyError(find_some_call(mod,x,mixee),"...when called from {}".format(x))
     
     done = set()
     for prop in mod.labeled_props:

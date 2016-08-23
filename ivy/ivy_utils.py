@@ -230,7 +230,7 @@ class IvyError(Exception):
 
 class IvyUndefined(IvyError):
     def __init__(self,ast,name):
-        assert False
+#        assert False
         super(IvyUndefined,self).__init__(ast,"undefined: " + name)
 
 def warn(ast,msg):

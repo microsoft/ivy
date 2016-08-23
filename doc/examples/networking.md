@@ -36,7 +36,6 @@ a module called `udp`. Here is the interface specification:
         }
 
         instance impl(X:addr) : udp_wrapper(addr,pkt,X)
-        private impl
     }
 
 The interface is a module with two parameters: the type `addr` of
@@ -295,7 +294,6 @@ system `timeout` module. This contains the following interface:
         }
 
         instance impl : timeout_wrapper
-        private impl
     }
 
 This interface is pretty simple. It calls imported action `timeout`

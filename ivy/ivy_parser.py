@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -144,6 +144,7 @@ class Ivy(object):
         self.modules = dict()
         self.macros = dict()
         self.actions = dict()
+        self.included = set()
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
@@ -181,10 +182,12 @@ def p_top_using_symbol(p):
 def p_top_include_symbol(p):
     'top : top INCLUDE SYMBOL'
     p[0] = p[1]
-    pref = Atom(p[3],[])
-    module = importer(p[3])
-    for decl in module.decls:
-        p[0].declare(decl)
+    if not any(p[3] in m.included for m in stack):
+        p[0].included.add(p[3])
+        pref = Atom(p[3],[])
+        module = importer(p[3])
+        for decl in module.decls:
+            p[0].declare(decl)
 
 def p_labeledfmla_fmla(p):
     'labeledfmla : fmla'
@@ -726,7 +729,7 @@ if not (iu.get_numeric_version() <= [1,1]):
         p[0].declare(d)
     def p_top_extract_callatom_eq_callatoms(p):
         'top : top EXTRACT SYMBOL optargs EQ callatoms'
-        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6])))
+        d = IsolateDecl(ExtractDef(*([Atom(p[3],p[4])] + p[6])))
         d.args[0].with_args = len(p[6])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
@@ -976,6 +979,21 @@ else:
         p[0] = IfAction(p[2],fix_if_part(p[2],p[4]),p[7])
         p[0].lineno = get_lineno(p,1)
 
+    def p_invariants(p):
+        'invariants : '
+        p[0] = []
+
+    def p_invariant_invariant_fmla(p):
+        'invariants : invariants INVARIANT fmla'
+        p[0] = p[1]
+        inv = p[3]
+        inv.lineno = get_lineno(p,1)
+        p[0].append(inv)
+
+    def p_action_while_fmla_invariants_lcb_action_rcb(p):
+        'action : WHILE fmla invariants LCB action RCB'
+        p[0] = WhileAction(*([p[2], p[5]] + p[3]))
+        p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,2]:
     def p_action_field_assign_term(p):

@@ -1,0 +1,7 @@
+#lang ivy1.6
+
+module totally_ordered(t) = {
+    property (T:t < U & U < V) -> (T < V)
+    property ~(T:t < U & U < T)
+    property T:t < U | T = U | U < T
+}

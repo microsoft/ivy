@@ -1,0 +1,77 @@
+#lang ivy1.6
+
+
+include collections
+
+################################################################################
+#
+# Specification of delegation map
+#
+
+module delegation_map(key,id) = {
+
+    # set the value of all keys in the range [lo,hi] to id
+
+    action set(lo:key.t,hi:key.t,dst:id)
+
+    # get the value of key k
+
+    action get(k:key.t) returns (val:id)
+
+    # The delegation map is a relation, since as a function it might
+    # not be stratified.
+
+    relation map(K:key.t, X:id)
+    init map(K,X) <-> X = 0
+
+    object spec = {
+	before set {
+	    map(K,X) := (X = dst) & (lo <= K & K <= hi)
+	                | map(K,X) & ~(lo <= K & K <= hi)
+	}
+        after get {
+	    assert map(k,val)
+	}
+    }
+
+    conjecture map(K,V) & map(K,W) -> V = W
+
+    # The implementation uses map and an ordered set.  Each element of
+    # the ordered set represents the lower bound of an interval of
+    # keys with the same value. The map gives the values for the lower bounds.
+
+    object impl = {
+
+	function entries(K:key.t) :id
+	init entries(0) = 0
+	instance has : ordered_set(key.t)
+
+	implement set(lo:key.t,hi:key.t,dst:id)  {
+	    if lo <= hi {
+		if hi ~= key.max {
+		    local nkey:key.t, nid:id {
+			nkey := key.next(hi);
+			nid := entries(has.get_glb(nkey));
+			entries(nkey) := nid;
+			call has.insert(nkey)
+		    }
+		};
+		call has.erase(lo,hi);
+		entries(lo) := dst;
+		call has.insert(lo)
+	    }
+	}
+
+	implement get(k:key.t) returns (val:id)  {
+	    val := entries(has.get_glb(k))
+	}
+
+	# The value of every key between K and its successor is the same as K's value.
+
+	conjecture has.s(K) & has.succ.map(K,L) & K <= M & (L = 0 | L > M) -> map(M,entries(K))
+
+	# We always have an entry for key zero. 
+
+	conjecture has.s(0)
+    }
+}

@@ -1,0 +1,43 @@
+#lang ivy1.6
+
+include order
+
+object key = {
+    
+    type t
+    instantiate totally_ordered(t)
+    property 0 <= K:t
+
+    # returns the maximum key
+    action max returns (x:t)
+
+    # returns the least key greater than x
+    action next(x:t) returns (y:t)
+
+    object spec = {
+	after max {
+	    assert X <= x
+	}
+	before next {
+	    assert exists Z. ~(Z <= x)
+	}
+	after next {
+	    assert x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
+	}
+    }
+
+    object impl = {
+	interpret t -> bv[1]
+	
+	implement max {
+	    x := 1
+	}
+
+	implement next {
+	    y := x + 1
+	}
+    }
+    private impl
+
+}
+

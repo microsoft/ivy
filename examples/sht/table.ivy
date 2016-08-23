@@ -1,0 +1,104 @@
+#lang ivy 1.6
+
+include collections
+
+module hash_table(key,value,shard) = {
+
+    ###########################################
+    # Interface
+
+    # Set the value of a key
+    action set(k:key, v:value)
+
+    # Get the value of a key
+    action get(k:key) returns (v:value)
+
+    # Extract a shard from a hash table
+    action extract_(lo:key,hi:key) returns(res:shard.t)
+
+    # Incorporates a shard into a hash table
+    action incorporate(s:shard.t)
+
+    ###########################################
+    # Specification
+
+    function hash(X:key) : data
+    init hash(X) = 0
+
+    object spec = {
+	before set {
+	    hash(k) := v
+	}
+
+	after get {
+	    assert v = hash(k)
+	}
+
+	after extract_ = {
+	    assert shard.lo(res) = lo;
+	    assert shard.hi(res) = hi;
+	    assert (lo <= X & X <= hi) -> shard.value(res,X) = hash(X)
+	}
+
+	before incorporate(s:shard.t) = {
+	    hash(K) := shard.value(s,K) if (shard.lo(s) <= K & K <= shard.hi(s)) else hash(K)
+	}
+    }
+
+    ###########################################
+    # Implementation
+
+    object impl = {
+	
+	instance tab : ordered_map(key,value)
+
+	implement set {
+	    tab.set(k,v)
+	}
+
+	implement get {
+	    v := tab.get(k)
+	}
+
+	implement extract_ = {
+	    shard.lo(res) := lo;
+	    shard.hi(res) := hi;
+	    shard.entries(res,X) := 0;
+	    local idx : key.iterator, pos : shard.iterator {
+		idx := tab.get_lub(idx);
+		pos := shard.get_lub(0);
+		while pos < shard.end
+		    invariant pos <= X -> shard.value(res,X) = 0
+                    invariant lo <= X & X < idx -> shard.value(res,X) = tab.get(X)  
+		{
+		    first(shard.entries(res,pos)) := idx;
+		    second(shard.entries(res,pos)) := tab.get(idx);
+		    if idx < key.end {
+			idx := tab.next(idx);
+		    }
+		    pos := shard.next(pos)
+		}			
+	    }
+	}
+
+	implement incorporate(s:shard.t) = {
+	    shard.lo(res) := lo;
+	    shard.hi(res) := hi;
+	    shard.entries(res,X) := 0;
+	    tab.erase(lo,hi);
+	    local idx : key.iterator, pos : shard.iterator {
+		pos := shard.get_lub(0);
+		while pos < shard.end
+                    invariant lo <= X & X <= hi & shard.find(s,X) < pos -> shard.value(res,X) = tab.get(X)  
+		{
+		    tab.set(first(shard.entries(s,pos)),second(shard.entries(s,pos)));
+		}			
+	    }
+	}
+	
+
+	conjecture tab.tab.entries(X) = hash(X)
+    }
+
+}
+

@@ -1,0 +1,33 @@
+#lang ivy1.6
+
+########################################
+# Shards contain a subset of a map from a low to a hi key
+#
+
+include order
+
+module table_shard(key,data) = {
+
+    type range
+    instantiate tolally_ordered(range)
+    
+    type t = record {
+	lo : key,
+	hi : key,
+	first(Y:range) : key,
+	second(Y:range) : data
+    }
+
+    function value(X:key):data
+
+    object impl = {
+	
+	interpret range -> bv[2]
+
+	derived find(S:t,X:key) := Y if some Y. first(entries(S,Y)) = X else 0
+	
+	derived value(S:t,X:key) :=
+            second(entries(S,Y)) if some Y. first(entries(S,Y)) = X else 0
+    }
+
+}

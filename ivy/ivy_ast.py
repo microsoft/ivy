@@ -605,7 +605,6 @@ class IsolateDef(AST):
     def params(self):
         return self.args[0].args
         
-
     def __repr__(self):
         return (','.join(repr(a) for a in self.verified()) +
                   (('with ' + ','.join(repr(a) for a in self.present())) if self.present() else ''))
@@ -615,6 +614,9 @@ class IsolateDef(AST):
         res.args.extend(extra_with)
         return res
         
+class ExtractDef(IsolateDef):
+    pass
+
 class ExportDecl(Decl):    
     def name(self):
         return 'export'
@@ -1007,9 +1009,13 @@ class ASTContext(object):
         if isinstance(exc_val,ivy_logic.Error):
 #            assert False
             raise IvyError(self.ast,str(exc_val))
-        if exc_type == IvyError and exc_val.lineno == None and hasattr(self.ast,'lineno'):
-            if isinstance(self.ast.lineno,tuple):
-                exc_val.filename, exc_val.lineno = self.ast.lineno
-            else:
-                exc_val.lineno = self.ast.lineno
+        if exc_type == IvyError:
+            print "no lineno: {}".format(self.ast)
+            needs_lineno = not exc_val.lineno
+            if needs_lineno and hasattr(self.ast,'lineno'):
+                print "lineno: {}".format(self.ast.lineno)
+                if isinstance(self.ast.lineno,tuple):
+                    exc_val.filename, exc_val.lineno = self.ast.lineno
+                else:
+                    exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions

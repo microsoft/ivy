@@ -503,7 +503,9 @@ def emit_some_action(header,impl,name,action,classname):
     indent_level += 1
     if len(action.formal_returns) == 1:
         indent(impl)
-        impl.append('int ' + varname(action.formal_returns[0].name) + ';\n')
+        p = action.formal_returns[0]
+        impl.append('int ' + varname(p.name) + ';\n')
+        mk_nondet(impl,p.name,sort_card(p.sort),p.name,0)
     action.emit(impl)
     if len(action.formal_returns) == 1:
         indent(impl)
