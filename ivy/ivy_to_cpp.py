@@ -67,7 +67,7 @@ def declare_symbol(header,sym,c_type = None,skip_params=0):
         return # skip interpreted symbols
     name, sort = sym.name,sym.sort
     if not c_type:
-        c_type = 'bool' if sort.is_relational() else 'int'
+        c_type = ctype(sort)
     header.append('    ' + c_type + ' ')
     header.append(varname(sym.name))
     if hasattr(sort,'dom'):
@@ -97,17 +97,16 @@ def mk_nondet(code,v,rng,name,unique_id):
     code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def ctype(sort):
-    if sort.name in im.module.sort_destructors:
+    if il.is_uninterpreted_sort(sort) and sort.name in im.module.sort_destructors:
         return varname(sort.name)
-    return "int"
+    return 'bool' if sort.is_relational() else 'int'
 
 def emit_cpp_sorts(header):
     for name in sorted(im.module.sort_destructors):
-        sym = im.module.sig.symbols[name]
         header.append("    struct " + varname(name) + " {\n");
         for destr in im.module.sort_destructors[name]:
-            declare_symbol(header,sym,skip_params=1)
-        header.append("    }\n");
+            declare_symbol(header,destr,skip_params=1)
+        header.append("    };\n");
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
@@ -202,6 +201,10 @@ def emit_set(header,symbol):
                   + ");\n")
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
+
+def sym_is_member(sym):
+    global is_derived
+    return sym not in is_derived and sym.name not in im.module.destructor_sorts
 
 def emit_eval_sig(header,obj=None):
     for symbol in all_state_symbols():
@@ -436,7 +439,7 @@ def native_declaration(atom):
 thunk_counter = 0
 
 def action_return_type(action):
-    return 'int' if action.formal_returns else 'void'
+    return ctype(action.formal_returns[0].sort) if action.formal_returns else 'void'
 
 def thunk_name(actname):
     return 'thunk__' + varname(actname)
@@ -481,7 +484,7 @@ def emit_native(header,impl,native,classname):
 
 def emit_param_decls(header,name,params,extra=[]):
     header.append(varname(name) + '(')
-    header.append(', '.join(extra + ['int ' + varname(p.name) for p in params]))
+    header.append(', '.join(extra + [ctype(p.sort) + ' ' + varname(p.name) for p in params]))
     header.append(')')
 
 def emit_method_decl(header,name,action,body=False,classname=None):
@@ -496,7 +499,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
-        header.append('int ')
+        header.append(ctype(rs[0].sort))
     else:
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
@@ -517,7 +520,7 @@ def emit_some_action(header,impl,name,action,classname):
     if len(action.formal_returns) == 1:
         indent(impl)
         p = action.formal_returns[0]
-        impl.append('int ' + varname(p.name) + ';\n')
+        impl.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
         mk_nondet(impl,p.name,sort_card(p.sort),p.name,0)
     action.emit(impl)
     if len(action.formal_returns) == 1:
@@ -538,6 +541,8 @@ def init_method():
 def open_loop(impl,vs,declare=True):
     global indent_level
     for idx in vs:
+        ct = ctype(idx.sort)
+        
         indent(impl)
         impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
@@ -772,9 +777,9 @@ void install_timer(timer *);
     }
 """)
 
-    emit_c_sorts(header)
+    emit_cpp_sorts(header)
     for sym in all_state_symbols():
-        if sym not in is_derived:
+        if sym_is_member(sym):
             declare_symbol(header,sym)
     for sym in il.sig.constructors:
         declare_symbol(header,sym)
@@ -895,7 +900,7 @@ cstr = il.fmla_to_str_ambiguous
 def assign_symbol_from_model(header,sym,m):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
-    if sym.name in im.module.sort_destructors:
+    if sym.name in im.module.destructor_sorts:
         return # skip structs
     name, sort = sym.name,sym.sort
     check_representable(sym)
@@ -1003,6 +1008,12 @@ def emit_app(self,header,code):
         self.args[1].emit(header,code)
         code.append(')')
         return 
+    # handle destructors
+    skip_params = 0
+    if self.func.name in im.module.destructor_sorts:
+        self.args[0].emit(header,code)
+        code.append('.')
+        skip_params = 1
     # handle uninterpreted ops
     code.append(varname(self.func.name))
     global is_derived
@@ -1016,7 +1027,7 @@ def emit_app(self,header,code):
             first = False
         code.append(')')
     else: 
-        for a in self.args:
+        for a in self.args[skip_params:]:
             code.append('[')
             a.emit(header,code)
             code.append(']')
