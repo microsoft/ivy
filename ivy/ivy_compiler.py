@@ -113,10 +113,15 @@ expr_context = None
 top_context = None
 
 def compile_app(self):
+    iu.dbg('self')
+    iu.dbg('type(self)')
+    iu.dbg('type(self.rep)')
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
         returns = top_context.actions[self.rep]
+        iu.dbg('self.rep')
+        iu.dbg('returns')
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
             # TODO: right now we can't do anything with multiple returns
@@ -192,6 +197,7 @@ def sortify_with_inference(ast):
     with top_sort_as_default():
         res = ast.compile()
     with ASTContext(ast):
+        iu.dbg('repr(res)')
         res = sort_infer(res)
     return res
 
@@ -231,7 +237,12 @@ def compile_assign(self):
             if isinstance(args[1],ivy_ast.Tuple):
                 raise IvyError(self,"wrong number of values in assignment");
             with ASTContext(self):
-                teq = sort_infer(Equals(*args))
+                try:
+                    teq = sort_infer(Equals(*args))
+                except:
+                    iu.dbg('local_syms')
+                    iu.dbg('[str(c) for c in code]')
+                    assert False
             args = list(teq.args)
             code.append(AssignAction(*args))
         for c in code:
@@ -337,6 +348,18 @@ def compile_action_def(a,sig):
         res.formal_returns = returns
         res.label = a.args[0].relname
         return res
+
+def compile_defn(df):
+    if isinstance(df.args[1],ivy_ast.Some):
+        eqn = ivy_ast.Atom('=',(df.args[0],df.args[1].params()[0]))
+        fmla = ivy_ast.Implies(eqn,df.args[1].fmla())
+        fmla = sortify_with_inference(fmla)
+        df = ivy_logic.Definition(fmla.args[0].args[0],ivy_logic.Some(fmla.args[0].args[1],fmla.args[1]))
+    else:
+        eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
+        eqn = sortify_with_inference(eqn)
+        df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+    return df
     
     
 class IvyDomainSetup(IvyDeclInterp):
@@ -374,18 +397,27 @@ class IvyDomainSetup(IvyDeclInterp):
             raise IvyError(v,"A destructor must have at least one parameter")
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
-    def derived(self,df):
+    def derived(self,ldf):
         try:
-            rel = df.args[0]
-            with ASTContext(rel):
-              sym = add_symbol(rel.relname,get_relation_sort(self.domain.sig,rel.args,df.args[1]))
-            df = sortify_with_inference(df)
-            self.domain.all_relations.append((sym,len(rel.args)))
-            self.domain.relations[sym] = len(rel.args)
-            self.domain.concepts.append(df)
+            label = ldf.label
+            df = ldf.formula
+            lhs = df.args[0]
+            sym = ivy_logic.add_symbol(lhs.rep,ivy_logic.TopFunctionSort(len(lhs.args)))
+            df  = compile_defn(df)
+            ivy_logic.remove_symbol(sym)
+            add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
+            self.domain.all_relations.append((sym,len(lhs.args)))
+            self.domain.relations[sym] = len(lhs.args)
+            self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
             self.domain.updates.append(DerivedUpdate(df))
         except ValueError:
             raise IvyError(df,"definition of derived relation must be a cube")
+    def definition(self,ldf):
+        label = ldf.label
+        df = ldf.formula
+        df = compile_defn(df)
+        self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
+        self.domain.updates.append(DerivedUpdate(df))
     def progress(self,df):
         rel = df.args[0]
         with ASTContext(rel):
@@ -407,6 +439,15 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.updates.append(upd.compile())
     def type(self,typedef):
 #        print "typedef {!r}".format(typedef)
+        if isinstance(typedef.args[1],ivy_ast.StructSort):
+            sort = ivy_logic.ConstantSort(typedef.args[0])
+            self.domain.sig.sorts[typedef.args[0]] = sort
+            for a in typedef.args[1].args:
+                p = a.clone([ivy_ast.Variable('V:dstr',sort.name)]+a.args)
+                p.sort = a.sort
+                with ASTContext(typedef.args[1]):
+                    self.destructor(p)
+            return
         sort = typedef.args[1].compile()
         self.domain.sig.sorts[typedef.args[0]] = sort
         for c in sort.defines(): # register the type's constructors
@@ -503,6 +544,8 @@ def collect_actions(decls):
     for d in decls:
         if d.name() == 'action':
             for a in d.args:
+                iu.dbg('a.defines()')
+                iu.dbg('a.formal_returns')
                 res[a.defines()] = a.formal_returns
     return res
 

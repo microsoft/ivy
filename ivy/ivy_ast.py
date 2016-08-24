@@ -5,7 +5,7 @@
 Ivy abstract syntax trees.
 """
 
-from ivy_utils import flatten, gen_to_set, UniqueRenamer, compose_names, split_name, IvyError
+from ivy_utils import flatten, gen_to_set, UniqueRenamer, compose_names, split_name, IvyError, base_name
 import ivy_utils as iu
 import ivy_logic
 import re
@@ -358,6 +358,7 @@ class EnumeratedSort(Sort):
     def rename(self,name):
         return self
 
+
 class ConstantSort(Sort):
     def __init__(self,rep,prover_sort = None):
         self.rep,self.prover_sort = rep,prover_sort
@@ -379,6 +380,13 @@ class ConstantSort(Sort):
     def rename(self,name):
         return ConstantSort(name,self.prover_sort)
         
+class StructSort(Sort):
+    def __repr__(self):
+        return 'struct {' + ','.join(map(str,self.args)) + '}'
+    def defines(self):
+        return [a.rep for a in self.args]
+    def rename(self,name):
+        return self
 
 UninterpretedSort = ConstantSort
 
@@ -500,7 +508,13 @@ class DerivedDecl(Decl):
     def name(self):
         return 'derived'
     def defines(self):
-        return [(c.defines(),lineno(c)) for c in self.args]
+        return [(c.formula.defines(),lineno(c.formula)) for c in self.args]
+
+class DefinitionDecl(Decl):
+    def name(self):
+        return 'definition'
+    def defines(self):
+        return []
 
 class ProgressDecl(Decl):
     def name(self):
@@ -776,7 +790,7 @@ def is_enumerated(term):
     return isinstance(term.get_sort(),EnumeratedSort)
 
 def app_to_atom(app):
-    if isinstance(app,Old) or isinstance(app,Quantifier) or isinstance(app,Ite):
+    if isinstance(app,Old) or isinstance(app,Quantifier) or isinstance(app,Ite) or isinstance(app,Variable):
         return app
     res = Atom(app.rep,app.args)
     if hasattr(app,'lineno'):
@@ -811,6 +825,8 @@ def subst_subscripts(s,subst):
 #    return compose_names(*[subst_subscripts_comp(t,subst) for t in split_name(s)])
     return subst_subscripts_comp(s,subst)
 
+def base_name_differs(x,y):
+    return base_name(x) != base_name(y)
 
 class AstRewriteSubstConstants(object):
     def __init__(self,subst):
@@ -855,8 +871,10 @@ class AstRewriteAddParams(object):
     def rewrite_atom(self,atom,always=False):
         return atom.clone(atom.args + self.params)
 
-def rewrite_sort(rewrite,sort):
-    sort = rewrite.rewrite_name(sort)
+def rewrite_sort(rewrite,orig_sort):
+    sort = rewrite.rewrite_name(orig_sort)
+    if base_name_differs(sort,orig_sort):
+        return sort
     sort = rewrite.rewrite_atom(Atom(sort)).rep
     return sort
 
@@ -875,6 +893,8 @@ def ast_rewrite(x,rewrite):
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
             atom.sort = rewrite_sort(rewrite,x.sort)
+        if base_name_differs(x.rep,atom.rep):
+            return atom
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
         return Literal(x.polarity,ast_rewrite(x.atom,rewrite))
@@ -897,7 +917,11 @@ def ast_rewrite(x,rewrite):
         if atom.args:
             raise iu.IvyError(x,'Types cannot have parameters: {}'.format(atom))
         name = atom.rep
-        return TypeDef(name,x.args[1].rename(name))
+        if isinstance(x.args[1],StructSort):
+            t = ast_rewrite(x.args[1],rewrite)
+        else:
+            t = x.args[1].rename(name)
+        return TypeDef(name,t)
     if hasattr(x,'args'):
         return x.clone(ast_rewrite(x.args,rewrite)) # yikes!
     print "wtf: {} {}".format(x,type(x))

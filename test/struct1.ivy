@@ -1,0 +1,15 @@
+#lang ivy1.6
+
+type q
+type r
+
+type t = struct {
+    first : q,
+    second : r
+}
+
+action a(v:t,c:q,d:r) = {
+    first(v) := c;
+    second(v) := d;
+    assert first(v) = c & second(v) = d
+}

@@ -370,7 +370,12 @@ def p_tatom_lp_symbol_relop_symbol_rp(p):
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
     p[0] = p[1]
-    p[0].declare(DerivedDecl(*p[3]))
+    p[0].declare(DerivedDecl(*[LabeledFormula(None,x) for x in p[3]]))
+
+def p_top_definition_defns(p):
+    'top : top DEFINITION defns'
+    p[0] = p[1]
+    p[0].declare(DefinitionDecl(*[LabeledFormula(None,x) for x in p[3]]))
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'
@@ -481,7 +486,7 @@ def p_optreturns(p):
     p[0] = []
     
 def p_optreturns_tsyms(p):
-    'optreturns : RETURNS LPAREN params RPAREN'
+    'optreturns : RETURNS LPAREN lparams RPAREN'
     p[0] = p[3]
 
 def p_optactualreturns(p):
@@ -529,6 +534,10 @@ def p_tterms_tterms_comma_tterm(p):
 def p_sort_lcb_names_rcb(p):
     'sort : LCB names RCB'
     p[0] = EnumeratedSort(p[2])
+
+def p_sort_struct_lcb_names_rcb(p):
+    'sort : STRUCT LCB tterms RCB'
+    p[0] = StructSort(*p[3])
 
 def p_names_symbol(p):
     'names : SYMBOL'
@@ -641,6 +650,8 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
+    iu.dbg('p[4]')
+    iu.dbg('p[6]')
     p[0].declare(ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6])))
     if p[2]:
         if p[2] == ExportDecl:
@@ -936,29 +947,37 @@ else:
         'somefmla : fmla'
         p[0] = p[1]
 
-    def p_somefmla_some_params_dot_fmla(p):
-        'somefmla : SOME params DOT fmla'
+    def p_bounds_params_dot(p):
+        'bounds : params DOT'
+        p[0] = p[1]
+
+    def p_bounds_lparen_lparams_rparen(p):
+        'bounds : LPAREN lparams RPAREN'
+        p[0] = p[2]
+
+    def p_somefmla_some_bounds_fmla(p):
+        'somefmla : SOME bounds fmla'
         lsyms = [s.prefix('loc:') for s in p[2]]
         subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
-        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
+        fmla = subst_prefix_atoms_ast(p[3],subst,None,None)
         p[0] = Some(*(lsyms+[fmla]))
         p[0].lineno = get_lineno(p,1)
     
-    def p_somefmla_some_params_dot_fmla_minimizing_term(p):
-        'somefmla : SOME params DOT fmla MINIMIZING term'
+    def p_somefmla_some_bounds_fmla_minimizing_term(p):
+        'somefmla : SOME bounds fmla MINIMIZING term'
         lsyms = [s.prefix('loc:') for s in p[2]]
         subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
-        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
-        index = subst_prefix_atoms_ast(p[6],subst,None,None)
+        fmla = subst_prefix_atoms_ast(p[3],subst,None,None)
+        index = subst_prefix_atoms_ast(p[5],subst,None,None)
         p[0] = SomeMin(*(lsyms+[fmla,index]))
         p[0].lineno = get_lineno(p,1)
 
-    def p_somefmla_some_params_dot_fmla_maximizing_term(p):
-        'somefmla : SOME params DOT fmla MAXIMIZING term'
+    def p_somefmla_some_bounds_fmla_maximizing_term(p):
+        'somefmla : SOME bounds fmla MAXIMIZING term'
         lsyms = [s.prefix('loc:') for s in p[2]]
         subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
-        fmla = subst_prefix_atoms_ast(p[4],subst,None,None)
-        index = subst_prefix_atoms_ast(p[6],subst,None,None)
+        fmla = subst_prefix_atoms_ast(p[3],subst,None,None)
+        index = subst_prefix_atoms_ast(p[5],subst,None,None)
         p[0] = SomeMax(*(lsyms+[fmla,index]))
         p[0].lineno = get_lineno(p,1)
 
@@ -1149,8 +1168,32 @@ def p_defns_defns_comma_defn(p):
     p[0] = p[1]
     p[0].append(p[3])
 
+def p_defnlhs_atom(p):
+    'defnlhs : atom'
+    p[0] = p[1]
+    
+def p_defnlhs_lp_term_relop_term_rp(p):
+    'defnlhs : LPAREN term relop term RPAREN'
+    p[0] = Atom(p[3],[p[2],p[4]])
+    p[0].lineno = get_lineno(p,3)
+
+def p_defnlhs_lp_term_infix_term_rp(p):
+    'defnlhs : LPAREN term infix term RPAREN'
+    p[0] = App(p[3],[p[2],p[4]])
+    p[0].lineno = get_lineno(p,3)
+
 def p_defn_atom_fmla(p):
-    'defn : atom EQ fmla'
+    'defn : defnlhs EQ fmla'
+    p[0] = Definition(app_to_atom(p[1]),p[3])
+    p[0].lineno = get_lineno(p,2)
+
+def p_somevarfmla_some_simplevar_dot_fmla(p):
+    'somevarfmla : SOME simplevar DOT fmla'
+    p[0] = Some(p[2],p[4])
+    p[0].lineno = get_lineno(p,1)
+
+def p_defn_atom_somevarfmla(p):
+    'defn : defnlhs EQ somevarfmla'
     p[0] = Definition(app_to_atom(p[1]),p[3])
     p[0].lineno = get_lineno(p,2)
 

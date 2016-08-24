@@ -1,0 +1,45 @@
+#lang ivy1.6
+
+module totally_ordered(t) = {
+    property (T:t < U & U < V) -> (T < V)
+    property ~(T:t < U & U < T)
+    property T:t < U | T = U | U < T
+}
+
+module order_iterator(range) = {
+    type t = struct {
+	iter_end : bool,
+	iter_val : range
+    }
+
+    definition (X < Y)
+ = ~iter_end(X) & iter_end(Y) 
+                      | ~iter_end(X) & ~iter_end(Y) & iter_val(X) < iter_val(Y)
+
+    action begin(x:range) returns (y:t)
+    action end returns (y:t)
+    action next(x:t) returns (y:t)
+    action val(x:t) returns (y:range)
+    
+    object spec = {
+	after begin {
+	    assert ~iter_end(y) & iter_val(y) = x
+	}
+	after end {
+	    assert iter_end(y)
+	}
+	before next {
+	    assert ~iter_end(x)
+	}
+	after next {
+	    assert X <= x & iter_end(y) | ~(x < Y & Y < y) & x < y
+	}
+	before val {
+	    assert ~iter_end(x)
+	}
+	after val {
+	    assert y = iter_val(x)
+	}
+    }
+}
+

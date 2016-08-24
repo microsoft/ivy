@@ -156,3 +156,179 @@ module ordered_set(key) = {
     private impl
 
 }
+
+module map_wrapper(key,value) = {
+
+    object s = {}
+
+    <<< header
+	#include <map>
+    >>>
+
+    <<< member
+	std::map<int,int> `s`;
+    >>>
+
+    <<< init
+    >>>
+
+    implement set(x:key.t,y:value) {
+	<<<
+	    `s`[`x`] = `y`;
+	>>>
+    }
+
+    implement get(x:key.t) returns (y:value) {
+	<<<
+	    std::map<int,int>::iterator it = `s`.find(`k`);
+	    if (it == `s`.end()) {
+	        `y` = 0;
+	    } else {
+	        `y` = *it;
+	    }
+	>>>
+    }
+
+    implement erase(lo:key.t,hi:key.t) {
+	<<<
+            `s`.erase(`s`.lower_bound(`lo`),`s`.upper_bound(`hi`));
+	>>>
+    }
+
+    implement begin(k:key.t) returns (res:key.iter.t) {
+	<<<
+	    std::map<int,int>::iterator it = `s`.lower_bound(`k`);
+	    if (it == `s`.end()) {
+	        `res`.iter_end = true;
+	        `res`.iter_val = 0;
+	    } else {
+                `res`.iter_end = false;
+	        `res`.iter_val = it->first;
+	    }
+	>>>
+	
+    }
+
+    implement next(inp:key.iter.t) returns (res:key.iter.t) {
+	<<<
+	    std::map<int,int>::iterator it = `s`.upper_bound(`k`);
+	    if (it == `s`.end()) {
+	        `res`.iter_end = true;
+	        `res`.iter_val = 0;
+	    } else {
+                `res`.iter_end = false;
+	        `res`.iter_val = it->first;
+	    }
+	>>>
+    }
+}
+
+################################################################################
+#
+# Ordered map representation
+#
+# This is intended to be implemented using the STL map template.
+#
+# Ordered maps assume the key type has a total non-strict order, with
+# a least element 0 and iteration.  They provide insertion of
+# key/value pairs (in log time), deletion of ranges of keys (in n
+# log(n) time) and iteration.
+# 
+# For help with proofs, this module also provides an auxiliary map
+# "succ" that gives the successor of every element in the map. The
+# "successor" of the maximal element in the map is 0.
+
+module ordered_map(key,value) = {
+
+    # set the value of key k
+    action set(nkey:key.t,v:value)
+
+    # get the value of key k or zero
+    action get(k:key.t) returns (v:value)
+
+    # remove all leys in range [lo,hi]
+    action erase(lo:key.t,hi:key.t)
+
+    # iterator to least key >= k or end
+    action begin(k:key.t) returns (res:key.iter.t)
+
+    # iterator least key > iter or end
+    action next(it:key.iter.t) returns (res:key.iter.t)
+
+    relation s(K:key.t)
+    relation r(K:key.t,V:value)
+    init ~s(K) & ~r(K,V)
+    
+    instantiate succ : map(key.t,key.t,0) # ghost
+
+    object spec = {
+	# insert one element
+	before set {
+	    s(nkey) := true;
+	    r(nkey,X) := X = v;
+
+	    # following is ghost code to update the successor relation
+	    local sk:key.t {
+		if some (lub:key.t) ~(lub <= nkey) & s(lub) minimizing lub {
+		    sk := lub
+		}
+		else {
+		    sk := 0
+		};
+		call succ.set_(nkey,sk)
+	    };
+	    if some (glb:key.t) ~(nkey <= glb) & s(glb) maximizing glb {
+		call succ.lemma(glb); # instantiate succ(glb)
+		call succ.set_(glb,nkey)
+	    }
+	}
+
+	after get {
+	    assert r(k,v) & s(k) | v = 0
+	}
+
+	# erase elements in a closed interval
+	before erase {
+	    s(K) := s(K) & ~(lo <= K & K <= hi);
+	    r(K,V) := r(K,V) & ~(lo <= K & K <= hi)
+	}
+
+	after begin {
+	    local foo:key.t {
+		foo := key.iter.val(res);
+		if some (lub:key.t) lub >= k & s(lub) minimizing lub {
+		    assert res < key.iter.end & foo = lub
+		}
+	    }
+	}
+
+	before next {
+	    assert it < key.iter.end
+	}
+
+	after next {
+	    local k:key.t {
+		k := key.iter.val(it);
+		call succ.lemma(k);
+		if some (lub:key.t) lub > k & s(lub) minimizing lub {
+		    assert key.iter.val(res) = lub
+		}
+		else {
+		    assert res = key.iter.end
+		}
+	    }
+	}
+
+    }
+
+    # Useful invariants of the "succ" relation. The successor of K is
+    # also in the map, and nothing between K and its successor is in
+    # the map. Here, if L = 0 it means K is the maximim element, so we
+    # have to treat this as a special case.
+
+    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
+    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
+
+    instance impl : map_wrapper(key,value)
+
+}

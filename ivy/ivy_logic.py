@@ -170,6 +170,12 @@ class Let(AST):
             res = 'let ' + ', '.join([str(x) for x in self.args[0:-1]]) + ' in ' + res
         return res
 
+class Some(AST):
+    def __init__(self,*args):
+        assert len(args) == 2
+        self.args = args
+    def __str__(self):
+        return 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
 
 class Definition(AST):
     """
@@ -183,6 +189,9 @@ class Definition(AST):
     def defines(self):
         return self.args[0].rep
     def to_constraint(self):
+        if isinstance(self.args[1],Some):
+            return lg.ForAll([self.args[1].args[0]],Implies(self.args[1].args[1],
+                                                         lu.substitute(self.args[1].args[1],{self.args[1].args[0]:self.args[0]})))
         if is_individual(self.args[0]):
             return Equals(*self.args)
         return Iff(*self.args)
@@ -266,6 +275,8 @@ def find_symbol(symbol_name):
         raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
 def find_polymorphic_symbol(symbol_name):
+    iu.dbg('symbol_name')
+    iu.dbg('type(symbol_name)')
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
     if symbol_name[0].isdigit():
@@ -574,6 +585,11 @@ def is_first_order_sort(s):
 def RelationSort(dom):
     return FunctionSort(*(list(dom) + [lg.Boolean])) if len(dom) else lg.Boolean
 
+def TopFunctionSort(arity):
+    res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
+    iu.dbg('res')
+    return res
+    
 def apply(symbol,args):
     return App(symbol,*args)
 
@@ -682,6 +698,7 @@ def is_variable(term):
 def sort_infer(term):
     res = concretize_sorts(term)
     for x in chain(lu.used_variables(res),lu.used_constants(res)):
+        iu.dbg('repr(x)')
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
             raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
 #    print "sort_infer: res = {!r}".format(res)

@@ -514,7 +514,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
                 del ivy_logic.sig.interp[type_name]
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
-    derived = set(df.args[0].func.name for df in mod.concepts)
+    derived = set(ldf.formula.args[0].func.name for ldf in mod.definitions)
     for name in present:
         if (name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
@@ -645,7 +645,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     mod.labeled_props =  [a for a in mod.labeled_props if check_pr(a.label)]
 
     # filter definitions
-    mod.concepts = [c for c in mod.concepts if startswith_eq_some(c.args[0].func.name,present,mod)]
+    mod.definitions = [c for c in mod.definitions if keepax(c.label)]
 
 
     # filter the signature
@@ -653,9 +653,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     # formulas
 
     asts = []
-    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
         asts += [y.formula for y in x]
-    asts += mod.concepts
     asts += [action for action in new_actions.values()]
     sym_names = set(x.name for x in lu.used_symbols_asts(asts))
 

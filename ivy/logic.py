@@ -196,7 +196,7 @@ class Ite(recstruct('Ite', [], ['cond', 't_then', 't_else'])):
     def _preprocess_(cls, cond, t_then, t_else):
         if cond.sort not in (Boolean, TopS):
             raise SortError("Ite condition must be Boolean: {}".format(body))
-        elif TopS in (t_then.sort, t_else.sort):
+        elif isinstance(t_then.sort,TopSort) or isinstance(t_else.sort,TopSort):
             pass
         elif t_then.sort != t_else.sort:
             raise SortError("Ite then and else terms must have same sort: {}, {}".format(t_then, t_else))

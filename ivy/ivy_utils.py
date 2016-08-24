@@ -466,6 +466,9 @@ def compose_names(*names):
 def split_name(name):
     return name.split(ivy_compose_character)
 
+def base_name(name):
+    return split_name(name)[0]
+
 def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')
     lines = [s.strip() for s in lines]

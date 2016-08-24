@@ -349,6 +349,12 @@ class AssignAction(Action):
             eqs = [eq_atom(v,a) for (v,a) in zip(vs,lhs.args)[1:] if not isinstance(a,Variable)]
             if eqs:
                 fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
+            for destr in ivy_module.module.sort_destructors[mut.sort.name]:
+                if destr != n:
+                    phs = sym_placeholders(destr)
+                    a1 = [nondet(*mut.args)] + phs[1:]
+                    a2 = [mut] + phs[1:]
+                    fmlas.append(eq_atom(destr(*a1),destr(*a2)))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
             dbg('new_clauses')
             return ([mut_n], new_clauses, false_clauses())
@@ -406,7 +412,7 @@ class HavocAction(Action):
     def __str__(self):
         return str(self.args[0]) + ' := *'
     def action_update(self,domain,pvars):
-        lhs = type_ast(domain,self.args[0])
+        lhs = self.args[0]
         n = lhs.rep
         new_n = new(n)
         args = lhs.args
@@ -668,12 +674,14 @@ class WhileAction(Action):
         havocs = [HavocAction(sym) for sym in modset]
         for a in asserts + assumes:
             a.lineno = self.lineno #TODO: get actual invariant lineno
-        return Sequence(*(
+        res =  Sequence(*(
                 asserts +
                 havocs +
                 assumes +
                 [ChoiceAction(Sequence(),Sequence(*([self.args[1]]+asserts))),
-                AssumeAction(self.args[0])]))
+                AssumeAction(Not(self.args[0]))]))
+        iu.dbg('res')
+        return res
             
     def int_update(self,domain,pvars):
         return self.expand(domain,pvars).int_update(domain,pvars)

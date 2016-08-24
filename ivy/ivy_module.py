@@ -25,7 +25,7 @@ class Module(object):
         # these fields represent all the module declarations
 
         self.all_relations = [] # this includes both base and derived relations in declaration order
-        self.concepts = []  # TODO: these are actually "derived" relations
+        self.definitions = []  # TODO: these are actually "derived" relations
         self.labeled_axioms = []
         self.labeled_props = []
         self.labeled_inits = []
@@ -90,8 +90,8 @@ class Module(object):
         # axioms of the derived relations TODO: used only the
         # referenced ones, but we need to know abstract domain for
         # this
-        for df in self.concepts:
-            theory.append(df.to_constraint()) # TODO: make this a def?
+        for ldf in self.definitions:
+            theory.append(ldf.formula.to_constraint()) # TODO: make this a def?
         return lu.Clauses(theory)
 
 

@@ -62,7 +62,7 @@ def indent_code(header,code):
     for line in code.split('\n'):
         header.append((indent_level * 4 + get_indent(line) - indent) * ' ' + line.strip() + '\n')
 
-def declare_symbol(header,sym,c_type = None):
+def declare_symbol(header,sym,c_type = None,skip_params=0):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
     name, sort = sym.name,sym.sort
@@ -71,7 +71,7 @@ def declare_symbol(header,sym,c_type = None):
     header.append('    ' + c_type + ' ')
     header.append(varname(sym.name))
     if hasattr(sort,'dom'):
-        for d in sort.dom:
+        for d in sort.dom[skip_params:]:
             header.append('[' + str(sort_card(d)) + ']')
     header.append(';\n')
 
@@ -95,6 +95,19 @@ def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
     code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
+
+def ctype(sort):
+    if sort.name in im.module.sort_destructors:
+        return varname(sort.name)
+    return "int"
+
+def emit_cpp_sorts(header):
+    for name in sorted(im.module.sort_destructors):
+        sym = im.module.sig.symbols[name]
+        header.append("    struct " + varname(name) + " {\n");
+        for destr in im.module.sort_destructors[name]:
+            declare_symbol(header,sym,skip_params=1)
+        header.append("    }\n");
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
@@ -645,8 +658,8 @@ def emit_tick(header,impl,classname):
 def module_to_cpp_class(classname):
     global is_derived
     is_derived = set()
-    for df in im.module.concepts:
-        is_derived.add(df.defines())
+    for ldf in im.module.definitions:
+        is_derived.add(ldf.formula.defines())
 
     # remove the actions not reachable from exported
         
@@ -758,6 +771,8 @@ void install_timer(timer *);
         return 0;
     }
 """)
+
+    emit_c_sorts(header)
     for sym in all_state_symbols():
         if sym not in is_derived:
             declare_symbol(header,sym)
@@ -765,8 +780,8 @@ void install_timer(timer *);
         declare_symbol(header,sym)
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
-    for df in im.module.concepts:
-        emit_derived(header,impl,df,classname)
+    for ldf in im.module.definitions:
+        emit_derived(header,impl,ldf.formula,classname)
 
     for native in im.module.natives:
         tag = native_type(native)
@@ -880,6 +895,8 @@ cstr = il.fmla_to_str_ambiguous
 def assign_symbol_from_model(header,sym,m):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
+    if sym.name in im.module.sort_destructors:
+        return # skip structs
     name, sort = sym.name,sym.sort
     check_representable(sym)
     if hasattr(sort,'dom'):

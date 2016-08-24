@@ -1,33 +1,39 @@
 #lang ivy1.6
 
 ########################################
-# Shards contain a subset of a map from a low to a hi key
+# A shard contains an interval of keys [lo,hi] from a hash table
 #
 
 include order
 
+
 module table_shard(key,data) = {
 
     type range
-    instantiate tolally_ordered(range)
+    instantiate totally_ordered(range)
     
-    type t = record {
+    type t = struct {
 	lo : key,
 	hi : key,
 	first(Y:range) : key,
 	second(Y:range) : data
     }
 
-    function value(X:key):data
+    function value(S:t,X:key):data
 
+    instance iter : order_iterator(range)
+    
     object impl = {
 	
 	interpret range -> bv[2]
-
-	derived find(S:t,X:key) := Y if some Y. first(entries(S,Y)) = X else 0
 	
-	derived value(S:t,X:key) :=
-            second(entries(S,Y)) if some Y. first(entries(S,Y)) = X else 0
+	derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
+	derived find(S,X) = some Y. at(S,X,Y)
+	derived present(S,X) = at(S,X,find(S,X))
+	
+	definition value(S,X) = second(S,find(S,X)) if present(S,X) else 0
+
+	conjecture at(S,X,Y) & at(S,X,Z) -> Y = Z
     }
 
 }
