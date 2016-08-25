@@ -3,3 +3,5 @@
 
 %: %.cpp
 	g++ -g -o $@ $<
+
+.PRECIOUS: %.cpp

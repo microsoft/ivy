@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -635,6 +635,8 @@ class IfAction(Action):
 #            iu.dbg('if_part')
 #            iu.dbg('else_part')
         else:
+            if not is_boolean(self.args[0]):
+                raise IvyError(self,'condition must be boolean') 
             if_part = Sequence(AssumeAction(self.args[0]),self.args[1])
             else_action = self.args[2] if len(self.args) >= 3 else Sequence()
             else_part = Sequence(AssumeAction(dual_formula(self.args[0])),else_action)
@@ -679,7 +681,6 @@ class WhileAction(Action):
                 assumes +
                 [ChoiceAction(Sequence(),Sequence(*([self.args[1]]+asserts))),
                 AssumeAction(Not(self.args[0]))]))
-        iu.dbg('res')
         return res
             
     def int_update(self,domain,pvars):

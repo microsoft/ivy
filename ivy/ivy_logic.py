@@ -176,6 +176,11 @@ class Some(AST):
         self.args = args
     def __str__(self):
         return 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
+    def params(self):
+        return [self.args[0]]
+    def fmla(self):
+        return self.args[1]
+
 
 class Definition(AST):
     """
@@ -650,6 +655,18 @@ polymorphic_macros_map = {
     '>=' : '<',
 }
 
+macros_expansions = {
+    '<=' : lambda t: Or(normalize_symbol(t.func)(*t.args),Equals(*t.args)),
+    '>' : lambda t: normalize_symbol(t.func)(t.args[1],t.args[0]),
+    '>=' : lambda t: Or(normalize_symbol(t.func)(t.args[1],t.args[0]),Equals(*t.args)),
+}
+
+def is_macro(term):
+    return isinstance(term,lg.Apply) and term.func.name in macros_expansions
+
+def expand_macro(term):
+    return macros_expansions[term.func.name](term)
+    
 def default_sort():
     ds = sig._default_sort
     if ds != None: return ds

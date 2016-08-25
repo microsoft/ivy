@@ -96,7 +96,7 @@ module hash_table(key,value,shard) = {
 		    {
 			local r : shard.range {
 			    r := shard.iter.val(pos);
-			    if shard.second(s,r) {
+			    if shard.second(s,r) ~= 0 {
 				call tab.set(shard.first(s,r),shard.second(s,r))
 			    }
 			}			

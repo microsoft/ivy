@@ -100,7 +100,7 @@ def mk_nondet(code,v,rng,name,unique_id):
 def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
     fun = lambda v: '___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')'
-    assign_symbol_value(code,[varname(sym)],fun,sym)
+    assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
 
 def field_eq(s,t,field):
     vs = [il.Variable('X{}'.format(idx),sort) for idx,sort in enumerate(field.sort.dom[1:])]
@@ -421,7 +421,7 @@ def emit_action_gen(header,impl,name,action,classname):
 """)
 def emit_derived(header,impl,df,classname):
     name = df.defines().name
-    sort = df.defines().sort
+    sort = df.defines().sort.rng
     retval = il.Symbol("ret:val",sort)
     vs = df.args[0].args
     ps = [ilu.var_to_skolem('p:',v) for v in vs]
@@ -889,8 +889,19 @@ void install_timer(timer *);
                 open_scope(impl,line='else')
                 code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
                 close_scope(impl)
-                code_line(impl,'res.'+fname+' = '+ctype(sym.sort.rng)
+                vs = variables(sym.sort.dom[1:])
+                for v in vs:
+                    open_scope(impl)
+                    code_line(impl,'ivy_value tmp = tmp_args[0]')
+                    code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx)'.format(csortcard(v.sort)))
+                    open_loop(impl,[v])
+                    code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+                    code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
+                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = '+ctype(sym.sort.rng)
                           +'_arg(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+                for v in vs:
+                    close_loop(impl,[v])
+                    close_scope(impl)
             code_line(impl,'return res')
             close_scope(impl)
             open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
@@ -963,19 +974,31 @@ def check_representable(sym,ast=None,skip_args=0):
 
 cstr = il.fmla_to_str_ambiguous
 
-def assign_symbol_value(header,lhs_text,m,v):
+def variables(sorts):
+    return [il.Variable('X__'+str(idx),s) for idx,s in enumerate(sorts)]
+
+
+def assign_symbol_value(header,lhs_text,m,v,same=False):
     sort = v.sort
     if hasattr(sort,'name') and sort.name in im.module.sort_destructors:
         for sym in im.module.sort_destructors[sort.name]:
             check_representable(sym,skip_args=1)
             dom = sym.sort.dom[1:]
             if dom:
-                for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
-                    term = sym(*([v] + [il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)]))
-                    ctext = varname(sym.name) + ''.join('['+str(a)+']' for a in args)
-                    assign_symbol_value(header,lhs_text+[ctext],m,term)
+                if same:
+                    vs = variables(dom)
+                    open_loop(header,vs)
+                    term = sym(*([v] + vs))
+                    ctext = memname(sym) + ''.join('['+varname(a)+']' for a in vs)
+                    assign_symbol_value(header,lhs_text+[ctext],m,term,same)
+                    close_loop(header,vs)
+                else:
+                    for args in itertools.product(*[range(sort_card(s)) for s in dom]):
+                        term = sym(*([v] + [il.Symbol(str(a),s) for a,s in zip(args,dom)]))
+                        ctext = memname(sym) + ''.join('['+str(a)+']' for a in args)
+                        assign_symbol_value(header,lhs_text+[ctext],m,term,same)
             else:
-                assign_symbol_value(header,lhs_text+[memname(sym)],m,sym(v))
+                assign_symbol_value(header,lhs_text+[memname(sym)],m,sym(v),same)
     else:
         header.append('    ' + '.'.join(lhs_text) + ' = ' + m(v) + ';\n')
         
@@ -1075,6 +1098,9 @@ def is_bv_term(self):
             and il.sig.interp[self.sort.name].startswith('bv['))
 
 def emit_app(self,header,code):
+    # handle macros
+    if il.is_macro(self):
+        return il.expand_macro(self).emit(header,code)
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
         if self.func.name in il.sig.interp:
@@ -1174,9 +1200,15 @@ def code_eval(impl,expr):
     return ''.join(code)
 
 def emit_some(self,header,code):
-    vs = [il.Variable('X__'+str(idx),p.sort) for idx,p in enumerate(self.params())]
-    subst = dict(zip(self.params(),vs))
-    fmla = ilu.substitute_constants_ast(self.fmla(),subst)
+    if isinstance(self,ivy_ast.Some):
+        vs = [il.Variable('X__'+str(idx),p.sort) for idx,p in enumerate(self.params())]
+        subst = dict(zip(self.params(),vs))
+        fmla = ilu.substitute_constants_ast(self.fmla(),subst)
+        params = self.params()
+    else:
+        vs = self.params()
+        params = [new_temp(header)]
+        fmla = self.fmla()
     for v in vs:
         check_iterable_sort(v.sort)
     some = new_temp(header)
@@ -1200,15 +1232,19 @@ def emit_some(self,header,code):
         close_scope(header)
         close_scope(header)
         code_asgn(header,minmax,index)
-    for p,v in zip(self.params(),vs):
+    for p,v in zip(params,vs):
         code_asgn(header,varname(p),varname(v))
     code_line(header,some+'= 1')
     close_scope(header)
     close_loop(header,vs)
-    code.append(some)
+    if isinstance(self,ivy_ast.Some):
+        code.append(some)
+    else:
+        code.append(varname(params[0]))
 
 ivy_ast.Some.emit = emit_some
 
+il.Some.emit = emit_some
 
 def emit_unop(self,header,code,op):
     code.append(op)
@@ -1242,6 +1278,17 @@ lg.Iff.emit = lambda self,header,code: emit_binop(self,header,code,'==')
 lg.Implies.emit = emit_implies
 lg.And.emit = lambda self,header,code: emit_binop(self,header,code,'&&','true')
 lg.Or.emit = lambda self,header,code: emit_binop(self,header,code,'||','false')
+
+def emit_ternop(self,header,code):
+    code.append('(')
+    self.args[0].emit(header,code)
+    code.append(' ? ')
+    self.args[1].emit(header,code)
+    code.append(' : ')
+    self.args[2].emit(header,code)
+    code.append(')')
+    
+lg.Ite.emit = emit_ternop
 
 def emit_assign_simple(self,header):
     code = []
@@ -1414,6 +1461,16 @@ def emit_if(self,header):
 
 
 ia.IfAction.emit = emit_if
+
+def emit_while(self,header):
+    global indent_level
+    code = []
+    open_scope(header,line='while('+code_eval(header,self.args[0])+')')
+    self.args[1].emit(header)
+    close_scope(header)
+
+
+ia.WhileAction.emit = emit_while
 
 def emit_choice(self,header):
     global indent_level

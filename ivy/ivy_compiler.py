@@ -134,10 +134,7 @@ def compile_app(self):
         with ASTContext(self):
             if len(params) != len(args):
                 raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
-            iu.dbg('[p.sort for p in params]')
-            iu.dbg('args')
             args = [sort_infer(a,find_sort(p.sort)) for a,p in zip(args,params)]
-            iu.dbg('args')
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
         return res()
     return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)

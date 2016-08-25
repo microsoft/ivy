@@ -17,7 +17,7 @@ instance tab : hash_table(key,value,shard)
 interpret key.t -> bv[2]
 interpret value -> bv[2]
 
-export foo.set
-export foo.get
-export foo.extract_
-export foo.incorporate
+export tab.set
+export tab.get
+export tab.extract_
+export tab.incorporate
