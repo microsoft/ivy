@@ -24,7 +24,8 @@ module order_iterator(range) = {
     
     object spec = {
 	after begin {
-	    assert ~iter_end(y) & iter_val(y) = x
+	    iter_end(y) := false;
+	    iter_val(y) := x
 	}
 	after end {
 	    iter_end(y) := true;

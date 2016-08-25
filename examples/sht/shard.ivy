@@ -34,6 +34,16 @@ module table_shard(key,data) = {
 	definition value(S,X) = second(S,find(S,X)) if present(S,X) else 0
 
 	conjecture at(S,X,Y) & at(S,X,Z) -> Y = Z
-    }
 
+	implement iter.next(x:iter.t) returns (y:iter.t) {
+	    if iter.iter_val(x) = 3 {
+		iter.iter_end(y) := true;
+		iter.iter_val(y) := 0
+	    }
+	    else {
+		iter.iter_end(y) := false;
+		iter.iter_val(y) := iter.iter_val(x) + 1
+	    }
+	}
+    }
 }

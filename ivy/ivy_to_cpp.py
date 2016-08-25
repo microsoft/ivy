@@ -909,7 +909,17 @@ void install_timer(timer *);
             for idx,sym in enumerate(destrs):
                 if idx > 0:
                     code_line(impl,'s<<","')
-                code_line(impl,'s<< "' + memname(sym) + ':" <<  t.'+memname(sym))
+                code_line(impl,'s<< "' + memname(sym) + ':"')
+                dom = sym.sort.dom[1:]
+                vs = variables(dom)
+                for d,v in zip(dom,vs):
+                    code_line(impl,'s << "["')
+                    open_loop(impl,[v])
+                    code_line(impl,'if ({}) s << ","'.format(varname(v)))
+                code_line(impl,'s << t.' + memname(sym) + subscripts(vs))
+                for d,v in zip(dom,vs):
+                    close_loop(impl,[v])
+                    code_line(impl,'s << "]"')
             code_line(impl,'s<<"}"')
             code_line(impl,'return s')
             close_scope(impl)
@@ -973,6 +983,9 @@ def check_representable(sym,ast=None,skip_args=0):
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is large'.format(sym,domsort))
 
 cstr = il.fmla_to_str_ambiguous
+
+def subscripts(vs):
+    return ''.join('['+varname(v)+']' for v in vs)
 
 def variables(sorts):
     return [il.Variable('X__'+str(idx),s) for idx,s in enumerate(sorts)]

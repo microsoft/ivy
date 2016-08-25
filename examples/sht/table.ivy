@@ -62,10 +62,11 @@ module hash_table(key,value,shard) = {
 
 	implement extract_ {
 	    shard.second(res,X) := 0;
-	    local idx : key.iter.t, pos : shard.iter.t {
+	    local idx : key.iter.t, pos : shard.iter.t, lim: key.iter.t  {
 		idx := tab.begin(lo);
+		lim := key.iter.begin(hi);
 		pos := shard.iter.begin(0);
-		while ~shard.iter.iter_end(pos) & ~key.iter.iter_end(idx)
+		while ~shard.iter.iter_end(pos) & idx <= lim
 #		    invariant pos <= X -> shard.value(res,X) = 0
 #                    invariant lo <= X & X < idx -> shard.value(res,X) = tab.get(X)  
 		{
@@ -90,7 +91,7 @@ module hash_table(key,value,shard) = {
 		call tab.erase(lo,hi);
 		local idx : key.iter.t, pos : shard.iter.t {
 		    pos := shard.iter.begin(0);
-		    while shard.iter.iter_end(pos)
+		    while ~shard.iter.iter_end(pos)
 #                        invariant lo <= X & X <= hi & shard.find(s,X) < pos
 #                                  -> shard.value(res,X) = tab.get(X)  
 		    {
@@ -99,7 +100,8 @@ module hash_table(key,value,shard) = {
 			    if shard.second(s,r) ~= 0 {
 				call tab.set(shard.first(s,r),shard.second(s,r))
 			    }
-			}			
+			};			
+			pos := shard.iter.next(pos)
 		    }
 		}
 	    }
