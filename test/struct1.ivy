@@ -8,13 +8,35 @@ type t = struct {
     second : r
 }
 
-action a(v:t,c:q,d:r) = {
+individual v:t
+
+action a(c:q,d:r) = {
     first(v) := c;
     second(v) := d;
     assert first(v) = c & second(v) = d
+}
+
+action b returns (x:q) = {
+    x := first(v)
+}
+
+action c returns (x:r) = {
+    x := second(v)
+}
+
+action d(x:t) = {
+    v := x
+}
+
+action e returns (x:t) = {
+    x := v
 }
 
 interpret q -> bv[16]
 interpret r -> bv[16]
 
 export a
+export b
+export c
+export d
+export e

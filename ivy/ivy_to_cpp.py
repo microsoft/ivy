@@ -58,7 +58,8 @@ def get_indent(line):
 
 def indent_code(header,code):
     code = code.rstrip() # remove trailing whitespace
-    indent = min(get_indent(line) for line in code.split('\n') if line.strip() != "")
+    nonempty_lines = [line for line in code.split('\n') if line.strip() != ""]
+    indent = min(get_indent(line) for line in nonempty_lines) if nonempty_lines else 0
     for line in code.split('\n'):
         header.append((indent_level * 4 + get_indent(line) - indent) * ' ' + line.strip() + '\n')
 
@@ -69,7 +70,7 @@ def declare_symbol(header,sym,c_type = None,skip_params=0):
     if not c_type:
         c_type = ctype(sort)
     header.append('    ' + c_type + ' ')
-    header.append(varname(sym.name))
+    header.append(memname(sym) if skip_params else varname(sym.name))
     if hasattr(sort,'dom'):
         for d in sort.dom[skip_params:]:
             header.append('[' + str(sort_card(d)) + ']')
@@ -96,9 +97,23 @@ def mk_nondet(code,v,rng,name,unique_id):
     indent(code)
     code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
-def ctype(sort):
+def mk_nondet_sym(code,sym,name,unique_id):
+    global nondet_cnt
+    fun = lambda v: '___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')'
+    assign_symbol_value(code,[varname(sym)],fun,sym)
+
+def field_eq(s,t,field):
+    vs = [il.Variable('X{}'.format(idx),sort) for idx,sort in enumerate(field.sort.dom[1:])]
+    if not vs:
+        return il.Equals(field(s),field(t))
+    return il.ForAll(vs,il.Equals(field(*([s]+vs)),field(*([t]+vs))))
+
+def memname(sym):
+    return sym.name.split('.')[-1]
+
+def ctype(sort,classname=None):
     if il.is_uninterpreted_sort(sort) and sort.name in im.module.sort_destructors:
-        return varname(sort.name)
+        return ((classname+'::') if classname != None else '') + varname(sort.name)
     return 'bool' if sort.is_relational() else 'int'
 
 def emit_cpp_sorts(header):
@@ -499,7 +514,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
-        header.append(ctype(rs[0].sort))
+        header.append(ctype(rs[0].sort,classname=classname) + ' ')
     else:
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
@@ -521,8 +536,9 @@ def emit_some_action(header,impl,name,action,classname):
         indent(impl)
         p = action.formal_returns[0]
         impl.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
-        mk_nondet(impl,p.name,sort_card(p.sort),p.name,0)
-    action.emit(impl)
+        mk_nondet_sym(impl,p,p.name,0)
+    with ivy_ast.ASTContext(action):
+        action.emit(impl)
     if len(action.formal_returns) == 1:
         indent(impl)
         impl.append('return ' + varname(action.formal_returns[0].name) + ';\n')
@@ -538,11 +554,15 @@ def init_method():
     res.formal_returns = []
     return res
 
+def check_iterable_sort(sort):
+    if ctype(sort) not in ["bool","int"]:
+        raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
+    
+
 def open_loop(impl,vs,declare=True):
     global indent_level
     for idx in vs:
-        ct = ctype(idx.sort)
-        
+        check_iterable_sort(idx.sort)
         indent(impl)
         impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
         indent_level += 1
@@ -659,6 +679,10 @@ def emit_tick(header,impl,classname):
     indent_level -= 1
     indent(impl)
     impl.append('}\n')
+
+def csortcard(s):
+    card = sort_card(s)
+    return str(card) if card else "0"
 
 def module_to_cpp_class(classname):
     global is_derived
@@ -843,15 +867,54 @@ void install_timer(timer *);
                 emit_action_gen(header,impl,name,action,classname)
 
     if target.get() == "repl":
-        def csortcard(s):
-            card = sort_card(s)
-            return str(card) if card else "0"
         emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
+
+        for sort_name in sorted(im.module.sort_destructors):
+            destrs = im.module.sort_destructors[sort_name]
+            sort = im.module.sig.sorts[sort_name]
+            csname = varname(sort_name)
+            cfsname = classname + '::' + csname
+            open_scope(impl,line=cfsname + ' ' + csname + '_arg(std::vector<ivy_value> &args, unsigned idx, int bound)')
+            code_line(impl,cfsname + ' res')
+            code_line(impl,'ivy_value &arg = args[idx]')
+            code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
+            code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+            for idx,sym in enumerate(destrs):
+                open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
+                code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
+                fname = memname(sym)
+                code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds(idx)'.format(idx,fname))
+                close_scope(impl)
+                open_scope(impl,line='else')
+                code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
+                close_scope(impl)
+                code_line(impl,'res.'+fname+' = '+ctype(sym.sort.rng)
+                          +'_arg(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+            code_line(impl,'return res')
+            close_scope(impl)
+            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
+            code_line(impl,'s<<"{"')
+            for idx,sym in enumerate(destrs):
+                if idx > 0:
+                    code_line(impl,'s<<","')
+                code_line(impl,'s<< "' + memname(sym) + ':" <<  t.'+memname(sym))
+            code_line(impl,'s<<"}"')
+            code_line(impl,'return s')
+            close_scope(impl)
+            open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
+            s = il.Symbol('s',sort)
+            t = il.Symbol('t',sort)
+            code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
+            close_scope(header)
+            
+                
+
+        emit_repl_boilerplate1a(header,impl,classname)
         for actname in sorted(im.module.public_actions):
             username = actname[4:] if actname.startswith("ext:") else actname
             action = im.module.actions[actname]
-            getargs = ','.join('int_arg(args,{},{})'.format(idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
+            getargs = ','.join('{}_arg(args,{},{})'.format(ctype(x.sort),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
             if action.formal_returns:
                 thing = "std::cout << " + thing + " << std::endl"
@@ -863,6 +926,9 @@ void install_timer(timer *);
             else
 """.replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
         emit_repl_boilerplate2(header,impl,classname)
+
+                
+        impl.append("int main(int argc, char **argv){\n")
         impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
         impl.append('        std::cerr << "usage: {} {}\\n";\n'
                     .format(classname,' '.join(map(varname,im.module.params))))
@@ -885,10 +951,10 @@ void install_timer(timer *);
     return ''.join(header) , ''.join(impl)
 
 
-def check_representable(sym,ast=None):
+def check_representable(sym,ast=None,skip_args=0):
     sort = sym.sort
     if hasattr(sort,'dom'):
-        for domsort in sort.dom:
+        for domsort in sort.dom[skip_args:]:
             card = sort_card(domsort)
             if card == None:
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is uninterpreted'.format(sym,domsort))
@@ -897,6 +963,23 @@ def check_representable(sym,ast=None):
 
 cstr = il.fmla_to_str_ambiguous
 
+def assign_symbol_value(header,lhs_text,m,v):
+    sort = v.sort
+    if hasattr(sort,'name') and sort.name in im.module.sort_destructors:
+        for sym in im.module.sort_destructors[sort.name]:
+            check_representable(sym,skip_args=1)
+            dom = sym.sort.dom[1:]
+            if dom:
+                for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
+                    term = sym(*([v] + [il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)]))
+                    ctext = varname(sym.name) + ''.join('['+str(a)+']' for a in args)
+                    assign_symbol_value(header,lhs_text+[ctext],m,term)
+            else:
+                assign_symbol_value(header,lhs_text+[memname(sym)],m,sym(v))
+    else:
+        header.append('    ' + '.'.join(lhs_text) + ' = ' + m(v) + ';\n')
+        
+
 def assign_symbol_from_model(header,sym,m):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
@@ -904,14 +987,14 @@ def assign_symbol_from_model(header,sym,m):
         return # skip structs
     name, sort = sym.name,sym.sort
     check_representable(sym)
+    fun = lambda v: cstr(m.eval_to_constant(v))
     if hasattr(sort,'dom'):
         for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):
             term = sym(*[il.Symbol(str(a),s) for a,s in zip(args,sym.sort.dom)])
-            val = m.eval_to_constant(term)
-            header.append(varname(sym.name) + ''.join('['+str(a)+']' for a in args) + ' = ')
-            header.append(cstr(val) + ';\n')
+            ctext = varname(sym.name) + ''.join('['+str(a)+']' for a in args)
+            assign_symbol_value(header,[ctext],fun,term)
     else:
-        header.append(varname(sym.name) + ' = ' + cstr(m.eval_to_constant(sym)) + ';\n')
+        assign_symbol_value(header,[varname(sym.name)],fun,sym)
         
 def check_init_cond(kind,lfmlas):
     params = set(im.module.params)
@@ -1012,10 +1095,11 @@ def emit_app(self,header,code):
     skip_params = 0
     if self.func.name in im.module.destructor_sorts:
         self.args[0].emit(header,code)
-        code.append('.')
+        code.append('.'+memname(self.func))
         skip_params = 1
     # handle uninterpreted ops
-    code.append(varname(self.func.name))
+    else:
+        code.append(varname(self.func.name))
     global is_derived
     if self.func in is_derived:
         code.append('(')
@@ -1036,12 +1120,12 @@ lg.Apply.emit = emit_app
 
 temp_ctr = 0
 
-def new_temp(header):
+def new_temp(header,sort=None):
     global temp_ctr
     name = '__tmp' + str(temp_ctr)
     temp_ctr += 1
     indent(header)
-    header.append('int ' + name + ';\n')
+    header.append(('int' if sort == None else ctype(sort)) + ' ' + name + ';\n')
     return name
 
 def emit_quant(variables,body,header,code,exists=False):
@@ -1051,6 +1135,7 @@ def emit_quant(variables,body,header,code,exists=False):
         return
     v0 = variables[0]
     variables = variables[1:]
+    check_iterable_sort(v0.sort)
     res = new_temp(header)
     idx = v0.name
     indent(header)
@@ -1080,6 +1165,9 @@ def code_line(impl,line):
 def code_asgn(impl,lhs,rhs):
     code_line(impl,lhs + ' = ' + rhs)
 
+def code_decl(impl,sort,name):
+    code_line(impl,ctype(sort) + ' ' + name)
+
 def code_eval(impl,expr):
     code = []
     expr.emit(impl,code)
@@ -1089,6 +1177,8 @@ def emit_some(self,header,code):
     vs = [il.Variable('X__'+str(idx),p.sort) for idx,p in enumerate(self.params())]
     subst = dict(zip(self.params(),vs))
     fmla = ilu.substitute_constants_ast(self.fmla(),subst)
+    for v in vs:
+        check_iterable_sort(v.sort)
     some = new_temp(header)
     code_asgn(header,some,'0')
     if isinstance(self,ivy_ast.SomeMinMax):
@@ -1165,6 +1255,8 @@ def emit_assign_simple(self,header):
 def emit_assign(self,header):
     global indent_level
     vs = list(lu.free_variables(self.args[0]))
+    for v in vs:
+        check_iterable_sort(v.sort)
     if len(vs) == 0:
         emit_assign_simple(self,header)
         return
@@ -1172,7 +1264,7 @@ def emit_assign(self,header):
     tmp = '__tmp' + str(temp_ctr)
     temp_ctr += 1
     indent(header)
-    header.append('int ' + tmp)
+    header.append(ctype(self.args[1].sort) + '  ' + tmp)
     for v in vs:
         header.append('[' + str(sort_card(v.sort)) + ']')
     header.append(';\n')
@@ -1276,9 +1368,9 @@ def local_start(header,params,nondet_id=None):
     indent_level += 1
     for p in params:
         indent(header)
-        header.append('int ' + varname(p.name) + ';\n')
+        header.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
         if nondet_id != None:
-            mk_nondet(header,p.name,sort_card(p.sort),p.name,nondet_id)
+            mk_nondet_sym(header,p,p.name,nondet_id)
 
 def local_end(header):
     global indent_level
@@ -1468,8 +1560,57 @@ std::string get_ident(const std::string& str, int &pos) {
     return res;
 }
 
+struct ivy_value {
+    std::string atom;
+    std::vector<ivy_value> fields;
+    bool is_member() const {
+        return atom.size() && fields.size();
+    }
+};
 
-void parse_command(const std::string &cmd, std::string &action, std::vector<std::string> &args) {
+ivy_value parse_value(const std::string& cmd, int &pos) {
+    ivy_value res;
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '[') {
+        while (true) {
+            pos++;
+            skip_white(cmd,pos);
+            res.fields.push_back(parse_value(cmd,pos));
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == ']')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw syntax_error();
+        }
+        pos++;
+    }
+    else if (pos < cmd.size() && cmd[pos] == '{') {
+        while (true) {
+            ivy_value field;
+            pos++;
+            skip_white(cmd,pos);
+            field.atom = get_ident(cmd,pos);
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ':'))
+                 throw syntax_error();
+            pos++;
+            skip_white(cmd,pos);
+            field.fields.push_back(parse_value(cmd,pos));
+            res.fields.push_back(field);
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == '}')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw syntax_error();
+        }
+        pos++;
+    }
+    else 
+        res.atom = get_ident(cmd,pos);
+    return res;
+}
+
+void parse_command(const std::string &cmd, std::string &action, std::vector<ivy_value> &args) {
     int pos = 0;
     skip_white(cmd,pos);
     action = get_ident(cmd,pos);
@@ -1477,13 +1618,13 @@ void parse_command(const std::string &cmd, std::string &action, std::vector<std:
     if (pos < cmd.size() && cmd[pos] == '(') {
         pos++;
         skip_white(cmd,pos);
-        args.push_back(get_ident(cmd,pos));
+        args.push_back(parse_value(cmd,pos));
         while(true) {
             skip_white(cmd,pos);
             if (!(pos < cmd.size() && cmd[pos] == ','))
                 break;
             pos++;
-            args.push_back(get_ident(cmd,pos));
+            args.push_back(parse_value(cmd,pos));
         }
         if (!(pos < cmd.size() && cmd[pos] == ')'))
             throw syntax_error();
@@ -1500,18 +1641,29 @@ struct bad_arity {
     bad_arity(std::string &_action, unsigned _num) : action(_action), num(_num) {}
 };
 
-void check_arity(std::vector<std::string> &args, unsigned num, std::string &action) {
+void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action) {
     if (args.size() != num)
         throw bad_arity(action,num);
 }
 
-int int_arg(std::vector<std::string> &args, unsigned idx, int bound) {
-    int res = atoi(args[idx].c_str());
-    if (bound && (res < 0 || res >= bound))
+int int_arg(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
         throw out_of_bounds(idx);
     return res;
 }
 
+bool bool_arg(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
+        throw out_of_bounds(idx);
+    return args[idx].atom == "true";
+}
+
+""".replace('classname',classname))
+
+
+def emit_repl_boilerplate1a(header,impl,classname):
+    impl.append("""
 
 class stdin_reader: public reader {
     std::string buf;
@@ -1547,7 +1699,7 @@ public:
 
     virtual void process(const std::string &cmd) {
         std::string action;
-        std::vector<std::string> args;
+        std::vector<ivy_value> args;
         try {
             parse_command(cmd,action,args);
 """.replace('classname',classname))
@@ -1584,9 +1736,6 @@ std::vector<timer *> timers;
 void install_timer(timer *r){
     timers.push_back(r);
 }
-
-
-int main(int argc, char **argv){
 """.replace('classname',classname))
 
 def emit_repl_boilerplate3(header,impl,classname):

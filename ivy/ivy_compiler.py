@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, AssertAction, AssumeAction, NativeAction, has_code
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, has_code
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -113,15 +113,10 @@ expr_context = None
 top_context = None
 
 def compile_app(self):
-    iu.dbg('self')
-    iu.dbg('type(self)')
-    iu.dbg('type(self.rep)')
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
-        returns = top_context.actions[self.rep]
-        iu.dbg('self.rep')
-        iu.dbg('returns')
+        params,returns = top_context.actions[self.rep]
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
             # TODO: right now we can't do anything with multiple returns
@@ -136,6 +131,13 @@ def compile_app(self):
         sort = find_sort(returns[0].sort)
         res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
         expr_context.local_syms.append(res)
+        with ASTContext(self):
+            if len(params) != len(args):
+                raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
+            iu.dbg('[p.sort for p in params]')
+            iu.dbg('args')
+            args = [sort_infer(a,find_sort(p.sort)) for a,p in zip(args,params)]
+            iu.dbg('args')
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
         return res()
     return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
@@ -197,7 +199,6 @@ def sortify_with_inference(ast):
     with top_sort_as_default():
         res = ast.compile()
     with ASTContext(ast):
-        iu.dbg('repr(res)')
         res = sort_infer(res)
     return res
 
@@ -237,12 +238,7 @@ def compile_assign(self):
             if isinstance(args[1],ivy_ast.Tuple):
                 raise IvyError(self,"wrong number of values in assignment");
             with ASTContext(self):
-                try:
-                    teq = sort_infer(Equals(*args))
-                except:
-                    iu.dbg('local_syms')
-                    iu.dbg('[str(c) for c in code]')
-                    assert False
+                teq = sort_infer(Equals(*args))
             args = list(teq.args)
             code.append(AssignAction(*args))
         for c in code:
@@ -295,6 +291,20 @@ def compile_if_action(self):
         return res
 
 IfAction.cmpl = compile_if_action
+
+def compile_while_action(self):
+        ctx = ExprContext(lineno = self.lineno)
+        with ctx:
+            cond = sortify_with_inference(self.args[0])
+            invars = map(sortify_with_inference,self.args[2:])
+        body = self.args[1].compile()
+        if ctx.code:
+            raise iu.IvyError(self,'while condition may not contain action calls')
+        ctx.code.append(self.clone([cond,body]+invars))
+        res = ctx.extract()
+        return res
+
+WhileAction.cmpl = compile_while_action
 
 def compile_assert_action(self):
     ctx = ExprContext(lineno = self.lineno)
@@ -544,9 +554,7 @@ def collect_actions(decls):
     for d in decls:
         if d.name() == 'action':
             for a in d.args:
-                iu.dbg('a.defines()')
-                iu.dbg('a.formal_returns')
-                res[a.defines()] = a.formal_returns
+                res[a.defines()] = (a.formal_params,a.formal_returns)
     return res
 
 def infer_parameters(decls):

@@ -650,8 +650,6 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
-    iu.dbg('p[4]')
-    iu.dbg('p[6]')
     p[0].declare(ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6])))
     if p[2]:
         if p[2] == ExportDecl:

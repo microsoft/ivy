@@ -180,11 +180,11 @@ module map_wrapper(key,value) = {
 
     implement get(x:key.t) returns (y:value) {
 	<<<
-	    std::map<int,int>::iterator it = `s`.find(`k`);
+	    std::map<int,int>::iterator it = `s`.find(`x`);
 	    if (it == `s`.end()) {
 	        `y` = 0;
 	    } else {
-	        `y` = *it;
+	        `y` = it->second;
 	    }
 	>>>
     }
@@ -211,13 +211,13 @@ module map_wrapper(key,value) = {
 
     implement next(inp:key.iter.t) returns (res:key.iter.t) {
 	<<<
-	    std::map<int,int>::iterator it = `s`.upper_bound(`k`);
-	    if (it == `s`.end()) {
+	    std::map<int,int>::iterator __it = `s`.upper_bound(`inp`.iter_val);
+	    if (__it == `s`.end()) {
 	        `res`.iter_end = true;
 	        `res`.iter_val = 0;
 	    } else {
                 `res`.iter_end = false;
-	        `res`.iter_val = it->first;
+	        `res`.iter_val = __it->first;
 	    }
 	>>>
     }
@@ -295,9 +295,11 @@ module ordered_map(key,value) = {
 
 	after begin {
 	    local foo:key.t {
-		foo := key.iter.val(res);
 		if some (lub:key.t) lub >= k & s(lub) minimizing lub {
-		    assert res < key.iter.end & foo = lub
+		    assert res < key.iter.end & key.iter.val(res) = lub
+		}
+		else {
+		    assert res = key.iter.end
 		}
 	    }
 	}

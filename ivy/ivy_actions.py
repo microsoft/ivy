@@ -356,7 +356,6 @@ class AssignAction(Action):
                     a2 = [mut] + phs[1:]
                     fmlas.append(eq_atom(destr(*a1),destr(*a2)))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            dbg('new_clauses')
             return ([mut_n], new_clauses, false_clauses())
 
         new_clauses = mk_assign_clauses(lhs,rhs)

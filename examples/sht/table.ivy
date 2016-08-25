@@ -1,4 +1,4 @@
-#lang ivy 1.6
+#lang ivy1.6
 
 include collections
 
@@ -8,13 +8,13 @@ module hash_table(key,value,shard) = {
     # Interface
 
     # Set the value of a key
-    action set(k:key, v:value)
+    action set(k:key.t, v:value)
 
     # Get the value of a key
-    action get(k:key) returns (v:value)
+    action get(k:key.t) returns (v:value)
 
     # Extract a shard from a hash table
-    action extract_(lo:key,hi:key) returns(res:shard.t)
+    action extract_(lo:key.t,hi:key.t) returns(res:shard.t)
 
     # Incorporates a shard into a hash table
     action incorporate(s:shard.t)
@@ -22,7 +22,7 @@ module hash_table(key,value,shard) = {
     ###########################################
     # Specification
 
-    function hash(X:key) : data
+    function hash(X:key.t) : value
     init hash(X) = 0
 
     object spec = {
@@ -34,13 +34,13 @@ module hash_table(key,value,shard) = {
 	    assert v = hash(k)
 	}
 
-	after extract_ = {
+	after extract_ {
 	    assert shard.lo(res) = lo;
 	    assert shard.hi(res) = hi;
 	    assert (lo <= X & X <= hi) -> shard.value(res,X) = hash(X)
 	}
 
-	before incorporate(s:shard.t) = {
+	before incorporate(s:shard.t) {
 	    hash(K) := shard.value(s,K) if (shard.lo(s) <= K & K <= shard.hi(s)) else hash(K)
 	}
     }
@@ -53,50 +53,51 @@ module hash_table(key,value,shard) = {
 	instance tab : ordered_map(key,value)
 
 	implement set {
-	    tab.set(k,v)
+	    call tab.set(k,v)
 	}
 
 	implement get {
 	    v := tab.get(k)
 	}
 
-	implement extract_ = {
+	implement extract_ {
 	    shard.second(res,X) := 0;
 	    local idx : key.iter.t, pos : shard.iter.t {
-		idx := tab.get_lub(idx);
+		idx := tab.begin(lo);
 		pos := shard.iter.begin(0);
-		while pos < shard.iter.end & idx < key.end
-		    invariant pos <= X -> shard.value(res,X) = 0
-                    invariant lo <= X & X < idx -> shard.value(res,X) = tab.get(X)  
+		while ~shard.iter.iter_end(pos) & ~key.iter.iter_end(idx)
+#		    invariant pos <= X -> shard.value(res,X) = 0
+#                    invariant lo <= X & X < idx -> shard.value(res,X) = tab.get(X)  
 		{
 		    shard.first(res,shard.iter.val(pos)) := key.iter.val(idx);
 		    shard.second(res,shard.iter.val(pos)) := tab.get(key.iter.val(idx));
 		    idx := tab.next(idx);
-		    pos := shard.next(pos)
-		}		
+		    pos := shard.iter.next(pos)
+		};		
 		shard.lo(res) := lo;
-		if key.iter.begin(hi) <= pos {
+		if key.iter.begin(hi) <= idx {
 		    shard.hi(res) := hi
 		} else {
-		    shard.hi(res) := key.iter.val(pos)
+		    shard.hi(res) := key.iter.val(idx)
 		}
 	    }
 	}
 
-	implement incorporate(s:shard.t) = {
+	implement incorporate(s:shard.t) {
 	    local lo:key.t, hi:key.t {
 		lo := shard.lo(s);
-		hi := shard.hio(s);
-		tab.erase(lo,hi);
+		hi := shard.hi(s);
+		call tab.erase(lo,hi);
 		local idx : key.iter.t, pos : shard.iter.t {
-		    pos := shard.begin(0);
-		    while pos < shard.iter.end
-                        invariant lo <= X & X <= hi & shard.find(s,X) < pos -> shard.value(res,X) = tab.get(X)  
+		    pos := shard.iter.begin(0);
+		    while shard.iter.iter_end(pos)
+#                        invariant lo <= X & X <= hi & shard.find(s,X) < pos
+#                                  -> shard.value(res,X) = tab.get(X)  
 		    {
-			local r : key.t {
+			local r : shard.range {
 			    r := shard.iter.val(pos);
-			    if second(s,r) {
-				tab.set(shard.first(s,r),shard.second(s,r));
+			    if shard.second(s,r) {
+				call tab.set(shard.first(s,r),shard.second(s,r))
 			    }
 			}			
 		    }
@@ -104,7 +105,7 @@ module hash_table(key,value,shard) = {
 	    }
 	}	
 
-	conjecture tab.tab.entries(X) = hash(X)
+#	conjecture tab.entries(X) = hash(X)
     }
 
 }

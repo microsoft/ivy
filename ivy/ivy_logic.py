@@ -275,8 +275,6 @@ def find_symbol(symbol_name):
         raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
 def find_polymorphic_symbol(symbol_name):
-    iu.dbg('symbol_name')
-    iu.dbg('type(symbol_name)')
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
     if symbol_name[0].isdigit():
@@ -587,7 +585,6 @@ def RelationSort(dom):
 
 def TopFunctionSort(arity):
     res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
-    iu.dbg('res')
     return res
     
 def apply(symbol,args):
@@ -695,10 +692,9 @@ def is_constant(term):
 def is_variable(term):
     return isinstance(term,lg.Var)
         
-def sort_infer(term):
-    res = concretize_sorts(term)
+def sort_infer(term,sort=None):
+    res = concretize_sorts(term,sort)
     for x in chain(lu.used_variables(res),lu.used_constants(res)):
-        iu.dbg('repr(x)')
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
             raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
 #    print "sort_infer: res = {!r}".format(res)

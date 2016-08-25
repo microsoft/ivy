@@ -20,25 +20,32 @@ module order_iterator(range) = {
     action end returns (y:t)
     action next(x:t) returns (y:t)
     action val(x:t) returns (y:range)
+    action over(x:t) returns (y:bool)
     
     object spec = {
 	after begin {
 	    assert ~iter_end(y) & iter_val(y) = x
 	}
 	after end {
-	    assert iter_end(y)
+	    iter_end(y) := true;
+	    iter_val(y) := 0
 	}
 	before next {
 	    assert ~iter_end(x)
 	}
 	after next {
-	    assert X <= x & iter_end(y) | ~(x < Y & Y < y) & x < y
+	    assert X <= iter_val(x) & iter_end(y)
+	           | ~(iter_val(x) < Y & Y < iter_val(y))
+	             & iter_val(x) < iter_val(y) & ~iter_end(y)
 	}
 	before val {
 	    assert ~iter_end(x)
 	}
 	after val {
-	    assert y = iter_val(x)
+	    y := iter_val(x)
+	}
+	after over {
+	    y := iter_end(x)
 	}
     }
 }
