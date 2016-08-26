@@ -172,14 +172,23 @@ class Let(AST):
 
 class Some(AST):
     def __init__(self,*args):
-        assert len(args) == 2
+        assert len(args) >= 2
         self.args = args
     def __str__(self):
-        return 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
+        res = 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
+        if len(self.args) >= 3:
+            res += ' in ' + str(self.args[2])
+        if len(self.args) >= 4:
+            res += ' else ' + str(self.args[3])
+        return res
     def params(self):
         return [self.args[0]]
     def fmla(self):
         return self.args[1]
+    def if_value(self):
+        return self.args[2] if len(self.args) == 4 else None
+    def else_value(self):
+        return self.args[3] if len(self.args) == 4 else None
 
 
 class Definition(AST):
@@ -195,14 +204,24 @@ class Definition(AST):
         return self.args[0].rep
     def to_constraint(self):
         if isinstance(self.args[1],Some):
-            return lg.ForAll([self.args[1].args[0]],Implies(self.args[1].args[1],
-                                                         lu.substitute(self.args[1].args[1],{self.args[1].args[0]:self.args[0]})))
+            if self.args[1].if_value() != None:
+                return And(Implies(self.args[1].args[1],
+                                   lg.Exists([self.args[1].args[0]],
+                                             And(self.args[1].args[1],Equals(self.args[0],self.args[1].if_value())))),
+                           Or(lg.Exists([self.args[1].args[0]],self.args[1].args[1]),
+                              Equals(self.args[0],self.args[1].else_value())))
+            return lg.ForAll([self.args[1].args[0]],
+                             Implies(self.args[1].args[1],
+                                     lu.substitute(self.args[1].args[1],{self.args[1].args[0]:self.args[0]})))
         if is_individual(self.args[0]):
             return Equals(*self.args)
         return Iff(*self.args)
     @property
     def sort(self):
         return lg.Boolean
+
+
+                
 
 lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists]
 
@@ -462,6 +481,18 @@ def quantifier_vars(term):
 
 def quantifier_body(term):
     return term.body
+
+def is_epr_rec(term,uvars):
+    if is_forall(term):
+        return is_epr_rec(term.body,frozenset.union(uvars,term.variables))
+    if is_exists(term):
+        if frozenset.intersection(lu.free_variables(term),uvars):
+            return False
+        return is_epr_rec(term.body,frozenset())
+    return all(is_epr_rec(a,uvars) for a in term.args)
+
+def is_epr(term):
+    return is_epr_rec(term,lu.free_variables(term))
 
 Variable = lg.Var
 Variable.args = property(lambda self: [])

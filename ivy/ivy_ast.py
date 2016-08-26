@@ -341,6 +341,25 @@ class SomeMax(SomeMinMax):
     def extra(self):
         return ' maximizing ' + str(self.index())
     
+class SomeExpr(AST):
+    def __init__(self,*args):
+        assert len(args) >= 2
+        self.args = args
+    def __str__(self):
+        res = 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
+        if len(self.args) >= 3:
+            res += ' in ' + str(self.args[2])
+        if len(self.args) >= 4:
+            res += ' else ' + str(self.args[3])
+        return res
+    def params(self):
+        return [self.args[0]]
+    def fmla(self):
+        return self.args[1]
+    def if_value(self):
+        return self.args[2] if len(self.args) == 4 else None
+    def else_value(self):
+        return self.args[3] if len(self.args) == 4 else None
 
 class Sort(AST):
     pass

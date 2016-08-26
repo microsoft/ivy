@@ -331,6 +331,10 @@ module ordered_map(key,value) = {
     conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
     conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
 
+    # Mapping relation R is injective
+
+    conjecture r(X,Y) & r(X,Z) -> Y = Z
+
     instance impl : map_wrapper(key,value)
 
 }

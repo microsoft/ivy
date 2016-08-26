@@ -82,7 +82,7 @@ class Module(object):
             res += sch.instances
         return res
 
-    def background_theory(self, symbols=None):
+    def background_theory(self, symbols=None, clauses = None):
         """ Return a set of clauses which represent the background theory
         restricted to the given symbols (should be like the result of used_symbols).
         """
@@ -90,8 +90,27 @@ class Module(object):
         # axioms of the derived relations TODO: used only the
         # referenced ones, but we need to know abstract domain for
         # this
+        non_epr = {}
         for ldf in self.definitions:
-            theory.append(ldf.formula.to_constraint()) # TODO: make this a def?
+            cnst = ldf.formula.to_constraint()
+            if il.is_epr(cnst):
+                iu.dbg('cnst')
+                theory.append(cnst) # TODO: make this a def?
+            else:
+                non_epr[ldf.formula.defines()] = (ldf,cnst)
+        if clauses != None:
+            matched = set()
+            for term in lu.ground_apps_clauses(clauses):
+                iu.dbg('term')
+                if term.rep in non_epr and term not in matched:
+                    iu.dbg('term')
+                    ldf,cnst = non_epr[term.rep]
+                    subst = dict((v.name,t) for v,t in zip(ldf.formula.args[0].args,term.args))
+                    inst = ilu.substitute_ast(cnst,subst)
+                    if il.is_epr(inst):
+                        theory.append(inst)
+                    iu.dbg('inst')
+                    matched.add(term)
         return lu.Clauses(theory)
 
 
@@ -134,8 +153,8 @@ class Module(object):
 
 module = None
 
-def background_theory(symbols = None):
-    return module.background_theory(symbols)
+def background_theory(symbols = None,clauses=None):
+    return module.background_theory(symbols,clauses=clauses)
 
 def find_action(name):
     return module.actions.get(name,None)

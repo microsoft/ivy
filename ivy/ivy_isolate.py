@@ -366,13 +366,12 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     mods[actname] = amods
     mixins[actname] = amixins
     for sub in action.iter_subactions():
-        if isinstance(sub,ia.AssignAction):
-            sym = sub.args[0].rep
+        for sym in sub.modifies():
             if sym.name in mod.sig.symbols:
                 amods.add(sym.name)
 #                iu.dbg('"{}: mods: {} lineno: {}".format(actname,sym.name,sub.lineno)')
 #                iu.dbg('action')
-        elif isinstance(sub,ia.CallAction):
+        if isinstance(sub,ia.CallAction):
             calledname = sub.args[0].rep
             if calledname not in summarized_actions:
                 acalls.add(calledname)
@@ -597,6 +596,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
 
     # figure out what is exported:
     exported = set()
+#    save_implementation_map = implementation_map
+#    implementation_map = {}
+#    iu.dbg('[(e.scope(),e.exported()) for e in mod.exports]')
+#    iu.dbg('present')
     for e in mod.exports:
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
@@ -606,6 +609,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
                 if (startswith_some(c,present,mod)
                     or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
                         exported.add('ext:' + c)
+#   iu.dbg('exported')
+#    implementation_map = save_implementation_map
 #    print "exported: {}".format(exported)
 
 
@@ -645,7 +650,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     mod.labeled_props =  [a for a in mod.labeled_props if check_pr(a.label)]
 
     # filter definitions
-    mod.definitions = [c for c in mod.definitions if keepax(c.label)]
+    mod.definitions = [c for c in mod.definitions if keep_ax(c.label)]
 
 
     # filter the signature

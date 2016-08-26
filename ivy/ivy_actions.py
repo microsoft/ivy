@@ -207,6 +207,8 @@ class Action(AST):
                     yield c
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
+    def modifies(self):
+        return []
 
 
 class AssumeAction(Action):
@@ -295,6 +297,11 @@ class AssignAction(Action):
         return 'assign'
     def __str__(self):
         return str(self.args[0]) + ' := ' + str(self.args[1])
+    def modifies(self):
+        n = self.args[0]
+        while n.rep.name in ivy_module.module.destructor_sorts:
+            n = n.args[0]
+        return [n.rep]
     def action_update(self,domain,pvars):
         lhs,rhs = self.args
         n = lhs.rep
@@ -410,6 +417,11 @@ class HavocAction(Action):
         return 'havoc'
     def __str__(self):
         return str(self.args[0]) + ' := *'
+    def modifies(self):
+        n = self.args[0]
+        while n.rep.name in ivy_module.module.destructor_sorts:
+            n = n.args[0]
+        return [n.rep]
     def action_update(self,domain,pvars):
         lhs = self.args[0]
         n = lhs.rep
@@ -679,14 +691,15 @@ class WhileAction(Action):
                 asserts +
                 havocs +
                 assumes +
-                [ChoiceAction(Sequence(),Sequence(*([self.args[1]]+asserts))),
+                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0]),
+                                                     self.args[1]]+asserts))),
                 AssumeAction(Not(self.args[0]))]))
         return res
             
     def int_update(self,domain,pvars):
         return self.expand(domain,pvars).int_update(domain,pvars)
     def decompose(self,pre,post,fail=False):
-        return self.expand(domain,pvars).decompose(pre,post,fail)
+        return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
 
 
 

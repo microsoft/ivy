@@ -357,11 +357,19 @@ def compile_action_def(a,sig):
         return res
 
 def compile_defn(df):
-    if isinstance(df.args[1],ivy_ast.Some):
-        eqn = ivy_ast.Atom('=',(df.args[0],df.args[1].params()[0]))
-        fmla = ivy_ast.Implies(eqn,df.args[1].fmla())
-        fmla = sortify_with_inference(fmla)
-        df = ivy_logic.Definition(fmla.args[0].args[0],ivy_logic.Some(fmla.args[0].args[1],fmla.args[1]))
+    if isinstance(df.args[1],ivy_ast.SomeExpr):
+        ifval = df.args[1].if_value() or df.args[1].params()[0]
+        elseval = df.args[1].else_value() or ifval
+        eqn = ivy_ast.Forall(df.args[1].params(),
+                             ivy_ast.Atom('=',(df.args[0],ivy_ast.Ite(df.args[1].fmla(),ifval,elseval))))
+        fmla = sortify_with_inference(eqn)
+        args = [list(fmla.variables)[0],fmla.body.args[1].args[0]]
+        if df.args[1].if_value() :
+            args.append(fmla.body.args[1].args[1])
+        if df.args[1].else_value() :
+            args.append(fmla.body.args[1].args[2])
+        df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
+        iu.dbg('df')
     else:
         eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
         eqn = sortify_with_inference(eqn)

@@ -67,8 +67,8 @@ module hash_table(key,value,shard) = {
 		lim := key.iter.begin(hi);
 		pos := shard.iter.begin(0);
 		while ~shard.iter.iter_end(pos) & idx <= lim
-#		    invariant pos <= X -> shard.value(res,X) = 0
-#                    invariant lo <= X & X < idx -> shard.value(res,X) = tab.get(X)  
+		    invariant ~shard.iter.done(X,pos) -> shard.second(res,X) = 0
+                    invariant lo <= X & key.iter.done(X,idx) -> shard.value(res,X) = hash(X)  
 		{
 		    shard.first(res,shard.iter.val(pos)) := key.iter.val(idx);
 		    shard.second(res,shard.iter.val(pos)) := tab.get(key.iter.val(idx));
@@ -107,7 +107,8 @@ module hash_table(key,value,shard) = {
 	    }
 	}	
 
-#	conjecture tab.entries(X) = hash(X)
+	conjecture tab.s(X) & tab.r(X,Y) -> hash(X) = Y
+	conjecture ~tab.s(X) -> hash(X) = 0
     }
 
 }

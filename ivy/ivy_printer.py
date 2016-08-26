@@ -28,3 +28,6 @@ def print_module(mod):
 
     for x,y in mod.actions.iteritems():
         print iu.pretty(ia.action_def_to_str(x,y))
+
+    for x in sorted(mod.public_actions):
+        print 'export {}'.format(x)

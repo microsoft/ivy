@@ -547,10 +547,9 @@ def undecided_conjectures(state1):
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 
 def false_properties():
-    axioms = im.background_theory()
     props = im.module.labeled_props
     goals = [formula_to_clauses(prop.formula) for prop in props]
-    truths = clauses_imply_list(axioms,goals)
+    truths = clauses_imply_list(im.background_theory,goals)
     return [c for c,t in zip(props,truths) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 

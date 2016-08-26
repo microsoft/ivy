@@ -645,7 +645,7 @@ def clauses_imply(clauses1, clauses2):
     s.add(z2)
     return s.check() == z3.unsat
 
-def clauses_imply_list(clauses1, clauses2_list):
+def clauses_imply_list(clauses1, clauses2_list, instantiate=None):
     """True if clauses1 imply clauses2.
     """
     s = z3.Solver()

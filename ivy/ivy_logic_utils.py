@@ -376,10 +376,29 @@ def apps_ast(ast):
         for x in apps_ast(arg):
             yield x
 
+# get the ground apps (excluding equality atoms)
+
+def ground_apps_ast_rec(ast,res):
+    if isinstance(ast,Variable) or is_quantifier(ast):
+        return False
+    ground = True
+    for x in ast.args:
+        ground &= ground_apps_ast_rec(x,res)
+    if ground and is_app(ast):
+        res.append(ast)
+    return ground
+
+def ground_apps_ast(ast):
+    res = []
+    ground_apps_ast_rec(ast,res)
+    for x in res:
+        yield x
+
 # extend to clauses, etc...
 
 apps_clause = apps_cube = apply_gen_to_list(apps_ast)
 apps_clauses = apps_cubes = apply_gen_to_clauses(apps_ast)
+ground_apps_clauses = ground_apps_cubes = apply_gen_to_clauses(ground_apps_ast)
 
 # get the equality atoms
 

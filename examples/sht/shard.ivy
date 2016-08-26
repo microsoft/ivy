@@ -23,18 +23,18 @@ module table_shard(key,data) = {
 
     instance iter : order_iterator(range)
     
+    derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
+    derived find(S,X) = some Y. at(S,X,Y)
+    derived present(S,X) = at(S,X,find(S,X))
+	
+    definition value(S,X) = second(S,find(S,X)) if present(S,X) else 0
+
+    conjecture at(S,X,Y) & at(S,X,Z) -> Y = Z
+
     object impl = {
 	
 	interpret range -> bv[2]
 	
-	derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
-	derived find(S,X) = some Y. at(S,X,Y)
-	derived present(S,X) = at(S,X,find(S,X))
-	
-	definition value(S,X) = second(S,find(S,X)) if present(S,X) else 0
-
-	conjecture at(S,X,Y) & at(S,X,Z) -> Y = Z
-
 	implement iter.next(x:iter.t) returns (y:iter.t) {
 	    if iter.iter_val(x) = 3 {
 		iter.iter_end(y) := true;

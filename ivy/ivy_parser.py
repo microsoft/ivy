@@ -1185,9 +1185,25 @@ def p_defn_atom_fmla(p):
     p[0] = Definition(app_to_atom(p[1]),p[3])
     p[0].lineno = get_lineno(p,2)
 
+def p_optin(p):
+    'optin : '
+    p[0] = []
+
+def p_optin_in_fmla(p):
+    'optin : IN fmla'
+    p[0] = [p[2]]
+
+def p_optelse(p):
+    'optelse : '
+    p[0] = []
+
+def p_optelse_else_fmla(p):
+    'optelse : ELSE fmla'
+    p[0] = [p[2]]
+
 def p_somevarfmla_some_simplevar_dot_fmla(p):
-    'somevarfmla : SOME simplevar DOT fmla'
-    p[0] = Some(p[2],p[4])
+    'somevarfmla : SOME simplevar DOT fmla optin optelse'
+    p[0] = SomeExpr(*([p[2],p[4]]+p[5]+p[6]))
     p[0].lineno = get_lineno(p,1)
 
 def p_defn_atom_somevarfmla(p):
