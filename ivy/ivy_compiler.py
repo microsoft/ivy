@@ -369,7 +369,6 @@ def compile_defn(df):
         if df.args[1].else_value() :
             args.append(fmla.body.args[1].args[2])
         df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
-        iu.dbg('df')
     else:
         eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
         eqn = sortify_with_inference(eqn)

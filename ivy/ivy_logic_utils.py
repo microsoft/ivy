@@ -1096,20 +1096,31 @@ def false_clauses():
 def true_clauses():
     return Clauses([])
 
+instantiator = None
+
 def dual_clauses(clauses, skolemizer=None):
     if skolemizer == None:
         skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
     vs = used_variables_in_order_clauses(clauses)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     clauses = substitute_clauses(clauses,sksubs)
-    return formula_to_clauses(negate(clauses_to_formula(clauses)))
+    fmla = negate(clauses_to_formula(clauses))
+    if instantiator != None: 
+        gts = ground_apps_clauses(clauses)
+        insts = instantiator(gts)
+        fmla = And(fmla,clauses_to_formula(insts))
+    return formula_to_clauses(fmla)
 
 def dual_formula(fmla, skolemizer=None):
     if skolemizer == None:
         skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
     vs = used_variables_in_order_ast(fmla)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
-    fmla = substitute_ast(fmla,sksubs)
+    fmla = negate(substitute_ast(fmla,sksubs))
+    if instantiator != None: 
+        gts = ground_apps_ast(fmla)
+        insts = instantiate(ground_terms)
+        fmla = And(fmla,insts)
     return negate(fmla)
 
 def reskolemize_clauses(clauses, skolemizer):

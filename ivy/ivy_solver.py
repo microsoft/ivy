@@ -16,7 +16,7 @@ import ivy_logic
 from ivy_logic_utils import used_variables_clause, used_variables_ast, variables_ast,\
    to_clauses, constants_clauses, used_relations_clauses, rel_inst, fun_eq_inst, \
    is_ground_lit, used_constants_clauses, substitute_constants_clauses, eq_atom, \
-   functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast, sym_placeholders, used_symbols_clauses
+   functions_clauses, fun_inst, substitute_lit, used_constants_clause, used_symbols_clause,Clauses, used_symbols_clause, and_clauses, true_clauses, used_symbols_ast, sym_placeholders, used_symbols_clauses, ground_apps_clauses, dual_clauses
 from ivy_core import minimize_core, biased_core
 import ivy_utils as iu
 import ivy_unitres as ur
@@ -645,7 +645,7 @@ def clauses_imply(clauses1, clauses2):
     s.add(z2)
     return s.check() == z3.unsat
 
-def clauses_imply_list(clauses1, clauses2_list, instantiate=None):
+def clauses_imply_list(clauses1, clauses2_list):
     """True if clauses1 imply clauses2.
     """
     s = z3.Solver()
@@ -654,9 +654,11 @@ def clauses_imply_list(clauses1, clauses2_list, instantiate=None):
     s.add(z1)
 
     res = []
-    for clauses2 in clauses2_list:
-        z2 = not_clauses_to_z3(clauses2)
-#    print "z2 = {}".format(z2)
+    negs = map(dual_clauses,clauses2_list)
+        
+    for clauses2 in negs:
+        z2 = clauses_to_z3(clauses2)
+#        print "z2 = {}".format(z2)
         s.push()
         s.add(z2)
         res.append(s.check() == z3.unsat)

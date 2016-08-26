@@ -85,21 +85,22 @@ def check_module():
             print "Checking isolate {}...".format(isolate)
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
-            check_properties()
-            ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
-            if im.module.initializers:
-                cex = ag.check_bounded_safety(ag.states[0])
-                if cex is not None:
-                    display_cex("safety failed in initializer",cex)
-            with ivy_interp.EvalContext(check=False):
-                check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-                for a in sorted(im.module.public_actions):
-                    print "trying {}...".format(a)
-                    ag.execute_action(a,prestate=ag.states[0])
-                    cex = ag.check_bounded_safety(ag.states[-1])
+            with im.module.theory_context():
+                check_properties()
+                ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
+                if im.module.initializers:
+                    cex = ag.check_bounded_safety(ag.states[0])
                     if cex is not None:
-                        display_cex("safety failed",cex)
-                    check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
+                        display_cex("safety failed in initializer",cex)
+                with ivy_interp.EvalContext(check=False):
+                    check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
+                    for a in sorted(im.module.public_actions):
+                        print "trying {}...".format(a)
+                        ag.execute_action(a,prestate=ag.states[0])
+                        cex = ag.check_bounded_safety(ag.states[-1])
+                        if cex is not None:
+                            display_cex("safety failed",cex)
+                        check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
 
 
 def main():
