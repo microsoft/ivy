@@ -41,6 +41,7 @@ module hash_table(key,value,shard) = {
 	}
 
 	before incorporate(s:shard.t) {
+	    assert shard.at(s,X,Y) & shard.at(s,X,Z) -> Y = Z;
 	    hash(K) := shard.value(s,K) if (shard.lo(s) <= K & K <= shard.hi(s)) else hash(K)
 	}
     }
@@ -96,12 +97,14 @@ module hash_table(key,value,shard) = {
 		local idx : key.iter.t, pos : shard.iter.t {
 		    pos := shard.iter.begin(0);
 		    while ~shard.iter.iter_end(pos)
-#                        invariant lo <= X & X <= hi & shard.find(s,X) < pos
+                        invariant lo <= X & X <= hi & shard.value(s,X) = 0 -> ~tab.s(X)
+		        invariant lo <= X & X <= hi & shard.iter.done(Y,pos) & shard.at(s,X,Y) -> tab.s(X) & tab.r(X,shard.value(s,X))
+		        invariant ~(lo <= X & X <= hi) -> tab_invar(X,Y)
 #                                  -> shard.value(res,X) = tab.get(X)  
 		    {
 			local r : shard.range {
 			    r := shard.iter.val(pos);
-			    if shard.second(s,r) ~= 0 {
+			    if lo <= shard.first(s,r) & shard.first(s,r) <= hi & shard.second(s,r) ~= 0 {
 				call tab.set(shard.first(s,r),shard.second(s,r))
 			    }
 			};			
@@ -111,9 +114,13 @@ module hash_table(key,value,shard) = {
 	    }
 	}	
 
-	conjecture tab.s(X) & tab.r(X,Y) -> hash(X) = Y
-	conjecture ~tab.s(X) -> hash(X) = 0
-	conjecture tab.s(X) -> tab.r(X,hash(X))
+	derived tab_invar(X,Y) =
+	    (tab.s(X) & tab.r(X,Y) -> hash(X) = Y)
+	    & (~tab.s(X) -> hash(X) = 0)
+	    & (tab.s(X) -> tab.r(X,hash(X)))
+
+	conjecture tab_invar(X,Y)
+
     }
 
 }

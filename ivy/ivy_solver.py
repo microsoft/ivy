@@ -822,10 +822,12 @@ def model_if_none(clauses1,implied,model):
 
 
 def decide(s,atoms=None):
+    print "solving{"
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
         raise iu.IvyError(None,"Solver produced inconclusive result")
+    print "}"
     return res
 
 def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None):

@@ -10,7 +10,7 @@ include order
 module table_shard(key,data) = {
 
     type range
-    instantiate totally_ordered(range)
+    instantiate totally_ordered_with_zero(range)
     
     type t = struct {
 	lo : key,

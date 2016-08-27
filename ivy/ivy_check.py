@@ -20,6 +20,7 @@ import sys
 
 diagnose = iu.BooleanParameter("diagnose",False)
 coverage = iu.BooleanParameter("coverage",True)
+checked_action = iu.Parameter("action","")
 
 
 def display_cex(msg,ag):
@@ -70,6 +71,14 @@ def show_assertions():
     for a in find_assertions():
         print '{}: {}'.format(a.lineno,a)
 
+def get_checked_actions():
+    cact = checked_action.get()
+    if cact and 'ext:'+cact in im.module.public_actions:
+        cact = 'ext:'+cact
+    if cact and cact not in im.module.public_actions:
+        raise IvyError(None,'{} is not an exported action'.format(cact))
+    return [cact] if cact else sorted(im.module.public_actions)
+
 def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
     # are specificied in the file, check all, else check globally.
@@ -91,7 +100,7 @@ def check_module():
         raise iu.IvyError(None,"Some assertions are not checked")
 
     for isolate in isolates:
-        if isolate != None and len(im.module.isolates[isolate].verified()) == 0:
+        if isolate != None and isolate in im.module.isolates and len(im.module.isolates[isolate].verified()) == 0:
             continue # skip if nothing to verify
         if isolate:
             print "Checking isolate {}...".format(isolate)
@@ -109,17 +118,21 @@ def check_module():
                     check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
                     show_assertions()
                     assertions = find_assertions()
-                    for a in sorted(im.module.public_actions):
+                    if act.checked_assert.get():
+                        assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
+                    for a in get_checked_actions():
                         print "trying {}...".format(a)
                         tried = set()
                         for asn in assertions:
                             if asn.lineno not in tried:
                                 tried.add(asn.lineno)
                                 act.checked_assert.value = asn.lineno
+                                print '{}: {}'.format(asn.lineno,asn)
                                 ag.execute_action(a,prestate=ag.states[0])
                                 cex = ag.check_bounded_safety(ag.states[-1])
                                 if cex is not None:
                                     display_cex("safety failed",cex)
+                        print "checking consecution..."
                         check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
 
 

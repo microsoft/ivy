@@ -243,7 +243,6 @@ class AssertAction(Action):
         if ca:
             if ca != self.lineno:
                 return ([],formula_to_clauses(self.args[0]),false_clauses())
-        iu.dbg('self')
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         return ([],true_clauses(),cl)

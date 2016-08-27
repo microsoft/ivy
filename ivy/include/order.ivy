@@ -6,6 +6,11 @@ module totally_ordered(t) = {
     property T:t < U | T = U | U < T
 }
 
+module totally_ordered_with_zero(t) = {
+    instantiate totally_ordered(t)
+    property 0 <= X:t
+}
+
 module order_iterator(range) = {
     type t = struct {
 	iter_end : bool,
