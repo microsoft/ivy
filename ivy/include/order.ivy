@@ -20,6 +20,7 @@ module order_iterator(range) = {
     action begin(x:range) returns (y:t)
     action end returns (y:t)
     action next(x:t) returns (y:t)
+    action prev(y:t) returns (x:t)
     action val(x:t) returns (y:range)
     action over(x:t) returns (y:bool)
     
@@ -40,6 +41,17 @@ module order_iterator(range) = {
 	           | ~(iter_val(x) < Y & Y < iter_val(y))
 	             & iter_val(x) < iter_val(y) & ~iter_end(y)
 	}
+
+	before prev {
+	    assert iter_end(y) | exists X. X < iter_val(y)
+	}
+	after prev {
+	    assert ~iter_end(x);
+	    assert X <= iter_val(x) & iter_end(y)
+	           | ~(iter_val(x) < Y & Y < iter_val(y))
+	             & iter_val(x) < iter_val(y) & ~iter_end(y)
+	}
+
 	before val {
 	    assert ~iter_end(x)
 	}

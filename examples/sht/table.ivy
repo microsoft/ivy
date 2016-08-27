@@ -36,8 +36,8 @@ module hash_table(key,value,shard) = {
 
 	after extract_ {
 	    assert shard.lo(res) = lo;
-	    assert shard.hi(res) = hi;
-	    assert (lo <= X & X <= hi) -> shard.value(res,X) = hash(X)
+	    assert shard.hi(res) <= hi;
+	    assert (shard.lo(res) <= X & X <= shard.hi(res)) -> shard.value(res,X) = hash(X)
 	}
 
 	before incorporate(s:shard.t) {
@@ -69,6 +69,10 @@ module hash_table(key,value,shard) = {
 		while ~shard.iter.iter_end(pos) & idx <= lim
 		    invariant ~shard.iter.done(X,pos) -> shard.second(res,X) = 0
                     invariant lo <= X & key.iter.done(X,idx) -> shard.value(res,X) = hash(X)  
+		    invariant ~key.iter.iter_end(idx) -> lo <= key.iter.iter_val(idx)
+		    invariant shard.iter.iter_end(pos) -> key.iter.done(lo,idx)
+		    invariant ~key.iter.done(X,idx) -> ~shard.at(res,X,Y)
+		    invariant shard.at(res,X,Y) & shard.at(res,X,Z) -> Y = Z
 		{
 		    shard.first(res,shard.iter.val(pos)) := key.iter.val(idx);
 		    shard.second(res,shard.iter.val(pos)) := tab.get(key.iter.val(idx));
@@ -76,10 +80,10 @@ module hash_table(key,value,shard) = {
 		    pos := shard.iter.next(pos)
 		};		
 		shard.lo(res) := lo;
-		if key.iter.begin(hi) <= idx {
+		if key.iter.done(hi,idx) {
 		    shard.hi(res) := hi
 		} else {
-		    shard.hi(res) := key.iter.val(idx)
+		    shard.hi(res) := key.iter.val(key.iter.prev(idx))
 		}
 	    }
 	}
@@ -109,6 +113,7 @@ module hash_table(key,value,shard) = {
 
 	conjecture tab.s(X) & tab.r(X,Y) -> hash(X) = Y
 	conjecture ~tab.s(X) -> hash(X) = 0
+	conjecture tab.s(X) -> tab.r(X,hash(X))
     }
 
 }

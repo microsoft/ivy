@@ -856,7 +856,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
         if res == z3.unsat:
             return None
 
-#    print "shrinking model {"
+    print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):
         for n in itertools.count(1):
             s.push()
@@ -867,7 +867,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 break
             else:
                 s.pop()
-#    print "} shrinking model"
+    print "} shrinking model"
     m = get_model(s)
     h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h

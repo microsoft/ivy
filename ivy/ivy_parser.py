@@ -1004,8 +1004,9 @@ else:
         'invariants : invariants INVARIANT fmla'
         p[0] = p[1]
         inv = p[3]
-        inv.lineno = get_lineno(p,1)
-        p[0].append(inv)
+        a = AssertAction(inv)
+        a.lineno = get_lineno(p,2)
+        p[0].append(a)
 
     def p_action_while_fmla_invariants_lcb_action_rcb(p):
         'action : WHILE fmla invariants LCB action RCB'
@@ -1166,10 +1167,33 @@ def p_defns_defns_comma_defn(p):
     p[0] = p[1]
     p[0].append(p[3])
 
-def p_defnlhs_atom(p):
-    'defnlhs : atom'
-    p[0] = p[1]
+def p_defnlhs_symbol(p):
+    'defnlhs : SYMBOL'
+    p[0] = Atom(p[1],[])
+    p[0].lineno = get_lineno(p,1)
     
+def p_defnlhs_symbol_lparen_defargs_rparen(p):
+    'defnlhs : SYMBOL LPAREN defargs RPAREN'
+    p[0] = Atom(p[1],p[3])
+    p[0].lineno = get_lineno(p,1)
+    
+def p_defargs_defarg(p):
+    'defargs : defarg'
+    p[0] = [p[1]]
+
+def p_defargs_defargs_comma_defarg(p):
+    'defargs : defargs COMMA defarg'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_defarg_lparam(p):
+    'defarg : lparam'
+    p[0] = p[1]
+
+def p_defarg_var(p):
+    'defarg : var'
+    p[0] = p[1]
+
 def p_defnlhs_lp_term_relop_term_rp(p):
     'defnlhs : LPAREN term relop term RPAREN'
     p[0] = Atom(p[3],[p[2],p[4]])

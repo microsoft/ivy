@@ -357,23 +357,29 @@ def compile_action_def(a,sig):
         return res
 
 def compile_defn(df):
-    if isinstance(df.args[1],ivy_ast.SomeExpr):
-        ifval = df.args[1].if_value() or df.args[1].params()[0]
-        elseval = df.args[1].else_value() or ifval
-        eqn = ivy_ast.Forall(df.args[1].params(),
-                             ivy_ast.Atom('=',(df.args[0],ivy_ast.Ite(df.args[1].fmla(),ifval,elseval))))
-        fmla = sortify_with_inference(eqn)
-        args = [list(fmla.variables)[0],fmla.body.args[1].args[0]]
-        if df.args[1].if_value() :
-            args.append(fmla.body.args[1].args[1])
-        if df.args[1].else_value() :
-            args.append(fmla.body.args[1].args[2])
-        df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
-    else:
-        eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
-        eqn = sortify_with_inference(eqn)
-        df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
-    return df
+    has_consts = any(not isinstance(p,ivy_ast.Variable) for p in df.args[0].args)
+    sig = ivy_logic.sig.copy() if has_consts else ivy_logic.sig
+    with sig:
+        for p in df.args[0].args:
+            if not isinstance(p,ivy_ast.Variable):
+                compile_const(p,sig)
+        if isinstance(df.args[1],ivy_ast.SomeExpr):
+            ifval = df.args[1].if_value() or df.args[1].params()[0]
+            elseval = df.args[1].else_value() or ifval
+            eqn = ivy_ast.Forall(df.args[1].params(),
+                                 ivy_ast.Atom('=',(df.args[0],ivy_ast.Ite(df.args[1].fmla(),ifval,elseval))))
+            fmla = sortify_with_inference(eqn)
+            args = [list(fmla.variables)[0],fmla.body.args[1].args[0]]
+            if df.args[1].if_value() :
+                args.append(fmla.body.args[1].args[1])
+            if df.args[1].else_value() :
+                args.append(fmla.body.args[1].args[2])
+            df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
+        else:
+            eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
+            eqn = sortify_with_inference(eqn)
+            df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+        return df
     
     
 class IvyDomainSetup(IvyDeclInterp):

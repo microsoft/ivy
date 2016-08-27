@@ -17,9 +17,11 @@ def get_qa_arcs(fmla,ast,pol,univs):
     is_e = il.is_exists(fmla)
     is_a = il.is_forall(fmla)
     if is_e and pol or is_a and not pol:
+        fvs = set(il.free_variables(fmla))
         for u in univs:
-            for e in il.quantifier_vars(fmla):
-                yield (u.sort,e.sort,ast)
+            if u in fvs:
+                for e in il.quantifier_vars(fmla):
+                    yield (u.sort,e.sort,ast)
     if is_e and not pol or is_a and pol:
         for a in get_qa_arcs(fmla.args[0],ast,pol,univs+list(il.quantifier_vars(fmla))):
             yield a
@@ -84,6 +86,8 @@ def get_assumes_and_asserts():
             if isinstance(sa,ia.IfAction):
                 asserts.append((sa.get_cond(),sa))
 
+    for ldf in im.module.definitions:
+        assumes.append(ldf.formula.to_constraint())
     # TODO: check axioms, inits, conjectures
 
     return assumes,asserts

@@ -19,17 +19,12 @@ module table_shard(key,data) = {
 	second(Y:range) : data
     }
 
+    instance iter : order_iterator(range)
+
     function value(S:t,X:key):data
 
-    instance iter : order_iterator(range)
-    
     derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
-    derived find(S,X) = some Y. at(S,X,Y)
-    derived present(S,X) = at(S,X,find(S,X))
-	
-    definition value(S,X) = second(S,find(S,X)) if present(S,X) else 0
-
-    conjecture at(S,X,Y) & at(S,X,Z) -> Y = Z
+    definition value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
 
     object impl = {
 	

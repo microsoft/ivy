@@ -1119,9 +1119,9 @@ def dual_formula(fmla, skolemizer=None):
     fmla = negate(substitute_ast(fmla,sksubs))
     if instantiator != None: 
         gts = ground_apps_ast(fmla)
-        insts = instantiate(ground_terms)
+        insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
-    return negate(fmla)
+    return fmla
 
 def reskolemize_clauses(clauses, skolemizer):
     print clauses

@@ -284,7 +284,7 @@ module ordered_map(key,value) = {
 	}
 
 	after get {
-	    assert r(k,v) & s(k) | v = 0
+	    assert r(k,v) & s(k) | ~s(k) & v = 0
 	}
 
 	# erase elements in a closed interval

@@ -494,6 +494,22 @@ def is_epr_rec(term,uvars):
 def is_epr(term):
     return is_epr_rec(term,lu.free_variables(term))
 
+def variables(sorts):
+    return [Variable('V'+str(idx),s) for idx,s in enumerate(sorts)]
+
+def extensionality(destrs):
+    if not destrs:
+        return Or()
+    c = []
+    sort = destrs[0].sort.dom[0]
+    x,y = Variable("X",sort),Variable("Y",sort)
+    for d in destrs:
+        vs = variables(d.sort.dom[1:])
+        c.append(Equals(d(*([x]+vs)),d(*([y]+vs))))
+    res = Implies(And(*c),Equals(x,y))
+    iu.dbg('res')
+    return res
+    
 Variable = lg.Var
 Variable.args = property(lambda self: [])
 Variable.clone = lambda self,args: self
@@ -941,6 +957,8 @@ def close_formula(fmla):
         return fmla
     else:
         return ForAll(variables,fmla)
+
+free_variables = lu.free_variables
 
 def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]

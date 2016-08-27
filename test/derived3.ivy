@@ -1,9 +1,22 @@
 #lang ivy1.6
 
 type t
+type q
+type u
 
-function ident(X:t):t
+function ident(U:u,X:t):q
+relation r(U:u,X:t,Y:q)
 
-definition ident(X) = some Y. X = Y in Y else 0
+definition ident(U:u,x:t) = some Y. r(U,x,Y) in Y else 0
 
-property ident(Z) = Z
+action a = {
+    assert r(U,X,ident(U,X)) | ident(U,X) = 0
+}
+
+conjecture r(U,X,ident(U,X)) | ident(U,X) = 0
+
+property r(U,X,ident(U,X)) | ident(U,X) = 0
+
+
+
+

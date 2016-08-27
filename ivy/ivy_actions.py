@@ -16,6 +16,13 @@ from ivy_ast import AST, compose_atoms, MixinAfterDef
 import ivy_module
 import ivy_utils as iu
 
+def p_c_a(s):
+    a = s.split(':')
+    return (a[0]+'.ivy',int(a[1]))
+
+checked_assert = iu.Parameter("assert","",check=lambda s: len(s.split(':'))==2,
+                              process=p_c_a)
+
 class Schema(AST):
     def __init__(self,defn,fresh):
         self.defn,self.fresh = defn,fresh
@@ -232,6 +239,11 @@ class AssertAction(Action):
     def action_update(self,domain,pvars):
         type_check(domain,self.args[0])
 #        print type(self.args[0])
+        ca = checked_assert.get()
+        if ca:
+            if ca != self.lineno:
+                return ([],formula_to_clauses(self.args[0]),false_clauses())
+        iu.dbg('self')
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         return ([],true_clauses(),cl)
@@ -677,22 +689,20 @@ class WhileAction(Action):
     def __str__(self):
         res = 'while ' + str(self.args[0]) + '\n'
         for inv in self.args[2:]:
-            res += 'invariant ' + str(inv) + '\n'
+            res += 'invariant ' + str(inv.args[0]) + '\n'
         res += bracket_action(self.args[1])
         return res
     def expand(self,domain,pvars):
         modset,pre,post = self.args[1].int_update(domain,pvars)  # TODO:cheaper way to get modset
-        asserts = [AssertAction(fmla) for fmla in self.args[2:]]
-        assumes = [AssumeAction(fmla) for fmla in self.args[2:]]
+        asserts = self.args[2:]
+        assumes = [a.assert_to_assume() for a in asserts]
         havocs = [HavocAction(sym) for sym in modset]
-        for a in asserts + assumes:
-            a.lineno = self.lineno #TODO: get actual invariant lineno
         res =  Sequence(*(
                 asserts +
                 havocs +
                 assumes +
                 [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0]),
-                                                     self.args[1]]+asserts))),
+                                                     self.args[1]]+asserts+[AssumeAction(And())]))),
                 AssumeAction(Not(self.args[0]))]))
         return res
             

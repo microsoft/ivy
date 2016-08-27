@@ -84,18 +84,9 @@ class Module(object):
         return res
 
     def background_theory(self, symbols=None):
-        """ Return a set of clauses which represent the background theory
-        restricted to the given symbols (should be like the result of used_symbols).
-        """
-        theory = list(self.get_axioms())
-        # axioms of the derived relations TODO: used only the
-        # referenced ones, but we need to know abstract domain for
-        # this
-        for ldf in self.definitions:
-            cnst = ldf.formula.to_constraint()
-            if il.is_epr(cnst):
-                theory.append(cnst) # TODO: make this a def?
-        return lu.Clauses(theory)
+        if hasattr(self,"theory"):
+            return self.theory
+        return lu.Clauses([])
 
     def add_to_hierarchy(self,name):
         if iu.ivy_compose_character in name:
@@ -123,10 +114,28 @@ class Module(object):
 
     def theory_context(self):
         """ Set up to instiate the non-epr axioms """
+        """ Return a set of clauses which represent the background theory
+        restricted to the given symbols (should be like the result of used_symbols).
+        """
+        theory = list(self.get_axioms())
+        # axioms of the derived relations TODO: used only the
+        # referenced ones, but we need to know abstract domain for
+        # this
+        for ldf in self.definitions:
+            cnst = ldf.formula.to_constraint()
+            if all(isinstance(p,il.Variable) for p in ldf.formula.args[0].args):
+                theory.append(cnst) # TODO: make this a def?
+        # extensionality axioms for structs
+        for sort in sorted(self.sort_destructors):
+            destrs = self.sort_destructors[sort]
+            if any(d.name in self.sig.symbols for d in destrs):
+                theory.append(il.extensionality(destrs))
+        self.theory = lu.Clauses(theory)
+
         non_epr = {}
         for ldf in self.definitions:
             cnst = ldf.formula.to_constraint()
-            if not il.is_epr(cnst):
+            if not all(isinstance(p,il.Variable) for p in ldf.formula.args[0].args):
                 non_epr[ldf.formula.defines()] = (ldf,cnst)
         return ModuleTheoryContext(functools.partial(instantiate_non_epr,non_epr))
         
@@ -152,10 +161,11 @@ def instantiate_non_epr(non_epr,ground_terms):
         for term in ground_terms:
             if term.rep in non_epr and term not in matched:
                 ldf,cnst = non_epr[term.rep]
-                subst = dict((v.name,t) for v,t in zip(ldf.formula.args[0].args,term.args))
-                inst = lu.substitute_ast(cnst,subst)
-                if il.is_epr(inst):
-                    theory.append(inst)
+                subst = dict((v,t) for v,t in zip(ldf.formula.args[0].args,term.args)
+                             if not isinstance(v,il.Variable))
+                inst = lu.substitute_constants_ast(cnst,subst)
+                theory.append(inst)
+                iu.dbg('inst')
                 matched.add(term)
     return lu.Clauses(theory)
 
