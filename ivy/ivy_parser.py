@@ -98,6 +98,8 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
+            iu.dbg('decl')
+            iu.dbg('type(decl)')
             idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined)
             idecl = substitute_constants_ast(idecl,vvsubst)
         else:

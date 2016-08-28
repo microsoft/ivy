@@ -100,7 +100,8 @@ module hash_table(key,value,shard) = {
                         invariant lo <= X & X <= hi & shard.value(s,X) = 0 -> ~tab.s(X)
 		        invariant lo <= X & X <= hi & shard.iter.done(Y,pos) & shard.at(s,X,Y) -> tab.s(X) & tab.r(X,shard.value(s,X))
 		        invariant ~(lo <= X & X <= hi) -> tab_invar(X,Y)
-#                                  -> shard.value(res,X) = tab.get(X)  
+		        # following are object invariants of tab and shouldn't be needed here
+		        invariant tab.r(X,Y) & tab.r(X,Z) -> Y = Z
 		    {
 			local r : shard.range {
 			    r := shard.iter.val(pos);
@@ -119,7 +120,7 @@ module hash_table(key,value,shard) = {
 	    & (~tab.s(X) -> hash(X) = 0)
 	    & (tab.s(X) -> tab.r(X,hash(X)))
 
-	conjecture tab_invar(X,Y)
+	conjecture shard.value(S,X)=Z -> tab_invar(X,Y)
 
     }
 

@@ -259,28 +259,32 @@ module ordered_map(key,value) = {
     relation r(K:key.t,V:value)
     init ~s(K) & ~r(K,V)
     
-    instantiate succ : map(key.t,key.t,0) # ghost
+#    instantiate succ : map(key.t,key.t,0) # ghost
+
 
     object spec = {
 	# insert one element
 	before set {
 	    s(nkey) := true;
-	    r(nkey,X) := X = v;
+	    r(nkey,X) := X = v
 
-	    # following is ghost code to update the successor relation
-	    local sk:key.t {
-		if some (lub:key.t) ~(lub <= nkey) & s(lub) minimizing lub {
-		    sk := lub
-		}
-		else {
-		    sk := 0
-		};
-		call succ.set_(nkey,sk)
-	    };
-	    if some (glb:key.t) ~(nkey <= glb) & s(glb) maximizing glb {
-		call succ.lemma(glb); # instantiate succ(glb)
-		call succ.set_(glb,nkey)
-	    }
+            # ;
+
+	    # # following is ghost code to update the successor relation
+	    # local sk:key.t {
+	    # 	if some (lub:key.t) ~(lub <= nkey) & s(lub) minimizing lub {
+	    # 	    sk := lub
+	    # 	}
+	    # 	else {
+	    # 	    sk := 0
+	    # 	};
+	    # 	call succ.set_(nkey,sk)
+	    # };
+	    # if some (glb:key.t) ~(nkey <= glb) & s(glb) maximizing glb {
+	    # 	call succ.lemma(glb); # instantiate succ(glb)
+	    # 	call succ.set_(glb,nkey)
+
+
 	}
 
 	after get {
@@ -311,7 +315,7 @@ module ordered_map(key,value) = {
 	after next {
 	    local k:key.t {
 		k := key.iter.val(it);
-		call succ.lemma(k);
+#		call succ.lemma(k);
 		if some (lub:key.t) lub > k & s(lub) minimizing lub {
 		    assert key.iter.val(res) = lub
 		}
@@ -323,13 +327,14 @@ module ordered_map(key,value) = {
 
     }
 
+
     # Useful invariants of the "succ" relation. The successor of K is
     # also in the map, and nothing between K and its successor is in
     # the map. Here, if L = 0 it means K is the maximim element, so we
     # have to treat this as a special case.
 
-    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
-    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
+#    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
+#    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
 
     # Mapping relation R is injective
 

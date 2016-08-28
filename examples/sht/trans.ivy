@@ -1,0 +1,209 @@
+#lang ivy1.6
+
+include queue
+include timeout
+
+module net(lower,req,shard,seq_num,ltime) = {
+
+    relation requested(D:id,R:req)
+    relation delegated(D:id,S:shard)
+
+    init ~requested(D,R)
+    init ~delegated(D,S)
+
+    action send_request(src:id,dst:id,rq:req)
+    action send_delegate(src:id,dst:id,s:shard)
+    action send_reply(src:id, dst:id, d:data, lt:ltime)
+    action recv_request(dst:id,rq:req)
+    action recv_delegate(dst:id,s:shard)
+
+    object spec = {
+	before send_request {
+	    assert ~requested(dst,rq);
+	    requested(dst,rq) := true
+	}
+
+	before send_delegate {
+	    assert ~delegated(dst,s);
+	    delegated(dst,s) := true
+	}
+
+	before recv_request {
+	    assert requested(dst,rq);
+	    requested(dst,rq) := false
+	}
+
+	before recv_delegate {
+	    assert delegated(dst,s);
+	    delegated(dst,s) := false
+	}
+    }
+
+    object impl(me:id) = {
+
+	# these type describe the format of messages
+
+	type mtype = {request_t, reply_t, delegate_t, ack_t}
+
+	type net_msg = struct {
+	    mty : mtype,
+	    src : id,
+	    rq : req,
+	    num : seq_num.t,
+	    sh : shard
+	}
+
+	# Create one outgoing message queue for each host
+	# and a timout for each queue.
+
+	instance mq(D:id) : message_queue(net_msg,seq_num.t)
+	instance timer(D:id) : timeout_sec
+
+	# Keep track of the latest sequence number sent and received
+	# on each channel.
+
+	individual send_seq(S:id) : seq_num.t
+	individual recv_seq(S:id) : seq_num.t
+
+	init recv_seq(S) = 0 & send_seq(S) = 0
+
+	# Implementations of interface actions
+
+	implement send_request(dst:id,rq:req) {
+	    local msg : net_msg, seq : seq_num.t {
+#		msg := encoder.mk_req(me,dst,rq,send_seq(dst));
+		net_msg.mty(msg) := request_t;
+		net_msg.src(msg) := me;
+		net_msg.rq(msg) := rq;
+		net_msg.num(msg) := send_seq(dst);
+		send_seq(dst) := seq_num.next(send_seq(dst));
+		call mq(dst).enqueue(msg);
+		call lower.send(dst,msg)
+	    }
+	}
+
+	implement send_delegate(dst:id,sh:shard) {
+	    local msg : net_msg, seq : seq_num.t {
+#		msg := encoder.mk_delegate(me,dst,sh,send_seq(dst));
+		net_msg.mty(msg) := delegate_t;
+		net_msg.src(msg) := me;
+		net_msg.sh(msg) := sh;
+		net_msg.num(msg) := send_seq(dst);
+		send_seq(dst) := seq_nums.next(send_seq(dst));
+		call mq(dst).enqueue(msg);
+		call lower.send_msg(dst,msg)
+	    }
+	}
+
+	implement send_reply(dst:id, d:data, lt:ltime) {
+	    # for now, do nothing, but we verify data correct
+	}
+
+	# Receiving a message is the most complicated. First, we send
+	# an ack. Then, if the sequence number is correct, we call the
+	# application layer action determined by the message type.
+
+	implement lower.recv_msg(msg:net_msg) {
+	    local src:id,seq:seq_num.t {
+		seq := net_msg.num(msg);
+		src := net_msg.src(msg);
+		if seq <= recv_seq(src) & net_msg.mty(msg) ~= ack_t  {
+		    local ack : net_msg {
+			net_msg.mty(ack) := ack_t;
+			net_msg.src(ack) := me;
+			net_msg.num(ack) := seq;
+			call lower.send_msg(src,ack)
+		    }
+		};
+		if seq = recv_seq(src) {
+		    recv_seq(src) := seq_nums.next(recv_seq(src));
+		    if net_msg._mty(msg) = request_t {
+			call recv_request(me,net_msg.req(msg))
+		    }
+		    else if net_msg.mty(msg) = delegate_t {
+			call recv_delegate(me,net_msg.sh(msg))
+		    }
+		    else if net_msg_mtype(msg) = ack_t {
+			call mq(src).delete_all(seq)
+		    }
+		}
+	    }
+	}
+
+	# If an outgoing channel times out and the queue is not empty,
+	# we pick an arbitrary message in the queue and retransmit it.
+
+	implement timer.timeout(dst:id) {
+	    if ~mq(dst).empty {
+		call lower.send_msg(dst,mq(dst).pick_one)
+	    }
+	}
+
+	# If I have a request message for D enqueued and if its sequence number is
+	# >= D's receive sequence number, then the message is pending.
+
+	conjecture mq(D).contents(M) & neti(D).recv_seq(me) <= net_msg_seq_num(M)
+	   & net_msg_mtype(M) = request_t -> net.requested(D,net_msg_req(M))
+
+	# If I have a delegate message for D enqueued and if its sequence number is
+	# >= D's receive sequence number, then the message is pending.
+
+	conjecture mq(D).contents(M) & neti(D).recv_seq(me) <= net_msg_seq_num(M)
+	   & net_msg_mtype(M) = delegate_t -> net.delegated(D,net_msg_shard(M))
+
+	# A given request cannot occur twice in the network
+
+	conjecture neti(S1).mq(D).contents(M1) & neti(D).recv_seq(S1) <= net_msg_seq_num(M1)
+	   & neti(S2).mq(D).contents(M2) & neti(D).recv_seq(S2) <= net_msg_seq_num(M2)
+	   & net_msg_mtype(M1) = request_t & net_msg_mtype(M2) = request_t 
+	   & (S1 ~= S2 | net_msg_seq_num(M1) ~= net_msg_seq_num(M2))
+	   -> net_msg_req(M1) ~= net_msg_req(M2)
+
+	# A given delegation cannot occur twice in the network
+
+	conjecture neti(S1).mq(D).contents(M1) & neti(D).recv_seq(S1) <= net_msg_seq_num(M1)
+	   & neti(S2).mq(D).contents(M2) & neti(D).recv_seq(S2) <= net_msg_seq_num(M2)
+	   & net_msg_mtype(M1) = delegate_t & net_msg_mtype(M2) = delegate_t 
+	   & (S1 ~= S2 | net_msg_seq_num(M1) ~= net_msg_seq_num(M2))
+	   -> net_msg_shard(M1) ~= net_msg_shard(M2)
+
+	# The sending seq number is greater than any queue entry
+
+	conjecture mq(D).contents(M) -> ~(send_seq(D) <= net_msg_seq_num(M))
+
+	# No two messages in a queue have the same sequence number
+
+	conjecture mq(D).contents(M1) & mq(D).contents(M2) & M1 ~= M2
+	    -> net_msg_seq_num(M1) ~= net_msg_seq_num(M2)
+
+	# A sent non-ack message must match any message queue entry with the same
+	# sequence number
+
+	conjecture low.sent(M,D) & net_msg_src(M) = me
+	   & mq(D).contents(M2) & net_msg_seq_num(M2) = net_msg_seq_num(M)
+	   & net_msg_mtype(M) ~= ack_t -> M = M2
+
+	# Following added due to counterexamples
+
+	# A sent non-ack message with seq num >= receiver must be in the
+	# corresponding queue
+
+	conjecture low.sent(M,D) & net_msg_src(M) = S
+	  & neti(D).recv_seq(S) <= net_msg_seq_num(M) & net_msg_mtype(M) ~= ack_t
+	  -> neti(S).mq(D).contents(M)
+
+	# If an ack is sent, the receiving seq_num must be greater
+
+	conjecture low.sent(M,D) & net_msg_src(M) = S
+	  & net_msg_mtype(M) = ack_t -> ~(neti(S).recv_seq(D) <= net_msg_seq_num(M))
+
+	# The sending seq number is greater than non-ack sent message
+
+	conjecture low.sent(M,D) & net_msg_src(M) = me & net_msg_mtype(M) ~= ack_t
+			 -> ~(send_seq(D) <= net_msg_seq_num(M))
+
+	# A message in the queue has correct src and is not ack
+
+	conjecture mq(D).contents(M) -> net_msg_src(M) = me & net_msg_mtype(M) ~= ack_t
+    }
+}

@@ -368,6 +368,7 @@ class EnumeratedSort(Sort):
     def __init__(self,extension):
         self.extension = extension
         self.dom = []
+        self.args = []
     def __repr__(self):
         return '{' + ','.join(self.extension) + '}'
     def defines(self):
@@ -933,8 +934,8 @@ def ast_rewrite(x,rewrite):
         return res
     if isinstance(x,TypeDef):
         atom = rewrite.rewrite_atom(Atom(x.args[0]))
-        if atom.args:
-            raise iu.IvyError(x,'Types cannot have parameters: {}'.format(atom))
+#        if atom.args:
+#            raise iu.IvyError(x,'Types cannot have parameters: {}'.format(atom))
         name = atom.rep
         if isinstance(x.args[1],StructSort):
             t = ast_rewrite(x.args[1],rewrite)
@@ -983,6 +984,8 @@ def substitute_constants_ast(ast,subs):
     if (isinstance(ast, Atom) or isinstance(ast,App)) and not ast.args:
         return subs.get(ast.rep,ast)
     else:
+        if isinstance(ast,str):
+            print ast
         new_args = [substitute_constants_ast(x,subs) for x in ast.args]
         res = ast.clone(new_args)
         copy_attributes_ast(ast,res)

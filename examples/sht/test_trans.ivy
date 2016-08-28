@@ -1,0 +1,23 @@
+#lang ivy1.6
+
+include trans
+include seq_num
+include udp
+
+type ltime
+type id
+type req
+type shard
+
+instance seq_num : sequence_numbers
+
+intance u : udp_simple(id,t.impl.net_msg.t)
+
+instance t : net(u,req,shard,seq_num,ltime)
+
+isolate iso_t = t.impl with t,u,seq_num
+
+export t.enqueue
+export t.empty
+export t.pick_one
+export t.delete_all
