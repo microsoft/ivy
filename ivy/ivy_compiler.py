@@ -144,9 +144,9 @@ ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
 ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,ivy_logic.find_sort(self.sort) if isinstance(self.sort,str) else self.sort)
 
-ivy_ast.ConstantSort.cmpl = lambda self: ivy_logic.ConstantSort(self.rep)
+ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name)
 
-ivy_ast.EnumeratedSort.cmpl = lambda self: ivy_logic.EnumeratedSort(self.name,self.extension)
+ivy_ast.EnumeratedSort.cmpl = lambda self,name: ivy_logic.EnumeratedSort(name,self.extension)
 
 SymbolList.cmpl = lambda self: self.clone([find_symbol(s) for s in self.symbols])
 
@@ -459,17 +459,18 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.updates.append(upd.compile())
     def type(self,typedef):
 #        print "typedef {!r}".format(typedef)
-        if isinstance(typedef.args[1],ivy_ast.StructSort):
-            sort = ivy_logic.ConstantSort(typedef.args[0])
-            self.domain.sig.sorts[typedef.args[0]] = sort
-            for a in typedef.args[1].args:
+        if isinstance(typedef.value,ivy_ast.StructSort):
+            sort = ivy_logic.ConstantSort(typedef.name)
+            self.domain.sig.sorts[typedef.name] = sort
+            for a in typedef.value.args:
                 p = a.clone([ivy_ast.Variable('V:dstr',sort.name)]+a.args)
                 p.sort = a.sort
-                with ASTContext(typedef.args[1]):
+                with ASTContext(typedef.value):
                     self.destructor(p)
             return
-        sort = typedef.args[1].compile()
-        self.domain.sig.sorts[typedef.args[0]] = sort
+        with ASTContext(typedef.value):
+            sort = typedef.value.cmpl(typedef.name)
+        self.domain.sig.sorts[typedef.name] = sort
         for c in sort.defines(): # register the type's constructors
             sym = Symbol(c,sort)
             self.domain.functions[sym] = 0
@@ -591,15 +592,32 @@ def infer_parameters(decls):
                     mixin = a.args[1]
                     mixee = actdecls[am[0]]
                     nparms = len(a.args[0].args)
-                    if (len(a.formal_params) + nparms <= len(mixee.formal_params)
-                        and len(a.formal_returns) <= len(mixee.formal_returns)):
-                        xtraps = mixee.formal_params[len(a.formal_params)+nparms:]
-                        xtrars = mixee.formal_returns[len(a.formal_returns):]
-                        if xtraps or xtrars:
-                            a.formal_params.extend(xtraps)
-                            a.formal_returns.extend(xtrars)
-                            subst = dict((x.drop_prefix('fml:').rep,x.rep) for x in (xtraps + xtrars))
-                            a.args[1] = ivy_ast.subst_prefix_atoms_ast(a.args[1],subst,None,None)
+                    mnparms = len(mixee.args[0].args)
+                    if a.defines() == 't.impl.mq.spec.enqueue.before':
+                        print "got here"
+                        iu.dbg('a.formal_params')
+                        iu.dbg('nparms')
+                        iu.dbg('mnparms')
+                        iu.dbg('mixee.formal_params')
+                        iu.dbg('a.formal_returns')
+                        iu.dbg('mixee.formal_returns')
+                    if len(a.formal_params) + nparms > len(mixee.formal_params) + mnparms:
+                        raise iu.IvyError(a,'monitor has too many input parameters for {}'.format(mixee.defines()))
+                    if len(a.formal_returns) > len(mixee.formal_returns):
+                        raise iu.IvyError(a,'monitor has too many output parameters for {}'.format(mixee.defines()))
+                    required = mnparms - nparms
+                    if len(a.formal_params) < required:
+                        raise iu.IvyError(a,'monitor must supply at least {} explicit input parameters for {}'.format(required,mixee.defines()))
+                    xtraps = (mixee.args[0].args+mixee.formal_params)[len(a.formal_params)+nparms:]
+                    xtrars = mixee.formal_returns[len(a.formal_returns):]
+                    if a.defines() == 't.impl.mq.spec.enqueue.before':
+                        iu.dbg('xtraps')
+                        iu.dbg('xtrars')
+                    if xtraps or xtrars:
+                        a.formal_params.extend(xtraps)
+                        a.formal_returns.extend(xtrars)
+                        subst = dict((x.drop_prefix('fml:').rep,x.rep) for x in (xtraps + xtrars))
+                        a.args[1] = ivy_ast.subst_prefix_atoms_ast(a.args[1],subst,None,None)
 
 def check_instantiations(mod,decls):
     schemata = set()

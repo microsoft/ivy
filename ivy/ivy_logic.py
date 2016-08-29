@@ -273,6 +273,7 @@ def _find_sort(type_name):
             if iu.get_numeric_version() <= [1,2]:
                 return default_sort()
             raise IvyError(None,"unspecified type")
+        print sig.sorts.keys()
         raise IvyError(None,"unknown type: {}".format(type_name))
 
 def find_sort(type_name):

@@ -365,48 +365,37 @@ class Sort(AST):
     pass
 
 class EnumeratedSort(Sort):
-    def __init__(self,extension):
-        self.extension = extension
-        self.dom = []
-        self.args = []
-    def __repr__(self):
+    @property
+    def extension(self):
+        return [a.rep for a in self.args]
+    @property
+    def rng(self):
+        return self
+    def dom(self):
+        return []
+    def __str__(self):
         return '{' + ','.join(self.extension) + '}'
     def defines(self):
         return self.extension
-    def range(self):
-        return self
-    def rename(self,name):
-        return self
+        
 
 
 class ConstantSort(Sort):
-    def __init__(self,rep,prover_sort = None):
-        self.rep,self.prover_sort = rep,prover_sort
-        self.rng = self
-        self.dom = []
-    def __repr__(self):
-        return self.rep
     def __str__(self):
-        return self.rep
-    def __eq__(self,other):
-        return type(other) == type(self) and other.rep == self.rep
+        return 'uninterpreted'
     def defines(self):
         return []
-    def range(self):
-        return self
     @property
-    def args(self):
+    def rng(self):
+        return self
+    def dom(self):
         return []
-    def rename(self,name):
-        return ConstantSort(name,self.prover_sort)
         
 class StructSort(Sort):
-    def __repr__(self):
+    def __str__(self):
         return 'struct {' + ','.join(map(str,self.args)) + '}'
     def defines(self):
         return [a.rep for a in self.args]
-    def rename(self,name):
-        return self
 
 UninterpretedSort = ConstantSort
 
@@ -417,8 +406,6 @@ class FunctionSort(Sort):
         return ' * '.join(repr(s) for s in self.dom) + ' -> ' + repr(self.rng)
     def defines(self):
         return []
-    def range(self):
-        return self.rng
 
 class RelationSort(Sort):
     def __init__(self,dom):
@@ -446,6 +433,9 @@ class Decl(AST):
         return res
     def defines(self):
         return []
+    def static(self):
+        return []
+
 
 class ModuleDecl(Decl):
     def name(self):
@@ -583,6 +573,10 @@ class TypeDecl(Decl):
         return 'type'
     def defines(self):
         return self.args[0].defines()
+    def static(self):
+        res = [a for a,b in self.args[0].defines()]
+        iu.dbg('res')
+        return res
 
 class AssertDecl(Decl):
     def name(self):
@@ -749,10 +743,17 @@ class TypeDef(Definition):
     def __init__(self,name,sort):
         self.args = [name,sort]
     def __repr__(self):
-        return self.args[0] + ' = ' + repr(self.args[1])
+        return str(self.args[0]) + ' = ' + repr(self.args[1])
     def defines(self):
-        syms =  [self.args[0]] + self.args[1].defines()
+        syms =  [self.args[0].rep] + self.args[1].defines()
         return [(sym,lineno(self)) for sym in syms]
+        
+    @property
+    def name(self):
+        return self.args[0].rep
+    @property
+    def value(self):
+        return self.args[1]
 
 class ActionDef(Definition):
     def __init__(self,atom,action,formals=[],returns=[]):
@@ -768,6 +769,8 @@ class ActionDef(Definition):
     def defines(self):
         return self.args[0].relname
     def clone(self,args):
+        if not hasattr(self.args[1],'lineno'):
+            print 'no lineno!!!!!: {}'.format(self)
         res = ActionDef(args[0],args[1])
         res.formal_params = self.formal_params
         res.formal_returns = self.formal_returns
@@ -868,12 +871,17 @@ class AstRewriteSubstConstantsParams(object):
         return subst[atom.rep] if not atom.args and atom.rep in subst else atom
 
 class AstRewriteSubstPrefix(object):
-    def __init__(self,subst,pref,to_pref = None):
-        self.subst,self.pref,self.to_pref = subst,pref,to_pref
+    def __init__(self,subst,pref,to_pref = None,static=None):
+        self.subst,self.pref,self.to_pref,self.static = subst,pref,to_pref,static
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
     def rewrite_atom(self,atom,always=False):
-        return compose_atoms(self.pref,atom) if self.pref and (always or self.to_pref == None or atom.rep in self.to_pref) else atom
+        if not (self.pref and (always or self.to_pref == None or atom.rep in self.to_pref)):
+            return atom
+        the_pref = self.pref
+        if self.static != None and atom.rep in self.static:
+            the_pref = Atom(the_pref.rep)
+        return compose_atoms(the_pref,atom)
 
 class AstRewritePostfix(object):
     def __init__(self,post):
@@ -933,23 +941,19 @@ def ast_rewrite(x,rewrite):
         res = x.clone([arg0] + [ast_rewrite(y,rewrite) for y in x.args[1:]])
         return res
     if isinstance(x,TypeDef):
-        atom = rewrite.rewrite_atom(Atom(x.args[0]))
-#        if atom.args:
-#            raise iu.IvyError(x,'Types cannot have parameters: {}'.format(atom))
-        name = atom.rep
-        if isinstance(x.args[1],StructSort):
-            t = ast_rewrite(x.args[1],rewrite)
-        else:
-            t = x.args[1].rename(name)
-        return TypeDef(name,t)
+        res = x.clone(ast_rewrite(x.args,rewrite)) # yikes!
+        if res.args[0].args:
+            iu.dbg('rewrite.static')
+            raise iu.IvyError(x,'Types cannot have parameters: {}'.format(x.name))
+        return res
     if hasattr(x,'args'):
         return x.clone(ast_rewrite(x.args,rewrite)) # yikes!
     print "wtf: {} {}".format(x,type(x))
     assert False
 
-def subst_prefix_atoms_ast(ast,subst,pref,to_pref):
+def subst_prefix_atoms_ast(ast,subst,pref,to_pref,static=None):
     po = variables_distinct_ast(pref,ast) if pref else pref
-    return ast_rewrite(ast,AstRewriteSubstPrefix(subst,po,to_pref))
+    return ast_rewrite(ast,AstRewriteSubstPrefix(subst,po,to_pref,static=static))
 
 def postfix_atoms_ast(ast,post):
     po = variables_distinct_ast(post,ast)
@@ -985,7 +989,7 @@ def substitute_constants_ast(ast,subs):
         return subs.get(ast.rep,ast)
     else:
         if isinstance(ast,str):
-            print ast
+            return ast
         new_args = [substitute_constants_ast(x,subs) for x in ast.args]
         res = ast.clone(new_args)
         copy_attributes_ast(ast,res)

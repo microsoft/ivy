@@ -98,12 +98,10 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
-            iu.dbg('decl')
-            iu.dbg('type(decl)')
-            idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined)
+            idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined,static=module.static)
             idecl = substitute_constants_ast(idecl,vvsubst)
         else:
-            idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+            idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined,static=module.static)
         if isinstance(idecl,ActionDecl):
             for foo in idecl.args:
                 if not hasattr(foo.args[1],'lineno'):
@@ -143,6 +141,7 @@ class Ivy(object):
     def __init__(self):
         self.decls = []
         self.defined = dict()
+        self.static = set()
         self.modules = dict()
         self.macros = dict()
         self.actions = dict()
@@ -152,6 +151,9 @@ class Ivy(object):
     def declare(self,decl):
         for df in decl.defines():
             self.define(df)
+        for df in decl.static():
+            iu.dbg('df')
+            self.static.add(df)
         self.decls.append(decl)
         if isinstance(decl,MacroDecl):
             for d in decl.args:
@@ -423,15 +425,18 @@ def p_top_update_terms_from_terms_upaxes(p):
 def p_top_type_symbol(p):
     'top : top TYPE SYMBOL'
     p[0] = p[1]
-    tdfn = TypeDef(p[3],UninterpretedSort(p[3]))
+    scnst = Atom(p[3])
+    scnst.lineno = get_lineno(p,3)
+    tdfn = TypeDef(scnst,UninterpretedSort())
     tdfn.lineno = get_lineno(p,3)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
     'top : top TYPE SYMBOL EQ sort'
     p[0] = p[1]
-    p[5].name = p[3]
-    tdfn = TypeDef(p[3],p[5])
+    scnst = Atom(p[3])
+    scnst.lineno = get_lineno(p,3)
+    tdfn = TypeDef(scnst,p[5])
     tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))
 
@@ -535,7 +540,7 @@ def p_tterms_tterms_comma_tterm(p):
 
 def p_sort_lcb_names_rcb(p):
     'sort : LCB names RCB'
-    p[0] = EnumeratedSort(p[2])
+    p[0] = EnumeratedSort(*[Atom(n) for n in p[2]])
 
 def p_sort_struct_lcb_names_rcb(p):
     'sort : STRUCT LCB tterms RCB'
@@ -652,7 +657,11 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
-    p[0].declare(ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6])))
+    decl = ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6]))
+    p[0].declare(decl)
+    for foo in decl.args:
+        if not hasattr(foo.args[1],'lineno'):
+            print 'no lineno!!!: {}'.format(foo)
     if p[2]:
         if p[2] == ExportDecl:
             d = ExportDecl(ExportDef(Atom(p[4]),Atom('')))
@@ -721,6 +730,8 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_implement_callatom_lcb_action_rcb(p):
         'top : top IMPLEMENT atype optargs optreturns LCB optaction RCB'
         p[0] = p[1]
+        if not hasattr(p[7],'lineno'):
+            p[7].lineno = get_lineno(p,6)
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
         handle_before_after("implement",atom,p[7],p[0],p[4],p[5])
