@@ -822,12 +822,12 @@ def model_if_none(clauses1,implied,model):
 
 
 def decide(s,atoms=None):
-    print "solving{"
+#    print "solving{"
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
         raise iu.IvyError(None,"Solver produced inconclusive result")
-    print "}"
+#    print "}"
     return res
 
 def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None):
@@ -858,7 +858,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
         if res == z3.unsat:
             return None
 
-    print "shrinking model {"
+#    print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):
         for n in itertools.count(1):
             s.push()
@@ -869,7 +869,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 break
             else:
                 s.pop()
-    print "} shrinking model"
+#    print "} shrinking model"
     m = get_model(s)
     h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h

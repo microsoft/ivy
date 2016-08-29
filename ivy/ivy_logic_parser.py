@@ -7,7 +7,7 @@ import ivy_logic_utils
 import ivy_utils as iu
 
 def get_lineno(p,n):
-    return (iu.filename,p.lineno(n))
+    return iu.Location(iu.filename,p.lineno(n))
 
 def symbol(s):
     return Variable(s,universe) if str.isupper(s[0]) else Constant(s)

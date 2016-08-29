@@ -337,24 +337,25 @@ def compile_action_def(a,sig):
         print a
     assert hasattr(a.args[1],'lineno')
     with sig:
-        params = a.args[0].args
-        pformals = [v.to_const('prm:') for v in params] 
-        if params:
-            subst = dict((x.rep,y) for x,y in zip(params,pformals))
-            a = ivy_ast.substitute_ast(a,subst)
-            assert hasattr(a.args[1],'lineno')
-#            a = ivy_ast.subst_prefix_atoms_ast(a,subst,None,None)
-#            print "after: %s" % (a)
-        # convert object paramaters to arguments (object-orientation!)
-        formals =  [compile_const(v,sig) for v in pformals + a.formal_params]
-        returns = [compile_const(v,sig) for v in a.formal_returns]
-#        print returns
-        res = sortify(a.args[1])
-        assert hasattr(res,'lineno'), res
-        res.formal_params = formals
-        res.formal_returns = returns
-        res.label = a.args[0].relname
-        return res
+        with ASTContext(a.args[1]):
+            params = a.args[0].args
+            pformals = [v.to_const('prm:') for v in params] 
+            if params:
+                subst = dict((x.rep,y) for x,y in zip(params,pformals))
+                a = ivy_ast.substitute_ast(a,subst)
+                assert hasattr(a.args[1],'lineno')
+    #            a = ivy_ast.subst_prefix_atoms_ast(a,subst,None,None)
+    #            print "after: %s" % (a)
+            # convert object paramaters to arguments (object-orientation!)
+            formals =  [compile_const(v,sig) for v in pformals + a.formal_params]
+            returns = [compile_const(v,sig) for v in a.formal_returns]
+    #        print returns
+            res = sortify(a.args[1])
+            assert hasattr(res,'lineno'), res
+            res.formal_params = formals
+            res.formal_returns = returns
+            res.label = a.args[0].relname
+            return res
 
 def compile_defn(df):
     has_consts = any(not isinstance(p,ivy_ast.Variable) for p in df.args[0].args)
@@ -565,7 +566,7 @@ def collect_actions(decls):
     for d in decls:
         if d.name() == 'action':
             for a in d.args:
-                res[a.defines()] = (a.formal_params,a.formal_returns)
+                res[a.defines()] = (a.args[0].args + a.formal_params,a.formal_returns)
     return res
 
 def infer_parameters(decls):
@@ -593,14 +594,6 @@ def infer_parameters(decls):
                     mixee = actdecls[am[0]]
                     nparms = len(a.args[0].args)
                     mnparms = len(mixee.args[0].args)
-                    if a.defines() == 't.impl.mq.spec.enqueue.before':
-                        print "got here"
-                        iu.dbg('a.formal_params')
-                        iu.dbg('nparms')
-                        iu.dbg('mnparms')
-                        iu.dbg('mixee.formal_params')
-                        iu.dbg('a.formal_returns')
-                        iu.dbg('mixee.formal_returns')
                     if len(a.formal_params) + nparms > len(mixee.formal_params) + mnparms:
                         raise iu.IvyError(a,'monitor has too many input parameters for {}'.format(mixee.defines()))
                     if len(a.formal_returns) > len(mixee.formal_returns):
@@ -610,9 +603,6 @@ def infer_parameters(decls):
                         raise iu.IvyError(a,'monitor must supply at least {} explicit input parameters for {}'.format(required,mixee.defines()))
                     xtraps = (mixee.args[0].args+mixee.formal_params)[len(a.formal_params)+nparms:]
                     xtrars = mixee.formal_returns[len(a.formal_returns):]
-                    if a.defines() == 't.impl.mq.spec.enqueue.before':
-                        iu.dbg('xtraps')
-                        iu.dbg('xtrars')
                     if xtraps or xtrars:
                         a.formal_params.extend(xtraps)
                         a.formal_returns.extend(xtrars)

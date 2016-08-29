@@ -107,7 +107,6 @@ def check_module():
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             with im.module.theory_context():
-                print im.module.sig.symbols
                 check_properties()
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
                 if im.module.initializers:

@@ -575,7 +575,6 @@ class TypeDecl(Decl):
         return self.args[0].defines()
     def static(self):
         res = [a for a,b in self.args[0].defines()]
-        iu.dbg('res')
         return res
 
 class AssertDecl(Decl):
@@ -943,7 +942,6 @@ def ast_rewrite(x,rewrite):
     if isinstance(x,TypeDef):
         res = x.clone(ast_rewrite(x.args,rewrite)) # yikes!
         if res.args[0].args:
-            iu.dbg('rewrite.static')
             raise iu.IvyError(x,'Types cannot have parameters: {}'.format(x.name))
         return res
     if hasattr(x,'args'):

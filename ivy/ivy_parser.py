@@ -73,7 +73,7 @@ error_list = []
 stack = []
 
 def get_lineno(p,n):
-    return (iu.filename,p.lineno(n))
+    return iu.Location(iu.filename,p.lineno(n))
 
 def report_error(error):
     error_list.append(error)
@@ -152,7 +152,6 @@ class Ivy(object):
         for df in decl.defines():
             self.define(df)
         for df in decl.static():
-            iu.dbg('df')
             self.static.add(df)
         self.decls.append(decl)
         if isinstance(decl,MacroDecl):
@@ -852,13 +851,13 @@ def parse_nativequote(p,n):
     text = "`".join([(s if idx % 2 == 0 else str(idx/2)) for idx,s in enumerate(fields)])
     eols = [sum(1 for c in s if c == '\n') for idx,s in enumerate(fields) if idx % 2 == 0]
     seols = 0
-    filename,line = get_lineno(p,n)
+    loc = get_lineno(p,n)
     for idx,e in enumerate(eols[:-1]):
         seols += e
-        bqs[idx].lineno = (filename,line+seols)
+        bqs[idx].lineno = iu.Location(loc.filename,loc.line+seols)
     if len(fields) %2 != 1:
         thing = Atom("")
-        thing.lineno = (filename,line)
+        thing.lineno = loc
         report_error(IvyError(thing,"unterminated back-quote"))
     return NativeCode(text),bqs
 

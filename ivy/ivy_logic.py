@@ -273,7 +273,6 @@ def _find_sort(type_name):
             if iu.get_numeric_version() <= [1,2]:
                 return default_sort()
             raise IvyError(None,"unspecified type")
-        print sig.sorts.keys()
         raise IvyError(None,"unknown type: {}".format(type_name))
 
 def find_sort(type_name):
@@ -506,9 +505,11 @@ def extensionality(destrs):
     x,y = Variable("X",sort),Variable("Y",sort)
     for d in destrs:
         vs = variables(d.sort.dom[1:])
-        c.append(Equals(d(*([x]+vs)),d(*([y]+vs))))
+        eqn = Equals(d(*([x]+vs)),d(*([y]+vs)))
+        if vs:
+            eqn = lg.ForAll(vs,eqn)
+        c.append(eqn)
     res = Implies(And(*c),Equals(x,y))
-    iu.dbg('res')
     return res
     
 Variable = lg.Var

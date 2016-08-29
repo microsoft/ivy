@@ -204,29 +204,29 @@ class SourceFile(object):
 
 filename = None
 
+class Location(object):
+    def __init__(self,filename=None,line=None):
+        self.filename = filename
+        self.line = line
+    def __str__(self):
+        dbg('self.filename')
+        return (((str(self.filename) + ': ') if self.filename else '')
+                + ('line: ' + str(self.line)) if self.line else '')
+
 def lineno_str(ast):
     if not hasattr(ast,'lineno'):
         return ''
-    lineno = ast.lineno
-    filename = None
-    if isinstance(lineno,tuple):
-        filename,lineno = lineno
-    return (((filename + ': ') if filename else '') + "line {}".format(lineno))
+    return str(ast.lineno)
 
 class IvyError(Exception):
     def __init__(self,ast,msg):
-        self.lineno = ast.lineno if hasattr(ast,'lineno') else None
-        if isinstance(self.lineno,tuple):
-            self.filename,self.lineno = self.lineno
+        self.lineno = ast.lineno if hasattr(ast,'lineno') else Location()
         self.msg = msg
         if not catch.get():
             print repr(self)
             assert False
-    def __repr__(self):
-        pre = (self.filename + ': ') if hasattr(self,'filename') and self.filename else ''
-        pre += "line {}: ".format(self.lineno) if self.lineno else ''
-        return (pre + 'error: ' + self.msg)
-    __str__ = __repr__
+    def __str__(self):
+        return str(self.lineno) + 'error: ' + self.msg
 
 class IvyUndefined(IvyError):
     def __init__(self,ast,name):

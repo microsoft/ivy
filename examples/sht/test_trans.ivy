@@ -19,7 +19,7 @@ instance u : udp_simple(id,t.net_msg.t)
 
 isolate iso_t = t.impl with t,u,seq_num
 
-export t.enqueue
-export t.empty
-export t.pick_one
-export t.delete_all
+export t.send_request
+export t.send_delegate
+import t.recv_request
+import t.recv_delegate

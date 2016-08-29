@@ -81,7 +81,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 		net_msg.num(msg) := send_seq(dst);
 		send_seq(dst) := seq_num.next(send_seq(dst));
 		call mq(dst).enqueue(msg);
-		call lower.send(dst,msg)
+		call lower.send(me,dst,msg)
 	    }
 	}
 
@@ -94,7 +94,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 		net_msg.num(msg) := send_seq(dst);
 		send_seq(dst) := seq_num.next(send_seq(dst));
 		call mq(dst).enqueue(msg);
-		call lower.send_msg(dst,msg)
+		call lower.send(me,dst,msg)
 	    }
 	}
 
@@ -106,7 +106,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 	# an ack. Then, if the sequence number is correct, we call the
 	# application layer action determined by the message type.
 
-	implement lower.recv(msg:net_msg) {
+	implement lower.recv(msg:net_msg.t) {
 	    local src:id,seq:seq_num.t {
 		seq := net_msg.num(msg);
 		src := net_msg.src(msg);
@@ -115,18 +115,18 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 			net_msg.mty(ack) := ack_t;
 			net_msg.src(ack) := me;
 			net_msg.num(ack) := seq;
-			call lower.send_msg(src,ack)
+			call lower.send(me,src,ack)
 		    }
 		};
 		if seq = recv_seq(src) {
 		    recv_seq(src) := seq_num.next(recv_seq(src));
-		    if net_msg._mty(msg) = request_t {
-			call recv_request(me,net_msg.req(msg))
+		    if net_msg.mty(msg) = request_t {
+			call recv_request(me,net_msg.rq(msg))
 		    }
 		    else if net_msg.mty(msg) = delegate_t {
 			call recv_delegate(me,net_msg.sh(msg))
 		    }
-		    else if net_msg_mtype(msg) = ack_t {
+		    else if net_msg.mty(msg) = ack_t {
 			call mq(src).delete_all(seq)
 		    }
 		}
@@ -138,7 +138,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 
 	implement timer.timeout(dst:id) {
 	    if ~mq(dst).empty {
-		call lower.send_msg(dst,mq(dst).pick_one)
+		call lower.send(me,dst,mq(dst).pick_one)
 	    }
 	}
 

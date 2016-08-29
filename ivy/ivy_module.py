@@ -129,7 +129,9 @@ class Module(object):
         for sort in sorted(self.sort_destructors):
             destrs = self.sort_destructors[sort]
             if any(d.name in self.sig.symbols for d in destrs):
-                theory.append(il.extensionality(destrs))
+                ea = il.extensionality(destrs)
+                if il.is_epr(ea):
+                    theory.append(ea)
         self.theory = lu.Clauses(theory)
 
         non_epr = {}
