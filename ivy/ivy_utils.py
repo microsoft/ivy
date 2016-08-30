@@ -209,9 +209,8 @@ class Location(object):
         self.filename = filename
         self.line = line
     def __str__(self):
-        dbg('self.filename')
         return (((str(self.filename) + ': ') if self.filename else '')
-                + ('line: ' + str(self.line)) if self.line else '')
+                + ('line ' + str(self.line) + ': ') if self.line else '')
 
 def lineno_str(ast):
     if not hasattr(ast,'lineno'):
@@ -223,10 +222,12 @@ class IvyError(Exception):
         self.lineno = ast.lineno if hasattr(ast,'lineno') else Location()
         self.msg = msg
         if not catch.get():
-            print repr(self)
+            print str(self)
             assert False
     def __str__(self):
         return str(self.lineno) + 'error: ' + self.msg
+    def __repr__(seld):
+        assert False
 
 class IvyUndefined(IvyError):
     def __init__(self,ast,name):
@@ -406,7 +407,7 @@ class ErrorPrinter(object):
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         if exc_type == IvyError or isinstance(exc_val,IvyError):
-            print repr(exc_val)
+            print str(exc_val)
             exit(1)
             return True
         return False # don't block any other exceptions

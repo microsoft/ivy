@@ -640,6 +640,10 @@ class IsolateDef(AST):
         res.with_args += len(extra_with)
         res.args.extend(extra_with)
         return res
+    def clone(self,args):
+        res = AST.clone(self,args)
+        res.with_args = self.with_args
+        return res
         
 class ExtractDef(IsolateDef):
     pass
@@ -1011,6 +1015,9 @@ def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
     elif ast != None and not isinstance(ast,str):
+        if not hasattr(ast,'args'):
+            print ast
+            print type(ast)
         for arg in ast.args:
             for x in variables_ast(arg):
                 yield x
@@ -1059,7 +1066,7 @@ class ASTContext(object):
             raise IvyError(self.ast,str(exc_val))
         if exc_type == IvyError:
             print "no lineno: {}".format(self.ast)
-            needs_lineno = not exc_val.lineno
+            needs_lineno = not exc_val.lineno.line
             if needs_lineno and hasattr(self.ast,'lineno'):
                 print "lineno: {}".format(self.ast.lineno)
                 if isinstance(self.ast.lineno,tuple):

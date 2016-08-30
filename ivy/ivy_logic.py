@@ -296,6 +296,7 @@ def find_symbol(symbol_name):
     except KeyError:
         if symbol_name == '=':
             return equals
+        print sig.symbols.keys()
         raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
 def find_polymorphic_symbol(symbol_name):

@@ -167,6 +167,12 @@ class Ivy(object):
             report_error(Redefining(name,lineno,self.defined[name]))
         self.defined[name] = lineno
 
+    @property
+    def args(self):
+        return []
+    def clone(self,args):
+        return self
+
 
 def p_top(p):
     'top :'

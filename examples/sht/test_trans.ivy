@@ -4,7 +4,6 @@ include trans
 include seq_num
 include udp
 
-type ltime
 type id
 type req
 type shard
@@ -12,7 +11,7 @@ type data
 
 instance seq_num : sequence_numbers
 
-instance t : net(u,req,shard,seq_num,data,ltime)
+instance t : net(u,req,shard,seq_num,data)
 
 instance u : udp_simple(id,t.net_msg.t)
 

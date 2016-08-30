@@ -5,8 +5,8 @@ include order
 object key = {
     
     type t
-    instantiate totally_ordered(t)
-    property 0 <= K:t
+    instantiate totally_ordered_with_zero(t)
+    instance iter : order_iterator(t)
 
     # returns the maximum key
     action max returns (x:t)

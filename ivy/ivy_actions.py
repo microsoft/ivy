@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -339,6 +339,7 @@ class AssignAction(Action):
 
         lhs_vars = used_variables_ast(lhs)
         if any(v not in lhs_vars for v in used_variables_ast(rhs)):
+            print self
             raise IvyError(self,"multiply assigned: {}".format(lhs.rep))
 
         type_check(domain,rhs)
@@ -645,13 +646,17 @@ class IfAction(Action):
             if isinstance(self.args[0],ivy_ast.SomeMinMax):
                 idx = self.args[0].index()
                 if idx not in ps:
-                    raise IvyError(self,'cannot optimize non-parameter {}'.format(idx))
-#                operator = Symbol('<',RelationSort([idx.sort,idx.sort]))
-                leqsym = Symbol('<=',RelationSort([idx.sort,idx.sort]))
-                operator = lambda x,y: And(leqsym(x,y),Not(Equals(x,y)))
-                ivar = next(v for p,v in zip(ps,vs) if p == idx)
-                comp = operator(ivar,idx) if isinstance(self.args[0],ivy_ast.SomeMin) else operator(idx,ivar)
-                fmla = And(fmla,Not(And(sfmla,comp)))
+                    ltsym = Symbol('<',RelationSort([idx.sort,idx.sort]))
+                    operator = lambda x,y: Not(ltsym(x,y))
+                    ivar = substitute_constants_ast(idx,subst)
+                    comp = operator(ivar,idx) if isinstance(self.args[0],ivy_ast.SomeMin) else operator(idx,ivar)
+                    fmla = And(fmla,Implies(sfmla,comp))
+                else :
+                    leqsym = Symbol('<=',RelationSort([idx.sort,idx.sort]))
+                    operator = lambda x,y: And(leqsym(x,y),Not(Equals(x,y)))
+                    ivar = next(v for p,v in zip(ps,vs) if p == idx)
+                    comp = operator(ivar,idx) if isinstance(self.args[0],ivy_ast.SomeMin) else operator(idx,ivar)
+                    fmla = And(fmla,Not(And(sfmla,comp)))
             if_part = LocalAction(*(ps+[Sequence(AssumeAction(fmla),self.args[1])]))
             else_action = self.args[2] if len(self.args) >= 3 else Sequence()
             else_part = Sequence(AssumeAction(Not(sfmla)),else_action)
@@ -823,7 +828,6 @@ class CallAction(Action):
         input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
         output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]
         res = Sequence(*(input_asgns+[v]+output_asgns))
-#        print "with parameter assigns: {}".format(res)
         res = res.int_update(domain,pvars)
 #        print "call update: {}".format(res)
         res = hide(formal_params+formal_returns,res)

@@ -116,6 +116,8 @@ def compile_app(self):
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
+        if any(lu.used_variables_ast(a) for a in args):
+            raise iu.IvyError(self,"call may not have free variables")
         params,returns = top_context.actions[self.rep]
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
@@ -249,9 +251,13 @@ def compile_assign(self):
 AssignAction.cmpl = compile_assign
 
 def compile_call(self):
+    if lu.used_variables_ast(self):
+        iu.IvyError(self,"call may not have free variables")
     ctx = ExprContext(lineno = self.lineno)
     with ctx:
         mas = [a.cmpl() for a in self.args[0].args]
+    if any(lu.used_variables_ast(a) for a in mas):
+        iu.IvyError(self,"call may not have free variables")
     n = self.args[0].rep
 #        print self.args
     res = CallAction(*([ivy_ast.Atom(n,mas)] + [a.cmpl() for a in self.args[1:]]))
@@ -595,12 +601,12 @@ def infer_parameters(decls):
                     nparms = len(a.args[0].args)
                     mnparms = len(mixee.args[0].args)
                     if len(a.formal_params) + nparms > len(mixee.formal_params) + mnparms:
-                        raise iu.IvyError(a,'monitor has too many input parameters for {}'.format(mixee.defines()))
+                        raise iu.IvyError(a.args[1],'monitor has too many input parameters for {}'.format(mixee.defines()))
                     if len(a.formal_returns) > len(mixee.formal_returns):
-                        raise iu.IvyError(a,'monitor has too many output parameters for {}'.format(mixee.defines()))
+                        raise iu.IvyError(a.args[1],'monitor has too many output parameters for {}'.format(mixee.defines()))
                     required = mnparms - nparms
                     if len(a.formal_params) < required:
-                        raise iu.IvyError(a,'monitor must supply at least {} explicit input parameters for {}'.format(required,mixee.defines()))
+                        raise iu.IvyError(a.args[1],'monitor must supply at least {} explicit input parameters for {}'.format(required,mixee.defines()))
                     xtraps = (mixee.args[0].args+mixee.formal_params)[len(a.formal_params)+nparms:]
                     xtrars = mixee.formal_returns[len(a.formal_returns):]
                     if xtraps or xtrars:

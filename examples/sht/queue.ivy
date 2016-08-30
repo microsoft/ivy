@@ -78,7 +78,7 @@ module message_queue(net_msg,seq_num) = {
 	}
 
 	implement pick_one {
-	    if some pos:range. full(pos) {
+	    if some pos:range. full(pos) minimizing net_msg.num(items(pos)) {
 		res := items(pos)
 	    }
 	}

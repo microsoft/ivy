@@ -1,0 +1,30 @@
+#lang ivy1.6
+
+include proto
+include reference
+include key
+include trans
+include udp
+include shard
+include seq_num
+
+type id
+type data
+
+
+instance r : sht_reference(id,key,data)
+instance s : table_shard(key.t,data)
+instance n: sequence_numbers
+instance p(X:id) : sht_protocol(X,r,t,id,key,data,s)
+instance t : net(u,p.req.t,s.t,n,data)
+instance u : udp_simple(id,t.net_msg.t)
+
+isolate iso_s = s.impl with s,key
+isolate iso_n = n.impl with n
+isolate iso_t = t.impl with t,u,n
+isolate iso_p = p.impl with r,t,key,s
+
+export p.set
+export p.get
+export p.delegate_
+

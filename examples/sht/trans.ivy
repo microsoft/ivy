@@ -3,7 +3,7 @@
 include queue
 include timeout
 
-module net(lower,req,shard,seq_num,data,ltime) = {
+module net(lower,req,shard,seq_num,data) = {
 
     relation requested(D:id,R:req)
     relation delegated(D:id,S:shard)
@@ -13,7 +13,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 
     action send_request(src:id,dst:id,rq:req)
     action send_delegate(src:id,dst:id,s:shard)
-    action send_reply(src:id, dst:id, d:data, lt:ltime)
+    action send_reply(src:id, dst:id, rq:req)
     action recv_request(dst:id,rq:req)
     action recv_delegate(dst:id,s:shard)
 
@@ -98,7 +98,7 @@ module net(lower,req,shard,seq_num,data,ltime) = {
 	    }
 	}
 
-	implement send_reply(dst:id, d:data, lt:ltime) {
+	implement send_reply {
 	    # for now, do nothing, but we verify data correct
 	}
 
