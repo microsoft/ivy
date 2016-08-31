@@ -31,6 +31,7 @@ module sht_protocol(me,ref,trans,id,key,data,shard) = {
     object spec = {
 	before delegate_ {
 	    assert dst ~= me;
+	    assert lo <= hi;
 	    assert lo <= K & K <= hi -> impl.dm.map(K:key.t,me)
 	}
 	before trans.send_reply(dst:id, rq:req.t) {
@@ -44,12 +45,10 @@ module sht_protocol(me,ref,trans,id,key,data,shard) = {
 	# The server's hash table
 
 	instance hash : hash_table(key,data,shard)
-	isolate iso_hash = hash.impl with hash,key,shard
 
 	# The server's delegation map
 
 	instance dm : delegation_map(key,id)
-	isolate iso_dm = dm.impl with dm, key
 
 	# Handle a request from user or from network
 	
@@ -110,8 +109,10 @@ module sht_protocol(me,ref,trans,id,key,data,shard) = {
 	}
 
 	implement trans.recv_delegate(s:shard.t) {
-	    call dm.set(shard.lo(s),shard.hi(s),me);
-	    call hash.incorporate(s)
+	    if shard.valid(s) {  # ignore mal-formed messages
+		call dm.set(shard.lo(s),shard.hi(s),me);
+		call hash.incorporate(s)
+	    }
 	}
 
 

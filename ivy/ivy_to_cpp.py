@@ -21,7 +21,8 @@ import itertools
 from collections import defaultdict
 
 def all_state_symbols():
-    return [s for s in il.all_symbols() if s not in il.sig.constructors]
+    syms = il.all_symbols()
+    return [s for s in syms if s not in il.sig.constructors]
 
 def sort_card(sort):
     if hasattr(sort,'card'):
@@ -219,7 +220,8 @@ def emit_set(header,symbol):
 
 def sym_is_member(sym):
     global is_derived
-    return sym not in is_derived and sym.name not in im.module.destructor_sorts
+    res = sym not in is_derived and sym.name not in im.module.destructor_sorts
+    return res
 
 def emit_eval_sig(header,obj=None):
     for symbol in all_state_symbols():
@@ -445,6 +447,8 @@ def native_type(native):
     return tag
 
 def native_declaration(atom):
+    if atom.rep in im.module.sig.sorts:
+        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
     res = varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
@@ -469,10 +473,10 @@ def create_thunk(impl,actname,action,classname):
     for p in params:
         declare_symbol(impl,p)
     impl.append('    ')
-    emit_param_decls(impl,tc,params,extra = [ classname + ' *__ivy'])
+    emit_param_decls(impl,tc,params,extra = [ classname + ' *__ivy'],classname=classname)
     impl.append(': __ivy(__ivy)' + ''.join(',' + varname(p) + '(' + varname(p) + ')' for p in params) + '{}\n')
     impl.append('    ' + action_return_type(action) + ' ')
-    emit_param_decls(impl,'operator()',inputs);
+    emit_param_decls(impl,'operator()',inputs,classname=classname);
     impl.append(' const {\n        __ivy->' + varname(actname)
                 + '(' + ','.join(varname(p.name) for p in action.formal_params) + ');\n    }\n};\n')
 
@@ -482,6 +486,7 @@ def native_typeof(arg):
             return thunk_name(arg.rep)
         raise iu.IvyError(arg,'undefined action: ' + arg.rep)
     return int + len(arg.sort.dom) * '[]'
+
 
 def native_to_str(native,reference=False):
     tag,code = native_split(native.args[1].code)
@@ -497,9 +502,9 @@ def native_to_str(native,reference=False):
 def emit_native(header,impl,native,classname):
     header.append(native_to_str(native))
 
-def emit_param_decls(header,name,params,extra=[]):
+def emit_param_decls(header,name,params,extra=[],classname=None):
     header.append(varname(name) + '(')
-    header.append(', '.join(extra + [ctype(p.sort) + ' ' + varname(p.name) for p in params]))
+    header.append(', '.join(extra + [ctype(p.sort,classname=classname) + ' ' + varname(p.name) for p in params]))
     header.append(')')
 
 def emit_method_decl(header,name,action,body=False,classname=None):
@@ -546,9 +551,11 @@ def emit_some_action(header,impl,name,action,classname):
     impl.append('}\n')
 
 def init_method():
-    asserts = [ia.AssertAction(im.module.init_cond.to_formula())]
-    for a in im.module.axioms:
-        asserts.append(ia.AssertAction(a))
+    asserts = []
+    for ini in im.module.labeled_inits + im.module.labeled_axioms:
+        act = ia.AssertAction(ini.formula)
+        act.lineno = ini.lineno
+        asserts.append(act)
     res = ia.Sequence(*asserts)
     res.formal_params = []
     res.formal_returns = []
@@ -777,7 +784,10 @@ void install_timer(timer *);
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "impl":
+            global native_classname
+            native_classname = classname
             code = native_to_str(native)
+            native_classname = None
             if code not in once_memo:
                 once_memo.add(code)
                 impl.append(code)
@@ -1382,7 +1392,8 @@ def emit_assert(self,header):
     code = []
     indent(code)
     code.append('ivy_assert(')
-    il.close_formula(self.args[0]).emit(header,code)
+    with ivy_ast.ASTContext(self):
+        il.close_formula(self.args[0]).emit(header,code)
     code.append(', "{}");\n'.format(iu.lineno_str(self)))    
     header.extend(code)
 
@@ -1507,11 +1518,16 @@ def emit_choice(self,header):
 
 ia.ChoiceAction.emit = emit_choice
 
+native_classname = None
+
+
 def native_reference(atom):
     if isinstance(atom,ivy_ast.Atom) and atom.rep in im.module.actions:
         res = thunk_name(atom.rep) + '(this'
         res += ''.join(', ' + varname(arg.rep) for arg in atom.args) + ')'
         return res
+    if atom.rep in im.module.sig.sorts:
+        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
     res = varname(atom.rep)
     for arg in atom.args:
         n = arg.name if hasattr(arg,'name') else arg.rep

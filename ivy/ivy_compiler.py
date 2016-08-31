@@ -466,6 +466,8 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.updates.append(upd.compile())
     def type(self,typedef):
 #        print "typedef {!r}".format(typedef)
+        if isinstance(typedef,ivy_ast.GhostTypeDef):
+            self.domain.ghost_sorts.add(typedef.name)
         if isinstance(typedef.value,ivy_ast.StructSort):
             sort = ivy_logic.ConstantSort(typedef.name)
             self.domain.sig.sorts[typedef.name] = sort

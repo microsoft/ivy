@@ -98,9 +98,9 @@ module net(lower,req,shard,seq_num,data) = {
 	    }
 	}
 
-	implement send_reply {
+#	implement send_reply {
 	    # for now, do nothing, but we verify data correct
-	}
+#	}
 
 	# Receiving a message is the most complicated. First, we send
 	# an ack. Then, if the sequence number is correct, we call the

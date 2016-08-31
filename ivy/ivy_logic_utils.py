@@ -1098,6 +1098,15 @@ def true_clauses():
 
 instantiator = None
 
+def unfold_definitions_clauses(clauses):
+    if instantiator != None: 
+        gts = ground_apps_clauses(clauses)
+        insts = instantiator(gts)
+        if insts.fmlas:
+            clauses = and_clauses(clauses,insts)
+            iu.dbg('insts')
+    return clauses
+
 def dual_clauses(clauses, skolemizer=None):
     if skolemizer == None:
         skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))

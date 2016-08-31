@@ -100,7 +100,7 @@ def report_error(logic,note,ast,unstrat):
             if isinstance(a,il.Symbol):
                 msg += '  function {}\n'.format(a)
             else:
-                msg += '  {}\n'.format(IvyError(a,"quantifier alternation"))                
+                msg += '  {}\n'.format(iu.IvyError(a,"quantifier alternation"))                
     raise iu.IvyError(ast,msg)
 
 def check_can_assert(logic,fmla,ast,unstrat):

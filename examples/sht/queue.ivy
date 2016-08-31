@@ -6,7 +6,6 @@ include collections
 module message_queue(net_msg,seq_num) = {
 
     relation contents(M:net_msg.t)
-    init ~contents(M)
 
     action enqueue(msg:net_msg.t)
     action empty returns (res:bool)
@@ -15,6 +14,7 @@ module message_queue(net_msg,seq_num) = {
 
 
     object spec = {
+	init ~contents(M)
 
 	before enqueue {
 	    assert ~contents(msg);
@@ -22,14 +22,14 @@ module message_queue(net_msg,seq_num) = {
 	}
 
 	after empty returns (res:bool) {
-	    call impl.lemma;
+	    call impl.spec.lemma;
 	    assert contents(M) -> ~res;
 	    assert ~res -> exists M. contents(M)
 	}
 
 	before pick_one {
 	    assert exists M. contents(M);
-	    call impl.lemma
+	    call impl.spec.lemma
 	}
 
 	after pick_one {
@@ -83,9 +83,11 @@ module message_queue(net_msg,seq_num) = {
 	    }
 	}
 
-	action lemma = {
-	    if some (msg:net_msg.t) contents(msg) {
-		call rev.lemma(msg)
+	object spec = {
+	    action lemma = {
+		if some (msg:net_msg.t) contents(msg) {
+		    call rev.lemma(msg)
+		}
 	    }
 	}
 

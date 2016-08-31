@@ -17,8 +17,11 @@ def print_module(mod):
     for kwd,lst in [('axiom',mod.labeled_axioms),
                     ('property',mod.labeled_props),
                     ('init',mod.labeled_inits),
-                    ('conjecture',mod.labeled_conjs),]:
+                    ('conjecture',mod.labeled_conjs),
+                    ('definition',mod.definitions),]:
+        
         thing += labeled_fmlas_to_str(kwd,lst)
+
     for tn in sorted(mod.sig.interp):
         thing += "interp {} -> {}\n".format(tn,mod.sig.interp[tn])
     print thing
@@ -31,3 +34,4 @@ def print_module(mod):
 
     for x in sorted(mod.public_actions):
         print 'export {}'.format(x)
+

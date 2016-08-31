@@ -286,7 +286,7 @@ class AnalysisGraphUI(object):
             act = transition[1]
             assert isinstance(act,Action)
             if hasattr(act,'lineno'):
-                filename,lineno = act.lineno
+                filename,lineno = act.lineno.filename,act.lineno.line
                 self.ui_parent.browse(filename,lineno)
 
     # Recalculate a state based on its equation

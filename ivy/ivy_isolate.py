@@ -23,6 +23,7 @@ cone_of_influence = iu.BooleanParameter("coi",True)
 filter_symbols = iu.BooleanParameter("filter_symbols",True)
 create_imports = iu.BooleanParameter("create_imports",False)
 enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
+do_check_interference = iu.BooleanParameter("interference",True)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -205,11 +206,12 @@ def strip_action(ast,strip_map,strip_binding):
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
         return ast.clone([call]+[strip_action(arg,strip_map,strip_binding) for arg in ast.args[1:]])
-    if isinstance(ast,ia.AssignAction):
-        if ast.args[0].rep.name in ivy_logic.sig.symbols:
-            lhs_params = strip_map_lookup(ast.args[0].rep.name,strip_map)
-            if len(lhs_params) != num_isolate_params:
-                raise iu.IvyError(ast,"assignment may be interfering")
+    if isinstance(ast,ia.Action):
+        for sym in ast.modifies():
+            if sym.name in ivy_logic.sig.symbols:
+                lhs_params = strip_map_lookup(sym.name,strip_map)
+                if len(lhs_params) != num_isolate_params:
+                    raise iu.IvyError(ast,"assignment may be interfering")
     if (ivy_logic.is_constant(ast) or ivy_logic.is_variable(ast)) and ast in strip_binding:
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
@@ -323,7 +325,7 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
     mod.actions.update(new_actions)
 
     # strip the axioms and conjectures
-    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_conjs,mod.labeled_inits]:
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_conjs,mod.labeled_inits,mod.definitions]:
         strip_labeled_fmlas(x,strip_map)
 
     # strip the native quotes
@@ -452,7 +454,7 @@ def check_interference(mod,new_actions,summarized_actions):
                 for midcall in sorted(callouts[actname][0]):
                     if midcall in calls:
                         callbacks = calls[midcall]
-                        if callbacks:
+                        if callbacks and mods[midcall]:
                             raise iu.IvyError(action,"Call to {} may cause interfering callback to {}"
                                               .format(midcall,','.join(callbacks)))
                 
@@ -537,7 +539,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
                     raise IvyError(m,'action {} not defined'.format(foo))
             action = mod.actions[m.mixee()]
             if not (isinstance(action,ia.Sequence) and len(action.args) == 0):
-                raise IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
+                raise iu.IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
             action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
             mod.actions[m.mixee()] = action
             implementation_map[m.mixee()] = m.mixer()
@@ -661,13 +663,17 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
         asts += [y.formula for y in x]
     asts += [action for action in new_actions.values()]
-    sym_names = set(x.name for x in lu.used_symbols_asts(asts))
+
+    for a in asts:
+        print a
+
+    all_syms = set(lu.used_symbols_asts(asts))
 
     if filter_symbols.get() or cone_of_influence.get():
-        old_syms = list(mod.sig.symbols)
+        old_syms = list(mod.sig.all_symbols())
         for sym in old_syms:
-            if sym not in sym_names:
-                del mod.sig.symbols[sym]
+            if sym not in all_syms:
+                mod.sig.remove_symbol(sym)
 
     # check that any dropped axioms do not refer to the isolate's signature
     # and any properties have dependencies present
@@ -678,7 +684,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     if enforce_axioms.get():
         for a in dropped_axioms:
             for x in lu.used_symbols_ast(a.formula):
-                if x.name in sym_names:
+                if x in all_syms:
                     raise iu.IvyError(a,"relevant axiom {} not enforced".format(pname(a)))
         for actname,action in mod.actions.iteritems():
             if startswith_eq_some(actname,present,mod):
@@ -686,12 +692,16 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
                     called = mod.actions[c]
                     if not startswith_eq_some(c,present,mod):
                         if not(type(called) == ia.Sequence and not called.args):
-                            raise iu.IvyError(None,"No implementation for action {}".format(c))
+                            if (isinstance(called,ia.NativeAction) or 
+                                any(p.sort.name not in mod.ghost_sorts for p in called.formal_returns)):
+                                raise iu.IvyError(None,"No implementation for action {}".format(c))
         for p,ds in prop_deps:
             for d in ds:
                 if not startswith_eq_some(d,present,mod):
-                    raise iu.IvyError(p,"property {} depends on abstracted object {}"
-                                      .format(pname(p),d))
+                    for x in lu.used_symbols_ast(p.formula):
+                        if x in all_syms:
+                            raise iu.IvyError(p,"property {} depends on abstracted object {}"
+                                              .format(pname(p),d))
 
 #    for x,y in new_actions.iteritems():
 #        print iu.pretty(ia.action_def_to_str(x,y))
@@ -699,7 +709,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     # check for interference
 
 #    iu.dbg('list(summarized_actions)')
-    check_interference(mod,new_actions,summarized_actions)
+    if do_check_interference.get():
+        check_interference(mod,new_actions,summarized_actions)
 
 
     # After checking, we can put in place the new action definitions
@@ -988,8 +999,22 @@ def check_isolate_completeness(mod = None):
     checked_context = defaultdict(set) # maps action name to set of delegees
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
+
+    # delegate all the stub actions to their implementations
     global implementation_map
     implementation_map = {}
+    impl_mixins = defaultdict(list)
+    for actname,ms in mod.mixins.iteritems():
+        implements = [m for m in ms if isinstance(m,ivy_ast.MixinImplementDef)]
+        impl_mixins[actname].extend(implements)
+        for m in implements:
+            for foo in (m.mixee(),m.mixer()):
+                if foo not in mod.actions:
+                    raise IvyError(m,'action {} not defined'.format(foo))
+            implementation_map[m.mixee()] = m.mixer()
+    
+
+
     for iso_name,isolate in mod.isolates.iteritems():
         verified = set(a.relname for a in isolate.verified())
         present = set(a.relname for a in isolate.present())

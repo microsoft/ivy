@@ -334,17 +334,10 @@ def add_symbol(symbol_name,sort):
     return sig.symbols[symbol_name]
 
 def remove_symbol(symbol):
-    assert symbol.name in sig.symbols
-    assert not (iu.ivy_have_polymorphism and symbol.name in polymorphic_symbols)
-    del sig.symbols[symbol.name]
+    sig.remove_symbol(symbol)
 
 def all_symbols():
-    for name,sym in sig.symbols.iteritems():
-        if isinstance(sym.sort,UnionSort):
-            for sort in sym.sort.sorts:
-                yield Symbol(sym.name,sort)
-        else:
-            yield sym
+    return sig.all_symbols()
 
 def get_sort_term(term):
     if hasattr(term,'sort'):
@@ -681,6 +674,20 @@ class Sig(object):
         res._default_sort = self._default_sort
         res.default_numeric_sort = self.default_numeric_sort
         return res
+    def all_symbols(self):
+        for name,sym in self.symbols.iteritems():
+            if isinstance(sym.sort,UnionSort):
+                for sort in sym.sort.sorts:
+                    yield Symbol(sym.name,sort)
+            else:
+                yield sym
+    def remove_symbol(self,symbol):
+        assert symbol.name in self.symbols
+        if iu.ivy_have_polymorphism and symbol.name in polymorphic_symbols:
+            assert symbol.sort in self.symbols[symbol.name].sorts
+            self.symbols[symbol.name].sorts.remove(symbol.sort)
+        del self.symbols[symbol.name]
+
     def __str__(self):
         return sig_to_str(self)
 

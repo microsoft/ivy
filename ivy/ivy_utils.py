@@ -204,13 +204,21 @@ class SourceFile(object):
 
 filename = None
 
-class Location(object):
-    def __init__(self,filename=None,line=None):
-        self.filename = filename
-        self.line = line
+
+def Location(filename=None,line=None):
+    return LocationTuple([filename,line])
+
+class LocationTuple(tuple):
+    @property
+    def filename(self):
+        return self[0]
+    @property
+    def line(self):
+        return self[1]
     def __str__(self):
-        return (((str(self.filename) + ': ') if self.filename else '')
+        res =  (((str(self.filename) + ': ') if self.filename else '')
                 + ('line ' + str(self.line) + ': ') if self.line else '')
+        return res
 
 def lineno_str(ast):
     if not hasattr(ast,'lineno'):
@@ -420,7 +428,7 @@ class ErrorList(IvyError):
         self.errors = errors
     def __repr__(self):
         pre = (self.filename + ': ') if hasattr(self,'filename') else ''
-        return '\n'.join((repr(e) if hasattr(e,'filename') else pre + repr(e)) for e in self.errors)
+        return '\n'.join((repr(e) if hasattr(e,'filename') else pre + str(e)) for e in self.errors)
     __str__ = __repr__
 
 

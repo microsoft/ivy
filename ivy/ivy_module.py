@@ -59,6 +59,7 @@ class Module(object):
         self.natives = [] # list of NativeDef
         self.initializers = [] # list of name,action pairs
         self.params = []
+        self.ghost_sorts = set() # set of sort names
 
         self.sig = il.sig.copy() # capture the current signature
 

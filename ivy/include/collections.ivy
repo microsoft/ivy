@@ -22,7 +22,6 @@
 module map(dom,rng,zero) = {
 
     relation map(X:dom,Y:rng)
-    init map(X,Y) <-> Y = zero
 
     action set_(x:dom,y:rng)
     # get the value of x
@@ -31,6 +30,8 @@ module map(dom,rng,zero) = {
     action lemma(x:dom)
 
     object spec = {
+	init map(X,Y) <-> Y = zero
+
 	implement set_(x:dom,y:rng) {
 	    call lemma(x);
 	    map(x,Y) := Y = y
@@ -54,7 +55,7 @@ module set_wrapper(key) = {
     >>>
 
     <<< member
-	std::set<int> `s`;
+	std::set<`key`> `s`;
     >>>
 
     <<< init
@@ -105,11 +106,11 @@ module ordered_set(key) = {
     action get_glb(k:key) returns (res:key)
 
     relation s(K:key)
-    init s(K) <-> K = 0
 
     instantiate succ : map(key,key,0) # ghost
 
     object spec = {
+	init s(K) <-> K = 0
 	# insert one element
 	before insert {
 	    s(nkey) := true;
@@ -139,7 +140,7 @@ module ordered_set(key) = {
 	after get_glb {
 	    if some glb:key. glb <= k & s(glb) maximizing glb {
 		call succ.lemma(glb); # instantiate succ(glb)
-		assert res = glb
+		assume res = glb
 	    }
 	}
     }
@@ -153,7 +154,6 @@ module ordered_set(key) = {
     conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
 
     instance impl : set_wrapper(key)
-    private impl
 
 }
 
@@ -166,7 +166,7 @@ module map_wrapper(key,value) = {
     >>>
 
     <<< member
-	std::map<int,int> `s`;
+	std::map<`key.t`,`value`> `s`;
     >>>
 
     <<< init
@@ -180,7 +180,7 @@ module map_wrapper(key,value) = {
 
     implement get(x:key.t) returns (y:value) {
 	<<<
-	    std::map<int,int>::iterator it = `s`.find(`x`);
+	    std::map<`key.t`,`value`>::iterator it = `s`.find(`x`);
 	    if (it == `s`.end()) {
 	        `y` = 0;
 	    } else {
@@ -197,7 +197,7 @@ module map_wrapper(key,value) = {
 
     implement begin(k:key.t) returns (res:key.iter.t) {
 	<<<
-	    std::map<int,int>::iterator it = `s`.lower_bound(`k`);
+	    std::map<`key.t`,`value`>::iterator it = `s`.lower_bound(`k`);
 	    if (it == `s`.end()) {
 	        `res`.iter_end = true;
 	        `res`.iter_val = 0;
@@ -211,7 +211,7 @@ module map_wrapper(key,value) = {
 
     implement next(inp:key.iter.t) returns (res:key.iter.t) {
 	<<<
-	    std::map<int,int>::iterator __it = `s`.upper_bound(`inp`.iter_val);
+	    std::map<`key.t`,`value`>::iterator __it = `s`.upper_bound(`inp`.iter_val);
 	    if (__it == `s`.end()) {
 	        `res`.iter_end = true;
 	        `res`.iter_val = 0;
@@ -257,12 +257,14 @@ module ordered_map(key,value) = {
 
     relation s(K:key.t)
     relation r(K:key.t,V:value)
-    init ~s(K) & ~r(K,V)
     
 #    instantiate succ : map(key.t,key.t,0) # ghost
 
 
     object spec = {
+
+	init ~s(K) & ~r(K,V)
+
 	# insert one element
 	before set {
 	    s(nkey) := true;

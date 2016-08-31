@@ -5,7 +5,7 @@ include order
 object key = {
     
     type t
-    instantiate totally_ordered_with_zero(t)
+    instance props : totally_ordered_with_zero(t)
     instance iter : order_iterator(t)
 
     # returns the maximum key
@@ -13,6 +13,9 @@ object key = {
 
     # returns the least key greater than x
     action next(x:t) returns (y:t)
+
+    # returns the greatest key less than x
+    action prev(x:t) returns (y:t)
 
     object spec = {
 	after max {
@@ -24,11 +27,22 @@ object key = {
 	after next {
 	    assert x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
 	}
+	before prev {
+	    assert exists Z. Z < x
+	}
+	after prev {
+	    assert y < x & (Y < x -> Y <= y)
+	}
     }
 
     object impl = {
 	interpret t -> bv[1]
 	
+	implement iter.prev {
+	    iter.iter_val(x) := max if iter.iter_end(y) else prev(iter.iter_val(y));
+	    iter.iter_end(x) := false
+	}
+
 	implement max {
 	    x := 1
 	}
@@ -36,8 +50,12 @@ object key = {
 	implement next {
 	    y := x + 1
 	}
-    }
-    private impl
 
+	implement prev {
+	    y := x - 1
+	}
+    }
+
+    isolate iso_props = props with impl
 }
 

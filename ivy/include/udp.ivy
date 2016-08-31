@@ -33,13 +33,13 @@ module udp_wrapper(addr,pkt,me) = {
 		return sock;
 	    }
 	    virtual void read() {
-		int pkt;
+		`pkt` pkt;
 		//std::cout << "RECEIVING\n";
-		if (recvfrom(sock,&pkt,sizeof(int),0,0,0) < 0)
+		if (recvfrom(sock,&pkt,sizeof(`pkt`),0,0,0) < 0)
 		    { std::cerr << "recvfrom failed\n"; exit(1); }
 		rcb(pkt);
 	    }
-	    virtual void write(int dst, int pkt) {
+	    virtual void write(int dst, `pkt` pkt) {
 		struct sockaddr_in dstaddr;
 		memset((char *)&dstaddr, 0, sizeof(dstaddr));
 		dstaddr.sin_family = AF_INET;
@@ -47,7 +47,7 @@ module udp_wrapper(addr,pkt,me) = {
 		dstaddr.sin_port = htons(4990+dst);
 
 		//std::cout << "SENDING\n";
-		if (sendto(sock,&pkt,sizeof(int),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+		if (sendto(sock,&pkt,sizeof(`pkt`),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
 		     { std::cerr << "sendto failed\n"; exit(1); }
 	    }
 	};

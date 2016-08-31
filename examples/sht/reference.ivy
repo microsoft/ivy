@@ -20,8 +20,8 @@ module sht_reference(id,key,data) = {
     ########################################
     # type of local time
 
-    type ltime
-    instantiate totally_ordered(ltime)
+    ghost type ltime
+    instance props : totally_ordered(ltime)
 
     ########################################
     # type of hash table ops
@@ -89,7 +89,7 @@ module sht_reference(id,key,data) = {
 
     action begin(id_:id,op:otype,key_:key.t,data_:data) returns (lt:ltime) = {
 	assume exists T. ~generated(T);
-	if some c:ltime. ~generated(T) minimizing c {
+	if some c:ltime. ~generated(c) minimizing c {
 	    evs(c).type_ := op;
 	    evs(c).key_ := key_;
 	    evs(c).data_  := data_;
@@ -105,4 +105,10 @@ module sht_reference(id,key,data) = {
 	assert evs(lt).serialized
     }
     delegate end
+
+    object impl = {
+	interpret ltime -> int
+    }
+
+    isolate iso_props = props with impl
 }

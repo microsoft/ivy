@@ -76,7 +76,7 @@ def get_checked_actions():
     if cact and 'ext:'+cact in im.module.public_actions:
         cact = 'ext:'+cact
     if cact and cact not in im.module.public_actions:
-        raise IvyError(None,'{} is not an exported action'.format(cact))
+        raise iu.IvyError(None,'{} is not an exported action'.format(cact))
     return [cact] if cact else sorted(im.module.public_actions)
 
 def check_module():
@@ -114,6 +114,7 @@ def check_module():
                     if cex is not None:
                         display_cex("safety failed in initializer",cex)
                 with ivy_interp.EvalContext(check=False):
+                    old_checked_assert = act.checked_assert.get()
                     check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
                     show_assertions()
                     assertions = find_assertions()
@@ -133,6 +134,8 @@ def check_module():
                                     display_cex("safety failed",cex)
                         print "checking consecution..."
                         check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
+                    act.checked_assert.value = old_checked_assert
+
 
 
 def main():

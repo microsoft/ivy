@@ -10,7 +10,7 @@ include order
 module table_shard(key,data) = {
 
     type range
-    instantiate totally_ordered_with_zero(range)
+    instance props : totally_ordered_with_zero(range)
     
     type t = struct {
 	lo : key,
@@ -22,9 +22,11 @@ module table_shard(key,data) = {
     instance iter : order_iterator(range)
 
     function value(S:t,X:key):data
+    relation valid(S:t)
 
     derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
     definition value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
+    definition valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
 
     object impl = {
 	
@@ -41,4 +43,6 @@ module table_shard(key,data) = {
 	    }
 	}
     }
+
+    isolate iso_props = props with impl
 }

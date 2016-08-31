@@ -758,6 +758,9 @@ class TypeDef(Definition):
     def value(self):
         return self.args[1]
 
+class GhostTypeDef(TypeDef):
+    pass
+
 class ActionDef(Definition):
     def __init__(self,atom,action,formals=[],returns=[]):
         # we rename the formals to avoid name capture
@@ -1065,12 +1068,9 @@ class ASTContext(object):
 #            assert False
             raise IvyError(self.ast,str(exc_val))
         if exc_type == IvyError:
-            print "no lineno: {}".format(self.ast)
+#            print "no lineno: {}".format(self.ast)
             needs_lineno = not exc_val.lineno.line
             if needs_lineno and hasattr(self.ast,'lineno'):
-                print "lineno: {}".format(self.ast.lineno)
-                if isinstance(self.ast.lineno,tuple):
-                    exc_val.filename, exc_val.lineno = self.ast.lineno
-                else:
-                    exc_val.lineno = self.ast.lineno
+#                print "lineno: {}".format(self.ast.lineno)
+                exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions

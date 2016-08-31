@@ -36,12 +36,12 @@ module hash_table(key,value,shard) = {
 
 	after extract_ {
 	    assert shard.lo(res) = lo;
-	    assert shard.hi(res) <= hi;
+	    assert (lo <= hi -> lo <= shard.hi(res)) & shard.hi(res) <= hi;
 	    assert (shard.lo(res) <= X & X <= shard.hi(res)) -> shard.value(res,X) = hash(X)
 	}
 
 	before incorporate(s:shard.t) {
-	    assert shard.at(s,X,Y) & shard.at(s,X,Z) -> Y = Z;
+	    assert shard.valid(s);
 	    hash(K) := shard.value(s,K) if (shard.lo(s) <= K & K <= shard.hi(s)) else hash(K)
 	}
     }
@@ -97,11 +97,11 @@ module hash_table(key,value,shard) = {
 		local idx : key.iter.t, pos : shard.iter.t {
 		    pos := shard.iter.begin(0);
 		    while ~shard.iter.iter_end(pos)
-                        invariant lo <= X & X <= hi & shard.value(s,X) = 0 -> ~tab.s(X)
-		        invariant lo <= X & X <= hi & shard.iter.done(Y,pos) & shard.at(s,X,Y) -> tab.s(X) & tab.r(X,shard.value(s,X))
-		        invariant ~(lo <= X & X <= hi) -> tab_invar(X,Y)
-		        # following are object invariants of tab and shouldn't be needed here
-		        invariant tab.r(X,Y) & tab.r(X,Z) -> Y = Z
+			invariant lo <= X & X <= hi & shard.value(s,X) = 0 -> ~tab.s(X)
+			invariant lo <= X & X <= hi & shard.iter.done(Y,pos) & shard.at(s,X,Y) -> tab.s(X) & tab.r(X,shard.value(s,X))
+			invariant ~(lo <= X & X <= hi) -> spec.tab_invar(X,Y)
+			# following are object invariants of tab and shouldn't be needed here
+			invariant tab.r(X,Y) & tab.r(X,Z) -> Y = Z
 		    {
 			local r : shard.range {
 			    r := shard.iter.val(pos);
@@ -115,12 +115,14 @@ module hash_table(key,value,shard) = {
 	    }
 	}	
 
-	derived tab_invar(X,Y) =
-	    (tab.s(X) & tab.r(X,Y) -> hash(X) = Y)
-	    & (~tab.s(X) -> hash(X) = 0)
-	    & (tab.s(X) -> tab.r(X,hash(X)))
+	object spec = {
+	    derived tab_invar(X,Y) =
+	      (tab.s(X) & tab.r(X,Y) -> hash(X) = Y)
+	      & (~tab.s(X) -> hash(X) = 0)
+	      & (tab.s(X) -> tab.r(X,hash(X)))
+	}
 
-	conjecture shard.value(S,X)=Z -> tab_invar(X,Y)
+	conjecture shard.value(S,X)=Z -> spec.tab_invar(X,Y)
 
     }
 

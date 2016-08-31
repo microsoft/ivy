@@ -427,22 +427,30 @@ def p_top_update_terms_from_terms_upaxes(p):
                                                SymbolList(*deps),
                                                UpdatePatternList(*p[6]))))
 
+def p_optghost(p):
+    'optghost : '
+    p[0] = False
+
+def p_optghost_ghost(p):
+    'optghost : GHOST'
+    p[0] = True
+
 def p_top_type_symbol(p):
-    'top : top TYPE SYMBOL'
+    'top : top optghost TYPE SYMBOL'
     p[0] = p[1]
-    scnst = Atom(p[3])
-    scnst.lineno = get_lineno(p,3)
-    tdfn = TypeDef(scnst,UninterpretedSort())
-    tdfn.lineno = get_lineno(p,3)
+    scnst = Atom(p[4])
+    scnst.lineno = get_lineno(p,4)
+    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,UninterpretedSort())
+    tdfn.lineno = get_lineno(p,4)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
-    'top : top TYPE SYMBOL EQ sort'
+    'top : top optghost TYPE SYMBOL EQ sort'
     p[0] = p[1]
-    scnst = Atom(p[3])
-    scnst.lineno = get_lineno(p,3)
-    tdfn = TypeDef(scnst,p[5])
-    tdfn.lineno = get_lineno(p,4)
+    scnst = Atom(p[4])
+    scnst.lineno = get_lineno(p,4)
+    tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,p[6])
+    tdfn.lineno = get_lineno(p,5)
     p[0].declare(TypeDecl(tdfn))
 
 def p_tsyms_tsym(p):
