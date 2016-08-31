@@ -126,9 +126,9 @@ module net(lower,req,shard,seq_num,data) = {
 		    else if net_msg.mty(msg) = delegate_t {
 			call recv_delegate(me,net_msg.sh(msg))
 		    }
-		    else if net_msg.mty(msg) = ack_t {
-			call mq(src).delete_all(seq)
-		    }
+		};
+		if net_msg.mty(msg) = ack_t {
+		    call mq(src).delete_all(seq)
 		}
 	    }
 	}
