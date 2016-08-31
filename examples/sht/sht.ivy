@@ -36,5 +36,19 @@ object impl = {
     interpret id -> bv[1]
     interpret t.impl.mq.impl.range -> bv[3]
 }
-extract iso_impl = key.impl,key.iter,s,n.impl,t.impl,p.impl,u.impl
+
+object debug = {
+    action send(dst:id,m:t.net_msg.t)
+    action recv(dts:id,m:t.net_msg.t)
+    before u.send {
+	call send(dst,v)
+    }
+    before u.recv{
+	call recv(dst,v)
+    }
+}
+import debug.send
+import debug.recv
+
+extract iso_impl = key.impl,key.iter,s,n.impl,t.impl,p.impl,u.impl,debug
 

@@ -118,7 +118,10 @@ module net(lower,req,shard,seq_num,data) = {
 			call lower.send(me,src,ack)
 		    }
 		};
-		if seq = recv_seq(src) {
+		if net_msg.mty(msg) = ack_t {
+		    call mq(src).delete_all(seq)
+		}
+		else if seq = recv_seq(src) {
 		    recv_seq(src) := seq_num.next(recv_seq(src));
 		    if net_msg.mty(msg) = request_t {
 			call recv_request(me,net_msg.rq(msg))
@@ -126,9 +129,6 @@ module net(lower,req,shard,seq_num,data) = {
 		    else if net_msg.mty(msg) = delegate_t {
 			call recv_delegate(me,net_msg.sh(msg))
 		    }
-		};
-		if net_msg.mty(msg) = ack_t {
-		    call mq(src).delete_all(seq)
 		}
 	    }
 	}
