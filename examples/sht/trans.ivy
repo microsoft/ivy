@@ -6,21 +6,29 @@ include timeout
 module net(lower,req,shard,seq_num,data) = {
 
     relation requested(D:id,R:req)
+    relation replied(D:id,R:req)
     relation delegated(D:id,S:shard)
 
     init ~requested(D,R)
+    init ~replied(D,R)
     init ~delegated(D,S)
 
     action send_request(src:id,dst:id,rq:req)
     action send_delegate(src:id,dst:id,s:shard)
     action send_reply(src:id, dst:id, rq:req)
     action recv_request(dst:id,rq:req)
+    action recv_reply(dst:id,rq:req)
     action recv_delegate(dst:id,s:shard)
 
     object spec = {
 	before send_request {
 	    assert ~requested(dst,rq);
 	    requested(dst,rq) := true
+	}
+
+	before send_reply {
+	    assert ~replied(dst,rq);
+	    replied(dst,rq) := true
 	}
 
 	before send_delegate {
@@ -31,6 +39,11 @@ module net(lower,req,shard,seq_num,data) = {
 	before recv_request {
 	    assert requested(dst,rq);
 	    requested(dst,rq) := false
+	}
+
+	before recv_reply {
+	    assert replied(dst,rq);
+	    replied(dst,rq) := false
 	}
 
 	before recv_delegate {
@@ -74,7 +87,6 @@ module net(lower,req,shard,seq_num,data) = {
 
 	implement send_request(dst:id,rq:req) {
 	    local msg : net_msg.t, seq : seq_num.t {
-#		msg := encoder.mk_req(me,dst,rq,send_seq(dst));
 		net_msg.mty(msg) := request_t;
 		net_msg.src(msg) := me;
 		net_msg.rq(msg) := rq;
@@ -87,7 +99,6 @@ module net(lower,req,shard,seq_num,data) = {
 
 	implement send_delegate(dst:id,sh:shard) {
 	    local msg : net_msg.t, seq : seq_num.t {
-#		msg := encoder.mk_delegate(me,dst,sh,send_seq(dst));
 		net_msg.mty(msg) := delegate_t;
 		net_msg.src(msg) := me;
 		net_msg.sh(msg) := sh;
@@ -98,9 +109,18 @@ module net(lower,req,shard,seq_num,data) = {
 	    }
 	}
 
-#	implement send_reply {
-	    # for now, do nothing, but we verify data correct
-#	}
+	implement send_reply(dst:id,rq:req) {
+	    local msg : net_msg.t, seq : seq_num.t {
+		net_msg.mty(msg) := reply_t;
+		net_msg.src(msg) := me;
+		net_msg.rq(msg) := rq;
+		net_msg.num(msg) := send_seq(dst);
+		send_seq(dst) := seq_num.next(send_seq(dst));
+		call mq(dst).enqueue(msg);
+		call lower.send(me,dst,msg)
+	    }
+	    
+	}
 
 	# Receiving a message is the most complicated. First, we send
 	# an ack. Then, if the sequence number is correct, we call the
@@ -126,6 +146,9 @@ module net(lower,req,shard,seq_num,data) = {
 		    if net_msg.mty(msg) = request_t {
 			call recv_request(me,net_msg.rq(msg))
 		    }
+		    else if net_msg.mty(msg) = reply_t {
+			call recv_reply(me,net_msg.rq(msg))
+		    }
 		    else if net_msg.mty(msg) = delegate_t {
 			call recv_delegate(me,net_msg.sh(msg))
 		    }
@@ -148,6 +171,12 @@ module net(lower,req,shard,seq_num,data) = {
 	conjecture mq(D).contents(M) & impl(D).recv_seq(me) <= net_msg.num(M)
 	   & net_msg.mty(M) = request_t -> requested(D,net_msg.rq(M))
 
+	# If I have a reply message for D enqueued and if its sequence number is
+	# >= D's receive sequence number, then the message is pending.
+
+	conjecture mq(D).contents(M) & impl(D).recv_seq(me) <= net_msg.num(M)
+	   & net_msg.mty(M) = reply_t -> replied(D,net_msg.rq(M))
+
 	# If I have a delegate message for D enqueued and if its sequence number is
 	# >= D's receive sequence number, then the message is pending.
 
@@ -159,6 +188,14 @@ module net(lower,req,shard,seq_num,data) = {
 	conjecture impl(S1).mq(D).contents(M1) & impl(D).recv_seq(S1) <= net_msg.num(M1)
 	   & impl(S2).mq(D).contents(M2) & impl(D).recv_seq(S2) <= net_msg.num(M2)
 	   & net_msg.mty(M1) = request_t & net_msg.mty(M2) = request_t 
+	   & (S1 ~= S2 | net_msg.num(M1) ~= net_msg.num(M2))
+	   -> net_msg.rq(M1) ~= net_msg.rq(M2)
+
+	# A given reply cannot occur twice in the network
+
+	conjecture impl(S1).mq(D).contents(M1) & impl(D).recv_seq(S1) <= net_msg.num(M1)
+	   & impl(S2).mq(D).contents(M2) & impl(D).recv_seq(S2) <= net_msg.num(M2)
+	   & net_msg.mty(M1) = reply_t & net_msg.mty(M2) = reply_t 
 	   & (S1 ~= S2 | net_msg.num(M1) ~= net_msg.num(M2))
 	   -> net_msg.rq(M1) ~= net_msg.rq(M2)
 

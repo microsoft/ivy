@@ -39,7 +39,7 @@ object key = {
 	interpret t -> bv[1]
 	
 	implement iter.prev {
-	    iter.iter_val(x) := max if iter.iter_end(y) else prev(iter.iter_val(y));
+	    iter.iter_val(x) := max if iter.iter_end(y) else iter.iter_val(y) - 1;
 	    iter.iter_end(x) := false
 	}
 

@@ -30,7 +30,7 @@ isolate iso_hash(me:id) = p.impl.hash.impl(me) with p.impl.hash(me),key,s
 export p.set
 export p.get
 export p.delegate_
-import t.send_reply
+import p.answer
 
 object impl = {
     interpret id -> bv[1]
@@ -50,5 +50,5 @@ object debug = {
 import debug.send
 import debug.recv
 
-extract iso_impl = key.impl,key.iter,s,n.impl,t.impl,p.impl,u.impl,debug
+extract iso_impl = key.impl,key.iter,s,n.impl,t.impl,p.impl,u.impl
 
