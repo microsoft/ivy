@@ -634,7 +634,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
 
     new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
     del mod.labeled_conjs[:]
-    mod.labeled_conjs.extend(new_conjs)
+    if not create_imports.get(): # no conjectures if compiling
+        mod.labeled_conjs.extend(new_conjs)
 
     # filter the inits
 
@@ -664,8 +665,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
         asts += [y.formula for y in x]
     asts += [action for action in new_actions.values()]
 
-    for a in asts:
-        print a
+#    for a in asts:
+#        print a
 
     all_syms = set(lu.used_symbols_asts(asts))
 

@@ -23,10 +23,13 @@ module table_shard(key,data) = {
 
     function value(S:t,X:key):data
     relation valid(S:t)
+    relation at(S:t,X:key,Y:range)
 
-    derived at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
-    definition value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
-    definition valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
+    object repr = {
+	definition at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
+	definition value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
+	definition valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
+    }
 
     object impl = {
 	

@@ -69,7 +69,7 @@ def declare_symbol(header,sym,c_type = None,skip_params=0):
         return # skip interpreted symbols
     name, sort = sym.name,sym.sort
     if not c_type:
-        c_type = ctype(sort)
+        c_type = ctype(sort.rng)
     header.append('    ' + c_type + ' ')
     header.append(memname(sym) if skip_params else varname(sym.name))
     if hasattr(sort,'dom'):
@@ -852,7 +852,7 @@ void install_timer(timer *);
             impl.append('    {} = {};\n'.format(varname(n),i))
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
-            impl.append('    __CARD__{} = {};\n'.format(varname(sortname),sort_card(il.sig.sorts[sortname])))
+            impl.append('    __CARD__{} = {};\n'.format(varname(sortname),csortcard(il.sig.sorts[sortname])))
     if target.get() != "gen":
         emit_one_initial_state(impl)
     for native in im.module.natives:
@@ -877,6 +877,37 @@ void install_timer(timer *);
                 emit_action_gen(header,impl,name,action,classname)
 
     if target.get() == "repl":
+
+        for sort_name in sorted(im.module.sort_destructors):
+            destrs = im.module.sort_destructors[sort_name]
+            sort = im.module.sig.sorts[sort_name]
+            csname = varname(sort_name)
+            cfsname = classname + '::' + csname
+            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
+            code_line(impl,'s<<"{"')
+            for idx,sym in enumerate(destrs):
+                if idx > 0:
+                    code_line(impl,'s<<","')
+                code_line(impl,'s<< "' + memname(sym) + ':"')
+                dom = sym.sort.dom[1:]
+                vs = variables(dom)
+                for d,v in zip(dom,vs):
+                    code_line(impl,'s << "["')
+                    open_loop(impl,[v])
+                    code_line(impl,'if ({}) s << ","'.format(varname(v)))
+                code_line(impl,'s << t.' + memname(sym) + subscripts(vs))
+                for d,v in zip(dom,vs):
+                    close_loop(impl,[v])
+                    code_line(impl,'s << "]"')
+            code_line(impl,'s<<"}"')
+            code_line(impl,'return s')
+            close_scope(impl)
+            open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
+            s = il.Symbol('s',sort)
+            t = il.Symbol('t',sort)
+            code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
+            close_scope(header)
+
         emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
 
@@ -914,30 +945,6 @@ void install_timer(timer *);
                     close_scope(impl)
             code_line(impl,'return res')
             close_scope(impl)
-            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
-            code_line(impl,'s<<"{"')
-            for idx,sym in enumerate(destrs):
-                if idx > 0:
-                    code_line(impl,'s<<","')
-                code_line(impl,'s<< "' + memname(sym) + ':"')
-                dom = sym.sort.dom[1:]
-                vs = variables(dom)
-                for d,v in zip(dom,vs):
-                    code_line(impl,'s << "["')
-                    open_loop(impl,[v])
-                    code_line(impl,'if ({}) s << ","'.format(varname(v)))
-                code_line(impl,'s << t.' + memname(sym) + subscripts(vs))
-                for d,v in zip(dom,vs):
-                    close_loop(impl,[v])
-                    code_line(impl,'s << "]"')
-            code_line(impl,'s<<"}"')
-            code_line(impl,'return s')
-            close_scope(impl)
-            open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
-            s = il.Symbol('s',sort)
-            t = il.Symbol('t',sort)
-            code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
-            close_scope(header)
             
                 
 
@@ -992,7 +999,10 @@ def check_representable(sym,ast=None,skip_args=0):
             if card > 16:
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is large'.format(sym,domsort))
 
-cstr = il.fmla_to_str_ambiguous
+def cstr(term):
+    if isinstance(term,il.Symbol):
+        return varname(term).split('!')[-1]
+    return il.fmla_to_str_ambiguous(term)
 
 def subscripts(vs):
     return ''.join('['+varname(v)+']' for v in vs)
