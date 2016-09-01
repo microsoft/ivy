@@ -972,13 +972,20 @@ void install_timer(timer *);
                     .format(classname,' '.join(map(varname,im.module.params))))
         impl.append('        exit(1);\n    }\n')
         impl.append('    std::vector<std::string> args;\n')
+        impl.append('    std::vector<ivy_value> arg_values(1);\n')
         impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
         for idx,s in enumerate(im.module.params):
             impl.append('    int p__'+varname(s)+';\n')
             impl.append('    try {\n')
-            impl.append('        p__'+varname(s)+' =  int_arg(args,{},{});\n'.format(idx,csortcard(s.sort)))
+            impl.append('        int pos = 0;\n')
+            impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
+            impl.append('        p__'+varname(s)+' =  {}_arg(arg_values,{},{});\n'
+                        .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
             impl.append('    }\n    catch(out_of_bounds &) {\n')
             impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+            impl.append('        exit(1);\n    }\n')
+            impl.append('    catch(syntax_error &) {\n')
+            impl.append('        std::cerr << "syntax error in command argument\\n";\n')
             impl.append('        exit(1);\n    }\n')
         cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
         impl.append('    {}_repl ivy{};\n'

@@ -50,5 +50,5 @@ object debug = {
 import debug.send
 import debug.recv
 
-extract iso_impl = key.impl,key.iter,s,n.impl,t.impl,p.impl,u.impl
+extract iso_impl(me:id) = key.impl,key.iter,s,n.impl,t.impl(me),p.impl(me),u.impl(me)
 
