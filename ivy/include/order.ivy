@@ -11,6 +11,30 @@ module totally_ordered_with_zero(t) = {
     property 0 <= X:t
 }
 
+module unbounded_sequence = {
+    
+    type t
+    instance props : totally_ordered_with_zero(t)
+
+    # returns the least key greater than x
+    action next(x:t) returns (y:t)
+
+    # returns the greatest key less than x
+    action prev(x:t) returns (y:t)
+
+    object spec = {
+	after next {
+	    assert x < y & (x < Y -> y <= Y)
+	}
+	before prev {
+	    assert exists Z. Z < x
+	}
+	after prev {
+	    assert y < x & (Y < x -> Y <= y)
+	}
+    }
+}
+
 module order_iterator(range) = {
     type t = struct {
 	iter_end : bool,

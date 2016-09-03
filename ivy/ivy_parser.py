@@ -834,20 +834,26 @@ def p_top_assert_symbol_arrow_assert_rhs(p):
 
 def p_oper_symbol(p):
     'oper : atype'
-    p[0] = p[1]
+    p[0] = Atom(p[1])
 
 def p_oper_relop(p):
     'oper : relop'
-    p[0] = p[1]
+    p[0] = Atom(p[1])
 
 def p_oper_infix(p):
     'oper : infix'
-    p[0] = p[1]
+    p[0] = Atom(p[1])
+
+def p_oper_nativequote(p):
+    'oper : NATIVEQUOTE'
+    text,bqs = parse_nativequote(p,1)
+    p[0] = NativeType(*([text] + bqs))
+    p[0].lineno = get_lineno(p,1)
 
 def p_top_interpret_symbol_arrow_symbol(p):
     'top : top INTERPRET oper ARROW oper'
     p[0] = p[1]
-    thing = InterpretDecl(LabeledFormula(None,Implies(Atom(p[3],[]),Atom(p[5],[]))))
+    thing = InterpretDecl(LabeledFormula(None,Implies(p[3],p[5])))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     

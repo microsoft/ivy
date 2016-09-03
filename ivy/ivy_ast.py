@@ -160,6 +160,7 @@ class Atom(Formula):
     A n-ary relation symbol applied to n terms
     """
     def __init__(self, relsym, *terms):
+        assert not(isinstance(relsym,Atom)), relsym
         self.rep = relsym
         self.args = flatten(terms)
     def __repr__(self):
@@ -714,9 +715,18 @@ class NativeCode(AST):
         self.code = string
     def __str__(self):
         return self.code
+    def inst(self,fun,args):
+        fields = self.code.split('`')
+        fields = [(fun(args[int(s)]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+        return ''.join(fields)
     def clone(self,args):
         return NativeCode(self.code)
     
+
+class NativeType(AST):
+    """ Quote native type """
+    def __str__(self):
+        return ivy_ast.native_to_string(self.args)
 
 def native_to_string(args):
     res = '<<<'

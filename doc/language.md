@@ -209,14 +209,51 @@ clause, for example:
     }
 
 As in the C programming language, the "else" is associated to the
-nearest "if".
+nearest "if". 
 
-### No loops
+The following syntax can be used to find a element of a type that
+satisfies some condition:
 
-There are no looping constructs in IVy. This is because loops would
-make important verification problems undecidable. Frequently,
-though, we can write the *effect* of a loop in logic. For example, instead of
-something like this:
+    if some x:t. f(x) = y {
+        z := x + y
+    }
+    else {
+        z := y
+    }        
+
+Here, if there is any value `x` of type `t` such that `f(x) = y`, then
+such a value is assigned to `x` and the assignment `z := x + y` is
+executed. If there is more than one such value, the choice is
+non-deterministic. If there is no such value, the `else` clause is
+executed. The symbol `x` is only in scope in the `if` clause. It acts
+like a local variable and is distinct from any `x` declared in an
+outer scope. 
+
+It is also possible to choose a value of `x` minimizing some function
+of `x`. For example, we can find an element of a set `s` with the least key like this:
+
+    if some x:t. s(x) minimizing key(x) {
+       ...
+    }
+
+This is logically equivalent to the following:
+
+    if some x:t. s(x) & ~exists Y. s(Y) & key(Y) < key(x) {
+       ...
+    }
+
+Besides being more concise, the `minimizing` syntax can be more
+efficiently compiled and is easier for Ivy to reason about (see the
+[decidability](decidability.html) discussion). The keyword
+`maximizing` produces the same result with the direction of `<` reversed.
+
+
+### Loops
+
+Loops are discouraged IVy. Often, the effect of a loop can be
+described using an assignment or an `if some` conditional. 
+
+For example, instead of something like this:
 
     for y in type {
         link(x,y) := false
@@ -226,14 +263,27 @@ we can instead write this:
 
     link(x,Y) := false
 
-In other procedural languages used for formal modeling and
-verification, loops must be decorated with invariants, which
-essentially encode the effect of the loop into logic. Since IVy is
-intended mainly for abstract models and not programming, we keep the
-logic and dispense with the loop.
+When a loop is needed, it can be written like this:
 
-In the future, IVy will probably be extended to support loops and
-recursion, provided the user gives an inductive invariant.
+    sum := 0;
+    i := x;
+    while i > 0
+    {
+        sum := sum + f(i)
+    }
+
+This loop computes the sum of `f(i)` for `i` in the range `(0,x]`.
+A loop can be decorated with a invariants, like this:
+
+    while i > 0
+    invariant sum >= 0
+    {
+        sum := sum + f(i)
+    }
+
+The invariant `sum >= 0` is a special assertion that is applied
+on each loop iteration, before the evaluation of the condition.
+Invariants are helpful in proving properties of programs with loops.
 
 
 ## Non-deterministic choice
@@ -385,9 +435,9 @@ memory. This is by design. The language is intended for
 modeling distributed protocols at a level of abstraction that hides
 low-level concurrency control mechanisms.
 
-### An abstract protocol model
+### An abstract interface model
 
-The following is a very abstract model of a protocol that establishes
+The following is a very abstract model of an interface that establishes
 connections between clients and servers. Each server has a semaphore
 that is used to guarantee that at any time at most one client can be
 connected to the server.
@@ -420,7 +470,9 @@ connected to the server.
 This program declares two types `client` and `server`. The state of
 the protocol model consists of two relations. The relation `link`
 tells us which clients are connected to which servers, while
-`semaphore` tells us which servers have their semaphore "up".
+`semaphore` tells us which servers have their semaphore "up".  The
+`link` and `semaphore` components aren't "real". They are abstractions
+that represent the interface user's view of the system.
 
 The program exports two actions to the environment: `connect` and
 `disconnect`. The `connect` actions creates a link from client `x` to
@@ -706,6 +758,15 @@ Notice that the object parameter is given as a logical constant rather
 than a variable. This constant can be referred to in the body of the
 object.
 
+Types in IVy are never parameterized. For example, if we write:
+
+    object foo(self:t) = {
+        type t
+    }
+
+this creates a single type called `foo.t`, not a collection of types
+`f.t(self)` for all values of `self`.
+
 ## Monitors
 
 While embedding assertions in code is a useful way to write
@@ -745,6 +806,31 @@ Monitors can also check the return values of actions. For example:
 Here, we have an action `incr` that is supposed to increment a value,
 and we specify that the output must be greater than the input.
 
+As a shorthand, we can write out monitor action like this:
+
+    after c.post(inp:t) returns(out:t) {
+        assert inp < out
+    }
+
+This creates a monitor action called `post.after` that is executed after `c.post`.
+Similarly, we can write:
+
+    before pre_connect(x:client,y:server) {
+        assert semaphore(y)
+    }        
+
+If we drop the input or output parameters, they are inherited from the monitored action.
+For example:
+
+    after c.post {
+        assert inp < out
+    }
+
+This is a useful shorthand when the declaration of `c.post` is nearby,
+but should probably be avoided otherwise.
+
+### Monitor state
+
 Usually, monitors contain state components that allow them to remember
 some of the history of past events. For example, here is a monitor specifying a 
 property of `counter` objects. It requires that immediately after a call to `up`,
@@ -755,20 +841,17 @@ the `is_zero` action cannot return true:
         relation was_up
         init ~was_up 
 
-        action up = {
+        after c.up {
             was_up := true
         }
-        execute up after c.up
 
-        action down = {
+        after c.down {
             was_up := false
         }
-        execute down after c.down
 
-        action is_zero returns (z:bool) = {
+        after c.is_zero returns (z:bool) {
             assert was_up -> ~z
         }
-        execute is_zero after c.is_zero
     }
 
 This module is parameterized on `c`, the counter being specified. This
@@ -780,6 +863,7 @@ any difference whether it is before or after). The action `is_zero`
 executes after calls for the counter's `is_zero` action and asserts a
 fact about the return value: if the last action was `up` the result
 cannot be true. 
+
 
 ## Assume/guarantee reasoning
 
@@ -834,15 +918,13 @@ odd numbers. Here is a specification of this property as a monitor:
 
     object spec = {
 
-        action even_put(n:nat) = {
+        before even.put {
             assert even(n)
         }
-        execute even_put before evens.put       
 
-        action odd_put(n:nat) = {
+        before odd.put = {
             assert odd(n)
         }
-        execute odd_put before odds.put       
     }
 
 We would like to break the proof that these two assertions always hold
@@ -969,6 +1051,58 @@ Roughly speaking, this means that assertions about an object's inputs
 are assumptions for that object, while assertions about its outputs
 are guarantees.
 
+## Action implementations
+
+Often it is useful two separate the declaration of an action from
+its implementation. We can declare an action like this:
+
+    action incr(x:t) returns(y:t)
+
+and then give its implementation like this:
+
+    implement incr {
+        y := x
+    }
+
+This is useful for defining and specifying interfaces. For example,
+we could define the interface between "evens" and "odds" like this:
+
+    object intf = {
+    
+        action put_even(n:nat)
+        action put_odd(n:nat)
+
+        object spec = {
+
+            before put_even {
+                assert even(n)
+            }
+
+            before put_odd = {
+                assert odd(n)
+            }
+        }
+    }
+
+The `event` object would then be:
+
+    object evens = {
+        individual number : nat
+        init nat = 0
+
+        action step = {
+            call intf.put_odd(number + 1)
+        }
+
+        implement intf.even_put(n:nat) = {
+            number := n;
+        }
+    }
+
+In this way, we can make the interface specification into a re-usable
+component.
+
+
 ## Initializers
 
 In some cases it is awkward to give the initial condition as a
@@ -1043,6 +1177,114 @@ parameterized.  This means it is in effect being assigned a different
 value for each value of `self`.  The restrictions guarantee that the
 result of the initializer does not depend on the order in which it is
 called for different parameter values.
+
+## Definitions
+
+We can define the value of a previously declared function like this:
+
+    function square(X:t):t
+
+    definition square(X) = X * X
+
+Notice we don't have to give the type of X in the definition, since it
+can be inferred from the type of `square`. Logically, the definition
+is equivalence to writing:
+
+    axiom square(X) = X * X
+
+However, definitions have several advantages. Primarily, they are safer,
+since definitions are guaranteed to be consistent. In addition they can be
+computed. If we use an axiom, the only way that Ivy can compile the
+function `square` is to compile a table of squares. On the other hand,
+IVy can compile the definition of `square` into a procedure. 
+
+IVy doesn't (currently) allow recursive definitions. So, for example,
+this is not allowed:
+
+    definition factorial(X) = X * factorial(X-1) if X > 0 else 1
+
+### Macro definitions
+
+A macro is a definition that is only "unfolded" when it is used.  For
+example, let's say we want to define a predicate `rng` that is true of
+all the elements in range of function `f`. We could write it like
+this:
+
+    definition rng(X) = exists Y. f(X) = Y
+
+The corresponding axiom might be problematic, however. Writing it out
+with explicit quantifiers, we have:
+
+    axiom forall X. (rng(X) <-> exists Y. f(X) = Y)
+
+This formula has an alternation of quantifiers that might result in
+verification conditions that IVy can't decide (see the
+[decidability](decidability.html) discussion). Suppose though, that we only need
+to know the truth value of `rng` for some specific arguments. We can instead
+write the definition like this:
+
+    definition rng(x:t) = exists Y. f(x) = Y
+
+Notice that the argument of `rng` is a constant `x`, not a variable
+`X`. This definition acts like a macro (or an axiom *schema*) that can be
+instantiated for specific values of `x`. So, for example, if we have an assertion
+to prove like this:
+
+    assert r(y)
+
+Ivy will instantiate the definition like this:
+
+    axiom rng(y) <-> exists Y. f(y) = Y
+
+In fact, all instances if the macro will be alternation-free, since
+IVy guarantees to instantiate the macro using only ground terms for
+the constant arguments.  A macro can have both variables and constants
+as arguments. For example, consider this definition:
+
+    definition g(x,Y) = x < Y & exists Z. Z < x
+
+Given a term `g(f(a),b)`, Ivy will instantiate this macro as:
+
+    axiom g(f(a),Y) = f(a) < Y & exists Z. Z < f(a)
+
+### Choice functions
+
+Suppose we want to define a function `finv` that is
+the inverse of function `f`. We can write the definition like this:
+
+    definition finv(X) = some Y. f(Y) = X in Y
+
+This special form of definition says that `finv(X)` is `Y` for *some*
+`Y` such that `f(Y) = X`. If there is no such `Y`, `finv(X)` is left
+undefined. The corresponding axiom is:
+
+    axiom forall X. ((exists Y. f(X) = Y) -> f(finv(Y)) = Y)
+
+With this definition, `finv` is a function, but it isn't fully
+specified.  If a given element `Y` has two inverses, `finv` will yield
+one of them. This isn't a non-deterministic choice, however. Since `f`
+is a function, it will always yield the *same* inverse of any given
+value `Y`.
+
+If we want to specify the value of `finv` in case there is no inverse,
+we can write the definition like this:
+
+    definition finv(X) = some Y. f(Y) = X in Y else 0
+
+The `else` part gives us this additional axiom:
+
+    axiom forall X. ((~exists Y. f(Y) = X) -> finv(X) = 0)
+
+Notice that this axiom contains a quantifier alternation. If this
+is a problem, we could use a macro instead:
+
+    definition finv(x) = some Y. f(Y) = x in Y else 0
+
+The axiom we get is
+
+    axiom (~exists Y. f(Y) = x) -> finv(x) = 0)
+
+which is alternation-free.
 
 ## Interpreted types and theories
 

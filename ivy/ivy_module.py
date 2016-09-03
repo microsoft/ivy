@@ -60,6 +60,9 @@ class Module(object):
         self.initializers = [] # list of name,action pairs
         self.params = []
         self.ghost_sorts = set() # set of sort names
+        self.native_types = {} # map from sort names to ivy_ast.NativeType
+        self.sort_order = [] # list of sorts names in order declared
+        self.symbol_order = [] # list of symbols in order declared
 
         self.sig = il.sig.copy() # capture the current signature
 

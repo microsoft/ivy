@@ -98,8 +98,13 @@ def mk_nondet(code,v,rng,name,unique_id):
     indent(code)
     code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
+def is_native_sym(sym):
+    return il.is_uninterpreted_sort(sym.sort) and sym.sort.name in im.module.native_types    
+
 def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
+    if is_native_sym(sym):
+        return  # native classes have their own initializers
     fun = lambda v: '___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')'
     assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
 
@@ -113,16 +118,36 @@ def memname(sym):
     return sym.name.split('.')[-1]
 
 def ctype(sort,classname=None):
-    if il.is_uninterpreted_sort(sort) and sort.name in im.module.sort_destructors:
-        return ((classname+'::') if classname != None else '') + varname(sort.name)
+    if il.is_uninterpreted_sort(sort):
+        if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
+            return ((classname+'::') if classname != None else '') + varname(sort.name)
+    return 'bool' if sort.is_relational() else 'int'
+    
+def ctypefull(sort,classname=None):
+    if il.is_uninterpreted_sort(sort):
+        if sort.name in im.module.native_types:
+            return native_type_full(im.module.native_types[sort.name])
+        if sort.name in im.module.sort_destructors:
+            return ((classname+'::') if classname != None else '') + varname(sort.name)
     return 'bool' if sort.is_relational() else 'int'
 
+def native_type_full(self):
+    return self.args[0].inst(native_reference,self.args[1:])    
+
 def emit_cpp_sorts(header):
-    for name in sorted(im.module.sort_destructors):
-        header.append("    struct " + varname(name) + " {\n");
-        for destr in im.module.sort_destructors[name]:
-            declare_symbol(header,destr,skip_params=1)
-        header.append("    };\n");
+    print 'emit_cpp_sorts:'
+    print im.module.sort_order
+    print im.module.native_types
+    for name in im.module.sort_order:
+        if name in im.module.native_types:
+            nt = native_type_full(im.module.native_types[name])
+            iu.dbg('nt')
+            header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
+        elif name in im.module.sort_destructors:
+            header.append("    struct " + varname(name) + " {\n");
+            for destr in im.module.sort_destructors[name]:
+                declare_symbol(header,destr,skip_params=1)
+            header.append("    };\n");
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
@@ -540,8 +565,9 @@ def emit_some_action(header,impl,name,action,classname):
     if len(action.formal_returns) == 1:
         indent(impl)
         p = action.formal_returns[0]
-        impl.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
-        mk_nondet_sym(impl,p,p.name,0)
+        if p not in action.formal_params:
+            impl.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
+            mk_nondet_sym(impl,p,p.name,0)
     with ivy_ast.ASTContext(action):
         action.emit(impl)
     if len(action.formal_returns) == 1:
@@ -778,6 +804,30 @@ public:
     virtual void timeout() = 0;
 };
 void install_timer(timer *);
+struct ivy_value {
+    std::string atom;
+    std::vector<ivy_value> fields;
+    bool is_member() const {
+        return atom.size() && fields.size();
+    }
+};
+struct out_of_bounds {
+    int idx;
+    out_of_bounds(int _idx) : idx(_idx) {}
+};
+
+template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+
+template <>
+int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx);
+    return res;
+}
+
+
+
 """)
 
     once_memo = set()
@@ -916,7 +966,7 @@ void install_timer(timer *);
             sort = im.module.sig.sorts[sort_name]
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
-            open_scope(impl,line=cfsname + ' ' + csname + '_arg(std::vector<ivy_value> &args, unsigned idx, int bound)')
+            open_scope(impl,line=cfsname + ' _arg<' + csname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
             code_line(impl,cfsname + ' res')
             code_line(impl,'ivy_value &arg = args[idx]')
             code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
@@ -938,8 +988,8 @@ void install_timer(timer *);
                     open_loop(impl,[v])
                     code_line(impl,'std::vector<ivy_value> tmp_args(1)')
                     code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
-                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = '+ctype(sym.sort.rng)
-                          +'_arg(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng)
+                          +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
                 for v in vs:
                     close_loop(impl,[v])
                     close_scope(impl)
@@ -952,7 +1002,7 @@ void install_timer(timer *);
         for actname in sorted(im.module.public_actions):
             username = actname[4:] if actname.startswith("ext:") else actname
             action = im.module.actions[actname]
-            getargs = ','.join('{}_arg(args,{},{})'.format(ctype(x.sort),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
+            getargs = ','.join('_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
             thing = "ivy.methodname(getargs)"
             if action.formal_returns:
                 thing = "std::cout << " + thing + " << std::endl"
@@ -979,7 +1029,7 @@ void install_timer(timer *);
             impl.append('    try {\n')
             impl.append('        int pos = 0;\n')
             impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
-            impl.append('        p__'+varname(s)+' =  {}_arg(arg_values,{},{});\n'
+            impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
                         .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
             impl.append('    }\n    catch(out_of_bounds &) {\n')
             impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
@@ -1077,7 +1127,7 @@ def emit_one_initial_state(header):
         if sym in im.module.params:
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
-        elif sym not in is_derived:
+        elif sym not in is_derived and not is_native_sym(sym):
             assign_symbol_from_model(header,sym,m)
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)
@@ -1647,11 +1697,6 @@ void skip_white(const std::string& str, int &pos){
 struct syntax_error {
 };
 
-struct out_of_bounds {
-    int idx;
-    out_of_bounds(int _idx) : idx(_idx) {}
-};
-
 std::string get_ident(const std::string& str, int &pos) {
     std::string res = "";
     while (pos < str.size() && is_ident(str[pos])) {
@@ -1662,14 +1707,6 @@ std::string get_ident(const std::string& str, int &pos) {
         throw syntax_error();
     return res;
 }
-
-struct ivy_value {
-    std::string atom;
-    std::vector<ivy_value> fields;
-    bool is_member() const {
-        return atom.size() && fields.size();
-    }
-};
 
 ivy_value parse_value(const std::string& cmd, int &pos) {
     ivy_value res;
@@ -1749,14 +1786,8 @@ void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action
         throw bad_arity(action,num);
 }
 
-int int_arg(std::vector<ivy_value> &args, unsigned idx, int bound) {
-    int res = atoi(args[idx].atom.c_str());
-    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
-        throw out_of_bounds(idx);
-    return res;
-}
-
-bool bool_arg(std::vector<ivy_value> &args, unsigned idx, int bound) {
+template <>
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
         throw out_of_bounds(idx);
     return args[idx].atom == "true";

@@ -437,6 +437,7 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.relations[sym] = len(lhs.args)
             self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
             self.domain.updates.append(DerivedUpdate(df))
+            self.domain.symbol_order.append(sym)
         except ValueError:
             raise IvyError(df,"definition of derived relation must be a cube")
     def definition(self,ldf):
@@ -445,6 +446,7 @@ class IvyDomainSetup(IvyDeclInterp):
         df = compile_defn(df)
         self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
         self.domain.updates.append(DerivedUpdate(df))
+        self.domain.symbol_order.append(sym)
     def progress(self,df):
         rel = df.args[0]
         with ASTContext(rel):
@@ -466,9 +468,11 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.updates.append(upd.compile())
     def type(self,typedef):
 #        print "typedef {!r}".format(typedef)
+        self.domain.sort_order.append(typedef.name)
         if isinstance(typedef,ivy_ast.GhostTypeDef):
             self.domain.ghost_sorts.add(typedef.name)
         if isinstance(typedef.value,ivy_ast.StructSort):
+            self.domain.sort_order.append(typedef.name)
             sort = ivy_logic.ConstantSort(typedef.name)
             self.domain.sig.sorts[typedef.name] = sort
             for a in typedef.value.args:
@@ -486,10 +490,18 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.sig.symbols[c] = sym
             self.domain.sig.constructors.add(sym)
     def interpret(self,thing):
-        lhs,rhs = (a.rep for a in thing.formula.args)
-        self.domain.interps[lhs].append(thing)
         sig = self.domain.sig
         interp = sig.interp
+        if isinstance(thing.formula.args[1],ivy_ast.NativeType):
+            lhs = thing.formula.args[0].rep
+            if lhs in interp or lhs in self.domain.native_types :
+                raise IvyError(thing,"{} is already interpreted".format(lhs))
+            self.domain.native_types[lhs] = thing.formula.args[1]
+            return
+        lhs,rhs = (a.rep for a in thing.formula.args)
+        self.domain.interps[lhs].append(thing)
+        if lhs in self.domain.native_types :
+            raise IvyError(thing,"{} is already interpreted".format(lhs))
         if lhs in interp:
             if interp[lhs] != rhs:
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
