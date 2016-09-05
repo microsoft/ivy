@@ -85,11 +85,14 @@ def stack_lookup(name):
     return None
 
 
-def stack_action_lookup(name):
+def stack_action_lookup(name,params=0):
     for ivy in reversed(stack):
+        if ivy.is_module:
+            break
+        params += len(ivy.params)
         if name in ivy.actions:
-            return ivy.actions[name]
-    return None
+            return ivy.actions[name],params
+    return None,0
 
 def inst_mod(ivy,module,pref,subst,vsubst):
     for decl in module.decls:
@@ -146,6 +149,8 @@ class Ivy(object):
         self.macros = dict()
         self.actions = dict()
         self.included = set()
+        self.is_module = False
+        self.params = []
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
@@ -229,22 +234,51 @@ def p_top_conjecture_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_modulestart(p):
+    'modulestart :'
+    stack[-1].is_module=True
+    p[0] = None
+ 
+def p_moduleend(p):
+    'moduleend :'
+    stack[-1].is_module=False
+    p[0] = None
+   
 def p_top_module_atom_eq_lcb_top_rcb(p):
-    'top : top MODULE atom EQ LCB top RCB'
+    'top : top MODULE modulestart atom EQ LCB top RCB moduleend'
     p[0] = p[1]
-    d = Definition(app_to_atom(p[3]),p[6])
+    d = Definition(app_to_atom(p[4]),p[7])
     p[0].declare(ModuleDecl(d))
     p[0].modules[d.defines()] = d
     stack.pop()
 
-def p_top_object_symbol_eq_lcb_top_rcb(p):
-    'top : top OBJECT SYMBOL optargs EQ LCB top RCB'
+def p_optdotdotdot(p):
+    'optdotdotdot : '
+    p[0] = False
+
+def p_optdotdotdot_dotdotdot(p):
+    'optdotdotdot : DOTDOTDOT'
+    p[0] = True
+
+def p_objectargs_optargs(p):
+    'objectargs : optargs'
     p[0] = p[1]
-    module = p[7]
+    stack[-1].params = p[0]
+
+def p_objectend(p):
+    'objectend :'
+    stack[-1].is_object=False
+    p[0] = None
+
+def p_top_object_symbol_eq_lcb_top_rcb(p):
+    'top : top OBJECT SYMBOL objectargs EQ LCB optdotdotdot top RCB objectend'
+    p[0] = p[1]
+    module = p[8]
     prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
     pref = Atom(p[3],prefargs)
 #    p[0].define((pref.rep,get_lineno(p,2)))
-    p[0].declare(ObjectDecl(pref))
+    if not p[7]:
+        p[0].declare(ObjectDecl(pref))
     vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
     inst_mod(p[0],module,pref,{},vsubst)
     # for decl in module.decls:
@@ -375,6 +409,30 @@ def p_tatom_lp_symbol_relop_symbol_rp(p):
     'tatom : LPAREN var relop var RPAREN'
     p[0] = Atom(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
+
+def p_fun_defnlhs_colon_atype(p):
+    'fun : defnlhs COLON atype'
+    p[1].sort = p[3]
+    p[0] = ConstantDecl(p[1])
+
+def p_fun_defn(p):
+    'fun : defn'
+    p[0] = DerivedDecl(LabeledFormula(None,p[1]))
+
+def p_funs_fun(p):
+    'funs : fun'
+    p[0] = [p[1]]
+
+def p_funs_funs_comma_fun(p):
+    'funs : funs COMMA fun'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_top_function_tapp_colon_atype(p):
+    'top : top FUNCTION funs'
+    p[0] = p[1]
+    for d in p[3]:
+        p[0].declare(d)
 
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
@@ -693,23 +751,21 @@ def handle_mixin(kind,mixer,mixee,ivy):
     ivy.declare(d)
 
 
-# def handle_before_after(kind,atom,action,ivy):
-#     mixee = stack_action_lookup(atom.relname)
-#     if not mixee:
-#         report_error(IvyError(atom,"no matching action for {}".format(atom.relname)))
-#     elif atom.args:  # no args -- we get them from the matching action
-#         report_error(IvyError(atom,"syntax error"))
-#     else:
-#         formals,returns = mixee.formals()
-#         mixer = atom.suffix('.'+kind)
-#         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=formals,returns=returns)))
-#         handle_mixin(kind,mixer,mixee.args[0],ivy)
+def infer_action_params(actname,formals,returns):
+    mixee,num_params = stack_action_lookup(actname)
+    if not mixee:
+        return formals,returns
+    mformals,mreturns = mixee.formals()
+    formals.extend(mformals[num_params+len(formals):])
+    returns.extend(mreturns[len(returns):])
+    return formals,returns
 
 def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
         mixer = atom.suffix('.'+kind)
+        optargs,optreturns = infer_action_params(atom.rep,optargs,optreturns)
         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=optargs,returns=optreturns)))
         handle_mixin(kind,mixer,atom,ivy)
     
@@ -811,6 +867,13 @@ if not (iu.get_numeric_version() <= [1,1]):
     #     d.lineno = get_lineno(p,2)
     #     p[0] = p[1]
     #     p[0].declare(d)
+
+def p_top_aliase_symbol_eq_callatom(p):
+    'top : top ALIAS SYMBOL EQ callatom'
+    d = AliasDecl(Definition(Atom(p[3]),p[5]))
+    d.lineno = get_lineno(p,3)
+    p[0] = p[1]
+    p[0].declare(d)
 
 def p_top_state_symbol_eq_state_expr(p):
     'top : top STATE SYMBOL EQ state_expr'
@@ -1241,6 +1304,12 @@ def p_defn_atom_fmla(p):
     p[0] = Definition(app_to_atom(p[1]),p[3])
     p[0].lineno = get_lineno(p,2)
 
+def p_defn_defnlhs_eq_nativequote(p):
+    'defn : defnlhs EQ NATIVEQUOTE'
+    text,bqs = parse_nativequote(p,3)
+    p[0] = Definition(app_to_atom(p[1]),NativeExpr(*([text] + bqs)))
+    p[0].lineno = get_lineno(p,2)
+
 def p_optin(p):
     'optin : '
     p[0] = []
@@ -1375,6 +1444,7 @@ def p_error(token):
 import os
 tabdir = os.path.dirname(os.path.abspath(__file__))
 parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir,debug=None)
+#parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',outputdir=tabdir,debug=None)
 #parser = yacc.yacc(start='top',tabmodule='ivy_parsetab')
 # formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 

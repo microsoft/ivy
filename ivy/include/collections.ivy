@@ -31,7 +31,7 @@ module array(domain,range) = {
     action size(a:t) returns (s:domain)
     
     # change the size of the array
-    action resize(a:t,s:domain) returns (a:t)
+    action resize(a:t,s:domain,v:range) returns (a:t)
 
     ########################################
     # Representation
@@ -53,6 +53,9 @@ module array(domain,range) = {
 	before create {
 	    assert 0 <= s
 	}
+	after create {
+	    assert end(a) = s & value(a,X) = y
+	}
         before set {
 	    assert 0 <= x & x < end(a)
 	}	       	 
@@ -70,13 +73,18 @@ module array(domain,range) = {
 	}
 	after resize {
 	    assert end(a) = s;
-	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X)
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert end(old a) <= X & X < s -> value(a,X) = v
 	}
     }
 
     object impl = {
 
 	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
 
 	implement create {
 	    <<<
@@ -106,6 +114,15 @@ module array(domain,range) = {
 	    >>>
 	}
 
+	implement resize {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
 	<<< impl
 	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
 	        s << '[';
@@ -116,7 +133,6 @@ module array(domain,range) = {
 		}
 	        s << ']';
 	    }
-
 
 	    template <>
 	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {

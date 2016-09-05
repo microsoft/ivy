@@ -1,0 +1,14 @@
+#lang ivy1.6
+
+action a(x:bool) returns (x:bool) = {
+    x := ~x;
+    assert ~(x & old x)
+}
+
+action b(y:bool) returns (z:bool) = {
+    z := a(y);
+    assert ~(y & z)
+}
+
+export b
+

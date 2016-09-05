@@ -1,0 +1,55 @@
+#lang ivy1.6
+
+include collections
+
+module set(index,elem) = {
+
+    instance arr:array(index.t,elem)
+
+    alias t = arr.t
+
+    function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
+
+    action emptyset returns(s:t)
+    action add(s:t,e:elem) returns (s:t)
+    
+    object spec = {
+	after emptyset {
+	    assert ~contains(s,X)
+	}
+	after add {
+	    assert contains(s,X) <-> (contains(old s,X) | X = e)
+	}
+    }
+
+    object impl = {
+	implement emptyset {
+	    s := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                s := arr.resize(s,index.next(arr.end(s)),e)
+	    }
+        }
+    }
+}
+
+include order
+
+instance index : unbounded_sequence
+type elem
+
+instance s : set(index,elem)
+
+object impl = {
+    interpret index.t -> int
+}
+
+export s.emptyset
+export s.add
+
+
+isolate iso_s = s,s.impl with s,index
+isolate iso_index = index,index.impl with impl
+extract iso_impl = s,index,impl

@@ -188,6 +188,18 @@ def join(s1,s2,relations,op):
     p = or_clauses(p1,p2)
     return (u,c,p)
 
+# Bind the "old" symbols to their current values in an action
+# In practice, this just means dropping the "old" prefix.
+
+def bind_olds_clauses(clauses):
+    subst = dict((s,old_of(s)) for s in used_symbols_clauses(clauses) if is_old(s))
+    return rename_clauses(clauses,subst)
+    
+def bind_olds_action(action):
+    u,c,p = action
+    res = (u,bind_olds_clauses(c),bind_olds_clauses(p))
+    return res
+
 class CounterExample(object):
     def __init__(self,clauses):
         self.clauses = clauses

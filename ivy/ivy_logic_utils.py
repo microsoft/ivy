@@ -1104,7 +1104,6 @@ def unfold_definitions_clauses(clauses):
         insts = instantiator(gts)
         if insts.fmlas:
             clauses = and_clauses(clauses,insts)
-            iu.dbg('insts')
     return clauses
 
 def dual_clauses(clauses, skolemizer=None):

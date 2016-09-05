@@ -63,6 +63,7 @@ class Module(object):
         self.native_types = {} # map from sort names to ivy_ast.NativeType
         self.sort_order = [] # list of sorts names in order declared
         self.symbol_order = [] # list of symbols in order declared
+        self.aliases = {} # map from name to name
 
         self.sig = il.sig.copy() # capture the current signature
 

@@ -1012,14 +1012,13 @@ def check_isolate_completeness(mod = None):
                     raise IvyError(m,'action {} not defined'.format(foo))
             implementation_map[m.mixee()] = m.mixer()
     
-
-
     for iso_name,isolate in mod.isolates.iteritems():
         verified = set(a.relname for a in isolate.verified())
         present = set(a.relname for a in isolate.present())
         present.update(verified)
         verified_actions = set(a for a in mod.actions if startswith_eq_some(a,verified,mod))
         present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
+
         for a in verified_actions:
             if a not in delegates:
                 checked.add(a)
@@ -1049,6 +1048,8 @@ def check_isolate_completeness(mod = None):
                 mixed = mixin.args[0].relname
                 if not has_assertions(mod,mixed):
                     continue
+                if not isinstance(mixin,ivy_ast.MixinBeforeDef) and startswith_eq_some(callee,trusted,mod):
+                    continue
                 verifier = actname if isinstance(mixin,ivy_ast.MixinBeforeDef) else callee
                 if verifier not in checked_context[mixed]:
                         missing.append((actname,mixin,None))
@@ -1061,8 +1062,9 @@ def check_isolate_completeness(mod = None):
         for mixin in mod.mixins[callee]:
             mixed = mixin.args[0].relname
             if has_assertions(mod,mixed) and not isinstance(mixin,ivy_ast.MixinBeforeDef):
-                missing.append(("external",mixin,None))
-        
+                if callee not in checked_context[mixed]:
+                    missing.append(("external",mixin,None))
+                
     if missing:
         for x,y,z in missing:
             mixer = y.mixer() if isinstance(y,ivy_ast.MixinDef) else y

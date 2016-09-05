@@ -31,13 +31,14 @@ tokens = (
    'GT',
    'MINUS',
    'DOTS',
+   'DOTDOTDOT',
    'NATIVEQUOTE',
 )
 
 reserved = all_reserved = {
    'relation' : 'RELATION',
    'individual' : 'INDIV',
-   'function' : 'INDIV',
+   'function' : 'FUNCTION',
    'axiom' : 'AXIOM',
    'conjecture' : 'CONJECTURE',
    'schema' : 'SCHEMA',
@@ -107,6 +108,7 @@ reserved = all_reserved = {
    'struct' : 'STRUCT',
    'definition' : 'DEFINITION',
    'ghost' : 'GHOST',
+   'alias' : 'ALIAS',
 }
 
 tokens += tuple(all_reserved.values())
@@ -136,6 +138,7 @@ t_ARROW = r'\->'
 t_IFF = r'\<->'
 t_COLON = r':'
 t_DOTS = r'\.\.'
+t_DOTDOTDOT = r'\.\.\.'
 
 t_ignore  = ' \t'
 t_ignore_COMMENT = r'\#.*'
@@ -196,7 +199,7 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
-                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost',]:
+                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias',]:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

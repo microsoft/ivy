@@ -16,13 +16,12 @@ action a(z:foo,y:foo) = {
   x := y
 }
 
-module m(me) = {
+object m(me:foo) = {
     after a {
        assert x = y | x = me
     }
 }
 
-instance i(X:foo) : m(X)
 
 export a
 """

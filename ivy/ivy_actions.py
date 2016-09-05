@@ -9,7 +9,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
     used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const, used_variables_ast, unfold_definitions_clauses
 from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
-    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state
+    subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state, bind_olds_action, old
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming, dbg
 import ivy_ast
 from ivy_ast import AST, compose_atoms, MixinAfterDef
@@ -175,7 +175,7 @@ class Action(AST):
         res = (updated,clauses,pre)
         return res
     def update(self,domain,in_scope):
-        return self.hide_formals(self.int_update(domain,in_scope))
+        return self.hide_formals(bind_olds_action(self.int_update(domain,in_scope)))
     def hide_formals(self,update):
         to_hide = []
         if hasattr(self,'formal_params'):
@@ -772,6 +772,10 @@ class NativeAction(Action):
         
 call_action_ctr = 0
 
+class BindOldsAction(Action):
+    def int_update(self,domain,pvars):
+        return bind_olds_action(self.args[0].int_update(domain,pvars))
+
 class CallAction(Action):
     """ Inlines a named state or action """
     def __init__(self,*args):
@@ -812,6 +816,8 @@ class CallAction(Action):
 #        subst = dict(zip(v.formal_params+v.formal_returns, formal_params+formal_returns))
         vocab = list(symbols_asts(actual_params+actual_returns))
         subst = distinct_obj_renaming(v.formal_params+v.formal_returns,vocab)
+        for s,t in list(subst.iteritems()):
+            subst[old(s)] = old(t)
 #        print "apply_actuals: subst: {}".format(subst)
         formal_params = [subst[s] for s in  v.formal_params] # rename to prevent capture
         formal_returns = [subst[s] for s in v.formal_returns] # rename to prevent capture
@@ -831,7 +837,7 @@ class CallAction(Action):
                 raise IvyError(self,"value for output parameter {} has wrong sort".format(x))
         input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
         output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]
-        res = Sequence(*(input_asgns+[v]+output_asgns))
+        res = Sequence(*(input_asgns+[BindOldsAction(v)]+output_asgns))
         res = res.int_update(domain,pvars)
 #        print "call update: {}".format(res)
         res = hide(formal_params+formal_returns,res)

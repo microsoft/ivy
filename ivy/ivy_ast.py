@@ -689,6 +689,13 @@ class PrivateDef(AST):
     def __repr__(self):
         return 'private {}'.format(self.args[0])
 
+class AliasDecl(Decl):
+    def name(self):
+        return 'alias'
+    def defines(self):
+        return [(c.defines(),lineno(c)) for c in self.args]
+    
+
 class DelegateDecl(Decl):    
     def name(self):
         return 'delegate'
@@ -727,6 +734,16 @@ class NativeType(AST):
     """ Quote native type """
     def __str__(self):
         return ivy_ast.native_to_string(self.args)
+
+class NativeExpr(AST):
+    """ Quote native expr """
+    def __str__(self):
+        return native_to_string(self.args)
+    def clone(self,args):
+        clone_res = AST.clone(self,args)
+        if hasattr(self,'sort'):
+            clone_res.sort = self.sort
+        return clone_res
 
 def native_to_string(args):
     res = '<<<'

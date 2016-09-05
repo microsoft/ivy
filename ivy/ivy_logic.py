@@ -635,6 +635,8 @@ def TopFunctionSort(arity):
     res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
     return res
     
+TopS = lg.TopS
+
 def apply(symbol,args):
     return App(symbol,*args)
 

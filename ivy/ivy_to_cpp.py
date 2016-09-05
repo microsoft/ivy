@@ -134,14 +134,12 @@ def ctypefull(sort,classname=None):
 def native_type_full(self):
     return self.args[0].inst(native_reference,self.args[1:])    
 
+native_expr_full = native_type_full
+
 def emit_cpp_sorts(header):
-    print 'emit_cpp_sorts:'
-    print im.module.sort_order
-    print im.module.native_types
     for name in im.module.sort_order:
         if name in im.module.native_types:
             nt = native_type_full(im.module.native_types[name])
-            iu.dbg('nt')
             header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
         elif name in im.module.sort_destructors:
             header.append("    struct " + varname(name) + " {\n");
@@ -1145,6 +1143,11 @@ def emit_constant(self,header,code):
 il.Symbol.emit = emit_constant
 il.Variable.emit = emit_constant
 
+def emit_native_expr(self,header,code):
+    code.append(native_expr_full(self))
+
+ivy_ast.NativeExpr.emit = emit_native_expr
+
 def parse_int_params(name):
     spl = name.split('[')
     name,things = spl[0],spl[1:]
@@ -1244,6 +1247,57 @@ def new_temp(header,sort=None):
     header.append(('int' if sort == None else ctype(sort)) + ' ' + name + ';\n')
     return name
 
+
+def get_bound_exprs(v0,variables,body,exists,res):
+    if isinstance(body,il.Not):
+        return get_bound_exprs(v0,variables,body,not exists)
+    if il.is_app(body) and body.rep.name in ['<','<=','>','>=']:
+        res.append((body,not exists))
+    if isinstance(body,il.Implies) and not exists:
+        get_bound_exprs(v0,variables,body.args[0],not exists,res)
+        get_bound_exprs(v0,variables,body.args[1],exists,res)
+        return
+    if isinstance(body,il.Or) and not exists:
+        for arg in body.args:
+            get_bound_exprs(v0,variables,arg,exists,res)
+        return
+    if isinstance(body,il.And) and exists:
+        for arg in body.args:
+            get_bound_exprs(v0,variables,arg,exists,res)
+        return
+    
+def sort_has_negative_values(sort):
+    return sort.name in il.sig.interp and il.sig.interp[sort.name] == 'int'
+
+def get_bounds(header,v0,variables,body,exists):
+    bes = []
+    get_bound_exprs(v0,variables,body,exists,bes)
+    los = []
+    his = []
+    for be in bes:
+        expr,neg = be
+        op = expr.rep.name
+        strict = op in ['<','>']
+        args = expr.args if op in ['<','<='] else [expr.args[1],expr.args[0]]
+        if neg:
+            strict = not strict
+            args = [args[1],args[0]]
+        if args[0] == v0 and args[1] != v0 and args[1] not in variables:
+            e = code_eval(header,args[1])
+            his.append('('+e+')-1' if not strict else e)
+        if args[1] == v0 and args[0] != v0 and args[0] not in variables:
+            e = code_eval(header,args[0])
+            los.append('('+e+')+1' if strict else e)
+    if not sort_has_negative_values(v0.sort):
+        los.append("0")
+    if sort_card(v0.sort) != None:
+        his.append(csortcard(v0.sort))
+    if not los:
+        raise iu.IvyError(None,'cannot find a lower bound for {}'.format(v0))
+    if not his:
+        raise iu.IvyError(None,'cannot find an upper bound for {}'.format(v0))
+    return los[0],his[0]
+
 def emit_quant(variables,body,header,code,exists=False):
     global indent_level
     if len(variables) == 0:
@@ -1257,7 +1311,8 @@ def emit_quant(variables,body,header,code,exists=False):
     indent(header)
     header.append(res + ' = ' + str(0 if exists else 1) + ';\n')
     indent(header)
-    header.append('for (int ' + idx + ' = 0; ' + idx + ' < ' + str(sort_card(v0.sort)) + '; ' + idx + '++) {\n')
+    lo,hi = get_bounds(header,v0,variables,body,exists)
+    header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
     indent_level += 1
     subcode = []
     emit_quant(variables,body,header,subcode,exists)

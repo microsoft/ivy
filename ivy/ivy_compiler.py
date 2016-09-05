@@ -40,7 +40,7 @@ from ivy_ast import ASTContext
 # ast compilation
 
 
-ivy_ast.Variable.get_sort = lambda self: ivy_logic.find_sort(self.sort.rep)
+ivy_ast.Variable.get_sort = lambda self: ivy_logic.find_sort(resolve_alias(self.sort.rep))
 
 def thing(self):
     with ASTContext(self):
@@ -122,7 +122,7 @@ def compile_app(self):
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
             # TODO: right now we can't do anything with multiple returns
-            sorts = [find_sort(r.sort) for r in returns]
+            sorts = [cmpl_sort(r.sort) for r in returns]
             ress = []
             for sort in sorts:
                 res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
@@ -130,21 +130,30 @@ def compile_app(self):
                 ress.append(res())
             expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
             return ivy_ast.Tuple(*ress)
-        sort = find_sort(returns[0].sort)
+        sort = cmpl_sort(returns[0].sort)
         res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
         expr_context.local_syms.append(res)
         with ASTContext(self):
             if len(params) != len(args):
                 raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
-            args = [sort_infer(a,find_sort(p.sort)) for a,p in zip(args,params)]
+            args = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
         return res()
     return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
     
+def cmpl_sort(sortname):
+    return ivy_logic.find_sort(resolve_alias(sortname))
+
+def cmpl_native_expr(self):
+    res = self.clone([a.compile() for a in self.args])
+    res.sort = ivy_logic.TopS
+    return res
+
+ivy_ast.NativeExpr.cmpl = cmpl_native_expr
 
 ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
-ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,ivy_logic.find_sort(self.sort) if isinstance(self.sort,str) else self.sort)
+ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort)
 
 ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name)
 
@@ -206,7 +215,7 @@ ivy_ast.AST.compile_with_sort_inference = sortify_with_inference
 
 def compile_const(v,sig):
     with ASTContext(v):
-      rng = find_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
+      rng = cmpl_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
       return add_symbol(v.rep,get_function_sort(sig,v.args,rng))
     
 
@@ -389,9 +398,20 @@ def compile_defn(df):
         return df
     
     
+def resolve_alias(name): 
+    if name in im.module.aliases:
+        return im.module.aliases[name]
+    parts = name.rsplit(iu.ivy_compose_character,1)
+    if len(parts) == 2:
+        return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
+    return name
+
+
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
+    def alias(self,dfn):
+        self.domain.aliases[dfn.defines()] = resolve_alias(dfn.args[1].rep)
     def object(self,atom):
         self.domain.add_object(atom.rep)
     def axiom(self,ax):
@@ -446,7 +466,7 @@ class IvyDomainSetup(IvyDeclInterp):
         df = compile_defn(df)
         self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
         self.domain.updates.append(DerivedUpdate(df))
-        self.domain.symbol_order.append(sym)
+        self.domain.symbol_order.append(df.args[0].rep)
     def progress(self,df):
         rel = df.args[0]
         with ASTContext(rel):
@@ -649,7 +669,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         check_instantiations(mod,decls)
         for name in decls.defined:
             mod.add_to_hierarchy(name)
-        infer_parameters(decls.decls)
+#        infer_parameters(decls.decls)
         with TopContext(collect_actions(decls.decls)):
             IvyDomainSetup(mod)(decls)
             IvyConjectureSetup(mod)(decls)
@@ -720,9 +740,9 @@ def import_module(name):
     try: 
         f = open(fname,'r')
     except Exception:
-        inc = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
+        fname = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
         try:
-            f = open(inc,'r')
+            f = open(fname,'r')
         except Exception:
             raise IvyError(None,"module {} not found in current directory or module path".format(name))
     with iu.SourceFile(fname):

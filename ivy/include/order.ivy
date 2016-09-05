@@ -14,7 +14,6 @@ module totally_ordered_with_zero(t) = {
 module unbounded_sequence = {
     
     type t
-    instance props : totally_ordered_with_zero(t)
 
     # returns the least key greater than x
     action next(x:t) returns (y:t)
@@ -23,14 +22,26 @@ module unbounded_sequence = {
     action prev(x:t) returns (y:t)
 
     object spec = {
+
+	instantiate totally_ordered(t)
+
 	after next {
 	    assert x < y & (x < Y -> y <= Y)
 	}
 	before prev {
-	    assert exists Z. Z < x
+	    assert 0 < x
 	}
 	after prev {
 	    assert y < x & (Y < x -> Y <= y)
+	}
+    }
+
+    object impl = {
+	implement next {
+	    y := x + 1
+	}
+	implement prev {
+	    y := x - 1
 	}
     }
 }
