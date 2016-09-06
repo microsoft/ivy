@@ -509,13 +509,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     verified = set(a.relname for a in (isolate.verified()+tuple(extra_with)))
     present = set(a.relname for a in isolate.present())
     present.update(verified)
-    if not interpret_all_sorts:
-        for type_name in list(ivy_logic.sig.interp):
-            if not (type_name in present or any(startswith_eq_some(itp.label.rep,present,mod) for itp in mod.interps[type_name] if itp.label)):
-                del ivy_logic.sig.interp[type_name]
-    delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
-    delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
-    derived = set(ldf.formula.args[0].func.name for ldf in mod.definitions)
+
     for name in present:
         if (name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
@@ -524,6 +518,19 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
             and name not in mod.actions
             and name not in ivy_logic.sig.symbols):
             raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
+
+    impls = set(a.relname + iu.ivy_compose_character + 'impl' for a in isolate.verified())
+
+    verified.update(impls)
+    present.update(impls)
+
+    if not interpret_all_sorts:
+        for type_name in list(ivy_logic.sig.interp):
+            if not (type_name in present or any(startswith_eq_some(itp.label.rep,present,mod) for itp in mod.interps[type_name] if itp.label)):
+                del ivy_logic.sig.interp[type_name]
+    delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
+    delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
+    derived = set(ldf.formula.args[0].func.name for ldf in mod.definitions)
     
     impl_mixins = defaultdict(list)
     # delegate all the stub actions to their implementations
@@ -964,7 +971,7 @@ def create_isolate(iso,mod = None,**kwargs):
                 if a not in cone and not a.startswith('ext:') and a not in mixers:
                     ea = 'ext:' + a
                     if ea in mod.actions and ea not in cone:
-                        if ia.has_code(mod.actions[a]):
+                        if ia.has_code(mod.actions[a]) and not mod.actions[a].lineno.filename.startswith('/'):
                             iu.warn(mod.actions[a],"action {} is never called".format(a))
 
         fix_initializers(mod,after_inits)

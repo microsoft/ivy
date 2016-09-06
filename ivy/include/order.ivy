@@ -21,22 +21,33 @@ module unbounded_sequence = {
     # returns the greatest key less than x
     action prev(x:t) returns (y:t)
 
+    relation succ(X:t,Y:t)
+
     object spec = {
+
+	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
 	instantiate totally_ordered(t)
 
 	after next {
-	    assert x < y & (x < Y -> y <= Y)
+	    assert x < y & (x < Y -> y <= Y);
+	    assert succ(x,y)
 	}
 	before prev {
 	    assert 0 < x
 	}
 	after prev {
-	    assert y < x & (Y < x -> Y <= y)
+	    assert y < x & (Y < x -> Y <= y);
+	    assert succ(y,x)
 	}
     }
 
     object impl = {
+
+	interpret index.t -> int
+
+	definition succ(X,Y) = (Y = X + 1)
+
 	implement next {
 	    y := x + 1
 	}

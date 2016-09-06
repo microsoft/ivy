@@ -40,6 +40,7 @@ def check_properties():
             exit(1)
         raise iu.IvyError(None,"Some properties failed.")
     im.module.labeled_axioms.extend(im.module.labeled_props)
+    im.module.update_theory()
 
 
 def check_conjectures(kind,msg,ag,state):

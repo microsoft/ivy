@@ -117,11 +117,7 @@ class Module(object):
             res.append(clauses)
         return res
 
-    def theory_context(self):
-        """ Set up to instiate the non-epr axioms """
-        """ Return a set of clauses which represent the background theory
-        restricted to the given symbols (should be like the result of used_symbols).
-        """
+    def update_theory(self):
         theory = list(self.get_axioms())
         # axioms of the derived relations TODO: used only the
         # referenced ones, but we need to know abstract domain for
@@ -138,6 +134,16 @@ class Module(object):
                 if il.is_epr(ea):
                     theory.append(ea)
         self.theory = lu.Clauses(theory)
+        
+        iu.dbg('self.theory')
+
+
+    def theory_context(self):
+        """ Set up to instiate the non-epr axioms """
+        """ Return a set of clauses which represent the background theory
+        restricted to the given symbols (should be like the result of used_symbols).
+        """
+        self.update_theory()
 
         non_epr = {}
         for ldf in self.definitions:

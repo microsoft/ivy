@@ -715,7 +715,14 @@ def csortcard(s):
     card = sort_card(s)
     return str(card) if card else "0"
 
+def check_member_names(classname):
+    names = map(varname,(list(il.sig.symbols) + list(il.sig.sorts) + list(im.module.actions)))
+    if classname in names:
+        raise iu.IvyError(None,'Cannot create C++ class {} with member {}.\nUse command line option classname=... to change the class name.'
+                          .format(classname,classname))
+
 def module_to_cpp_class(classname):
+    check_member_names(classname)
     global is_derived
     is_derived = set()
     for ldf in im.module.definitions:
@@ -2227,6 +2234,8 @@ public:
 
 
 target = iu.EnumeratedParameter("target",["impl","gen","repl"],"gen")
+opt_classname = iu.Parameter("classname","")
+
 
 def main():
     ia.set_determinize(True)
@@ -2240,7 +2249,7 @@ def main():
     with im.Module():
         ivy.ivy_init()
 
-        classname = im.module.name
+        classname = opt_classname.get() or im.module.name
         with iu.ErrorPrinter():
             header,impl = module_to_cpp_class(classname)
 #        print header

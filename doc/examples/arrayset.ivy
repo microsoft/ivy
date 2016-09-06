@@ -42,14 +42,10 @@ type elem
 
 instance s : set(index,elem)
 
-object impl = {
-    interpret index.t -> int
-}
-
 export s.emptyset
 export s.add
 
 
-isolate iso_s = s,s.impl with s,index
-isolate iso_index = index,index.impl with impl
-extract iso_impl = s,index,impl
+isolate iso_s = s with index
+isolate iso_index = index
+extract iso_impl = s,index
