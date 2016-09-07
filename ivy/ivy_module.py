@@ -135,7 +135,6 @@ class Module(object):
                     theory.append(ea)
         self.theory = lu.Clauses(theory)
         
-        iu.dbg('self.theory')
 
 
     def theory_context(self):

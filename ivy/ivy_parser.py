@@ -804,17 +804,25 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
         handle_before_after("implement",atom,p[7],p[0],p[4],p[5])
-    def p_top_isolate_callatom_eq_callatoms(p):
-        'top : top ISOLATE SYMBOL optargs EQ callatoms'
-        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6])))
+    def p_opttrusted(p):
+        'opttrusted :'
+        p[0] = False
+    def p_opttrusted_trusted(p):
+        'opttrusted : TRUSTED'
+        p[0] = True
+    def p_top_opttrusted_isolate_callatom_eq_callatoms(p):
+        'top : top opttrusted ISOLATE SYMBOL optargs EQ callatoms'
+        ty = TrustedIsolateDef if p[2] else IsolateDef
+        d = IsolateDecl(ty(*([Atom(p[4],p[5])] + p[7])))
         d.args[0].with_args = 0
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
-    def p_top_isolate_callatom_eq_callatoms_with_callatoms(p):
-        'top : top ISOLATE SYMBOL optargs EQ callatoms WITH callatoms'
-        d = IsolateDecl(IsolateDef(*([Atom(p[3],p[4])] + p[6] + p[8])))
-        d.args[0].with_args = len(p[8])
+    def p_top_opttrusted_isolate_callatom_eq_callatoms_with_callatoms(p):
+        'top : top opttrusted ISOLATE SYMBOL optargs EQ callatoms WITH callatoms'
+        ty = TrustedIsolateDef if p[2] else IsolateDef
+        d = IsolateDecl(ty(*([Atom(p[4],p[5])] + p[7] + p[9])))
+        d.args[0].with_args = len(p[9])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
@@ -923,7 +931,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
 def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
-    thing = InterpretDecl(LabeledFormula(None,Implies(Atom(p[3],[]),Range(p[6],p[8]))))
+    thing = InterpretDecl(LabeledFormula(None,Implies(p[3],Range(p[6],p[8]))))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 

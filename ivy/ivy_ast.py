@@ -646,6 +646,9 @@ class IsolateDef(AST):
         res.with_args = self.with_args
         return res
         
+class TrustedIsolateDef(IsolateDef):
+    pass
+
 class ExtractDef(IsolateDef):
     pass
 

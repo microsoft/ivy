@@ -15,6 +15,7 @@ import ivy_art
 import ivy_interp
 import ivy_compiler
 import ivy_isolate
+import ivy_ast
 
 import sys
 
@@ -101,8 +102,10 @@ def check_module():
         raise iu.IvyError(None,"Some assertions are not checked")
 
     for isolate in isolates:
-        if isolate != None and isolate in im.module.isolates and len(im.module.isolates[isolate].verified()) == 0:
-            continue # skip if nothing to verify
+        if isolate != None and isolate in im.module.isolates:
+            idef = im.module.isolates[isolate]
+            if len(idef.verified()) == 0 or isinstance(idef,ivy_ast.TrustedIsolateDef):
+                continue # skip if nothing to verify
         if isolate:
             print "Checking isolate {}...".format(isolate)
         with im.module.copy():
@@ -134,6 +137,7 @@ def check_module():
                                 if cex is not None:
                                     display_cex("safety failed",cex)
                         print "checking consecution..."
+                        ag.execute_action(a,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
                         check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
                     act.checked_assert.value = old_checked_assert
 

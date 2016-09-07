@@ -281,8 +281,8 @@ public:
     constraints = [im.module.init_cond.to_formula()]
     for a in im.module.axioms:
         constraints.append(a)
-    for df in im.module.concepts:
-        constraints.append(df.to_constraint())
+    for ldf in im.module.definitions:
+        constraints.append(ldf.formula.to_constraint())
     for c in constraints:
         fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
         indent(impl)
@@ -343,7 +343,7 @@ def emit_action_gen(header,impl,name,action,classname):
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
-    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([df.to_constraint() for df in im.module.concepts]))
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
     pre = pre_clauses.to_formula()
     syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
@@ -397,7 +397,7 @@ def emit_action_gen(header,impl,name,action,classname):
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
-    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([df.to_constraint() for df in im.module.concepts]))
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
     pre = pre_clauses.to_formula()
     syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
@@ -1257,7 +1257,7 @@ def new_temp(header,sort=None):
 
 def get_bound_exprs(v0,variables,body,exists,res):
     if isinstance(body,il.Not):
-        return get_bound_exprs(v0,variables,body,not exists)
+        return get_bound_exprs(v0,variables,body.args[0],not exists,res)
     if il.is_app(body) and body.rep.name in ['<','<=','>','>=']:
         res.append((body,not exists))
     if isinstance(body,il.Implies) and not exists:

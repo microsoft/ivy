@@ -721,7 +721,7 @@ macros_expansions = {
 }
 
 def is_macro(term):
-    return isinstance(term,lg.Apply) and term.func.name in macros_expansions
+    return isinstance(term,lg.Apply) and term.func.name in macros_expansions and iu.ivy_use_polymorphic_macros
 
 def expand_macro(term):
     return macros_expansions[term.func.name](term)
