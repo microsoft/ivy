@@ -234,8 +234,8 @@ class IvyError(Exception):
             assert False
     def __str__(self):
         return str(self.lineno) + 'error: ' + self.msg
-    def __repr__(seld):
-        assert False
+    def __repr__(self):
+        return str(self)
 
 class IvyUndefined(IvyError):
     def __init__(self,ast,name):
