@@ -1,0 +1,23 @@
+#lang ivy1.6
+
+include collections
+
+type t
+
+instance arr : array(t,t)
+
+action tabulate(max : t) returns (res:arr.t) = {
+    local i:t {
+	i := 0;
+	res := arr.create(max,0);
+	while i < max {
+	    res := arr.set(res,i,i*i);
+	    i := i + 1
+	}
+    }
+}
+
+interpret t -> int
+export tabulate
+extract iso_impl = tabulate, arr
+

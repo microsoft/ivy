@@ -135,7 +135,7 @@ module process(pid) = {
 	call trans.send(node.get_next(me),pid(me))
     }
 
-    implement trans.recv(me:node.t) {
+    implement trans.recv(me:node.t,v:id.t) {
         if v = pid(me) {  # Found a leader
             call serv.elect(me)
         }

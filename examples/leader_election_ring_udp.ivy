@@ -131,7 +131,7 @@ module process(pid) = {
 	call trans.send(me,node.get_next(me),pid(me))
     }
 
-    implement trans.recv(me:node.t) {
+    implement trans.recv(me:node.t,v:id.t) {
         if v = pid(me) {  # Found a leader
             call serv.elect(me)
         }
@@ -159,17 +159,17 @@ isolate iso_app = app with node,id,trans,serv,asgn
 object node_impl = {
     interpret node.t -> bv[1]
     
-    implement node.get_next {
+    implement node.get_next(x:node.t) returns (y:node.t)  {
 	y := x + 1 
    }
 }
 
-isolate iso_node = node with node_impl
+isolate iso_node = node, node_impl
 
 object id_impl = {
     interpret id.t -> bv[1]
 }
 
-isolate iso_id = id with id_impl
+isolate iso_id = id, id_impl
 
 extract iso_impl(me:node.trans) = app(me),trans.impl(me),node_impl,id_impl,asgn

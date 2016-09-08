@@ -1,0 +1,74 @@
+#lang ivy1.6
+
+include collections
+
+module set(index,elem) = {
+
+    instance arr:array(index.t,elem)
+
+    alias t = arr.t
+
+    function valid(X:t) = forall Y,Z. (0 <= Y & Y < arr.end(X) & 0 <= Z & Z < arr.end(X) & arr.value(X,Y) = arr.value(X,Z) -> Y = Z)
+    function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
+
+    action emptyset returns(s:t)
+    action add(s:t,e:elem) returns (s:t)
+    action remove(s:t,e:elem) returns (s:t)
+    
+    object spec = {
+	after emptyset {
+	    assert ~contains(s,X)
+	}
+	before add {
+	    assert valid(s)
+	}
+	after add {
+	    assert contains(s,X) <-> (contains(old s,X) | X = e);
+	    assert valid(s)
+	}
+	before remove {
+	    assert valid(s)
+	}
+	after remove {
+	    assert contains(s,X) <-> (contains(old s,X) & X ~= e);
+	    assert valid(s)
+	}
+    }
+
+    object impl = {
+	implement emptyset {
+	    s := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                s := arr.resize(s,index.next(arr.end(s)),e)
+	    }
+        }
+	implement remove {
+	    if some (i:index.t) 0 <= i & i < arr.end(s) & arr.value(s,i) = e {
+		local last:index.t {
+		    last  := index.prev(arr.end(s));
+		    s := arr.set(s,i,arr.get(s,last));
+                    s := arr.resize(s,last,0)
+		}
+	    }
+        }
+    }
+}
+
+include order
+
+instance index : unbounded_sequence
+type elem
+
+instance s : set(index,elem)
+
+export s.emptyset
+export s.add
+export s.remove
+
+
+isolate iso_s = s with index
+isolate iso_index = index
+extract iso_impl = s,index
