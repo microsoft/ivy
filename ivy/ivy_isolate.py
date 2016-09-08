@@ -734,11 +734,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
                             if (isinstance(called,ia.NativeAction) or 
                                 any(p.sort.name not in mod.ghost_sorts for p in called.formal_returns)):
                                 raise iu.IvyError(None,"No implementation for action {}".format(c))
+        all_syms_norm = map(ivy_logic.normalize_symbol,all_syms)
         for p,ds in prop_deps:
             for d in ds:
                 if not startswith_eq_some(d,present,mod):
                     for x in lu.used_symbols_ast(p.formula):
-                        if x in all_syms:
+                        if ivy_logic.normalize_symbol(x) in all_syms_norm:
                             raise iu.IvyError(p,"property {} depends on abstracted object {}"
                                               .format(pname(p),d))
 

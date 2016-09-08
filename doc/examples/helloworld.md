@@ -25,7 +25,7 @@ spontaneously prints a message. Here is an approximation:
     }
 
     export hello
-    import word
+    import world
     
 This program provides an action `hello` that calls action `world`
 provided by the environment. Let's try compiling and running this program:
@@ -139,9 +139,10 @@ interpet `money` with unbounded integers (that is "bignums").
 Let's give it a try:
 
     $ ivy_to_cpp target=repl account2.ivy
-    $ g++ -o account account2.cpp
+    $ g++ -o account2 account2.cpp
     $ ./account2
     > account.withdraw(4)
+
     account2.ivy: line 29: assertion failed
     $
 

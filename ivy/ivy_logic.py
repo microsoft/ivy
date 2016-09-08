@@ -683,8 +683,8 @@ class Sig(object):
             else:
                 yield sym
     def remove_symbol(self,symbol):
-        assert symbol.name in self.symbols
-        sort = self.symbols[symbol.name]
+        assert symbol.name in self.symbols, symbol.name
+        sort = self.symbols[symbol.name].sort
         if isinstance(sort,UnionSort):
             assert symbol.sort in sort.sorts
             sort.sorts.remove(symbol.sort)
