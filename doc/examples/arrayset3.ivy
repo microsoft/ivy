@@ -41,10 +41,10 @@ module set(index,elem) = {
 	    = (exists Z. 0 <= Z & Z < i & arr.value(s,Z) = y) & y ~= e
 
 	property I >= 0 & index.succ(I,J) ->
-	    remove_step(X,E,J,Y) <-> (remove_step(X,E,I,Y) | arr.value(X,I) = Y & Y ~= E)
+	    (remove_step(X,E,J,Y) <-> (remove_step(X,E,I,Y) | arr.value(X,I) = Y & Y ~= E))
 
 	property I = arr.end(X) ->
-	    remove_step(X,E,I,Y) <-> (contains(X,Y) & Y~=E)
+	    (remove_step(X,E,I,Y) <-> (contains(X,Y) & Y~=E))
 
 	implement remove {
 	    local i:index.t, end:index.t {
@@ -53,12 +53,12 @@ module set(index,elem) = {
 		end := arr.end(s);
 		while i < end
 		    invariant 0 <= i & i <= end
-		    invariant contains(res,Y) = remove_step(s,Y,i,e)
+		    invariant contains(res,Y) = remove_step(s,e,i,Y)
 		{
 		    local f:elem {
 			f := arr.get(s,i);
 			if  f ~= e {
-			    res := add(res,e)
+			    res := add(res,f)
 			}
 		    };
 		    i := index.next(i)

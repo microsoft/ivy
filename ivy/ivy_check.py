@@ -61,9 +61,11 @@ def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])
     sys.exit(1)
 
-def find_assertions():
+def find_assertions(action_name=None):
     res = []
-    for actname,action in im.module.actions.iteritems():
+    actions = act.call_set(action_name,im.module.actions) if action_name else im.module.actions.keys()
+    for actname in actions:
+        action = im.module.actions[actname]
         for a in action.iter_subactions():
             if isinstance(a,act.AssertAction):
                 res.append(a)
@@ -121,23 +123,23 @@ def check_module():
                     old_checked_assert = act.checked_assert.get()
                     check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
                     show_assertions()
-                    assertions = find_assertions()
-                    if act.checked_assert.get():
-                        assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
-                    for a in get_checked_actions():
-                        print "trying {}...".format(a)
+                    for actname in get_checked_actions():
+                        print "trying {}...".format(actname)
+                        assertions = find_assertions(actname)
+                        if act.checked_assert.get():
+                            assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
                         tried = set()
                         for asn in assertions:
                             if asn.lineno not in tried:
                                 tried.add(asn.lineno)
                                 act.checked_assert.value = asn.lineno
                                 print '{}: {}'.format(asn.lineno,asn)
-                                ag.execute_action(a,prestate=ag.states[0])
+                                ag.execute_action(actname,prestate=ag.states[0])
                                 cex = ag.check_bounded_safety(ag.states[-1])
                                 if cex is not None:
                                     display_cex("safety failed",cex)
                         print "checking consecution..."
-                        ag.execute_action(a,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
+                        ag.execute_action(actname,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
                         check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
                     act.checked_assert.value = old_checked_assert
 

@@ -964,3 +964,16 @@ def action_def_to_str(name,action):
 def has_code(action):
     return any(not isinstance(a,Sequence) for a in action.iter_subactions())
 
+def call_set_rec(action_name,env,res):
+    if action_name in res:
+        return
+    res.add(action_name)
+    if action_name in env:
+        for c in env[action_name].iter_calls():
+            call_set_rec(c,env,res)
+
+def call_set(action_name,env):
+    res = set()
+    call_set_rec(action_name,env,res)
+    return sorted(res)
+    

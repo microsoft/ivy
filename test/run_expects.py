@@ -21,7 +21,7 @@ checks = [
       ['interference','OK'],
       ['leader_election_ring2','OK'],
       ['leader_election_ring_btw','OK'],
-      ['leader_election_ring','OK'],
+      ['leader_election_ring','error: Some assertions are not checked'],
       ['leader_election_ring_repl','OK'],
       ['leader_election_ring_udp2','OK'],
       ['leader_election_ring_udp','OK'],

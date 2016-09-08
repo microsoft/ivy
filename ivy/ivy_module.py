@@ -134,7 +134,6 @@ class Module(object):
                 if il.is_epr(ea):
                     theory.append(ea)
         self.theory = lu.Clauses(theory)
-        
 
 
     def theory_context(self):

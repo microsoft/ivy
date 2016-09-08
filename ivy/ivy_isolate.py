@@ -520,6 +520,7 @@ def set_privates(mod,isolate,suff=None):
 
 def get_props_proved_in_isolate(mod,isolate):
     save_privates = mod.privates
+    mod.privates = set()
     set_privates(mod,isolate,'spec')
     verified,present = get_isolate_info(mod,isolate,'spec')
     check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))

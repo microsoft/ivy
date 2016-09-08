@@ -529,12 +529,12 @@ Now we need an inductive charaterization. Basically, we add an element
 of the array to the output set if it is not the removed element:
 
     property I >= 0 & index.succ(I,J) ->
-	 remove_step(S,E,J,Y) = (remove_step(S,E,I,Y) | arr.value(S,I) = Y & Y ~= E)
+	(remove_step(X,E,J,Y) <-> (remove_step(X,E,I,Y) | arr.value(X,I) = Y & Y ~= E))
 
 The exit condition tells us when we have completed the computation:
 
-    property I = arr.end(S) ->
-         remove_step(S,E,I,Y) = (contains(S,Y) & Y~=E)
+    property I = arr.end(X) ->
+	(remove_step(X,E,I,Y) <-> (contains(X,Y) & Y~=E))
 
 That is, when we reach the end of the array, we have accumulated all
 the elements of the input set except `e`.
@@ -547,13 +547,13 @@ Now here's the `remove` action, decorated with invariants:
 	    res := arr.create(0,0);
 	    end := arr.end(s);
 	    while i < end
-	        invariant 0 <= i & i <= end
-	        invariant contains(res,Y) = remove_step(s,Y,i,e)
+		invariant 0 <= i & i <= end
+		invariant contains(res,Y) = remove_step(s,e,i,Y)
 	    {
 		local f:elem {
 		    f := arr.get(s,i);
 		    if  f ~= e {
-			res := add(res,e)
+			res := add(res,f)
 		    }
 		};
 		i := index.next(i)
@@ -574,7 +574,7 @@ fragile quantifier instantiation heuristics to make the proof go
 through.
 
 In general, though, it's best to avoid this kind of painstaking
-consrtuction of loops by using higher-level operator on containers.
+construction of loops by using higher-level operations on containers.
 
 
 
