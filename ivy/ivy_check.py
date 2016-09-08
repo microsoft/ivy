@@ -122,7 +122,7 @@ def check_module():
                 with ivy_interp.EvalContext(check=False):
                     old_checked_assert = act.checked_assert.get()
                     check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-                    show_assertions()
+#                    show_assertions()
                     for actname in get_checked_actions():
                         print "trying {}...".format(actname)
                         assertions = find_assertions(actname)

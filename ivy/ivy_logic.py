@@ -296,7 +296,6 @@ def find_symbol(symbol_name):
     except KeyError:
         if symbol_name == '=':
             return equals
-        print sig.symbols.keys()
         raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
 def find_polymorphic_symbol(symbol_name):
@@ -685,9 +684,11 @@ class Sig(object):
                 yield sym
     def remove_symbol(self,symbol):
         assert symbol.name in self.symbols
-        if iu.ivy_have_polymorphism and symbol.name in polymorphic_symbols:
-            assert symbol.sort in self.symbols[symbol.name].sorts
-            self.symbols[symbol.name].sorts.remove(symbol.sort)
+        sort = self.symbols[symbol.name]
+        if isinstance(sort,UnionSort):
+            assert symbol.sort in sort.sorts
+            sort.sorts.remove(symbol.sort)
+            return
         del self.symbols[symbol.name]
 
     def __str__(self):

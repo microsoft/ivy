@@ -57,3 +57,7 @@ module counter_prop(c) = {
 }
 
 instance cp : counter_prop(d)
+
+export d.up
+export d.down
+export d.is_zero

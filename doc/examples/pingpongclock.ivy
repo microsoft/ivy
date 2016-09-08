@@ -97,4 +97,4 @@ export right_player.hit
 
 isolate iso_l = left_player with spec, clock
 isolate iso_r = right_player with spec, clock
-isolate iso_ci = clock with clock_impl
+isolate iso_ci = clock, clock_impl

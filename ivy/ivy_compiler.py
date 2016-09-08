@@ -693,6 +693,8 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
 
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
+            im.module.labeled_axioms.extend(im.module.labeled_props)
+            im.module.theory_context().__enter__()
 
 
 def clear_rules(modname):
