@@ -849,6 +849,8 @@ def is_enumerated(term):
     return isinstance(term.get_sort(),EnumeratedSort)
 
 def app_to_atom(app):
+    if not isinstance(app,App):
+        return app
     if isinstance(app,Old) or isinstance(app,Quantifier) or isinstance(app,Ite) or isinstance(app,Variable):
         return app
     res = Atom(app.rep,app.args)

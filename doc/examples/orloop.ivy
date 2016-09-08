@@ -1,0 +1,41 @@
+#lang ivy1.6
+
+include collections
+include order
+
+instance index : unbounded_sequence
+
+object p = {
+
+    instance arr : array(index.t,bool)
+
+    individual a : arr.t
+
+    function or = exists X. 0 <= X & X < arr.end(a) & arr.value(a,X)
+
+    function step(i:index.t) = exists X. 0 <= X & X < i & arr.value(a,X)
+
+    property 0 <= I & index.succ(I,J) -> step(J) <-> ((step(I) | arr.value(a,I)))
+
+    property I = arr.end(a) -> step(I) = or
+
+    action compute_or returns (res:bool) = {
+	local i:index.t {
+	    i := 0;
+	    res := false;
+	    while i < arr.end(a)
+		invariant 0 <= i & i <= arr.end(a)
+		invariant res = step(i)
+	    {
+		res := res | arr.value(a,i);
+		i := index.next(i)
+	    } 
+	};  
+	assert res = or
+    }
+}
+
+export p.compute_or
+
+isolate iso_p = p with index
+isolate iso_index = index

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-tests=`ls *.py`
+tests=`ls *.py | grep -v run_expects`
 
 sh_tests='tilelink_unit_test.sh'
 

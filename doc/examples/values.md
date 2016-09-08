@@ -203,7 +203,7 @@ This gives us an efficient way of passing these values across
 interfaces.
 
 As an example, consider using an array as a representation of a
-set. Here is the tart of a module that accomplishes that:
+set. Here is the start of a module that accomplishes that:
 
     include collections
 
@@ -278,16 +278,16 @@ element to a set, we test whether the element is already present.  If
 not, we resize the array to make it one value larger, where the added
 value is `e`. 
 
-Notice that in the implementation of `add`, we evaluate the preediate
+Notice that in the implementation of `add`, we evaluate the predicate
 `contains`.  IVy recognizes that `contains` is executable because the
 quantifier in the definition of `contains` is bounded. This means it
 can compile the quantifier into a loop from `0` to `arr.end(X)`. If
 you try to compile an unbounded quantifier into executable code, IVy
 will complain.
 
-Also notice that instead of `arr.end(s)+1`, we wrote
+Also notice that instead of `arr.end(s) + 1`, we wrote
 `index.next(arr.end(s))`.  That is, we are treating `index` as an
-abstract datatype, assuming only that it provides an order and an
+abstract datatype, assuming only that it provides an order `<` and an
 action `next`. From a software engineering point of view, this is
 probably useless abstraction. However, from a verification point of
 view, it is useful -- it allows us to verify `set` without using the
@@ -351,26 +351,26 @@ Now let's try adding an action to our `set` module that removes an element:
 
      module set(index,elem) = {
          ...
-	 action remove(s:t,e:elem) returns (s:t)
+         action remove(s:t,e:elem) returns (s:t)
 
-	 object spec = {
+         object spec = {
              ...
-	     after remove {
-		 assert contains(s,X) <-> (contains(old s,X) & X ~= e);
-	     }
+             after remove {
+                 assert contains(s,X) <-> (contains(old s,X) & X ~= e);
+             }
         }
 
-	object impl = {
-	    ...
-	    implement remove {
-		if some (i:index.t) 0 <= i & i < arr.end(s) & arr.value(s,i) = e {
-		    local last:index.t {
-			last  := index.prev(arr.end(s));
-			s := arr.set(s,i,arr.get(s,last));
-			s := arr.resize(s,last,0)
-		    }
-		}
-	    }
+        object impl = {
+            ...
+            implement remove {
+                if some (i:index.t) 0 <= i & i < arr.end(s) & arr.value(s,i) = e {
+                    local last:index.t {
+                        last  := index.prev(arr.end(s));
+                        s := arr.set(s,i,arr.get(s,last));
+                        s := arr.resize(s,last,0)
+                    }
+                }
+            }
         }
     }
 
@@ -393,23 +393,23 @@ occurs twice in the array:
 Now we have to specify our interface to make the appropriate assumptions and guarantees:
 
     object spec = {
-	after emptyset {
-	    assert ~contains(s,X)
-	}
-	before add {
-	    assert valid(s)
-	}
-	after add {
-	    assert contains(s,X) <-> (contains(old s,X) | X = e);
-	    assert valid(s)
-	}
-	before remove {
-	    assert valid(s)
-	}
-	after remove {
-	    assert contains(s,X) <-> (contains(old s,X) & X ~= e);
-	    assert valid(s)
-	}
+        after emptyset {
+            assert ~contains(s,X)
+        }
+        before add {
+            assert valid(s)
+        }
+        after add {
+            assert contains(s,X) <-> (contains(old s,X) | X = e);
+            assert valid(s)
+        }
+        before remove {
+            assert valid(s)
+        }
+        after remove {
+            assert contains(s,X) <-> (contains(old s,X) & X ~= e);
+            assert valid(s)
+        }
     }
 
 Now we can verify that our implementation of `remove` works (try
@@ -430,23 +430,23 @@ Here is the implementation we have in mind:
     object impl = {
         ...
 
-	implement remove {
-	    local i:index.t, end:index.t {
-		i := 0;
-		res := emptyset;
-		end := arr.end(s);
-		while i < end
-		{
-		    local f:elem {
-			f := arr.get(s,i);
-			if  f ~= e {
-			    res := add(res,e)
-			}
-		    };
-		    i := index.next(i)
-		}
-	    }
-	}
+        implement remove {
+            local i:index.t, end:index.t {
+                i := 0;
+                res := emptyset;
+                end := arr.end(s);
+                while i < end
+                {
+                    local f:elem {
+                        f := arr.get(s,i);
+                        if  f ~= e {
+                            res := add(res,f)
+                        }
+                    };
+                    i := index.next(i)
+                }
+            }
+        }
     }
 
 That is, we scan the input array `s`. When we encounter a value not
@@ -461,11 +461,11 @@ with each iteration. We'll call this function `step(i)`, where `i` is
 the loop index. Suppose we want our loop to compute the "or" of the
 bits in an array `a`, that is:
 
-     definition or = exists X. 0 <= X & X < arr.end(a) & arr.value(a,X)
+     function or = exists X. 0 <= X & X < arr.end(a) & arr.value(a,X)
 
  Then our step function would be:
 
-     definition step(i) = exists X. 0 <= X & X < i & arr.value(a,X)
+     function step(i) = exists X. 0 <= X & X < i & arr.value(a,X)
 
 That is, our approximation is the "or" of all the bits up to (but not
 including) the index `i`.
@@ -474,12 +474,15 @@ Now we need to give an *inductive* characterization of `step`. That
 is, we need to know how to compute the value of `step` at the next
 iteration. It looks like this:
 
-    property 0 <= I & succ(I,J) -> step(J) = (step(I) | arr.value(a,I))
+    property 0 <= I & index.succ(I,J) -> step(J) = (step(I) | arr.value(a,I))
 
 That is, to compute approximation for the successor of index `I`, we
 "or" `step(I)` with the bit in the array at index `I`. Ivy can prove
 this property from the definition of `step`. It just unfolds the definition
 of `step` for `I` and `J` and uses its EPR decision procedure.
+Notice we use the successor relation `succ` provided by the index type
+to represent the fact that `J` is next after `I`. This is because we
+can't call the action `next` in a property of function definition.
 
 Now we need to know that when we get to the and of the array, we have
 the desired result. Here is how we write this condition:
@@ -488,8 +491,9 @@ the desired result. Here is how we write this condition:
         
 Again, Ivy can easily prove this from the definitions of `step` and
 `or`. If you squint at these two properties a bit, you'll see that
-they're actually (Horn
-clauses)[https://en.wikipedia.org/wiki/Horn_clause]. A logic
+they are very close to a logic program for computing `or` (in fact,
+we could easily recast them in the form of [Horn
+clauses](https://en.wikipedia.org/wiki/Horn_clause)). A logic
 programming system could execute them directly to compute our result.
 We have have in mind, however, to do the computation using a loop:
 
@@ -500,22 +504,23 @@ We have have in mind, however, to do the computation using a loop:
         invariant res = step(i)
     {
         res := res | arr.value(a,i);
-	i := index.next(i)
-    }   
+        i := index.next(i)
+    } 
     assert res = or
+
 
 Notice the two invariants decorating the loop. IVy can prove that that
 they are inductive and that the assertion is true. This can be done
-purely use the two Horn properties, without reference to the
-definition of `step`. This is the general approach for writing a loop
-in IVy: first characterize the loop using Horn clauses, then write the
-loop with two invariants as above.
+using only our two properties, without reference to the actual
+definition definition of `step`. This is the general approach for
+writing a loop in IVy: first characterize the loop inductively, then
+write the loop with two invariants as above.
 
 Now let's get back to the `remove` method. We start with the step
 function:
 
     function remove_step (s:t,e:elem,i:index.t,y:elem)
-	    = (exists Z. 0 <= Z & Z < i & arr.value(s,Z) = y) & y ~= e
+            = (exists Z. 0 <= Z & Z < i & arr.value(s,Z) = y) & y ~= e
 
 This is an approximation of the representation function
 `contains`. Here, `s` is the input set, `e` is the element to remove,
@@ -529,12 +534,12 @@ Now we need an inductive charaterization. Basically, we add an element
 of the array to the output set if it is not the removed element:
 
     property I >= 0 & index.succ(I,J) ->
-	(remove_step(X,E,J,Y) <-> (remove_step(X,E,I,Y) | arr.value(X,I) = Y & Y ~= E))
+        (remove_step(X,E,J,Y) <-> (remove_step(X,E,I,Y) | arr.value(X,I) = Y & Y ~= E))
 
 The exit condition tells us when we have completed the computation:
 
     property I = arr.end(X) ->
-	(remove_step(X,E,I,Y) <-> (contains(X,Y) & Y~=E))
+        (remove_step(X,E,I,Y) <-> (contains(X,Y) & Y~=E))
 
 That is, when we reach the end of the array, we have accumulated all
 the elements of the input set except `e`.
@@ -542,29 +547,29 @@ the elements of the input set except `e`.
 Now here's the `remove` action, decorated with invariants:
 
     implement remove {
-	local i:index.t, end:index.t {
-	    i := 0;
-	    res := arr.create(0,0);
-	    end := arr.end(s);
-	    while i < end
-		invariant 0 <= i & i <= end
-		invariant contains(res,Y) = remove_step(s,e,i,Y)
-	    {
-		local f:elem {
-		    f := arr.get(s,i);
-		    if  f ~= e {
-			res := add(res,f)
-		    }
-		};
-		i := index.next(i)
-	    }
-	}
+        local i:index.t, end:index.t {
+            i := 0;
+            res := arr.create(0,0);
+            end := arr.end(s);
+            while i < end
+                invariant 0 <= i & i <= end
+                invariant contains(res,Y) = remove_step(s,e,i,Y)
+            {
+                local f:elem {
+                    f := arr.get(s,i);
+                    if  f ~= e {
+                        res := add(res,f)
+                    }
+                };
+                i := index.next(i)
+            }
+        }
     }
 
 Notice that the invariant is universally quantified on `Y`, the test
-element. The invariant says that our loop computes exactly what the
-Horn clauses compute. Ivy can easily verify that [this version](arrayset3.ivy) of `remove`
-satisfies its specification.
+element. The invariant says that our loop computes exactly what our
+inductive characterization computes. Ivy can easily verify that [this
+version](arrayset3.ivy) of `remove` satisfies its specification.
 
 Of course, this might seem like a lot of work for around ten lines of
 code. This style of proof has a big advantage, though, from the point

@@ -24,6 +24,7 @@ filter_symbols = iu.BooleanParameter("filter_symbols",True)
 create_imports = iu.BooleanParameter("create_imports",False)
 enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
 do_check_interference = iu.BooleanParameter("interference",True)
+pedantic = iu.BooleanParameter("pedantic",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -646,13 +647,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
     for actname,action in mod.actions.iteritems():
-        if not startswith_some(actname,present,mod):
+        if not startswith_eq_some(actname,present,mod):
             for c in action.iter_calls():
                 if (startswith_some(c,present,mod)
                     or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
                         exported.add('ext:' + c)
 #    implementation_map = save_implementation_map
-#    print "exported: {}".format(exported)
 
 
     # We allow objects to reference any symbols in global scope, and
@@ -695,6 +695,9 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     # filter definitions
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label)]
 
+    # filter natives
+
+    mod.natives = [c for c in mod.natives if keep_ax(c.args[0])]
 
     # filter the signature
     # keep only the symbols referenced in the remaining
@@ -953,6 +956,8 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # Construct an isolate
 
+        orig_exports = set(e.exported() for e in mod.exports)
+
         if iso:
             isolate_component(mod,iso,extra_with=extra_with,extra_strip=extra_strip)
         else:
@@ -1011,12 +1016,18 @@ def create_isolate(iso,mod = None,**kwargs):
                 if a not in cone:
                     del mod.actions[a]
         else:
-            for a in list(mod.actions):
-                if a not in cone and not a.startswith('ext:') and a not in mixers:
-                    ea = 'ext:' + a
-                    if ea in mod.actions and ea not in cone:
-                        if ia.has_code(mod.actions[a]) and not mod.actions[a].lineno.filename.startswith('/'):
-                            iu.warn(mod.actions[a],"action {} is never called".format(a))
+            if pedantic.get():
+                for a in list(mod.actions):
+                    if a not in cone and not a.startswith('ext:') and a not in mixers:
+                        ea = 'ext:' + a
+                        if ea in mod.actions and ea not in cone:
+                            if ia.has_code(mod.actions[a]) and not mod.actions[a].lineno.filename.startswith('/'):
+                                iu.warn(mod.actions[a],"action {} is never called".format(a))
+            for a in sorted(mod.public_actions):
+                anorm = a[4:] if a.startswith('ext:') else a
+                if anorm not in orig_exports:
+                    iu.warn(mod.actions[a],"action {} is implicitly exported".format(anorm))
+                    
 
         fix_initializers(mod,after_inits)
 

@@ -374,18 +374,12 @@ packets, which causes node 0 to be elected (and to continues to be
 elected once per second).
 
 A note: suppose we had neglected to include `sec.impl` in the extract.
-The result would have been that `sec.timeout` was never called, so the
-protocol would do nothing. IVy would compile this extract, however,
-since the specification would still be satisfied (that is, it would
-never happen that the wrong node was elected, since no election would
-occur). This is a general problem with safety specifications: a
-protocol that does nothing always satisfies them. At length, we will
-deal with this problem when we consider
-[liveness](https://en.wikipedia.org/wiki/Liveness) specifications.
-IVy will however, warn us that there might be a problem:
+Since the action `sec.timeout` is called from outside the extract, it
+is implicitly exported to the environment. Since this is likely not
+what we want, Ivy gives the following warning:
 
     $ ivy_to_cpp target=repl isolate=iso_impl leader_election_ring_udp2.ivy
-    leader_election_ring_udp2.ivy: line 131: warning: action sec.timeout is never called
+    leader_election_ring_udp2.ivy: line 131: warning: action sec.timeout is implicitly exported
 
 ## Serializability
 
@@ -484,7 +478,7 @@ be equal to `me`.
 Of course, to communicate with each other, processes must have a
 visible effect on something. That something is the environment, which
 includes the operating system and the physical network. A call to
-`trans.send` has an an effect on the environment, namely sending a
+`trans.send` has an effect on the environment, namely sending a
 packet. The Ivy run-time guarantees, however, that actions remain
 serializable despite these effects, using [Lipton's theory of left-movers
 and right-movers](http://dl.acm.org/citation.cfm?id=361234). In the theory's terms,

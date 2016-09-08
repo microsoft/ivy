@@ -100,6 +100,27 @@ if not (iu.get_numeric_version() <= [1,2]):
         p[0] = Ite(p[3],p[1],p[5])
         p[0].lineno = get_lineno(p,2)
 
+# if not (iu.get_numeric_version() <= [1,5]):
+
+#     def p_term_term_and_term(p):
+#         'term : term AND term'
+#         if isinstance(p[1],And):
+#             p[0] = p[1]
+#             p[0].args.append(p[3])
+#         else:
+#             p[0] = And(p[1],p[3])
+#             p[0].lineno = get_lineno(p,2)
+
+#     def p_term_term_or_term(p):
+#         'term : term OR term'
+#         if isinstance(p[1],Or):
+#             p[0] = p[1]
+#             p[0].args.append(p[3])
+#         else:
+#             p[0] = Or(p[1],p[3])
+#             p[0].lineno = get_lineno(p,2)
+
+
 def p_terms(p):
     'terms : '
     p[0] = []
