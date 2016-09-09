@@ -1,0 +1,38 @@
+#lang ivy1.6
+
+########################################
+# A shard contains an interval of keys [lo,hi) from a hash table
+#
+
+include order
+include collections
+
+module table_shard(key,data) = {
+
+    type pair = struct {
+	p_key : key.t,
+	p_value : data
+    }
+    
+    type index
+
+    instance arr : array(index,pair)
+
+    type t = struct {
+	lo : key.iter.t,
+	hi : key.iter.t,
+	pairs : arr.t
+    }
+
+    function key_at(S,I) = 0 <= I & I < arr.end(S) & p_key(arr.get(S,I))
+    function value_at(S,I) = p_value(arr.get(S,I))
+    function at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0) 
+
+    function value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
+    function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
+
+    object impl = {	
+	interpret index -> int
+    }
+
+}

@@ -1,0 +1,15 @@
+#lang ivy1.6
+
+include order
+
+object key = {
+    
+    type t
+    instance props : totally_ordered_with_zero(t)
+    instance iter : order_iterator(t)
+
+    object impl = {
+	interpret t -> bv[16]
+    }
+}
+
