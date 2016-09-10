@@ -1,0 +1,81 @@
+#lang ivy1.6
+
+include collections
+
+module set(index,elem) = {
+
+    instance arr:array(index.t,elem)
+
+    alias t = arr.t
+
+    function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
+
+    action emptyset returns(s:t)
+    action add(s:t,e:elem) returns (s:t)
+    action remove(s:t,e:elem) returns (res:t)
+    
+    object spec = {
+	after emptyset {
+	    assert ~contains(s,X)
+	}
+	after add {
+	    assert contains(s,X) <-> (contains(old s,X) | X = e)
+	}
+	after remove {
+	    assert contains(res,X) <-> (contains(s,X) & X ~= e)
+	}
+    }
+
+    object impl = {
+	implement emptyset {
+	    s := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                s := arr.resize(s,index.next(arr.end(s)),e)
+	    }
+        }
+
+	function contains_before(X:t,y:elem,i:index.t)
+	    = exists Z. 0 <= Z & Z < i & arr.value(X,Z) = y
+
+	property I >= 0 & index.succ(I,J) -> (contains_before(X,Y,J) <-> (contains_before(X,Y,I) | arr.value(X,I) = Y))
+	property I = arr.end(S) -> (contains_before(S,Y,I) = contains(S,Y))
+
+	implement remove {
+	    local i:index.t, end:index.t {
+		i := 0;
+		res := arr.create(0,0);
+		end := arr.end(s);
+		while i < end
+		invariant 0 <= i & i <= end
+		invariant contains(res,Y) <-> contains_before(s,Y,i) & Y ~= e
+		{
+		    local f:elem {
+			f := arr.get(s,i);
+			if  f ~= e {
+			    res := add(res,e)
+			}
+		    };
+		    i := index.next(i)
+		}
+	    }
+	}
+    }
+}
+
+include order
+
+instance index : unbounded_sequence
+type elem
+
+instance s : set(index,elem)
+
+export s.emptyset
+export s.add
+export s.remove
+
+isolate iso_s = s with index
+isolate iso_index = index
+extract iso_impl = s,index

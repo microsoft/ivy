@@ -155,6 +155,9 @@ class Forall(Quantifier):
 class Exists(Quantifier):
     pass
 
+class This(AST):
+    pass
+
 class Atom(Formula):
     """
     A n-ary relation symbol applied to n terms
@@ -868,7 +871,12 @@ name_parser = re.compile(r'[^\[\]]+|\[[^\[\]]*\]')
 
 def str_subst(s,subst):
     names = split_name(s)
-    return compose_names(subst.get(names[0],names[0]),*names[1:])
+    it = subst.get(names[0],names[0])
+    if isinstance(it,This):
+        if len(names) > 1:
+            return compose_names(*names[1:])
+        return it
+    return compose_names(it,*names[1:])
 #    return subst.get(s,s)
 
 def subst_subscripts_comp(s,subst):
@@ -914,7 +922,7 @@ class AstRewriteSubstPrefix(object):
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
     def rewrite_atom(self,atom,always=False):
-        if not (self.pref and (always or self.to_pref == None or atom.rep in self.to_pref)):
+        if not (self.pref and (always or self.to_pref == None or split_name(atom.rep)[0] in self.to_pref)):
             return atom
         the_pref = self.pref
         if self.static != None and atom.rep in self.static:

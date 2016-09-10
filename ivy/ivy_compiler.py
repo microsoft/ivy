@@ -498,8 +498,9 @@ class IvyDomainSetup(IvyDeclInterp):
             for a in typedef.value.args:
                 p = a.clone([ivy_ast.Variable('V:dstr',sort.name)]+a.args)
                 p.sort = a.sort
-                with ASTContext(typedef.value):
-                    self.destructor(p)
+                with ASTContext(typedef):
+                    with ASTContext(a):
+                        self.destructor(p)
             return
         with ASTContext(typedef.value):
             sort = typedef.value.cmpl(typedef.name)

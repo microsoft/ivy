@@ -465,24 +465,35 @@ def get_callouts(mod,new_actions,summarized_actions,actname,callouts):
     get_callouts_action(mod,new_actions,summarized_actions,callouts,action,acallouts,True,True)
     
 
+def get_loc_mods(mod,actname):
+    action = mod.actions[actname]
+    res = [s for s in action.modifies() if s.name.startswith('fml:')]
+    return res
+
 def check_interference(mod,new_actions,summarized_actions):
     calls = dict()
     mods = dict()
     mixins = dict()
+    locmods = dict()
     for actname in summarized_actions:
         get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins)
+        locmods[actname] = get_loc_mods(mod,actname)
     callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
     for actname in new_actions:
         get_callouts(mod,new_actions,summarized_actions,actname,callouts)
     for actname,action in new_actions.iteritems():
         if actname not in summarized_actions:
-            for called in action.iter_calls():
-                if called in summarized_actions:
-                    cmods = mods[called]
-                    if cmods:
-                        things = ','.join(sorted(cmods))
-                        raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
-                                          .format(called,things))
+            for called_name in action.iter_calls():
+                called_name = canon_act(called_name)
+                all_calls = [called_name] + [m.mixer() for m in mod.mixins[called_name]]
+                for called in all_calls:
+                    if called in summarized_actions:
+                        cmods = set(mods[called])
+                        cmods.update(locmods[called])
+                        if cmods:
+                            things = ','.join(sorted(map(str,cmods)))
+                            raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
+                                              .format(called,things))
             if actname in callouts:
                 for midcall in sorted(callouts[actname][0]):
                     if midcall in calls:
@@ -1153,6 +1164,8 @@ def check_isolate_completeness(mod = None):
         if lbl:
             trusted.add(lbl.rep)
             
+    iu.dbg('trusted')
+
     for actname,action in mod.actions.iteritems():
         if startswith_eq_some(actname,trusted,mod):
             continue
@@ -1164,10 +1177,14 @@ def check_isolate_completeness(mod = None):
                 mixed = mixin.args[0].relname
                 if not has_assertions(mod,mixed):
                     continue
+                iu.dbg('mixed')
                 if not isinstance(mixin,ivy_ast.MixinBeforeDef) and startswith_eq_some(callee,trusted,mod):
                     continue
                 verifier = actname if isinstance(mixin,ivy_ast.MixinBeforeDef) else callee
+                verifier = implementation_map.get(verifier,verifier)
+                print "callee: {}, verifier: {}".format(callee,verifier)
                 if verifier not in checked_context[mixed]:
+                    print "missing!"
                     missing.append((actname,mixin,None))
     for e in mod.exports:
         if e.scope(): # global export

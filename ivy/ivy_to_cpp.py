@@ -19,6 +19,7 @@ import ivy_ast
 import itertools
 
 from collections import defaultdict
+import re
 
 def all_state_symbols():
     syms = il.all_symbols()
@@ -84,13 +85,17 @@ special_names = {
     '>=' : '__ge',
 }
 
+puncs = re.compile('[\.\[\]]')
+
 def varname(name):
     global special_names
     if not isinstance(name,str):
         name = name.name
     if name in special_names:
         return special_names[name]
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('.','__')
+
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__')
+    name = re.sub(puncs,'__',name)
     return name.split(':')[-1]
 
 def mk_nondet(code,v,rng,name,unique_id):

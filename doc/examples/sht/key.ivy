@@ -6,10 +6,11 @@ object key = {
     
     type t
     instance props : totally_ordered_with_zero(t)
-    instance iter : order_iterator(t)
+    instance iter : order_iterator(this)
 
     object impl = {
 	interpret t -> bv[16]
     }
+    isolate iso = iter with impl
 }
 

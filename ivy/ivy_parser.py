@@ -65,8 +65,8 @@ class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
         msg = 'redefining ' + str(name)
         if orig_lineno != None:
-            msg += " (from line {})".format(orig_lineno)
-        super(Redefining, self).__init__(lineno,None,msg)
+            msg += " (from {})".format(str(orig_lineno)[:-2])
+        super(Redefining, self).__init__(lineno.line,None,msg)
 
 error_list = []
 
@@ -328,6 +328,11 @@ def p_pname_infix(p):
 def p_pname_relop(p):
     'pname : relop'
     p[0] = App(p[1])
+    p[0].lineno = get_lineno(p,1)
+
+def p_pname_relop(p):
+    'pname : THIS'
+    p[0] = App(This())
     p[0].lineno = get_lineno(p,1)
 
 def p_pnames(p):
@@ -769,7 +774,7 @@ def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
-        mixer = atom.suffix('.'+kind)
+        mixer = atom.suffix('['+kind+']')
         optargs,optreturns = infer_action_params(atom.rep,optargs,optreturns)
         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=optargs,returns=optreturns)))
         handle_mixin(kind,mixer,atom,ivy)
