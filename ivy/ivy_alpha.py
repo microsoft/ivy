@@ -64,6 +64,12 @@ class ProgressiveDomain(object):
     def inhabited_lit(self,lit):
         self.inhabited_cube([lit])
 
+
+    def unfold_defs(self,cube):
+        insts = unfold_definitions_clauses(Clauses([cube_to_formula(cube)]))
+        add_clauses(self.solver, insts)
+
+
     def test_cube(self,cube):
         canon_cube = canonize_clause(cube)
         if log:
@@ -78,8 +84,10 @@ class ProgressiveDomain(object):
         cube = rename_clause(cube,self.new_sym)
         vs = used_variables_clause(cube)
         # TODO: these constants need to have right sorts
-        subs = dict((v,var_to_skolem('__c',v)) for v in vs)
-        res = check_cube(self.solver,substitute_clause(cube,subs),self.cube_memo,memo_unsat_only = True)
+        subs = dict((v.rep,var_to_skolem('__c',v)) for v in vs)
+        scube = substitute_clause(cube,subs)
+        self.unfold_defs(scube)
+        res = check_cube(self.solver,scube,self.cube_memo,memo_unsat_only = True)
         if res:
             if len(cube) <= 4:
                 self.model_check()

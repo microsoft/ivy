@@ -14,9 +14,9 @@ module table_shard(key,data) = {
 	p_value : data
     }
     
-    type index
+    instance index : unbounded_sequence
 
-    instance arr : array(index,pair)
+    instance arr : array(index.t,pair)
 
     type t = struct {
 	lo : key.iter.t,
@@ -24,15 +24,12 @@ module table_shard(key,data) = {
 	pairs : arr.t
     }
 
-    function key_at(S,I) = 0 <= I & I < arr.end(S) & p_key(arr.get(S,I))
-    function value_at(S,I) = p_value(arr.get(S,I))
-    function at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0) 
+    function key_at(S,I) = p_key(arr.value(pairs(S),I))
+    function value_at(S,I) = p_value(arr.value(pairs(S),I))
+    function at(S,X,I) = (0 <= I & I < arr.end(pairs(S)) & key_at(S,I) = X)
 
-    function value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
+    function value(S:t,x:key.t) = some Y. at(S,x,Y) in value_at(S,Y) else 0
     function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
 
-    object impl = {	
-	interpret index -> int
-    }
-
+    isolate iso_index = index
 }

@@ -417,7 +417,7 @@ def p_fun_defnlhs_colon_atype(p):
 
 def p_fun_defn(p):
     'fun : defn'
-    p[0] = DerivedDecl(LabeledFormula(None,p[1]))
+    p[0] = DerivedDecl(mk_lf(p[1]))
 
 def p_funs_fun(p):
     'funs : fun'
@@ -434,15 +434,20 @@ def p_top_function_tapp_colon_atype(p):
     for d in p[3]:
         p[0].declare(d)
 
+def mk_lf(x):
+    res = LabeledFormula(None,x)
+    res.lineno = x.lineno
+    return res
+
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
     p[0] = p[1]
-    p[0].declare(DerivedDecl(*[LabeledFormula(None,x) for x in p[3]]))
+    p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
 
 def p_top_definition_defns(p):
     'top : top DEFINITION defns'
     p[0] = p[1]
-    p[0].declare(DefinitionDecl(*[LabeledFormula(None,x) for x in p[3]]))
+    p[0].declare(DefinitionDecl(*[mk_lf(x) for x in p[3]]))
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'
@@ -924,14 +929,16 @@ def p_oper_nativequote(p):
 def p_top_interpret_symbol_arrow_symbol(p):
     'top : top INTERPRET oper ARROW oper'
     p[0] = p[1]
-    thing = InterpretDecl(LabeledFormula(None,Implies(p[3],p[5])))
+    impl = Implies(p[3],p[5])
+    impl.lineno = get_lineno(p,4)
+    thing = InterpretDecl(mk_lf(impl))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
 def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
-    thing = InterpretDecl(LabeledFormula(None,Implies(p[3],Range(p[6],p[8]))))
+    thing = InterpretDecl(mk_lf(Implies(p[3],Range(p[6],p[8]))))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 

@@ -36,6 +36,8 @@ def add_mixins(mod,actname,action2,assert_to_assume=lambda m:False,use_mixin=lam
     assert hasattr(action2,'lineno'), action2
     assert hasattr(action2,'formal_params'), action2
     res = action2
+    if create_imports.get():
+        res = res.drop_invariants()
     for mixin in mod.mixins[actname]:
         mixin_name = mixin.args[0].relname
         action1 = lookup_action(mixin,mod,mixin_name)
@@ -372,6 +374,26 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         else:
             mod.params.append(add_map[s.rep])
 
+def has_side_effect_rec(mod,new_actions,actname,memo):
+    if actname in memo:
+        return False
+    memo.add(actname)
+    action = new_actions[actname]
+    for sub in action.iter_subactions():
+        for sym in sub.modifies():
+            if sym.name in mod.sig.symbols:
+                return True
+        if isinstance(sub,ia.AssertAction):
+            return True
+        if isinstance(sub,ia.CallAction):
+            if has_side_effect_rec(mod,new_actions,sub.args[0].rep,memo):
+                return True
+    return False
+
+def has_side_effect(mod,new_actions,actname):
+    return has_side_effect_rec(mod,new_actions,actname,set())
+
+
 def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     if actname in calls or actname not in summarized_actions:
         return
@@ -552,6 +574,19 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
     present.update(xtra)
     return verified,present
 
+
+def follow_definitions_rec(sym,dmap,all_syms,memo):
+    if sym in dmap and sym not in memo:
+        memo.add(sym)
+        all_syms.add(sym)
+        for s in lu.used_symbols_ast(dmap[sym]):
+            follow_definitions_rec(s,dmap,all_syms,memo)
+
+def follow_definitions(ldfs,all_syms):
+    dmap = dict((ldf.formula.args[0].rep,ldf.formula.args[1]) for ldf in ldfs)
+    for sym in list(all_syms):
+        follow_definitions_rec(sym,dmap,all_syms,set())
+
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     global implementation_map
     implementation_map = {}
@@ -646,11 +681,17 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     for e in mod.exports:
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
+    with_effects = set()
     for actname,action in mod.actions.iteritems():
         if not startswith_eq_some(actname,present,mod):
             for c in action.iter_calls():
-                if (startswith_some(c,present,mod)
+                if (startswith_eq_some(c,present,mod)
                     or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
+                        if ('ext:' + c) in exported or c in with_effects:
+                            continue
+                        if not has_side_effect(mod,new_actions,c):
+                            with_effects.add(c)
+                            continue
                         exported.add('ext:' + c)
 #    implementation_map = save_implementation_map
 
@@ -693,7 +734,14 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     mod.labeled_props = proved
 
     # filter definitions
-    mod.definitions = [c for c in mod.definitions if keep_ax(c.label)]
+
+    asts = []
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
+        asts += [y.formula for y in x]
+    asts += [action for action in new_actions.values()]
+    all_syms = set(lu.used_symbols_asts(asts))
+    follow_definitions(mod.definitions,all_syms)
+    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
 
     # filter natives
 

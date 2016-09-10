@@ -193,6 +193,14 @@ class Action(AST):
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
         return res
+    def drop_invariants(self):
+        args = [a.drop_invariants() if isinstance(a,Action) else a for a in self.args]
+        res = self.clone(args)
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
     def prefix_calls(self,pref):
         args = [a.prefix_calls(pref) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
@@ -718,6 +726,13 @@ class WhileAction(Action):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self):
         return self.clone(self.args[:2])
+    def drop_invariants(self):
+        res = self.clone(self.args[:2])
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
 
 
 

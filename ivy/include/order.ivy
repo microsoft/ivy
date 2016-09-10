@@ -67,7 +67,7 @@ module order_iterator(range) = {
                       | ~iter_end(X) & ~iter_end(Y) & iter_val(X) < iter_val(Y)
 
     derived done(X,Y) = iter_end(Y) | X < iter_val(Y)
-    function between(X,V,Y) = ~done(V,X) & done(X,Y)
+    function between(X,V,Y) = ~done(V,X) & done(V,Y)
 
     action begin(x:range) returns (y:t)
     action end returns (y:t)

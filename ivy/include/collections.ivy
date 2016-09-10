@@ -18,6 +18,10 @@ module array(domain,range) = {
 
     type t
 
+    # return an empty array
+
+    action empty returns (a:t)
+
     # return an array with end=s and all values mapped to y
     action create(s:domain,y:range) returns (a:t)
 
@@ -32,6 +36,9 @@ module array(domain,range) = {
     
     # change the size of the array
     action resize(a:t,s:domain,v:range) returns (a:t)
+
+    # add one element to the array
+    action append(a:t,v:range) returns (a:t)
 
     ########################################
     # Representation
@@ -52,6 +59,9 @@ module array(domain,range) = {
     object spec = {
 	property end(X) >= 0
 
+	after empty {
+	    assert end(a) = 0
+	}
 	before create {
 	    assert 0 <= s
 	}
@@ -78,6 +88,11 @@ module array(domain,range) = {
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert end(old a) <= X & X < s -> value(a,X) = v
 	}
+	after append {
+	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert value(a,end(old a)) = v
+	}
     }
 
     object impl = {
@@ -93,6 +108,11 @@ module array(domain,range) = {
 	        `a`.resize(`s`);
 	        for (unsigned i = 0; i < `s`; i++)
 	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty {
+	    <<<
 	    >>>
 	}
 
@@ -122,6 +142,12 @@ module array(domain,range) = {
 	        `a`.resize(`s`);
 	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
 	            `a`[i] = v;
+            >>>
+        }
+
+	implement append {
+	    <<<
+	        `a`.push_back(`v`);
             >>>
         }
 
@@ -343,21 +369,41 @@ module map_wrapper(key,value) = {
 	>>>
     }
 
-    implement erase(lo:key.t,hi:key.t) {
+    implement erase(lo:key.iter.t,hi:key.iter.t) {
 	<<<
-            `s`.erase(`s`.lower_bound(`lo`),`s`.upper_bound(`hi`));
+            `s`.erase(`lo`.iter_end ? `s`.end() : `s`.lower_bound(`lo`.iter_val),
+ 	              `hi`.iter_end ? `s`.end() : `s`.upper_bound(`hi`.iter_val));
 	>>>
     }
 
     implement begin(k:key.t) returns (res:key.iter.t) {
 	<<<
-	    std::map<`key.t`,`value`>::iterator it = `s`.lower_bound(`k`);
-	    if (it == `s`.end()) {
+	    std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`k`);
+	    if (__it == `s`.end()) {
 	        `res`.iter_end = true;
 	        `res`.iter_val = 0;
 	    } else {
                 `res`.iter_end = false;
-	        `res`.iter_val = it->first;
+	        `res`.iter_val = __it->first;
+	    }
+	>>>
+	
+    }
+
+    implement lub(it:key.iter.t) returns (res:key.iter.t) {
+	<<<
+	    if (`it`.iter_end) {
+	     	`res`.iter_end = true;
+	        `res`.iter_val = 0;
+	    } else {
+		std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`it`.iter_val);
+		if (__it == `s`.end()) {
+		    `res`.iter_end = true;
+		    `res`.iter_val = 0;
+		} else {
+		    `res`.iter_end = false;
+		    `res`.iter_val = __it->first;
+		}
 	    }
 	>>>
 	
@@ -401,16 +447,20 @@ module ordered_map(key,value) = {
     action get(k:key.t) returns (v:value)
 
     # remove all leys in range [lo,hi]
-    action erase(lo:key.t,hi:key.t)
+    action erase(lo:key.iter.t,hi:key.iter.t)
 
     # iterator to least key >= k or end
     action begin(k:key.t) returns (res:key.iter.t)
+
+    # get least iterator >= it
+    action lub(it:key.iter.t) returns (res:key.iter.t)
 
     # iterator least key > iter or end
     action next(it:key.iter.t) returns (res:key.iter.t)
 
     relation s(K:key.t)
     relation r(K:key.t,V:value)
+#    relation succ(K:key.t,M:key.t)
     
 #    instantiate succ : map(key.t,key.t,0) # ghost
 
@@ -423,24 +473,6 @@ module ordered_map(key,value) = {
 	before set {
 	    s(nkey) := true;
 	    r(nkey,X) := X = v
-
-            # ;
-
-	    # # following is ghost code to update the successor relation
-	    # local sk:key.t {
-	    # 	if some (lub:key.t) ~(lub <= nkey) & s(lub) minimizing lub {
-	    # 	    sk := lub
-	    # 	}
-	    # 	else {
-	    # 	    sk := 0
-	    # 	};
-	    # 	call succ.set_(nkey,sk)
-	    # };
-	    # if some (glb:key.t) ~(nkey <= glb) & s(glb) maximizing glb {
-	    # 	call succ.lemma(glb); # instantiate succ(glb)
-	    # 	call succ.set_(glb,nkey)
-
-
 	}
 
 	after get {
@@ -449,8 +481,8 @@ module ordered_map(key,value) = {
 
 	# erase elements in a closed interval
 	before erase {
-	    s(K) := s(K) & ~(lo <= K & K <= hi);
-	    r(K,V) := r(K,V) & ~(lo <= K & K <= hi)
+	    s(K) := s(K) & ~key.iter.between(lo,K,hi);
+	    r(K,V) := r(K,V) & ~key.iter.between(lo,K,hi)
 	}
 
 	after begin {
@@ -462,6 +494,13 @@ module ordered_map(key,value) = {
 		    assert res = key.iter.end
 		}
 	    }
+	}
+
+	after lub {
+	    assert it <= res;
+	    assert key.iter.between(it,X,res) -> ~s(X);
+	    assert key.iter.iter_end(res) | s(key.iter.iter_val(res))
+#		assert succ(K,key.iter.iter_val(res)) -> done(K,it)
 	}
 
 	before next {

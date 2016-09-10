@@ -143,8 +143,6 @@ class Apply(recstruct('Apply', [], ['func', '*terms'])):
         elif type(func.sort) is not FunctionSort:
             raise SortError("Tried to apply a non-function: {}".format(func))
         elif func.sort.arity != len(terms):
-            print func.sort.arity
-            print func.sort
             raise SortError("Bad arity in: {}({})".format(
                 str(func),
                 ', '.join(str(t) for t in terms)

@@ -105,7 +105,8 @@ def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
     if is_native_sym(sym):
         return  # native classes have their own initializers
-    fun = lambda v: '___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')'
+    fun = lambda v: (('___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
+                     if not is_native_sym(v) else None)
     assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
 
 def field_eq(s,t,field):
@@ -835,6 +836,14 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
 
 """)
 
+    if target.get() == "repl":
+        for sort_name in sorted(im.module.sort_destructors):
+            csname = varname(sort_name)
+            cfsname = classname + '::' + csname
+            impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
+            impl.append('template <>\n')
+            impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
@@ -875,7 +884,8 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
     for ldf in im.module.definitions:
-        emit_derived(header,impl,ldf.formula,classname)
+        with ivy_ast.ASTContext(ldf):
+            emit_derived(header,impl,ldf.formula,classname)
 
     for native in im.module.natives:
         tag = native_type(native)
@@ -971,7 +981,8 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
             sort = im.module.sig.sorts[sort_name]
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
-            open_scope(impl,line=cfsname + ' _arg<' + csname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+            impl.append('template <>\n')
+            open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
             code_line(impl,cfsname + ' res')
             code_line(impl,'ivy_value &arg = args[idx]')
             code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
@@ -993,7 +1004,7 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
                     open_loop(impl,[v])
                     code_line(impl,'std::vector<ivy_value> tmp_args(1)')
                     code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
-                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng)
+                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
                           +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
                 for v in vs:
                     close_loop(impl,[v])
@@ -1095,7 +1106,9 @@ def assign_symbol_value(header,lhs_text,m,v,same=False):
             else:
                 assign_symbol_value(header,lhs_text+[memname(sym)],m,sym(v),same)
     else:
-        header.append('    ' + '.'.join(lhs_text) + ' = ' + m(v) + ';\n')
+        mv = m(v)
+        if mv != None:           
+            header.append('    ' + '.'.join(lhs_text) + ' = ' + m(v) + ';\n')
         
 
 def assign_symbol_from_model(header,sym,m):
@@ -1140,11 +1153,13 @@ def emit_one_initial_state(header):
 
 
 def emit_constant(self,header,code):
-    if (isinstance(self,il.Symbol) and self.is_numeral() and self.sort.name in il.sig.interp
-        and il.sig.interp[self.sort.name].startswith('bv[')):
-        sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
-        code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
-        return
+    if isinstance(self,il.Symbol) and self.is_numeral():
+        if is_native_sym(self) or self.sort.name in im.module.sort_destructors:
+            raise iu.IvyError(None,"cannot compile symbol {} of sort {}".format(self.name,self.sort))
+        if self.sort.name in il.sig.interp and il.sig.interp[self.sort.name].startswith('bv['):
+            sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
+            code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
+            return
     code.append(varname(self.name))
 
 il.Symbol.emit = emit_constant
@@ -1453,47 +1468,48 @@ def emit_assign_simple(self,header):
 
 def emit_assign(self,header):
     global indent_level
-    vs = list(lu.free_variables(self.args[0]))
-    for v in vs:
-        check_iterable_sort(v.sort)
-    if len(vs) == 0:
-        emit_assign_simple(self,header)
-        return
-    global temp_ctr
-    tmp = '__tmp' + str(temp_ctr)
-    temp_ctr += 1
-    indent(header)
-    header.append(ctype(self.args[1].sort) + '  ' + tmp)
-    for v in vs:
-        header.append('[' + str(sort_card(v.sort)) + ']')
-    header.append(';\n')
-    for idx in vs:
+    with ivy_ast.ASTContext(self):
+        vs = list(lu.free_variables(self.args[0]))
+        for v in vs:
+            check_iterable_sort(v.sort)
+        if len(vs) == 0:
+            emit_assign_simple(self,header)
+            return
+        global temp_ctr
+        tmp = '__tmp' + str(temp_ctr)
+        temp_ctr += 1
         indent(header)
-        header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
-        indent_level += 1
-    code = []
-    indent(code)
-    code.append(tmp + ''.join('['+varname(v.name)+']' for v in vs) + ' = ')
-    self.args[1].emit(header,code)
-    code.append(';\n')    
-    header.extend(code)
-    for idx in vs:
-        indent_level -= 1
-        indent(header)
-        header.append('}\n')
-    for idx in vs:
-        indent(header)
-        header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
-        indent_level += 1
-    code = []
-    indent(code)
-    self.args[0].emit(header,code)
-    code.append(' = ' + tmp + ''.join('['+varname(v.name)+']' for v in vs) + ';\n')
-    header.extend(code)
-    for idx in vs:
-        indent_level -= 1
-        indent(header)
-        header.append('}\n')
+        header.append(ctype(self.args[1].sort) + '  ' + tmp)
+        for v in vs:
+            header.append('[' + str(sort_card(v.sort)) + ']')
+        header.append(';\n')
+        for idx in vs:
+            indent(header)
+            header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+            indent_level += 1
+        code = []
+        indent(code)
+        code.append(tmp + ''.join('['+varname(v.name)+']' for v in vs) + ' = ')
+        self.args[1].emit(header,code)
+        code.append(';\n')    
+        header.extend(code)
+        for idx in vs:
+            indent_level -= 1
+            indent(header)
+            header.append('}\n')
+        for idx in vs:
+            indent(header)
+            header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+            indent_level += 1
+        code = []
+        indent(code)
+        self.args[0].emit(header,code)
+        code.append(' = ' + tmp + ''.join('['+varname(v.name)+']' for v in vs) + ';\n')
+        header.extend(code)
+        for idx in vs:
+            indent_level -= 1
+            indent(header)
+            header.append('}\n')
     
 ia.AssignAction.emit = emit_assign
 

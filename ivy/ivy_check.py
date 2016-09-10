@@ -120,10 +120,10 @@ def check_module():
                     if cex is not None:
                         display_cex("safety failed in initializer",cex)
                 with ivy_interp.EvalContext(check=False):
-                    old_checked_assert = act.checked_assert.get()
                     check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
 #                    show_assertions()
                     for actname in get_checked_actions():
+                        old_checked_assert = act.checked_assert.get()
                         print "trying {}...".format(actname)
                         assertions = find_assertions(actname)
                         if act.checked_assert.get():
@@ -141,7 +141,7 @@ def check_module():
                         print "checking consecution..."
                         ag.execute_action(actname,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
                         check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
-                    act.checked_assert.value = old_checked_assert
+                        act.checked_assert.value = old_checked_assert
 
 
 

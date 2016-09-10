@@ -375,27 +375,28 @@ def compile_action_def(a,sig):
 def compile_defn(df):
     has_consts = any(not isinstance(p,ivy_ast.Variable) for p in df.args[0].args)
     sig = ivy_logic.sig.copy() if has_consts else ivy_logic.sig
-    with sig:
-        for p in df.args[0].args:
-            if not isinstance(p,ivy_ast.Variable):
-                compile_const(p,sig)
-        if isinstance(df.args[1],ivy_ast.SomeExpr):
-            ifval = df.args[1].if_value() or df.args[1].params()[0]
-            elseval = df.args[1].else_value() or ifval
-            eqn = ivy_ast.Forall(df.args[1].params(),
-                                 ivy_ast.Atom('=',(df.args[0],ivy_ast.Ite(df.args[1].fmla(),ifval,elseval))))
-            fmla = sortify_with_inference(eqn)
-            args = [list(fmla.variables)[0],fmla.body.args[1].args[0]]
-            if df.args[1].if_value() :
-                args.append(fmla.body.args[1].args[1])
-            if df.args[1].else_value() :
-                args.append(fmla.body.args[1].args[2])
-            df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
-        else:
-            eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
-            eqn = sortify_with_inference(eqn)
-            df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
-        return df
+    with ivy_ast.ASTContext(df):
+        with sig:
+            for p in df.args[0].args:
+                if not isinstance(p,ivy_ast.Variable):
+                    compile_const(p,sig)
+            if isinstance(df.args[1],ivy_ast.SomeExpr):
+                ifval = df.args[1].if_value() or df.args[1].params()[0]
+                elseval = df.args[1].else_value() or ifval
+                eqn = ivy_ast.Forall(df.args[1].params(),
+                                     ivy_ast.Atom('=',(df.args[0],ivy_ast.Ite(df.args[1].fmla(),ifval,elseval))))
+                fmla = sortify_with_inference(eqn)
+                args = [list(fmla.variables)[0],fmla.body.args[1].args[0]]
+                if df.args[1].if_value() :
+                    args.append(fmla.body.args[1].args[1])
+                if df.args[1].else_value() :
+                    args.append(fmla.body.args[1].args[2])
+                df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
+            else:
+                eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
+                eqn = sortify_with_inference(eqn)
+                df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+            return df
     
     
 def resolve_alias(name): 
@@ -455,7 +456,7 @@ class IvyDomainSetup(IvyDeclInterp):
             add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
             self.domain.all_relations.append((sym,len(lhs.args)))
             self.domain.relations[sym] = len(lhs.args)
-            self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
+            self.domain.definitions.append(ldf.clone([label,df]))
             self.domain.updates.append(DerivedUpdate(df))
             self.domain.symbol_order.append(sym)
         except ValueError:
@@ -464,7 +465,7 @@ class IvyDomainSetup(IvyDeclInterp):
         label = ldf.label
         df = ldf.formula
         df = compile_defn(df)
-        self.domain.definitions.append(ivy_ast.LabeledFormula(label,df))
+        self.domain.definitions.append(ldf.clone([label,df]))
         self.domain.updates.append(DerivedUpdate(df))
         self.domain.symbol_order.append(df.args[0].rep)
     def progress(self,df):
@@ -492,7 +493,6 @@ class IvyDomainSetup(IvyDeclInterp):
         if isinstance(typedef,ivy_ast.GhostTypeDef):
             self.domain.ghost_sorts.add(typedef.name)
         if isinstance(typedef.value,ivy_ast.StructSort):
-            self.domain.sort_order.append(typedef.name)
             sort = ivy_logic.ConstantSort(typedef.name)
             self.domain.sig.sorts[typedef.name] = sort
             for a in typedef.value.args:
