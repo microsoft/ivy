@@ -1164,8 +1164,6 @@ def check_isolate_completeness(mod = None):
         if lbl:
             trusted.add(lbl.rep)
             
-    iu.dbg('trusted')
-
     for actname,action in mod.actions.iteritems():
         if startswith_eq_some(actname,trusted,mod):
             continue
@@ -1177,14 +1175,11 @@ def check_isolate_completeness(mod = None):
                 mixed = mixin.args[0].relname
                 if not has_assertions(mod,mixed):
                     continue
-                iu.dbg('mixed')
                 if not isinstance(mixin,ivy_ast.MixinBeforeDef) and startswith_eq_some(callee,trusted,mod):
                     continue
                 verifier = actname if isinstance(mixin,ivy_ast.MixinBeforeDef) else callee
                 verifier = implementation_map.get(verifier,verifier)
-                print "callee: {}, verifier: {}".format(callee,verifier)
                 if verifier not in checked_context[mixed]:
-                    print "missing!"
                     missing.append((actname,mixin,None))
     for e in mod.exports:
         if e.scope(): # global export

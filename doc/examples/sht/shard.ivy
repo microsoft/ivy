@@ -31,5 +31,4 @@ module table_shard(key,data) = {
     function value(S:t,x:key.t) = some Y. at(S,x,Y) in value_at(S,Y) else 0
     function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
 
-    isolate iso_index = index
 }

@@ -55,61 +55,46 @@ module unbounded_sequence = {
 	    y := x - 1
 	}
     }
+
+    isolate iso = impl,spec
 }
 
 module order_iterator(range) = {
     type t = struct {
-	iter_end : bool,
-	iter_val : range.t
+	is_end : bool,
+	val : range.t
     }
 
     instantiate totally_ordered(range.t)
 
-    definition (X < Y) = ~iter_end(X) & iter_end(Y) 
-                      | ~iter_end(X) & ~iter_end(Y) & iter_val(X) < iter_val(Y)
+    definition (X < Y) = ~is_end(X) & is_end(Y) 
+                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
 
-    function done(X,Y) = iter_end(Y) | X < iter_val(Y)
+    function done(X,Y) = is_end(Y) | X < val(Y)
     function between(X,V,Y) = ~done(V,X) & done(V,Y)
 
-    action begin(x:range.t) returns (y:t)
+    action create(x:range.t) returns (y:t)
     action end returns (y:t)
-    action val(x:t) returns (y:range.t)
-    action over(x:t) returns (y:bool)
     
     object spec = {
-	after begin {
-	    assert ~iter_end(y);
-	    assert iter_val(y) = x
+	after create {
+	    assert ~is_end(y);
+	    assert val(y) = x
 	}
 	after end {
-	    assert iter_end(y);
-	    assert iter_val(y) = 0
-	}
-	before val {
-	    assert ~iter_end(x)
-	}
-	after val {
-	    assert y = iter_val(x)
-	}
-	after over {
-	    assert iter_end(x)
+	    assert is_end(y);
+	    assert val(y) = 0
 	}
     }
 
     object impl = {
-	implement begin {
-	    iter_end(y) := false;
-	    iter_val(y) := x
+	implement create {
+	    is_end(y) := false;
+	    val(y) := x
 	}
 	implement end {
-	    iter_end(y) := true;
-	    iter_val(y) := 0
-	}
-	implement val {
-	    y := iter_val(x)
-	}
-	implement over {
-	    y := iter_end(x)
+	    is_end(y) := true;
+	    val(y) := 0
 	}
     }
 
@@ -125,21 +110,21 @@ module sequence_iterator(range) = {
     object spec = {
 	...
 	before next {
-	    assert ~iter_end(x)
+	    assert ~is_end(x)
 	}
 	after next {
-	    assert X <= iter_val(x) & iter_end(y)
-	           | ~(iter_val(x) < Y & Y < iter_val(y))
-	             & iter_val(x) < iter_val(y) & ~iter_end(y)
+	    assert X <= val(x) & is_end(y)
+	           | ~(val(x) < Y & Y < val(y))
+	             & val(x) < val(y) & ~is_end(y)
 	}
 	before prev {
-	    assert iter_end(y) | exists X. X < iter_val(y)
+	    assert is_end(y) | exists X. X < val(y)
 	}
 	after prev {
-	    assert ~iter_end(x);
-	    assert X <= iter_val(x) & iter_end(y)
-	           | ~(iter_val(x) < Y & Y < iter_val(y))
-	             & iter_val(x) < iter_val(y) & ~iter_end(y)
+	    assert ~is_end(x);
+	    assert X <= val(x) & is_end(y)
+	           | ~(val(x) < Y & Y < val(y))
+	             & val(x) < val(y) & ~is_end(y)
 	}
     }
 
@@ -149,11 +134,11 @@ module sequence_iterator(range) = {
 	    if range.is_max(x) {
 		y := end
 	    } else {
-		y := begin(range.next(val(x)))
+		y := create(range.next(val(x)))
 	    }
 	}
 	implement prev {
-	    y := begin(range.prev(val(x)))
+	    y := create(range.prev(val(x)))
 	}
     }
 

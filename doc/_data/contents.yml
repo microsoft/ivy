@@ -14,3 +14,7 @@
 - title: Sharded Hash Table
   docs:
   - examples/sht/sharded_hash_table
+  - examples/sht/key
+  - examples/sht/shard
+  - examples/sht/table
+

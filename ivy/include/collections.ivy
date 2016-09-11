@@ -371,8 +371,8 @@ module map_wrapper(key,value) = {
 
     implement erase(lo:key.iter.t,hi:key.iter.t) {
 	<<<
-            `s`.erase(`lo`.iter_end ? `s`.end() : `s`.lower_bound(`lo`.iter_val),
- 	              `hi`.iter_end ? `s`.end() : `s`.upper_bound(`hi`.iter_val));
+            `s`.erase(`lo`.is_end ? `s`.end() : `s`.lower_bound(`lo`.val),
+ 	              `hi`.is_end ? `s`.end() : `s`.upper_bound(`hi`.val));
 	>>>
     }
 
@@ -380,11 +380,11 @@ module map_wrapper(key,value) = {
 	<<<
 	    std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`k`);
 	    if (__it == `s`.end()) {
-	        `res`.iter_end = true;
-	        `res`.iter_val = 0;
+	        `res`.is_end = true;
+	        `res`.val = 0;
 	    } else {
-                `res`.iter_end = false;
-	        `res`.iter_val = __it->first;
+                `res`.is_end = false;
+	        `res`.val = __it->first;
 	    }
 	>>>
 	
@@ -392,17 +392,17 @@ module map_wrapper(key,value) = {
 
     implement lub(it:key.iter.t) returns (res:key.iter.t) {
 	<<<
-	    if (`it`.iter_end) {
-	     	`res`.iter_end = true;
-	        `res`.iter_val = 0;
+	    if (`it`.is_end) {
+	     	`res`.is_end = true;
+	        `res`.val = 0;
 	    } else {
-		std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`it`.iter_val);
+		std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`it`.val);
 		if (__it == `s`.end()) {
-		    `res`.iter_end = true;
-		    `res`.iter_val = 0;
+		    `res`.is_end = true;
+		    `res`.val = 0;
 		} else {
-		    `res`.iter_end = false;
-		    `res`.iter_val = __it->first;
+		    `res`.is_end = false;
+		    `res`.val = __it->first;
 		}
 	    }
 	>>>
@@ -411,13 +411,13 @@ module map_wrapper(key,value) = {
 
     implement next(inp:key.iter.t) returns (res:key.iter.t) {
 	<<<
-	    std::map<`key.t`,`value`>::iterator __it = `s`.upper_bound(`inp`.iter_val);
+	    std::map<`key.t`,`value`>::iterator __it = `s`.upper_bound(`inp`.val);
 	    if (__it == `s`.end()) {
-	        `res`.iter_end = true;
-	        `res`.iter_val = 0;
+	        `res`.is_end = true;
+	        `res`.val = 0;
 	    } else {
-                `res`.iter_end = false;
-	        `res`.iter_val = __it->first;
+                `res`.is_end = false;
+	        `res`.val = __it->first;
 	    }
 	>>>
     }
@@ -458,8 +458,8 @@ module ordered_map(key,value) = {
     # iterator least key > iter or end
     action next(it:key.iter.t) returns (res:key.iter.t)
 
-    relation s(K:key.t)
-    relation r(K:key.t,V:value)
+    relation contains(K:key.t)
+    relation maps(K:key.t,V:value)
 #    relation succ(K:key.t,M:key.t)
     
 #    instantiate succ : map(key.t,key.t,0) # ghost
@@ -467,27 +467,27 @@ module ordered_map(key,value) = {
 
     object spec = {
 
-	init ~s(K) & ~r(K,V)
+	init ~contains(K) & ~maps(K,V)
 
 	# insert one element
 	before set {
-	    s(nkey) := true;
-	    r(nkey,X) := X = v
+	    contains(nkey) := true;
+	    maps(nkey,X) := X = v
 	}
 
 	after get {
-	    assert r(k,v) & s(k) | ~s(k) & v = 0
+	    assert maps(k,v) & contains(k) | ~contains(k) & v = 0
 	}
 
 	# erase elements in a closed interval
 	before erase {
-	    s(K) := s(K) & ~key.iter.between(lo,K,hi);
-	    r(K,V) := r(K,V) & ~key.iter.between(lo,K,hi)
+	    contains(K) := contains(K) & ~key.iter.between(lo,K,hi);
+	    maps(K,V) := maps(K,V) & ~key.iter.between(lo,K,hi)
 	}
 
 	after begin {
 	    local foo:key.t {
-		if some (lub:key.t) lub >= k & s(lub) minimizing lub {
+		if some (lub:key.t) lub >= k & contains(lub) minimizing lub {
 		    assert res < key.iter.end & key.iter.val(res) = lub
 		}
 		else {
@@ -498,9 +498,9 @@ module ordered_map(key,value) = {
 
 	after lub {
 	    assert it <= res;
-	    assert key.iter.between(it,X,res) -> ~s(X);
-	    assert key.iter.iter_end(res) | s(key.iter.iter_val(res))
-#		assert succ(K,key.iter.iter_val(res)) -> done(K,it)
+	    assert key.iter.between(it,X,res) -> ~contains(X);
+	    assert key.iter.is_end(res) | contains(key.iter.val(res))
+#		assert succ(K,key.iter.val(res)) -> done(K,it)
 	}
 
 	before next {
@@ -511,7 +511,7 @@ module ordered_map(key,value) = {
 	    local k:key.t {
 		k := key.iter.val(it);
 #		call succ.lemma(k);
-		if some (lub:key.t) lub > k & s(lub) minimizing lub {
+		if some (lub:key.t) lub > k & contains(lub) minimizing lub {
 		    assert key.iter.val(res) = lub
 		}
 		else {
@@ -528,12 +528,12 @@ module ordered_map(key,value) = {
     # the map. Here, if L = 0 it means K is the maximim element, so we
     # have to treat this as a special case.
 
-#    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
-#    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
+#    conjecture contains(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & contains(L)
+#    conjecture contains(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~contains(M)
 
     # Mapping relation R is injective
 
-    conjecture r(X,Y) & r(X,Z) -> Y = Z
+    conjecture maps(X,Y) & maps(X,Z) -> Y = Z
 
     instance impl : map_wrapper(key,value)
 
