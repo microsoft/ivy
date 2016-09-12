@@ -928,8 +928,8 @@ def fix_initializers(mod,after_inits):
         for m in after_inits:
             name = m.mixer()
             extname = 'ext:'+name
-            action = mod.actions[extname] if extname in mod.actions else mod.actions[name]
-            if not ia.has_code(action):
+            action = mod.actions[extname] if extname in mod.actions else mod.actions.get(name,None)
+            if action == None or not ia.has_code(action):
                 continue
             mod.initializers.append((name,loop_action(action,mod)))
             if name in mod.actions:
@@ -1045,7 +1045,8 @@ def create_isolate(iso,mod = None,**kwargs):
             mod.actions[name].label = name
         ext = kwargs['ext'] if 'ext' in kwargs else ext_action.get()
         if ext is not None:
-            ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
+            ais = set(m.mixer() for m in after_inits)
+            ext_acts = [mod.actions[x] for x in sorted(mod.public_actions) if canon_act(x) not in ais]
             ext_act = ia.EnvAction(*ext_acts)
             mod.public_actions.add(ext);
             mod.actions[ext] = ext_act;

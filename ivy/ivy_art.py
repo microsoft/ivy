@@ -118,7 +118,6 @@ class AnalysisGraph(object):
             self.add(s2,s)
         if abstractor:
             abstractor(s2)
-#        print "initial state: {}".format(s2)
 
     def initialize(self, abstractor):
         ac = self.context
@@ -346,16 +345,16 @@ class AnalysisGraph(object):
             state.universe = universe
         return other_art
 
-    def check_bounded_safety(self,state,_get_model_clauses=None):
+    def check_bounded_safety(self,state,_get_model_clauses=None,bound=None):
         postcond = get_state_assertions(state)
         if postcond != None:
-            res = self.bmc(state,postcond,_get_model_clauses=_get_model_clauses)
+            res = self.bmc(state,postcond,_get_model_clauses=_get_model_clauses,bound=bound)
             if res != None:
                 return res
         # currently checks failure only in last action
         if state.expr != None:
             fail = State(expr = fail_expr(state.expr))
-            res = self.bmc(fail,true_clauses(),_get_model_clauses=_get_model_clauses)
+            res = self.bmc(fail,true_clauses(),_get_model_clauses=_get_model_clauses,bound=bound)
             return res
         return True
 

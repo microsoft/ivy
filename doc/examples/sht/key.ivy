@@ -11,6 +11,6 @@ object key = {
     object impl = {
 	interpret t -> bv[16]
     }
-    isolate iso = iter with impl
+    isolate iso = iter,props with impl
 }
 

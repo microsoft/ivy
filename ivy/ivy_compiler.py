@@ -262,14 +262,24 @@ AssignAction.cmpl = compile_assign
 def compile_call(self):
     if lu.used_variables_ast(self):
         iu.IvyError(self,"call may not have free variables")
+    assert top_context
     ctx = ExprContext(lineno = self.lineno)
+    name = self.args[0].rep
+    if name not in top_context.actions:
+        raise iu.IvyError(self,"call to unknown action: {}".format(name))
+    args = [a.cmpl() for a in self.args[0].args]
+    params,returns = top_context.actions[name]
+    if len(returns) != len(self.args) - 1:
+        raise iu.IvyError(self,"wrong number of output parameters (got {}, expecting {})".format(len(self.args) - 1,len(returns)))
+    if len(params) != len(args):
+        raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
     with ctx:
-        mas = [a.cmpl() for a in self.args[0].args]
+        with ASTContext(self):
+            mas = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
     if any(lu.used_variables_ast(a) for a in mas):
         iu.IvyError(self,"call may not have free variables")
-    n = self.args[0].rep
 #        print self.args
-    res = CallAction(*([ivy_ast.Atom(n,mas)] + [a.cmpl() for a in self.args[1:]]))
+    res = CallAction(*([ivy_ast.Atom(name,mas)] + [a.cmpl() for a in self.args[1:]]))
     res.lineno = self.lineno
     ctx.code.append(res)
     res = ctx.extract()

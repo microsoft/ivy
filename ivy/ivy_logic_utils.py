@@ -1131,6 +1131,21 @@ def dual_formula(fmla, skolemizer=None):
         fmla = And(fmla,insts)
     return fmla
 
+def skolemize_formula(fmla, skolemizer=None):
+    if skolemizer == None:
+        skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
+    vs = []
+    while is_exists(fmla):
+        vs.extend(fmla.variables)
+        fmla = fmla.body
+    sksubs = dict((v.rep,skolemizer(v)) for v in vs)
+    fmla = substitute_ast(fmla,sksubs)
+    if instantiator != None: 
+        gts = ground_apps_ast(fmla)
+        insts = clauses_to_formula(instantiator(gts))
+        fmla = And(fmla,insts)
+    return fmla
+
 def reskolemize_clauses(clauses, skolemizer):
     print clauses
     cs = [c for c in used_constants_clauses(clauses) if '__' in c.rep]

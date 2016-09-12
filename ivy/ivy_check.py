@@ -135,7 +135,7 @@ def check_module():
                                 act.checked_assert.value = asn.lineno
                                 print '{}: {}'.format(asn.lineno,asn)
                                 ag.execute_action(actname,prestate=ag.states[0])
-                                cex = ag.check_bounded_safety(ag.states[-1])
+                                cex = ag.check_bounded_safety(ag.states[-1],bound=1)
                                 if cex is not None:
                                     display_cex("safety failed",cex)
                         print "checking consecution..."

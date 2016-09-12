@@ -71,6 +71,7 @@ module order_iterator(range) = {
                       | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
 
     function done(X,Y) = is_end(Y) | X < val(Y)
+    function ahead(X,Y) = ~is_end(Y) & val(Y) < X
     function between(X,V,Y) = ~done(V,X) & done(V,Y)
 
     action create(x:range.t) returns (y:t)
