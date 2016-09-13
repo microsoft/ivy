@@ -66,7 +66,7 @@ class ProgressiveDomain(object):
 
 
     def unfold_defs(self,cube):
-        insts = unfold_definitions_clauses(Clauses([cube_to_formula(cube)]))
+        insts = definition_instances(cube_to_formula(cube))
         add_clauses(self.solver, insts)
 
 

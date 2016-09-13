@@ -102,7 +102,7 @@ module hash_table(key,value,shard) = {
                                          -> tab.contains(X) & tab.maps(X,shard.value(s,X))
 			invariant ~key.iter.between(lo,X,hi) -> spec.tab_invar(X,Y)
 			# following are object invariants of tab and shouldn't be needed here
-			invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z
+			invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z & tab.contains(X)
 		    {
 			local pair:shard.pair {
 			    pair := shard.arr.get(pairs,pos);

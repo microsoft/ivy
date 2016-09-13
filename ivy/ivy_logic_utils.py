@@ -1098,6 +1098,12 @@ def true_clauses():
 
 instantiator = None
 
+def definition_instances(fmla):
+    if instantiator != None: 
+        gts = ground_apps_ast(fmla)
+        return instantiator(gts)
+    return Clauses([])
+
 def unfold_definitions_clauses(clauses):
     if instantiator != None: 
         gts = ground_apps_clauses(clauses)

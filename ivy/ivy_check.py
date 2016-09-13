@@ -52,7 +52,7 @@ def check_conjectures(kind,msg,ag,state):
             gui = ui.new_ui()
             agui = gui.add(ag)
             gui.tk.update_idletasks() # so that dialog is on top of main window
-            agui.try_conjecture(state,msg="{}\nChoose one to see counterexample.".format(msg))
+            agui.try_conjecture(state,msg="{}\nChoose one to see counterexample.".format(msg),bound=1)
             gui.tk.mainloop()
             exit(1)
         raise iu.IvyError(None,"{} failed.".format(kind))

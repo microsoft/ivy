@@ -774,7 +774,7 @@ def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
-        mixer = atom.suffix('['+kind+']')
+        mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'['+kind+']')
         optargs,optreturns = infer_action_params(atom.rep,optargs,optreturns)
         ivy.declare(ActionDecl(ActionDef(mixer,action,formals=optargs,returns=optreturns)))
         handle_mixin(kind,mixer,atom,ivy)

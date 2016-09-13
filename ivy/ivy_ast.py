@@ -186,6 +186,12 @@ class Atom(Formula):
         if hasattr(self,'lineno'):
             res.lineno = self.lineno
         return res
+    def rename(self,s):
+        res = self.clone(self.args)
+        res.rep = s
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
         
     # following for backward compat
     @property

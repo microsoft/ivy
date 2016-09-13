@@ -478,6 +478,8 @@ module ordered_map(key,value) = {
 	init ~contains(K) & ~maps(K,V)
 
 	property gap(W,X) & gap(Y,Z) & Y < X -> gap(W,Z)
+	property gap(W,X) & W <= Y & Z <= X -> gap(Y,Z)
+	property gap(K,M) -> ~(key.iter.ahead(L,K) & key.iter.done(L,M) & contains(L))
 
 	# insert one element
 	before set {
@@ -554,5 +556,7 @@ module ordered_map(key,value) = {
     conjecture maps(X,Y) -> contains(X)
 
     instance impl : map_wrapper(key,value)
+
+    trusted isolate iso = impl,spec
 
 }

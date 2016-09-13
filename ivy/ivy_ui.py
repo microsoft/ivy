@@ -392,7 +392,7 @@ class AnalysisGraphUI(object):
     # user to choose from. Also browses the source code of the
     # conjecture. The proof method depends on the current mode.
 
-    def try_conjecture(self,node,conj=None,msg=None):
+    def try_conjecture(self,node,conj=None,msg=None,bound=None):
         if conj == None:
             udc = undecided_conjectures(node)
             udc_text = [repr(clauses_to_formula(conj)) for conj in udc]
@@ -405,7 +405,7 @@ class AnalysisGraphUI(object):
                 self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
             if self.mode.get() == "induction":
-                self.bmc(node,dual)
+                self.bmc(node,dual,bound=bound)
             else:
                 sg = self.g.concept_graph(node)
                 sg.current.add_constraints(dual.conjuncts)
@@ -527,8 +527,8 @@ class AnalysisGraphUI(object):
     # Bounded reachability: find a concrete path from initial node to
     # a given state satisfying err_cond in state.
 
-    def bmc(self,state,err_cond):
-        res = self.g.bmc(state,err_cond)
+    def bmc(self,state,err_cond,bound=None):
+        res = self.g.bmc(state,err_cond,bound=bound)
         if res == None:
             msg = "The condition is unreachable along the given path"
             self.ui_parent.ok_dialog(msg)

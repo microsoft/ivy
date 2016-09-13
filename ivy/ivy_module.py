@@ -176,7 +176,7 @@ def instantiate_non_epr(non_epr,ground_terms):
                              if not isinstance(v,il.Variable))
                 inst = lu.substitute_constants_ast(cnst,subst)
                 theory.append(inst)
-                iu.dbg('inst')
+#                iu.dbg('inst')
                 matched.add(term)
     return lu.Clauses(theory)
 

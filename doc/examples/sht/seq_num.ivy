@@ -1,0 +1,27 @@
+#lang ivy1.6
+
+include order
+
+module sequence_numbers = {
+
+    type t
+    action next(seq:t) returns (res:t)
+
+    object spec = {
+	instantiate totally_ordered(t)
+
+	after next {
+	    assume exists X. seq < X;
+	    assert seq < res & (X < res -> X <= seq)
+	}
+    }
+
+    object impl = {
+	interpret t->bv[16]
+	implement next {
+	    res := seq + 1
+	}
+    }
+
+    isolate iso_props = spec,impl
+}

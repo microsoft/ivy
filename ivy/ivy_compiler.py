@@ -116,8 +116,6 @@ def compile_app(self):
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
-        if any(lu.used_variables_ast(a) for a in args):
-            raise iu.IvyError(self,"call may not have free variables")
         params,returns = top_context.actions[self.rep]
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
@@ -260,24 +258,20 @@ def compile_assign(self):
 AssignAction.cmpl = compile_assign
 
 def compile_call(self):
-    if lu.used_variables_ast(self):
-        iu.IvyError(self,"call may not have free variables")
     assert top_context
     ctx = ExprContext(lineno = self.lineno)
     name = self.args[0].rep
     if name not in top_context.actions:
         raise iu.IvyError(self,"call to unknown action: {}".format(name))
-    args = [a.cmpl() for a in self.args[0].args]
+    with ctx:
+        args = [a.cmpl() for a in self.args[0].args]
     params,returns = top_context.actions[name]
     if len(returns) != len(self.args) - 1:
         raise iu.IvyError(self,"wrong number of output parameters (got {}, expecting {})".format(len(self.args) - 1,len(returns)))
     if len(params) != len(args):
         raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
-    with ctx:
-        with ASTContext(self):
-            mas = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
-    if any(lu.used_variables_ast(a) for a in mas):
-        iu.IvyError(self,"call may not have free variables")
+    with ASTContext(self):
+        mas = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
 #        print self.args
     res = CallAction(*([ivy_ast.Atom(name,mas)] + [a.cmpl() for a in self.args[1:]]))
     res.lineno = self.lineno
@@ -377,6 +371,14 @@ def compile_action_def(a,sig):
     #        print returns
             res = sortify(a.args[1])
             assert hasattr(res,'lineno'), res
+            for suba in res.iter_subactions():
+                if isinstance(suba,CallAction):
+                    if any(lu.used_variables_ast(a) for a in suba.args[0].args):
+                        iu.dbg('a.args[0]')
+                        iu.dbg('a.formal_params')
+                        iu.dbg('suba.lineno')
+                        iu.dbg('suba')
+                        raise iu.IvyError(suba,"call may not have free variables")
             res.formal_params = formals
             res.formal_returns = returns
             res.label = a.args[0].relname
