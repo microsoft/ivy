@@ -3,15 +3,11 @@
 include queue
 include timeout
 
-module net(lower,req,shard,seq_num,data) = {
+module sht_transport(lower,req,shard,seq_num,id) = {
 
     relation requested(D:id,R:req)
     relation replied(D:id,R:req)
     relation delegated(D:id,S:shard)
-
-    init ~requested(D,R)
-    init ~replied(D,R)
-    init ~delegated(D,S)
 
     action send_request(src:id,dst:id,rq:req) returns (ok:bool)
     action send_delegate(src:id,dst:id,s:shard)  returns (ok:bool)
@@ -21,6 +17,9 @@ module net(lower,req,shard,seq_num,data) = {
     action recv_delegate(dst:id,s:shard)
 
     object spec = {
+
+	init ~requested(D,R)
+
 	before send_request {
 	    assert ~requested(dst,rq)
 	}
@@ -30,6 +29,13 @@ module net(lower,req,shard,seq_num,data) = {
 		requested(dst,rq) := true
 	    }
 	}
+
+	before recv_request {
+	    assert requested(dst,rq);
+	    requested(dst,rq) := false
+	}
+
+	init ~replied(D,R)
 
 	before send_reply {
 	    assert ~replied(dst,rq)
@@ -41,6 +47,13 @@ module net(lower,req,shard,seq_num,data) = {
 	    }
 	}
 
+	before recv_reply {
+	    assert replied(dst,rq);
+	    replied(dst,rq) := false
+	}
+
+	init ~delegated(D,S)
+
 	before send_delegate {
 	    assert ~delegated(dst,s)
 	}
@@ -49,16 +62,6 @@ module net(lower,req,shard,seq_num,data) = {
 	    if ok {
 	        delegated(dst,s) := true
 	    }
-	}
-
-	before recv_request {
-	    assert requested(dst,rq);
-	    requested(dst,rq) := false
-	}
-
-	before recv_reply {
-	    assert replied(dst,rq);
-	    replied(dst,rq) := false
 	}
 
 	before recv_delegate {

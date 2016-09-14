@@ -79,7 +79,7 @@ the same sequence number as a message already in the queue, and
 `pick_one` has the pre-condition that the queue is not empty.
 
 We can implement this specification in a number of ways. Here is a
-simple implementation the uses an ordered map from sequence numbers to
+simple implementation that uses an ordered map from sequence numbers to
 messages:
 
     object impl = {
@@ -123,5 +123,4 @@ a message with number `X`.  The second is essentially the
 representation function. It says that the contents of the queue is the
 set of message such that are mapped to by their sequence number.
 
-A good exercise would be to instantiate and verify this module.
 

@@ -11,7 +11,7 @@ type data
 
 instance seq_num : sequence_numbers
 
-instance t : net(u,req,shard,seq_num,data)
+instance t : sht_transport(u,req,shard,seq_num,id)
 
 instance u : udp_simple(id,t.net_msg.t)
 
