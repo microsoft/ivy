@@ -7,29 +7,32 @@ module message_queue(net_msg,seq_num) = {
 
     relation contents(M:net_msg.t)
 
-    action enqueue(msg:net_msg.t)
+    action enqueue(msg:net_msg.t) returns (ok:bool)
     action empty returns (res:bool)
     action pick_one returns (res:net_msg.t)
-    action delete_all(seq:seq_num)
+    action delete_all(seq:seq_num.t)
 
 
     object spec = {
 	init ~contents(M)
 
 	before enqueue {
-	    assert ~contents(msg);
-	    contents(msg) := true
+	    assert contents(X) -> net_msg.num(X) ~= net_msg.num(msg)
+	}
+
+	after enqueue {
+	    if ok {
+		contents(msg) := true
+	    }
 	}
 
 	after empty returns (res:bool) {
-	    call impl.spec.lemma;
 	    assert contents(M) -> ~res;
 	    assert ~res -> exists M. contents(M)
 	}
 
 	before pick_one {
-	    assert exists M. contents(M);
-	    call impl.spec.lemma
+	    assert exists M. contents(M)
 	}
 
 	after pick_one {
@@ -43,56 +46,27 @@ module message_queue(net_msg,seq_num) = {
     
     object impl = {
 
-	type range
-
-#	instantiate totally_ordered_with_zero(t)
-#	instance iter : order_iterator(range)
-
-	individual full(X:range) : bool
-	individual items(X:range) : net_msg.t
-
-	init ~full(X)
-
-	instance rev : map(net_msg.t,range,0)
+	instance imap : ordered_map(seq_num,net_msg.t)
 
 	implement enqueue {
-	    assume exists X. ~full(X);
-	    if some pos:range. ~full(pos) {
-		full(pos) := true;
-		items(pos) := msg;
-		call rev.set_(msg,pos)
-	    }
+	    call imap.set(net_msg.num(msg),msg);
+	    ok := true
 	}
 
 	implement empty {
-	    if exists X. full(X) {
-		res := false
-	    }
-	    else {
-		res := true
-	    }
+	    res := seq_num.iter.is_end(imap.lub(seq_num.iter.create(0)))
 	}
 	
-	implement delete_all(seq:seq_num) {
-	    full(X) := full(X) & ~(net_msg.num(items(X)) <= seq)
+	implement delete_all(seq:seq_num.t) {
+	    call imap.erase(seq_num.iter.create(0),seq_num.iter.create(seq_num.next(seq)))
 	}
 
 	implement pick_one {
-	    if some pos:range. full(pos) minimizing net_msg.num(items(pos)) {
-		res := items(pos)
-	    }
+	    res := imap.get(seq_num.iter.val(imap.lub(seq_num.iter.create(0))))
 	}
 
-	object spec = {
-	    action lemma = {
-		if some (msg:net_msg.t) contents(msg) {
-		    call rev.lemma(msg)
-		}
-	    }
-	}
-
-	conjecture rev.map(M,X) -> (contents(M) <-> (full(X) & items(X) = M))
-	conjecture full(X) & items(X) = M -> rev.map(M,X)
+	conjecture imap.maps(X,Y) -> X = net_msg.num(Y)
+	conjecture contents(Y) <-> imap.maps(net_msg.num(Y),Y)
 
     }
 

@@ -1,7 +1,7 @@
 #lang ivy1.6
 
 include trans
-include seq_num
+include seqnum
 include udp
 
 type id

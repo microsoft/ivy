@@ -13,27 +13,42 @@ module net(lower,req,shard,seq_num,data) = {
     init ~replied(D,R)
     init ~delegated(D,S)
 
-    action send_request(src:id,dst:id,rq:req)
-    action send_delegate(src:id,dst:id,s:shard)
-    action send_reply(src:id, dst:id, rq:req)
+    action send_request(src:id,dst:id,rq:req) returns (ok:bool)
+    action send_delegate(src:id,dst:id,s:shard)  returns (ok:bool)
+    action send_reply(src:id, dst:id, rq:req) returns (ok:bool)
     action recv_request(dst:id,rq:req)
     action recv_reply(dst:id,rq:req)
     action recv_delegate(dst:id,s:shard)
 
     object spec = {
 	before send_request {
-	    assert ~requested(dst,rq);
-	    requested(dst,rq) := true
+	    assert ~requested(dst,rq)
+	}
+
+	after send_request {
+	    if ok {
+		requested(dst,rq) := true
+	    }
 	}
 
 	before send_reply {
-	    assert ~replied(dst,rq);
-	    replied(dst,rq) := true
+	    assert ~replied(dst,rq)
+	}
+
+	after send_reply {
+	    if ok {
+		replied(dst,rq) := true
+	    }
 	}
 
 	before send_delegate {
-	    assert ~delegated(dst,s);
-	    delegated(dst,s) := true
+	    assert ~delegated(dst,s)
+	}
+
+	after send_delegate {
+	    if ok {
+	        delegated(dst,s) := true
+	    }
 	}
 
 	before recv_request {
@@ -72,7 +87,7 @@ module net(lower,req,shard,seq_num,data) = {
 	# Create one outgoing message queue for each host
 	# and a timout for each queue.
 
-	instance mq(D:id) : message_queue(net_msg,seq_num.t)
+	instance mq(D:id) : message_queue(net_msg,seq_num)
 	instance timer(D:id) : timeout_sec
 
 	# Keep track of the latest sequence number sent and received
@@ -92,8 +107,10 @@ module net(lower,req,shard,seq_num,data) = {
 		net_msg.rq(msg) := rq;
 		net_msg.num(msg) := send_seq(dst);
 		send_seq(dst) := seq_num.next(send_seq(dst));
-		call mq(dst).enqueue(msg);
-		call lower.send(me,dst,msg)
+		ok := mq(dst).enqueue(msg);
+		if ok {
+		    call lower.send(me,dst,msg)
+		}
 	    }
 	}
 
@@ -104,8 +121,10 @@ module net(lower,req,shard,seq_num,data) = {
 		net_msg.sh(msg) := sh;
 		net_msg.num(msg) := send_seq(dst);
 		send_seq(dst) := seq_num.next(send_seq(dst));
-		call mq(dst).enqueue(msg);
-		call lower.send(me,dst,msg)
+		ok := mq(dst).enqueue(msg);
+		if ok {
+		    call lower.send(me,dst,msg)
+		}
 	    }
 	}
 
@@ -116,8 +135,10 @@ module net(lower,req,shard,seq_num,data) = {
 		net_msg.rq(msg) := rq;
 		net_msg.num(msg) := send_seq(dst);
 		send_seq(dst) := seq_num.next(send_seq(dst));
-		call mq(dst).enqueue(msg);
-		call lower.send(me,dst,msg)
+		ok := mq(dst).enqueue(msg);
+		if ok {
+		    call lower.send(me,dst,msg)
+		}
 	    }
 	    
 	}

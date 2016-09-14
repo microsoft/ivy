@@ -514,7 +514,8 @@ module ordered_map(key,value) = {
 	after lub {
 	    assert it <= res;
 	    assert key.iter.between(it,X,res) -> ~contains(X);
-	    assert key.iter.is_end(res) | contains(key.iter.val(res))
+	    assert key.iter.is_end(res) | (contains(key.iter.val(res))
+	                                   & exists Y. maps(key.iter.val(res),Y))
 #		assert succ(K,key.iter.val(res)) -> done(K,it)
 	}
 
