@@ -199,7 +199,9 @@ def p_top_include_symbol(p):
     if not any(p[3] in m.included for m in stack):
         p[0].included.add(p[3])
         pref = Atom(p[3],[])
-        module = importer(p[3])
+        pref.lineno = get_lineno(p,2)
+        with ASTContext(pref):
+            module = importer(p[3])
         for decl in module.decls:
             p[0].declare(decl)
 

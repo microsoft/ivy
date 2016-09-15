@@ -13,3 +13,5 @@ paraminit3
 timeout_test
 udp_test
 udp_test2
+udp_test_struct
+udp_test_array

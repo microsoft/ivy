@@ -62,7 +62,7 @@ module hash_table(key,value,shard) = {
 	}
 
 	implement get {
-	    v := tab.get(k)
+	    v := tab.get(k,0)
 	}
 
 	implement extract_ {
@@ -77,7 +77,7 @@ module hash_table(key,value,shard) = {
 		    local pair : shard.pair, k:key.t {
 			k := key.iter.val(idx);
 			shard.p_key(pair) := k;
-			shard.p_value(pair) := tab.get(k);
+			shard.p_value(pair) := tab.get(k,0);
 			shard.pairs(res) := shard.arr.append(shard.pairs(res),pair);
 			idx := tab.next(idx)
 		    }

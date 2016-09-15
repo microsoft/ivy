@@ -837,7 +837,39 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     return res;
 }
 
+template <class T> void __ser(std::vector<char> &res, const T &inp);
 
+template <>
+void __ser<int>(std::vector<char> &res, const int &inp) {
+    for (int i = sizeof(int)-1; i >= 0 ; i--)
+        res.push_back((inp>>(8*i))&0xff);
+}
+
+template <>
+void __ser<bool>(std::vector<char> &res, const bool &inp) {
+        res.push_back(inp);
+}
+
+struct deser_err {
+};
+
+template <class T> void __deser(const std::vector<char> &inp, unsigned &pos, T &res);
+
+template <>
+void __deser<int>(const std::vector<char> &inp, unsigned &pos, int &res) {
+    if (inp.size() < pos + sizeof(int))
+        throw deser_err();
+    res = 0;
+    for (int i = 0; i < sizeof(int); i++)
+        res = (res << 8) | (((int)inp[pos++]) & 0xff);
+}
+
+template <>
+void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
+    if (inp.size() < pos + 1)
+        throw deser_err();
+    res = inp[pos++] ? true : false;
+}
 
 """)
 
@@ -848,6 +880,10 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
             impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
             impl.append('template <>\n')
             impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+            impl.append('template <>\n')
+            impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
+            impl.append('template <>\n')
+            impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')
 
     once_memo = set()
     for native in im.module.natives:
@@ -972,11 +1008,25 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
             code_line(impl,'s<<"}"')
             code_line(impl,'return s')
             close_scope(impl)
+
             open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
             s = il.Symbol('s',sort)
             t = il.Symbol('t',sort)
             code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
             close_scope(header)
+
+            impl.append('template <>\n')
+            open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
+            for idx,sym in enumerate(destrs):
+                dom = sym.sort.dom[1:]
+                vs = variables(dom)
+                for d,v in zip(dom,vs):
+                    open_loop(impl,[v])
+                code_line(impl,'__ser<' + ctype(sym.sort.rng,classname=classname) + '>(res,t.' + memname(sym) + subscripts(vs) + ')')
+                for d,v in zip(dom,vs):
+                    close_loop(impl,[v])
+            close_scope(impl)
+
 
         emit_repl_imports(header,impl,classname)
         emit_repl_boilerplate1(header,impl,classname)
@@ -1015,6 +1065,18 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
                     close_loop(impl,[v])
                     close_scope(impl)
             code_line(impl,'return res')
+            close_scope(impl)
+
+            impl.append('template <>\n')
+            open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
+            for idx,sym in enumerate(destrs):
+                fname = memname(sym)
+                vs = variables(sym.sort.dom[1:])
+                for v in vs:
+                    open_loop(impl,[v])
+                code_line(impl,'__deser(inp,pos,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                for v in vs:
+                    close_loop(impl,[v])
             close_scope(impl)
             
                 

@@ -33,10 +33,26 @@ module udp_wrapper(addr,pkt,me) = {
 		return sock;
 	    }
 	    virtual void read() {
-		`pkt` pkt;
 		//std::cout << "RECEIVING\n";
-		if (recvfrom(sock,&pkt,sizeof(`pkt`),0,0,0) < 0)
+	        int len;
+                socklen_t lenlen;
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+	            { std::cerr << "getsockopt failed\n"; exit(1); }
+	        std::vector<char> buf(len);
+	        int bytes;
+		if ((bytes = recvfrom(sock,&buf[0],sizeof(`pkt`),0,0,0)) < 0)
 		    { std::cerr << "recvfrom failed\n"; exit(1); }
+	        buf.resize(bytes);
+	        `pkt` pkt;
+	        try {
+	            unsigned pos = 0;
+		    __deser(buf,pos,pkt);
+	            if (pos < buf.size())
+	                throw deser_err();
+                } catch (deser_err &){
+		    std::cout << "BAD PACKET RECEIVED\n";
+		    return;
+		}
 		rcb(pkt);
 	    }
 	    virtual void write(int dst, `pkt` pkt) {
@@ -46,8 +62,10 @@ module udp_wrapper(addr,pkt,me) = {
 		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		dstaddr.sin_port = htons(4990+dst);
 
+	        std::vector<char> buf;
+	        __ser(buf,pkt);
 		//std::cout << "SENDING\n";
-		if (sendto(sock,&pkt,sizeof(`pkt`),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+		if (sendto(sock,&buf[0],buf.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
 		     { std::cerr << "sendto failed\n"; exit(1); }
 	    }
 	};
@@ -88,7 +106,6 @@ module udp_simple(addr,pkt) = {
     }
 
     instance impl(X:addr) : udp_wrapper(addr,pkt,X)
-    private impl
 }
 
 

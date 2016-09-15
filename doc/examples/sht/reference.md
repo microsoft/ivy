@@ -3,7 +3,7 @@ layout: page
 title: Reference object
 ---
 
-In this section, we'll introduce the notion of linearizabiliyy as our
+In this section, we'll introduce the notion of linearizability as our
 concurrency semantics, and see how to define a monitor for
 linearizability. We'll call this monitor the *reference object*.
 
@@ -40,7 +40,7 @@ transactions such that:
 - the transactions ordered by `<` are consistent.
 
 Consistency means that the value returned by a `get` transaction `t` for
-key `k` is the value of the most recent set by the most recent `set`
+key `k` is the value of the most recent `set`
 transaction to `k` according to `<`.
 
 Linearizability is easy to describe on paper, but not so easy to
@@ -67,7 +67,7 @@ already committed. In this case, the order of committing transactions
 is a consistent sequential order `<` (and IVy can prove this).
 
 The `commit` action is special because we don't actually indend to
-execute in in reality. When we extract code to execution, the `commit`
+execute it in reality. When we extract code to execute, the `commit`
 actions will be abstracted away. This lets us decorate our code with
 `commit` actions to help in the proof.
 
@@ -75,53 +75,53 @@ The reference object's specification starts like this:
 
     module sht_reference(id,key,data) = {
 
-	type otype = {read, write}
+        type otype = {read, write}
 
-	ghost type txid
+        ghost type txid
 
-	function type_(T:txid) : otype
-	function key_(T:txid) : key.t
-	function data_(T:txid)  : data
+        function type_(T:txid) : otype
+        function key_(T:txid) : key.t
+        function data_(T:txid)  : data
 
 
 We have an emumerated `otype` to represent the operation type, and an
 uninterpreted ghost type `txid` to represent transactions. Because
 `txid` is a ghost type, values of this type can't occur in extracted
-code. We'll see how ghost type are used shorty.  The functions
-`type_`, `key` and `data` tell us respectively the operation type, key
+code. We'll see how ghost types are used shorty.  The functions
+`type_`, `key_` and `data_` tell us respectively the operation type, key
 and data value associate with the transaction.
 
 This is the monitor state:
 
-	relation generated(T:txid)
-	init ~generated(T)
+        relation generated(T:txid)
+        init ~generated(T)
 
-	relation committed(T:txid)
-	init ~committed(T)
+        relation committed(T:txid)
+        init ~committed(T)
 
-	individual map(A:key.t) : data
-	init map(A) = 0
+        individual map(A:key.t) : data
+        init map(A) = 0
 
 We keep track of a set of `generated` transactions (those that have
-begun) as set of `committed` transactions, and the abstract state
+begun) as well as a set of `committed` transactions, and the abstract state
 `map` of the directory.  Initially, all keys map to value `0`.
 
-The begin action is called when a transaction starts. It allocates a
+The `begin` action is called when a transaction starts. It allocates a
 fresh transaction id, builds a transaction with that id and adds the
 transaction to the set `generated`. Being lazy, we assume that there
 is always an unused transaction id available. We could prove this by
 implementing `txid` with, for example, the integers.
 
-	action begin(i:id, o:otype, k:key.t, d:data) returns (lt:txid) = {
-	    assume exists T. ~generated(T);
-	    if some c:txid. ~generated(c) {
-		type_(c) := o;
-		key_(c) := k;
-		data_(c) := d;
-		generated(c) := true;
-		lt := c
-	    }
-	}
+        action begin(i:id, o:otype, k:key.t, d:data) returns (lt:txid) = {
+            assume exists T. ~generated(T);
+            if some c:txid. ~generated(c) {
+                type_(c) := o;
+                key_(c) := k;
+                data_(c) := d;
+                generated(c) := true;
+                lt := c
+            }
+        }
 
 Notice that the `begin` action returns a transaction id. This ghost
 value can be used by the protocol implementation to indicate when a
@@ -130,20 +130,20 @@ transaction is being committed.
 The commit action is called by the protocol to do just that. Here is its
 specification:
 
-	action commit(lt:txid)
+        action commit(lt:txid)
 
-	before commit {
+        before commit {
 
-	    assert generated(lt) & ~committed(lt);
-	    committed(lt) := true;
+            assert generated(lt) & ~committed(lt);
+            committed(lt) := true;
 
-	    if type_(lt) = read {
-		data_(lt) := map(key_(lt))
-	    }
-	    else {
-		map(key_(lt)) := data_(lt)
-	    }			
-	}     
+            if type_(lt) = read {
+                data_(lt) := map(key_(lt))
+            }
+            else {
+                map(key_(lt)) := data_(lt)
+            }                        
+        }     
 
 The precondition for this operation is that the operation has begun,
 but has not yet committed. We add the `txid` to the commited set and
@@ -155,17 +155,19 @@ Finally, when a transaction ends, we have to verify that it has
 committed (that is, every transaction must commit between begin and
 end).
 
-	action end(lt:txid)
-	before end {
-	    assert commited(lt)
-	}	
+        action end(lt:txid)
+        before end {
+            assert commited(lt)
+        }        
     }
 
-In princple, we can now write a monitor for the reference object that
+In principle, we can now write a monitor for the reference object that
 maintains the "happens before" relation and checks that the actual
 commit order is consistent with "happens before". We'll leave that
 problem for later however, and just trust that our reference object is
-correct.
+correct. The reference object is all we really need, since it can be
+used as a specification of our protocol by a client in order to prove
+the client correct.
 
 
 

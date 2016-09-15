@@ -90,7 +90,7 @@ module sht_reference(id,key,data) = {
 
     action end(lt:txid)
     before end {
-	assert commited(lt)
+	assert committed(lt)
     }	
 
 }

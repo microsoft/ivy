@@ -22,3 +22,9 @@ export t.send_request
 export t.send_delegate
 import t.recv_request
 import t.recv_delegate
+
+object impl = {
+    interpret id -> bv[1]
+}
+
+extract iso_impl = t,u,seq_num,impl

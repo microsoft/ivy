@@ -5,8 +5,8 @@ title: Transport Service
 
 The distributed hash table service need a reliable transport mechanism
 for two reasons.  It's important not to lose parts of the has table in
-transit. Moreover, for consistency, we rely on the fact that we have
-have to values for the same key on the system. This invariant could be
+transit. Moreover, for consistency, we rely on the fact that we never
+have two values for the same key on the system. This invariant could be
 violated if messages were duplicated.
 
 We will build a [non-duplicating ordered transport
@@ -20,24 +20,24 @@ Here is the interface of the transport service:
 
     module sht_transport(lower,req,shard,seq_num,id) = {
 
-	relation requested(D:id,R:req)
-	relation replied(D:id,R:req)
-	relation delegated(D:id,S:shard)
+        relation requested(D:id,R:req)
+        relation replied(D:id,R:req)
+        relation delegated(D:id,S:shard)
 
-	action send_request(src:id,dst:id,rq:req) returns (ok:bool)
-	action send_delegate(src:id,dst:id,s:shard)  returns (ok:bool)
-	action send_reply(src:id, dst:id, rq:req) returns (ok:bool)
-	action recv_request(dst:id,rq:req)
-	action recv_reply(dst:id,rq:req)
-	action recv_delegate(dst:id,s:shard)
+        action send_request(src:id,dst:id,rq:req) returns (ok:bool)
+        action send_delegate(src:id,dst:id,s:shard)  returns (ok:bool)
+        action send_reply(src:id, dst:id, rq:req) returns (ok:bool)
+        action recv_request(dst:id,rq:req)
+        action recv_reply(dst:id,rq:req)
+        action recv_delegate(dst:id,s:shard)
 
-	...
+        ...
     }
 
 The `lower` parameter of the module is the low-level network
 interface, an unreliable, duplicating message sevice. Parameters `req`
 and `shard` are data types for message contents, `seq_num` is a type
-of packet sequence numbers and `id` is a type of process id's.
+of [packet sequence numbers](seqnum.html) and `id` is a type of process id's.
 
 The service has specific calls and call-backs for the three types of
 messages in the protocol: request, reply and delegate. The `send` actions
@@ -53,25 +53,25 @@ message contains a [shard](shard.md).
 The service specification has three parts relating to the three types
 of messages. Here is the specification for request messages:
 
-	object spec = {
+        object spec = {
 
-	    init ~requested(D,R)
+            init ~requested(D,R)
 
-	    before send_request {
-		assert ~requested(dst,rq)
-	    }
+            before send_request {
+                assert ~requested(dst,rq)
+            }
 
-	    after send_request {
-		if ok {
-		    requested(dst,rq) := true
-		}
-	    }
+            after send_request {
+                if ok {
+                    requested(dst,rq) := true
+                }
+            }
 
-	    before recv_request {
-		assert requested(dst,rq);
-		requested(dst,rq) := false
-	    }
-	    ...
+            before recv_request {
+                assert requested(dst,rq);
+                requested(dst,rq) := false
+            }
+            ...
 
 The specifications for reply and delegate messages are similar.  The
 specification does not allow a meesage to be sent if it is already in
@@ -101,13 +101,13 @@ last, `ack_t` is for acknowledgment packets. Here is the struct that
 holds the messages:
 
     object net_msg = {
-	type t = struct {
-	    mty : mtype,
-	    src : id,
-	    num : seq_num.t,
-	    rq : req,
-	    sh : shard
-	}
+        type t = struct {
+            mty : mtype,
+            src : id,
+            num : seq_num.t,
+            rq : req,
+            sh : shard
+        }
     }
 
 In has a tag `mty`, a source id, a sequence number and two payload
@@ -127,38 +127,38 @@ re-transmission:
 
     object impl(me:id) = {
 
-	instance mq(D:id) : message_queue(net_msg,seq_num)
-	instance timer(D:id) : timeout_sec
-	
+        instance mq(D:id) : message_queue(net_msg,seq_num)
+        instance timer(D:id) : timeout_sec
+        
 
 In addition, for each destination, we record `send_seq`, the next
 sequence number to use, and for each message source we record
 `recv_seq` the next sequence number to receive. Initially, both are zero:
 
-	individual send_seq(S:id) : seq_num.t
-	individual recv_seq(S:id) : seq_num.t
+        individual send_seq(S:id) : seq_num.t
+        individual recv_seq(S:id) : seq_num.t
 
-	init recv_seq(S) = 0 & send_seq(S) = 0
+        init recv_seq(S) = 0 & send_seq(S) = 0
 
 ## Sending
 
 Here is the code that sends requests:
 
-	implement send_request(dst:id,rq:req) {
-	    local msg : net_msg.t, seq : seq_num.t {
-		net_msg.mty(msg) := request_t;
-		net_msg.src(msg) := me;
-		net_msg.rq(msg) := rq;
-		net_msg.num(msg) := send_seq(dst);
-		send_seq(dst) := seq_num.next(send_seq(dst));
-		ok := mq(dst).enqueue(msg);
-		if ok {
-		    call lower.send(me,dst,msg)
-		}
-	    }
-	}
+        implement send_request(dst:id,rq:req) {
+            local msg : net_msg.t, seq : seq_num.t {
+                net_msg.mty(msg) := request_t;
+                net_msg.src(msg) := me;
+                net_msg.rq(msg) := rq;
+                net_msg.num(msg) := send_seq(dst);
+                send_seq(dst) := seq_num.next(send_seq(dst));
+                ok := mq(dst).enqueue(msg);
+                if ok {
+                    call lower.send(me,dst,msg)
+                }
+            }
+        }
 
-It starts by formula in packet `msg` by filling in the fields. The
+It starts by constructing packet `msg` by filling in the fields. The
 sequence number of the packet is `send_seq` for the specified
 destination. Then `send_seq` is incremented and we call the message
 queue `mq(dst)` to enqueue the message. Finally, if the message was
@@ -173,41 +173,41 @@ Sending messages for replies and delegations is similar.
 To receive messages, we implement the `recv` action of the low-level
 network interface. Here is the code:
 
-	implement lower.recv(msg:net_msg.t) {
-	    local src:id,seq:seq_num.t {
-		seq := net_msg.num(msg);
-		src := net_msg.src(msg);
-		if seq <= recv_seq(src) & net_msg.mty(msg) ~= ack_t  {
-		    local ack : net_msg.t {
-			net_msg.mty(ack) := ack_t;
-			net_msg.src(ack) := me;
-			net_msg.num(ack) := seq;
-			call lower.send(me,src,ack)
-		    }
-		};
-		if net_msg.mty(msg) = ack_t {
-		    call mq(src).delete_all(seq)
-		}
-		else if seq = recv_seq(src) {
-		    recv_seq(src) := seq_num.next(recv_seq(src));
-		    if net_msg.mty(msg) = request_t {
-			call recv_request(me,net_msg.rq(msg))
-		    }
-		    else if net_msg.mty(msg) = reply_t {
-			call recv_reply(me,net_msg.rq(msg))
-		    }
-		    else if net_msg.mty(msg) = delegate_t {
-			call recv_delegate(me,net_msg.sh(msg))
-		    }
-		}
-	    }
-	}
+        implement lower.recv(msg:net_msg.t) {
+            local src:id,seq:seq_num.t {
+                seq := net_msg.num(msg);
+                src := net_msg.src(msg);
+                if seq <= recv_seq(src) & net_msg.mty(msg) ~= ack_t  {
+                    local ack : net_msg.t {
+                        net_msg.mty(ack) := ack_t;
+                        net_msg.src(ack) := me;
+                        net_msg.num(ack) := seq;
+                        call lower.send(me,src,ack)
+                    }
+                };
+                if net_msg.mty(msg) = ack_t {
+                    call mq(src).delete_all(seq)
+                }
+                else if seq = recv_seq(src) {
+                    recv_seq(src) := seq_num.next(recv_seq(src));
+                    if net_msg.mty(msg) = request_t {
+                        call recv_request(me,net_msg.rq(msg))
+                    }
+                    else if net_msg.mty(msg) = reply_t {
+                        call recv_reply(me,net_msg.rq(msg))
+                    }
+                    else if net_msg.mty(msg) = delegate_t {
+                        call recv_delegate(me,net_msg.sh(msg))
+                    }
+                }
+            }
+        }
 
 Several things are going on here. First we deal with acknowledgments.
-We acknowledge a message if it sequence number is less tha or equal to
-the expected sequence number `recv_seq`. The idea here is that a
-lesser sequence number has already been received. We have to
-acknowledge it because the eariler acknowledgment might have been
+We acknowledge a message if its sequence number is less than or equal to
+the expected sequence number `recv_seq`. The idea here is that all packets
+with lesser sequence numbers have already been received. We have to
+acknowledge the packet because the eariler acknowledgment might have been
 lost. A greater sequence number will be ignored, since we receive
 messages strictly in order.
 
@@ -229,13 +229,13 @@ When a message queue times out, we may need to retransmit a
 message. We do this by implementing the `timeout` action of the timer
 interface, like this:
 
-	implement timer.timeout(dst:id) {
-	    if ~mq(dst).empty {
-		call lower.send(me,dst,mq(dst).pick_one)
-	    }
-	}
+        implement timer.timeout(dst:id) {
+            if ~mq(dst).empty {
+                call lower.send(me,dst,mq(dst).pick_one)
+            }
+        }
 
-Notice that becuase the timer is a parameterized object, the `timeout`
+Notice that because the timer is a parameterized object, the `timeout`
 action as a parameter corresponding to the destination host id. We
 check to see if the corresponding queue is empty. If not, we call
 `pick_one` to select a message to re-transmit, and then call the
@@ -255,11 +255,11 @@ an enqueued message that is not yet received must correspond to a request
 in transit:
 
     conjecture mq(D).contents(M) & impl(D).recv_seq(me) <= net_msg.num(M)
-	       & net_msg.mty(M) = request_t -> requested(D,net_msg.rq(M))
+               & net_msg.mty(M) = request_t -> requested(D,net_msg.rq(M))
 
-Moreover, we can't have unreceived duplicates in the network. This is
-a bit subtle: we disallow two identical messages in the same queue
-(i.e., with distinct sequence numbers). We also have to a message
+Moreover, we can't have unreceived duplicate messages in the network. This is
+a bit subtle. We disallow two identical messages in the same queue
+(i.e., with distinct sequence numbers). We also have to disallow a message
 in transit to the same destination from two distinct sources, since
 the abstract state does not distinguish sources:
 
@@ -268,13 +268,13 @@ the abstract state does not distinguish sources:
         & impl(S2).mq(D).contents(M2) & impl(D).recv_seq(S2) <= net_msg.num(M2)
         & net_msg.mty(M1) = request_t & net_msg.mty(M2) = request_t 
         & (S1 ~= S2 | net_msg.num(M1) ~= net_msg.num(M2))
-	   -> net_msg.rq(M1) ~= net_msg.rq(M2)
+           -> net_msg.rq(M1) ~= net_msg.rq(M2)
 
 The above is a bit redundant. It might be better style to define
-relation describing an unreceived request message in a given queue.
+a relation describing an unreceived request message in a given queue.
 We have a similar invariants for replies and delegations.
 
-To make sure we don't have duplicate sequence numbers in the queues,
+To make sure we don't create duplicate sequence numbers in the queues,
 we need to say that now that the sending sequence number is bigger
 than any message in the queue:
 
@@ -284,7 +284,7 @@ No sequence number occurs twice in a queue (this is actually an invariant
 of message queues and could have been stated in their implementation):
 
     conjecture mq(D).contents(M1) & mq(D).contents(M2) & M1 ~= M2
-	       -> net_msg.num(M1) ~= net_msg.num(M2)
+               -> net_msg.num(M1) ~= net_msg.num(M2)
 
 We also need to know that only appropriate messages are enqueued, that
 is, messages in a queue have a correct source field and are not
@@ -301,20 +301,20 @@ know three things:
 First, a message intransit must match any queue entry with the same sequence number:
 
     conjecture lower.spec.sent(M,D) & net_msg.src(M) = me
-	       & mq(D).contents(M2) & net_msg.num(M2) = net_msg.num(M)
-	       & net_msg.mty(M) ~= ack_t -> M = M2
+               & mq(D).contents(M2) & net_msg.num(M2) = net_msg.num(M)
+               & net_msg.mty(M) ~= ack_t -> M = M2
 
 Second, a low-level message that hasn't been received yet must still be in the
 corresponding queue:
 
     conjecture lower.spec.sent(M,D) & net_msg.src(M) = S
-	       & impl(D).recv_seq(S) <= net_msg.num(M) & net_msg.mty(M) ~= ack_t
-	       -> impl(S).mq(D).contents(M)
+               & impl(D).recv_seq(S) <= net_msg.num(M) & net_msg.mty(M) ~= ack_t
+               -> impl(S).mq(D).contents(M)
 
 Third, every low-level message as actually been sent:
 
     conjecture lower.spec.sent(M,D) & net_msg.src(M) = me & net_msg.mty(M) ~= ack_t
-	        -> ~(send_seq(D) <= net_msg.num(M))
+                -> ~(send_seq(D) <= net_msg.num(M))
 
 Taken together, these properties say that the unreceived low-level
 messages are a subset of the messages in the appropriate outgoing
@@ -324,7 +324,7 @@ Finally, we need to know that low-level acknowledgment packets are correct. This
 that any acknowledged sequence number must actually have been received:
 
     conjecture lower.spec.sent(M,D) & net_msg.src(M) = S
-	       & net_msg.mty(M) = ack_t -> ~(impl(S).recv_seq(D) <= net_msg.num(M))
+               & net_msg.mty(M) = ack_t -> ~(impl(S).recv_seq(D) <= net_msg.num(M))
 
 Together, these invariants are inductive and are sufficient to show
 the implementation is correct in the sense of delivering each sent
@@ -332,18 +332,18 @@ protocol message no more than once.
 
 ## The message queues
 
-We aqlso need to verify the mesage queues agains their specification. We will use [paramater stripping](leader.md) to do that:
+We aqlso need to verify the mesage queues agains their specification. We will use [parameter stripping](leader.md) to do that:
 
     isolate iso_mq(mq_me:id) = mq(mq_me) with seq_num
-	
+        
 What this means is that we verify one message queue instance named
 `mq_me` in isolation from the others. This works because the different
-message queues don't interfer with each other.
+message queues don't interfere with each other.
 
 # Testing
 
 Before implementing the application-level protcol on top of this
-service, its worth instnatiating and proving it, and perhaps also
+service, it's worth instantiating and proving it, and perhaps also
 testing it a bit. Here is a [test module](trans_test.ivy):
 
     include trans
@@ -353,7 +353,6 @@ testing it a bit. Here is a [test module](trans_test.ivy):
     type id
     type req
     type shard
-    type data
 
     instance seq_num : sequence_numbers
 
@@ -369,7 +368,10 @@ testing it a bit. Here is a [test module](trans_test.ivy):
     import t.recv_request
     import t.recv_delegate
 
-We use `udp_simple` as the low-level datagram service. Let's verify this module:
+
+We left the `req` and `shard` types uninterpreted, since these don't
+matter to the transport service.  We use `udp_simple` as the low-level
+datagram service. Let's verify this module:
 
     ivy_check trans_test.ivy 
     Checking isolate iso_t...
@@ -403,4 +405,30 @@ Notice the IVy actually verified three isolates: `iso_t` (the
 transport module), `seq_num.iso` (the sequence number module) and
 `t.impl.iso_mq` (the parameter-stripped message queue module).
 
+## Compile and run
 
+Let's compile to a REPL and try a few packets:
+
+    $ make -B trans_test
+    ivy_to_cpp target=repl isolate=iso_impl trans_test.ivy
+    g++ -g -o trans_test trans_test.cpp
+
+    ./trans_test
+    > t.send_request(0,1,42)
+    true    
+    > t.recv_request(1,42)
+    t.send_delegate(1,0,66)
+    true
+    > t.recv_delegate(0,66)
+    ...
+
+Notice the order of events. We call `send_request`, which responds with `true`
+meaning the pack was sent. Then asynchronously the packet arrives, which results
+in a callback of `recv_request`. Also notice we entered integers for message
+payloads. The compiler uses machine integers to implement the uninterpreted types,
+though logically any type would work.
+
+As an excercise, you might try stripping the first parameter to
+generate a parallel implementation. Check that if you send a
+message to a process that hasn't started yet, the packet is retried
+until that process starts.

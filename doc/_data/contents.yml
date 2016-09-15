@@ -17,4 +17,8 @@
   - examples/sht/key
   - examples/sht/shard
   - examples/sht/table
-
+  - examples/sht/delmap
+  - examples/sht/seqnum
+  - examples/sht/queue
+  - examples/sht/trans
+  - examples/sht/reference

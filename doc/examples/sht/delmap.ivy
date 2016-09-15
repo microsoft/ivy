@@ -52,7 +52,7 @@ module delegation_map(key,id) = {
 	    if lo < hi {
 		if ~key.iter.is_end(hi) {
 		    local nid:id {
-			nid := imap.get(key.iter.val(imap.glb(hi)));
+			nid := imap.get(key.iter.val(imap.glb(hi)),0);
 		        call imap.set(key.iter.val(hi),nid)
 		    }
 		};
@@ -62,7 +62,7 @@ module delegation_map(key,id) = {
 	}
 
 	implement get(k:key.t) returns (val:id)  {
-	    val := imap.get(key.iter.val(imap.glb(key.iter.create(k))))
+	    val := imap.get(key.iter.val(imap.glb(key.iter.create(k))),0)
 	}
 
 	# The value of every key between K and its successor is the same as K's value.

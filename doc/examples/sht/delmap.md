@@ -10,27 +10,27 @@ server id's. Here's its specification as an abstract datatype:
 
     module delegation_map(key,id) = {
 
-	action set(lo:key.iter.t,hi:key.iter.t,dst:id)
-	action get(k:key.t) returns (val:id)
+        action set(lo:key.iter.t,hi:key.iter.t,dst:id)
+        action get(k:key.t) returns (val:id)
 
-	# The delegation map is a relation, since as a function it might
-	# not be stratified.
+        # The delegation map is a relation, since as a function it might
+        # not be stratified.
 
-	relation map(K:key.t, X:id)
-	init map(K,X) <-> X = 0
+        relation map(K:key.t, X:id)
+        init map(K,X) <-> X = 0
 
-	object spec = {
-	    before set {
-		map(K,X) := (X = dst) & key.iter.between(lo,K,hi)
-			    | map(K,X) & ~key.iter.between(lo,K,hi)
-	    }
-	    after get {
-		assert map(k,val)
-	    }
-	}
+        object spec = {
+            before set {
+                map(K,X) := (X = dst) & key.iter.between(lo,K,hi)
+                            | map(K,X) & ~key.iter.between(lo,K,hi)
+            }
+            after get {
+                assert map(k,val)
+            }
+        }
 
-	conjecture map(K,V) & map(K,W) -> V = W
-	...
+        conjecture map(K,V) & map(K,W) -> V = W
+        ...
 
 The delegation map provides an action `set` that maps a range of keys
 `[lo,hi)` to a given id `dst`. Notice that `lo` and `hi` are key
@@ -42,7 +42,7 @@ all keys map to the default server with if `0`. By making `map` a relation
 rather than a function, we avoid creating a function cycles in case the client
 of the delegation map has a finction from id's to keys. 
 
-THe specification of `set` says that all keys between `lo` and 'hi`
+THe specification of `set` says that all keys between `lo` and `hi`
 are mapped to `dst` and all other keys keep their value. The `get`
 action just returns an `id` associated to a given `key`. Of course, we
 won't be able to actually prove this post-condition unless `map` is
@@ -64,32 +64,32 @@ large range of keys.
 
 Here is the implementation:
 
-	object impl = {
+        object impl = {
 
-	    instance imap : ordered_map(key,id)
+            instance imap : ordered_map(key,id)
 
-	    after init {
-		call imap.set(0,0)
-	    }
+            after init {
+                call imap.set(0,0)
+            }
 
-	    implement set(lo:key.iter.t,hi:key.iter.t,dst:id)  {
-		if lo < hi {
-		    if ~key.iter.is_end(hi) {
-			local nid:id {
-			    nid := imap.get(key.iter.val(imap.glb(hi)));
-			    call imap.set(key.iter.val(hi),nid)
-			}
-		    };
-		    call imap.erase(lo,hi);
-		    call imap.set(key.iter.val(lo),dst)
-		}
-	    }
+            implement set(lo:key.iter.t,hi:key.iter.t,dst:id)  {
+                if lo < hi {
+                    if ~key.iter.is_end(hi) {
+                        local nid:id {
+                            nid := imap.get(key.iter.val(imap.glb(hi)));
+                            call imap.set(key.iter.val(hi),nid)
+                        }
+                    };
+                    call imap.erase(lo,hi);
+                    call imap.set(key.iter.val(lo),dst)
+                }
+            }
 
-	    implement get(k:key.t) returns (val:id)  {
-		val := imap.get(key.iter.val(imap.glb(key.iter.create(k))))
-	    }
-	...
- 	}
+            implement get(k:key.t) returns (val:id)  {
+                val := imap.get(key.iter.val(imap.glb(key.iter.create(k))))
+            }
+        ...
+         }
 
 The implmentation map is called `imap`.  Notice the use of `after
 init` to set value of key `0` to `0`. Since `0` is the minimal key,
@@ -194,7 +194,7 @@ Let's test the `delegation_map` module by instantiating it:
     export dmap.get
 
     object impl = {
-	interpret id -> bv[1]
+        interpret id -> bv[1]
     }
 
     isolate iso_dmap = dmap with key
