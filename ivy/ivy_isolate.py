@@ -328,8 +328,8 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         if not(len(action.formal_params) >= len(strip_params)):
             raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
-        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
-            raise IvyError(None,'foreign function {} may be interfering'.format(name))
+#        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
+#            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
         new_action = strip_action(action,strip_map,strip_binding)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
@@ -407,7 +407,7 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
     for sub in action.iter_subactions():
         for sym in sub.modifies():
             if sym.name in mod.sig.symbols:
-                amods.add(sym.name)
+                amods.add(sym)
         if isinstance(sub,ia.CallAction):
             calledname = sub.args[0].rep
             if calledname not in summarized_actions:
@@ -470,6 +470,19 @@ def get_loc_mods(mod,actname):
     res = [s for s in action.modifies() if s.name.startswith('fml:')]
     return res
 
+def find_references(mod,syms,new_actions):
+    print [type(s) for s in syms]
+    syms = set(syms)
+    refs = set()
+    for x in mod.labeled_axioms+mod.labeled_props+mod.labeled_inits+mod.labeled_conjs+mod.definitions:
+        if syms.intersection(lu.used_symbols_ast(x.formula)):
+            refs.add(x.lineno)
+    for x in new_actions.values():
+        if syms.intersection(lu.used_symbols_ast(x)):
+            refs.add(x.lineno)
+    return refs
+    
+
 def check_interference(mod,new_actions,summarized_actions):
     calls = dict()
     mods = dict()
@@ -492,8 +505,9 @@ def check_interference(mod,new_actions,summarized_actions):
                         cmods.update(locmods[called])
                         if cmods:
                             things = ','.join(sorted(map(str,cmods)))
-                            raise iu.IvyError(action,"Call out to {} may have visible effect on {}"
-                                              .format(called,things))
+                            refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
+                            raise iu.IvyError(action,"Call out to {} may have visible effect on {}{}"
+                                              .format(called,things,refs))
             if actname in callouts:
                 for midcall in sorted(callouts[actname][0]):
                     if midcall in calls:

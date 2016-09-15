@@ -22,9 +22,10 @@ module delegation_map(key,id) = {
     # not be stratified.
 
     relation map(K:key.t, X:id)
-    init map(K,X) <-> X = 0
 
     object spec = {
+	init map(K,X) <-> X = 0
+
 	before set {
 	    map(K,X) := (X = dst) & key.iter.between(lo,K,hi)
 	                | map(K,X) & ~key.iter.between(lo,K,hi)
@@ -32,9 +33,9 @@ module delegation_map(key,id) = {
         after get {
 	    assert map(k,val)
 	}
-    }
 
-    conjecture map(K,V) & map(K,W) -> V = W
+	conjecture map(K,V) & map(K,W) -> V = W
+    }
 
     # The implementation uses an ordered map.  Each key in the
     # the ordered map represents the lower bound of an interval of

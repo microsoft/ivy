@@ -118,10 +118,10 @@ module sht_protocol(me,ref,trans,id,key,data,shard) = {
 	}
 
 	implement trans.recv_delegate(s:shard.t) {
-	    if shard.valid(s) {  # ignore mal-formed messages
+#	    if shard.valid(s) {  # ignore mal-formed messages
 		call dm.set(shard.lo(s),shard.hi(s),me);
 		call hash.incorporate(s)
-	    }
+#	    }
 	}
 
 
