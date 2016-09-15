@@ -778,7 +778,9 @@ def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     else:
         mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'['+kind+']')
         optargs,optreturns = infer_action_params(atom.rep,optargs,optreturns)
-        ivy.declare(ActionDecl(ActionDef(mixer,action,formals=optargs,returns=optreturns)))
+        df = ActionDef(mixer,action,formals=optargs,returns=optreturns)
+        df.lineno = atom.lineno
+        ivy.declare(ActionDecl(df))
         handle_mixin(kind,mixer,atom,ivy)
     
 if not (iu.get_numeric_version() <= [1,1]):
@@ -794,7 +796,7 @@ if not (iu.get_numeric_version() <= [1,1]):
         'top : top BEFORE atype optargs optreturns LCB action RCB'
         p[0] = p[1]
         atom = Atom(p[3])
-        atom.lineno = get_lineno(p,3)
+        atom.lineno = get_lineno(p,2)
         handle_before_after("before",atom,p[7],p[0],p[4],p[5])
     def p_top_after_callatom_lcb_action_rcb(p):
         'top : top AFTER atype optargs optreturns LCB action RCB'

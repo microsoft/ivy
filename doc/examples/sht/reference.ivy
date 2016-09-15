@@ -56,7 +56,7 @@ module sht_reference(id,key,data) = {
 
     before commit {
 
-	assert committed(lt);
+	assert ~committed(lt);
 	committed(lt) := true;
 
 	# execute the transaction abstractly

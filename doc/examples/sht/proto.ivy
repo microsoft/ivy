@@ -31,10 +31,10 @@ module sht_protocol(me,ref,trans,id,key,data,shard) = {
     object spec = {
 	before delegate_ {
 	    assert dst ~= me;
-	    assert lo <= hi;
+	    assert lo < hi;
 	    assert key.iter.between(lo,K,hi) -> impl.dm.map(K,me)
 	}
-	before trans.send_reply(dst:id, rq:req.t) {
+	before trans.send_reply(dst:id, rq:req.t) returns(ok:bool) {
 	    assert ref.data_(req.ltime(rq)) = req.rdata(rq)
 	}
 	before answer {

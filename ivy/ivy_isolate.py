@@ -1174,7 +1174,7 @@ def check_isolate_completeness(mod = None):
                 missing.append((actname,callee,None))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname
-                if not has_assertions(mod,mixed):
+                if not has_assertions(mod,mixed) or isinstance(mixin,ivy_ast.MixinImplementDef):
                     continue
                 if not isinstance(mixin,ivy_ast.MixinBeforeDef) and startswith_eq_some(callee,trusted,mod):
                     continue
