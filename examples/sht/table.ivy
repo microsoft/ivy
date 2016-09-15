@@ -1,0 +1,131 @@
+#lang ivy1.6
+
+include collections
+
+module hash_table(key,value,shard) = {
+
+    ###########################################
+    # Interface
+
+    # Set the value of a key
+    action set(k:key.t, v:value)
+
+    # Get the value of a key
+    action get(k:key.t) returns (v:value)
+
+    # Extract a shard from a hash table
+    action extract_(lo:key.iter.t,hi:key.iter.t) returns(res:shard.t)
+
+    # Incorporates a shard into a hash table
+    action incorporate(s:shard.t)
+
+    ###########################################
+    # Specification
+
+    function hash(X:key.t) : value
+
+    object spec = {
+	init hash(X) = 0
+
+	before set {
+	    hash(k) := v
+	}
+
+	after get {
+	    assert v = hash(k)
+	}
+
+	after extract_ {
+	    assert shard.lo(res) = lo;
+	    assert shard.hi(res) = hi;
+	    assert key.iter.between(lo,X,hi)-> shard.value(res,X) = hash(X);
+	    assert shard.valid(res)
+	}
+
+	before incorporate(s:shard.t) {
+	    assert shard.valid(s);
+	    hash(K) := shard.value(s,K) 
+	               if key.iter.between(shard.lo(s),K,shard.hi(s))
+	               else hash(K)
+	}
+    }
+
+    ###########################################
+    # Implementation
+
+    object impl = {
+	
+	instance tab : ordered_map(key,value)
+
+	implement set {
+	    call tab.set(k,v)
+	}
+
+	implement get {
+	    v := tab.get(k,0)
+	}
+
+	implement extract_ {
+	    shard.pairs(res) := shard.arr.empty;
+	    local idx : key.iter.t, pos : shard.index.t {
+		idx := tab.lub(lo);
+		while idx < hi
+		    invariant lo <= idx
+                    invariant shard.value(res,X) = hash(X) if key.iter.between(lo,X,idx) else 0  
+		    invariant shard.valid(res)
+		{
+		    local pair : shard.pair, k:key.t {
+			k := key.iter.val(idx);
+			shard.p_key(pair) := k;
+			shard.p_value(pair) := tab.get(k,0);
+			shard.pairs(res) := shard.arr.append(shard.pairs(res),pair);
+			idx := tab.next(idx)
+		    }
+		};		
+		shard.lo(res) := lo;
+		shard.hi(res) := hi
+	    }
+	}
+
+	implement incorporate(s:shard.t) {
+	    local lo:key.iter.t, hi:key.iter.t, pairs:shard.arr.t {
+		lo := shard.lo(s);
+		hi := shard.hi(s);
+		pairs := shard.pairs(s);
+		call tab.erase(lo,hi);
+		local idx : key.iter.t, pos : shard.index.t {
+		    pos := 0;
+		    while pos < shard.arr.end(pairs)
+		        invariant 0 <= pos & pos <= shard.arr.end(pairs)
+		        invariant key.iter.between(lo,X,hi) & shard.value(s,X) = 0 -> ~tab.contains(X)
+			invariant key.iter.between(lo,X,hi) & Y < pos & shard.at(s,X,Y) & shard.value(s,X) ~= 0
+                                         -> tab.contains(X) & tab.maps(X,shard.value(s,X))
+			invariant ~key.iter.between(lo,X,hi) -> spec.tab_invar(X,Y)
+			# following are object invariants of tab and shouldn't be needed here
+			invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z & tab.contains(X)
+		    {
+			local pair:shard.pair {
+			    pair := shard.arr.get(pairs,pos);
+			    if key.iter.between(lo,shard.p_key(pair),hi) & shard.p_value(pair) ~= 0{
+				call tab.set(shard.p_key(pair),shard.p_value(pair))
+			    }
+			};			
+			pos := shard.index.next(pos)
+		    }
+		}
+	    }
+	}	
+
+	object spec = {
+	    function tab_invar(X,Y) =
+	      (tab.contains(X) & tab.maps(X,Y) -> hash(X) = Y)
+	      & (~tab.contains(X) -> hash(X) = 0)
+	      & (tab.contains(X) -> tab.maps(X,hash(X)))
+	}
+
+	conjecture shard.value(S,X)=Z -> spec.tab_invar(X,Y)
+
+    }
+
+}
+

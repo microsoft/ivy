@@ -1,0 +1,2430 @@
+#include "test_table.h"
+
+#include <sstream>
+#include <algorithm>
+
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>          /* See NOTES */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <sys/select.h>
+#include <string.h>
+#include <stdio.h>
+#include <string>
+#include <unistd.h>
+typedef test_table ivy_class;
+
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+};
+void install_reader(reader *);
+class timer {
+public:
+    virtual int ms_delay() = 0;
+    virtual void timeout() = 0;
+};
+void install_timer(timer *);
+struct ivy_value {
+    std::string atom;
+    std::vector<ivy_value> fields;
+    bool is_member() const {
+        return atom.size() && fields.size();
+    }
+};
+struct out_of_bounds {
+    int idx;
+    out_of_bounds(int _idx) : idx(_idx) {}
+};
+
+template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+
+template <>
+int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx);
+    return res;
+}
+
+
+
+std::ostream &operator <<(std::ostream &s, const test_table::key__iter__t &t);
+template <>
+test_table::key__iter__t _arg<test_table::key__iter__t>(std::vector<ivy_value> &args, unsigned idx, int bound);
+std::ostream &operator <<(std::ostream &s, const test_table::shard__pair &t);
+template <>
+test_table::shard__pair _arg<test_table::shard__pair>(std::vector<ivy_value> &args, unsigned idx, int bound);
+std::ostream &operator <<(std::ostream &s, const test_table::shard__t &t);
+template <>
+test_table::shard__t _arg<test_table::shard__t>(std::vector<ivy_value> &args, unsigned idx, int bound);
+	    std::ostream &operator <<(std::ostream &s, const test_table::shard__arr__t &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+	    }
+
+	    template <>
+	    test_table::shard__arr__t _arg<test_table::shard__arr__t>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        test_table::shard__arr__t a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<test_table::shard__pair>(arg.fields,i,0x7fffffff);
+	        }
+	        return a;
+	    }
+	int test_table::___ivy_choose(int rng,const char *name,int id) {
+        return 0;
+    }
+bool test_table::__lt(key__iter__t X, key__iter__t Y){
+    bool val;
+    val = ___ivy_choose(2,"ret:val",0);
+    val = (((X.iter_val < Y.iter_val) && !X.iter_end && !Y.iter_end) || (Y.iter_end && !X.iter_end));
+    return val;
+}
+bool test_table::key__iter__done(int X, key__iter__t Y){
+    bool val;
+    val = ___ivy_choose(2,"ret:val",0);
+    val = ((X < Y.iter_val) || Y.iter_end);
+    return val;
+}
+bool test_table::key__iter__between(key__iter__t X, int V, key__iter__t Y){
+    bool val;
+    val = ___ivy_choose(2,"ret:val",0);
+    val = (key__iter__done(V,Y) && !key__iter__done(V,X));
+    return val;
+}
+int test_table::shard__arr__end(shard__arr__t a){
+    int val;
+    val = ___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+test_table::shard__pair test_table::shard__arr__get(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+
+        if (0 <= x && x < (int)a.size())
+            y = a[x];
+    }
+    return y;
+}
+test_table::key__iter__t test_table::key__iter__end(){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__pair test_table::shard__arr__impl__get__implement(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+
+    if (0 <= x && x < (int)a.size())
+        y = a[x];
+    return y;
+}
+int test_table::key__iter__val(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::shard__index__spec__next__after(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::tab__impl__tab__next(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.upper_bound(it.iter_val);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+int test_table::ext__shard__index__prev(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+        y = (x - 1);
+    }
+    return y;
+}
+int test_table::ext__key__iter__spec__val__after(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::key__iter__spec__next__before(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::tab__impl__tab__get(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+
+        std::map<int,int>::iterator it = tab__impl__tab__impl__s.find(k);
+        if (it == tab__impl__tab__impl__s.end()) {
+            v = 0;
+        } else {
+            v = it->second;
+        }
+    }
+    return v;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__set__after(shard__arr__t a, int x, shard__pair y){
+        {
+    }
+    return a;
+}
+void test_table::ext__tab__impl__tab__impl__set__implement(int x, int y){
+
+    tab__impl__tab__impl__s[x] = y;
+}
+int test_table::key__iter__spec__val__after(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::ext__tab__set(int k, int v){
+    {
+        ___ivy_stack.push_back(121);
+        ext__tab__impl__tab__set(k, v);
+        ___ivy_stack.pop_back();
+    }
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__impl__lub__implement(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    if (it.iter_end) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(it.iter_val);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__lub(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        if (it.iter_end) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(it.iter_val);
+            if (__it == tab__impl__tab__impl__s.end()) {
+                res.iter_end = true;
+                res.iter_val = 0;
+            } else {
+                res.iter_end = false;
+                res.iter_val = __it->first;
+            }
+        }
+    }
+    return res;
+}
+int test_table::shard__index__impl__next__implement(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    y = (x + 1);
+    return y;
+}
+int test_table::shard__index__next(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+        y = (x + 1);
+    }
+    return y;
+}
+void test_table::tab__impl__tab__spec__erase__before(key__iter__t lo, key__iter__t hi){
+    {
+    }
+}
+void test_table::ext__tab__impl__set__implement(int k, int v){
+    ___ivy_stack.push_back(122);
+    ext__tab__impl__tab__set(k, v);
+    ___ivy_stack.pop_back();
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__spec__begin__after(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+void test_table::ext__tab__impl__tab__erase(key__iter__t lo, key__iter__t hi){
+    {
+
+        tab__impl__tab__impl__s.erase(lo.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.lower_bound(lo.iter_val),
+                  hi.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.upper_bound(hi.iter_val));
+    }
+}
+int test_table::ext__key__iter__val(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::tab__impl__tab__erase(key__iter__t lo, key__iter__t hi){
+    {
+
+        tab__impl__tab__impl__s.erase(lo.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.lower_bound(lo.iter_val),
+                  hi.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.upper_bound(hi.iter_val));
+    }
+}
+test_table::shard__pair test_table::shard__arr__spec__get__before(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::tab__impl__tab__set(int nkey, int v){
+    {
+
+        tab__impl__tab__impl__s[nkey] = v;
+    }
+}
+test_table::shard__arr__t test_table::shard__arr__impl__resize__implement(shard__arr__t a, int s, shard__pair v){
+    
+    unsigned __old_size = a.size();
+    a.resize(s);
+    for (unsigned i = __old_size; i < (unsigned)s; i++)
+        a[i] = v;
+    return a;
+}
+int test_table::ext__tab__get(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+        {
+            int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",146);
+            {
+                ___ivy_stack.push_back(127);
+                loc__0 = ext__tab__impl__tab__get(k);
+                ___ivy_stack.pop_back();
+                v = loc__0;
+            }
+        }
+    }
+    return v;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__impl__empty__implement(){
+    shard__arr__t a;
+    
+    return a;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__resize__after(shard__arr__t a, int s, shard__pair v){
+        {
+    }
+    return a;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__create__before(int s, shard__pair y){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+test_table::key__iter__t test_table::key__iter__next(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__create__after(int s, shard__pair y){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+void test_table::tab__impl__tab__impl__erase__implement(key__iter__t lo, key__iter__t hi){
+
+    tab__impl__tab__impl__s.erase(lo.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.lower_bound(lo.iter_val),
+              hi.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.upper_bound(hi.iter_val));
+}
+void test_table::ext__tab__impl__tab__impl__erase__implement(key__iter__t lo, key__iter__t hi){
+
+    tab__impl__tab__impl__s.erase(lo.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.lower_bound(lo.iter_val),
+              hi.iter_end ? tab__impl__tab__impl__s.end() : tab__impl__tab__impl__s.upper_bound(hi.iter_val));
+}
+void test_table::ext__tab__impl__tab__spec__erase__before(key__iter__t lo, key__iter__t hi){
+    {
+    }
+}
+int test_table::ext__shard__index__impl__next__implement(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    y = (x + 1);
+    return y;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__next__before(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__pair test_table::ext__shard__arr__spec__get__before(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::shard__arr__set(shard__arr__t a, int x, shard__pair y){
+        {
+
+        if (0 <= x && x < (int)a.size())
+            a[x] = y;
+    }
+    return a;
+}
+test_table::key__iter__t test_table::ext__key__iter__next(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::shard__arr__create(int s, shard__pair y){
+    shard__arr__t a;
+    {
+
+        a.resize(s);
+        for (unsigned i = 0; i < s; i++)
+            a[i] = y;
+    }
+    return a;
+}
+int test_table::ext__shard__index__next(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+        y = (x + 1);
+    }
+    return y;
+}
+test_table::shard__pair test_table::ext__shard__arr__spec__get__after(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__shard__index__impl__prev__implement(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    y = (x - 1);
+    return y;
+}
+int test_table::ext__shard__arr__spec__size__after(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+    {
+    }
+    return s;
+}
+test_table::shard__t test_table::tab__spec__extract___after(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__pair test_table::ext__shard__arr__impl__get__implement(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+
+    if (0 <= x && x < (int)a.size())
+        y = a[x];
+    return y;
+}
+test_table::key__iter__t test_table::key__iter__spec__end__after(){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__shard__index__spec__prev__after(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__set__before(shard__arr__t a, int x, shard__pair y){
+        {
+    }
+    return a;
+}
+int test_table::shard__index__prev(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+        y = (x - 1);
+    }
+    return y;
+}
+int test_table::ext__shard__index__spec__prev__before(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__shard__arr__impl__size__implement(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+
+    s = (int) a.size();
+    return s;
+}
+void test_table::tab__incorporate(shard__t s){
+    {
+        {
+            key__iter__t loc__lo;
+    loc__lo.iter_end = ___ivy_choose(2,"loc:lo",145);
+    loc__lo.iter_val = ___ivy_choose(65536,"loc:lo",145);
+            key__iter__t loc__hi;
+    loc__hi.iter_end = ___ivy_choose(2,"loc:hi",145);
+    loc__hi.iter_val = ___ivy_choose(65536,"loc:hi",145);
+            shard__arr__t loc__pairs;
+            {
+                loc__lo = s.lo;
+                loc__hi = s.hi;
+                loc__pairs = s.pairs;
+                ___ivy_stack.push_back(123);
+                ext__tab__impl__tab__erase(loc__lo, loc__hi);
+                ___ivy_stack.pop_back();
+                {
+                    key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",144);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",144);
+                    int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",144);
+                    {
+                        loc__pos = 0;
+                        while((loc__pos < shard__arr__end(loc__pairs))){
+                            {
+                                {
+                                    shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",142);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",142);
+                                    {
+                                        {
+                                            shard__pair loc__0;
+    loc__0.p_key = ___ivy_choose(65536,"loc:0",141);
+    loc__0.p_value = ___ivy_choose(65536,"loc:0",141);
+                                            {
+                                                ___ivy_stack.push_back(124);
+                                                loc__0 = ext__shard__arr__get(loc__pairs, loc__pos);
+                                                ___ivy_stack.pop_back();
+                                                loc__pair = loc__0;
+                                            }
+                                        }
+                                        if((key__iter__between(loc__lo,loc__pair.p_key,loc__hi) && !(loc__pair.p_value == (0 & 65535)))){
+                                            ___ivy_stack.push_back(125);
+                                            ext__tab__impl__tab__set(loc__pair.p_key, loc__pair.p_value);
+                                            ___ivy_stack.pop_back();
+                                        }
+                                    }
+                                }
+                                {
+                                    int loc__0;
+    loc__0 = ___ivy_choose(0,"loc:0",143);
+                                    {
+                                        ___ivy_stack.push_back(126);
+                                        loc__0 = ext__shard__index__next(loc__pos);
+                                        ___ivy_stack.pop_back();
+                                        loc__pos = loc__0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+void test_table::__init(){
+    {
+        int __tmp0;
+        __tmp0 = 1;
+        for (int T = 0; T < 65536; T++) {
+            int __tmp1;
+            __tmp1 = 1;
+            for (int U = (T)+1; U < 65536; U++) {
+                int __tmp2;
+                __tmp2 = 1;
+                for (int V = (U)+1; V < (T)-1; V++) {
+                    if (!(!((T < U) && (U < V)) || (T < V))) __tmp2 = 0;
+                }
+                if (!__tmp2) __tmp1 = 0;
+            }
+            if (!__tmp1) __tmp0 = 0;
+        }
+        ivy_assert(__tmp0, "/home/mcmillan/projects/ivy/ivy/include/order.ivy: line 4: ");
+        int __tmp3;
+        __tmp3 = 1;
+        for (int T = 0; T < 65536; T++) {
+            int __tmp4;
+            __tmp4 = 1;
+            for (int U = (T)+1; U < T; U++) {
+                if (!!((T < U) && (U < T))) __tmp4 = 0;
+            }
+            if (!__tmp4) __tmp3 = 0;
+        }
+        ivy_assert(__tmp3, "/home/mcmillan/projects/ivy/ivy/include/order.ivy: line 5: ");
+        int __tmp5;
+        __tmp5 = 1;
+        for (int T = 0; T < 65536; T++) {
+            int __tmp6;
+            __tmp6 = 1;
+            for (int U = T; U < (T)-1; U++) {
+                if (!((T < U) || (U < T) || (T == U))) __tmp6 = 0;
+            }
+            if (!__tmp6) __tmp5 = 0;
+        }
+        ivy_assert(__tmp5, "/home/mcmillan/projects/ivy/ivy/include/order.ivy: line 6: ");
+        int __tmp7;
+        __tmp7 = 1;
+        for (int X = 0; X < (0 & 65535); X++) {
+            if (!(((0 & 65535) < X) || ((0 & 65535) == X))) __tmp7 = 0;
+        }
+        ivy_assert(__tmp7, "");
+    }
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__empty__after(){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+void test_table::tab__impl__tab__spec__set__before(int nkey, int v){
+    {
+    }
+}
+test_table::key__iter__t test_table::tab__impl__tab__spec__next__before(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__resize(shard__arr__t a, int s, shard__pair v){
+        {
+
+        unsigned __old_size = a.size();
+        a.resize(s);
+        for (unsigned i = __old_size; i < (unsigned)s; i++)
+            a[i] = v;
+    }
+    return a;
+}
+void test_table::tab__set(int k, int v){
+    {
+        ___ivy_stack.push_back(128);
+        ext__tab__impl__tab__set(k, v);
+        ___ivy_stack.pop_back();
+    }
+}
+test_table::key__iter__t test_table::key__iter__prev(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+void test_table::ext__tab__spec__incorporate__before(shard__t s){
+    {
+    }
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__spec__next__after(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::key__iter__t test_table::tab__impl__tab__impl__lub__implement(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    if (it.iter_end) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(it.iter_val);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__begin(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(k);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+test_table::key__iter__t test_table::tab__impl__tab__lub(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        if (it.iter_end) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(it.iter_val);
+            if (__it == tab__impl__tab__impl__s.end()) {
+                res.iter_end = true;
+                res.iter_val = 0;
+            } else {
+                res.iter_end = false;
+                res.iter_val = __it->first;
+            }
+        }
+    }
+    return res;
+}
+int test_table::tab__get(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+        {
+            int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",147);
+            {
+                ___ivy_stack.push_back(129);
+                loc__0 = ext__tab__impl__tab__get(k);
+                ___ivy_stack.pop_back();
+                v = loc__0;
+            }
+        }
+    }
+    return v;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__resize(shard__arr__t a, int s, shard__pair v){
+        {
+
+        unsigned __old_size = a.size();
+        a.resize(s);
+        for (unsigned i = __old_size; i < (unsigned)s; i++)
+            a[i] = v;
+    }
+    return a;
+}
+int test_table::ext__tab__impl__tab__impl__get__implement(int x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+
+    std::map<int,int>::iterator it = tab__impl__tab__impl__s.find(x);
+    if (it == tab__impl__tab__impl__s.end()) {
+        y = 0;
+    } else {
+        y = it->second;
+    }
+    return y;
+}
+void test_table::tab__impl__tab__impl__set__implement(int x, int y){
+
+    tab__impl__tab__impl__s[x] = y;
+}
+int test_table::shard__arr__size(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+    {
+
+        s = (int) a.size();
+    }
+    return s;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__next(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.upper_bound(it.iter_val);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__create__before(int s, shard__pair y){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__append(shard__arr__t a, shard__pair v){
+        {
+
+        a.push_back(v);
+    }
+    return a;
+}
+test_table::shard__arr__t test_table::shard__arr__append(shard__arr__t a, shard__pair v){
+        {
+
+        a.push_back(v);
+    }
+    return a;
+}
+int test_table::key__iter__spec__val__before(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__append__after(shard__arr__t a, shard__pair v){
+        {
+    }
+    return a;
+}
+test_table::key__iter__t test_table::ext__key__iter__prev(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__impl__set__implement(shard__arr__t a, int x, shard__pair y){
+    
+    if (0 <= x && x < (int)a.size())
+        a[x] = y;
+    return a;
+}
+test_table::key__iter__t test_table::tab__impl__tab__spec__lub__after(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__empty__after(){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+void test_table::tab__impl__incorporate__implement(shard__t s){
+    {
+        key__iter__t loc__lo;
+    loc__lo.iter_end = ___ivy_choose(2,"loc:lo",152);
+    loc__lo.iter_val = ___ivy_choose(65536,"loc:lo",152);
+        key__iter__t loc__hi;
+    loc__hi.iter_end = ___ivy_choose(2,"loc:hi",152);
+    loc__hi.iter_val = ___ivy_choose(65536,"loc:hi",152);
+        shard__arr__t loc__pairs;
+        {
+            loc__lo = s.lo;
+            loc__hi = s.hi;
+            loc__pairs = s.pairs;
+            ___ivy_stack.push_back(130);
+            ext__tab__impl__tab__erase(loc__lo, loc__hi);
+            ___ivy_stack.pop_back();
+            {
+                key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",151);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",151);
+                int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",151);
+                {
+                    loc__pos = 0;
+                    while((loc__pos < shard__arr__end(loc__pairs))){
+                        {
+                            {
+                                shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",149);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",149);
+                                {
+                                    {
+                                        shard__pair loc__0;
+    loc__0.p_key = ___ivy_choose(65536,"loc:0",148);
+    loc__0.p_value = ___ivy_choose(65536,"loc:0",148);
+                                        {
+                                            ___ivy_stack.push_back(131);
+                                            loc__0 = ext__shard__arr__get(loc__pairs, loc__pos);
+                                            ___ivy_stack.pop_back();
+                                            loc__pair = loc__0;
+                                        }
+                                    }
+                                    if((key__iter__between(loc__lo,loc__pair.p_key,loc__hi) && !(loc__pair.p_value == (0 & 65535)))){
+                                        ___ivy_stack.push_back(132);
+                                        ext__tab__impl__tab__set(loc__pair.p_key, loc__pair.p_value);
+                                        ___ivy_stack.pop_back();
+                                    }
+                                }
+                            }
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(0,"loc:0",150);
+                                {
+                                    ___ivy_stack.push_back(133);
+                                    loc__0 = ext__shard__index__next(loc__pos);
+                                    ___ivy_stack.pop_back();
+                                    loc__pos = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+test_table::shard__arr__t test_table::shard__arr__empty(){
+    shard__arr__t a;
+    {
+        
+    }
+    return a;
+}
+test_table::key__iter__t test_table::key__iter__spec__prev__after(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__prev__after(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__set__before(shard__arr__t a, int x, shard__pair y){
+        {
+    }
+    return a;
+}
+int test_table::ext__tab__impl__tab__get(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+
+        std::map<int,int>::iterator it = tab__impl__tab__impl__s.find(k);
+        if (it == tab__impl__tab__impl__s.end()) {
+            v = 0;
+        } else {
+            v = it->second;
+        }
+    }
+    return v;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__resize__after(shard__arr__t a, int s, shard__pair v){
+        {
+    }
+    return a;
+}
+test_table::shard__arr__t test_table::shard__arr__impl__empty__implement(){
+    shard__arr__t a;
+    
+    return a;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__create__after(int s, shard__pair y){
+    shard__arr__t a;
+    {
+    }
+    return a;
+}
+test_table::key__iter__t test_table::key__iter__spec__prev__before(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+int test_table::shard__arr__spec__size__after(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+    {
+    }
+    return s;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__end__after(){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::shard__index__impl__prev__implement(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    y = (x - 1);
+    return y;
+}
+int test_table::ext__shard__arr__size(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+    {
+
+        s = (int) a.size();
+    }
+    return s;
+}
+int test_table::tab__spec__get__after(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+    }
+    return v;
+}
+int test_table::ext__tab__spec__get__after(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+    }
+    return v;
+}
+bool test_table::ext__key__iter__over(key__iter__t x){
+    bool y;
+    y = ___ivy_choose(2,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::tab__spec__incorporate__before(shard__t s){
+    {
+    }
+}
+test_table::shard__arr__t test_table::ext__shard__arr__spec__append__after(shard__arr__t a, shard__pair v){
+        {
+    }
+    return a;
+}
+void test_table::ext__tab__impl__tab__spec__set__before(int nkey, int v){
+    {
+    }
+}
+int test_table::shard__index__spec__prev__after(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::key__iter__spec__next__after(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__impl__append__implement(shard__arr__t a, shard__pair v){
+    
+    a.push_back(v);
+    return a;
+}
+int test_table::tab__impl__get__implement(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+        int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",153);
+        {
+            ___ivy_stack.push_back(134);
+            loc__0 = ext__tab__impl__tab__get(k);
+            ___ivy_stack.pop_back();
+            v = loc__0;
+        }
+    }
+    return v;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__spec__lub__after(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__empty(){
+    shard__arr__t a;
+    {
+        
+    }
+    return a;
+}
+void test_table::ext__tab__impl__incorporate__implement(shard__t s){
+    {
+        key__iter__t loc__lo;
+    loc__lo.iter_end = ___ivy_choose(2,"loc:lo",158);
+    loc__lo.iter_val = ___ivy_choose(65536,"loc:lo",158);
+        key__iter__t loc__hi;
+    loc__hi.iter_end = ___ivy_choose(2,"loc:hi",158);
+    loc__hi.iter_val = ___ivy_choose(65536,"loc:hi",158);
+        shard__arr__t loc__pairs;
+        {
+            loc__lo = s.lo;
+            loc__hi = s.hi;
+            loc__pairs = s.pairs;
+            ___ivy_stack.push_back(135);
+            ext__tab__impl__tab__erase(loc__lo, loc__hi);
+            ___ivy_stack.pop_back();
+            {
+                key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",157);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",157);
+                int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",157);
+                {
+                    loc__pos = 0;
+                    while((loc__pos < shard__arr__end(loc__pairs))){
+                        {
+                            {
+                                shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",155);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",155);
+                                {
+                                    {
+                                        shard__pair loc__0;
+    loc__0.p_key = ___ivy_choose(65536,"loc:0",154);
+    loc__0.p_value = ___ivy_choose(65536,"loc:0",154);
+                                        {
+                                            ___ivy_stack.push_back(136);
+                                            loc__0 = ext__shard__arr__get(loc__pairs, loc__pos);
+                                            ___ivy_stack.pop_back();
+                                            loc__pair = loc__0;
+                                        }
+                                    }
+                                    if((key__iter__between(loc__lo,loc__pair.p_key,loc__hi) && !(loc__pair.p_value == (0 & 65535)))){
+                                        ___ivy_stack.push_back(137);
+                                        ext__tab__impl__tab__set(loc__pair.p_key, loc__pair.p_value);
+                                        ___ivy_stack.pop_back();
+                                    }
+                                }
+                            }
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(0,"loc:0",156);
+                                {
+                                    ___ivy_stack.push_back(138);
+                                    loc__0 = ext__shard__index__next(loc__pos);
+                                    ___ivy_stack.pop_back();
+                                    loc__pos = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+void test_table::tab__spec__set__before(int k, int v){
+    {
+    }
+}
+int test_table::tab__impl__tab__impl__get__implement(int x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+
+    std::map<int,int>::iterator it = tab__impl__tab__impl__s.find(x);
+    if (it == tab__impl__tab__impl__s.end()) {
+        y = 0;
+    } else {
+        y = it->second;
+    }
+    return y;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__next__after(key__iter__t x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+bool test_table::key__iter__over(key__iter__t x){
+    bool y;
+    y = ___ivy_choose(2,"fml:y",0);
+    {
+    }
+    return y;
+}
+bool test_table::ext__key__iter__spec__over__after(key__iter__t x){
+    bool y;
+    y = ___ivy_choose(2,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::ext__tab__incorporate(shard__t s){
+    {
+        {
+            key__iter__t loc__lo;
+    loc__lo.iter_end = ___ivy_choose(2,"loc:lo",163);
+    loc__lo.iter_val = ___ivy_choose(65536,"loc:lo",163);
+            key__iter__t loc__hi;
+    loc__hi.iter_end = ___ivy_choose(2,"loc:hi",163);
+    loc__hi.iter_val = ___ivy_choose(65536,"loc:hi",163);
+            shard__arr__t loc__pairs;
+            {
+                loc__lo = s.lo;
+                loc__hi = s.hi;
+                loc__pairs = s.pairs;
+                ___ivy_stack.push_back(139);
+                ext__tab__impl__tab__erase(loc__lo, loc__hi);
+                ___ivy_stack.pop_back();
+                {
+                    key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",162);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",162);
+                    int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",162);
+                    {
+                        loc__pos = 0;
+                        while((loc__pos < shard__arr__end(loc__pairs))){
+                            {
+                                {
+                                    shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",160);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",160);
+                                    {
+                                        {
+                                            shard__pair loc__0;
+    loc__0.p_key = ___ivy_choose(65536,"loc:0",159);
+    loc__0.p_value = ___ivy_choose(65536,"loc:0",159);
+                                            {
+                                                ___ivy_stack.push_back(140);
+                                                loc__0 = ext__shard__arr__get(loc__pairs, loc__pos);
+                                                ___ivy_stack.pop_back();
+                                                loc__pair = loc__0;
+                                            }
+                                        }
+                                        if((key__iter__between(loc__lo,loc__pair.p_key,loc__hi) && !(loc__pair.p_value == (0 & 65535)))){
+                                            ___ivy_stack.push_back(141);
+                                            ext__tab__impl__tab__set(loc__pair.p_key, loc__pair.p_value);
+                                            ___ivy_stack.pop_back();
+                                        }
+                                    }
+                                }
+                                {
+                                    int loc__0;
+    loc__0 = ___ivy_choose(0,"loc:0",161);
+                                    {
+                                        ___ivy_stack.push_back(142);
+                                        loc__0 = ext__shard__index__next(loc__pos);
+                                        ___ivy_stack.pop_back();
+                                        loc__pos = loc__0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+test_table::shard__arr__t test_table::ext__shard__arr__impl__create__implement(int s, shard__pair y){
+    shard__arr__t a;
+
+    a.resize(s);
+    for (unsigned i = 0; i < s; i++)
+        a[i] = y;
+    return a;
+}
+test_table::shard__t test_table::ext__tab__spec__extract___after(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::key__iter__t test_table::tab__impl__tab__spec__next__after(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__impl__resize__implement(shard__arr__t a, int s, shard__pair v){
+    
+    unsigned __old_size = a.size();
+    a.resize(s);
+    for (unsigned i = __old_size; i < (unsigned)s; i++)
+        a[i] = v;
+    return a;
+}
+int test_table::shard__arr__impl__size__implement(shard__arr__t a){
+    int s;
+    s = ___ivy_choose(0,"fml:s",0);
+
+    s = (int) a.size();
+    return s;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__prev__before(key__iter__t y){
+    key__iter__t x;
+    x.iter_end = ___ivy_choose(2,"fml:x",0);
+    x.iter_val = ___ivy_choose(65536,"fml:x",0);
+    {
+    }
+    return x;
+}
+void test_table::ext__tab__spec__set__before(int k, int v){
+    {
+    }
+}
+test_table::key__iter__t test_table::tab__impl__tab__begin(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+
+        std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(k);
+        if (__it == tab__impl__tab__impl__s.end()) {
+            res.iter_end = true;
+            res.iter_val = 0;
+        } else {
+            res.iter_end = false;
+            res.iter_val = __it->first;
+        }
+    }
+    return res;
+}
+test_table::key__iter__t test_table::tab__impl__tab__impl__next__implement(key__iter__t inp){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    std::map<int,int>::iterator __it = tab__impl__tab__impl__s.upper_bound(inp.iter_val);
+    if (__it == tab__impl__tab__impl__s.end()) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        res.iter_end = false;
+        res.iter_val = __it->first;
+    }
+    return res;
+}
+int test_table::ext__tab__impl__tab__spec__get__after(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+    }
+    return v;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__set(shard__arr__t a, int x, shard__pair y){
+        {
+
+        if (0 <= x && x < (int)a.size())
+            a[x] = y;
+    }
+    return a;
+}
+test_table::shard__pair test_table::shard__arr__spec__get__after(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::tab__impl__tab__impl__begin__implement(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(k);
+    if (__it == tab__impl__tab__impl__s.end()) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        res.iter_end = false;
+        res.iter_val = __it->first;
+    }
+    return res;
+}
+test_table::key__iter__t test_table::tab__impl__tab__spec__begin__after(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::shard__pair test_table::ext__shard__arr__get(shard__arr__t a, int x){
+    shard__pair y;
+    y.p_key = ___ivy_choose(65536,"fml:y",0);
+    y.p_value = ___ivy_choose(65536,"fml:y",0);
+    {
+
+        if (0 <= x && x < (int)a.size())
+            y = a[x];
+    }
+    return y;
+}
+test_table::shard__t test_table::ext__tab__impl__extract___implement(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+        {
+            shard__arr__t loc__0;
+            {
+                ___ivy_stack.push_back(143);
+                loc__0 = ext__shard__arr__empty();
+                ___ivy_stack.pop_back();
+                res.pairs = loc__0;
+            }
+        }
+        {
+            key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",171);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",171);
+            int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",171);
+            {
+                {
+                    key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",165);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",165);
+                    {
+                        ___ivy_stack.push_back(144);
+                        loc__0 = ext__tab__impl__tab__lub(lo);
+                        ___ivy_stack.pop_back();
+                        loc__idx = loc__0;
+                    }
+                }
+                while(__lt(loc__idx,hi)){
+                    {
+                        shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",170);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",170);
+                        int loc__k;
+    loc__k = ___ivy_choose(65536,"loc:k",170);
+                        {
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",166);
+                                {
+                                    ___ivy_stack.push_back(145);
+                                    loc__0 = ext__key__iter__val(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__k = loc__0;
+                                }
+                            }
+                            loc__pair.p_key = loc__k;
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",167);
+                                {
+                                    ___ivy_stack.push_back(146);
+                                    loc__0 = ext__tab__impl__tab__get(loc__k);
+                                    ___ivy_stack.pop_back();
+                                    loc__pair.p_value = loc__0;
+                                }
+                            }
+                            {
+                                shard__arr__t loc__0;
+                                {
+                                    ___ivy_stack.push_back(147);
+                                    loc__0 = ext__shard__arr__append(res.pairs, loc__pair);
+                                    ___ivy_stack.pop_back();
+                                    res.pairs = loc__0;
+                                }
+                            }
+                            {
+                                key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",169);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",169);
+                                {
+                                    ___ivy_stack.push_back(148);
+                                    loc__0 = ext__tab__impl__tab__next(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__idx = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+                res.lo = lo;
+                res.hi = hi;
+            }
+        }
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__impl__append__implement(shard__arr__t a, shard__pair v){
+    
+    a.push_back(v);
+    return a;
+}
+test_table::key__iter__t test_table::ext__key__iter__begin(int x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__arr__t test_table::ext__shard__arr__create(int s, shard__pair y){
+    shard__arr__t a;
+    {
+
+        a.resize(s);
+        for (unsigned i = 0; i < s; i++)
+            a[i] = y;
+    }
+    return a;
+}
+test_table::key__iter__t test_table::ext__key__iter__end(){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__tab__impl__get__implement(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+        int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",172);
+        {
+            ___ivy_stack.push_back(149);
+            loc__0 = ext__tab__impl__tab__get(k);
+            ___ivy_stack.pop_back();
+            v = loc__0;
+        }
+    }
+    return v;
+}
+test_table::shard__t test_table::tab__impl__extract___implement(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+        {
+            shard__arr__t loc__0;
+            {
+                ___ivy_stack.push_back(150);
+                loc__0 = ext__shard__arr__empty();
+                ___ivy_stack.pop_back();
+                res.pairs = loc__0;
+            }
+        }
+        {
+            key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",180);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",180);
+            int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",180);
+            {
+                {
+                    key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",174);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",174);
+                    {
+                        ___ivy_stack.push_back(151);
+                        loc__0 = ext__tab__impl__tab__lub(lo);
+                        ___ivy_stack.pop_back();
+                        loc__idx = loc__0;
+                    }
+                }
+                while(__lt(loc__idx,hi)){
+                    {
+                        shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",179);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",179);
+                        int loc__k;
+    loc__k = ___ivy_choose(65536,"loc:k",179);
+                        {
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",175);
+                                {
+                                    ___ivy_stack.push_back(152);
+                                    loc__0 = ext__key__iter__val(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__k = loc__0;
+                                }
+                            }
+                            loc__pair.p_key = loc__k;
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",176);
+                                {
+                                    ___ivy_stack.push_back(153);
+                                    loc__0 = ext__tab__impl__tab__get(loc__k);
+                                    ___ivy_stack.pop_back();
+                                    loc__pair.p_value = loc__0;
+                                }
+                            }
+                            {
+                                shard__arr__t loc__0;
+                                {
+                                    ___ivy_stack.push_back(154);
+                                    loc__0 = ext__shard__arr__append(res.pairs, loc__pair);
+                                    ___ivy_stack.pop_back();
+                                    res.pairs = loc__0;
+                                }
+                            }
+                            {
+                                key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",178);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",178);
+                                {
+                                    ___ivy_stack.push_back(155);
+                                    loc__0 = ext__tab__impl__tab__next(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__idx = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+                res.lo = lo;
+                res.hi = hi;
+            }
+        }
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__impl__create__implement(int s, shard__pair y){
+    shard__arr__t a;
+
+    a.resize(s);
+    for (unsigned i = 0; i < s; i++)
+        a[i] = y;
+    return a;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__spec__next__before(key__iter__t it){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+    }
+    return res;
+}
+test_table::key__iter__t test_table::key__iter__spec__begin__after(int x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__key__iter__spec__val__before(key__iter__t x){
+    int y;
+    y = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+int test_table::ext__shard__index__spec__next__after(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::key__iter__begin(int x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__impl__begin__implement(int k){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    std::map<int,int>::iterator __it = tab__impl__tab__impl__s.lower_bound(k);
+    if (__it == tab__impl__tab__impl__s.end()) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        res.iter_end = false;
+        res.iter_val = __it->first;
+    }
+    return res;
+}
+test_table::shard__arr__t test_table::shard__arr__spec__set__after(shard__arr__t a, int x, shard__pair y){
+        {
+    }
+    return a;
+}
+test_table::key__iter__t test_table::ext__key__iter__spec__begin__after(int x){
+    key__iter__t y;
+    y.iter_end = ___ivy_choose(2,"fml:y",0);
+    y.iter_val = ___ivy_choose(65536,"fml:y",0);
+    {
+    }
+    return y;
+}
+bool test_table::key__iter__spec__over__after(key__iter__t x){
+    bool y;
+    y = ___ivy_choose(2,"fml:y",0);
+    {
+    }
+    return y;
+}
+void test_table::tab__impl__set__implement(int k, int v){
+    ___ivy_stack.push_back(156);
+    ext__tab__impl__tab__set(k, v);
+    ___ivy_stack.pop_back();
+}
+test_table::shard__arr__t test_table::shard__arr__impl__set__implement(shard__arr__t a, int x, shard__pair y){
+    
+    if (0 <= x && x < (int)a.size())
+        a[x] = y;
+    return a;
+}
+test_table::shard__t test_table::tab__extract_(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+        {
+            shard__arr__t loc__0;
+            {
+                ___ivy_stack.push_back(157);
+                loc__0 = ext__shard__arr__empty();
+                ___ivy_stack.pop_back();
+                res.pairs = loc__0;
+            }
+        }
+        {
+            key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",188);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",188);
+            int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",188);
+            {
+                {
+                    key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",182);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",182);
+                    {
+                        ___ivy_stack.push_back(158);
+                        loc__0 = ext__tab__impl__tab__lub(lo);
+                        ___ivy_stack.pop_back();
+                        loc__idx = loc__0;
+                    }
+                }
+                while(__lt(loc__idx,hi)){
+                    {
+                        shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",187);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",187);
+                        int loc__k;
+    loc__k = ___ivy_choose(65536,"loc:k",187);
+                        {
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",183);
+                                {
+                                    ___ivy_stack.push_back(159);
+                                    loc__0 = ext__key__iter__val(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__k = loc__0;
+                                }
+                            }
+                            loc__pair.p_key = loc__k;
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",184);
+                                {
+                                    ___ivy_stack.push_back(160);
+                                    loc__0 = ext__tab__impl__tab__get(loc__k);
+                                    ___ivy_stack.pop_back();
+                                    loc__pair.p_value = loc__0;
+                                }
+                            }
+                            {
+                                shard__arr__t loc__0;
+                                {
+                                    ___ivy_stack.push_back(161);
+                                    loc__0 = ext__shard__arr__append(res.pairs, loc__pair);
+                                    ___ivy_stack.pop_back();
+                                    res.pairs = loc__0;
+                                }
+                            }
+                            {
+                                key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",186);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",186);
+                                {
+                                    ___ivy_stack.push_back(162);
+                                    loc__0 = ext__tab__impl__tab__next(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__idx = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+                res.lo = lo;
+                res.hi = hi;
+            }
+        }
+    }
+    return res;
+}
+test_table::key__iter__t test_table::ext__tab__impl__tab__impl__next__implement(key__iter__t inp){
+    key__iter__t res;
+    res.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.iter_val = ___ivy_choose(65536,"fml:res",0);
+
+    std::map<int,int>::iterator __it = tab__impl__tab__impl__s.upper_bound(inp.iter_val);
+    if (__it == tab__impl__tab__impl__s.end()) {
+        res.iter_end = true;
+        res.iter_val = 0;
+    } else {
+        res.iter_end = false;
+        res.iter_val = __it->first;
+    }
+    return res;
+}
+int test_table::shard__index__spec__prev__before(int x){
+    int y;
+    y = ___ivy_choose(0,"fml:y",0);
+    {
+    }
+    return y;
+}
+test_table::shard__t test_table::ext__tab__extract_(key__iter__t lo, key__iter__t hi){
+    shard__t res;
+    res.lo.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.lo.iter_val = ___ivy_choose(65536,"fml:res",0);
+    res.hi.iter_end = ___ivy_choose(2,"fml:res",0);
+    res.hi.iter_val = ___ivy_choose(65536,"fml:res",0);
+    {
+        {
+            shard__arr__t loc__0;
+            {
+                ___ivy_stack.push_back(163);
+                loc__0 = ext__shard__arr__empty();
+                ___ivy_stack.pop_back();
+                res.pairs = loc__0;
+            }
+        }
+        {
+            key__iter__t loc__idx;
+    loc__idx.iter_end = ___ivy_choose(2,"loc:idx",196);
+    loc__idx.iter_val = ___ivy_choose(65536,"loc:idx",196);
+            int loc__pos;
+    loc__pos = ___ivy_choose(0,"loc:pos",196);
+            {
+                {
+                    key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",190);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",190);
+                    {
+                        ___ivy_stack.push_back(164);
+                        loc__0 = ext__tab__impl__tab__lub(lo);
+                        ___ivy_stack.pop_back();
+                        loc__idx = loc__0;
+                    }
+                }
+                while(__lt(loc__idx,hi)){
+                    {
+                        shard__pair loc__pair;
+    loc__pair.p_key = ___ivy_choose(65536,"loc:pair",195);
+    loc__pair.p_value = ___ivy_choose(65536,"loc:pair",195);
+                        int loc__k;
+    loc__k = ___ivy_choose(65536,"loc:k",195);
+                        {
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",191);
+                                {
+                                    ___ivy_stack.push_back(165);
+                                    loc__0 = ext__key__iter__val(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__k = loc__0;
+                                }
+                            }
+                            loc__pair.p_key = loc__k;
+                            {
+                                int loc__0;
+    loc__0 = ___ivy_choose(65536,"loc:0",192);
+                                {
+                                    ___ivy_stack.push_back(166);
+                                    loc__0 = ext__tab__impl__tab__get(loc__k);
+                                    ___ivy_stack.pop_back();
+                                    loc__pair.p_value = loc__0;
+                                }
+                            }
+                            {
+                                shard__arr__t loc__0;
+                                {
+                                    ___ivy_stack.push_back(167);
+                                    loc__0 = ext__shard__arr__append(res.pairs, loc__pair);
+                                    ___ivy_stack.pop_back();
+                                    res.pairs = loc__0;
+                                }
+                            }
+                            {
+                                key__iter__t loc__0;
+    loc__0.iter_end = ___ivy_choose(2,"loc:0",194);
+    loc__0.iter_val = ___ivy_choose(65536,"loc:0",194);
+                                {
+                                    ___ivy_stack.push_back(168);
+                                    loc__0 = ext__tab__impl__tab__next(loc__idx);
+                                    ___ivy_stack.pop_back();
+                                    loc__idx = loc__0;
+                                }
+                            }
+                        }
+                    }
+                }
+                res.lo = lo;
+                res.hi = hi;
+            }
+        }
+    }
+    return res;
+}
+void test_table::ext__tab__impl__tab__set(int nkey, int v){
+    {
+
+        tab__impl__tab__impl__s[nkey] = v;
+    }
+}
+int test_table::tab__impl__tab__spec__get__after(int k){
+    int v;
+    v = ___ivy_choose(65536,"fml:v",0);
+    {
+    }
+    return v;
+}
+void test_table::__tick(int __timeout){
+}
+test_table::test_table(){
+    __CARD__shard__index__t = 0;
+    __CARD__key__t = 65536;
+    __CARD__value = 65536;
+{
+}
+    
+}
+std::ostream &operator <<(std::ostream &s, const test_table::key__iter__t &t){
+    s<<"{";
+    s<< "iter_end:";
+    s << t.iter_end;
+    s<<",";
+    s<< "iter_val:";
+    s << t.iter_val;
+    s<<"}";
+    return s;
+}
+std::ostream &operator <<(std::ostream &s, const test_table::shard__pair &t){
+    s<<"{";
+    s<< "p_key:";
+    s << t.p_key;
+    s<<",";
+    s<< "p_value:";
+    s << t.p_value;
+    s<<"}";
+    return s;
+}
+std::ostream &operator <<(std::ostream &s, const test_table::shard__t &t){
+    s<<"{";
+    s<< "lo:";
+    s << t.lo;
+    s<<",";
+    s<< "hi:";
+    s << t.hi;
+    s<<",";
+    s<< "pairs:";
+    s << t.pairs;
+    s<<"}";
+    return s;
+}
+
+
+int ask_ret(int bound) {
+    int res;
+    while(true) {
+        std::cout << "? ";
+        std::cin >> res;
+        if (res >= 0 && res < bound) 
+            return res;
+        std::cout << "value out of range" << std::endl;
+    }
+}
+
+
+
+    class test_table_repl : public test_table {
+
+    public:
+
+    virtual void ivy_assert(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assertion failed\n";
+            exit(1);
+        }
+    }
+    virtual void ivy_assume(bool truth,const char *msg){
+        if (!truth) {
+            std::cerr << msg << ": assumption failed\n";
+            exit(1);
+        }
+    }
+    test_table_repl() : test_table(){}
+
+    };
+
+// Override methods to implement low-level network service
+
+bool is_white(int c) {
+    return (c == ' ' || c == '\t' || c == '\n');
+}
+
+bool is_ident(int c) {
+    return c == '_' || c == '.' || (c >= 'A' &&  c <= 'Z')
+        || (c >= 'a' &&  c <= 'z')
+        || (c >= '0' &&  c <= '9');
+}
+
+void skip_white(const std::string& str, int &pos){
+    while (pos < str.size() && is_white(str[pos]))
+        pos++;
+}
+
+struct syntax_error {
+};
+
+std::string get_ident(const std::string& str, int &pos) {
+    std::string res = "";
+    while (pos < str.size() && is_ident(str[pos])) {
+        res.push_back(str[pos]);
+        pos++;
+    }
+    if (res.size() == 0)
+        throw syntax_error();
+    return res;
+}
+
+ivy_value parse_value(const std::string& cmd, int &pos) {
+    ivy_value res;
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '[') {
+        while (true) {
+            pos++;
+            skip_white(cmd,pos);
+            res.fields.push_back(parse_value(cmd,pos));
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == ']')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw syntax_error();
+        }
+        pos++;
+    }
+    else if (pos < cmd.size() && cmd[pos] == '{') {
+        while (true) {
+            ivy_value field;
+            pos++;
+            skip_white(cmd,pos);
+            field.atom = get_ident(cmd,pos);
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ':'))
+                 throw syntax_error();
+            pos++;
+            skip_white(cmd,pos);
+            field.fields.push_back(parse_value(cmd,pos));
+            res.fields.push_back(field);
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == '}')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw syntax_error();
+        }
+        pos++;
+    }
+    else 
+        res.atom = get_ident(cmd,pos);
+    return res;
+}
+
+void parse_command(const std::string &cmd, std::string &action, std::vector<ivy_value> &args) {
+    int pos = 0;
+    skip_white(cmd,pos);
+    action = get_ident(cmd,pos);
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '(') {
+        pos++;
+        skip_white(cmd,pos);
+        args.push_back(parse_value(cmd,pos));
+        while(true) {
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                break;
+            pos++;
+            args.push_back(parse_value(cmd,pos));
+        }
+        if (!(pos < cmd.size() && cmd[pos] == ')'))
+            throw syntax_error();
+        pos++;
+    }
+    skip_white(cmd,pos);
+    if (pos != cmd.size())
+        throw syntax_error();
+}
+
+struct bad_arity {
+    std::string action;
+    int num;
+    bad_arity(std::string &_action, unsigned _num) : action(_action), num(_num) {}
+};
+
+void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action) {
+    if (args.size() != num)
+        throw bad_arity(action,num);
+}
+
+template <>
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
+        throw out_of_bounds(idx);
+    return args[idx].atom == "true";
+}
+
+test_table::key__iter__t _arg<test_table::key__iter__t>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    test_table::key__iter__t res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds(idx);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "iter_end") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    res.iter_end = _arg<bool>(tmp_args,0,2);
+;
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "iter_val") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    res.iter_val = _arg<int>(tmp_args,0,65536);
+;
+    return res;
+}
+test_table::shard__pair _arg<test_table::shard__pair>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    test_table::shard__pair res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds(idx);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "p_key") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    res.p_key = _arg<int>(tmp_args,0,65536);
+;
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "p_value") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    res.p_value = _arg<int>(tmp_args,0,65536);
+;
+    return res;
+}
+test_table::shard__t _arg<test_table::shard__t>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    test_table::shard__t res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 3) throw out_of_bounds(idx);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "lo") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    res.lo = _arg<key__iter__t>(tmp_args,0,0);
+;
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "hi") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    res.hi = _arg<key__iter__t>(tmp_args,0,0);
+;
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "pairs") throw out_of_bounds(idx);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    res.pairs = _arg<shard__arr__t>(tmp_args,0,0);
+;
+    return res;
+}
+
+
+class stdin_reader: public reader {
+    std::string buf;
+
+    virtual int fdes(){
+        return 0;
+    }
+    virtual void read() {
+        char tmp[257];
+        int chars = ::read(0,tmp,256);
+        tmp[chars] = 0;
+        buf += std::string(tmp);
+        size_t pos;
+        while ((pos = buf.find('\n')) != std::string::npos) {
+            std::string line = buf.substr(0,pos+1);
+            buf.erase(0,pos+1);
+            process(line);
+        }
+    }
+    virtual void process(const std::string &line) {
+        std::cout << line;
+    }
+};
+
+class cmd_reader: public stdin_reader {
+
+public:
+    test_table_repl &ivy;    
+
+    cmd_reader(test_table_repl &_ivy) : ivy(_ivy) {
+        std::cout << "> "; std::cout.flush();
+    }
+
+    virtual void process(const std::string &cmd) {
+        std::string action;
+        std::vector<ivy_value> args;
+        try {
+            parse_command(cmd,action,args);
+
+            if (action == "tab.extract_") {
+                check_arity(args,2,action);
+                std::cout << ivy.ext__tab__extract_(_arg<test_table::key__iter__t>(args,0,0),_arg<test_table::key__iter__t>(args,1,0)) << std::endl;
+            }
+            else
+
+            if (action == "tab.get") {
+                check_arity(args,1,action);
+                std::cout << ivy.ext__tab__get(_arg<int>(args,0,65536)) << std::endl;
+            }
+            else
+
+            if (action == "tab.incorporate") {
+                check_arity(args,1,action);
+                ivy.ext__tab__incorporate(_arg<test_table::shard__t>(args,0,0));
+            }
+            else
+
+            if (action == "tab.set") {
+                check_arity(args,2,action);
+                ivy.ext__tab__set(_arg<int>(args,0,65536),_arg<int>(args,1,65536));
+            }
+            else
+
+            {
+                std::cout << "undefined action: " << action << std::endl;
+            }
+        }
+        catch (syntax_error&) {
+            std::cout << "syntax error" << std::endl;
+        }
+        catch (out_of_bounds &err) {
+            std::cout << "argument " << err.idx + 1 << " out of bounds" << std::endl;
+        }
+        catch (bad_arity &err) {
+            std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
+        }
+        std::cout << "> "; std::cout.flush();
+    }
+};
+
+
+std::vector<reader *> readers;
+
+void install_reader(reader *r){
+    readers.push_back(r);
+}
+
+std::vector<timer *> timers;
+
+void install_timer(timer *r){
+    timers.push_back(r);
+}
+int main(int argc, char **argv){
+    if (argc != 1){
+        std::cerr << "usage: test_table \n";
+        exit(1);
+    }
+    std::vector<std::string> args;
+    std::vector<ivy_value> arg_values(1);
+    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}
+    test_table_repl ivy;
+
+    install_reader(new cmd_reader(ivy));
+
+    while(true) {
+
+        fd_set rdfds;
+        FD_ZERO(&rdfds);
+        int maxfds = 0;
+
+        for (unsigned i = 0; i < readers.size(); i++) {
+            reader *r = readers[i];
+            int fds = r->fdes();
+            FD_SET(fds,&rdfds);
+            if (fds > maxfds)
+                maxfds = fds;
+        }
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+
+        if (foo < 0)
+            {perror("select failed"); exit(1);}
+        
+        if (foo == 0){
+            // std::cout << "TIMEOUT\n";            
+           for (unsigned i = 0; i < timers.size(); i++)
+               timers[i]->timeout();
+        }
+        else {
+            for (unsigned i = 0; i < readers.size(); i++) {
+                reader *r = readers[i];
+                if (FD_ISSET(r->fdes(),&rdfds))
+                    r->read();
+            }
+        }            
+    }
+}

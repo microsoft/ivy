@@ -11,3 +11,16 @@
   - examples/helloworld
   - examples/networking
   - examples/values
+- title: Sharded Hash Table
+  docs:
+  - examples/sht/sharded_hash_table
+  - examples/sht/key
+  - examples/sht/shard
+  - examples/sht/table
+  - examples/sht/delmap
+  - examples/sht/seqnum
+  - examples/sht/queue
+  - examples/sht/trans
+  - examples/sht/reference
+  - examples/sht/proto
+  - examples/sht/sht

@@ -5,6 +5,8 @@ Viewing the site locally:
 
 $ jekyll serve --port 8989
 
+(open http://localhost:8989)
+
 Deploying the site to github pages:
 
 The script "deploy" will do the following:
