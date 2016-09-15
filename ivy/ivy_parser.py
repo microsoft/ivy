@@ -333,7 +333,7 @@ def p_pname_relop(p):
     p[0] = App(p[1])
     p[0].lineno = get_lineno(p,1)
 
-def p_pname_relop(p):
+def p_pname_this(p):
     'pname : THIS'
     p[0] = App(This())
     p[0].lineno = get_lineno(p,1)
@@ -948,7 +948,9 @@ def p_top_interpret_symbol_arrow_symbol(p):
 def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
-    thing = InterpretDecl(mk_lf(Implies(p[3],Range(p[6],p[8]))))
+    imp = Implies(p[3],Range(p[6],p[8]))
+    imp.lineno = get_lineno(p,4)
+    thing = InterpretDecl(mk_lf(imp))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 

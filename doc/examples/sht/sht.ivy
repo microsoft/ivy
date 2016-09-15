@@ -45,5 +45,5 @@ object debug = {
 import debug.send
 import debug.recv
 
-extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me),debug(me)
+extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me)
 
