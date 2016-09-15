@@ -29,13 +29,13 @@ modular way.
 Our system consists of the following objects, each of which provides a
 service specification and an implementation:
 
-- The [directory](directory.html) (a parameterized protocol)
+- The [directory](proto.html) (a parameterized protocol)
 - A [reference object](reference.html) that checks linearizability
 - An abstract datatype for the [hash table](table.html)
 - An abstract datatype for the [delegation map](delmap.html)
 - A concrete datatype for [shards](shard.html)
 - An ordered, non-duplicating network [transport protocol](trans.html)
-- Abstract datatypes for [keys and values](key.html)
+- Abstract datatypes for [keys, values](key.html) and [sequence numbers](seqnum.html)
 
 These modularly verified objects are assembled to produce the [sharded
 hash table system](sht.html), which we can then compile and execute.

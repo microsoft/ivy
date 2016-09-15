@@ -271,7 +271,9 @@ module sht_transport(lower,req,shard,seq_num,id) = {
 	conjecture mq(D).contents(M) -> net_msg.src(M) = me & net_msg.mty(M) ~= ack_t
 
 	isolate iso_mq(mq_me:id) = mq(mq_me) with seq_num
-	
 
     }
+
+    isolate iso = impl with spec,udp,num
+
 }

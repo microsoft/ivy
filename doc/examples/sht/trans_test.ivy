@@ -16,8 +16,6 @@ instance t : sht_transport(u,req,shard,seq_num,id)
 instance u : udp_simple(id,t.net_msg.t)
 
 
-isolate iso_t = t.impl with t,u,seq_num
-
 export t.send_request
 export t.send_delegate
 import t.recv_request

@@ -66,7 +66,8 @@ class Redefining(ParseError):
         msg = 'redefining ' + str(name)
         if orig_lineno != None:
             msg += " (from {})".format(str(orig_lineno)[:-2])
-        super(Redefining, self).__init__(lineno.line,None,msg)
+        line = lineno.line if hasattr(lineno,"line") else lineno
+        super(Redefining, self).__init__(line,None,msg)
 
 error_list = []
 

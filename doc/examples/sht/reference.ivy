@@ -93,4 +93,8 @@ module sht_reference(id,key,data) = {
 	assert committed(lt)
     }	
 
+    # Invariant: everything committed has been generated
+
+    conjecture committed(T) -> generated(T)
+	
 }

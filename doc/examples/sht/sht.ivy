@@ -12,39 +12,38 @@ type id
 type data
 
 
-instance r : sht_reference(id,key,data)
-instance s : table_shard(key,data)
-instance n: sequence_numbers
-instance p(X:id) : sht_protocol(X,r,t,id,key,data,s)
-instance t : sht_transport(u,p.req.t,s.t,n,id)
-instance u : udp_simple(id,t.net_msg.t)
+instance ref : sht_reference(id,key,data)
+instance shard : table_shard(key,data)
+instance num: sequence_numbers
+instance proto(X:id) : sht_protocol(X,ref,trans,id,key,data,shard)
+instance trans : sht_transport(udp,proto.req.t,shard.t,num,id)
+instance udp : udp_simple(id,trans.net_msg.t)
 
-isolate iso_t = t.impl with t,u,n
-isolate iso_p = p.impl with p,r,t,key,s
-isolate iso_dm(me:id) = p.impl.dm.impl(me) with p.impl.dm(me), key
-isolate iso_hash(me:id) = p.impl.hash.impl(me) with p.impl.hash(me),key,s
+isolate iso_p = proto with ref,trans,key,shard
+isolate iso_dm(me:id) = proto.impl.dm(me) with key
+isolate iso_hash(me:id) = proto.impl.hash(me) with key,shard
 
-export p.set
-export p.get
-export p.delegate_
-import p.answer
+export proto.set
+export proto.get
+export proto.delegate_
+import proto.answer
 
 object impl = {
     interpret id -> bv[1]
 }
 
 object debug = {
-    action send(dst:id,m:t.net_msg.t)
-    action recv(dts:id,m:t.net_msg.t)
-    before u.send(src:id,dst:id,msg:t.net_msg.t) {
-	call send(dst,msg)
+    action send(src:id,dst:id,m:trans.net_msg.t)
+    action recv(dst:id,m:trans.net_msg.t)
+    before udp.send(src:id,dst:id,msg:trans.net_msg.t) {
+	call send(src,dst,msg)
     }
-    before u.recv(dst:id,msg:t.net_msg.t) {
+    before udp.recv(dst:id,msg:trans.net_msg.t) {
 	call recv(dst,msg)
     }
 }
 import debug.send
 import debug.recv
 
-extract iso_impl(me:id) = key,s,n,t.impl(me),p.impl(me),u.impl(me)
+extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me),debug(me)
 
