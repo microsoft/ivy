@@ -279,6 +279,8 @@ class init_gen : public gen {
 public:
     init_gen();
 """)
+    header.append("    bool generate(" + classname + "&);\n")
+    header.append("    bool execute(" + classname + "&){}\n};\n")
     impl.append("init_gen::init_gen(){\n");
     indent_level += 1
     emit_sig(impl)
@@ -297,13 +299,12 @@ public:
     impl.append('))");\n')
     indent_level -= 1
     impl.append("}\n");
-    header.append("    bool generate(" + classname + "&);\n};\n")
     impl.append("bool init_gen::generate(" + classname + "& obj) {\n")
     indent_level += 1
     for sym in all_state_symbols():
-        if slv.solver_name(sym) != None: # skip interpreted symbols
+        if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
             global is_derived
-            if sym not in is_derived:
+            if sym_is_member(sym):
                 emit_randomize(impl,sym)
     indent_level -= 1
     impl.append("""
@@ -343,74 +344,36 @@ def emit_randomize(header,symbol):
 #    indent(header)
 #    header.append('randomize("{}");\n'.format(slv.solver_name(symbol)))
 
-def emit_action_gen(header,impl,name,action,classname):
-    global indent_level
-    caname = varname(name)
-    upd = action.update(im.module,None)
-    pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
-    pre_clauses = ilu.trim_clauses(pre)
-    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
-    pre = pre_clauses.to_formula()
-    syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
-    header.append("class " + caname + "_gen : public gen {\n  public:\n")
-    for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            declare_symbol(header,sym)
-    header.append("    {}_gen();\n".format(caname))
-    impl.append(caname + "_gen::" + caname + "_gen(){\n");
-    indent_level += 1
-    emit_sig(impl)
-    for sym in syms:
-        emit_decl(impl,sym)
-    
-    indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
-    indent_level -= 1
-    impl.append("}\n");
-    header.append("    bool generate(" + classname + "&);\n};\n");
-    impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
-    indent_level += 1
-    pre_used = ilu.used_symbols_ast(pre)
-    for sym in all_state_symbols():
-        if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
-            if slv.solver_name(sym) != None: # skip interpreted symbols
-                global is_derived
-                if sym not in is_derived:
-                    emit_set(impl,sym)
-    for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            emit_randomize(impl,sym)
-    impl.append("""
-    bool res = solve();
-    if (res) {
-""")
-    indent_level += 1
-    for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            emit_eval(impl,sym)
-    indent_level -= 2
-    impl.append("""
-    }
-    pop();
-    obj.___ivy_gen = this;
-    return res;
-}
-""")
+
+def is_local_sym(sym):
+    sym = il.normalize_symbol(sym)
+    return not il.sig.contains_symbol(sym) and slv.solver_name(il.normalize_symbol(sym)) != None
 
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
+    iu.dbg('name')
+    iu.dbg('pre')
     pre_clauses = ilu.trim_clauses(pre)
+    iu.dbg('pre_clauses')
     pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
     pre = pre_clauses.to_formula()
-    syms = [x for x in ilu.used_symbols_ast(pre) if x.name not in il.sig.symbols]
+    used = set(ilu.used_symbols_ast(pre))
+    used_names = set(varname(s) for s in used)
+    for p in action.formal_params:
+        if varname(p) not in used_names:
+            used.add(p)
+    syms = [x for x in used if is_local_sym(x)]
+    iu.dbg('syms')
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
             declare_symbol(header,sym)
     header.append("    {}_gen();\n".format(caname))
+    header.append("    bool generate(" + classname + "&);\n");
+    header.append("    bool execute(" + classname + "&);\n};\n");
     impl.append(caname + "_gen::" + caname + "_gen(){\n");
     indent_level += 1
     emit_sig(impl)
@@ -421,15 +384,15 @@ def emit_action_gen(header,impl,name,action,classname):
     impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
     indent_level -= 1
     impl.append("}\n");
-    header.append("    bool generate(" + classname + "&);\n};\n");
     impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
     indent_level += 1
     pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
         if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
-            if slv.solver_name(sym) != None: # skip interpreted symbols
-                global is_derived
-                if sym not in is_derived:
+            iu.dbg('sym')
+            if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
+                if sym_is_member(sym):
+                    iu.dbg('"got here"')
                     emit_set(impl,sym)
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -450,6 +413,16 @@ def emit_action_gen(header,impl,name,action,classname):
     return res;
 }
 """)
+    open_scope(impl,line="bool " + caname + "_gen::execute(" + classname + "& obj)")
+    code_line(impl,'std::cout << "> {}("'.format(name) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
+    call = 'obj.{}('.format(caname) + ','.join(varname(p) for p in action.formal_params) + ')'
+    if len(action.formal_returns) == 0:
+        code_line(impl,call)
+    else:
+        code_line(impl,'std::out << "= " << ' + call)
+    close_scope(impl)
+
+
 def emit_derived(header,impl,df,classname):
     name = df.defines().name
     sort = df.defines().sort.rng
@@ -727,7 +700,7 @@ def check_member_names(classname):
         raise iu.IvyError(None,'Cannot create C++ class {} with member {}.\nUse command line option classname=... to change the class name.'
                           .format(classname,classname))
 
-def module_to_cpp_class(classname):
+def module_to_cpp_class(classname,basename):
     check_member_names(classname)
     global is_derived
     is_derived = set()
@@ -747,6 +720,7 @@ def module_to_cpp_class(classname):
         header.append('extern void ivy_assume(bool,const char *);\n')
         header.append('extern void ivy_check_progress(int,int);\n')
         header.append('extern int choose(int,int);\n')
+    if target.get() in ["gen","test"]:
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
     header.append('#include <vector>\n')
 
@@ -762,7 +736,7 @@ def module_to_cpp_class(classname):
 
     header.append('class ' + classname + ' {\n  public:\n')
     header.append('    std::vector<int> ___ivy_stack;\n')
-    if target.get() == "gen":
+    if target.get() in ["gen","test"]:
         header.append('    ivy_gen *___ivy_gen;\n')
     header.append('    int ___ivy_choose(int rng,const char *name,int id);\n')
     if target.get() != "gen":
@@ -770,7 +744,7 @@ def module_to_cpp_class(classname):
         header.append('    virtual void ivy_assume(bool,const char *){}\n')
         header.append('    virtual void ivy_check_progress(int,int){}\n')
     
-    impl = ['#include "' + classname + '.h"\n\n']
+    impl = ['#include "' + basename + '.h"\n\n']
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("""
@@ -873,7 +847,7 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
 """)
 
-    if target.get() == "repl":
+    if True or target.get() == "repl":
         for sort_name in sorted(im.module.sort_destructors):
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
@@ -899,7 +873,7 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
 
     impl.append("int " + classname)
-    if target.get() == "gen":
+    if target.get() in ["gen","test"]:
         impl.append(
 """::___ivy_choose(int rng,const char *name,int id) {
         std::ostringstream ss;
@@ -959,7 +933,7 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),csortcard(il.sig.sorts[sortname])))
-    if target.get() != "gen":
+    if target.get() not in ["gen","test"]:
         emit_one_initial_state(impl)
     for native in im.module.natives:
         tag = native_type(native)
@@ -975,14 +949,15 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
     impl.append('}\n')
 
-    if target.get() == "gen":
-        emit_boilerplate1(header,impl)
-        emit_init_gen(header,impl,classname)
+    if target.get() in ["gen","test"]:
+        sf = header if target.get() == "gen" else impl
+        emit_boilerplate1(sf,impl,classname)
+        emit_init_gen(sf,impl,classname)
         for name,action in im.module.actions.iteritems():
             if name in im.module.public_actions:
-                emit_action_gen(header,impl,name,action,classname)
+                emit_action_gen(sf,impl,name,action,classname)
 
-    if target.get() == "repl":
+    if True or target.get() == "repl":
 
         for sort_name in sorted(im.module.sort_destructors):
             destrs = im.module.sort_destructors[sort_name]
@@ -1028,102 +1003,107 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
             close_scope(impl)
 
 
-        emit_repl_imports(header,impl,classname)
-        emit_repl_boilerplate1(header,impl,classname)
+        if target.get() in ["repl","test"]:
+            emit_repl_imports(header,impl,classname)
+            emit_repl_boilerplate1(header,impl,classname)
 
-        for sort_name in sorted(im.module.sort_destructors):
-            destrs = im.module.sort_destructors[sort_name]
-            sort = im.module.sig.sorts[sort_name]
-            csname = varname(sort_name)
-            cfsname = classname + '::' + csname
-            impl.append('template <>\n')
-            open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
-            code_line(impl,cfsname + ' res')
-            code_line(impl,'ivy_value &arg = args[idx]')
-            code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
-            code_line(impl,'std::vector<ivy_value> tmp_args(1)')
-            for idx,sym in enumerate(destrs):
-                open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
-                code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
-                fname = memname(sym)
-                code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds(idx)'.format(idx,fname))
-                close_scope(impl)
-                open_scope(impl,line='else')
-                code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
-                close_scope(impl)
-                vs = variables(sym.sort.dom[1:])
-                for v in vs:
-                    open_scope(impl)
-                    code_line(impl,'ivy_value tmp = tmp_args[0]')
-                    code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx)'.format(csortcard(v.sort)))
-                    open_loop(impl,[v])
-                    code_line(impl,'std::vector<ivy_value> tmp_args(1)')
-                    code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
-                code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
-                          +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
-                for v in vs:
-                    close_loop(impl,[v])
+            for sort_name in sorted(im.module.sort_destructors):
+                destrs = im.module.sort_destructors[sort_name]
+                sort = im.module.sig.sorts[sort_name]
+                csname = varname(sort_name)
+                cfsname = classname + '::' + csname
+                impl.append('template <>\n')
+                open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                code_line(impl,cfsname + ' res')
+                code_line(impl,'ivy_value &arg = args[idx]')
+                code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
+                code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+                for idx,sym in enumerate(destrs):
+                    open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
+                    code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
+                    fname = memname(sym)
+                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds(idx)'.format(idx,fname))
                     close_scope(impl)
-            code_line(impl,'return res')
-            close_scope(impl)
+                    open_scope(impl,line='else')
+                    code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
+                    close_scope(impl)
+                    vs = variables(sym.sort.dom[1:])
+                    for v in vs:
+                        open_scope(impl)
+                        code_line(impl,'ivy_value tmp = tmp_args[0]')
+                        code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx)'.format(csortcard(v.sort)))
+                        open_loop(impl,[v])
+                        code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+                        code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
+                    code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
+                              +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+                    for v in vs:
+                        close_loop(impl,[v])
+                        close_scope(impl)
+                code_line(impl,'return res')
+                close_scope(impl)
 
-            impl.append('template <>\n')
-            open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
-            for idx,sym in enumerate(destrs):
-                fname = memname(sym)
-                vs = variables(sym.sort.dom[1:])
-                for v in vs:
-                    open_loop(impl,[v])
-                code_line(impl,'__deser(inp,pos,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
-                for v in vs:
-                    close_loop(impl,[v])
-            close_scope(impl)
-            
-                
+                impl.append('template <>\n')
+                open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
+                for idx,sym in enumerate(destrs):
+                    fname = memname(sym)
+                    vs = variables(sym.sort.dom[1:])
+                    for v in vs:
+                        open_loop(impl,[v])
+                    code_line(impl,'__deser(inp,pos,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                    for v in vs:
+                        close_loop(impl,[v])
+                close_scope(impl)
 
-        emit_repl_boilerplate1a(header,impl,classname)
-        for actname in sorted(im.module.public_actions):
-            username = actname[4:] if actname.startswith("ext:") else actname
-            action = im.module.actions[actname]
-            getargs = ','.join('_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
-            thing = "ivy.methodname(getargs)"
-            if action.formal_returns:
-                thing = "std::cout << " + thing + " << std::endl"
-            impl.append("""
-            if (action == "actname") {
-                check_arity(args,numargs,action);
-                thing;
-            }
-            else
-""".replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
-        emit_repl_boilerplate2(header,impl,classname)
 
-                
-        impl.append("int main(int argc, char **argv){\n")
-        impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
-        impl.append('        std::cerr << "usage: {} {}\\n";\n'
-                    .format(classname,' '.join(map(varname,im.module.params))))
-        impl.append('        exit(1);\n    }\n')
-        impl.append('    std::vector<std::string> args;\n')
-        impl.append('    std::vector<ivy_value> arg_values(1);\n')
-        impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
-        for idx,s in enumerate(im.module.params):
-            impl.append('    int p__'+varname(s)+';\n')
-            impl.append('    try {\n')
-            impl.append('        int pos = 0;\n')
-            impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
-            impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
-                        .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
-            impl.append('    }\n    catch(out_of_bounds &) {\n')
-            impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+
+            emit_repl_boilerplate1a(header,impl,classname)
+            for actname in sorted(im.module.public_actions):
+                username = actname[4:] if actname.startswith("ext:") else actname
+                action = im.module.actions[actname]
+                getargs = ','.join('_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
+                thing = "ivy.methodname(getargs)"
+                if action.formal_returns:
+                    thing = 'std::cout << "= " << ' + thing + " << std::endl"
+                impl.append("""
+                if (action == "actname") {
+                    check_arity(args,numargs,action);
+                    thing;
+                }
+                else
+    """.replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
+            emit_repl_boilerplate2(header,impl,classname)
+
+
+            impl.append("int main(int argc, char **argv){\n")
+            impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
+            impl.append('        std::cerr << "usage: {} {}\\n";\n'
+                        .format(classname,' '.join(map(varname,im.module.params))))
             impl.append('        exit(1);\n    }\n')
-            impl.append('    catch(syntax_error &) {\n')
-            impl.append('        std::cerr << "syntax error in command argument\\n";\n')
-            impl.append('        exit(1);\n    }\n')
-        cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
-        impl.append('    {}_repl ivy{};\n'
-                    .format(classname,cp))
-        emit_repl_boilerplate3(header,impl,classname)
+            impl.append('    std::vector<std::string> args;\n')
+            impl.append('    std::vector<ivy_value> arg_values(1);\n')
+            impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
+            for idx,s in enumerate(im.module.params):
+                impl.append('    int p__'+varname(s)+';\n')
+                impl.append('    try {\n')
+                impl.append('        int pos = 0;\n')
+                impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
+                impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
+                            .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
+                impl.append('    }\n    catch(out_of_bounds &) {\n')
+                impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+                impl.append('        exit(1);\n    }\n')
+                impl.append('    catch(syntax_error &) {\n')
+                impl.append('        std::cerr << "syntax error in command argument\\n";\n')
+                impl.append('        exit(1);\n    }\n')
+            cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+            impl.append('    {}_repl ivy{};\n'
+                        .format(classname,cp))
+            if target.get() == "test":
+                emit_repl_boilerplate3test(header,impl,classname)
+            else:
+                emit_repl_boilerplate3(header,impl,classname)
+
 
         
     return ''.join(header) , ''.join(impl)
@@ -1800,7 +1780,7 @@ int ask_ret(int bound) {
         if not imp.scope() and name in im.module.actions:
             action = im.module.actions[name]
             emit_method_decl(impl,name,action);
-            impl.append('{\n    std::cout << "' + name[5:] + '"')
+            impl.append('{\n    std::cout << "< ' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
                 first = True
@@ -2060,8 +2040,67 @@ def emit_repl_boilerplate3(header,impl,classname):
 }
 """.replace('classname',classname))
 
+def emit_repl_boilerplate3test(header,impl,classname):
+    impl.append("""
+        init_gen my_init_gen;
+        my_init_gen.generate(ivy);
+        std::vector<gen *> generators;
+""")
+    for actname in sorted(im.module.public_actions):
+        action = im.module.actions[actname]
+        impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
+    impl.append("""
 
-def emit_boilerplate1(header,impl):
+    for(int cycle = 0; cycle < 100; cycle++) {
+
+        int rnd = rand() % (generators.size() + readers.size());
+        if (rnd < generators.size()) {
+            gen &g = *generators[rnd];
+            if (g.generate(ivy))
+                g.execute(ivy);
+            continue;
+        }
+
+
+        fd_set rdfds;
+        FD_ZERO(&rdfds);
+        int maxfds = 0;
+
+        for (unsigned i = 0; i < readers.size(); i++) {
+            reader *r = readers[i];
+            int fds = r->fdes();
+            FD_SET(fds,&rdfds);
+            if (fds > maxfds)
+                maxfds = fds;
+        }
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+
+        if (foo < 0)
+            {perror("select failed"); exit(1);}
+        
+        if (foo == 0){
+            // std::cout << "TIMEOUT\\n";            
+           for (unsigned i = 0; i < timers.size(); i++)
+               timers[i]->timeout();
+        }
+        else {
+            for (unsigned i = 0; i < readers.size(); i++) {
+                reader *r = readers[i];
+                if (FD_ISSET(r->fdes(),&rdfds))
+                    r->read();
+            }
+        }            
+    }
+}
+""".replace('classname',classname))
+
+
+def emit_boilerplate1(header,impl,classname):
     header.append("""
 #include <string>
 #include <vector>
@@ -2093,6 +2132,10 @@ protected:
 
 
 public:
+    virtual bool generate(classname& obj)=0;
+    virtual bool execute(classname& obj)=0;
+    virtual ~gen(){}
+
     z3::expr mk_apply_expr(const char *decl_name, unsigned num_args, const int *args){
         z3::func_decl decl = decls_by_name.find(decl_name)->second;
         std::vector<z3::expr> expr_args;
@@ -2313,10 +2356,10 @@ public:
         return eval_apply(name);
     }
 };
-""")
+""".replace('classname',classname))
 
 
-target = iu.EnumeratedParameter("target",["impl","gen","repl"],"gen")
+target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
 
 
@@ -2332,15 +2375,16 @@ def main():
     with im.Module():
         ivy.ivy_init()
 
-        classname = opt_classname.get() or im.module.name
+        basename = opt_classname.get() or im.module.name
+        classname = varname(basename)
         with iu.ErrorPrinter():
-            header,impl = module_to_cpp_class(classname)
+            header,impl = module_to_cpp_class(classname,basename)
 #        print header
 #        print impl
-        f = open(classname+'.h','w')
+        f = open(basename+'.h','w')
         f.write(header)
         f.close()
-        f = open(classname+'.cpp','w')
+        f = open(basename+'.cpp','w')
         f.write(impl)
         f.close()
 

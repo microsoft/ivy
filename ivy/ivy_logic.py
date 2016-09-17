@@ -691,6 +691,14 @@ class Sig(object):
             return
         del self.symbols[symbol.name]
 
+    def contains_symbol(self,symbol):
+        if symbol.name not in self.symbols:
+            return False
+        sort = self.symbols[symbol.name].sort
+        if isinstance(sort,UnionSort):
+            return symbol.sort in sort.sorts
+        return True
+
     def __str__(self):
         return sig_to_str(self)
 

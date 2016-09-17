@@ -1040,8 +1040,11 @@ def create_isolate(iso,mod = None,**kwargs):
             for name,mixins in mod.mixins.iteritems():
                 for mixin in mixins:
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
+                    mixed_name = mixin.args[1].relname
+                    if mixed_name in orig_exports and isinstance(mixin,ivy_ast.MixinBeforeDef):
+                        action1 = action1.assert_to_assume()
                     mixed = ia.apply_mixin(mixin,action1,action2)
-                    mod.actions[mixin.args[1].relname] = mixed
+                    mod.actions[mixed_name] = mixed
             # find the globally exported actions (all if none specified, for compat)
             if mod.exports:
                 mod.public_actions.clear()
