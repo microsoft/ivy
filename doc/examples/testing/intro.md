@@ -50,7 +50,7 @@ component bug through the component's interface rather than through
 the system's interface. In addition, of course, we do not have to
 execute the entire system to test it compositionally.
 
-# An example
+In the next few sections, we'll run through the same examples we
+looked at with compositional formal verification, but instead we'll
+use compositional testing.
 
-Let's consider a trivial example, to see how to create a test
-environment using ivy.

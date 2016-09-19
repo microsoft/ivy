@@ -252,12 +252,13 @@ def sym_is_member(sym):
     res = sym not in is_derived and sym.name not in im.module.destructor_sorts
     return res
 
-def emit_eval_sig(header,obj=None):
+def emit_eval_sig(header,obj=None,used=None):
     for symbol in all_state_symbols():
         if slv.solver_name(symbol) != None: # skip interpreted symbols
             global is_derived
             if symbol not in is_derived:
-                emit_eval(header,symbol,obj)
+                if used == None or symbol in used:
+                    emit_eval(header,symbol,obj)
 
 def emit_clear_progress(impl,obj=None):
     for df in im.module.progress:
@@ -271,6 +272,10 @@ def emit_clear_progress(impl,obj=None):
         code.append(' = 0;\n')
         impl.extend(code)
         close_loop(impl,vs)
+
+def mk_rand(sort):
+    card = csortcard(sort)
+    return '(rand() % {})'.format(card) if card else 0
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -299,24 +304,33 @@ public:
     impl.append('))");\n')
     indent_level -= 1
     impl.append("}\n");
+    used = ilu.used_symbols_asts(constraints)
     impl.append("bool init_gen::generate(" + classname + "& obj) {\n")
     indent_level += 1
     for sym in all_state_symbols():
         if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
             global is_derived
             if sym_is_member(sym):
-                emit_randomize(impl,sym)
+                if sym in used:
+                    emit_randomize(impl,sym)
+                else:
+                    if not is_native_sym(sym):
+                        fun = lambda v: (mk_rand(v.sort) if not is_native_sym(v) else None)
+                        assign_array_from_model(impl,sym,'obj.',fun)
     indent_level -= 1
     impl.append("""
     bool res = solve();
     if (res) {
 """)
     indent_level += 2
-    emit_eval_sig(impl,'obj')
+    emit_eval_sig(impl,'obj',used = used)
     emit_clear_progress(impl,'obj')
     indent_level -= 2
     impl.append("""
     }
+""")
+    impl.append("""
+    obj.__init();
     return res;
 }
 """)
@@ -354,10 +368,7 @@ def emit_action_gen(header,impl,name,action,classname):
     caname = varname(name)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
-    iu.dbg('name')
-    iu.dbg('pre')
     pre_clauses = ilu.trim_clauses(pre)
-    iu.dbg('pre_clauses')
     pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
     pre = pre_clauses.to_formula()
     used = set(ilu.used_symbols_ast(pre))
@@ -366,7 +377,6 @@ def emit_action_gen(header,impl,name,action,classname):
         if varname(p) not in used_names:
             used.add(p)
     syms = [x for x in used if is_local_sym(x)]
-    iu.dbg('syms')
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -389,10 +399,8 @@ def emit_action_gen(header,impl,name,action,classname):
     pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
         if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
-            iu.dbg('sym')
             if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
                 if sym_is_member(sym):
-                    iu.dbg('"got here"')
                     emit_set(impl,sym)
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -559,6 +567,10 @@ def init_method():
         act = ia.AssertAction(ini.formula)
         act.lineno = ini.lineno
         asserts.append(act)
+    
+    for name,ini in im.module.initializers:
+        asserts.append(ini)
+
     res = ia.Sequence(*asserts)
     res.formal_params = []
     res.formal_returns = []
@@ -1173,6 +1185,20 @@ def assign_symbol_from_model(header,sym,m):
             assign_symbol_value(header,[ctext],fun,term)
     else:
         assign_symbol_value(header,[varname(sym.name)],fun,sym)
+
+def assign_array_from_model(impl,sym,prefix,fun):
+    name, sort = sym.name,sym.sort
+    if hasattr(sort,'dom'):
+        vs = variables(sym.sort.dom)
+        for v in vs:
+            open_loop(impl,[v])
+        term = sym(*vs)
+        ctext = prefix + varname(sym.name) + ''.join('['+v.name+']' for v in vs)
+        assign_symbol_value(impl,[ctext],fun,term)
+        for v in vs:
+            close_loop(impl,[v])
+    else:
+        assign_symbol_value(impl,[prefix+varname(sym.name)],fun,sym)
         
 def check_init_cond(kind,lfmlas):
     params = set(im.module.params)
@@ -2107,6 +2133,10 @@ def emit_boilerplate1(header,impl,classname):
 #include <sstream>
 #include <cstdlib>
 #include "z3++.h"
+""")
+    header.append(hash_h)
+    header.append("""
+
 #include "hash.h"
 
 using namespace hash_space;
@@ -2357,10 +2387,11 @@ public:
     }
 };
 """.replace('classname',classname))
-
+    impl.append(hash_cpp)
 
 target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
+opt_build = iu.BooleanParameter("build",False)
 
 
 def main():
@@ -2387,8 +2418,584 @@ def main():
         f = open(basename+'.cpp','w')
         f.write(impl)
         f.close()
-
+    if opt_build.get():
+        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp -lz3".format(basename,basename)
+        print cmd
+        import os
+        exit(os.system(cmd))
 
 if __name__ == "__main__":
     main()
         
+hash_h = """
+/*++
+  Copyright (c) Microsoft Corporation
+
+  This hash template is borrowed from Microsoft Z3
+  (https://github.com/Z3Prover/z3).
+
+  Simple implementation of bucket-list hash tables conforming roughly
+  to SGI hash_map and hash_set interfaces, though not all members are
+  implemented.
+
+  These hash tables have the property that insert preserves iterators
+  and references to elements.
+
+  This package lives in namespace hash_space. Specializations of
+  class "hash" should be made in this namespace.
+
+  --*/
+
+#ifndef HASH_H
+#define HASH_H
+
+#ifdef _WINDOWS
+#pragma warning(disable:4267)
+#endif
+
+#include <string>
+#include <vector>
+#include <iterator>
+
+namespace hash_space {
+
+    unsigned string_hash(const char * str, unsigned length, unsigned init_value);
+
+    template <typename T> class hash {};
+
+    template <>
+        class hash<int> {
+    public:
+        size_t operator()(const int &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<std::string> {
+    public:
+        size_t operator()(const std::string &s) const {
+            return string_hash(s.c_str(), s.size(), 0);
+        }
+    };
+
+    template <>
+        class hash<std::pair<int,int> > {
+    public:
+        size_t operator()(const std::pair<int,int> &p) const {
+            return p.first + p.second;
+        }
+    };
+
+    template <class T>
+        class hash<std::pair<T *, T *> > {
+    public:
+        size_t operator()(const std::pair<T *,T *> &p) const {
+            return (size_t)p.first + (size_t)p.second;
+        }
+    };
+
+    template <class T>
+        class hash<T *> {
+    public:
+        size_t operator()(T * const &p) const {
+            return (size_t)p;
+        }
+    };
+
+    enum { num_primes = 29 };
+
+    static const unsigned long primes[num_primes] =
+        {
+            7ul,
+            53ul,
+            97ul,
+            193ul,
+            389ul,
+            769ul,
+            1543ul,
+            3079ul,
+            6151ul,
+            12289ul,
+            24593ul,
+            49157ul,
+            98317ul,
+            196613ul,
+            393241ul,
+            786433ul,
+            1572869ul,
+            3145739ul,
+            6291469ul,
+            12582917ul,
+            25165843ul,
+            50331653ul,
+            100663319ul,
+            201326611ul,
+            402653189ul,
+            805306457ul,
+            1610612741ul,
+            3221225473ul,
+            4294967291ul
+        };
+
+    inline unsigned long next_prime(unsigned long n) {
+        const unsigned long* to = primes + (int)num_primes;
+        for(const unsigned long* p = primes; p < to; p++)
+            if(*p >= n) return *p;
+        return primes[num_primes-1];
+    }
+
+    template<class Value, class Key, class HashFun, class GetKey, class KeyEqFun>
+        class hashtable
+    {
+    public:
+
+        typedef Value &reference;
+        typedef const Value &const_reference;
+    
+        struct Entry
+        {
+            Entry* next;
+            Value val;
+      
+        Entry(const Value &_val) : val(_val) {next = 0;}
+        };
+    
+
+        struct iterator
+        {      
+            Entry* ent;
+            hashtable* tab;
+
+            typedef std::forward_iterator_tag iterator_category;
+            typedef Value value_type;
+            typedef std::ptrdiff_t difference_type;
+            typedef size_t size_type;
+            typedef Value& reference;
+            typedef Value* pointer;
+
+        iterator(Entry* _ent, hashtable* _tab) : ent(_ent), tab(_tab) { }
+
+            iterator() { }
+
+            Value &operator*() const { return ent->val; }
+
+            Value *operator->() const { return &(operator*()); }
+
+            iterator &operator++() {
+                Entry *old = ent;
+                ent = ent->next;
+                if (!ent) {
+                    size_t bucket = tab->get_bucket(old->val);
+                    while (!ent && ++bucket < tab->buckets.size())
+                        ent = tab->buckets[bucket];
+                }
+                return *this;
+            }
+
+            iterator operator++(int) {
+                iterator tmp = *this;
+                operator++();
+                return tmp;
+            }
+
+
+            bool operator==(const iterator& it) const { 
+                return ent == it.ent;
+            }
+
+            bool operator!=(const iterator& it) const {
+                return ent != it.ent;
+            }
+        };
+
+        struct const_iterator
+        {      
+            const Entry* ent;
+            const hashtable* tab;
+
+            typedef std::forward_iterator_tag iterator_category;
+            typedef Value value_type;
+            typedef std::ptrdiff_t difference_type;
+            typedef size_t size_type;
+            typedef const Value& reference;
+            typedef const Value* pointer;
+
+        const_iterator(const Entry* _ent, const hashtable* _tab) : ent(_ent), tab(_tab) { }
+
+            const_iterator() { }
+
+            const Value &operator*() const { return ent->val; }
+
+            const Value *operator->() const { return &(operator*()); }
+
+            const_iterator &operator++() {
+                Entry *old = ent;
+                ent = ent->next;
+                if (!ent) {
+                    size_t bucket = tab->get_bucket(old->val);
+                    while (!ent && ++bucket < tab->buckets.size())
+                        ent = tab->buckets[bucket];
+                }
+                return *this;
+            }
+
+            const_iterator operator++(int) {
+                const_iterator tmp = *this;
+                operator++();
+                return tmp;
+            }
+
+
+            bool operator==(const const_iterator& it) const { 
+                return ent == it.ent;
+            }
+
+            bool operator!=(const const_iterator& it) const {
+                return ent != it.ent;
+            }
+        };
+
+    private:
+
+        typedef std::vector<Entry*> Table;
+
+        Table buckets;
+        size_t entries;
+        HashFun hash_fun ;
+        GetKey get_key;
+        KeyEqFun key_eq_fun;
+    
+    public:
+
+    hashtable(size_t init_size) : buckets(init_size,(Entry *)0) {
+            entries = 0;
+        }
+    
+        hashtable(const hashtable& other) {
+            dup(other);
+        }
+
+        hashtable& operator= (const hashtable& other) {
+            if (&other != this)
+                dup(other);
+            return *this;
+        }
+
+        ~hashtable() {
+            clear();
+        }
+
+        size_t size() const { 
+            return entries;
+        }
+
+        bool empty() const { 
+            return size() == 0;
+        }
+
+        void swap(hashtable& other) {
+            buckets.swap(other.buckets);
+            std::swap(entries, other.entries);
+        }
+    
+        iterator begin() {
+            for (size_t i = 0; i < buckets.size(); ++i)
+                if (buckets[i])
+                    return iterator(buckets[i], this);
+            return end();
+        }
+    
+        iterator end() { 
+            return iterator(0, this);
+        }
+
+        const_iterator begin() const {
+            for (size_t i = 0; i < buckets.size(); ++i)
+                if (buckets[i])
+                    return const_iterator(buckets[i], this);
+            return end();
+        }
+    
+        const_iterator end() const { 
+            return const_iterator(0, this);
+        }
+    
+        size_t get_bucket(const Value& val, size_t n) const {
+            return hash_fun(get_key(val)) % n;
+        }
+    
+        size_t get_key_bucket(const Key& key) const {
+            return hash_fun(key) % buckets.size();
+        }
+
+        size_t get_bucket(const Value& val) const {
+            return get_bucket(val,buckets.size());
+        }
+
+        Entry *lookup(const Value& val, bool ins = false)
+        {
+            resize(entries + 1);
+
+            size_t n = get_bucket(val);
+            Entry* from = buckets[n];
+      
+            for (Entry* ent = from; ent; ent = ent->next)
+                if (key_eq_fun(get_key(ent->val), get_key(val)))
+                    return ent;
+      
+            if(!ins) return 0;
+
+            Entry* tmp = new Entry(val);
+            tmp->next = from;
+            buckets[n] = tmp;
+            ++entries;
+            return tmp;
+        }
+
+        Entry *lookup_key(const Key& key) const
+        {
+            size_t n = get_key_bucket(key);
+            Entry* from = buckets[n];
+      
+            for (Entry* ent = from; ent; ent = ent->next)
+                if (key_eq_fun(get_key(ent->val), key))
+                    return ent;
+      
+            return 0;
+        }
+
+        const_iterator find(const Key& key) const {
+            return const_iterator(lookup_key(key),this);
+        }
+
+        iterator find(const Key& key) {
+            return iterator(lookup_key(key),this);
+        }
+
+        std::pair<iterator,bool> insert(const Value& val){
+            size_t old_entries = entries;
+            Entry *ent = lookup(val,true);
+            return std::pair<iterator,bool>(iterator(ent,this),entries > old_entries);
+        }
+    
+        iterator insert(const iterator &it, const Value& val){
+            Entry *ent = lookup(val,true);
+            return iterator(ent,this);
+        }
+
+        size_t erase(const Key& key)
+        {
+            Entry** p = &(buckets[get_key_bucket(key)]);
+            size_t count = 0;
+            while(*p){
+                Entry *q = *p;
+                if (key_eq_fun(get_key(q->val), key)) {
+                    ++count;
+                    *p = q->next;
+                    delete q;
+                }
+                else
+                    p = &(q->next);
+            }
+            entries -= count;
+            return count;
+        }
+
+        void resize(size_t new_size) {
+            const size_t old_n = buckets.size();
+            if (new_size <= old_n) return;
+            const size_t n = next_prime(new_size);
+            if (n <= old_n) return;
+            Table tmp(n, (Entry*)(0));
+            for (size_t i = 0; i < old_n; ++i) {
+                Entry* ent = buckets[i];
+                while (ent) {
+                    size_t new_bucket = get_bucket(ent->val, n);
+                    buckets[i] = ent->next;
+                    ent->next = tmp[new_bucket];
+                    tmp[new_bucket] = ent;
+                    ent = buckets[i];
+                }
+            }
+            buckets.swap(tmp);
+        }
+    
+        void clear()
+        {
+            for (size_t i = 0; i < buckets.size(); ++i) {
+                for (Entry* ent = buckets[i]; ent != 0;) {
+                    Entry* next = ent->next;
+                    delete ent;
+                    ent = next;
+                }
+                buckets[i] = 0;
+            }
+            entries = 0;
+        }
+
+        void dup(const hashtable& other)
+        {
+            buckets.resize(other.buckets.size());
+            for (size_t i = 0; i < other.buckets.size(); ++i) {
+                Entry** to = &buckets[i];
+                for (Entry* from = other.buckets[i]; from; from = from->next)
+                    to = &((*to = new Entry(from->val))->next);
+            }
+            entries = other.entries;
+        }
+    };
+
+    template <typename T> 
+        class equal {
+    public:
+        bool operator()(const T& x, const T &y) const {
+            return x == y;
+        }
+    };
+
+    template <typename T>
+        class identity {
+    public:
+        const T &operator()(const T &x) const {
+            return x;
+        }
+    };
+
+    template <typename T, typename U>
+        class proj1 {
+    public:
+        const T &operator()(const std::pair<T,U> &x) const {
+            return x.first;
+        }
+    };
+
+    template <typename Element, class HashFun = hash<Element>, 
+        class EqFun = equal<Element> >
+        class hash_set
+        : public hashtable<Element,Element,HashFun,identity<Element>,EqFun> {
+
+    public:
+
+    typedef Element value_type;
+
+    hash_set()
+    : hashtable<Element,Element,HashFun,identity<Element>,EqFun>(7) {}
+    };
+
+    template <typename Key, typename Value, class HashFun = hash<Key>, 
+        class EqFun = equal<Key> >
+        class hash_map
+        : public hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun> {
+
+    public:
+
+    hash_map()
+    : hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>(7) {}
+
+    Value &operator[](const Key& key) {
+	std::pair<Key,Value> kvp(key,Value());
+	return 
+	hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>::
+        lookup(kvp,true)->val.second;
+    }
+    };
+
+}
+#endif
+"""
+
+hash_cpp = """
+/*++
+Copyright (c) Microsoft Corporation
+
+This string hash function is borrowed from Microsoft Z3
+(https://github.com/Z3Prover/z3). 
+
+--*/
+
+#include"hash.h"
+
+#define mix(a,b,c)              \\
+{                               \\
+  a -= b; a -= c; a ^= (c>>13); \\
+  b -= c; b -= a; b ^= (a<<8);  \\
+  c -= a; c -= b; c ^= (b>>13); \\
+  a -= b; a -= c; a ^= (c>>12); \\
+  b -= c; b -= a; b ^= (a<<16); \\
+  c -= a; c -= b; c ^= (b>>5);  \\
+  a -= b; a -= c; a ^= (c>>3);  \\
+  b -= c; b -= a; b ^= (a<<10); \\
+  c -= a; c -= b; c ^= (b>>15); \\
+}
+
+#define __fallthrough
+
+namespace hash_space {
+
+// I'm using Bob Jenkin's hash function.
+// http://burtleburtle.net/bob/hash/doobs.html
+unsigned string_hash(const char * str, unsigned length, unsigned init_value) {
+    register unsigned a, b, c, len;
+
+    /* Set up the internal state */
+    len = length;
+    a = b = 0x9e3779b9;  /* the golden ratio; an arbitrary value */
+    c = init_value;      /* the previous hash value */
+
+    /*---------------------------------------- handle most of the key */
+    while (len >= 12) {
+        a += reinterpret_cast<const unsigned *>(str)[0];
+        b += reinterpret_cast<const unsigned *>(str)[1];
+        c += reinterpret_cast<const unsigned *>(str)[2];
+        mix(a,b,c);
+        str += 12; len -= 12;
+    }
+
+    /*------------------------------------- handle the last 11 bytes */
+    c += length;
+    switch(len) {        /* all the case statements fall through */
+    case 11: 
+        c+=((unsigned)str[10]<<24);
+        __fallthrough;
+    case 10: 
+        c+=((unsigned)str[9]<<16);
+        __fallthrough;
+    case 9 : 
+        c+=((unsigned)str[8]<<8);
+        __fallthrough;
+        /* the first byte of c is reserved for the length */
+    case 8 : 
+        b+=((unsigned)str[7]<<24);
+        __fallthrough;
+    case 7 : 
+        b+=((unsigned)str[6]<<16);
+        __fallthrough;
+    case 6 : 
+        b+=((unsigned)str[5]<<8);
+        __fallthrough;
+    case 5 : 
+        b+=str[4];
+        __fallthrough;
+    case 4 : 
+        a+=((unsigned)str[3]<<24);
+        __fallthrough;
+    case 3 : 
+        a+=((unsigned)str[2]<<16);
+        __fallthrough;
+    case 2 : 
+        a+=((unsigned)str[1]<<8);
+        __fallthrough;
+    case 1 : 
+        a+=str[0];
+        __fallthrough;
+        /* case 0: nothing left to add */
+    }
+    mix(a,b,c);
+    /*-------------------------------------------- report the result */
+    return c;
+}
+
+}
+
+"""

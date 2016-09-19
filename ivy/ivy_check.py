@@ -22,7 +22,7 @@ import sys
 diagnose = iu.BooleanParameter("diagnose",False)
 coverage = iu.BooleanParameter("coverage",True)
 checked_action = iu.Parameter("action","")
-
+opt_trusted = iu.BooleanParameter("trusted",False)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -112,6 +112,8 @@ def check_module():
             print "Checking isolate {}...".format(isolate)
         with im.module.copy():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
+            if opt_trusted.get():
+                continue
             with im.module.theory_context():
                 check_properties()
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)

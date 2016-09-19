@@ -1,0 +1,37 @@
+#lang ivy1.5
+type packet
+
+object intf = {
+    action send(x:packet)
+    action recv(x:packet)
+}
+
+
+object spec = {
+    relation sent(X:packet)
+
+    after init {
+	sent(X) := false
+    }
+
+    before intf.send {
+	sent(x) := true
+    }
+
+    before intf.recv {
+	assert sent(x)
+    }
+}
+
+
+object protocol = {
+    implement intf.send {
+	call intf.recv(x)
+    }
+}
+
+import intf.recv
+export intf.send
+
+interpret packet -> bv[16]
+

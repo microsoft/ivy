@@ -471,7 +471,6 @@ def get_loc_mods(mod,actname):
     return res
 
 def find_references(mod,syms,new_actions):
-    print [type(s) for s in syms]
     syms = set(syms)
     refs = set()
     for x in mod.labeled_axioms+mod.labeled_props+mod.labeled_inits+mod.labeled_conjs+mod.definitions:
@@ -640,12 +639,15 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
             for foo in (m.mixee(),m.mixer()):
                 if foo not in mod.actions:
                     raise IvyError(m,'action {} not defined'.format(foo))
+            if not startswith_eq_some(m.mixer(),present,mod):
+                continue
             action = mod.actions[m.mixee()]
             if not (isinstance(action,ia.Sequence) and len(action.args) == 0):
                 raise iu.IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
             action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
             mod.actions[m.mixee()] = action
             implementation_map[m.mixee()] = m.mixer()
+
 
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present,mod)
@@ -957,6 +959,15 @@ def fix_initializers(mod,after_inits):
         ais = set(m.mixer() for m in after_inits)
         mod.exports = [e for e in mod.exports if e.exported() not in ais]
 
+def set_up_implementation_map(mod):
+    global implementation_map
+    implementation_map = {}
+    for actname,ms in mod.mixins.iteritems():
+        implements = [m for m in ms if isinstance(m,ivy_ast.MixinImplementDef)]
+        for m in implements:
+            implementation_map[m.mixee()] = m.mixer()
+
+
 def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
@@ -991,7 +1002,10 @@ def create_isolate(iso,mod = None,**kwargs):
         extra_with = []
         extra_strip = {}
         if create_imports.get():
+            set_up_implementation_map(mod)
+            print 'implementation_map: {}'.format(implementation_map)
             newimps = []
+            outcalls = set()
             for imp in mod.imports:
                 if imp.args[1].rep == '':
                     impname = imp.args[0].rep
@@ -1000,22 +1014,39 @@ def create_isolate(iso,mod = None,**kwargs):
                     action = mod.actions[impname]
                     if not(type(action) == ia.Sequence and not action.args):
                         raise iu.IvyError(imp,"cannot import implemented action: {}".format(impname))
-                    extname = 'imp__' + impname
-                    call = ia.CallAction(*([ivy_ast.Atom(extname,action.formal_params)] + action.formal_returns))
-                    call.formal_params = action.formal_params
-                    call.formal_returns = action.formal_returns
-                    call.lineno = action.lineno
-                    mod.actions[impname] = call
-                    mod.actions[extname] = action
-                    newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),imp.args[1]))
-                    extra_with.append(ivy_ast.Atom(impname))
-#                    extra_with.append(ivy_ast.Atom(extname))
-                    if iso and iso in mod.isolates:
-                        ps = mod.isolates[iso].params()
-                        extra_strip[impname] = [a.rep for a in ps]
-                        extra_strip[extname] = [a.rep for a in ps]
+                    outcalls.add(impname)
                 else:
                     newimps.append(imp)
+
+            if iso and iso in mod.isolates:
+                isolate = mod.isolates[iso]
+                verified,present = get_isolate_info(mod,isolate,'impl')
+                save_privates = mod.privates
+                set_privates(mod,isolate)
+                verified_actions = set(a for a in mod.actions if startswith_eq_some(a,verified,mod))
+                present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
+                present_actions.update(verified_actions)
+                mod.privates = save_privates
+            for actname in present_actions:
+                for called in im.module.actions[actname].iter_calls():
+                    if called not in present_actions:
+                        outcalls.add(called)
+            for impname in outcalls:
+                action = im.module.actions[impname]
+                extname = 'imp__' + impname
+                call = ia.CallAction(*([ivy_ast.Atom(extname,action.formal_params)] + action.formal_returns))
+                call.formal_params = action.formal_params
+                call.formal_returns = action.formal_returns
+                call.lineno = action.lineno
+                mod.actions[impname] = call
+                mod.actions[extname] = action
+                newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),ivy_ast.Atom('')))
+                extra_with.append(ivy_ast.Atom(impname))
+#                    extra_with.append(ivy_ast.Atom(extname))
+                if iso and iso in mod.isolates:
+                    ps = mod.isolates[iso].params()
+                    extra_strip[impname] = [a.rep for a in ps]
+                    extra_strip[extname] = [a.rep for a in ps]
             mod.imports = newimps
 
         mixers = set()
@@ -1100,10 +1131,11 @@ def create_isolate(iso,mod = None,**kwargs):
                         if ea in mod.actions and ea not in cone:
                             if ia.has_code(mod.actions[a]) and not mod.actions[a].lineno.filename.startswith('/'):
                                 iu.warn(mod.actions[a],"action {} is never called".format(a))
-            for a in sorted(mod.public_actions):
-                anorm = a[4:] if a.startswith('ext:') else a
-                if anorm not in orig_exports:
-                    iu.warn(mod.actions[a],"action {} is implicitly exported".format(anorm))
+            if iso and isinstance(mod.isolates[iso],ivy_ast.ExtractDef):
+                for a in sorted(mod.public_actions):
+                    anorm = a[4:] if a.startswith('ext:') else a
+                    if anorm not in orig_exports:
+                        iu.warn(mod.actions[a],"action {} is implicitly exported".format(anorm))
                     
 
         fix_initializers(mod,after_inits)
