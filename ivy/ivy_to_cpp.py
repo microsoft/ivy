@@ -2137,8 +2137,6 @@ def emit_boilerplate1(header,impl,classname):
     header.append(hash_h)
     header.append("""
 
-#include "hash.h"
-
 using namespace hash_space;
 
 class gen : public ivy_gen {
@@ -2914,7 +2912,6 @@ This string hash function is borrowed from Microsoft Z3
 
 --*/
 
-#include"hash.h"
 
 #define mix(a,b,c)              \\
 {                               \\

@@ -37,6 +37,7 @@ object left_player = {
 	ball := true
     }
 
+    conjecture left_player.ball -> spec.side = left
 }
 
 object right_player = {
@@ -51,9 +52,10 @@ object right_player = {
     }
     
     implement intf.ping {
-	left_player.ball := true
+	ball := true
     }
 
+    conjecture right_player.ball -> spec.side = right
 }
 
 
@@ -61,4 +63,3 @@ export left_player.hit
 export right_player.hit
 
 isolate iso_l = left_player with spec
-isolate iso_r = right_player with spec

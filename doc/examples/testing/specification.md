@@ -8,14 +8,14 @@ between specifications at differing levels of abstraction. The same
 can be said of compositional testing. The difference is that in the
 compositional testing approach, we combine formal proof with
 specification-based testing to increase our confidence in the
-ciorrectness of a system.
+correctness of a system.
 
 
 Consider, for example, a network protocol, such as the [TCP
 protocol](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)
 that is widely used to communicate streams of data over the Internet.
 At a high level of abstraction, TCP is a *service*, providing methods
-for establishing connections, and sending or receive data. This
+for establishing connections, and sending or receiving data. This
 service provides guarantees to its users of reliable in-order
 transmission of streams of bytes. At a lower level of abstraction, TCP
 can be seen as a *protocol*. The protocol is a set of rules (laid out
@@ -28,7 +28,7 @@ process observed at different interfaces. That is, TCP is sandwiched
 between a higher-level application (say, a web browser and web server)
 and the lower-level datagram protocol (typically the IP protocol) as shown below:
 
-![Network Stack](../images/network_stack1.png)
+![Network Stack](../../images/network_stack1.png)
 
 The TCP service specification describes the events we observe at the
 interface between the application layer and the transport layer.  The
@@ -38,7 +38,7 @@ protocol specification describes the *relation* between events at this
 interface and the lower-level interface between transport and network
 layers.
 
-If we were develping the TCP protocol specification, we would like to
+If we were developing the TCP protocol specification, we would like to
 verify that the IP service and the TCP protocol together implement the
 TCP service specification. That is, if events at the transport/network
 interface are consistent with the IP service specification, and if we
@@ -56,7 +56,7 @@ verification to perform this kind of reasoning. It allows us to:
 - Test assume/guarantee relationships between these specifications
 
 In IVy, interfaces and specifications are objects. An interface is
-object with unimplemented actions (a bit like an instance of an
+an object with unimplemented actions (a bit like an instance of an
 abstract class in C++). A specification is a special object that
 monitors the calls and returns across an interface and makes assertions
 about their correctness.
@@ -70,7 +70,7 @@ receive events to abstract data streams that are transmitted between
 clients. Specifications about sequences of events in time are often
 referred to as *temporal* specifications.
 
-A common approach to tempral specification is to define a specialized
+A common approach to temporal specification is to define a specialized
 logical notation called a [*temporal
 logic*](http://plato.stanford.edu/entries/logic-temporal). These
 notations make it possible to write succinct temporal specifications,
@@ -85,7 +85,7 @@ history of the interface in its local state, and to assert facts that
 should be true about interface events based on the history of previous
 events.
 
-As an example, here is a definition of an interface for a rediculously
+As an example, here is a definition of an interface for a ridiculously
 simple network service:
  
     #lang ivy1.6
@@ -96,8 +96,8 @@ simple network service:
         action recv(x:packet)
     }
 
-The type `packet` is an example of an [*uninterpreted type*]. We don't
-yet know whant the contents of a packet are, but we can fill in the
+The type `packet` is an example of an [*uninterpreted type*](../../language.html#declarations). We don't
+yet know want the contents of a packet are, but we can fill in the
 definition of `packet` later.
 
 The actions in an interface object don't have definitions. These will
@@ -108,7 +108,10 @@ temporal behavior at the interface:
 
     object spec = {
         relation sent(X:packet)
-        init ~sent(X)
+
+        after init {
+            sent(X) := false
+        }
 
         before intf.send {
             sent(x) := true
@@ -121,10 +124,10 @@ temporal behavior at the interface:
 
 Object `spec` is a monitor. It has one local state component `sent`
 that records the set of packets that have been sent so far.  The
-`init` decatation says the, initially, no packet `X` has been sent.
-In [the Ivy language](../../language.html) symbols begeinning with
+`after init` declaration says that, initially, no packet `X` has been sent.
+In [the Ivy language](../../language.html), symbols beginning with
 capital letters are logical variables. Unbound variables are
-implicitly univerally quantified.
+implicitly universally quantified.
 
 Information about sent packets is recorded by inserting an action
 *before* every call to `intf.send`. This is done using a `before`
@@ -148,7 +151,7 @@ specification. Here is the most trivial one:
     }
 
 Object `protocol` provides the implementation of action `intf.send`
-using a new declaration `implement`. This declaration provides the
+using an `implement` declaration. This declaration provides the
 missing body of the action `intf.send`. The implementation simply calls `intf.recv`
 on the sent packet `x`. The assertion in monitor `spec` is always
 true, since before calling `intf.send`, the packet `x` is added to the
@@ -162,9 +165,15 @@ will implement `intf.recv` and will call `intf.send`:
     import intf.recv
     export intf.send
 
+In order to test our program, we need to give a concrete interpretation to
+the abstract type `packet`. It doesn't much matter what this interpretation is.
+This statement tells IVy to represent packets using 16-bit binary numbers:
+
+    interpret packet -> bv[16]
+
 Now, let's do some verification. The IVy compiler can translate our
 program into C++, and also generate a randomized tester that takes the
-role of the environemnt. We save the above text to the file
+role of the environment. We save the above text to the file
 `trivnet.ivy`, then compile like this:
 
     $ ivy_to_cpp target=test build=true trivnet.ivy
@@ -202,14 +211,14 @@ the monitor actions and interface implementations. Here is part of the output:
     relation spec.sent(V0:packet)
 
     after init {
-	spec.sent(X) := false
+        spec.sent(X) := false
     }
     action intf.recv(x:packet) = {
-	assert spec.sent(x)
+        assert spec.sent(x)
     }
     action intf.send(x:packet) = {
-	spec.sent(x) := true;
-	call intf.recv(x)
+        spec.sent(x) := true;
+        call intf.recv(x)
     }
 
 Notice that the `before` actions of `spec` have been inserted at the
@@ -243,7 +252,7 @@ environment, so we add:
 
     export protocol.async
 
-The output fromt the tester looks like this:
+The output from the tester looks like this:
 
     ./trivnet2
     > intf.send(59132)
@@ -260,8 +269,8 @@ The output fromt the tester looks like this:
     > protocol.async()
     < intf.recv(63393)
 
-The tester is calling `intf.send` and `prococol.async` uniformly at
-random (with a probaility of 0.5 for each). We can see that some
+The tester is calling `intf.send` and `protocol.async` uniformly at
+random (with a probability of 0.5 for each). We can see that some
 packets (for example the first) are dropped.
 
 Let's put a bug in the protocol to see what happens. The action
@@ -295,15 +304,15 @@ Here's a test run:
     > protocol.async()
     trivnet3.ivy: line 22: : assertion failed
 
-At some point, thenm environment calls `bug` then `async` causing the
-protocol to deliver a wrong packet value. We can see than the
+At some point, the environment calls `bug` then `async` causing the
+protocol to deliver a wrong packet value. We can see that the
 specification monitor is in fact running, and it gives an error
 message pointing to the line in the code where an assertion failed.
 
 ### Assume-Guarantee reasoning in IVy
 
 In the previous example, we saw that a service specification is a kind
-of abstraction. It hides details of the underlying imlementation,
+of abstraction. It hides details of the underlying implementation,
 telling us only what we need to know to use the service. Abstractions
 are crucial in reasoning about complex systems. They allow us to
 develop one component of a system without thinking about the details
@@ -398,7 +407,6 @@ The right-hand player is similar:
             ball := true
         }
 
-        conjecture ball -> spec.side = right
     }
 
 Let's export the `hit` actions to the environment, so the players
@@ -406,6 +414,10 @@ will do something:
 
     export left_player.hit
     export right_player.hit
+
+Here is the call graph of the system we have defined:
+
+![Ping Pong Call Graph](pingpong_fig1-crop-1.png)
 
 Now what we want to do is to generate testers for the left and right
 players in isolation. That is, we want the tester for the left player
@@ -421,8 +433,14 @@ To generate these testers, we use `isolate` declarations:
 The first says to isolate the left player using the interface
 specification `spec`.  The second says to do the same thing with the
 right player. This reduces the system verification problem to two
-separate verification problems called "isolates". We can see what the
-first isolate looks like as follows (leaving a few things out):
+separate verification problems called "isolates".
+
+Here's the call graph for the left player isolate `iso_l`:
+
+![Ping Pong Call Graph 2](pingpong_fig2-crop-1.png)
+
+We can see what the first isolate looks like textually as follows (leaving a few
+things out):
 
     $ ivy_show isolate=iso_l pingpong.ivy
 
@@ -466,10 +484,11 @@ but only so long as its inputs are correct.
 
 Let's start by testing the left player. First, we compile a tester:
 
-    $ ivy_to_cpp target=test build=true pingpong.ivy 
+    $ ivy_to_cpp isolate=iso_l target=test build=true pingpong.ivy 
     g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o pingpong pingpong.cpp -lz3
 
-Now let's run `pingpong`:
+Notice we specified the isolate `iso_l` on the command line.  Now
+let's run `pingpong`:
 
     $ ./pingpong
     > left_player.hit()
@@ -485,7 +504,7 @@ Now let's run `pingpong`:
     ...
 
 We can see that the environment (the calls marked with `>`) is
-respecting the assumption of the left player that `pong` occurrs only
+respecting the assumption of the left player that `pong` occurs only
 when the ball is on the right, that is, after a `ping`. The tester is
 sampling uniformly out of just the actions that satisfy the isolate's
 assumptions. You may notice that sometimes the environment calls `hit`
@@ -494,8 +513,8 @@ since a `hit` has no effect in this case. What if we neglected to test whether t
 Let's try it. That is, let's use this version of the left player's `hit` action:
 
     action hit = {
-	call intf.ping;
-	ball := false
+        call intf.ping;
+        ball := false
     }
 
 Here's what we get:
@@ -535,7 +554,7 @@ generated by the right player satisfy the precondition of `pong`.
 
 So what have we done so far? We've verified by randomized testing the
 the left player guarantees correct pings assuming correct pongs. We've
-also verified by testing the the right player guarantees correct pongs
+also verified by testing that the right player guarantees correct pongs
 given correct pings. Since neither the pings nor the pongs can be the
 first to fail, we can conclude that all pings and pongs are correct
 according to the specification.
@@ -548,8 +567,9 @@ We can ask IVY to check this conclusion for us:
     OK
 
 The option `trusted=true` tells IVY to trust that the specified
-isolates are correct. IVy says it can prove based on this assumption
-that all of our assertions are true at all times.
+isolates are correct, facts that we have tested, but not formally
+verified. IVy says it can prove based on this assumption that all of
+our assertions are true at all times.
 
 ## Is this really a proof?
 
@@ -561,7 +581,7 @@ the original goal must also be provable.
 
 Let's try informally to justify the soundness of our tactic. Ivy
 performed two transformations to produce each isolate: it changed some
-assertions to assumptions, and it deleted the actions and asserts of
+assertions to assumptions, and it deleted the actions and state components of
 one of the two players.
 
 # Pseudo-circular proofs
@@ -574,7 +594,7 @@ correct *in the past*.  When verifying `iso_l`, we show that the
 assertion about `ping` is not the first assertion to fail. When
 verifying `iso_r`, we show that the assertion about `pong` is not the
 first assertion to fail. Since no assertion is the first to fail, we
-know no assertion ever fails.
+know no assertion ever fails (this is an argument by [induction](https://en.wikipedia.org/wiki/Mathematical_induction) over time).
 
 # Abstraction
 
@@ -605,9 +625,13 @@ the left player's court without hitting it:
 
 Here's what happens when when we try to verify this version:
 
-    ivy_check interference.ivy
+    $ ivy_check trusted=true interference.ivy 
     Checking isolate iso_l...
-    interference.ivy: line 30: error: Call out to intf.ping may have visible effect on left_player.ball
+    interference.ivy: line 30: error: Call out to right_player.intf_ping[implement] may have visible effect on left_player.ball
+    interference.ivy: line 37: referenced here
+    interference.ivy: line 20: referenced here
+    interference.ivy: line 30: referenced here
+    interference.ivy: line 27: referenced here
 
 IVy can't abstract away the right player's implementation of
 `intf.ping` because of the possible side effect on `left_player.ball`.
@@ -627,16 +651,17 @@ isolate declaration from our ping-pong program:
 
     isolate iso_r = right_player with spec
 
-Here is what happens when we try to verify the program:
+Here is what happens when we try to verify [the program](coveragefail.ivy):
 
-    ivy_check coveragefail.ivy
+    ivy_check trusted=true  coveragefail.ivy
     coveragefail.ivy: line 20: error: assertion is not checked
     coveragefail.ivy: line 5: error: ...in action intf.pong
     coveragefail.ivy: line 49: error: ...when called from right_player.hit
     error: Some assertions are not checked
 
-IVy is telling us that the `pong` assertion isn't checked, because we
-haven't created an isolate for `right_player`.
+IVy is telling us that the precondition of action `pong` isn't checked
+when it's called from `right_player`, because we haven't created an
+isolate for `right_player`.
 
 ## The isolate declaration
 
@@ -672,12 +697,18 @@ An *assumption* for a given object is any assertion occurring in:
 This roughly corresponds to the intuition that an object makes
 assumptions about its inputs and guarantees about its outputs.
 
-## What we prove
+## So what have we proved?
 
-If all isolates are verified, and if IVY's non-interference and
+If all isolates are correct, and if IVy's non-interference and
 coverage checks succeed, then we can infer that all assertions in the
 program are true at all times in all executions of the program. In
-this case, `ivy_check` prints `OK`.
+this case, `ivy_check` prints `OK`. Of course, we only verified the
+isolates by randomized testing. This means there is a risk that we
+missed a bug in a system component. Because IVy checked our
+assume/guarantee proof, however, we know that if the whole system has
+a bug, then one of the isolates must have a bug. If we test the
+isolates long enough, we will eventually find it without testing the
+system as a whole. 
 
 
 

@@ -482,7 +482,7 @@ def find_references(mod,syms,new_actions):
     return refs
     
 
-def check_interference(mod,new_actions,summarized_actions):
+def check_interference(mod,new_actions,summarized_actions,impl_mixins):
     calls = dict()
     mods = dict()
     mixins = dict()
@@ -497,7 +497,8 @@ def check_interference(mod,new_actions,summarized_actions):
         if actname not in summarized_actions:
             for called_name in action.iter_calls():
                 called_name = canon_act(called_name)
-                all_calls = [called_name] + [m.mixer() for m in mod.mixins[called_name]]
+                all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
+                                           + [m.mixer() for m in impl_mixins[called_name]])
                 for called in all_calls:
                     if called in summarized_actions:
                         cmods = set(mods[called])
@@ -612,6 +613,7 @@ def follow_definitions(ldfs,all_syms):
         follow_definitions_rec(sym,dmap,all_syms,set())
 
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
+
     global implementation_map
     implementation_map = {}
     if isolate_name not in mod.isolates:
@@ -647,7 +649,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
             action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
             mod.actions[m.mixee()] = action
             implementation_map[m.mixee()] = m.mixer()
-
 
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present,mod)
@@ -827,7 +828,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     # check for interference
 
     if do_check_interference.get():
-        check_interference(mod,new_actions,summarized_actions)
+        check_interference(mod,new_actions,summarized_actions,impl_mixins)
 
 
     # After checking, we can put in place the new action definitions
@@ -1027,10 +1028,10 @@ def create_isolate(iso,mod = None,**kwargs):
                 present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
                 present_actions.update(verified_actions)
                 mod.privates = save_privates
-            for actname in present_actions:
-                for called in im.module.actions[actname].iter_calls():
-                    if called not in present_actions:
-                        outcalls.add(called)
+                for actname in present_actions:
+                    for called in im.module.actions[actname].iter_calls():
+                        if called not in present_actions:
+                            outcalls.add(called)
             for impname in outcalls:
                 action = im.module.actions[impname]
                 extname = 'imp__' + impname

@@ -1,76 +1,16 @@
 ---
 layout: page
-title: Parameterized systems
+title: Layered protocols
 ---
 
-Many systems are designed to include an arbitrary number of similar or
-identical components. A good example of such a system is the Internet,
-which is designed to accommodate a large number of hosts, all
-communicating using the same set of protocols. Another example would
-be peer-to-peer protocols such as
-[Chord](https://en.wikipedia.org/wiki/Chord_(peer-to-peer)).
+We just saw a very simple example of compositional testing of a
+peer-to-peer interface. It's also possible to use compositional
+testing at the interface between layers in a layered protocol stack.
 
-We call these *parameterized systems* where the parameter in question
-is the number of protocol participants. Ivy allows you to model an
-implement parameterized protocol in a particular style. A
-*parameterized* object is one in which every component has an initial
-parameter of the same type. Here is an example of an object parameterized on type `t`:
 
-    type t
-
-    object foo = {
-
-        function bit(S:t) : bool
-        init ~bit(S)
-
-        action set_bit(self:t) = {
-            bit(self) := true
-        }
-    }
-
-Notice that both the state component `bit` and the action `set_bit`
-have a first parameter of type `t`. The parameter of `set_bit` is
-suggestively called `self`. This parameter is used in any references
-to state components within the action. Thus, object `foo` really acts
-like a collection of independent objects or processes, one for each
-element of type `t`. The type `t` acts like a reference to one of
-these objects.
-
-IVy provides a shorthand for parameterized objects. We can equivalently
-write the object `foo` as follows:
-
-    type t
-
-    object foo(self:t) = {
-
-        individual bit : bool
-        init ~bit
-
-        action set_bit = {
-            bit := true
-        }
-    }
-
-Ivy adds the parameter `self` to each state component of `foo`, and
-each reference to a component. That is, `self` becomes an implicit
-parameter, much as it does in an object-oriented programming language
-(except for Python, where the `self` parameter is explicit). It makes
-no difference to IVy whether you use implicit or explicit
-parameters. You can reason about IVy programs in the same way using
-either style.
-
-As we will see later, IVY has special support for parameterized
-objects.  For example, you can compile them and run them in separate
-process spaces or on different hosts. In addition, when proving
-assertions that relate to only one process, you can ignore the
-parameter. This can be a good trick for staying within a decidable
-logical fragment.
-
-### Leader election ring
-
-As an example of a parameterized protocol, lets look at the very
-simple leader election protocol, introduced in [this paper](http://dl.acm.org/citation.cfm?id=359108) in
-1979.
+As an example, let's look at the very simple leader election protocol,
+introduced in [this paper](http://dl.acm.org/citation.cfm?id=359108)
+in 1979.
 
 In this protocol we have a collection of distributed processes
 organized in a ring. Each process can send messages to its right
@@ -85,6 +25,8 @@ but only if it is *greater than* the process' own `id` value. If a
 process receives its own `id`, this value must have traveled all the
 way around the ring, so the process knows its `id` is greater than all
 others and it declares itself leader.
+
+# Interface specifications
 
 We'll start with a service specification for this protocol:
 
@@ -106,83 +48,105 @@ We'll start with a service specification for this protocol:
         }
     }
 
-These two objects are parameterized on an abstract datatype `node`
-that we will define shortly. Type `node.t` represents a reference to a
-process in our system. The `asgn` object defines an assignment of `id`
-values to nodes, represented by the function `pid`.  The fact that the
-`id` values are unique is guaranteed by the axiom `injectivity`.
+The abstract type `node.t` represents a reference to a process in our
+system (for example, its network address). The `asgn` object defines
+an assignment of `id` values to nodes, represented by the function
+`pid`.  The fact that the `id` values are unique is guaranteed by the
+axiom `injectivity`.
 
 The service specification `serv` defines one action `elect` which is
 called when a given node is elected leader. Its specification says
 that only the node with the maximum `id` value can be elected.
 
-Now that we know what the protocol is supposed to do, let's define the
-protocol itself.  First, we use the explicit parameter style:
+Our protocol consists of a collection of concurrent process layered on
+top of two services: a network service and a timer service:
 
-    object app = {
+![Leader Election Ring Figure 1](leader_fig1-crop-1.png)
 
-        action async(me:node.t) = {
-            call trans.send(node.get_next(me),asgn.pid(me))
+Let's consider now the two intermediate interfaces.  The specification
+for the network service is quite simple and ocmes from IVy's standard
+library:
+
+    module ip_simple(addr,pkt) = {
+
+        import action recv(dst:addr,v:pkt)
+        export action send(src:addr,dst:addr,v:pkt)
+
+        object spec = {
+            relation sent(V:pkt, N:addr)
+            init ~sent(V, N)
+
+            before send {
+                sent(v,dst) := true
+            }
+            before recv {
+                assert sent(v,dst)
+            }
+        }
+    }
+
+The interface is a module with two parameters: the type `addr` of
+network addresses, and the type `pkt` of packets.  It has two actions,
+`recv` and `send`.  The relation `sent` tells us which values have been sent to which
+nodes.  Initially, nothing has been sent. The interface provides two
+actions `send` and `recv` which are called, respectively, when a value
+is sent or received. The `src` and `dst` parameters respectively give the source
+and desitination addresses of the packets.
+
+The specification says that a value is marked as sent when `send`
+occurs and a value must be marked sent before it can be received.
+This describes a network service that can duplicate or re-order
+messages, but cannot corrupt messages.
+
+The specification of the timer service is also quite simple and comes
+from the standard libarary:
+
+    module timeout_sec = {
+
+        import action timeout
+
+    }
+
+The timer service simply calls `timeout` from time to time, with no
+specification as to when.
+
+# Protocol implementation
+
+Now that we have the specificaitons of all the interfaces, let's
+define the protocol itself:
+
+    instance net : ip_simple(node.t,id.t)
+    instance timer(X:node.t) : timeout_sec
+
+    object proto = {
+
+        implement timer.timeout(me:node.t) = {
+            call trans.send(node.next(me),asgn.pid(me))
         }
 
-        implement trans.recv(me:node.t,v:id.t) {
+        implement net.recv(me:node.t,v:id.t) {
             if v = asgn.pid(me) {       # Found a leader!
                 call serv.elect(me)
             }
             else if v > asgn.pid(me)  { # pass message to next node
-                call trans.send(node.get_next(me),v)
+                call trans.send(node.next(me),v)
             }
         }
 
     }
 
-Our protocol implementation refers to two interfaces: the `serv`
-interface we just defined, and a network transport interface `trans`
-defined below. It also refers to the abstract datatype `node` that we
-will also define shortly.
+We create one instance of the network module, and one timer for each
+node.  The protocol implements the interface actions `timer.timeout`
+and `net.recv`. When a node times out, it transmits the node's `id` to
+the next process in the ring, defined by the the action
+`node.get_next` (which we'll see shortly).
 
-The protocol provides an action `async` that, when called, transmits
-the node's `id` to the next process in the ring, defined by the the
-action `node.get_next` (here, we used `me` instead of `self` to save
-two characters).
-
-The protocol also implements an action of the transport interface
-`trans.recv`.  This is called when the process receives a message with
-an `id` value `v`. If the value is equal to the process' own `id`, the
+When a node receives a message, an id value `v`, it checks whether `v`
+is its own id according to the id assignment `asgn`. If so, the
 process knows it is leader and calls `serv.elect`. Otherwise, if the
-received value is greater, it calls `trans.send` to send the value on
-to the next node.
+received value is greater, it calls `net.send` to send the value on to
+the next node in the ring.
 
-Notice that when giving the implementation, we explicitly gave the
-parameters of `trans.recv` rather than inheriting them from the
-interface specification.  This can avoid confusion and also allows us
-to give whatever local names we want to the parameters.
-
-Here is the same object described in the implicit style:
-
-    object app(me:node.t) = {
-
-        action async = {
-            call trans.send(node.get_next(me),asgn.pid(me))
-        }
-
-        implement trans.recv(v:id.t) {
-            if v = asgn.pid(me) {       # Found a leader!
-                call serv.elect(me)
-            }
-            else if v > asgn.pid(me)  { # pass message to next node
-                call trans.send(node.get_next(me),v)
-            }
-        }
-
-    }
-
-
-There is not much difference. Notice that we dropped the parameter
-`me` from the action definition. However, references to other objects
-still have to have the explicit parameter `me`. The implicit style
-mainly shows an advantage when the parameterized object has many references
-to its own actions and state components.
 
 With our protocol implemented, let's look at the interfaces that it's
 built on, starting with the type of `id` values:

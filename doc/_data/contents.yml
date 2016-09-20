@@ -24,3 +24,8 @@
   - examples/sht/reference
   - examples/sht/proto
   - examples/sht/sht
+- title: Compositional Testing
+  docs:
+  - examples/testing/intro
+  - examples/testing/specification
+
