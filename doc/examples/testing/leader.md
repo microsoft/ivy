@@ -32,16 +32,15 @@ We'll start with a service specification for this protocol:
 
     object asgn = {
 
-        function pid(X:node.t) : id.t          # map each node to an id
-
+        function pid(X:node.t) : id.t
         axiom [injectivity] pid(X) = pid(Y) -> X = Y
     }
 
     object serv = {
 
-        action elect(v:node.t)                 # called when v is elected leader
+        action elect(v:node.t)
 
-        object spec = {                        # only the max pid can be elected
+        object spec = {
             before elect {
                 assert asgn.pid(v) >= asgn.pid(X)  
             }
@@ -64,7 +63,7 @@ top of two services: a network service and a timer service:
 ![Leader Election Ring Figure 1](leader_fig1-crop-1.png)
 
 Let's consider now the two intermediate interfaces.  The specification
-for the network service is quite simple and ocmes from IVy's standard
+for the network service is quite simple and comes from IVy's standard
 library:
 
     module ip_simple(addr,pkt) = {
@@ -139,421 +138,234 @@ We create one instance of the network module, and one timer for each
 node.  The protocol implements the interface actions `timer.timeout`
 and `net.recv`. When a node times out, it transmits the node's `id` to
 the next process in the ring, defined by the the action
-`node.get_next` (which we'll see shortly).
+`node.next` (which we'll define shortly).
 
-When a node receives a message, an id value `v`, it checks whether `v`
+When a node receives an id value `v`, it checks whether `v`
 is its own id according to the id assignment `asgn`. If so, the
 process knows it is leader and calls `serv.elect`. Otherwise, if the
 received value is greater, it calls `net.send` to send the value on to
 the next node in the ring.
 
 
-With our protocol implemented, let's look at the interfaces that it's
-built on, starting with the type of `id` values:
+With our protocol implemented, we still need to provide concrete types
+for `node` and `id`. If we were formally verifying the protocol, we
+would probably treat these as abstract datatypes with specified
+mathematical properties. For testing, though, we just need some
+concrete types.  Here is one possiblity:
 
-    module totally_ordered(t) = {
-        relation (X:t < Y:t)
-        property [transitivity] X:t < Y & Y < Z -> X < Z
-        property [antisymmetry] ~(X:t < Y & Y < X)
-        property [totality] X:t < Y | X = Y | Y < X
-    }
-
-    module total_order = {
+    object node = {
         type t
-        instantiate totally_ordered(t)   # t is totally ordered
+        interpret t -> bv[1]
+
+        action next(x:t) returns (y:t) = {
+            y := x + 1
+        }
     }
 
-    instance id : total_order
-
-Notice that we defined a couple of modules that we can re-use later.
-The first gives the axioms of a total order. The second defines a
-datatype that obeys these axioms. We then define our abstract type
-`id` to be an instance of `total_order`. Later, we will implement
-`id.t` with fixed-width integers.
-
-Now let's look at the type of node references, which is a bit more
-interesting:
-
-    module ring_topology = {
+    object id = {
         type t
-        instantiate total_order_axioms(t)   # t is totally ordered
-
-        action get_next(x:t) returns (y:t)
-
-        object spec = {
-            after get_next {
-                assert (x < y & ~ (x < Z & Z < y)) | (y <= X & X <= x)
-            }
-        }
+        interpret t -> bv[8]
     }
 
-    instance node : ring_topology
-
-We start by defining a generic module for types that are organized in
-a ring topology.  We use a totally ordered type `t` for the ring
-elements. In addition, the `get_next` action takes an element `x` and
-returns the next element `y` in the ring.  The specification says that
-either `y` is the least element larger than `x` or `x` is the maximum
-element and `y` the minimum (that is, we "wrap around" to the
-beginning). In principle, we should also say that the set `t` is finite,
-but we won't actually need this fact to prove safety of our protocol.
-This is one way of specifying a ring topology. Later we will
-see a different way that can make the proofs a little simpler. We can
-implement either version with fixed-width integers.
- 
-Finally, we need the service specification for the network transport
-layer. It's quite simple:
-
-    object trans = {
-
-        relation sent(V:id.t, N:node.t)
-        init ~sent(V, N)
-
-        action send(dst:node.t, v:id.t)
-        action recv(dst:node.t, v:id.t)
-
-        object spec = {
-            before send {
-                sent(v,dst) := true
-            }
-            before recv {
-                assert sent(v,dst)
-            }
-        }
-    }
-
-The relation `sent` tells us which values have been sent to which
-nodes.  Initially, nothing has been sent. The interface provides two
-actions `send` and `recv` which are called, respectively, when a value
-is sent or received. The `dst` parameter gives the destination node of
-the message.
-
-The specification says that a value is marked as sent when `send`
-occurs and a value must be marked sent before it can be received.
-This describes a network service that can duplicate or re-order
-messages, but cannot corrupt messages.
-
-## Verifying the leader election protocol
-
-Now let's try to verify that our leader election protocol `app`
-guarantees its service specification `serv` , assuming the
-specifications of `trans`, `node`, `id` and `asgn`. Here is the
-isolate declaration:
-
-    isolate iso_p = app with node,id,trans,serv,asgn
-
-We are trying to prove that, when any node calls `serv.elect`, it in
-fact has the highest `id`. That is, the `before` specification of
-`serv.elect` is a guarantee of `app` when it calls `serv.elect`.
-
-To get a sense of what we're proving, let's have a look at the
-isolate:
-
-    $ ivy_show isolate=iso_app leader_election_ring.ivy
-
-    ... various declarations ...
-
-    action trans.send(dst:node.t,v:id.t) = {
-        trans.sent(v,dst) := true
-    }
-
-    action ext:trans.recv(dst:node.t,v:id.t) = {
-        assume trans.sent(v,dst);
-        if v = asgn.pid(dst) {
-            call serv.elect(dst)
-        }
-        else {
-            if v > asgn.pid(dst) {
-                local loc[0] {
-                    call loc[0] := node.get_next(dst);
-                    call trans.send(loc[0], v)
-                }
-            }
-        }
-    }
-
-    action serv.elect(v:node.t) = {
-        assert asgn.pid(v) >= asgn.pid(X)
-    }
-
-    action ext:app.send(me:node.t) = {
-        local loc[0] {
-            call loc[0] := node.get_next(me);
-            call trans.send(loc[0], asgn.pid(me))
-        }
-    }
-
-    action node.get_next(x:node.t) returns(y:node.t) = {
-        assume ((x < y & ~(Z:node.t < y & x < Z)) | (x = node.tail & y = node.head))
-    }
-
-Notice that the assertion in `serv.elect` is preserved as a guarantee. However,
-the other assertions have become assumptions.
-
-Obviously, we will need an inductive invariant at this point. We will
-try to discover one using IVy's [CTI
-method](client_server_example.html).  We start IVy using this command:
-
-    $ ivy ui=cti isolate=iso_app leader_election_ring.ivy
-
-We start, as usual, with `Invariant|Check induction`. Ivy tells us the
-the safety check failed, meaning that an assert fails in some action:
-
-![IVy screenshot](images/leader1.png)
-
-When we click OK, this is what we see:
-
-![IVy screenshot](images/leader2.png)
-
-On the left, we see a failing transition starting in state `0`, using
-one of our two exported actions, `app.async` and `trans.recv`. To
-discover which action failed, and explore the execution path to the
-failure, we can left-click on the transition and choose `Decompose`.
-In this case, however, we already have a pretty good idea of what went
-wrong: some node must have received its own `id` and declared itself
-leader without having the highest `id`. This is not surprising, since
-with no invariant conjectures, the only thing we know about state `0`
-is that it satisfies our axioms.
-
-On the right, we see a depiction of the state `0`. There are two
-elements in each of the two sorts `id.t` and `node.t`. Since we
-haven't yet selected any relations to view, this is all we see. We
-could start selecting relations to see more information, but let's
-instead choose the command `Invariant|Diagram` to see what information
-IVy thinks might be relevant to the failure. Here's what we see:
-
-![IVy screenshot](images/leader3.png)
-
-The arrow from id 0 to id 1 is depicting the relation `X:id.t < Y`.
-Because the arrow goes from `X` to `Y`, we interpret the arrow to mean
-`0:id.t < 1`.  Similarly, the arrow from node 0 to id 0 means that
-`asgn.pid(0) = 0`.  That is, the id of node 0 is 0. We can also see
-that node 1's id is 1 and that `trans.sent(0,1)`, in other words, id 0
-has been sent to node 0. These facts are displayed below the graph
-under the heading "Constraints".
-
-The problem is clear: node 1 is receiving its own id, so it is about
-to become leader, but it does not have highest id. This situation
-clearly has to be ruled out. We do this by selecting the
-`Conjecture|Strengthen` command. Here is what IVy says:
-
-![IVy screenshot](images/leader4.png)
-
-In other words, we conjecture that it never happens that a node N has
-id less than a node P, and node N is receiving its own id. Now we choose
-`Invariant|Check induction` again, to see if our conjecture is inductive. 
-Of course, it isn't. Here's what Ivy says:
-
-![IVy screenshot](images/leader5.png)
-
-And here is the counterexample to induction:
-
-![IVy screenshot](images/leader6.png)
-
-Here, some externally called action transitions from state `0`
-satisfying our conjecture to state `1` *not* satisfying the
-conjecture. IVy is depicting state `0`, with all the relations that
-appear in the conjecture. It's not immediately clear what's wrong here,
-so let's try `Invariant|Diagram` again to see what IVy thinks:
-
-![IVy screenshot](images/leader7.png)
-
-Now we can see the problem: node 1's id is arriving at node 0, but it
-should never have passed node 2, because node 2 has a higher
-id. Notice, though, that there are two additional arrows in the diagram
-we didn't mention (the ones from node 0 to id 0 and id 0 to id 1). Maybe
-these are actually irrelevant. We could remove these manually by
-clicking on the corresponding facts below. However, we have another
-trick up our sleeve. We can use bounded checking to see if some arrows
-can be removed. We choose `Conjecture|Minimize` and (somewhat
-arbitrarily) select a bound of 4 steps. Here is what IVy says:
-
-![IVy screenshot](images/leader8.png)
-
-This conjecture says that we never have nodes in the order `N < P < Q`
-such that `P` has a smaller id than `Q` and the id of `P` is arriving
-at `N`. In the graph, we see that the highlights have been removed
-from the two irrelevant arrows:
-
-![IVy screenshot](images/leader9.png)
-
-IVy discovered that, within 4 steps, we
-can rule out the highlighted facts. By ruling out a more general
-situation, we obtain a stronger conjecture. Since this new conjecture
-seems right, let's add it to our set by selecting
-`Conjecture|Strengthen`.
-
-Now let's try `Invariant|Check induction` again. IVy is still unhappy
-and says that our first conjecture is still not relatively inductive. We
-try `Invariant|Diagram` again and here is what we see:
-
-![IVy screenshot](images/leader10.png)
-
-This looks very similar to the diagram that led to our previous
-conjecture. Here, however, it's the id of node 0 that is arriving at
-node 2, when it couldn't have passed through node 1. This situation is
-symmetric to the previous one by rotating the ring. Unfortunately, the
-way we described the ring topology using a linear order has broken the
-ring's rotational symmetry, so this appears as a distinct case. Later,
-we'll see a way to avoid this symmetry breaking. For now, though,
-we'll just slog through the cases.  As before, we minimize this
-diagram by bounded checking. Here is the result:
-
-![IVy screenshot](images/leader11.png)
-
-IVy conjectures that we do not have nodes `N < P < Q` such that `N`
-has a lower id than `P` and the id of `N` is arriving at `Q`. This is
-just another case of the general proposition that a lower id cannot
-pass a higher id. We chose `Conjecture|Strengthen` to add this new
-conjecture to our set.
-
-Now we try `Invariant|Check induction` (the reader may be able to
-guess what happens next). Again, IVy says that our first conjecture is
-not relatively inductive. After `Invariant|Diagram`, we see this:
-
-![IVy screenshot](images/leader12.png)
-
-This describes the same situation, where the id of node 2 is arriving at node 1.
-Once again, we generalize using `Conjecture|Minimize`, giving this conjecture:
-
-![IVy screenshot](images/leader13.png)
-
-We add this conjecture using `Conjecture|Strengthen`. Now when we
-use `Invariant|Check induction`, we get the following:
-
-![IVy screenshot](images/leader14.png)
-
-That is, we have found a proof for the isolate. We can save this invariant to
-a file using the `File|Save invariant` command. We edit these conjectures
-into our implementation object `app`, like this:
-
-    object app = {
-
-        action async(me:node.t) = {
-            call trans.send(node.get_next(me),asgn.pid(me))
-        }
-
-        implement trans.recv(me:node.t,v:id.t) {
-            if v = asgn.pid(me) {       # Found a leader!
-                call serv.elect(me)
-            }
-            else if v > asgn.pid(me)  { # pass message to next node
-                call trans.send(node.get_next(me),v)
-            }
-        }
-
-        conjecture ~(asgn.pid(N) < asgn.pid(P) & trans.sent(asgn.pid(N),N))
-        conjecture ~(asgn.pid(P) < asgn.pid(Q) & N:node.t < P & P < Q & trans.sent(asgn.pid(P),N))
-        conjecture ~(asgn.pid(N) < asgn.pid(P) & N < P & P < Q & trans.sent(asgn.pid(N),Q))
-        conjecture ~(asgn.pid(Q) < asgn.pid(N) & N < P & P < Q & trans.sent(asgn.pid(Q),P))
-    }
-
-Of course, if we don't want to mess up our pretty implementation with parts of the proof,
-we can put the conjectures in a separate object and include that object in the isolate definition,
-like this:
-
-     object app_proof = {
-        conjecture ~(asgn.pid(N) < asgn.pid(P) & trans.sent(asgn.pid(N),N))
-        conjecture ~(asgn.pid(P) < asgn.pid(Q) & N:node.t < P & P < Q & trans.sent(asgn.pid(P),N))
-        conjecture ~(asgn.pid(N) < asgn.pid(P) & N < P & P < Q & trans.sent(asgn.pid(N),Q))
-        conjecture ~(asgn.pid(Q) < asgn.pid(N) & N < P & P < Q & trans.sent(asgn.pid(Q),P))
-     }
-
-    isolate iso_p = app with node,id,trans,serv,app_proof
-     
-## How not to break the rotational symmetry
-
-As we observed above, this proof is a bit messy because of the way we
-described the ring topology using a totally ordered set. There's a
-different way to describe rings that avoids this problem. Here is an
-alternative specification of `ring_topology`:
-
-    module ring_topology = {
-        type t
-        relation btw(X:t,Y:t,Z:t)
-
-        property btw(W, Y, Z) & btw(W, X, Y) -> btw(X, Y, Z)
-        property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, X, Y)
-        property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, Y, Z)
-        property btw(W, Y, Z) & btw(W, X, Y) -> btw(W, X, Z)
-        property W = X | btw(W, X, W)
-        property ~btw(X, X, Y)
-        property ~btw(X, Y, Y)
-        property btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y)
-        property btw(X,Y,Z) |  Y = X |  btw(Y,X,Z)
-
-        action get_next(x:t) returns (y:t)
-
-        object spec = {
-            after get_next {
-                assert ~btw(x,Z,y)
-            }
-        }
-    }
-
-Instead of putting the nodes in a total order, we define are relation
-`btw(X,Y,Z)` that holds when `Y` occurs on the path form `X` to `Z` in
-the ring. The axioms of `btw` are a bit more complex than the axioms
-of a total order. One the other hand, it is very easy to specify
-`get_next` in terms of `btw`. We say that `y` is next after `x` in the
-ring if there is no `Z` between `x` and `y`. You might wonder if the
-properties given above for `btw` are really correct. Later, when we
-implement `ring_topology`, we'll prove that it has these properties.
-
-Now, let's try to verify the isolate `iso_app` with this new version of `ring_topology`:
-
-    $ ivy ui=cti isolate=iso_app leader_election_ring_btw.ivy
-
-As before, after `Invariant|Check induction` and `Invariant|Diagram`, this is what we see:
-
-![IVy screenshot](images/leader15.png)
-
-That is, we have a node `1` that is receiving its own id while node
-`0` has a greater id.  Notice, though, that on the right the relation
-`node.btw` doesn't appear. This is because it is a ternary relation
-and IVy doesn't know how to display it graphically in a reasonable
-way.
-
-Now, as before, let's add this as a conjecture using
-`Conjecture|Strengthen`.  As before, `Invariant|Check induction` shows
-that this conjecture is not relatively inductive. Applying `Invariant|Diagram`,
-this is what we see:
-
-![IVy screenshot](images/leader16.png)
-
-This is similar to what we saw before, but notice the blue arrow from
-node `0` to node `1`.  This corresponds to a new relation that has
-been added on the right: `node.btw(2,X,Y)`. From this arrow, we can
-infer that `node.btw(2,0,1)` holds. That is, starting at `2`, and
-moving around the ring, we see `0` before `1`. We can also see this
-fact stated below under "Constraints". This means that, from `0`, we
-must pass through `1` on the way to `2`. Therefore, the id of `0`
-cannot possibly reach `2`, as the diagram shows.
-
-We can try generalizing this diagram using `Conjecture|Minimize`, but
-in this case, there is no effect. No matter -- since this looks like a
-reasonable conjecture, we use `Conjecture|Strengthen` to add it to our
-invariant. Here is the result:
-
-![IVy screenshot](images/leader17.png)
-
-This says it is not possible to have nodes `Q,N,P` in ascending order of id,
-such that `N` is on the way from `Q` to `P` and the id of `N` is arriving at `Q`.
-
-Now let's try `Invariant|Check induction`:
-
-![IVy screenshot](images/leader18.png)
-
-Because we haven't broken the rotational symmetry of the ring, there
-is just one case needed when we state the key invariant that an id
-can't bypass a higher id in the ring. This illustrates that the
-complexity of the proof can be affected by how we write the
-specification. Once again, we can save this invariant and edit it into
-the definition of `app`.
-
-
-
-
+That is, node addresses are one-bit binary numbers (meaning we have just two
+nodes, and id's are 8-bit numbers. Often it's a good idea to start testing
+with small datatypes. In the case of the leader election ring, more nodes
+would increase the amount of time needed to see an election event.
+
+## Compositionally testing the leader election protocol
+
+We're going to divide the system into three isolates, one for each of
+its major components. Here is what the three isolates will look like:
+
+![Leader Election Ring Figure 2](leader_fig2-crop-1.png)
+
+Here are the isolate definitions:
+
+    trusted isolate iso_p = proto with serv,node,id,asgn,net,timer
+    trusted isolate iso_t = timer
+    trusted isolate iso_n = net with node,id
+
+We added the keyword `trusted` to these isolates to indicate to IVy
+that they will be verified informally by testing. Notice that the
+isolate for `proto` contains its service specification as well as the
+specifications of all of the other components. We need to test that
+`proto` lives up to its guarantees at all of its interfaces, provided
+that all of its assumptions hold. On the other hand, `net` needs only
+the specifications of `node` and `id` (the `net` object contains its
+own service specification).
+
+We can now use IVy to compile test environments for each of the isolates,
+based on the interface specifications. Let's start with the high-level protocol:
+
+    $ ivy_to_cpp isolate=iso_p target=test build=true leader_election_ring.ivy
+    g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
+
+We run the tester:
+
+    $ ./leader_election_ring
+    > timer.timeout(1)
+    < net.send(1,0,170)
+    > net.recv(0,170)
+    < net.send(0,1,170)
+    > net.recv(0,170)
+    < net.send(0,1,170)
+    > net.recv(0,170)
+    < net.send(0,1,170)
+    > timer.timeout(0)
+    < net.send(0,1,149)
+    > timer.timeout(0)
+    < net.send(0,1,149)
+    > timer.timeout(0)
+    < net.send(0,1,149)
+    > net.recv(0,170)
+
+    ...
+
+    > net.recv(0,170)
+    < net.send(0,1,170)
+    > timer.timeout(0)
+    < net.send(0,1,149)
+    > net.recv(1,170)
+    < serv.elect(1)
+
+In this run, process 1 times out and sends its id 170 to process
+0. Process 0 receives this id and forwards it back to process 1
+(meaning process 0's id must be less than 170). Later, process 0 times
+out and sends its id 149 to process 1. Eventually, the network decides
+to deliver to process 1 the message with its own id, causing process
+1 to be elected. When this happens, the assertion monitor checkes that in 
+fact process 1 has the highest id.
+
+The important point here is that there is no actual network. The
+tester is simulating the network by randomly selecting actions
+consistent with the history of actions at the interface. In practice,
+this means that the tester stores the relation `sent` (the state of
+the network interface specification) and only calls `net.recv` with
+packets that have been previously sent. When there are multiple
+choices, the tester makes an effort to select uniformly.  This is a
+hard problem in general, however. In practice the distribution will be
+non-uniform.  If you look at the calls to `net.recv`, you can see that
+there is some duplication of sent packets, as we would expect.
+
+
+We can see here a major advantage of compositional testing over
+integration testing. If we used a real network to test our protocol,
+we might have to wait a long time for a packet duplication to occur
+(in fact, this might never occur unless we take care to stress the
+network appropriately). The resilience of our protocol to packet
+duplication would not be well tested, as it is here. Similarly, our
+protocol might have unintended dependences on timing. Since timeout
+events are being generated randomly here, and not based on wall clock
+time, we can see timings that might occur rarely in the actual system,
+perhaps only under very heavy load.
+
+Now let's turn to the network isolate. We compile and run:
+
+    $ ivy_to_cpp isolate=iso_n target=test build=true leader_election_ring.ivy
+    g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
+
+    ./leader_election_ring
+    > net.send(0,0,168)
+    < net.recv(0,168)
+    > net.send(0,0,243)
+    < net.recv(0,243)
+    > net.send(0,0,13)
+    < net.recv(0,13)
+    > net.send(1,0,108)
+    > net.send(0,0,84)
+    > net.send(0,0,78)
+    < net.recv(0,108)
+    < net.recv(0,84)
+    < net.recv(0,78)
+    > net.send(1,0,17)
+    < net.recv(0,17)
+    > net.send(0,1,167)
+    < net.recv(1,167)
+    > net.send(1,0,3)
+    > net.send(0,1,13)
+    ...
+
+The object `net` is actually just a wrapper around the operating
+system's networking API.  Therefore, when we test `net`, we are
+actually testing the operating system's networking stack. Fortunately,
+testing reveals no errors. Notice though, that the tester is
+generating a wider variety of packets than the protocol could
+actually generate. In fact, it's simply generating packet values
+uniformly at random. In this sense, the network stack is also being
+better tested than it would be if composed with the actual protocol.
+
+Finally, we can test the timer:
+
+    $ ivy_to_cpp isolate=iso_n target=test build=true leader_election_ring.ivy
+    g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
+
+    ./leader_election_ring
+    < timer.timeout(0)
+    < timer.timeout(1)
+    < timer.timeout(0)
+    < timer.timeout(1)
+    < timer.timeout(0)
+    < timer.timeout(1)
+    < timer.timeout(0)
+    < timer.timeout(1)
+    < timer.timeout(0)
+    ...
+
+    $ ivy ui=cti isolate=iso_proto leader_election_ring.ivy
+
+Not very interesting, but it shows both timeouts occurring once every
+second, which is what we expect. Again, we are really testing the
+operating system here (and also IVy's run time scheduler, which 
+uses the operating system API).
+
+# Running the protocol
+
+Now that we've tested the components, we can compile the whole system
+and run it as a collection of independent processes. Our protocol is an
+example of a [parameterized object](../leader.html). Ivy can decompose it
+into a collection of processes based on the parameter `me`.  Each
+value of the parameter becomes an individual process. This
+transformation is called *parameter stripping*.
+
+To do this, we use the following declaration:
+
+    extract iso_impl(me:node.t) = proto(me),net(me),timer(me),node,id,asgn
+
+This describes a special kind of isolate called an `extract`. Extracts
+are intended to be run in production and don't include the
+specification monitors. In the extract declaration, `me` is a symbolic
+constant that represents the first parameter of of each action and
+state component in the object. This parameter is "stripped" by
+replacing it with the symbolic constant `me`.
+
+Before thinking about this too hard, let's just run it to see what
+happens. We compile as usual, with one difference: we use the option
+`target=repl`.  Instead of generating a test environment, IVy provides
+a read-eval-print loop as the environment:
+
+    $ ivy_to_cpp target=repl isolate=iso_impl build=true leader_election_ring.ivy
+    g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
+
+This produces an executable that takes one parameter `me` on the
+command line. Let's create two terminals A annd B to run process 0 and
+process 1 respectively:
+
+    A: $ ./leader_election_ring_udp2 0
+    A: >
+
+    B: $ ./leader_election_ring_udp2 1
+    B: >
+
+    A: < serve.elect
+    A: < serve.elect
+    A: < serve.elect
+    ...
+
+Notice that nothing happens when we start node 0. It is sending packets
+once per second, but they are being dropped because no port is yet
+open to receive them. After we start node 1, it forwards node 0's
+packets, which causes node 0 to be elected (and to continues to be
+elected once per second).
 
 
 

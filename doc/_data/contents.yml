@@ -28,4 +28,4 @@
   docs:
   - examples/testing/intro
   - examples/testing/specification
-
+  - examples/testing/leader

@@ -1,0 +1,114 @@
+#lang ivy1.6
+
+
+################################################################################
+#
+# Concrete type of node addresses.
+#
+################################################################################
+
+
+object node = {
+    type t
+
+    interpret t -> bv[1]
+
+    action next(x:t) returns (y:t) = {
+	y := x + 1
+    }
+}
+
+
+################################################################################
+#
+# Concrete type of node ids.
+#
+################################################################################
+
+object id = {
+    type t
+
+    interpret t -> bv[8]
+}
+
+
+################################################################################
+#
+#  The assignments of id's to nodes
+#
+################################################################################
+
+object asgn = {
+
+    function pid(X:node.t) : id.t          # map each node to an id
+
+    axiom [injectivity] pid(X) = pid(Y) -> X = Y
+}
+
+
+################################################################################
+#
+# The network service specification
+#
+################################################################################
+
+include udp
+instance net : udp_simple(node.t,id.t)
+
+
+################################################################################
+#
+# The timer service
+#
+################################################################################
+
+include timeout
+instance timer(X:node.t) : timeout_sec
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    action elect(v:node.t)                 # called when v is elected leader
+
+    object spec = {
+	before elect {
+	    assert asgn.pid(v) >= asgn.pid(X)   # only the max pid can be elected
+	}
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+object proto = {
+
+    implement timer.timeout(me:node.t) {
+	call net.send(me,node.next(me),asgn.pid(me))
+    }
+
+    implement net.recv(me:node.t,v:id.t) {
+        if v = asgn.pid(me) {  # Found a leader
+            call serv.elect(me)
+        }
+	else if v > asgn.pid(me)  { # pass message to next node
+	    call net.send(me,node.next(me),v)
+        }
+    }
+}
+
+import serv.elect
+
+trusted isolate iso_p = proto with serv,node,id,asgn,net,timer
+trusted isolate iso_t = timer
+trusted isolate iso_n = net with node,id
+
+extract iso_impl(me:node.t) = proto(me),net(me),timer(me),node,id,asgn

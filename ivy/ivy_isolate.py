@@ -843,10 +843,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
     if type(isolate) == ivy_ast.IsolateDef:
         for action in mod.actions.values():
             if isinstance(action,ia.NativeAction):
-                raise IvyError(action,'trusted code used in untrusted isolate')
+                raise iu.IvyError(action,'trusted code used in untrusted isolate')
         for ldf in mod.definitions:
             if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr):
-                raise IvyError(action,'trusted code used in untrusted isolate')
+                raise iu.IvyError(action,'trusted code used in untrusted isolate')
 
 
     # TODO: need a better way to filter signature
@@ -1004,7 +1004,6 @@ def create_isolate(iso,mod = None,**kwargs):
         extra_strip = {}
         if create_imports.get():
             set_up_implementation_map(mod)
-            print 'implementation_map: {}'.format(implementation_map)
             newimps = []
             outcalls = set()
             for imp in mod.imports:

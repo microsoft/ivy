@@ -427,7 +427,7 @@ def emit_action_gen(header,impl,name,action,classname):
     if len(action.formal_returns) == 0:
         code_line(impl,call)
     else:
-        code_line(impl,'std::out << "= " << ' + call)
+        code_line(impl,'std::cout << "= " << ' + call)
     close_scope(impl)
 
 
@@ -2079,7 +2079,8 @@ def emit_repl_boilerplate3test(header,impl,classname):
 
     for(int cycle = 0; cycle < 100; cycle++) {
 
-        int rnd = rand() % (generators.size() + readers.size());
+        int choices = generators.size() + readers.size() + timers.size();
+        int rnd = choices ? (rand() % choices) : 0;
         if (rnd < generators.size()) {
             gen &g = *generators[rnd];
             if (g.generate(ivy))

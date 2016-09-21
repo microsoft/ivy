@@ -43,6 +43,5 @@ module timeout_sec = {
     }
 
     instance impl : timeout_wrapper
-    private impl
 }
 
