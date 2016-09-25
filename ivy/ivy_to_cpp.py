@@ -19,6 +19,7 @@ import ivy_ast
 import itertools
 
 from collections import defaultdict
+from operator import mul
 import re
 
 def all_state_symbols():
@@ -65,18 +66,21 @@ def indent_code(header,code):
     for line in code.split('\n'):
         header.append((indent_level * 4 + get_indent(line) - indent) * ' ' + line.strip() + '\n')
 
+def sym_decl(sym,c_type = None,skip_params=0):
+    name, sort = sym.name,sym.sort
+    dims = []
+    if not c_type:
+        c_type,dims = ctype_function(sort)
+    res = c_type + ' '
+    res += memname(sym) if skip_params else varname(sym.name)
+    for d in dims[skip_params:]:
+        res += '[' + str(d) + ']'
+    return res
+    
 def declare_symbol(header,sym,c_type = None,skip_params=0):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
-    name, sort = sym.name,sym.sort
-    if not c_type:
-        c_type = ctype(sort.rng)
-    header.append('    ' + c_type + ' ')
-    header.append(memname(sym) if skip_params else varname(sym.name))
-    if hasattr(sort,'dom'):
-        for d in sort.dom[skip_params:]:
-            header.append('[' + str(sort_card(d)) + ']')
-    header.append(';\n')
+    header.append('    '+sym_decl(sym,c_type,skip_params)+';\n')
 
 special_names = {
     '<' : '__lt',
@@ -123,6 +127,89 @@ def field_eq(s,t,field):
 def memname(sym):
     return sym.name.split('.')[-1]
 
+
+
+def ctuple(dom):
+    if len(dom) == 1:
+        return ctypefull(dom[0])
+    return '__tup__' + '__'.join(s.name for s in dom)
+
+declared_ctuples = set()
+
+def declare_ctuple(header,dom):
+    if len(dom) == 1:
+        return
+    t = ctuple(dom)
+    if t in declared_ctuples:
+        return
+    declared_ctuples.add(t)
+    header.append('struct ' + t + ' {\n')
+    for idx,sort in enumerate(dom):
+        sym = il.Symbol('arg{}'.format(idx),sort)
+        declare_symbol(header,sym)
+    header.append('};\n')
+
+def declare_ctuple_hash(header,dom,classname):
+    header.append("""
+namespace hash_space {
+    template <>
+        class hash<the_type> {
+    public:
+        size_t operator()(const the_type &s) const {
+            return the_val;
+        }
+    };
+}
+""".replace('the_type',classname+'::'+t).replace('the_val','+'.join('hash<{}>()(arg{})'.format(ctype(s),i,classname=classname) for i,s in enumerate(dom))))
+                  
+def declare_hash_thunk(header):
+    header.append("""
+template <typename D, typename R>
+struct thunk {
+    virtual R operator()(const D &) = 0;
+};
+template <typename D, typename R>
+struct hash_thunk {
+    thunk<D,R> *fun;
+    hash_space::hash_map<D,R> memo;
+    hash_thunk() : fun(0) {}
+    hash_thunk(thunk<D,R> *) : fun(fun) {}
+    ~hash_thunk() {
+        if (fun)
+            delete fun;
+    }
+    R &operator[](const D& arg){
+        std::pair<typename hash_space::hash_map<D,R>::iterator,bool> foo = memo.insert(std::pair<D,R>(arg,D()));
+        R &res = foo.first->second;
+        if (foo.second)
+            res = (*fun)(arg);
+        return res;
+    }
+};
+""")        
+
+def all_members():
+    for sym in il.all_symbols():
+        if sym_is_member(sym) and not slv.solver_name(sym) == None:
+            yield sym
+
+def all_ctuples():
+    done = set()
+    for sym in all_members():
+        if hasattr(sym.sort,'dom') and len(sym.sort.dom) > 1 and is_large_type(sym.sort):
+            res = tuple(sym.sort.dom)
+            if res not in done:
+                done.add(res)
+                yield sym
+    
+def declare_all_ctuples(header):
+    for dom in all_ctuples():
+        declare_ctuple(header,dom)
+
+def declare_all_ctuples_hash(header,classname):
+    for dom in all_ctuples():
+        declare_ctuple_hash(header,dom,classname)
+
 def ctype(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
@@ -140,7 +227,45 @@ def ctypefull(sort,classname=None):
 def native_type_full(self):
     return self.args[0].inst(native_reference,self.args[1:])    
 
+def is_large_type(sort):
+    cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
+    return not(all(cards) and reduce(mul,cards,1) <= 16)
+
+def ctype_function(sort,classname=None):
+    cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
+    cty = ctypefull(sort.rng,classname)
+    if all(cards) and reduce(mul,cards,1) <= 16:
+        return (cty,cards)
+    cty = 'hash_thunk<'+ctuple(sort.dom)+','+cty+'>'
+    return (cty,[])
+    
 native_expr_full = native_type_full
+
+thunk_counter = 0
+
+def make_thunk(impl,code,vs,expr):
+    dom = [v.sort for v in vs]
+    D = ctuple(dom)
+    R = ctypefull(expr.sort)
+    global thunk_counter
+    name = '__thunk__{}'.format(thunk_counter)
+    thunk_counter += 1
+    open_scope(impl,line='struct {} : thunk<{},{}>'.format(name,D,R))
+    env = list(ilu.used_symbols_ast(expr))
+    for sym in env:
+        declare_symbol(impl,sym)
+    envnames = [varname(sym) for sym in env]
+    open_scope(impl,line='{}({}) {} '.format(name,','.join(sym_decl(sym) for sym in env)
+                                             ,':' if envnames else ''
+                                             ,','.join('{}({})'.format(n,n) for n in envnames))),
+    close_scope(impl)
+    open_scope(impl,line='{} operator()(const {} &arg)'.format(R,D))
+    subst = {vs[0]:il.Symbol('arg',vs[0].sort)} if len(vs)==1 else dict((v,il.Symbol('arg.arg{}'.format(idx),v.sort)) for idx,v in enumerate(vs))
+    expr = ilu.substitute_ast(expr,subst)
+    code_line(impl,'return ' + code_eval(impl,expr))
+    close_scope(impl)
+    close_scope(impl,semi=True)
+    return 'hash_thunk<{},{}>(new {}({}))'.format(D,R,name,','.join(envnames))
 
 def emit_cpp_sorts(header):
     for name in im.module.sort_order:
@@ -544,22 +669,26 @@ def emit_some_action(header,impl,name,action,classname):
     global indent_level
     emit_method_decl(header,name,action)
     header.append(';\n')
-    emit_method_decl(impl,name,action,body=True,classname=classname)
-    impl.append('{\n')
+    global thunks
+    thunks = impl
+    code = []
+    emit_method_decl(code,name,action,body=True,classname=classname)
+    code.append('{\n')
     indent_level += 1
     if len(action.formal_returns) == 1:
-        indent(impl)
+        indent(code)
         p = action.formal_returns[0]
         if p not in action.formal_params:
-            impl.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
-            mk_nondet_sym(impl,p,p.name,0)
+            code.append(ctype(p.sort) + ' ' + varname(p.name) + ';\n')
+            mk_nondet_sym(code,p,p.name,0)
     with ivy_ast.ASTContext(action):
-        action.emit(impl)
+        action.emit(code)
     if len(action.formal_returns) == 1:
-        indent(impl)
-        impl.append('return ' + varname(action.formal_returns[0].name) + ';\n')
+        indent(code)
+        code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
     indent_level -= 1
-    impl.append('}\n')
+    code.append('}\n')
+    impl.extend(code)
 
 def init_method():
     asserts = []
@@ -610,11 +739,11 @@ def open_scope(impl,newline=False,line=None):
 def open_if(impl,cond):
     open_scope(impl,line='if('+(''.join(cond) if isinstance(cond,list) else cond)+')')
     
-def close_scope(impl):
+def close_scope(impl,semi=False):
     global indent_level
     indent_level -= 1
     indent(impl)
-    impl.append('}\n')
+    impl.append('}'+(';' if semi else '')+'\n')
 
 # This generates the "tick" method, called by the test environment to
 # represent passage of time. For each progress property, if it is not
@@ -734,7 +863,11 @@ def module_to_cpp_class(classname,basename):
         header.append('extern int choose(int,int);\n')
     if target.get() in ["gen","test"]:
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
-    header.append('#include <vector>\n')
+#    header.append('#include <vector>\n')
+
+    header.append(hash_h)
+
+    declare_hash_thunk(header)
 
     once_memo = set()
     for native in im.module.natives:
@@ -773,6 +906,8 @@ def module_to_cpp_class(classname,basename):
 #include <unistd.h>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
+
+    declare_all_ctuples(header)
 
     native_exprs = []
     for n in im.module.natives:
@@ -934,6 +1069,8 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
         emit_action(header,impl,a,classname)
     emit_tick(header,impl,classname)
     header.append('};\n')
+
+    declare_all_ctuples_hash(header,classname)
 
     impl.append(classname + '::')
     emit_param_decls(impl,classname,im.module.params)
@@ -1122,6 +1259,7 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
 
 def check_representable(sym,ast=None,skip_args=0):
+    return True
     sort = sym.sort
     if hasattr(sort,'dom'):
         for domsort in sort.dom[skip_args:]:
@@ -1211,14 +1349,17 @@ def emit_one_initial_state(header):
     check_init_cond("initial condition",im.module.labeled_inits)
     check_init_cond("axiom",im.module.labeled_axioms)
         
-    m = slv.get_model_clauses(ilu.and_clauses(im.module.init_cond,im.module.background_theory()))
+    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
+    m = slv.get_model_clauses(clauses)
     if m == None:
         raise IvyError(None,'Initial condition is inconsistent')
+    used = ilu.used_symbols_clauses(clauses)
     for sym in all_state_symbols():
         if sym in im.module.params:
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
-        elif sym not in is_derived and not is_native_sym(sym):
+        elif sym not in is_derived and not is_native_sym(sym) and sym in used:
+            iu.dbg('sym')
             assign_symbol_from_model(header,sym,m)
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)
@@ -1539,9 +1680,22 @@ def emit_assign_simple(self,header):
     code.append(';\n')    
     header.extend(code)
 
+def emit_assign_large(self,header):
+    dom = self.args[0].rep.sort.dom
+    vs = variables(dom)
+    vs = [x if isinstance(x,il.Variable) else y for x,y in zip(self.args[0].args,vs)]
+    eqs = [il.Equals(x,y) for x,y in zip(self.args[0].args,vs) if not isinstance(x,il.Variable)]
+    expr = il.Ite(il.And(eqs),self.args[1],self.args[0].rep(*vs)) if eqs else self.args[1]
+    global thunks
+
+    code_line(header,varname(self.args[0].rep)+' = ' + make_thunk(thunks,header,vs,expr))
+
 def emit_assign(self,header):
     global indent_level
     with ivy_ast.ASTContext(self):
+        if is_large_type(self.args[0].rep.sort):
+            emit_assign_large(self,header)
+            return
         vs = list(lu.free_variables(self.args[0]))
         for v in vs:
             check_iterable_sort(v.sort)
@@ -2135,7 +2289,6 @@ def emit_boilerplate1(header,impl,classname):
 #include <cstdlib>
 #include "z3++.h"
 """)
-    header.append(hash_h)
     header.append("""
 
 using namespace hash_space;

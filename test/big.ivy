@@ -1,0 +1,11 @@
+#lang ivy1.6
+
+type t
+
+interpret t -> bv[16]
+
+relation r(X:t)
+
+action a = {
+    r(X) := false
+}
