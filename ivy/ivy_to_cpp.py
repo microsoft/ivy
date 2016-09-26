@@ -114,6 +114,9 @@ def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
     if is_native_sym(sym):
         return  # native classes have their own initializers
+    if is_large_type(sym.sort):
+        code_line(code,varname(sym) + ' = ' + make_thunk(code,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,name,unique_id)))
+        return
     fun = lambda v: (('___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
                      if not is_native_sym(v) else None)
     assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
@@ -167,16 +170,19 @@ def declare_hash_thunk(header):
 template <typename D, typename R>
 struct thunk {
     virtual R operator()(const D &) = 0;
+    int ___ivy_choose(int rng,const char *name,int id) {
+        return 0;
+    }
 };
 template <typename D, typename R>
 struct hash_thunk {
     thunk<D,R> *fun;
     hash_space::hash_map<D,R> memo;
     hash_thunk() : fun(0) {}
-    hash_thunk(thunk<D,R> *) : fun(fun) {}
+    hash_thunk(thunk<D,R> *fun) : fun(fun) {}
     ~hash_thunk() {
-        if (fun)
-            delete fun;
+//        if (fun)
+//            delete fun;
     }
     R &operator[](const D& arg){
         std::pair<typename hash_space::hash_map<D,R>::iterator,bool> foo = memo.insert(std::pair<D,R>(arg,D()));
@@ -243,7 +249,7 @@ native_expr_full = native_type_full
 
 thunk_counter = 0
 
-def make_thunk(impl,code,vs,expr):
+def make_thunk(impl,vs,expr):
     dom = [v.sort for v in vs]
     D = ctuple(dom)
     R = ctypefull(expr.sort)
@@ -255,12 +261,12 @@ def make_thunk(impl,code,vs,expr):
     for sym in env:
         declare_symbol(impl,sym)
     envnames = [varname(sym) for sym in env]
-    open_scope(impl,line='{}({}) {} '.format(name,','.join(sym_decl(sym) for sym in env)
+    open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym) for sym in env)
                                              ,':' if envnames else ''
                                              ,','.join('{}({})'.format(n,n) for n in envnames))),
     close_scope(impl)
     open_scope(impl,line='{} operator()(const {} &arg)'.format(R,D))
-    subst = {vs[0]:il.Symbol('arg',vs[0].sort)} if len(vs)==1 else dict((v,il.Symbol('arg.arg{}'.format(idx),v.sort)) for idx,v in enumerate(vs))
+    subst = {vs[0].name:il.Symbol('arg',vs[0].sort)} if len(vs)==1 else dict((v.name,il.Symbol('arg.arg{}'.format(idx),v.sort)) for idx,v in enumerate(vs))
     expr = ilu.substitute_ast(expr,subst)
     code_line(impl,'return ' + code_eval(impl,expr))
     close_scope(impl)
@@ -1358,9 +1364,12 @@ def emit_one_initial_state(header):
         if sym in im.module.params:
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
-        elif sym not in is_derived and not is_native_sym(sym) and sym in used:
+        elif sym not in is_derived and not is_native_sym(sym):
             iu.dbg('sym')
-            assign_symbol_from_model(header,sym,m)
+            if sym in used:
+                assign_symbol_from_model(header,sym,m)
+            else:
+                mk_nondet_sym(header,sym,'init',0)
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)
 
@@ -1472,6 +1481,22 @@ def emit_app(self,header,code):
             code.append(']')
 
 lg.Apply.emit = emit_app
+
+class HavocSymbol(object):
+    def __init__(self,sort,name,unique_id):
+        self.sort,self.name,self.unique_id = sort,name,unique_id
+        self.args = []
+    def clone(self,args):
+        return HavocSymbol(self.sort,self.name,self.unique_id)
+
+def emit_havoc_symbol(self,header,code):
+    sym = il.Symbol(new_temp(header,sort=self.sort),self.sort)
+    mk_nondet_sym(header,sym,self.name,self.unique_id)
+    code.append(sym.name)
+    
+
+HavocSymbol.emit = emit_havoc_symbol
+
 
 temp_ctr = 0
 
@@ -1685,10 +1710,10 @@ def emit_assign_large(self,header):
     vs = variables(dom)
     vs = [x if isinstance(x,il.Variable) else y for x,y in zip(self.args[0].args,vs)]
     eqs = [il.Equals(x,y) for x,y in zip(self.args[0].args,vs) if not isinstance(x,il.Variable)]
-    expr = il.Ite(il.And(eqs),self.args[1],self.args[0].rep(*vs)) if eqs else self.args[1]
+    expr = il.Ite(il.And(*eqs),self.args[1],self.args[0].rep(*vs)) if eqs else self.args[1]
     global thunks
 
-    code_line(header,varname(self.args[0].rep)+' = ' + make_thunk(thunks,header,vs,expr))
+    code_line(header,varname(self.args[0].rep)+' = ' + make_thunk(thunks,vs,expr))
 
 def emit_assign(self,header):
     global indent_level
@@ -2988,6 +3013,7 @@ namespace hash_space {
 
         void dup(const hashtable& other)
         {
+            clear();
             buckets.resize(other.buckets.size());
             for (size_t i = 0; i < other.buckets.size(); ++i) {
                 Entry** to = &buckets[i];
