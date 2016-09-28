@@ -66,21 +66,21 @@ def indent_code(header,code):
     for line in code.split('\n'):
         header.append((indent_level * 4 + get_indent(line) - indent) * ' ' + line.strip() + '\n')
 
-def sym_decl(sym,c_type = None,skip_params=0):
+def sym_decl(sym,c_type = None,skip_params=0,classname=None):
     name, sort = sym.name,sym.sort
     dims = []
     if not c_type:
-        c_type,dims = ctype_function(sort,skip_params=skip_params)
+        c_type,dims = ctype_function(sort,skip_params=skip_params,classname=classname)
     res = c_type + ' '
     res += memname(sym) if skip_params else varname(sym.name)
     for d in dims:
         res += '[' + str(d) + ']'
     return res
     
-def declare_symbol(header,sym,c_type = None,skip_params=0):
+def declare_symbol(header,sym,c_type = None,skip_params=0,classname=None):
     if slv.solver_name(sym) == None:
         return # skip interpreted symbols
-    header.append('    '+sym_decl(sym,c_type,skip_params)+';\n')
+    header.append('    '+sym_decl(sym,c_type,skip_params,classname=classname)+';\n')
 
 special_names = {
     '<' : '__lt',
@@ -339,7 +339,7 @@ def sort_domain(sort):
         return sort.domain
     return []
 
-def emit_eval(header,symbol,obj=None): 
+def emit_eval(header,symbol,obj=None,classname=None): 
     global indent_level
     name = symbol.name
     sname = slv.solver_name(symbol)
@@ -352,11 +352,14 @@ def emit_eval(header,symbol,obj=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     indent(header)
-    header.append((obj + '.' if obj else '')
-                  + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
-                  + ' = eval_apply("{}"'.format(sname)
-                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
-                  + ");\n")
+    if sort.rng.name in im.module.sort_destructors:
+        code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(',int_to_z3(sort("'+s.name+'"),X{}'.format(idx)+')' for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
+    else:
+        header.append((obj + '.' if obj else '')
+                      + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
+                      + ' = eval_apply("{}"'.format(sname)
+                      + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+                      + ");\n")
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
 
@@ -415,13 +418,13 @@ def sym_is_member(sym):
     res = sym not in is_derived and sym.name not in im.module.destructor_sorts
     return res
 
-def emit_eval_sig(header,obj=None,used=None):
+def emit_eval_sig(header,obj=None,used=None,classname=None):
     for symbol in all_state_symbols():
         if slv.solver_name(symbol) != None: # skip interpreted symbols
             global is_derived
             if symbol not in is_derived:
                 if used == None or symbol in used:
-                    emit_eval(header,symbol,obj)
+                    emit_eval(header,symbol,obj,classname=classname)
 
 def emit_clear_progress(impl,obj=None):
     for df in im.module.progress:
@@ -475,7 +478,7 @@ public:
             global is_derived
             if sym_is_member(sym):
                 if sym in used:
-                    emit_randomize(impl,sym)
+                    emit_randomize(impl,sym,classname=classname)
                 else:
                     if not is_native_sym(sym):
                         fun = lambda v: (mk_rand(v.sort) if not is_native_sym(v) else None)
@@ -486,7 +489,7 @@ public:
     if (res) {
 """)
     indent_level += 2
-    emit_eval_sig(impl,'obj',used = used)
+    emit_eval_sig(impl,'obj',used = used,classname=classname)
     emit_clear_progress(impl,'obj')
     indent_level -= 2
     impl.append("""
@@ -498,7 +501,7 @@ public:
 }
 """)
     
-def emit_randomize(header,symbol):
+def emit_randomize(header,symbol,classname=None):
 
     global indent_level
     name = symbol.name
@@ -511,10 +514,13 @@ def emit_randomize(header,symbol):
         indent(header)
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
-    indent(header)
-    header.append('randomize("{}"'.format(sname)
-                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
-                  + ");\n")
+    if sort.rng.name in im.module.sort_destructors:
+        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(',int_to_z3(sort("'+s.name+'"),X{}'.format(idx)+')' for idx,s in enumerate(domain))+'))')
+    else:
+        indent(header)
+        header.append('randomize("{}"'.format(sname)
+                      + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+                      + ");\n")
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
 
@@ -543,7 +549,7 @@ def emit_action_gen(header,impl,name,action,classname):
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            declare_symbol(header,sym)
+            declare_symbol(header,sym,classname=classname)
     header.append("    {}_gen();\n".format(caname))
     header.append("    bool generate(" + classname + "&);\n");
     header.append("    bool execute(" + classname + "&);\n};\n");
@@ -567,7 +573,7 @@ def emit_action_gen(header,impl,name,action,classname):
                     emit_set(impl,sym)
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            emit_randomize(impl,sym)
+            emit_randomize(impl,sym,classname=classname)
     impl.append("""
     bool res = solve();
     if (res) {
@@ -575,7 +581,7 @@ def emit_action_gen(header,impl,name,action,classname):
     indent_level += 1
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
-            emit_eval(impl,sym)
+            emit_eval(impl,sym,classname=classname)
     indent_level -= 2
     impl.append("""
     }
@@ -961,6 +967,10 @@ def module_to_cpp_class(classname,basename):
         action = im.module.actions[actname]
         create_thunk(impl,actname,action,classname)
 
+    if target.get() in ["test"]:
+        sf = header if target.get() == "gen" else impl
+        emit_boilerplate1(sf,impl,classname)
+
     impl.append("""
 class reader {
 public:
@@ -1030,6 +1040,31 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
     res = inp[pos++] ? true : false;
 }
 
+class gen;
+
+template <class T> void __from_solver( gen &g, const  z3::expr &v, T &res);
+
+template <>
+void __from_solver<int>( gen &g, const  z3::expr &v, int &res) {
+    res = g.eval(v);
+}
+
+template <>
+void __from_solver<bool>( gen &g, const  z3::expr &v, bool &res) {
+    res = g.eval(v);
+}
+
+template <class T> void __randomize( gen &g, const  z3::expr &v);
+
+template <>
+void __randomize<int>( gen &g, const  z3::expr &v) {
+    g.randomize(v);
+}
+
+template <>
+void __randomize<bool>( gen &g, const  z3::expr &v) {
+    g.randomize(v);
+}
 """)
 
     if True or target.get() == "repl":
@@ -1043,6 +1078,12 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
             impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
             impl.append('template <>\n')
             impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')
+
+    if target.get() in ["test","gen"]:
+            impl.append('template <>\n')
+            impl.append('void __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &res);\n')
+            impl.append('template <>\n')
+            impl.append('void __randomize<' + cfsname + '>( gen &g, const  z3::expr &v);\n')
 
     once_memo = set()
     for native in im.module.natives:
@@ -1138,7 +1179,8 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
     if target.get() in ["gen","test"]:
         sf = header if target.get() == "gen" else impl
-        emit_boilerplate1(sf,impl,classname)
+        if target.get() == "gen":
+            emit_boilerplate1(sf,impl,classname)
         emit_init_gen(sf,impl,classname)
         for name,action in im.module.actions.iteritems():
             if name in im.module.public_actions:
@@ -1238,6 +1280,28 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
                     for v in vs:
                         open_loop(impl,[v])
                     code_line(impl,'__deser(inp,pos,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                    for v in vs:
+                        close_loop(impl,[v])
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
+                for idx,sym in enumerate(destrs):
+                    fname = memname(sym)
+                    vs = variables(sym.sort.dom[1:])
+                    for v in vs:
+                        open_loop(impl,[v])
+                    code_line(impl,'__from_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                    for v in vs:
+                        close_loop(impl,[v])
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
+                for idx,sym in enumerate(destrs):
+                    fname = memname(sym)
+                    vs = variables(sym.sort.dom[1:])
+                    for v in vs:
+                        open_loop(impl,[v])
+                    code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
                     for v in vs:
                         close_loop(impl,[v])
                 close_scope(impl)
@@ -2386,6 +2450,28 @@ public:
         }
         return decl(arity,&expr_args[0]);
     }
+
+    int eval(const z3::expr &apply_expr) {
+        try {
+            z3::expr foo = model.eval(apply_expr,true);
+            if (foo.is_bv()) {
+                assert(foo.is_numeral());
+                int v;
+                if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
+                    assert(false && "bit vector value too large for machine int");
+                return v;
+            }
+            assert(foo.is_app());
+            if (foo.is_bool())
+                return (foo.decl().decl_kind() == Z3_OP_TRUE) ? 1 : 0;
+            return enum_to_int[foo.decl().name()];
+        }
+        catch (const z3::exception &e) {
+            std::cout << e << std::endl;
+            throw e;
+        }
+    }
+
     int eval_apply(const char *decl_name, unsigned num_args, const int *args) {
         z3::expr apply_expr = mk_apply_expr(decl_name,num_args,args);
         //        std::cout << "apply_expr: " << apply_expr << std::endl;
@@ -2509,6 +2595,20 @@ public:
     int set(const char *decl_name, int arg0, int arg1, int arg2, int value) {
         int args[3] = {arg0,arg1,arg2};
         return set(decl_name,3,args,value);
+    }
+
+    void randomize(const z3::expr &apply_expr) {
+        z3::sort range = apply_expr.get_sort();
+        unsigned card = sort_card(range);
+        int value = rand() % card;
+        z3::expr val_expr = int_to_z3(range,value);
+        z3::expr pred = apply_expr == val_expr;
+        // std::cout << "pred: " << pred << std::endl;
+        std::ostringstream ss;
+        ss << "alit:" << alits.size();
+        z3::expr alit = ctx.bool_const(ss.str().c_str());
+        alits.push_back(alit);
+        slvr.add(!alit || pred);
     }
 
     void randomize(const char *decl_name, unsigned num_args, const int *args) {

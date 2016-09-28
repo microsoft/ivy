@@ -11,8 +11,8 @@ type s = struct {
 
 individual foo : s
 
-action bar(q:t) = {
-  assume q = x(foo)
+action bar(q:s) = {
+  assume y(q) = x(foo)
 }
 
 export bar
