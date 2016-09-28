@@ -70,10 +70,10 @@ def sym_decl(sym,c_type = None,skip_params=0):
     name, sort = sym.name,sym.sort
     dims = []
     if not c_type:
-        c_type,dims = ctype_function(sort)
+        c_type,dims = ctype_function(sort,skip_params=skip_params)
     res = c_type + ' '
     res += memname(sym) if skip_params else varname(sym.name)
-    for d in dims[skip_params:]:
+    for d in dims:
         res += '[' + str(d) + ']'
     return res
     
@@ -237,8 +237,8 @@ def is_large_type(sort):
     cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
     return not(all(cards) and reduce(mul,cards,1) <= 16)
 
-def ctype_function(sort,classname=None):
-    cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
+def ctype_function(sort,classname=None,skip_params=0):
+    cards = map(sort_card,sort.dom[skip_params:] if hasattr(sort,'dom') else [])
     cty = ctypefull(sort.rng,classname)
     if all(cards) and reduce(mul,cards,1) <= 16:
         return (cty,cards)
@@ -298,7 +298,9 @@ def emit_sorts(header):
                 indent(header)
                 header.append('mk_bv("{}",{});\n'.format(name,width))
                 continue
-            raise iu.IvyError(None,'sort {} has no finite interpretation'.format(name))
+            header.append('mk_sort("{}");\n'.format(name))
+            continue
+#            raise iu.IvyError(None,'sort {} has no finite interpretation'.format(name))
         card = sort.card
         cname = varname(name)
         indent(header)
@@ -358,6 +360,26 @@ def emit_eval(header,symbol,obj=None):
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
 
+def emit_set_field(header,symbol,lhs,rhs,nvars=0):
+    global indent_level
+    name = symbol.name
+    sname = slv.solver_name(symbol)
+    cname = varname(name)
+    sort = symbol.sort
+    domain = sort.dom[1:]
+    vs = variables(domain,start=nvars)
+    open_loop(header,vs)
+    lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(varname,vs))) + ')'
+    rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + varname(symbol)
+    if sort.rng.name in im.module.sort_destructors:
+        destrs = im.module.sort_destructors[sort.name]
+        for destr in destrs:
+            emit_set_field(header,destr,lhs1,rhs1,nvars+len(vs))
+    else:
+        code_line(header,'slvr.add('+lhs1+'==int_to_z3(enum_sorts.find("'+sort.rng.name+'")->second,'+rhs1+'))')
+    close_loop(header,vs)
+
+
 def emit_set(header,symbol): 
     global indent_level
     name = symbol.name
@@ -365,6 +387,16 @@ def emit_set(header,symbol):
     cname = varname(name)
     sort = symbol.sort
     domain = sort_domain(sort)
+    if sort.rng.name in im.module.sort_destructors:
+        destrs = im.module.sort_destructors[sort.name]
+        for destr in destrs:
+            vs = variables(domain)
+            open_loop(header,vs)
+            lhs = 'apply("'+symbol.name+'"'+''.join(','+s for s in map(varname,vs)) + ')'
+            rhs = 'obj.' + varname(symbol) + ''.join('[{}]'.format(varname(v)) for v in vs)
+            emit_set_field(header,destr,lhs,rhs,len(vs))
+            close_loop(header,vs)
+        return
     for idx,dsort in enumerate(domain):
         dcard = sort_card(dsort)
         indent(header)
@@ -1283,8 +1315,8 @@ def cstr(term):
 def subscripts(vs):
     return ''.join('['+varname(v)+']' for v in vs)
 
-def variables(sorts):
-    return [il.Variable('X__'+str(idx),s) for idx,s in enumerate(sorts)]
+def variables(sorts,start=0):
+    return [il.Variable('X__'+str(idx+start),s) for idx,s in enumerate(sorts)]
 
 
 def assign_symbol_value(header,lhs_text,m,v,same=False):
@@ -2395,6 +2427,39 @@ public:
         return eval_apply(decl_name,3,args);
     }
 
+    z3::expr apply(const char *decl_name, std::vector<z3::expr> &expr_args) {
+        z3::func_decl decl = decls_by_name.find(decl_name)->second;
+        unsigned arity = decl.arity();
+        assert(arity == expr_args.size());
+        return decl(arity,&expr_args[0]);
+    }
+
+    z3::expr apply(const char *decl_name) {
+        std::vector<z3::expr> a;
+        return apply(decl_name,a);
+    }
+
+    z3::expr apply(const char *decl_name, z3::expr arg0) {
+        std::vector<z3::expr> a;
+        a.push_back(arg0);
+        return apply(decl_name,a);
+    }
+    
+    z3::expr apply(const char *decl_name, z3::expr arg0, z3::expr arg1) {
+        std::vector<z3::expr> a;
+        a.push_back(arg0);
+        a.push_back(arg1);
+        return apply(decl_name,a);
+    }
+    
+    z3::expr apply(const char *decl_name, z3::expr arg0, z3::expr arg1, z3::expr arg2) {
+        std::vector<z3::expr> a;
+        a.push_back(arg0);
+        a.push_back(arg1);
+        a.push_back(arg2);
+        return apply(decl_name,a);
+    }
+
     z3::expr int_to_z3(const z3::sort &range, int value) {
         if (range.is_bool())
             return ctx.bool_val(value);
@@ -2506,6 +2571,12 @@ public:
 
     void mk_bv(const char *sort_name, unsigned width) {
         z3::sort sort = ctx.bv_sort(width);
+        // can't use operator[] here because the value classes don't have nullary constructors
+        enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
+    }
+
+    void mk_sort(const char *sort_name) {
+        z3::sort sort = ctx.uninterpreted_sort(sort_name);
         // can't use operator[] here because the value classes don't have nullary constructors
         enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
     }

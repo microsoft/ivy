@@ -704,6 +704,8 @@ class Sig(object):
 
 alpha = lg.TopSort('alpha')
 
+lg.BooleanSort.name = 'bool'
+
 polymorphic_symbols_list = [
     ('<' , [alpha,alpha,lg.Boolean]),
     ('<=' , [alpha,alpha,lg.Boolean]),

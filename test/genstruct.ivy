@@ -1,0 +1,18 @@
+#lang ivy1.6
+
+type t
+
+interpret t -> bv[1]
+
+type s = struct {
+  x : t,
+  y : t
+}
+
+individual foo : s
+
+action bar(q:t) = {
+  assume q = x(foo)
+}
+
+export bar
