@@ -9,10 +9,21 @@ type s = struct {
   y : t
 }
 
-individual foo : s
+relation sent(X:s,Y:t)
 
-action bar(q:s) = {
-  assume y(q) = x(foo)
+after init {
+    sent(X,Y) := false
 }
 
+individual foo : s
+
+action baz(q:s,r:t) = {
+    sent(q,r) := true
+}
+
+action bar(q:s,r:t) = {
+  assume sent(q,r)
+}
+
+export baz
 export bar
