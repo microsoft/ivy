@@ -101,6 +101,33 @@ module order_iterator(range) = {
 
 }
 
+module order_iterator_impl(range) = {
+    type t = struct {
+	is_end : bool,
+	val : range.t
+    }
+
+    definition (X < Y) = ~is_end(X) & is_end(Y) 
+                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
+
+    function done(X,Y) = is_end(Y) | X < val(Y)
+    function ahead(X,Y) = ~is_end(Y) & val(Y) < X
+    function between(X,V,Y) = ~done(V,X) & done(V,Y)
+
+    action create(x:range.t) returns (y:t)
+    action end returns (y:t)
+    
+    implement create {
+	is_end(y) := false;
+	val(y) := x
+    }
+    implement end {
+	is_end(y) := true;
+	val(y) := 0
+    }
+
+}
+
 module sequence_iterator(range) = {
 
     instantiate order_iterator(range)

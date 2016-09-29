@@ -584,3 +584,30 @@ module ordered_map(key,value) = {
     trusted isolate iso = impl,spec
 
 }
+
+
+module ordered_map_impl(key,value) = {
+
+    # set the value of key k
+    action set(nkey:key.t,v:value)
+
+    # is the key present in the map?
+    action present(k:key.t) returns (ans:bool)
+
+    # get the value of key k or zero
+    action get(k:key.t,def:value) returns (v:value)
+
+    # remove all leys in range [lo,hi]
+    action erase(lo:key.iter.t,hi:key.iter.t)
+
+    # get least iterator >= it
+    action lub(it:key.iter.t) returns (res:key.iter.t)
+
+    # get least iterator >= it
+    action glb(it:key.iter.t) returns (res:key.iter.t)
+
+    # iterator least key > iter or end
+    action next(it:key.iter.t) returns (res:key.iter.t)
+
+    instantiate map_wrapper(key,value)
+}

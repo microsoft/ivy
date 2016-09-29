@@ -135,7 +135,7 @@ def memname(sym):
 def ctuple(dom):
     if len(dom) == 1:
         return ctypefull(dom[0])
-    return '__tup__' + '__'.join(s.name for s in dom)
+    return '__tup__' + '__'.join(ctypefull(s) for s in dom)
 
 declared_ctuples = set()
 
@@ -326,7 +326,7 @@ def emit_cpp_sorts(header):
             destrs = im.module.sort_destructors[name]
             for destr in destrs:
                 declare_symbol(header,destr,skip_params=1)
-            header.append("        size_t __hash() const { return "+struct_hash_fun(map(varname,destrs),[d.sort.rng for d in destrs]) + ";}\n")
+            header.append("        size_t __hash() const { return "+struct_hash_fun(map(memname,destrs),[d.sort.rng for d in destrs]) + ";}\n")
             header.append("    };\n");
             
 
@@ -537,8 +537,8 @@ public:
     indent_level -= 1
     impl.append("""
     // std::cout << slvr << std::endl;
-    bool res = solve();
-    if (res) {
+    bool __res = solve();
+    if (__res) {
 """)
     indent_level += 2
     emit_eval_sig(impl,'obj',used = used,classname=classname)
@@ -549,7 +549,7 @@ public:
 """)
     impl.append("""
     obj.__init();
-    return res;
+    return __res;
 }
 """)
     
@@ -597,7 +597,7 @@ def emit_action_gen(header,impl,name,action,classname):
     for p in action.formal_params:
         if varname(p) not in used_names:
             used.add(p)
-    syms = [x for x in used if is_local_sym(x)]
+    syms = [x for x in used if is_local_sym(x) and not x.is_numeral()]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -628,8 +628,8 @@ def emit_action_gen(header,impl,name,action,classname):
             emit_randomize(impl,sym,classname=classname)
     impl.append("""
     // std::cout << slvr << std::endl;
-    bool res = solve();
-    if (res) {
+    bool __res = solve();
+    if (__res) {
 """)
     indent_level += 1
     for sym in syms:
@@ -640,7 +640,7 @@ def emit_action_gen(header,impl,name,action,classname):
     }
     pop();
     obj.___ivy_gen = this;
-    return res;
+    return __res;
 }
 """)
     open_scope(impl,line="bool " + caname + "_gen::execute(" + classname + "& obj)")
@@ -1188,6 +1188,9 @@ class z3_thunk : public thunk<D,R> {
             impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')
 
     if target.get() in ["test","gen"]:
+        for sort_name in sorted(im.module.sort_destructors):
+            csname = varname(sort_name)
+            cfsname = classname + '::' + csname
             impl.append('template <>\n')
             impl.append('void __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &res);\n')
             impl.append('template <>\n')
@@ -2488,7 +2491,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
     impl.append("""
 
-    for(int cycle = 0; cycle < 100; cycle++) {
+    for(int cycle = 0; cycle < 1000; cycle++) {
 
         int choices = generators.size() + readers.size() + timers.size();
         int rnd = choices ? (rand() % choices) : 0;
@@ -2963,6 +2966,14 @@ namespace hash_space {
         class hash<int> {
     public:
         size_t operator()(const int &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<bool> {
+    public:
+        size_t operator()(const bool &s) const {
             return s;
         }
     };

@@ -102,7 +102,7 @@ export serv.release
 import serv.grant
 
 trusted isolate iso_p = proto with serv,node,trans
-trusted isolate iso_t = trans,trans.mq,trans.seq_num with net,node
+trusted isolate iso_t = trans with net,node
 trusted isolate iso_n = net with node
 
 #extract iso_impl(me:node.t) = proto(me),net(me),timer(me),node,id,asgn
