@@ -41,7 +41,7 @@ instance trans : transport(net,packet.t,node.t)
 ################################################################################
 
 include udp
-instance net : udp_simple(node.t,trans.impl.net_msg.t)
+instance net : udp_simple(node.t,trans.net_msg.t)
 
 
 
@@ -79,21 +79,24 @@ object serv = {
 #
 ################################################################################
 
-object proto = {
+object proto(me:node.t) = {
 
-    relation token(X:node.t)
-    init token(X) <-> X = 0
-    individual pkt : packet.t
+    relation token
+    after init {
+	token := me = 0
+    }
 
-    implement serv.release(me:node.t) {
-	if token(me) {
-	    token(me) := false;
-	    call trans.send(me,node.next(me),pkt)
+    implement serv.release {
+	if token {
+	    token := false;
+	    local pkt : packet.t {
+		call trans.send(me,node.next(me),pkt)
+	    }
 	}
     }
 
-    implement trans.recv(me:node.t,pkt:packet.t) {
-	token(me) := true;
+    implement trans.recv(pkt:packet.t) {
+	token := true;
 	call serv.grant(me)
     }
 }
@@ -105,4 +108,6 @@ trusted isolate iso_p = proto with serv,node,trans
 trusted isolate iso_t = trans with net,node
 trusted isolate iso_n = net with node
 
-#extract iso_impl(me:node.t) = proto(me),net(me),timer(me),node,id,asgn
+trusted isolate iso_pt = proto with serv,trans.impl,net.impl,node
+
+extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num

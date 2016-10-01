@@ -230,8 +230,9 @@ def strip_action(ast,strip_map,strip_binding):
             new_args = args[len(strip_params):]
             new_symbol = ivy_logic.Symbol(name,new_sort)
             return new_symbol(*new_args)
-    if isinstance(ast,ivy_ast.Atom):
+    if isinstance(ast,ivy_ast.Atom) and ast.rep not in im.module.sig.sorts:
         name = ast.rep
+        iu.dbg('ast')
         strip_params = get_strip_params(name,ast.args,strip_map,strip_binding,ast)
         if strip_params:
             new_args = args[len(strip_params):]
@@ -330,6 +331,7 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         strip_binding = dict(zip(action.formal_params,strip_params))
 #        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
 #            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
+        iu.dbg('name')
         new_action = strip_action(action,strip_map,strip_binding)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns

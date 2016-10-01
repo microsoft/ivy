@@ -34,10 +34,10 @@ module udp_wrapper(addr,pkt,me) = {
 	    }
 	    virtual void read() {
 		//std::cout << "RECEIVING\n";
-	        int len;
-                socklen_t lenlen;
+	        int len=0;
+                socklen_t lenlen=4;
 	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
-	            { std::cerr << "getsockopt failed\n"; exit(1); }
+	            { perror("getsockopt failed"); exit(1); }
 	        std::vector<char> buf(len);
 	        int bytes;
 		if ((bytes = recvfrom(sock,&buf[0],sizeof(`pkt`),0,0,0)) < 0)

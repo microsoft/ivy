@@ -1124,6 +1124,9 @@ void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
 
 class gen;
 
+""")
+    if target.get() in ["gen","test"]:
+        impl.append("""
 template <class T> void __from_solver( gen &g, const  z3::expr &v, T &res);
 
 template <>
@@ -1399,41 +1402,42 @@ class z3_thunk : public thunk<D,R> {
                     for v in vs:
                         close_loop(impl,[v])
                 close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
-                for idx,sym in enumerate(destrs):
-                    fname = memname(sym)
-                    vs = variables(sym.sort.dom[1:])
-                    for v in vs:
-                        open_loop(impl,[v])
-                    code_line(impl,'__from_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
-                    for v in vs:
-                        close_loop(impl,[v])
-                close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
-                code_line(impl,'z3::expr res = g.ctx.bool_val(1)')
-                for idx,sym in enumerate(destrs):
-                    fname = memname(sym)
-                    vs = variables(sym.sort.dom[1:])
-                    for v in vs:
-                        open_loop(impl,[v])
-                    code_line(impl,'res = res && __to_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),val.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
-                    for v in vs:
-                        close_loop(impl,[v])
-                code_line(impl,'return res')
-                close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
-                for idx,sym in enumerate(destrs):
-                    fname = memname(sym)
-                    vs = variables(sym.sort.dom[1:])
-                    for v in vs:
-                        open_loop(impl,[v])
-                    code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
-                    for v in vs:
-                        close_loop(impl,[v])
-                close_scope(impl)
+                if target.get() in ["gen","test"]:
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
+                    for idx,sym in enumerate(destrs):
+                        fname = memname(sym)
+                        vs = variables(sym.sort.dom[1:])
+                        for v in vs:
+                            open_loop(impl,[v])
+                        code_line(impl,'__from_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                        for v in vs:
+                            close_loop(impl,[v])
+                    close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
+                    code_line(impl,'z3::expr res = g.ctx.bool_val(1)')
+                    for idx,sym in enumerate(destrs):
+                        fname = memname(sym)
+                        vs = variables(sym.sort.dom[1:])
+                        for v in vs:
+                            open_loop(impl,[v])
+                        code_line(impl,'res = res && __to_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),val.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                        for v in vs:
+                            close_loop(impl,[v])
+                    code_line(impl,'return res')
+                    close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
+                    for idx,sym in enumerate(destrs):
+                        fname = memname(sym)
+                        vs = variables(sym.sort.dom[1:])
+                        for v in vs:
+                            open_loop(impl,[v])
+                        code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
+                        for v in vs:
+                            close_loop(impl,[v])
+                    close_scope(impl)
 
             emit_all_ctuples_to_solver(impl,classname)
 

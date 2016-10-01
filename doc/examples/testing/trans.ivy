@@ -28,23 +28,24 @@ module transport(lower,packet,id) = {
 	}
     }
 
+    instance seq_num : sequence_numbers
+
+    # these type describe the format of messages
+    
+    type mtype = {msg_t, ack_t}
+    
+    object net_msg = {
+	type t = struct {
+	    mty : mtype,
+	    src : id,
+	    num : seq_num.t,
+	    payload : packet
+	}
+    }
+
     object impl(me:id) = {
 
 
-	# these type describe the format of messages
-
-	type mtype = {msg_t, ack_t}
-
-	instance seq_num : sequence_numbers
-
-	object net_msg = {
-	    type t = struct {
-		mty : mtype,
-		src : id,
-		num : seq_num.t,
-		payload : packet
-	    }
-	}
 
 	# Create one outgoing message queue for each host
 	# and a timout for each queue.
