@@ -4,8 +4,8 @@ import os
 checks = [
     ['../doc/examples',
      [
-      ['account2','error: safety failed'],
-      ['account3','error: safety failed'],
+      ['account2','OK'],
+      ['account3','OK'],
       ['account','OK'],
       ['array1','error: Some assertions are not checked'],
       ['arrayset2','OK'],

@@ -232,7 +232,6 @@ def strip_action(ast,strip_map,strip_binding):
             return new_symbol(*new_args)
     if isinstance(ast,ivy_ast.Atom) and ast.rep not in im.module.sig.sorts:
         name = ast.rep
-        iu.dbg('ast')
         strip_params = get_strip_params(name,ast.args,strip_map,strip_binding,ast)
         if strip_params:
             new_args = args[len(strip_params):]
@@ -331,7 +330,6 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         strip_binding = dict(zip(action.formal_params,strip_params))
 #        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
 #            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
-        iu.dbg('name')
         new_action = strip_action(action,strip_map,strip_binding)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
@@ -499,12 +497,18 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins):
         if actname not in summarized_actions:
             for called_name in action.iter_calls():
                 called_name = canon_act(called_name)
+                pre_refed = set()
+                for m in mod.mixins[called_name]:
+                    if isinstance(m,ivy_ast.MixinBeforeDef) and m.mixer() not in summarized_actions:
+                        pre_refed.update(lu.used_symbols_ast(mod.actions[m.mixer()]))
                 all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
                                            + [m.mixer() for m in impl_mixins[called_name]])
                 for called in all_calls:
                     if called in summarized_actions:
                         cmods = set(mods[called])
-                        cmods.update(locmods[called])
+                        for loc in locmods[called]:
+                            if loc in pre_refed:
+                                cmods.add(loc)
                         if cmods:
                             things = ','.join(sorted(map(str,cmods)))
                             refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
