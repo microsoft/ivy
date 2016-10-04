@@ -44,7 +44,7 @@ with im.Module():
     ivy_from_string(prog,create_isolate=True)
 
     classname = 'foo'
-    header,impl = i2c.module_to_cpp_class(classname)
+    header,impl = i2c.module_to_cpp_class(classname,classname)
     print header
     print impl
 
