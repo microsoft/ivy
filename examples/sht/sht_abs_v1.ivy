@@ -572,6 +572,13 @@ module net_impl(ref,proto,me,lower) = {
        & mq(D).contents(M2) & net_msg_seq_num(M2) = net_msg_seq_num(M)
        -> M = M2
 
+    conjecture low.sent(M) & net_msg_mtype(M) = request_t & net_msg_dst(M) = D
+               & net_msg_src(M) = S & neti(D).recv_seq(S) <= net_msg_seq_num(M) 
+               -> net.requested(D,net_msg_req(M))
+
+    conjecture low.sent(M) & net_msg_mtype(M) = delegate_t & net_msg_dst(M) = D
+               & net_msg_src(M) = S & neti(D).recv_seq(S) <= net_msg_seq_num(M) 
+               -> net.delegated(D,net_msg_shard(M))
 
 }
 
@@ -586,7 +593,7 @@ module lower(net_impl) = {
     }
 
     action recv_msg(dst:id, msg:net_msg) = {
-	assert sent(msg)
+	assert sent(msg) & dst = net_msg_dst(msg)
     }
     execute recv_msg before net_impl.recv_msg
 }
@@ -631,5 +638,5 @@ isolate iso_s = servers with reference,net
 
 # Verify the network implementation, using its upper and lower specifications
 
-isolate iso_n = neti with net,low
+isolate iso_n = neti with net,low,seq_nums,encoder
 

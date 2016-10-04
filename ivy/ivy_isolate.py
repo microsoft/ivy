@@ -647,13 +647,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
             for foo in (m.mixee(),m.mixer()):
                 if foo not in mod.actions:
                     raise IvyError(m,'action {} not defined'.format(foo))
-            if not startswith_eq_some(m.mixer(),present,mod):
-                continue
-            action = mod.actions[m.mixee()]
-            if not (isinstance(action,ia.Sequence) and len(action.args) == 0):
-                raise iu.IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
-            action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
-            mod.actions[m.mixee()] = action
+            if startswith_eq_some(m.mixer(),present,mod):
+                action = mod.actions[m.mixee()]
+                if not (isinstance(action,ia.Sequence) and len(action.args) == 0):
+                    raise iu.IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
+                action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
+                mod.actions[m.mixee()] = action
             implementation_map[m.mixee()] = m.mixer()
 
     new_actions = {}
