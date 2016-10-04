@@ -132,10 +132,10 @@ def memname(sym):
 
 
 
-def ctuple(dom):
+def ctuple(dom,classname=None):
     if len(dom) == 1:
-        return ctypefull(dom[0])
-    return '__tup__' + '__'.join(ctypefull(s) for s in dom)
+        return ctypefull(dom[0],classname=classname)
+    return (classname+'::' if classname else '') + '__tup__' + '__'.join(ctypefull(s) for s in dom)
 
 declared_ctuples = set()
 
@@ -270,7 +270,7 @@ def expr_to_z3(expr):
 def make_thunk(impl,vs,expr):
     global the_classname
     dom = [v.sort for v in vs]
-    D = the_classname+'::'+ctuple(dom)
+    D = ctuple(dom,classname=the_classname)
     R = ctypefull(expr.sort)
     global thunk_counter
     name = '__thunk__{}'.format(thunk_counter)
@@ -2826,7 +2826,9 @@ public:
     }
 
     void mk_sort(const char *sort_name) {
-        z3::sort sort = ctx.uninterpreted_sort(sort_name);
+        Z3_symbol symb = Z3_mk_string_symbol(ctx,sort_name);
+        z3::sort sort(ctx,Z3_mk_uninterpreted_sort(ctx, symb));
+//        z3::sort sort = ctx.uninterpreted_sort(sort_name);
         // can't use operator[] here because the value classes don't have nullary constructors
         enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
     }
