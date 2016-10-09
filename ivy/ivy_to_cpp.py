@@ -644,7 +644,7 @@ def emit_action_gen(header,impl,name,action,classname):
 }
 """)
     open_scope(impl,line="bool " + caname + "_gen::execute(" + classname + "& obj)")
-    code_line(impl,'std::cout << "> {}("'.format(name) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
+    code_line(impl,'std::cout << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     call = 'obj.{}('.format(caname) + ','.join(varname(p) for p in action.formal_params) + ')'
     if len(action.formal_returns) == 0:
         code_line(impl,call)
