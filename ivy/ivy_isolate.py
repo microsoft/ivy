@@ -1037,8 +1037,10 @@ def create_isolate(iso,mod = None,**kwargs):
                         if called not in present_actions:
                             outcalls.add(called)
             for impname in outcalls:
-                action = im.module.actions[impname]
                 extname = 'imp__' + impname
+                if impname in implementation_map:
+                    impname = implementation_map[impname]
+                action = im.module.actions[impname]
                 call = ia.CallAction(*([ivy_ast.Atom(extname,action.formal_params)] + action.formal_returns))
                 call.formal_params = action.formal_params
                 call.formal_returns = action.formal_returns
