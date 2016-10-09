@@ -534,17 +534,17 @@ the isolate `iso_r`:
     $ ivy_to_cpp isolate=iso_r target=test build=true pingpong.ivy 
     g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o pingpong pingpong.cpp -lz3
     $ ./pingpong
-    > right_player.hit()
-    > right_player.hit()
-    > right_player.hit()
-    > intf.ping()
-    > right_player.hit()
+    > right_player.hit
+    > right_player.hit
+    > right_player.hit
+    > intf.ping
+    > right_player.hit
     < intf.pong
-    > right_player.hit()
-    > intf.ping()
-    > right_player.hit()
+    > right_player.hit
+    > intf.ping
+    > right_player.hit
     < intf.pong
-    > intf.ping()
+    > intf.ping
 
 Here we see that the testing environment is generating calls to `ping`
 and right_player.hit. The `ping` calls satisfy the precondition of
