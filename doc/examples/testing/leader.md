@@ -296,7 +296,7 @@ better tested than it would be if composed with the actual protocol.
 
 Finally, we can test the timer:
 
-    $ ivy_to_cpp isolate=iso_n target=test build=true leader_election_ring.ivy
+    $ ivy_to_cpp isolate=iso_t target=test build=true leader_election_ring.ivy
     g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
 
     ./leader_election_ring

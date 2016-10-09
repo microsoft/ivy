@@ -2541,6 +2541,13 @@ def emit_repl_boilerplate3test(header,impl,classname):
         
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
+           cycle--;
+           for (unsigned i = 0; i < timers.size(); i++){
+               if (timer_min >= timers[i]->ms_delay()) {
+                   cycle++;
+                   break;
+               }
+           }
            for (unsigned i = 0; i < timers.size(); i++)
                timers[i]->timeout(timer_min);
         }
