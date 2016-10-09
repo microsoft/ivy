@@ -566,7 +566,7 @@ We can ask IVY to check this conclusion for us:
     Checking isolate iso_r...
     OK
 
-The option `trusted=true` tells IVY to trust that the specified
+The option `trusted=true` tells IVy to trust that the specified
 isolates are correct, facts that we have tested, but not formally
 verified. IVy says it can prove based on this assumption that all of
 our assertions are true at all times.
@@ -653,7 +653,7 @@ isolate declaration from our ping-pong program:
 
 Here is what happens when we try to verify [the program](coveragefail.ivy):
 
-    ivy_check trusted=true  coveragefail.ivy
+    $ ivy_check trusted=true  coveragefail.ivy
     coveragefail.ivy: line 20: error: assertion is not checked
     coveragefail.ivy: line 5: error: ...in action intf.pong
     coveragefail.ivy: line 49: error: ...when called from right_player.hit
