@@ -1066,7 +1066,7 @@ void install_reader(reader *);
 class timer {
 public:
     virtual int ms_delay() = 0;
-    virtual void timeout() = 0;
+    virtual void timeout(int) = 0;
 };
 void install_timer(timer *);
 struct ivy_value {
@@ -2462,9 +2462,15 @@ def emit_repl_boilerplate3(header,impl,classname):
                 maxfds = fds;
         }
 
+        int timer_min = 1000;
+        for (unsigned i = 0; i < timers.size(); i++){
+            int t = timers[i].ms_delay();
+            if (t < timer_min) 
+                timer_min = t;
+
         struct timeval timeout;
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
+        timeout.tv_sec = timer_min/1000;
+        timeout.tv_usec = 1000 * (timer_min % 1000);
 
         int foo = select(maxfds+1,&rdfds,0,0,&timeout);
 
@@ -2474,7 +2480,7 @@ def emit_repl_boilerplate3(header,impl,classname):
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
            for (unsigned i = 0; i < timers.size(); i++)
-               timers[i]->timeout();
+               timers[i]->timeout(timer_min);
         }
         else {
             for (unsigned i = 0; i < readers.size(); i++) {
@@ -2522,9 +2528,11 @@ def emit_repl_boilerplate3test(header,impl,classname):
                 maxfds = fds;
         }
 
+        int timer_min = 1;
+
         struct timeval timeout;
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
+        timeout.tv_sec = timer_min/1000;
+        timeout.tv_usec = 1000 * (timer_min % 1000);
 
         int foo = select(maxfds+1,&rdfds,0,0,&timeout);
 
@@ -2534,7 +2542,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
            for (unsigned i = 0; i < timers.size(); i++)
-               timers[i]->timeout();
+               timers[i]->timeout(timer_min);
         }
         else {
             for (unsigned i = 0; i < readers.size(); i++) {

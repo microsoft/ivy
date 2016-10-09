@@ -10,15 +10,21 @@ module timeout_wrapper = {
     <<< impl
 	class sec_timer : public timer {
 	    %`handle_timeout` rcb;
+            int ttl;
 	  public:
 	    sec_timer(%`handle_timeout` rcb)
 	        : rcb(rcb) {
+                ttl = 1000;
 	    }
 	    virtual int ms_delay() {
-		return 1000;
+		return ttl;
 	    }
-	    virtual void timeout() {
-		rcb();
+	    virtual void timeout(int elapse) {
+                ttl -= elapse;
+                if (ttl <= 0) {
+                    ttl = 1000;
+		    rcb();
+                }
 	    }
 	};
     >>>
