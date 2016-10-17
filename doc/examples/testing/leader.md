@@ -311,8 +311,6 @@ Finally, we can test the timer:
     < timer.timeout(0)
     ...
 
-    $ ivy ui=cti isolate=iso_proto leader_election_ring.ivy
-
 Not very interesting, but it shows both timeouts occurring once every
 second, which is what we expect. Again, we are really testing the
 operating system here (and also IVy's run time scheduler, which 
