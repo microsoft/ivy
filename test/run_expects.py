@@ -18,7 +18,7 @@ checks = [
       ['interference2','OK'],
       ['interference3','OK'],
       ['interference4','OK'],
-      ['interference','interference.ivy: line 30: error: Call out to right_player.intf_ping[implement] may have visible effect on left_player.ball'],
+      ['interference','interference.ivy: line 30: error: Call out to right_player.intf_ping'],
       ['leader_election_ring2','error: Some assertions are not checked'],
       ['leader_election_ring_btw','error: Some assertions are not checked'],
       ['leader_election_ring','error: Some assertions are not checked'],
