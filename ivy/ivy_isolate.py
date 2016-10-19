@@ -618,7 +618,7 @@ def follow_definitions(ldfs,all_syms):
     for sym in list(all_syms):
         follow_definitions_rec(sym,dmap,all_syms,set())
 
-def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
+def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_inits=None):
 
     global implementation_map
     implementation_map = {}
@@ -780,6 +780,19 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None):
 
     mod.natives = [c for c in mod.natives if keep_ax(c.args[0])]
 
+    # filter initializers
+
+    if after_inits:
+        for actname in after_inits:
+            if not startswith_eq_some(actname,present,mod):
+                extname='ext:'+actname
+                del new_actions[actname]
+                del new_actions[extname]
+                if actname in exported:
+                    del exported[actname]
+                if extname in exported:
+                    del exported[extname]
+    
     # filter the signature
     # keep only the symbols referenced in the remaining
     # formulas
@@ -1071,7 +1084,8 @@ def create_isolate(iso,mod = None,**kwargs):
         orig_exports = set(e.exported() for e in mod.exports)
 
         if iso:
-            isolate_component(mod,iso,extra_with=extra_with,extra_strip=extra_strip)
+            isolate_component(mod,iso,extra_with=extra_with,extra_strip=extra_strip,
+                              after_inits=set(a.mixer() for a in after_inits))
         else:
             if mod.isolates and cone_of_influence.get():
                 raise iu.IvyError(None,'no isolate specified on command line')

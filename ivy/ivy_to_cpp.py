@@ -1598,7 +1598,6 @@ def emit_one_initial_state(header):
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
         elif sym not in is_derived and not is_native_sym(sym):
-            iu.dbg('sym')
             if sym in used:
                 assign_symbol_from_model(header,sym,m)
             else:
@@ -2464,9 +2463,10 @@ def emit_repl_boilerplate3(header,impl,classname):
 
         int timer_min = 1000;
         for (unsigned i = 0; i < timers.size(); i++){
-            int t = timers[i].ms_delay();
+            int t = timers[i]->ms_delay();
             if (t < timer_min) 
                 timer_min = t;
+        }
 
         struct timeval timeout;
         timeout.tv_sec = timer_min/1000;
