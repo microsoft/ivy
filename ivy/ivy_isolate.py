@@ -827,7 +827,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 for c in action.iter_calls():
                     called = mod.actions[c]
                     if not startswith_eq_some(c,present,mod) and c not in extra_with and not c.startswith('imp__'):
-                        iu.dbg('extra_with')
                         if not(type(called) == ia.Sequence and not called.args):
                             if (isinstance(called,ia.NativeAction) or 
                                 any(p.sort.name not in mod.ghost_sorts for p in called.formal_returns)):
