@@ -38,7 +38,7 @@ def get_sort_arcs(assumes,asserts):
             for ds in sort.dom:
                 if il.is_uninterpreted_sort(ds):
                     yield (ds,rng,sym)
-    
+
     for fmla,ast in assumes + asserts:
         for a in get_qa_arcs(fmla,ast,True,list(lu.free_variables(fmla))):
             yield a
@@ -87,7 +87,7 @@ def get_assumes_and_asserts():
                 asserts.append((sa.get_cond(),sa))
 
     for ldf in im.module.definitions:
-        assumes.append(ldf.formula.to_constraint())
+        assumes.append((ldf.formula.to_constraint(),ldf))
     # TODO: check axioms, inits, conjectures
 
     return assumes,asserts

@@ -246,6 +246,68 @@ module map(dom,rng,zero) = {
     conjecture map(K,L) & map(K,M) -> L = M
 }
 
+################################################################################
+#
+# Partial functions
+#
+# This module represents a mutable partial function type dom to type
+# rng. The state consists of relation map that stores the function as
+# a set of tuples, and an auxiliary set pre that gives the pre-image.
+#
+################################################################################
+
+module partial_function(dom,rng) = {
+
+    relation map(X:dom,Y:rng)
+    relation pre(X:dom) 
+
+    # mutate the function so x maps to y
+    action remap(x:dom,y:rng)
+
+    # remove an element from the pre-image
+    action remove(x:dom)
+
+    # get the value of x, if any
+    action get(x:dom) returns (y:rng)
+
+    # true if x is in the pre-image
+    action present(x:dom) returns (r:bool)
+    
+    # if x in pre, there exists a y such that map(x,y)
+    action lemma(x:dom)
+
+    object spec = {
+	init ~map(X,Y)
+
+	implement remap {
+	    call lemma(x);
+	    map(x,Y) := Y = y;
+	    pre(x) := true
+	}
+
+	implement remove {
+	    call lemma(x);
+	    map(x,Y) := false;
+	    pre(x) := false
+	}
+
+	after get {
+	    assume pre(x) -> map(x,y)
+	}
+
+	after present {
+	    assume r = pre(x)
+	}
+
+	implement lemma(x:dom) {
+	    assume pre(x) -> exists Y. map(x,Y)
+	}
+    }
+
+    conjecture map(K,L) & map(K,M) -> L = M
+
+}
+
 module set_wrapper(key) = {
 
     object s = {}

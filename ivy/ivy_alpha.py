@@ -13,8 +13,10 @@ from ivy_concept_space import *
 from ivy_utils import Parameter
 
 def alpha(state):
+#    print "prestate: {}".format(state.clauses)
     d = ProgressiveDomain(state.domain.concept_spaces,verbose = False)
     state.clauses = d.post(state.clauses,state.domain.background_theory(state.in_scope),{},[])
+#    print "poststate: {}".format(state.clauses)
     
 #log = Parameter("log.alpha")
 log = False

@@ -3018,6 +3018,18 @@ namespace hash_space {
         }
     };
 
+    template <typename T>
+        class hash<std::vector<T> > {
+    public:
+        size_t operator()(const std::vector<T> &p) const {
+            hash<T> h;
+            size_t res = 0;
+            for (unsigned i = 0; i < p.size(); i++)
+                res += h(p[i]);
+            return res;
+        }
+    };
+
     template <class T>
         class hash<std::pair<T *, T *> > {
     public:

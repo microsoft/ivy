@@ -589,7 +589,7 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
     present = set(a.relname for a in isolate.present())
     present.update(verified)
 
-    derived = set(ldf.formula.args[0].func.name for ldf in mod.definitions)
+    derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
     for name in present:
         if (name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
@@ -1018,6 +1018,9 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # create the import actions, if requested
 
+        orig_exports = set(e.exported() for e in mod.exports)
+        orig_imports = set(e.imported() for e in mod.imports)
+
         extra_with = []
         extra_strip = {}
         if create_imports.get():
@@ -1049,7 +1052,8 @@ def create_isolate(iso,mod = None,**kwargs):
                     for called in im.module.actions[actname].iter_calls():
                         if called not in present_actions:
                             outcalls.add(called)
-            for impname in outcalls:
+            for name in outcalls:
+                impname = name
                 extname = 'imp__' + impname
                 if impname in implementation_map:
                     impname = implementation_map[impname]
@@ -1060,10 +1064,12 @@ def create_isolate(iso,mod = None,**kwargs):
                 call.lineno = action.lineno
                 mod.actions[impname] = call
                 mod.actions[extname] = action
-                newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),ivy_ast.Atom('')))
+                if name in orig_imports or not(iso and iso in mod.isolates
+                                               and isinstance(mod.isolates[iso],ivy_ast.ExtractDef)):
+                    newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),ivy_ast.Atom('')))
                 extra_with.append(ivy_ast.Atom(impname))
 #                    extra_with.append(ivy_ast.Atom(extname))
-                if iso and iso in mod.isolates:
+                if iso and iso in mod.isolates and name in orig_imports:
                     ps = mod.isolates[iso].params()
                     extra_strip[impname] = [a.rep for a in ps]
                     extra_strip[extname] = [a.rep for a in ps]
@@ -1079,8 +1085,6 @@ def create_isolate(iso,mod = None,**kwargs):
         get_mixin_order(iso,mod)
 
         # Construct an isolate
-
-        orig_exports = set(e.exported() for e in mod.exports)
 
         if iso:
             isolate_component(mod,iso,extra_with=extra_with,extra_strip=extra_strip,

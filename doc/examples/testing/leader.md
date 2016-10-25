@@ -348,10 +348,10 @@ This produces an executable that takes one parameter `me` on the
 command line. Let's create two terminals A annd B to run process 0 and
 process 1 respectively:
 
-    A: $ ./leader_election_ring_udp2 0
+    A: $ ./leader_election_ring 0
     A: >
 
-    B: $ ./leader_election_ring_udp2 1
+    B: $ ./leader_election_ring 1
     B: >
 
     A: < serve.elect

@@ -10,68 +10,14 @@
 # We assume that there is one permanent node in the ring, which we
 # call "q", the origin.
 
-################################################################################
-#
-# Partial functions
-#
-# This module represents a mutable partial function type dom to type
-# rng. The state consists of relation map that stores the function as
-# a set of tuples, and an auxiliary set pre that gives the pre-image.
-#
-################################################################################
-
-module partial_function(dom,rng) = {
-
-    relation map(X:dom,Y:rng)
-    relation pre(X:dom) 
-
-    # mutate the function so x maps to y
-    action remap(x:dom,y:rng)
-
-    # get the value of x, if any
-    action get(x:dom) returns (y:rng)
-
-    # true if x is in the pre-image
-    action present(x:dom) returns (r:bool)
-    
-    # if x in pre, there exists a y such that map(x,y)
-    action lemma(x:dom)
-
-    object spec = {
-	init ~map(X,Y)
-
-	implement remap {
-	    call lemma(x);
-	    map(x,Y) := Y = y
-	}
-
-	after get {
-	    assert pre(x) -> map(x,y)
-	}
-
-	after present {
-	    assert r = pre(x)
-	}
-
-	implement lemma(x:dom) {
-	    assume pre(x) -> exists Y. map(x,Y)
-	}
-    }
-
-    conjecture map(K,L) & map(K,M) -> L = M
-
-}
+include collections
 
 ################################################################################
 #
 # Ring topology.
 #
-# The module includes a ring_head and ring_tail elements, and a ring
-# total order relation.
-#
-# The module also includes get_next and get_prev actions.
-#
-# In this module, the ring topology is arbitrary and fixed.
+# We characterize the between relation "btw" with properties, but show
+# that there exists a model, using 16-bit integers.
 #
 ################################################################################
 
@@ -88,14 +34,12 @@ module ring_topology = {
     property ~btw(X, Y, Y)
     property btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y)
     property btw(X,Y,Z) |  Y = X |  btw(Y,X,Z)
-
-    action get_next(x:t) returns (y:t)
-
-    object spec = {
-	after get_next {
-	    assert ~btw(x,Z,y)
-	}
+    
+    object impl = {
+	interpret t -> bv[16]
+	definition btw(X,Y,Z) = X < Y & Y < Z | Z <= X & X < Y  | Y < Z & Z <= X
     }
+
 }
 
 instance ring : ring_topology
@@ -106,7 +50,7 @@ instance ring : ring_topology
 #
 ################################################################################
 
-relation a(X)                                  # active set
+relation a(X:ring.t)                           # active set
 instance s1 : partial_function(ring.t,ring.t)  # first successor map
 instance s2 : partial_function(ring.t,ring.t)  # second successor map
 instance p : partial_function(ring.t,ring.t)   # predecessor map
@@ -117,11 +61,12 @@ individual org : ring.t
 
 ################################################################################
 #
-# Best successor relation. We have bs(x,y) if y is active and
-# either it is the first successor of x or it is the second
-# successor of x and the first successor is inactive. We abstract this
-# definition by a Horn clause characterization. This gives an over-approcimation
-# that is sufficient for our purposes.
+# Best successor relation. We have bs(x,y) if y is active and either
+# it is the first successor of x or it is the second successor of x
+# and the first successor is inactive. We abstract this definition by
+# a Horn clause characterization. This gives an over-approcimation
+# that is sufficient for our purposes. We prove this
+# over-approximation is correct.
 #
 ################################################################################
 
@@ -133,7 +78,7 @@ object bs = {
     property s1.map(X,Y) & ~a(Y) & s2.map(X,Z) & a(Z) -> map(X,Z)
 
     object impl = {
-	definition map(x,y) = a(y) & (s1.map(x,y) | s2.map(x,y) & exists Z. (s1.map(x,Z) & ~a(Z)))
+	definition map(x:ring.t,y:ring.t) = a(y) & (s1.map(x,y) | s2.map(x,y) & exists Z. (s1.map(x,Z) & ~a(Z)))
     }
 }
 
@@ -146,42 +91,45 @@ object bs = {
 ################################################################################
 
 object rch = {
-    relation elem(X)
+    relation elem(X:ring.t)
 
     property bs.map(X,org) -> elem(X)
     property elem(Y) & bs.map(X,Y) -> elem(X)
 }
 
-################################################################################
-#
-# An error node is an active node that cannot reach origin.
-#
-################################################################################
+object prop = {
 
-definition err(X) = a(X) & ~rch(X) 
+    ################################################################################
+    #
+    # An error node is an active node that cannot reach origin.
+    #
+    ################################################################################
 
-################################################################################
-#
-# Ring order. We order the nodes by their distance to the origin.
-# We do the proof by induction on this well-founded order, which
-# decreases as node id's get closer to the origin. Notive the q itself
-# is the *top* element if this order, which is convenient for our purposes.
-#
-################################################################################
+    derived err(X) = a(X) & ~rch.elem(X) 
 
-definition (X < Y) = ~btw(X, org, Y)
+    ################################################################################
+    #
+    # Ring order. We order the nodes by their distance to the origin.
+    # We do the proof by induction on this well-founded order, which
+    # decreases as node id's get closer to the origin. Notive the q itself
+    # is the *top* element if this order, which is convenient for our purposes.
+    #
+    ################################################################################
+
+    definition (X < Y) = ~ring.btw(Y, org, X) & X ~= org
 
 
-################################################################################
-#
-# Extract the least error node. 
-#
-################################################################################
+    ################################################################################
+    #
+    # Extract the least error node. 
+    #
+    ################################################################################
 
-definition lerr = some X. err(X) minimizing X
+    derived lerr = some X. err(X)
 
-# TODO: we didn't prove that < is well founded
-
+    # TODO: we didn't prove that < is well founded
+    axiom ~(err(X) & X < lerr)
+}
 
 ###################################################################
 #
@@ -192,103 +140,112 @@ definition lerr = some X. err(X) minimizing X
 # In the initial state, we have two nodes including org. Each node is
 # the unique successor and predecessor of the other.
 
-after init {
-    local other : node {
-	assume other ~= org;
-	a(X) := false;
-	a(org) := true;
-        a(other) := true;
-	s1.remap(org,other);
-	s1.remap(other,org);
-	p.remap(org,other);
-	p.remap(other,org);
+object pro = {
+    after init {
+	local other : ring.t {
+	    assume other ~= org;
+	    a(X) := false;
+	    a(org) := true;
+	    a(other) := true;
+	    call s1.remap(org,other);
+	    call s1.remap(other,org);
+	    call p.remap(org,other);
+	    call p.remap(other,org)
+	}
     }
+
+
+    action join(x:ring.t,y:ring.t) = {
+	assume ~a(x);
+	assume a(y);
+	assume ~ring.btw(x, org, y);
+	a(x) := true;
+	call s1.remap(x,y);
+	call s2.remove(x);
+	call p.remove(x)
+    }
+
+    action stabilize(x:ring.t,y:ring.t,z:ring.t) = {
+	assume a(x);
+	assume s1.map(x, y);
+	assume a(y);
+	assume p.map(y, z);
+	assume a(z);
+	assume ring.btw(x, z, y);
+	call s1.remap(x,z);
+	call s2.remap(x,y)
+    }
+
+    action inherit(x:ring.t,y:ring.t,z:ring.t) = {
+	assume a(x);
+	assume s1.map(x, y);
+	assume a(y);
+	assume s1.map(y, z);
+	call s2.remap(x,z)
+    }
+
+    action remove(x:ring.t,y:ring.t,z:ring.t) = {
+	assume a(x);
+	assume s1.map(x, y);
+	assume ~a(y);
+	assume s2.map(x, z);
+	call s1.remap(x,z);
+	call s2.remove(x)
+    }
+
+    action notify(x:ring.t,y:ring.t,z:ring.t)  = {
+	assume a(x);
+	assume s1.map(x, y);
+	assume a(y);
+	assume p.map(y, z) | ~p.map(y, X);
+	assume ring.btw(z, x, y);
+	call p.remap(y,x)
+    }
+
+    action fail(x:ring.t) = {
+	assume a(x);
+	assume x ~= org; # assume origin node cannot fail
+	a(x) := false;
+	call p.remove(x);
+	call s1.remove(x);
+	call s2.remove(x);
+	# assume the last active successor of any does not fail
+	assume (~s1.map(X, Y) | a(Y) | s2.pre(X));
+	assume (~s1.map(X, Y) | a(Y) | ~s2.map(X, Z) | a(Z))
+    }
+
+    # Check that all nodes are connected to the origin via best successors.
+
+    action test(x:ring.t) = {
+	call s1.lemma(prop.lerr);
+	call s2.lemma(prop.lerr);
+	assert ~prop.err(X)  
+    } 
+
+    # Inductive invariant proving that test never fails
+
+    conjecture (a(X) | p.map(Y, X) | ~s1.map(X, Y))
+    conjecture (a(X) | X ~= org)
+    conjecture (a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
+    conjecture (a(X) | ~s2.map(X, Y))
+    conjecture (a(Y) | a(Z) | ~s1.map(X, Y) | ~s2.map(X, Z))
+    conjecture (a(Y) | s2.pre(X) | ~a(X) | ~s1.map(X, Y))
+    conjecture (a(Y) | ~a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
+    conjecture (s1.pre(X) | ~a(X))
+    conjecture (~ring.btw(X, org, Y) | ~s1.map(X, Y))
+    conjecture ~(s1.map(V0, V1) & V1 ~= org & s2.map(V0, V2) & ring.btw(V0, org, V2))
+
 }
 
+export pro.join
+export pro.stabilize
+export pro.inherit
+export pro.remove
+export pro.notify
+export pro.fail
+export pro.test
 
-action join(x:ring.t,y:ring.t) = {
-    assume ~a(x);
-    assume a(y);
-    assume ~btw(x, org, y);
-    a(x) := true;
-    s1.remap(x,y);
-    s2.remove(x);
-    p.remove(x)
-}
-
-action stabilize(x:ring.t,y:ring.t,z:ring.t) = {
-    assume a(x);
-    assume s1.map(x, y);
-    assume a(y);
-    assume p.map(y, z);
-    assume a(z);
-    assume btw(x, z, y);
-    s1.remap(x,z);
-    s2.remap(x,y)
-}
-
-action inherit(x:ring.t,y:ring.t,z:ring.t) = {
-    assume a(x);
-    assume s1.map(x, y);
-    assume a(y);
-    assume s1.map(y, z);
-    s2.remap(x,z)
-}
-
-action remove(x:ring.t,y:ring.t,z:ring.t) = {
-    assume a(x);
-    assume s1.map(x, y);
-    assume ~a(y);
-    assume s2.map(x, z);
-    s1.remap(x,z);
-    s2.remove(x)
-}
-
-action notify(x:ring.t,y:ring.t,z:ring.t)  = {
-    assume a(x);
-    assume s1.map(x, y);
-    assume a(y);
-    assume p.map(y, z) | ~p.map(y, X);
-    assume btw(z, x, y);
-    p.remap(y,x)
-}
-
-action fail(x:ring.t) = {
-    assume a(x);
-    assume x ~= org; # assume origin node cannot fail
-    a(x) := false;
-    p.remove(x);
-    s1.remove(x);
-    s2.remove(x);
-    # assume the last active successor of any does not fail
-    assume (~s1.map(X, Y) | a(Y) | s2.present(X));
-    assume (~s1.map(X, Y) | a(Y) | ~s2.map(X, Z) | a(Z))
-}
-
-# Test a all nodes are connected to the origin via best successors.
-
-action test(x:ring.t) = {
-    s1.lemma(lerr);
-    s2.lemma(lerr);
-    assert ~err(X)  
-} 
-
-
-# This is our guessed abstract domain
-
-concept act(X) = (a(X) + ~a(X))
-concept loc(X) = (X = org +  ~X = org)
-concept node(X) = (loc(X) * act(X))
-concept succ(X, Y) = (s1.map(X, Y) + ~s1.map(X, Y))
-concept pred(X, Y) = (p.map(X, Y) + ~p.map(X, Y))
-concept spact(X, Y) = (succ(X, Y) * pred(Y, X) * act(X) * act(Y))
-concept s2act(X,Y) = (s2.map(X,Y) * act(X) * act(Y))
-concept s1down(X, Y) = (btw(X, org, Y) * s1.map(X, Y))
-concept s2down(X, Z) = (btw(X, org, Z) * s2.map(X, Z))
-
-concept some_act(X, Y, Z) = (s1.map(X, Y) * s2.map(X, Z) * ~a(Y) * ~a(Z))
-concept has_s1.map(X) = (a(X) * ~dom[s1](X))
-concept has_s2.map(X,Y) = (a(X) * s1.map(X,Y) * ~a(Y) * ~s2.present(X))
-
-# This one is needed, but drop it so proof fails
-# concept itp_a(V0, V1, V2) = (~V1 = org * s2.map(V0, V2) * s1.map(V0, V1) * ~down(V0, V2))
+isolate iso_pro = pro with ring,s1,s2,p,bs,rch,prop
+isolate iso_ring = ring
+isolate iso_bs = bs
+trusted isolate iso_rch = rch # we can't yet prove that horn clauses are consistent!

@@ -631,6 +631,8 @@ def RelationSort(dom):
     return FunctionSort(*(list(dom) + [lg.Boolean])) if len(dom) else lg.Boolean
 
 def TopFunctionSort(arity):
+    if arity == 0:
+        return lg.TopSort('alpha')
     res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
     return res
     

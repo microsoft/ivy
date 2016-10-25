@@ -397,7 +397,7 @@ class AnalysisGraphUI(object):
             udc = undecided_conjectures(node)
             udc_text = [repr(clauses_to_formula(conj)) for conj in udc]
             msg = msg or "Choose a conjecture to prove:"
-            cmd = lambda idx: self.try_conjecture(node,udc[idx])
+            cmd = lambda idx: self.try_conjecture(node,udc[idx],bound=bound)
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd)
         else:
             if hasattr(conj,'lineno'):
@@ -405,6 +405,8 @@ class AnalysisGraphUI(object):
                 self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
             if self.mode.get() == "induction":
+                iu.dbg('node.clauses')
+                iu.dbg('dual')
                 self.bmc(node,dual,bound=bound)
             else:
                 sg = self.g.concept_graph(node)

@@ -49,6 +49,7 @@ def check_conjectures(kind,msg,ag,state):
     if failed:
         if diagnose.get():
             print "{} failed.".format(kind)
+            iu.dbg('ag.states[0].clauses')
             gui = ui.new_ui()
             agui = gui.add(ag)
             gui.tk.update_idletasks() # so that dialog is on top of main window
