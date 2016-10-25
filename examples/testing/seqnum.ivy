@@ -1,0 +1,18 @@
+#lang ivy1.6
+
+include order
+
+module sequence_numbers = {
+
+    type t
+
+    instance iter : order_iterator_impl(this)
+
+    action next(seq:t) returns (res:t)
+
+    interpret t->bv[8]
+    implement next {
+	res := seq + 1
+    }
+
+}

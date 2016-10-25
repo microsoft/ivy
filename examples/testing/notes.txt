@@ -1,0 +1,53 @@
+
+This is a trans showing a failure of the transport layer protocol 
+due to a bug introduced here:
+
+		    }
+		};
+		if net_msg.mty(msg) = ack_t {
+		    call mq(src).delete_all(seq)
+		}
+		else if seq >= recv_seq(src) {
+		    recv_seq(src) := seq_num.next(recv_seq(src));
+		    call recv(me,net_msg.payload(msg))
+		}
+	    }
+	}
+
+("=" changed to ">=:).
+
+
+
+
+$ ./token_ring
+> ext:trans.send(1,0,1)
+< net.send(1,0,{mty:0,src:1,num:0,payload:1})
+> ext:trans.send(0,0,0)
+< net.send(0,0,{mty:0,src:0,num:0,payload:0})
+> ext:trans.send(1,1,0)
+< net.send(1,1,{mty:0,src:1,num:0,payload:0})
+> ext:trans.impl.timer.timeout(0,0)
+< net.send(0,0,{mty:0,src:0,num:0,payload:0})
+> ext:trans.impl.timer.timeout(1,1)
+< net.send(1,1,{mty:0,src:1,num:0,payload:0})
+> ext:trans.send(0,1,1)
+< net.send(0,1,{mty:0,src:0,num:0,payload:1})
+> ext:trans.impl.timer.timeout(1,0)
+< net.send(1,0,{mty:0,src:1,num:0,payload:1})
+> ext:net.recv(1,{mty:0,src:1,num:0,payload:0})
+< net.send(1,1,{mty:1,src:1,num:0,payload:0})
+< trans.recv(1,0)
+> ext:trans.send(0,1,0)
+< net.send(0,1,{mty:0,src:0,num:1,payload:0})
+> ext:trans.impl.timer.timeout(0,0)
+< net.send(0,0,{mty:0,src:0,num:0,payload:0})
+> ext:net.recv(1,{mty:0,src:0,num:1,payload:0})
+< trans.recv(1,0)
+> ext:trans.impl.timer.timeout(1,1)
+< net.send(1,1,{mty:0,src:1,num:0,payload:0})
+> ext:net.recv(1,{mty:1,src:1,num:0,payload:0})
+> ext:trans.impl.timer.timeout(1,0)
+< net.send(1,0,{mty:0,src:1,num:0,payload:1})
+> ext:net.recv(1,{mty:0,src:0,num:1,payload:0})
+< net.send(1,0,{mty:1,src:1,num:1,payload:0})
+trans.ivy: line 26: : assertion failed

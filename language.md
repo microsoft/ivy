@@ -28,7 +28,7 @@ with important differences that we will discuss later).
 
 [al]: http://alloy.mit.edu
 
-### Types and declarations
+### Types and declarations <a name="declarations"></a>
 
 Suppose we have a network consisting of nodes, with pair-wise links
 between the nodes. We can model the structure of the network with a

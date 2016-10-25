@@ -3,7 +3,7 @@ This direcory can be builds into a web site using Jekyll
 
 Viewing the site locally:
 
-$ jekyll serve --port 8989
+$ jekyll serve --port 8989 --watch
 
 (open http://localhost:8989)
 

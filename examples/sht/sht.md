@@ -59,7 +59,7 @@ Notice the `answer` is a call-back and therefore an import.
 
 Before compiling, let's check the whole proof:
 
-    ivy_check  sht.ivy
+    $ ivy_check  sht.ivy
     Checking isolate iso_dm...
     trying ext:proto.impl.dm.get...
     checking consecution...
@@ -231,7 +231,7 @@ passing the destination address and message as parameters.
 Now we have to add the object `debug` to our extract so it doesn't get
 abstracted away:
 
-    extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me)
+    extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me),debug(me)
 
 Let's run this extract:
 
