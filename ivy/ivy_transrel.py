@@ -514,7 +514,7 @@ class History(object):
     """ A history is a symbolically represented sequence of states. """
     def __init__(self,state,maps = []):
         """ state is the initial state of the history """
-        print "init: {}".format(state)
+#        print "init: {}".format(state)
         update,clauses,pre = state
         assert update == None and pre.is_false()
         self.maps = maps     # sequence of symbol renamings resulting from forward images
@@ -527,15 +527,15 @@ class History(object):
         renamings is used to reconstruct the state symbols at previous
         times in the history. A new history after forward step is
         returned. """
-        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
+#        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
         map1,res = forward_image_map(self.post,axioms,update)
         return History(pure_state(res),self.maps + [map1])
 
     def assume(self,clauses):
         """ Returns a new history in which the final state is constrainted to
         satisfy "clauses"."""
-        print "assume post: {}".format(self.post)
-        print "assume: {}".format(clauses)
+#        print "assume post: {}".format(self.post)
+#        print "assume: {}".format(clauses)
         if isinstance(clauses,tuple):  # a pure state
             assert is_pure_state(clauses)
             clauses = clauses[1]
@@ -559,14 +559,14 @@ class History(object):
 
         # A model of the post-state embeds a valuation for each time
         # in the history.
-        print "concrete state: {}".format(self.post)
+#        print "concrete state: {}".format(self.post)
 #        print "background: {}".format(axioms)
         post = and_clauses(self.post,axioms)
 #        print "bounded check {"
         model = _get_model_clauses(post,final_cond=final_cond)
 #        print "} bounded check"
         if model == None:
-            print "core = {}".format(unsat_core(post,true_clauses()))
+#            print "core = {}".format(unsat_core(post,true_clauses()))
             return None
 
         # we reconstruct the sub-model for each state composing the
@@ -587,7 +587,6 @@ class History(object):
                 [f for f in clauses.fmlas if not is_tautology_equality(f)],
                 clauses.defs
             )
-            iu.dbg('clauses')
             states.append(clauses)
             try:
                 # update the inverse map by composing it with inverse

@@ -323,10 +323,6 @@ class AnalysisGraph(object):
         return None
 
     def get_history(self,state,bound=None):
-        if hasattr(state,'id'):
-            iu.dbg('state.id')
-        iu.dbg('state.clauses')
-        iu.dbg('bound')
         if hasattr(state,'pred') and state.pred != None and bound != 0:
             next_bound = None if bound is None else bound - 1
             return history_forward_step(self.get_history(state.pred, next_bound), state)
