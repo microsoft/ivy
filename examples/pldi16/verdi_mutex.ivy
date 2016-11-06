@@ -1,0 +1,219 @@
+#lang ivy1.3
+
+#
+# The Mutex example (Figure 3) from the Verdi paper's overview section.
+#
+# This file also includes two modules used to model lists and message
+# pools.
+#
+# [Verdi] Wilcox, James R., et al. "Verdi: A framework for
+# implementing and formally verifying distributed systems." PLDI 2015.
+#
+#
+
+
+
+################################################################################
+#
+# Module describing an ordered list. The list may contain multiple
+# occurences of the same data element.  The list contains derived
+# relations to test if it's empty, and to test if a data element is at
+# the head of the list.
+#
+################################################################################
+
+type list_elem  # used to allow multiple identical messages and list items
+
+module list(data_t) = {
+    individual data(U:list_elem) : data_t  # function from elements to data
+    individual h : list_elem
+    relation le(X:list_elem,Y:list_elem)  # the list order on elements
+    relation empty # should be a function when langauge enables it
+    relation at_head(D:data_t) # true only for the data at the head of the list, empty if the list is empty
+
+    # Conjectures that ensure that le is a total linear order over its support
+    conjecture le(X,Y) -> (le(X,X) & le(Y,Y))   # Reflexivity
+    conjecture le(X,Y) & le(Y,Z) -> le(X,Z)     # Transitivity
+    conjecture le(X,Y) & le(Y,X) -> X = Y       # Anti-symmetry
+    conjecture le(X,X) & le(Y,Y) -> (le(X,Y) | le(Y,X)) # Linearity
+
+    # empty, h, and at_head
+    conjecture empty -> ~le(X,Y)
+    conjecture ~empty -> le(h, h)
+    conjecture le(X, X) -> le(h, X)
+    conjecture at_head(D) -> le(h, h) & data(h) = D
+    conjecture le(h, h) -> at_head(data(h))
+
+    init empty
+    init ~le(X,Y)
+    init ~at_head(D)
+
+    action append(x:data_t) = {
+        local u:list_elem {
+            assume ~le(u, X) & ~le(X, u);
+            data(u) := x;
+            le(u, u) := true;
+            le(X, Y) := le(X, Y) | (le(X, X) & Y = u);
+            if empty {
+                h := u
+            };
+            empty := false;
+            at_head(D) := D = data(h)
+        }
+    }
+
+    action pop returns (x:data_t) = {
+        local u:list_elem {
+            assume le(u, u) & (le(X,X) -> le(u, X));
+            x := data(u);
+            le(X, Y) := le(X, Y) & (X ~= u);
+            h := *;
+            assume le(X, X) -> le(h, X);
+            if ~le(X:list_elem,X:list_elem) {
+                empty := true;
+                at_head(D) := false
+            } else {
+                at_head(D) := D = data(h)
+            }
+        }
+    }
+
+    action get_head returns (x:data_t) = {
+        assume at_head(x)
+    }
+}
+
+################################################################################
+#
+# Module describing a message pool with one message field.
+#
+# Messages can be sent and received, and multiple messages with the
+# same field are supported.
+#
+################################################################################
+
+
+module msg_pool(msg_t, field_t) = {
+    relation pending(M:msg_t)
+    individual fld(M:msg_t) : field_t
+
+    init ~pending(M)
+
+    action send(f:field_t) = {
+        local m:msg_t {
+            assume ~pending(m);
+            fld(m) := f;
+            pending(m) := true
+        }
+    }
+
+    action receive returns (f:field_t) = {
+        local m:msg_t {
+            assume pending(m);
+            f := fld(m);
+            pending(m) := false
+        }
+    }
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type client
+type lock_m
+type unlock_m
+type grant_m
+
+relation has_lock(C:client)
+instantiate lock_msg : msg_pool(lock_m, client)
+instantiate unlock_msg : msg_pool(unlock_m, client)
+instantiate grant_msg : msg_pool(grant_m, client)
+instantiate waiting : list(client) # list of waiting clients
+
+init ~has_lock(C)
+
+################################################################################
+#
+# Protocol description
+#
+################################################################################
+
+action send_lock = {
+    local c:client {
+        # A lock event - client requests lock
+        call lock_msg.send(c)
+    }
+}
+
+action send_unlock = {
+    local c:client {
+        # An unlock event - client requests unlock
+        assume has_lock(c);
+        has_lock(c) := false;
+        call unlock_msg.send(c)
+    }
+}
+
+action receive_lock = {
+    local c:client {
+        c := lock_msg.receive;
+        if waiting.empty {
+            call grant_msg.send(c)
+        };
+        call waiting.append(c)
+    }
+}
+
+action receive_unlock = {
+    local c:client, ignore:client {
+        ignore := unlock_msg.receive;
+        ignore := waiting.pop;
+        if ~waiting.empty {
+            c := waiting.get_head;
+            call grant_msg.send(c)
+        }
+    }
+}
+
+action receive_grant = {
+    local c:client {
+        c := grant_msg.receive;
+        has_lock(c) := true
+    }
+}
+
+export send_lock
+export send_unlock
+export receive_lock
+export receive_unlock
+export receive_grant
+
+# just a bogus conjecture used with BMC to make sure we CAN have a client that holds the lock
+#conjecture ~has_lock(C1)
+
+# The safety property is that no two different clients have the lock
+conjecture has_lock(C1) & has_lock(C2) -> C1 = C2
+
+# obtained interactively via CTI's (took less than an hour)
+# conjecture ~(grant_msg.pending(G0) & ~waiting.at_head(grant_msg.fld(G0)))
+# conjecture ~(grant_msg.pending(G0) & unlock_msg.pending(U0))
+# conjecture ~(has_lock(C0) & ~waiting.at_head(C0))
+# conjecture ~(has_lock(C0) & unlock_msg.pending(U0))
+# conjecture ~(grant_msg.pending(G0) & has_lock(C0))
+# conjecture ~(unlock_msg.pending(U0) & ~waiting.at_head(unlock_msg.fld(U0)))
+# conjecture ~(grant_msg.pending(G0) & grant_msg.pending(G1) & G1 ~= G0)
+# conjecture ~(unlock_msg.pending(U0) & unlock_msg.pending(U1) & U1 ~= U0)
+
+# obtained interactively via CTI's at the Skype demo with the Verdi team, took about an hour
+# (minimization of has_lock lock_msg.pending unlock_msg.pending grant_msg.pending waiting.le)
+# ~(has_lock(C0) & ~waiting.at_head(C0))
+# ~(grant_msg.pending(G0) & ~waiting.at_head(grant_msg.fld(G0)))
+# ~(grant_msg.pending(G0) & unlock_msg.pending(U0))
+# ~(grant_msg.pending(G0) & has_lock(C0))
+# ~(unlock_msg.pending(U0) & ~waiting.at_head(unlock_msg.fld(U0)))
+# ~(has_lock(C0) & unlock_msg.pending(U0))
+# ~(unlock_msg.pending(U0) & unlock_msg.pending(U1) & U1 ~= U0)
+# ~(grant_msg.pending(G0) & grant_msg.pending(G1) & G1 ~= G0)

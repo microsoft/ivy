@@ -1,0 +1,112 @@
+#lang ivy1.3
+
+#
+# An Ivy model of the toy lock example from https://github.com/Microsoft/Ironclad/blob/master/ironfleet/src/Dafny/Distributed/Protocol/Lock/Node.i.dfy
+#
+
+# A total order helper module
+module total_order(r) = {
+    axiom r(X,X)                        # Reflexivity
+    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X, Y) | r(Y, X)             # Totality
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type node
+type epoch
+
+# epochs are totally ordered with a least element called zero
+relation le(X:epoch, Y:epoch)
+instantiate total_order(le)
+individual zero:epoch
+axiom le(zero, X)
+
+individual ep(N:node) : epoch # ep(n) is the current epoch of node n
+
+relation held(N:node) # held(n) is true iff the lock is currently held by node n
+
+# initially exactly one node holds the lock, and all others have epoch zero
+individual first:node
+init held(X) <-> X=first
+init N ~= first -> ep(N) = zero
+
+# transfer messages
+relation transfer(E:epoch, N:node)  # the node is the message destination
+init ~transfer(E, N)
+
+# locked messages
+relation locked(E:epoch, N:node)  # the node is the message source
+init ~locked(E, N)
+
+################################################################################
+#
+# Protocol description
+#
+################################################################################
+
+action grant = {
+    local n1:node, n2:node, e:epoch {
+        # release the lock and send a transfer message
+        assume held(n1);
+        assume ~le(e, ep(n1));   # jump to some strictly higher epoch
+        transfer(e, n2) := true;
+        held(n1) := false
+    }
+}
+
+action accept = {
+    local n:node, e:epoch {
+        # receive a transfer message and take the lock, sending a locked message
+        assume transfer(e,n);
+        if ~le(e, ep(n)) {
+            held(n) := true;
+            ep(n) := e;
+            locked(e, n) := true
+        }
+    }
+}
+
+export grant
+export accept
+
+# a bogous conjecture to use BMC to test aht we can actually transfer the lock
+# conjecture locked(E, N) -> N = first
+
+# the safety property
+conjecture locked(E, N1) & locked(E, N2) -> N1 = N2
+
+# obtained interactively from CTI's (first attempt)
+# conjecture ~(locked(E1,N0) & transfer(E1,N1) & N1 ~= N0)  # not really needed
+# conjecture ~(le(ep(N1),E1) & locked(E1,N1) & E1 ~= ep(N1))
+# conjecture ~(held(N1) & le(ep(N1),E1) & locked(E1,N0) & N1 ~= N0)  # not really needed
+# conjecture ~(transfer(E1,N0) & transfer(E1,N1) & N1 ~= N0)
+# conjecture ~(held(N1) & le(ep(N1),E1) & transfer(E1,N1) & E1 ~= ep(N1))  # not really needed
+# conjecture ~(held(N0) & le(ep(N0),E1) & transfer(E1,N1) & E1 ~= ep(N0))
+# conjecture ~(held(N0) & held(N1) & N1 ~= N0)  # not really needed
+# conjecture ~(le(ep(N0),E1) & le(ep(N0),E2) & transfer(E1,N0) & transfer(E2,N0) & E2 ~= E1 & ep(N0) ~= E1 & ep(N0) ~= E2)  # not really needed
+# conjecture ~(transfer(ep(N1),N0) & N1 ~= N0)  # not really needed
+# conjecture ~(held(N1) & le(ep(N1),ep(N0)) & N1 ~= N0)
+# conjecture ~(le(E1,ep(N1)) & le(ep(N0),E1) & transfer(E1,N0) & ep(N0) ~= E1)
+# conjecture ~(le(E1,E2) & le(ep(N0),E1) & transfer(E1,N0) & transfer(E2,N1) & E2 ~= E1 & ep(N0) ~= E1)
+
+# the invariant of the first attempt after removal of unnecessary conjectures:
+# conjecture ~(le(ep(N1),E1) & locked(E1,N1) & E1 ~= ep(N1))
+# conjecture ~(transfer(E1,N0) & transfer(E1,N1) & N1 ~= N0)
+# conjecture ~(held(N0) & le(ep(N0),E1) & transfer(E1,N1) & E1 ~= ep(N0))
+# conjecture ~(held(N1) & le(ep(N1),ep(N0)) & N1 ~= N0)
+# conjecture ~(le(E1,ep(N1)) & le(ep(N0),E1) & transfer(E1,N0) & ep(N0) ~= E1)
+# conjecture ~(le(E1,E2) & le(ep(N0),E1) & transfer(E1,N0) & transfer(E2,N1) & E2 ~= E1 & ep(N0) ~= E1)
+
+# a prettyfied version of the above invariant
+conjecture transfer(E, N1) & transfer(E, N2) -> N1 = N2  # epochs transfer to at most one node
+conjecture locked(E, N) -> le(E, ep(N))  # if a node sent a locked msg, the node's epoch is now higher
+conjecture held(N) & N ~= M -> ~le(ep(N), ep(M))  # holding node's epoch is higher than any other node's epoch (this implies a single node holds the lock)
+conjecture held(N) & transfer(E, M) -> le(E, ep(N)) # holding node's epoch is higher than any transfer's epoch
+conjecture transfer(E, N) & ~le(E, ep(N)) -> ~le(E, ep(M)) # pending transfer epoch is higher than any node's epoch
+conjecture transfer(E, N) & ~le(E, ep(N)) & transfer(F, M) -> le(F, E)  # pending transfer epoch is higher than any transfer's epoch

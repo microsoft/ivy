@@ -1,0 +1,100 @@
+#lang ivy1.3
+
+#
+# A very basic exercise in verification of concencus protocols (ala Paxos).
+#
+# A contrived protocol that reaches concensus only when a node hears
+# that all nodes have the same value.
+#
+# It does contain an interesting AE example (see below in the receive_prop action).
+#
+
+type node
+type value
+
+module lone(f) = {
+    axiom ~f(X, Y1) | ~f(X, Y2) | Y1 = Y2
+}
+
+module injective(f) = {
+    axiom ~f(X1, Y) | ~f(X2, Y) | X1 = X2
+}
+
+relation val(N:node, V:value)  # node N has value V
+relation decided(N:node) # node N has decided
+
+instantiate lone(val)
+
+relation propose(S:node, V:value, R:node)  # node S proposed value V to node R
+relation ack(S:node, V:value, R:node)  # node S acknowledged value V to node R
+relation knowledge(X:node, Y:node, V:value) # node X knows node Y has value V
+
+init ~propose(X, Y, Z)
+init ~ack(X, Y, Z)
+init ~knowledge(X, Y, Z)
+init ~decided(X)
+init ~val(X, Y)
+
+action prop = {
+    local n:node, v:value {
+        # chose a node without a value and propose an arbitraty value to everyone (including self)
+        assume ~val(n, V);
+        propose(n, v, X) := true
+    }
+}
+
+action receive_prop = {
+    local n1:node, n2:node, v1:value, v2:value {
+        # process a propose message and reply an acknowledge message
+        assume propose(n1, v1, n2);
+        if ~val(n2, V:value) & ~decided(n2) {
+            # if we have no value and are undecided - take the proposed value
+
+            # actually, we would like to remove the undecided part
+            # from the if, but this would require an AE invariant!
+
+            val(n2, v1) := true
+        };
+        # acknowledge back with n2's current value
+        assume val(n2, v2);
+        ack(n2, v2, n1) := true
+    }
+}
+
+action receive_ack = {
+    local n1:node, n2:node, v:value {
+        # process an acknowledge message by updating the knowledge
+        assume ack(n1, v, n2);
+        knowledge(n2, n1, v) := true
+    }
+}
+
+action decide = {
+    local n:node, v:value {
+        # assume that you know all nodes have the same value v, become decided.
+        assume knowledge(n, N, v);
+        decided(n) := true
+    }
+}
+
+export prop
+export receive_prop
+export receive_ack
+export decide
+
+# the safety property
+conjecture (decided(N1) & decided(N2) & val(N1, V1) & val(N2, V2)) -> V1 = V2
+
+# found interactiveley on first attempt
+# conjecture ~(knowledge(N1, N1, V0) & val(N1, V1) & V0 ~= V1)
+# conjecture ~(decided(N0) & val(N0, V1) & val(N1, V0) & V0 ~= V1)
+# conjecture ~(ack(N0, V1, N1) & val(N0, V0) & V1 ~= V0)
+# conjecture ~(ack(N0, V0, N0) & ~val(N0, V0))
+# conjecture ~(decided(N0) & val(N0, V1) & ~val(N1, V1))
+# conjecture ~(knowledge(N0, N1, V0) & ~ack(N1, V0, N0))
+# conjecture ~(ack(N0, V0, N1) & ~val(N0, V0))
+
+# found interactively later (with knowledge of the previous invariant)
+# ~(knowledge(N0,N1,V0) & ~ack(N1,V0,N0))
+# ~(ack(N0,V1,N0) & ~val(N0,V1))  # subsumed by the next one
+# ~(ack(N1,V1,N0) & ~val(N1,V1))
