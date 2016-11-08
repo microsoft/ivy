@@ -170,7 +170,7 @@ object pro = {
 	assume s1.map(x, y);
 	assume a(y);
 	assume p.map(y, z);
-	assume a(z);
+#	assume a(z);
 	assume ring.btw(x, z, y);
 	call s1.remap(x,z);
 	call s2.remap(x,y)
@@ -230,7 +230,7 @@ object pro = {
     conjecture (a(X) | ~s2.map(X, Y))
     conjecture (a(Y) | a(Z) | ~s1.map(X, Y) | ~s2.map(X, Z))
     conjecture (a(Y) | s2.pre(X) | ~a(X) | ~s1.map(X, Y))
-    conjecture (a(Y) | ~a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
+#    conjecture (a(Y) | ~a(X) | ~p.map(Y, X) | ~s1.map(X, Y))
     conjecture (s1.pre(X) | ~a(X))
     conjecture (~ring.btw(X, org, Y) | ~s1.map(X, Y))
     conjecture ~(s1.map(V0, V1) & V1 ~= org & s2.map(V0, V2) & ring.btw(V0, org, V2))

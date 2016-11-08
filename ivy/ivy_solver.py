@@ -279,6 +279,9 @@ def term_to_z3(term):
     elif isinstance(term,ivy_logic.Ite):
         return z3.If(formula_to_z3_int(term.args[0]),term_to_z3(term.args[1]),term_to_z3(term.args[2]))
     else:
+        if not hasattr(term,'rep'):
+            print term
+            print term.lineno
         fun = z3_functions.get(term.rep)
         if fun is None:
             fun = lookup_native(term.rep,functions,"function")

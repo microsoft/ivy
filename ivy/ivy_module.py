@@ -57,6 +57,7 @@ class Module(object):
         self.privates = set() # set of string (names of private actions)
         self.interps = defaultdict(list) # maps type names to lists of labeled interpretions
         self.natives = [] # list of NativeDef
+        self.native_definitions = [] # list of definitions whose rhs is NativeExpr
         self.initializers = [] # list of name,action pairs
         self.params = []
         self.ghost_sorts = set() # set of sort names

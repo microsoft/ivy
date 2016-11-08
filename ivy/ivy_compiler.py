@@ -457,6 +457,10 @@ class IvyDomainSetup(IvyDeclInterp):
             raise IvyError(v,"A destructor must have at least one parameter")
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
+    def add_definition(self,ldf):
+        defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.definitions
+        defs.append(ldf)
+
     def derived(self,ldf):
         try:
             label = ldf.label
@@ -468,7 +472,7 @@ class IvyDomainSetup(IvyDeclInterp):
             add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
             self.domain.all_relations.append((sym,len(lhs.args)))
             self.domain.relations[sym] = len(lhs.args)
-            self.domain.definitions.append(ldf.clone([label,df]))
+            self.add_definition(ldf.clone([label,df]))
             self.domain.updates.append(DerivedUpdate(df))
             self.domain.symbol_order.append(sym)
         except ValueError:
@@ -477,7 +481,7 @@ class IvyDomainSetup(IvyDeclInterp):
         label = ldf.label
         df = ldf.formula
         df = compile_defn(df)
-        self.domain.definitions.append(ldf.clone([label,df]))
+        self.add_definition(ldf.clone([label,df]))
         self.domain.updates.append(DerivedUpdate(df))
         self.domain.symbol_order.append(df.args[0].rep)
     def progress(self,df):

@@ -44,7 +44,7 @@ module unbounded_sequence = {
 
     object impl = {
 
-	interpret index.t -> int
+	interpret t -> int
 
 	definition succ(X,Y) = (Y = X + 1)
 

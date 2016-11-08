@@ -253,7 +253,7 @@ def ctype_function(sort,classname=None,skip_params=0):
     cty = ctypefull(sort.rng,classname)
     if all(cards) and reduce(mul,cards,1) <= 16:
         return (cty,cards)
-    cty = 'hash_thunk<'+ctuple(sort.dom)+','+cty+'>'
+    cty = 'hash_thunk<'+ctuple(sort.dom,classname=classname)+','+cty+'>'
     return (cty,[])
     
 native_expr_full = native_type_full
@@ -409,6 +409,9 @@ def emit_eval(header,symbol,obj=None,classname=None):
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
 
+def var_to_z3_val(v):
+    return 'int_to_z3(sort("'+v.sort.name+'"),'+varname(v)+')'
+
 def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     global indent_level
     name = symbol.name
@@ -418,7 +421,7 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     domain = sort.dom[1:]
     vs = variables(domain,start=nvars)
     open_loop(header,vs)
-    lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(varname,vs))) + ')'
+    lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(var_to_z3_val,vs))) + ')'
     rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + varname(symbol)
     if sort.rng.name in im.module.sort_destructors:
         destrs = im.module.sort_destructors[sort.name]
@@ -437,11 +440,12 @@ def emit_set(header,symbol):
     sort = symbol.sort
     domain = sort_domain(sort)
     if sort.rng.name in im.module.sort_destructors:
-        destrs = im.module.sort_destructors[sort.name]
+        iu.dbg('sort')
+        destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             vs = variables(domain)
             open_loop(header,vs)
-            lhs = 'apply("'+symbol.name+'"'+''.join(','+s for s in map(varname,vs)) + ')'
+            lhs = 'apply("'+symbol.name+'"'+''.join(','+s for s in map(var_to_z3_val,vs)) + ')'
             rhs = 'obj.' + varname(symbol) + ''.join('[{}]'.format(varname(v)) for v in vs)
             emit_set_field(header,destr,lhs,rhs,len(vs))
             close_loop(header,vs)
@@ -491,8 +495,8 @@ def emit_clear_progress(impl,obj=None):
         close_loop(impl,vs)
 
 def mk_rand(sort):
-    card = csortcard(sort)
-    return '(rand() % {})'.format(card) if card else 0
+    card = sort_card(sort)
+    return '(rand() % {})'.format(card) if card else "0"
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -509,10 +513,14 @@ public:
     indent(impl)
     impl.append('add("(assert (and\\\n')
     constraints = [im.module.init_cond.to_formula()]
+    iu.dbg('constraints[0]')
     for a in im.module.axioms:
+        iu.dbg('a')
         constraints.append(a)
+    iu.dbg('constraints')
     for ldf in im.module.definitions:
         constraints.append(ldf.formula.to_constraint())
+    iu.dbg('constraints')
     for c in constraints:
         fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
         indent(impl)
@@ -810,12 +818,13 @@ def check_iterable_sort(sort):
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
 
-def open_loop(impl,vs,declare=True):
+def open_loop(impl,vs,declare=True,bounds=None):
     global indent_level
-    for idx in vs:
+    for num,idx in enumerate(vs):
         check_iterable_sort(idx.sort)
         indent(impl)
-        impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+        bds = bounds[num] if bounds else ["0",str(sort_card(idx.sort))]
+        impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = ' + bds[0] + '; ' + idx.name + ' < ' + bds[1] + '; ' + idx.name + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
@@ -976,7 +985,7 @@ def module_to_cpp_class(classname,basename):
     check_member_names(classname)
     global is_derived
     is_derived = set()
-    for ldf in im.module.definitions:
+    for ldf in im.module.definitions + im.module.native_definitions:
         is_derived.add(ldf.formula.defines())
 
     # remove the actions not reachable from exported
@@ -1248,7 +1257,7 @@ class z3_thunk : public thunk<D,R> {
         declare_symbol(header,sym)
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
-    for ldf in im.module.definitions:
+    for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
             emit_derived(header,impl,ldf.formula,classname)
 
@@ -1771,7 +1780,7 @@ def get_bound_exprs(v0,variables,body,exists,res):
 def sort_has_negative_values(sort):
     return sort.name in il.sig.interp and il.sig.interp[sort.name] == 'int'
 
-def get_bounds(header,v0,variables,body,exists):
+def get_bounds(header,v0,variables,body,exists,varname=None):
     bes = []
     get_bound_exprs(v0,variables,body,exists,bes)
     los = []
@@ -1794,11 +1803,23 @@ def get_bounds(header,v0,variables,body,exists):
         los.append("0")
     if sort_card(v0.sort) != None:
         his.append(csortcard(v0.sort))
+    varname = varname if varname != None else v0
     if not los:
-        raise iu.IvyError(None,'cannot find a lower bound for {}'.format(v0))
+        raise iu.IvyError(None,'cannot find a lower bound for {}'.format(varname))
     if not his:
-        raise iu.IvyError(None,'cannot find an upper bound for {}'.format(v0))
+        raise iu.IvyError(None,'cannot find an upper bound for {}'.format(varname))
     return los[0],his[0]
+
+def get_all_bounds(header,variables,body,exists,varnames):
+    if not variables:
+        return []
+    v0 = variables[0]
+    variables = variables[1:]
+    varname = varnames[0]
+    varnames = varnames[1:]
+    b = get_bounds(header,v0,variables,body,exists,varname=varname)
+    return [b] + get_all_bounds(header,variables,body,exists,varnames)
+
 
 def emit_quant(variables,body,header,code,exists=False):
     global indent_level
@@ -1862,7 +1883,7 @@ def emit_some(self,header,code):
     code_asgn(header,some,'0')
     if isinstance(self,ivy_ast.SomeMinMax):
         minmax = new_temp(header)
-    open_loop(header,vs)
+    open_loop(header,vs,bounds=get_all_bounds(header,vs,fmla,True,self.params()))
     open_if(header,code_eval(header,fmla))
     if isinstance(self,ivy_ast.SomeMinMax):
         index = new_temp(header)
