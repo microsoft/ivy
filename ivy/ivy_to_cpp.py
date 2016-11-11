@@ -344,6 +344,10 @@ def emit_sorts(header):
                 indent(header)
                 header.append('mk_bv("{}",{});\n'.format(name,width))
                 continue
+            if sortname == 'int':
+                indent(header)
+                header.append('mk_int("{}");\n'.format(name))
+                continue
             header.append('mk_sort("{}");\n'.format(name))
             continue
 #            raise iu.IvyError(None,'sort {} has no finite interpretation'.format(name))
@@ -385,6 +389,11 @@ def sort_domain(sort):
         return sort.domain
     return []
 
+def int_to_z3(sort,val):
+    if il.is_uninterpreted_sort(sort):
+        raise iu.IvyError(None,"cannot produce test generator because sort {} is uninterpreted".format(sort))
+    return 'int_to_z3(sort("'+sort.name+'"),'+val+')'
+
 def emit_eval(header,symbol,obj=None,classname=None): 
     global indent_level
     name = symbol.name
@@ -399,7 +408,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
         indent_level += 1
     indent(header)
     if sort.rng.name in im.module.sort_destructors:
-        code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(',int_to_z3(sort("'+s.name+'"),X{}'.format(idx)+')' for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
+        code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
     else:
         header.append((obj + '.' if obj else '')
                       + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
@@ -410,7 +419,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
         indent_level -= 1    
 
 def var_to_z3_val(v):
-    return 'int_to_z3(sort("'+v.sort.name+'"),'+varname(v)+')'
+    return int_to_z3(v.sort,varname(v))
 
 def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     global indent_level
@@ -422,13 +431,13 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     vs = variables(domain,start=nvars)
     open_loop(header,vs)
     lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(var_to_z3_val,vs))) + ')'
-    rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + varname(symbol)
+    rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + memname(symbol)
     if sort.rng.name in im.module.sort_destructors:
         destrs = im.module.sort_destructors[sort.name]
         for destr in destrs:
             emit_set_field(header,destr,lhs1,rhs1,nvars+len(vs))
     else:
-        code_line(header,'slvr.add('+lhs1+'==int_to_z3(enum_sorts.find("'+sort.rng.name+'")->second,'+rhs1+'))')
+        code_line(header,'slvr.add('+lhs1+'=='+int_to_z3(sort.rng,rhs1)+')')
     close_loop(header,vs)
 
 
@@ -440,7 +449,6 @@ def emit_set(header,symbol):
     sort = symbol.sort
     domain = sort_domain(sort)
     if sort.rng.name in im.module.sort_destructors:
-        iu.dbg('sort')
         destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             vs = variables(domain)
@@ -461,10 +469,14 @@ def emit_set(header,symbol):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     indent(header)
-    header.append('set("{}"'.format(sname)
-                  + ''.join(",X{}".format(idx) for idx in range(len(domain)))
-                  + ",obj.{}".format(cname)+ ''.join("[X{}]".format(idx) for idx in range(len(domain)))
-                  + ");\n")
+    header.append('slvr.add(__to_solver(*this,apply("{}"'.format(sname)
+                  + ''.join(','+int_to_z3(domain[idx],'X{}'.format(idx)) for idx in range(len(domain)))
+                  + '),obj.{}'.format(cname)+ ''.join("[X{}]".format(idx) for idx in range(len(domain)))
+                  + '));\n')
+    # header.append('set("{}"'.format(sname)
+    #               + ''.join(",X{}".format(idx) for idx in range(len(domain)))
+    #               + ",obj.{}".format(cname)+ ''.join("[X{}]".format(idx) for idx in range(len(domain)))
+    #               + ");\n")
     for idx,dsort in enumerate(domain):
         indent_level -= 1    
 
@@ -513,14 +525,10 @@ public:
     indent(impl)
     impl.append('add("(assert (and\\\n')
     constraints = [im.module.init_cond.to_formula()]
-    iu.dbg('constraints[0]')
     for a in im.module.axioms:
-        iu.dbg('a')
         constraints.append(a)
-    iu.dbg('constraints')
     for ldf in im.module.definitions:
         constraints.append(ldf.formula.to_constraint())
-    iu.dbg('constraints')
     for c in constraints:
         fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
         indent(impl)
@@ -575,7 +583,7 @@ def emit_randomize(header,symbol,classname=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     if sort.rng.name in im.module.sort_destructors:
-        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(',int_to_z3(sort("'+s.name+'"),X{}'.format(idx)+')' for idx,s in enumerate(domain))+'))')
+        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s.name,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
     else:
         indent(header)
         header.append('randomize("{}"'.format(sname)
@@ -660,7 +668,7 @@ def emit_action_gen(header,impl,name,action,classname):
     if len(action.formal_returns) == 0:
         code_line(impl,call)
     else:
-        code_line(impl,'std::cout << "= " << ' + call)
+        code_line(impl,'std::cout << "= " << ' + call + ' <<  std::endl')
     close_scope(impl)
 
 
@@ -730,13 +738,15 @@ def native_typeof(arg):
         raise iu.IvyError(arg,'undefined action: ' + arg.rep)
     return int + len(arg.sort.dom) * '[]'
 
+def native_z3name(arg):
+    return str(arg.rep)
 
 def native_to_str(native,reference=False):
     tag,code = native_split(native.args[1].code)
     fields = code.split('`')
     f = native_reference if reference else native_declaration
     def nfun(idx):
-        return native_typeof if fields[idx-1].endswith('%') else f
+        return native_typeof if fields[idx-1].endswith('%') else native_z3name if fields[idx-1].endswith('"') else f
     def dm(s):
         return s[:-1] if s.endswith('%') else s
     fields = [(nfun(idx)(native.args[int(s)+2]) if idx % 2 == 1 else dm(s)) for idx,s in enumerate(fields)]
@@ -2734,6 +2744,8 @@ public:
             return ctx.bool_val(value);
         if (range.is_bv())
             return ctx.bv_val(value,range.bv_size());
+        if (range.is_int())
+            return ctx.int_val(value);
         return enum_values.find(range)->second[value]();
     }
 
@@ -2742,6 +2754,8 @@ public:
             return 2;
         if (range.is_bv())
             return 1 << range.bv_size();
+        if (range.is_int())
+            return 1;  // bogus -- we need a good way to randomize ints
         return enum_values.find(range)->second.size();
     }
 
@@ -2864,6 +2878,12 @@ public:
         enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
     }
 
+    void mk_int(const char *sort_name) {
+        z3::sort sort = ctx.int_sort();
+        // can't use operator[] here because the value classes don't have nullary constructors
+        enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
+    }
+
     void mk_sort(const char *sort_name) {
         Z3_symbol symb = Z3_mk_string_symbol(ctx,sort_name);
         z3::sort sort(ctx,Z3_mk_uninterpreted_sort(ctx, symb));
@@ -2931,7 +2951,6 @@ public:
 target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
-
 
 def main():
     ia.set_determinize(True)

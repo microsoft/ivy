@@ -194,6 +194,15 @@ module array(domain,range) = {
 	            __ser(res,inp[i]);
                 }
 	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, std::vector<`range`>& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        return z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+            }
+	    #endif
+
 	>>>
     }
 
