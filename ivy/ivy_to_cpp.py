@@ -1686,10 +1686,19 @@ def is_bv_term(self):
             and self.sort.name in il.sig.interp
             and il.sig.interp[self.sort.name].startswith('bv['))
 
-def emit_app(self,header,code):
+def capture_emit(a,header,code,capture_args):
+    if capture_args != None:
+        tmp = []
+        a.emit(header,tmp)
+        code.extend(tmp)
+        capture_args.append(''.join(tmp))
+    else:
+        a.emit(header,code)
+
+def emit_app(self,header,code,capture_args=None):
     # handle macros
     if il.is_macro(self):
-        return il.expand_macro(self).emit(header,code)
+        return il.expand_macro(self).emit(header,code,capture_args)
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
         if self.func.name in il.sig.interp:
@@ -1731,13 +1740,13 @@ def emit_app(self,header,code):
         for a in self.args[skip_params:]:
             if not first:
                 code.append(',')
-            a.emit(header,code)
+            capture_emit(a,header,code,capture_args)
             first = False
         code.append(')]')
     else: 
         for a in self.args[skip_params:]:
             code.append('[')
-            a.emit(header,code)
+            capture_emit(a,header,code,capture_args)
             code.append(']')
 
 lg.Apply.emit = emit_app
@@ -1968,12 +1977,47 @@ def emit_ternop(self,header,code):
     
 lg.Ite.emit = emit_ternop
 
+def emit_traced_lhs(self,trace,captured_args):
+    iu.dbg('self')
+    trace.append('<< "{}"'.format(self.rep))
+    if il.is_constant(self):
+        return
+    iu.dbg('"got here"')
+    if self.args:
+        trace.append(' << "("')
+    num_args = len(self.args)
+    if self.func.name in im.module.destructor_sorts:
+        captured_args = emit_traced_lhs(self.args[0],header,captured_args)
+        trace.append(' << ","')
+        num_args -= 1
+    trace.append(' << ","'.join(' << ' + a for a in captured_args[:num_args]))
+    if self.args:
+        trace.append(' << ")"')
+    return captured_args[num_args:]
+
 def emit_assign_simple(self,header):
     code = []
     indent(code)
-    self.args[0].emit(header,code)
-    code.append(' = ')
-    self.args[1].emit(header,code)
+    if opt_trace.get():
+        trace = []
+        indent(trace)
+        trace.append('std::cout << "write: "')
+        cargs = []
+        if il.is_constant(self.args[0]):
+            self.args[0].emit(header,code)
+        else:
+            emit_app(self.args[0],header,code,cargs)
+        emit_traced_lhs(self.args[0],trace,cargs)
+        code.append(' = ')
+        rhs = []
+        self.args[1].emit(header,rhs)
+        code.extend(rhs)
+        trace.extend(' << " := " << ' + ''.join(rhs) + ' << std::endl;\n')
+        header.extend(trace)
+    else:
+        self.args[0].emit(header,code)
+        code.append(' = ')
+        self.args[1].emit(header,code)
     code.append(';\n')    
     header.extend(code)
 
@@ -2951,6 +2995,7 @@ public:
 target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
+opt_trace = iu.BooleanParameter("trace",False)
 
 def main():
     ia.set_determinize(True)
