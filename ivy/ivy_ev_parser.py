@@ -4,6 +4,9 @@
 import itertools
 import ivy_utils as iu
 
+def mymap(fun,obj):
+    return obj.map(fun)
+
 class Events(list):
     def __init__(self,*args):
         list.__init__(self,args)
@@ -29,6 +32,8 @@ class Event(object):
         if self.children:
             res += '{' + str(self.children) + '}'
         return res
+    def map(self,fun):
+        return type(self)(self.rep,[a.map(fun) for a in self.args],self.children)
 
 class InEvent(Event):
     def __str__(self):
@@ -59,7 +64,30 @@ class Symbol(object):
         return []
     def match(self,s):
         return isinstance(s,Symbol) and (s.name == '*' or s.name == self.name)
+    def map(self,fun):
+        iu.dbg('fun')
+        return fun(self.name)
     
+class App(object):
+    def __init__(self,rep,args):
+        self.rep,self.args = rep,args
+    def text(self):
+        res = self.rep
+        if self.args:
+            res += '(' + ','.join(map(str,self.args)) + ')'
+        return res
+    @property
+    def subs(self):
+        return self.args
+    def match(self,ev):
+        return (isinstance(ev,Symbol) and (ev.name == '*')
+                or isinstance(ev,App) and (ev.rep == '*' or ev.rep == self.rep)
+                and all(a.match(b) for a,b in zip(self.args,ev.args)))
+    def map(self,fun):
+        return type(self)(mymap(fun,self.args))
+    def __str__(self):
+        return self.text()
+
 class ListValue(list):
     def __init__(self,*args):
         list.__init__(self,args)
@@ -70,13 +98,14 @@ class ListValue(list):
     @property
     def subs(self):
         res = list(self)
-        print "list: {}".format(res)
         return res
     def match(self,l):
         return (isinstance(l,Symbol) and (l.name == '*')
                 or (isinstance(l,ListValue)
                     and len(l) == len(self)
                     and all(a.match(b) for a,b in zip(self,l))))
+    def map(self,fun):
+        return type(self)(*[mymap(fun,x) for x in self])
 
 
 class DictEntry(object):
@@ -103,6 +132,8 @@ class DictValue(dict):
         return (isinstance(d,Symbol) and (d.name == '*')
                 or (isinstance(d,DictValue)
                     and all(k in self and self[k].match(v) for k,v in d.iteritems())))
+    def map(self,fun):
+        return type(self)(*[(x,mymap(fun,y)) for x,y in self.iteritems()])
 
 class EventGen(object):
     def __call__(self,evs):
@@ -111,10 +142,56 @@ class EventGen(object):
             for ev1 in self(ev.children):
                 yield ev1
 
-def filter(evs,pats):
+class EventRevGen(object):
+    def __init__(self,addr):
+        self.addr = addr
+    def rec(self,things,addr,start=0):
+        if addr != None:
+            cs = addr.split('/',1)
+            num = int(cs[0])-start
+            thing = things[num]
+            if len(cs) == 2:
+                for a,t in self.rec(thing.children,cs[1],start=1):
+                    yield (cs[0]+'/'+a,t)
+                yield cs[0],thing
+        else:
+            num = len(things)
+        for idx in xrange(num-1,-1,-1):
+            thing = things[idx]
+            for a,t in self.rec(thing.children,None,start=1):
+                yield str(idx+start)+'/'+a,t
+            yield str(idx+start),thing
+    def __call__(self,evs):
+        for ev in self.rec(evs,self.addr):
+            yield ev
+
+
+class Anchor(object):
+    def __init__(self,anchor):
+        self.anchor = anchor
+    def __call__(self,s):
+        if s.startswith('$'):
+            num = int(s[1:])-1
+            if num < 0 or num >= len(self.anchor.args):
+                raise iu.IvyError(None,'event has no argument {}'.format(s))
+            return self.anchor.args[num]
+        return Symbol(s)
+
+def filter(evs,pats,anchor=None):
+    if anchor != None:
+        pats = [e.map(Anchor(anchor)) for e in pats]
     for e in evs:
         if any(e.match(pat) for pat in pats):
             yield e
+
+def find(evs,pats,anchor=None):
+    if anchor != None:
+        pats = [e.map(Anchor(anchor)) for e in pats]
+    for a,e in evs:
+        if any(e.match(pat) for pat in pats):
+            return a,e
+    return None
+
 
 import ply.lex as lex
 
@@ -152,7 +229,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-zA-Z0-9]+|\*'
+    r'[_a-zA-Z0-9\.\$]+|\*'
     return t
 
 def t_error(t):
@@ -205,6 +282,10 @@ def p_optsubs_lcb_events_rcb(p):
 def p_value_symbol(p):
     'value : SYMBOL'
     p[0] = Symbol(p[1])
+
+def p_value_symbol_lparen_list_rparen(p):
+    'value : SYMBOL LPAREN list RPAREN'
+    p[0] = App(p[1],p[3])
 
 def p_list_value(p):
     'list : value'
@@ -301,6 +382,8 @@ if __name__ == '__main__':
            break
        if not s: continue
        result = parser.parse(s)
-       print result
+#       print result
+       for a,x in EventRevGen("2/2")(result):
+           print a + ':' + x.text()
 
 

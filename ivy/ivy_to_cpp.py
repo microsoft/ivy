@@ -664,11 +664,20 @@ def emit_action_gen(header,impl,name,action,classname):
         code_line(impl,'std::cout << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     else:
         code_line(impl,'std::cout << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
+    if opt_trace.get():
+        code_line(impl,'std::cout << "{" << std::endl')
     call = 'obj.{}('.format(caname) + ','.join(varname(p) for p in action.formal_params) + ')'
     if len(action.formal_returns) == 0:
         code_line(impl,call)
+        if opt_trace.get():
+            code_line(impl,'std::cout << "}" << std::endl')
     else:
-        code_line(impl,'std::cout << "= " << ' + call + ' <<  std::endl')
+        if opt_trace.get():
+            code_line(impl,ctypefull(action.formal_returns[0].sort,classname=classname)+' __res = '+call)
+            code_line(impl,'std::cout << "}" << std::endl')
+            code_line(impl,'std::cout << "= " << __res <<  std::endl')
+        else:
+            code_line(impl,'std::cout << "= " << ' + call + ' <<  std::endl')
     close_scope(impl)
 
 
@@ -1978,11 +1987,9 @@ def emit_ternop(self,header,code):
 lg.Ite.emit = emit_ternop
 
 def emit_traced_lhs(self,trace,captured_args):
-    iu.dbg('self')
     trace.append('<< "{}"'.format(self.rep))
     if il.is_constant(self):
         return
-    iu.dbg('"got here"')
     if self.args:
         trace.append(' << "("')
     num_args = len(self.args)
@@ -2001,7 +2008,7 @@ def emit_assign_simple(self,header):
     if opt_trace.get():
         trace = []
         indent(trace)
-        trace.append('std::cout << "write: "')
+        trace.append('std::cout << "  write("')
         cargs = []
         if il.is_constant(self.args[0]):
             self.args[0].emit(header,code)
@@ -2012,7 +2019,7 @@ def emit_assign_simple(self,header):
         rhs = []
         self.args[1].emit(header,rhs)
         code.extend(rhs)
-        trace.extend(' << " := " << ' + ''.join(rhs) + ' << std::endl;\n')
+        trace.extend(' << "," << ' + ''.join(rhs) + ' << ")" << std::endl;\n')
         header.extend(trace)
     else:
         self.args[0].emit(header,code)

@@ -16,6 +16,19 @@ class UI(object):
     def ready(self):
         pass
 
+def ask_pat(self,fun,command_label=None):
+    global the_ui
+    uu.entry_dialog(the_ui.tk,self,"Pattern:",command=lambda s: do_ask_pat(fun,s),command_label=command_label)
+
+def do_ask_pat(fun,pattern):
+    global the_ui
+    with uu.RunContext(the_ui):
+        try:
+            pat_evs = ev.parse(pattern)
+        except:
+            raise iu.IvyError(None,'syntax error')
+    fun(pat_evs) 
+
 class EventTree(Tix.Tree,uu.WithMenuBar):
     def __init__(self,root,notebook,evs):
         uu.WithMenuBar.__init__(self,root)
@@ -27,28 +40,40 @@ class EventTree(Tix.Tree,uu.WithMenuBar):
 
     def menus(self):
         return [("menu","Events",
-                 [("button","Filter",self.filter),
+                 [("button","Filter...",self.filter),
+                  ("button","Find reverse...",self.find_reverse),
                  ],
                 ),
                ]
                  
-    def filter(self,pattern=None):
-        global tk
-        global the_thing
-        if pattern == None:
-            uu.entry_dialog(tk,self,"Pattern:",command=self.filter,command_label="Filter")
-        else:
-            global the_ui
-            with uu.RunContext(the_ui):
-                try:
-                    pat_evs = ev.parse(pattern)
-                except:
-                    raise iu.IvyError(None,'syntax error')
-                result = list(ev.filter(ev.EventGen()(self.evs),pat_evs))
-                for r in result:
-                    print r
-                self.notebook.new_sheet(list(result))
+    def filter(self):
+        ask_pat(self,self.do_filter,"Filter")
 
+    def do_filter(self,pat_evs):
+        result = list(ev.filter(ev.EventGen()(self.evs),pat_evs))
+        self.notebook.new_sheet(list(result))
+
+    def find_reverse(self):
+        sel = self.hlist.info_selection()
+        if len(sel):
+            anchor = sel[0]
+            ask_pat(self,lambda pats: self.do_find_reverse(anchor,pats),"Find")
+
+    def do_find_reverse(self,anchor,pats):
+        a,e = ev.find(ev.EventRevGen(anchor)(self.evs),pats,anchor=lookup(self.evs,anchor))
+        print a + ':' + str(e)
+        self.hlist.selection_clear()
+        self.uncover(a)
+        self.hlist.selection_set(a)
+        self.hlist.see(a)
+
+    def uncover(self,addr):
+        if '/' in addr:
+            cs = addr.rsplit('/',1)
+            self.uncover(cs[0])
+            opendir(self,cs[0],self.evs)
+        
+        
 class EventNoteBook(Tix.NoteBook):
     def __init__(self,root):
         Tix.NoteBook.__init__(self,root)
@@ -60,8 +85,9 @@ class EventNoteBook(Tix.NoteBook):
         self.num_sheets += 1
         tree = EventTree(tab,self,evs)
         tree.pack(expand=1, fill=Tix.BOTH, padx=10, pady=10, side=Tix.LEFT)
-        tree.hlist.configure(selectforeground='black')
+        tree.hlist.configure(selectforeground='red')
         tree['opencmd'] = lambda dir=None, w=tree, t=evs: opendir(w, dir, t)
+        tree['browsecmd'] = lambda dir=None, w=tree, t=evs: browsedir(w, dir, t)
         self.raise_page(name)
     def busy(self):
         pass
@@ -75,9 +101,11 @@ def RunSample(w,evs):
     global the_ui
     the_ui = UI(w,top)
     notebook = EventNoteBook(top)
-    notebook.pack(fill=Tix.BOTH,expand=1)
+    notebook.pack(side=Tix.LEFT, fill=Tix.BOTH,expand=1)
     notebook.new_sheet(evs)
-    top.pack(side=Tix.TOP, fill=Tix.BOTH, expand=1)
+    tlist = Tix.TList(top)
+    tlist.pack(expand=1, fill=Tix.BOTH, padx=10, pady=10, side=Tix.LEFT)
+    top.pack(side=Tix.LEFT, fill=Tix.BOTH, expand=1)
     
 
 
@@ -91,11 +119,8 @@ def adddir(tree, dir, thing):
 
 def lookup(things,dir):
     cs = dir.split('/',1)
-    print "cs:{}".format(cs)
     thing = things[int(cs[0])]
     res = thing if len(cs) == 1 else lookup(thing.subs,cs[1])
-    print 'dir: {}'.format(dir)
-    print 'res: {}'.format(res)
     return res
 
 # This function is called whenever the user presses the (+) indicator or
@@ -120,10 +145,11 @@ def opendir(tree, dir, evs):
             tree.hlist.show_entry(entry)
         return
     files = lookup(evs,dir).subs
-    print "files: {}".format(files)
     for idx,file in enumerate(files):
         adddir(tree, dir + '/' + str(idx),file)
 
+def browsedir(tree, dir, evs):
+    pass
 
 if __name__ == '__main__':
     
@@ -144,7 +170,6 @@ if __name__ == '__main__':
         with iu.SourceFile(fn):
             s = f.read()
             evs = ev.parse(s)
-    print evs
     global tk
     tk = Tix.Tk()
     RunSample(tk,evs)
