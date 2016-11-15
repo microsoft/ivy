@@ -1,5 +1,5 @@
 
-import Tix, os
+import Tix, os, tkFileDialog
 import ivy_ev_parser as ev
 import ivy_utils as iu
 import ivy_ui_util as uu
@@ -27,7 +27,7 @@ def do_ask_pat(fun,pattern):
             pat_evs = ev.parse(pattern)
         except:
             raise iu.IvyError(None,'syntax error')
-    fun(pat_evs) 
+        fun(pat_evs) 
 
 class EventTree(Tix.Tree,uu.WithMenuBar):
     def __init__(self,root,notebook,evs):
@@ -54,14 +54,13 @@ class EventTree(Tix.Tree,uu.WithMenuBar):
         self.notebook.new_sheet(list(result))
 
     def find_reverse(self):
-        sel = self.hlist.info_selection()
-        if len(sel):
-            anchor = sel[0]
-            ask_pat(self,lambda pats: self.do_find_reverse(anchor,pats),"Find")
+        ask_pat(self,self.do_find_reverse,"Find")
 
-    def do_find_reverse(self,anchor,pats):
-        a,e = ev.find(ev.EventRevGen(anchor)(self.evs),pats,anchor=lookup(self.evs,anchor))
-        print a + ':' + str(e)
+    def do_find_reverse(self,pats):
+        sel = self.hlist.info_selection()
+        anchor_addr = sel[0] if len(sel) else None
+        anchor_ev = lookup(self.evs,anchor_addr) if anchor_addr else None
+        a,e = ev.find(ev.EventRevGen(anchor_addr)(self.evs),pats,anchor=anchor_ev)
         self.hlist.selection_clear()
         self.uncover(a)
         self.hlist.selection_set(a)
@@ -79,6 +78,7 @@ class EventNoteBook(Tix.NoteBook):
         Tix.NoteBook.__init__(self,root)
         self.num_sheets = 0
         self.root = root
+        self.sheets = {}
     def new_sheet(self,evs):
         name = "sht{}".format(self.num_sheets)
         tab = self.add(name,label="Sheet {}".format(self.num_sheets)) 
@@ -88,13 +88,75 @@ class EventNoteBook(Tix.NoteBook):
         tree.hlist.configure(selectforeground='red')
         tree['opencmd'] = lambda dir=None, w=tree, t=evs: opendir(w, dir, t)
         tree['browsecmd'] = lambda dir=None, w=tree, t=evs: browsedir(w, dir, t)
+        self.sheets[name] = tree
         self.raise_page(name)
     def busy(self):
         pass
     def ready(self):
         pass
+    def current(self):
+        return self.sheets[self.raised()]
+
+class PatternList(Tix.Frame):
+    def __init__(self,root,notebook):
+        Tix.Frame.__init__(self,root)
+        bbox = Tix.Frame(self)
+        bts = [Tix.Button(bbox, text=t, command=c) for t,c in [
+            ("<<",self.reverse),
+            (">>",self.forward),
+            ("+",self.plus),
+            ("-",self.minus),]]
+        bbox.pack(side=Tix.TOP, fill=Tix.X)
+        for bt in bts:
+            bt.pack(side=Tix.LEFT, fill=Tix.X)
+        tlist = Tix.TList(self)
+        tlist.pack(expand=1, fill=Tix.BOTH, pady=10, side=Tix.TOP)
+        bbox = Tix.Frame(self)
+        bts = [Tix.Button(bbox, text=t, command=c) for t,c in [
+            ("Save",self.save),
+            ("Load",self.load),
+            ("Clear",self.clear),]]
+        bbox.pack(side=Tix.TOP, fill=Tix.X)
+        for bt in bts:
+            bt.pack(side=Tix.LEFT, fill=Tix.X)
+        self.tlist = tlist
+        self.patlist = []
+        self.notebook = notebook
         
+    def reverse(self):
+        sel = self.tlist.info_selection()
+        if len(sel):
+            item = int(sel[0])
+            self.notebook.current().do_find_reverse(self.patlist[item])
+    
+    def forward(self):
+        pass
+    
+    def plus(self):
+        ask_pat(self,self.do_plus,command_label="Add")
+
+    def do_plus(self,pats):
+        self.tlist.insert("end",text=str(pats))
+        self.patlist.append(pats)
         
+    def minus(self):
+        pass
+
+    def save(self):
+        f = tkFileDialog.asksaveasfile(mode='w',filetypes=[('event pattern files', '.pats')],title="Save patterns as...",parent=self)
+        if f:
+            for p in self.patlist:
+                f.write('{}\n'.format(p))
+            f.close()
+                
+    def load(self):
+        f = tkFileDialog.askopenfile(mode='r',filetypes=[('event pattern files', '.pats')],title="Load patterns from...",parent=self)
+        if f:
+            for pat in f.readlines():
+                do_ask_pat(self.do_plus,pat)
+                
+    def clear(self):
+        pass
 
 def RunSample(w,evs):
     top = Tix.Frame(w, relief=Tix.RAISED, bd=1)
@@ -103,8 +165,8 @@ def RunSample(w,evs):
     notebook = EventNoteBook(top)
     notebook.pack(side=Tix.LEFT, fill=Tix.BOTH,expand=1)
     notebook.new_sheet(evs)
-    tlist = Tix.TList(top)
-    tlist.pack(expand=1, fill=Tix.BOTH, padx=10, pady=10, side=Tix.LEFT)
+    pats = PatternList(top,notebook)
+    pats.pack(expand=1, fill=Tix.BOTH, padx=10, side=Tix.LEFT)
     top.pack(side=Tix.LEFT, fill=Tix.BOTH, expand=1)
     
 
