@@ -289,10 +289,18 @@ def p_top_object_symbol_eq_lcb_top_rcb(p):
     #     p[0].declare(idecl)
     stack.pop()
 
+def p_optsemi(p):
+    'optsemi : '
+    p[0] = None
+
+def p_optsemi(p):
+    'optsemi : SEMI'
+    p[0] = None
+
 def p_top_macro_atom_eq_lcb_action_rcb(p):
-    'top : top MACRO atom EQ LCB action RCB'
+    'top : top MACRO atom EQ sequence'
     p[0] = p[1]
-    d = Definition(app_to_atom(p[3]),p[6])
+    d = Definition(app_to_atom(p[3]),p[5])
     p[0].declare(MacroDecl(d))
 
 def p_top_schema_defn(p):
@@ -690,38 +698,30 @@ def p_ensures_ensures_fmla(p):
     'ensures : ENSURES fmla'
     p[0] = p[2]
 
-def p_optaction(p):
-    'optaction :'
-    p[0] = Sequence()
-
-def p_optaction_action(p):
-    'optaction : action'
-    p[0] = p[1]
-
-def p_optaction_nativequote(p):
-    'optaction : NATIVEQUOTE'
-    text,bqs = parse_nativequote(p,1)
-    p[0] = NativeAction(*([text] + bqs))
-    p[0].lineno = get_lineno(p,1)
-
 if iu.get_numeric_version() <= [1,1]:
   def p_top_action_symbol_eq_loc_action_loc(p):
-    'top : top ACTION SYMBOL loc EQ LCB optaction RCB loc'
+    'top : top ACTION SYMBOL loc EQ sequence loc'
     p[0] = p[1]
-    if not hasattr(p[7],'lineno'):
-        p[7].lineno = get_lineno(p,6)
-    p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[7])))
+    p[0].declare(ActionDecl(ActionDef(Atom(p[3],[]),p[6])))
 else:
 
   def p_optactiondef(p):
     'optactiondef : '
     p[0] = Sequence()
 
-  def p_optactiondef_eq_LCB_optaction_rcb(p):
-    'optactiondef : EQ LCB optaction RCB'
-    p[0] = p[3]
-    if not hasattr(p[0],'lineno'):
-        p[0].lineno = get_lineno(p,2)
+  def p_topseq_sequence(p):
+    'topseq : sequence'
+    p[0] = p[1]
+
+  def p_topseq_lcb_nativequote_rcb(p):
+    'topseq : LCB NATIVEQUOTE RCB'
+    text,bqs = parse_nativequote(p,2)
+    p[0] = NativeAction(*([text] + bqs))
+    p[0].lineno = get_lineno(p,2)
+
+  def p_optactiondef_eq_topseq(p):
+    'optactiondef : EQ topseq'
+    p[0] = p[2]
 
   def p_optimpex(p):
       'optimpex : '
@@ -794,31 +794,29 @@ if not (iu.get_numeric_version() <= [1,1]):
         p[0] = p[1]
         handle_mixin("after",p[3],p[5],p[0])
     def p_top_before_callatom_lcb_action_rcb(p):
-        'top : top BEFORE atype optargs optreturns LCB action RCB'
+        'top : top BEFORE atype optargs optreturns sequence'
         p[0] = p[1]
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,2)
-        handle_before_after("before",atom,p[7],p[0],p[4],p[5])
+        handle_before_after("before",atom,p[6],p[0],p[4],p[5])
     def p_top_after_callatom_lcb_action_rcb(p):
-        'top : top AFTER atype optargs optreturns LCB action RCB'
+        'top : top AFTER atype optargs optreturns sequence'
         p[0] = p[1]
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
-        handle_before_after("after",atom,p[7],p[0],p[4],p[5])
+        handle_before_after("after",atom,p[6],p[0],p[4],p[5])
     def p_top_after_init_optargs_lcb_action_rcb(p):
-        'top : top AFTER INIT optargs LCB action RCB'
+        'top : top AFTER INIT optargs topseq'
         p[0] = p[1]
         atom = Atom("init")
         atom.lineno = get_lineno(p,3)
-        handle_before_after("after",atom,p[6],p[0],p[4],[])
+        handle_before_after("after",atom,p[5],p[0],p[4],[])
     def p_top_implement_callatom_lcb_action_rcb(p):
-        'top : top IMPLEMENT atype optargs optreturns LCB optaction RCB'
+        'top : top IMPLEMENT atype optargs optreturns topseq'
         p[0] = p[1]
-        if not hasattr(p[7],'lineno'):
-            p[7].lineno = get_lineno(p,6)
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,3)
-        handle_before_after("implement",atom,p[7],p[0],p[4],p[5])
+        handle_before_after("implement",atom,p[6],p[0],p[4],p[5])
     def p_opttrusted(p):
         'opttrusted :'
         p[0] = False
@@ -989,14 +987,36 @@ def p_loc_symbol(p):
     'loc : SYMBOL'
     p[0] = p[1]
 
-def p_action_lcb_rcb(p):
-    'action : LCB RCB'
+def p_actseq_action(p):
+    'actseq : action'
+    p[0] = [p[1]]
+
+def p_actseq_actseq_semi_action(p):
+    'actseq : actseq SEMI action'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_sequence_lcb_rcb(p):
+    'sequence : LCB RCB'
     p[0] = Sequence()
     p[0].lineno = get_lineno(p,1)
 
-def p_action_lcb_action_rcb(p):
-    'action : LCB action RCB'
-    p[0] = p[2]
+def p_sequence_lcb_actseq_rcb(p):
+    'sequence : LCB actseq RCB'
+    if len(p[2]) == 1:
+        p[0] = p[2][0]
+    else:
+        p[0] = Sequence(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
+def p_sequence_lcb_actseq_semi_rcb(p):
+    'sequence : LCB actseq SEMI RCB'
+    p[0] = Sequence(*p[2])
+    p[0].lineno = get_lineno(p,1)
+
+def p_action_sequence(p):
+    'action : sequence'
+    p[0] = p[1]
 
 def p_action_assume(p):
     'action : ASSUME fmla'
@@ -1047,18 +1067,18 @@ def p_action_term_assign_times(p):
 if iu.get_numeric_version() <= [1,4]:
 
     def p_action_if_fmla_lcb_action_rcb(p):
-        'action : IF fmla LCB action RCB'
-        p[0] = IfAction(p[2],p[4])
+        'action : IF fmla sequence'
+        p[0] = IfAction(p[2],p[3])
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
-        'action : IF fmla LCB action RCB ELSE action'
-        p[0] = IfAction(p[2],p[4],p[7])
+        'action : IF fmla sequence ELSE action'
+        p[0] = IfAction(p[2],p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
-        'action : IF TIMES LCB action RCB ELSE action'
-        p[0] = ChoiceAction(p[4],p[7])
+        'action : IF TIMES sequence ELSE action'
+        p[0] = ChoiceAction(p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
 else:
@@ -1109,13 +1129,13 @@ else:
         return part
 
     def p_action_if_somefmla_lcb_action_rcb(p):
-        'action : IF somefmla LCB action RCB'
-        p[0] = IfAction(p[2],fix_if_part(p[2],p[4]))
+        'action : IF somefmla sequence'
+        p[0] = IfAction(p[2],fix_if_part(p[2],p[3]))
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_somefmla_lcb_action_rcb_else_LCB_action_RCB(p):
-        'action : IF somefmla LCB action RCB ELSE action'
-        p[0] = IfAction(p[2],fix_if_part(p[2],p[4]),p[7])
+        'action : IF somefmla sequence ELSE action'
+        p[0] = IfAction(p[2],fix_if_part(p[2],p[3]),p[5])
         p[0].lineno = get_lineno(p,1)
 
     def p_invariants(p):
@@ -1131,8 +1151,8 @@ else:
         p[0].append(a)
 
     def p_action_while_fmla_invariants_lcb_action_rcb(p):
-        'action : WHILE fmla invariants LCB action RCB'
-        p[0] = WhileAction(*([p[2], p[5]] + p[3]))
+        'action : WHILE fmla invariants sequence'
+        p[0] = WhileAction(*([p[2], p[4]] + p[3]))
         p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,2]:
@@ -1206,14 +1226,6 @@ def p_action_call_callatom_assign_callatom(p):
     p[0] = CallAction(p[4],p[2])
     p[0].lineno = get_lineno(p,1)
 
-def p_action_action_semi_action(p):
-    'action : action SEMI action'
-    if isinstance(p[1],Sequence):
-        p[0] = p[1]
-        p[0].args.append(p[3])
-    else:
-        p[0] = Sequence(p[1],p[3])
-        p[0].lineno = p[1].lineno
 
 def p_lparam_variable_colon_symbol(p):
     'lparam : SYMBOL COLON atype'
@@ -1232,11 +1244,11 @@ def p_lparams_lparams_comma_lparam(p):
 
 
 def p_action_local_params_lcb_action_rcb(p):
-    'action : LOCAL lparams LCB action RCB'
+    'action : LOCAL lparams sequence'
     # we rename the locals to avoid name capture
     lsyms = [s.prefix('loc:') for s in p[2]]
     subst = dict((x.rep,y.rep) for x,y in zip(p[2],lsyms))
-    action = subst_prefix_atoms_ast(p[4],subst,None,None)
+    action = subst_prefix_atoms_ast(p[3],subst,None,None)
     p[0] = LocalAction(*(lsyms+[action]))
     p[0].lineno = get_lineno(p,1)
 
@@ -1254,8 +1266,8 @@ def p_eqns_eqns_comma_eqn(p):
     p[0].append(p[3])
 
 def p_action_let_eqns_lcb_action_rcb(p):
-    'action : LET eqns LCB action RCB'
-    p[0] = LetAction(*(p[2]+[p[4]]))
+    'action : LET eqns sequence'
+    p[0] = LetAction(*(p[2]+[p[3]]))
 
 def p_symbols(p):
     'symbols : SYMBOL'

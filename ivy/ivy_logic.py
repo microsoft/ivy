@@ -138,7 +138,7 @@ Symbol.deskolem = lambda self,s: self.drop_prefix('__')
 Symbol.__call__ = lambda self,*args: App(self,*args) if len(args) > 0 or isinstance(self.sort,FunctionSort) else self
 Symbol.is_relation = lambda self: isinstance(self.sort.rng,lg.BooleanSort)
 Symbol.args = property(lambda self : [])
-Symbol.is_numeral  = lambda self : self.name[0].isdigit()
+Symbol.is_numeral  = lambda self : self.name[0].isdigit() or self.name[0] == '"'
 Symbol.clone = lambda self,args : self
 
 BooleanSort = lg.BooleanSort
@@ -301,7 +301,7 @@ def find_symbol(symbol_name):
 def find_polymorphic_symbol(symbol_name):
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
-    if symbol_name[0].isdigit():
+    if symbol_name[0].isdigit() or symbol_name[0] == '"':
         return Symbol(symbol_name,alpha)
     return find_symbol(symbol_name)
 
@@ -996,6 +996,9 @@ def is_uninterpreted_sort(s):
 
 def is_interpreted_sort(s):
     return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
+
+def sort_interp(s):
+    return sig.interp[s.name]
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()

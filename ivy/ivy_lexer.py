@@ -150,7 +150,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*'
+    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*|".*?"'
     t.type = reserved.get(t.value,'SYMBOL')
     return t
 

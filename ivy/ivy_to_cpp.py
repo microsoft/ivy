@@ -231,7 +231,7 @@ def ctype(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
-    return 'bool' if sort.is_relational() else 'int'
+    return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
     
 def ctypefull(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
@@ -239,7 +239,7 @@ def ctypefull(sort,classname=None):
             return native_type_full(im.module.native_types[sort.name])
         if sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
-    return 'bool' if sort.is_relational() else 'int'
+    return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
 
 def native_type_full(self):
     return self.args[0].inst(native_reference,self.args[1:])    
@@ -1024,7 +1024,10 @@ def module_to_cpp_class(classname,basename):
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
 #    header.append('#include <vector>\n')
 
+
     header.append(hash_h)
+
+    header.append("typedef std::string __strlit;\n")
 
     declare_hash_thunk(header)
 
@@ -1119,6 +1122,17 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     return res;
 }
 
+std::ostream &operator <<(std::ostream &s, const __strlit &t){
+    s << "\\"" << t.c_str() << "\\"";
+}
+
+template <>
+__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (args[idx].fields.size())
+        throw out_of_bounds(idx);
+    return args[idx].atom;
+}
+
 template <class T> void __ser(std::vector<char> &res, const T &inp);
 
 template <>
@@ -1130,6 +1144,13 @@ void __ser<int>(std::vector<char> &res, const int &inp) {
 template <>
 void __ser<bool>(std::vector<char> &res, const bool &inp) {
         res.push_back(inp);
+}
+
+template <>
+void __ser<__strlit>(std::vector<char> &res, const __strlit &inp) {
+    __ser(res,(int)inp.size());
+    for (unsigned i = 0; i < inp.size(); i++)
+        res.push_back(inp[i]);
 }
 
 struct deser_err {
@@ -1144,6 +1165,21 @@ void __deser<int>(const std::vector<char> &inp, unsigned &pos, int &res) {
     res = 0;
     for (int i = 0; i < sizeof(int); i++)
         res = (res << 8) | (((int)inp[pos++]) & 0xff);
+}
+
+template <>
+void __deser<__strlit>(const std::vector<char> &inp, unsigned &pos, __strlit &res) {
+    int siz;
+    __deser(inp,pos,siz);
+    if (inp.size() < pos + siz)
+        throw deser_err();
+    res = "";
+    for (int i = 0; i < siz; i++){
+        char c = inp[pos++];
+        if (c == 0 || c == '"')
+            throw deser_err();
+        res.push_back(inp[pos++]);
+    }
 }
 
 template <>
@@ -2396,6 +2432,15 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             if (!(pos < cmd.size() && cmd[pos] == ','))
                 throw syntax_error();
         }
+        pos++;
+    }
+    else if (pos < cmd.size() && cmd[pos] == '"') {
+        pos++;
+        res.atom = "";
+        while (pos < cmd.size() && cmd[pos] != '"')
+            res.atom.push_back(cmd[pos++]);
+        if(pos == cmd.size())
+            throw syntax_error();
         pos++;
     }
     else 

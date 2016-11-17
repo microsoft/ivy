@@ -239,7 +239,7 @@ class App(Term):
     def __eq__(self,other):
         return type(self) == type(other) and self.rep == other.rep and self.args == other.args
     def is_numeral(self):
-        return self.rep.rep[0].isdigit()
+        return self.rep.rep[0].isdigit() or self.rep.rep[0] == '"'
     def prefix(self,s):
         res = App(s + self.rep)
         if hasattr(self,'sort'):

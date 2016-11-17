@@ -59,6 +59,8 @@ def sorts(name):
         return z3.BitVecSort(width)
     if name == 'int':
         return z3.IntSort()
+    if name == 'strlit':
+        return z3.StringSort()
     return None
         
 #sorts = {}
@@ -74,7 +76,7 @@ def parse_int_params(name):
     
 
 def is_solver_sort(name):
-    return name.startswith('bv[') and name.endswith(']') or name == 'int'
+    return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'strlit'
 
 relations_dict = {'<':(lambda x,y: z3.ULT(x, y) if z3.is_bv(x) else x < y),
              '<=':(lambda x,y: z3.ULE(x, y) if z3.is_bv(x) else x <= y),
@@ -229,7 +231,10 @@ def numeral_to_z3(num):
     if z3sort == None:
         return z3.Const(num.name,num.sort.to_z3()) # uninterpreted sort
     try:
-        return z3sort.cast(str(int(num.name,0))) # allow 0x,0b, etc
+        name = num.name[1:-1] if num.name.startswith('"') else num.name
+        if isinstance(z3sort,z3.SeqSortRef) and z3sort.is_string():
+            return z3.StringVal(name)
+        return z3sort.cast(str(int(name,0))) # allow 0x,0b, etc
     except:
         raise iu.IvyError(None,'Cannot cast "{}" to native sort {}'.format(num,z3sort))
 
@@ -514,7 +519,7 @@ def collect_numerals(z3term):
 
 def from_z3_numeral(z3term,sort):
     name = str(z3term)
-    assert name[0].isdigit()
+    assert name[0].isdigit() or name[0] == '"'
     return ivy_logic.Symbol(name,sort)
 
 def collect_model_values(sort,model,sym):
