@@ -108,7 +108,8 @@ def mk_nondet(code,v,rng,name,unique_id):
     code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def is_native_sym(sym):
-    return il.is_uninterpreted_sort(sym.sort) and sym.sort.name in im.module.native_types    
+    iu.dbg('sym')
+    return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    
 
 def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
@@ -1743,7 +1744,7 @@ def capture_emit(a,header,code,capture_args):
 def emit_app(self,header,code,capture_args=None):
     # handle macros
     if il.is_macro(self):
-        return il.expand_macro(self).emit(header,code,capture_args)
+        return il.expand_macro(self).emit(header,code)
     # handle interpreted ops
     if slv.solver_name(self.func) == None:
         if self.func.name in il.sig.interp:

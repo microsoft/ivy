@@ -998,7 +998,7 @@ def is_interpreted_sort(s):
     return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
 
 def sort_interp(s):
-    return sig.interp[s.name]
+    return sig.interp.get(s.name,None)
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()

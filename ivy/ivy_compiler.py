@@ -341,13 +341,15 @@ def compile_native_arg(arg):
     return arg.clone(map(sortify_with_inference,arg.args)) # handles action names
 
 def compile_native_action(self):
-    args = [self.args[0]] + [compile_native_arg(a) for a in self.args[1:]]
+    fields = self.args[0].code.split('`')
+    args = [self.args[0]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else a for i,a in enumerate(self.args[1:])]
     return self.clone(args)
 
 NativeAction.cmpl = compile_native_action
 
 def compile_native_def(self):
-    args = list(self.args[0:2]) + [compile_native_arg(a) for a in self.args[2:]]
+    fields = self.args[1].code.split('`')
+    args = list(self.args[0:2]) + [compile_native_arg(a) if not fields[i*2].endswith('"') else a for i,a in enumerate(self.args[2:])]
     return self.clone(args)
 
 def compile_action_def(a,sig):
