@@ -105,22 +105,30 @@ def varname(name):
 def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
-    code.append(varname(v) + ' = ___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
+    code.append(varname(v) + ' = ('+ctype(v.sort)+')___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def is_native_sym(sym):
-    iu.dbg('sym')
     return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    
 
 def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
-    if is_native_sym(sym):
+    if is_native_sym(sym) or ctype(sym.sort.rng) == '__strlit':
         return  # native classes have their own initializers
     if is_large_type(sym.sort):
         code_line(code,varname(sym) + ' = ' + make_thunk(code,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,name,unique_id)))
         return
-    fun = lambda v: (('___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
-                     if not is_native_sym(v) else None)
-    assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
+    fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
+                     if not (is_native_sym(v) or ctype(v.sort) == '__strlit') else None)
+    dom = sym.sort.dom
+    if dom:
+        vs = variables(dom)
+        open_loop(code,vs)
+        term = sym(*(vs))
+        ctext = varname(sym) + ''.join('['+varname(a)+']' for a in vs)
+        assign_symbol_value(code,[ctext],fun,term,same=True)
+        close_loop(code,vs)
+    else:
+        assign_symbol_value(code,[varname(sym)],fun,sym,same=True)
 
 def field_eq(s,t,field):
     vs = [il.Variable('X{}'.format(idx),sort) for idx,sort in enumerate(field.sort.dom[1:])]
@@ -129,7 +137,9 @@ def field_eq(s,t,field):
     return il.ForAll(vs,il.Equals(field(*([s]+vs)),field(*([t]+vs))))
 
 def memname(sym):
-    return sym.name.split('.')[-1]
+    if not(isinstance(sym,str)):
+        sym = sym.name
+    return sym.split('.')[-1]
 
 
 
@@ -174,7 +184,7 @@ class the_hash_type {
             return the_val;
         }
     };
-""".replace('the_hash_type',ctuple_hash(dom)).replace('the_type',the_type).replace('the_val','+'.join('hash_space::hash<{}>()(__s.arg{})'.format(ctype(s),i,classname=classname) for i,s in enumerate(dom))))
+""".replace('the_hash_type',ctuple_hash(dom)).replace('the_type',the_type).replace('the_val','+'.join('hash_space::hash<{}>()(__s.arg{})'.format(hashtype(s),i,classname=classname) for i,s in enumerate(dom))))
 
                   
 def declare_hash_thunk(header):
@@ -228,9 +238,16 @@ def declare_all_ctuples_hash(header,classname):
     for dom in all_ctuples():
         declare_ctuple_hash(header,dom,classname)
 
+def hashtype(sort,classname=None):
+    if isinstance(sort,il.EnumeratedSort):
+        return 'int'
+    return ctype(sort,classname)
+    
 def ctype(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
+            return ((classname+'::') if classname != None else '') + varname(sort.name)
+    if isinstance(sort,il.EnumeratedSort):
             return ((classname+'::') if classname != None else '') + varname(sort.name)
     return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
     
@@ -239,6 +256,8 @@ def ctypefull(sort,classname=None):
         if sort.name in im.module.native_types:
             return native_type_full(im.module.native_types[sort.name])
         if sort.name in im.module.sort_destructors:
+            return ((classname+'::') if classname != None else '') + varname(sort.name)
+    if isinstance(sort,il.EnumeratedSort):
             return ((classname+'::') if classname != None else '') + varname(sort.name)
     return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
 
@@ -305,7 +324,7 @@ def make_thunk(impl,vs,expr):
     return 'hash_thunk<{},{}>(new {}({}))'.format(D,R,name,','.join(envnames))
 
 def struct_hash_fun(field_names,field_sorts):
-    return '+'.join('hash_space::hash<{}>()({})'.format(ctype(s),varname(f)) for s,f in zip(field_sorts,field_names))
+    return '+'.join('hash_space::hash<{}>()({})'.format(hashtype(s),varname(f)) for s,f in zip(field_sorts,field_names))
 
 def emit_struct_hash(header,the_type,field_names,field_sorts):
     header.append("""
@@ -329,7 +348,10 @@ def emit_cpp_sorts(header):
                 declare_symbol(header,destr,skip_params=1)
             header.append("        size_t __hash() const { return "+struct_hash_fun(map(memname,destrs),[d.sort.rng for d in destrs]) + ";}\n")
             header.append("    };\n");
-            
+        elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
+            sort = il.sig.sorts[name]
+            header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
@@ -1088,6 +1110,8 @@ def module_to_cpp_class(classname,basename):
         sf = header if target.get() == "gen" else impl
         emit_boilerplate1(sf,impl,classname)
 
+    impl.append(hash_cpp)
+
     impl.append("""
 class reader {
 public:
@@ -1109,8 +1133,13 @@ struct ivy_value {
     }
 };
 struct out_of_bounds {
-    int idx;
-    out_of_bounds(int _idx) : idx(_idx) {}
+    std::string txt;
+    out_of_bounds(int _idx) {
+        std::ostringstream os;
+        os << "argument " << _idx+1;
+        txt = os.str();
+    }
+    out_of_bounds(const std::string &s) : txt(s) {}
 };
 
 template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
@@ -1246,6 +1275,17 @@ class z3_thunk : public thunk<D,R> {
 
 """)
 
+    for sort_name in [s for s in sorted(il.sig.sorts) if isinstance(il.sig.sorts[s],il.EnumeratedSort)]:
+        csname = varname(sort_name)
+        cfsname = classname + '::' + csname
+        impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
+        impl.append('template <>\n')
+        impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+        impl.append('template <>\n')
+        impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
+        impl.append('template <>\n')
+        impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
+        
     if True or target.get() == "repl":
         for sort_name in sorted(im.module.sort_destructors):
             csname = varname(sort_name)
@@ -1256,7 +1296,7 @@ class z3_thunk : public thunk<D,R> {
             impl.append('template <>\n')
             impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
             impl.append('template <>\n')
-            impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')
+            impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
 
     if target.get() in ["test","gen"]:
         for sort_name in sorted(im.module.sort_destructors):
@@ -1309,8 +1349,8 @@ class z3_thunk : public thunk<D,R> {
     for sym in all_state_symbols():
         if sym_is_member(sym):
             declare_symbol(header,sym)
-    for sym in il.sig.constructors:
-        declare_symbol(header,sym)
+#    for sym in il.sig.constructors:
+#        declare_symbol(header,sym)
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
     for ldf in im.module.definitions + im.module.native_definitions:
@@ -1342,9 +1382,9 @@ class z3_thunk : public thunk<D,R> {
     emit_param_decls(impl,classname,im.module.params)
     impl.append('{\n')
     enums = set(sym.sort.name for sym in il.sig.constructors)  
-    for sortname in enums:
-        for i,n in enumerate(il.sig.sorts[sortname].extension):
-            impl.append('    {} = {};\n'.format(varname(n),i))
+#    for sortname in enums:
+#        for i,n in enumerate(il.sig.sorts[sortname].extension):
+#            impl.append('    {} = {};\n'.format(varname(n),i))
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),csortcard(il.sig.sorts[sortname])))
@@ -1373,6 +1413,7 @@ class z3_thunk : public thunk<D,R> {
             if name in im.module.public_actions:
                 emit_action_gen(sf,impl,name,action,classname)
 
+    enum_sort_names = [s for s in sorted(il.sig.sorts) if isinstance(il.sig.sorts[s],il.EnumeratedSort)]
     if True or target.get() == "repl":
 
         for sort_name in sorted(im.module.sort_destructors):
@@ -1418,6 +1459,20 @@ class z3_thunk : public thunk<D,R> {
                     close_loop(impl,[v])
             close_scope(impl)
 
+ 
+        for sort_name in enum_sort_names:
+            sort = im.module.sig.sorts[sort_name]
+            csname = varname(sort_name)
+            cfsname = classname + '::' + csname
+            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
+            for idx,sym in enumerate(sort.extension):
+                code_line(impl,'if (t == {}) s<<"{}"'.format(classname + '::' + varname(sym),memname(sym)))
+            close_scope(impl)
+            impl.append('template <>\n')
+            open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
+            code_line(impl,'__ser(res,(int)t)')
+            close_scope(impl)
+
 
         if target.get() in ["repl","test"]:
             emit_repl_imports(header,impl,classname)
@@ -1438,7 +1493,7 @@ class z3_thunk : public thunk<D,R> {
                     open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
                     code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
                     fname = memname(sym)
-                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds(idx)'.format(idx,fname))
+                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds("unexpected field: " + arg.fields[{}].atom)'.format(idx,fname,idx))
                     close_scope(impl)
                     open_scope(impl,line='else')
                     code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
@@ -1451,8 +1506,13 @@ class z3_thunk : public thunk<D,R> {
                         open_loop(impl,[v])
                         code_line(impl,'std::vector<ivy_value> tmp_args(1)')
                         code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
+                    open_scope(impl,line='try')
                     code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
                               +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+                    close_scope(impl)
+                    open_scope(impl,line='catch(const out_of_bounds &err)')
+                    code_line(impl,'throw out_of_bounds("in field {}: " + err.txt)'.format(fname))
+                    close_scope(impl)
                     for v in vs:
                         close_loop(impl,[v])
                         close_scope(impl)
@@ -1506,6 +1566,28 @@ class z3_thunk : public thunk<D,R> {
                         for v in vs:
                             close_loop(impl,[v])
                     close_scope(impl)
+
+
+            for sort_name in enum_sort_names:
+                sort = im.module.sig.sorts[sort_name]
+                csname = varname(sort_name)
+                cfsname = classname + '::' + csname
+                impl.append('template <>\n')
+                open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                code_line(impl,'ivy_value &arg = args[idx]')
+                code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx)')
+                for idx,sym in enumerate(sort.extension):
+                    code_line(impl,'if(arg.atom == "{}") return {}'.format(memname(sym),classname + '::' + varname(sym)))
+                code_line(impl,'throw out_of_bounds("bad value: " + arg.atom)')
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
+                code_line(impl,'int __res')
+                code_line(impl,'__deser(inp,pos,__res)')
+                code_line(impl,'res = ({})__res'.format(cfsname))
+                close_scope(impl)
+
+
 
             emit_all_ctuples_to_solver(impl,classname)
 
@@ -2548,7 +2630,7 @@ def emit_repl_boilerplate2(header,impl,classname):
             std::cout << "syntax error" << std::endl;
         }
         catch (out_of_bounds &err) {
-            std::cout << "argument " << err.idx + 1 << " out of bounds" << std::endl;
+            std::cout << err.txt << " out of bounds" << std::endl;
         }
         catch (bad_arity &err) {
             std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
@@ -3043,7 +3125,6 @@ public:
     }
 };
 """.replace('classname',classname))
-    impl.append(hash_cpp)
 
 target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
