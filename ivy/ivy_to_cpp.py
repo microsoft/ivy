@@ -291,7 +291,7 @@ def make_thunk(impl,vs,expr):
     global the_classname
     dom = [v.sort for v in vs]
     D = ctuple(dom,classname=the_classname)
-    R = ctypefull(expr.sort)
+    R = ctypefull(expr.sort,classname=the_classname)
     global thunk_counter
     name = '__thunk__{}'.format(thunk_counter)
     thunk_counter += 1
@@ -299,9 +299,9 @@ def make_thunk(impl,vs,expr):
     open_scope(impl,line='struct {} : {}<{},{}>'.format(name,thunk_class,D,R))
     env = list(ilu.used_symbols_ast(expr))
     for sym in env:
-        declare_symbol(impl,sym)
+        declare_symbol(impl,sym,classname=the_classname)
     envnames = [varname(sym) for sym in env]
-    open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym) for sym in env)
+    open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
                                              ,','.join('{}({})'.format(n,n) for n in envnames))),
     close_scope(impl)
@@ -529,9 +529,9 @@ def emit_clear_progress(impl,obj=None):
         impl.extend(code)
         close_loop(impl,vs)
 
-def mk_rand(sort):
+def mk_rand(sort,classname=None):
     card = sort_card(sort)
-    return '(rand() % {})'.format(card) if card else "0"
+    return '('+ctype(sort,classname=classname)+')' + ('(rand() % {})'.format(card) if card else "0")
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -571,7 +571,7 @@ public:
                     emit_randomize(impl,sym,classname=classname)
                 else:
                     if not is_native_sym(sym) and not is_large_type(sym.sort):
-                        fun = lambda v: (mk_rand(v.sort) if not is_native_sym(v) else None)
+                        fun = lambda v: (mk_rand(v.sort,classname=classname) if not is_native_sym(v) else None)
                         assign_array_from_model(impl,sym,'obj.',fun)
     indent_level -= 1
     impl.append("""
@@ -606,7 +606,7 @@ def emit_randomize(header,symbol,classname=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     if sort.rng.name in im.module.sort_destructors:
-        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s.name,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
+        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
     else:
         indent(header)
         header.append('randomize("{}"'.format(sname)
@@ -1285,6 +1285,13 @@ class z3_thunk : public thunk<D,R> {
         impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
         impl.append('template <>\n')
         impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
+        if target.get() in ["test","gen"]:
+            impl.append('template <>\n')
+            impl.append('void __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &res);\n')
+            impl.append('template <>\n')
+            impl.append('z3::expr __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &val);\n')
+            impl.append('template <>\n')
+            impl.append('void __randomize<' + cfsname + '>( gen &g, const  z3::expr &v);\n')
         
     if True or target.get() == "repl":
         for sort_name in sorted(im.module.sort_destructors):
@@ -1467,6 +1474,7 @@ class z3_thunk : public thunk<D,R> {
             open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
             for idx,sym in enumerate(sort.extension):
                 code_line(impl,'if (t == {}) s<<"{}"'.format(classname + '::' + varname(sym),memname(sym)))
+            code_line(impl,'return s')
             close_scope(impl)
             impl.append('template <>\n')
             open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
@@ -1585,6 +1593,21 @@ class z3_thunk : public thunk<D,R> {
                 code_line(impl,'int __res')
                 code_line(impl,'__deser(inp,pos,__res)')
                 code_line(impl,'res = ({})__res'.format(cfsname))
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
+                code_line(impl,'int thing = val')
+                code_line(impl,'return __to_solver<int>(g,v,thing)')
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
+                code_line(impl,'int temp')
+                code_line(impl,'__from_solver<int>(g,v,temp)')
+                code_line(impl,'res = ('+cfsname+')temp')
+                close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
+                code_line(impl,'__randomize<int>(g,v)')
                 close_scope(impl)
 
 
@@ -1846,7 +1869,10 @@ def emit_app(self,header,code,capture_args=None):
     # handle destructors
     skip_params = 0
     if self.func.name in im.module.destructor_sorts:
-        self.args[0].emit(header,code)
+        if capture_args != None and isinstance(self.args[0],lg.Apply):
+            self.args[0].emit(header,code,capture_args)
+        else:
+            self.args[0].emit(header,code)
         code.append('.'+memname(self.func))
         skip_params = 1
     # handle uninterpreted ops
@@ -2113,8 +2139,9 @@ def emit_traced_lhs(self,trace,captured_args):
         trace.append(' << "("')
     num_args = len(self.args)
     if self.func.name in im.module.destructor_sorts:
-        captured_args = emit_traced_lhs(self.args[0],header,captured_args)
-        trace.append(' << ","')
+        captured_args = emit_traced_lhs(self.args[0],trace,captured_args)
+        if num_args > 1:
+            trace.append(' << ","')
         num_args -= 1
     trace.append(' << ","'.join(' << ' + a for a in captured_args[:num_args]))
     if self.args:
@@ -2124,7 +2151,7 @@ def emit_traced_lhs(self,trace,captured_args):
 def emit_assign_simple(self,header):
     code = []
     indent(code)
-    if opt_trace.get():
+    if opt_trace.get() and ':' not in self.args[0].rep.name:
         trace = []
         indent(trace)
         trace.append('std::cout << "  write("')
@@ -2138,7 +2165,7 @@ def emit_assign_simple(self,header):
         rhs = []
         self.args[1].emit(header,rhs)
         code.extend(rhs)
-        trace.extend(' << "," << ' + ''.join(rhs) + ' << ")" << std::endl;\n')
+        trace.extend(' << "," << (' + ''.join(rhs) + ') << ")" << std::endl;\n')
         header.extend(trace)
     else:
         self.args[0].emit(header,code)
