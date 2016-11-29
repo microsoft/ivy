@@ -486,6 +486,9 @@ class IvyDomainSetup(IvyDeclInterp):
         self.add_definition(ldf.clone([label,df]))
         self.domain.updates.append(DerivedUpdate(df))
         self.domain.symbol_order.append(df.args[0].rep)
+        if not self.domain.sig.contains_symbol(df.args[0].rep):
+            add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
+            
     def progress(self,df):
         rel = df.args[0]
         with ASTContext(rel):

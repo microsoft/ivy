@@ -10,7 +10,8 @@ instance shard : table_shard(key,value)
 instance tab : hash_table(key,value,shard)
 
 object impl = {
-    interpret value -> bv[16]
+    interpret value -> bv[4]
+    interpret key.t -> bv[4]
 }
 
 export tab.set
@@ -22,5 +23,6 @@ isolate iso_tab = tab with tab,shard,key
 isolate iso_key = key
 
 
-extract iso_impl = tab,shard,key
+extract iso_impl = tab,shard,key,impl
 
+trusted isolate iso_test = tab with shard,key,impl

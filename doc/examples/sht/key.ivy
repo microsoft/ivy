@@ -5,12 +5,14 @@ include order
 object key = {
     
     type t
-    instance props : totally_ordered_with_zero(t)
     instance iter : order_iterator(this)
 
-    object impl = {
-	interpret t -> bv[16]
+    object spec  = {
+	instantiate totally_ordered_with_zero(t)
     }
-    isolate iso = iter,props with impl
+
+    object impl = {
+    }
+
 }
 

@@ -264,14 +264,16 @@ def ctypefull(sort,classname=None):
 def native_type_full(self):
     return self.args[0].inst(native_reference,self.args[1:])    
 
+large_thresh = 1024
+
 def is_large_type(sort):
     cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
-    return not(all(cards) and reduce(mul,cards,1) <= 16)
+    return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
 
 def ctype_function(sort,classname=None,skip_params=0):
     cards = map(sort_card,sort.dom[skip_params:] if hasattr(sort,'dom') else [])
     cty = ctypefull(sort.rng,classname)
-    if all(cards) and reduce(mul,cards,1) <= 16:
+    if all(cards) and reduce(mul,cards,1) <= large_thresh:
         return (cty,cards)
     cty = 'hash_thunk<'+ctuple(sort.dom,classname=classname)+','+cty+'>'
     return (cty,[])
@@ -510,7 +512,7 @@ def sym_is_member(sym):
 
 def emit_eval_sig(header,obj=None,used=None,classname=None):
     for symbol in all_state_symbols():
-        if slv.solver_name(symbol) != None: # skip interpreted symbols
+        if slv.solver_name(symbol) != None and symbol.name not in im.module.destructor_sorts: # skip interpreted symbols
             global is_derived
             if symbol not in is_derived:
                 if used == None or symbol in used:
@@ -1675,7 +1677,7 @@ def check_representable(sym,ast=None,skip_args=0):
             card = sort_card(domsort)
             if card == None:
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is uninterpreted'.format(sym,domsort))
-            if card > 16:
+            if card > large_thresh:
                 raise iu.IvyError(ast,'cannot compile "{}" because type {} is large'.format(sym,domsort))
 
 def cstr(term):
@@ -1932,7 +1934,14 @@ def new_temp(header,sort=None):
     return name
 
 
+def find_definition(sym):
+    for ldf in im.module.definitions:
+        if ldf.formula.defines() == sym:
+            return ldf
+    return None
+
 def get_bound_exprs(v0,variables,body,exists,res):
+    global is_derived
     if isinstance(body,il.Not):
         return get_bound_exprs(v0,variables,body.args[0],not exists,res)
     if il.is_app(body) and body.rep.name in ['<','<=','>','>=']:
@@ -1949,6 +1958,15 @@ def get_bound_exprs(v0,variables,body,exists,res):
         for arg in body.args:
             get_bound_exprs(v0,variables,arg,exists,res)
         return
+    if il.is_app(body) and body.rep in is_derived and v0 in body.args:
+        iu.dbg('body')
+        ldf = find_definition(body.rep)
+        if all(il.is_variable(v) for v in ldf.formula.args[0].args):
+            subst = dict((v.name,a) for v,a in zip(ldf.formula.args[0].args,body.args))
+            iu.dbg('subst')
+            thing = ilu.substitute_ast(ldf.formula.args[1],subst)
+            iu.dbg('thing')
+            get_bound_exprs(v0,variables,thing,exists,res)
     
 def sort_has_negative_values(sort):
     return sort.name in il.sig.interp and il.sig.interp[sort.name] == 'int'
@@ -3096,6 +3114,8 @@ public:
 //        z3::sort sort = ctx.uninterpreted_sort(sort_name);
         // can't use operator[] here because the value classes don't have nullary constructors
         enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
+        sort_names.push_back(symb);
+        sorts.push_back(sort);
     }
 
     void mk_decl(const char *decl_name, unsigned arity, const char **domain_names, const char *range_name) {

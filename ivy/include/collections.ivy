@@ -462,8 +462,10 @@ module map_wrapper(key,value) = {
 
     implement erase(lo:key.iter.t,hi:key.iter.t) {
 	<<<
+
             `s`.erase(`lo`.is_end ? `s`.end() : `s`.lower_bound(`lo`.val),
- 	              `hi`.is_end ? `s`.end() : `s`.upper_bound(`hi`.val));
+ 	              `hi`.is_end ? `s`.end() : `s`.lower_bound(`hi`.val));
+
 	>>>
     }
 
@@ -520,6 +522,16 @@ module map_wrapper(key,value) = {
 	        `res`.val = __it->first;
 	    }
 	>>>
+    }
+
+    action show = {
+	<<<
+            std::cout << "{";
+	    for(std::map<`key.t`,`value`>::iterator __it = `s`.begin(), __en = `s`.end(); __it != __en; ++__it)
+	        std::cout << __it->first << ":" << __it->second << ",";
+            std::cout << "}" << std::endl;
+	>>>
+
     }
 }
 

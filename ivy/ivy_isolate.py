@@ -25,6 +25,7 @@ create_imports = iu.BooleanParameter("create_imports",False)
 enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
 do_check_interference = iu.BooleanParameter("interference",True)
 pedantic = iu.BooleanParameter("pedantic",False)
+opt_prefer_impls = iu.BooleanParameter("prefer_impls",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -565,7 +566,19 @@ def get_prop_dependencies(mod):
             res.append((prop,ds))
     return res
 
+def set_privates_prefer(mod,isolate,preferred):
+    verified = set(a.relname for a in (isolate.verified()))
+    suff = "impl" if preferred == "spec" else "spec"
+    mod.privates = set(mod.privates)
+    for n,l in mod.hierarchy.iteritems():
+        if n not in verified:
+            if suff in l and preferred in l:
+                mod.privates.add(n+iu.ivy_compose_character+suff)
+
 def set_privates(mod,isolate,suff=None):
+    if suff == None and opt_prefer_impls.get():
+        set_privates_prefer(mod,isolate,"impl")
+        return
     suff = suff or ("spec" if isinstance(isolate,ivy_ast.ExtractDef) else "impl")
     mod.privates = set(mod.privates)
     for n,l in mod.hierarchy.iteritems():

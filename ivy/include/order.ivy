@@ -65,8 +65,6 @@ module order_iterator(range) = {
 	val : range.t
     }
 
-    instantiate totally_ordered(range.t)
-
     definition (X < Y) = ~is_end(X) & is_end(Y) 
                       | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
 
@@ -78,6 +76,9 @@ module order_iterator(range) = {
     action end returns (y:t)
     
     object spec = {
+
+	instantiate totally_ordered(range.t)
+
 	after create {
 	    assert ~is_end(y);
 	    assert val(y) = x
