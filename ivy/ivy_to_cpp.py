@@ -254,7 +254,9 @@ def ctype(sort,classname=None):
 def ctypefull(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types:
-            return native_type_full(im.module.native_types[sort.name])
+            if classname==None:
+                return native_type_full(im.module.native_types[sort.name])
+            return classname+'::'+varname(sort.name)
         if sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
     if isinstance(sort,il.EnumeratedSort):
@@ -284,7 +286,7 @@ thunk_counter = 0
 
 
 def expr_to_z3(expr):
-    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('\n',' ') + ')'
+    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\n',' ') + ')'
     return 'z3::expr(g.ctx,Z3_parse_smtlib2_string(ctx, "{}", sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]))'.format(fmla)
 
 
@@ -432,7 +434,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     indent(header)
-    if sort.rng.name in im.module.sort_destructors:
+    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types:
         code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
     else:
         header.append((obj + '.' if obj else '')
@@ -553,9 +555,9 @@ public:
     for a in im.module.axioms:
         constraints.append(a)
     for ldf in im.module.definitions:
-        constraints.append(ldf.formula.to_constraint())
+        constraints.append(fix_definition(ldf.formula).to_constraint())
     for c in constraints:
-        fmla = slv.formula_to_z3(c).sexpr().replace('\n',' ')
+        fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' ')
         indent(impl)
         impl.append("  {}\\\n".format(fmla))
     indent(impl)
@@ -607,7 +609,7 @@ def emit_randomize(header,symbol,classname=None):
         indent(header)
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
-    if sort.rng.name in im.module.sort_destructors:
+    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types:
         code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
     else:
         indent(header)
@@ -625,13 +627,21 @@ def is_local_sym(sym):
     sym = il.normalize_symbol(sym)
     return not il.sig.contains_symbol(sym) and slv.solver_name(il.normalize_symbol(sym)) != None
 
+def fix_definition(df):
+    if all(il.is_variable(v) for v in df.args[0].args):
+        return df
+    subst = dict((s,il.Variable('X__{}'.format(idx),s.sort)) for idx,s in enumerate(df.args[0].args) if not il.is_variable(s))
+    return ilu.substitute_constants_ast(df,subst)
+
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
-    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([ldf.formula.to_constraint() for ldf in im.module.definitions]))
+    iu.dbg('pre_clauses')
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([fix_definition(ldf.formula).to_constraint() for ldf in im.module.definitions]))
+    iu.dbg('pre_clauses')
     pre = pre_clauses.to_formula()
     used = set(ilu.used_symbols_ast(pre))
     used_names = set(varname(s) for s in used)
@@ -639,6 +649,7 @@ def emit_action_gen(header,impl,name,action,classname):
         if varname(p) not in used_names:
             used.add(p)
     syms = [x for x in used if is_local_sym(x) and not x.is_numeral()]
+    iu.dbg('syms')
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -653,7 +664,7 @@ def emit_action_gen(header,impl,name,action,classname):
         emit_decl(impl,sym)
     
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('\n','\\\n')))
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n','\\\n')))
     indent_level -= 1
     impl.append("}\n");
     impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
@@ -818,6 +829,7 @@ def emit_action(header,impl,name,classname):
     emit_some_action(header,impl,name,action,classname)
 
 def emit_some_action(header,impl,name,action,classname):
+    iu.dbg('name')
     global indent_level
     emit_method_decl(header,name,action)
     header.append(';\n')
@@ -844,10 +856,10 @@ def emit_some_action(header,impl,name,action,classname):
 
 def init_method():
     asserts = []
-    for ini in im.module.labeled_inits + im.module.labeled_axioms:
-        act = ia.AssertAction(ini.formula)
-        act.lineno = ini.lineno
-        asserts.append(act)
+    # for ini in im.module.labeled_inits + im.module.labeled_axioms:
+    #     act = ia.AssertAction(ini.formula)
+    #     act.lineno = ini.lineno
+    #     asserts.append(act)
     
     for name,ini in im.module.initializers:
         asserts.append(ini)
@@ -2067,6 +2079,7 @@ def emit_some(self,header,code):
     else:
         vs = self.params()
         params = [new_temp(header)]
+        code_line(header,params[0] + ' = ___ivy_choose(' + csortcard(vs[0].sort) + ',"' + str(vs[0]) + '",0)')
         fmla = self.fmla()
     for v in vs:
         check_iterable_sort(v.sort)
@@ -2098,8 +2111,17 @@ def emit_some(self,header,code):
     close_loop(header,vs)
     if isinstance(self,ivy_ast.Some):
         code.append(some)
+       
     else:
-        code.append(varname(params[0]))
+        iv = self.if_value()
+        if iv == None:
+            code.append(varname(params[0]))
+        else:
+            thing = il.Symbol(params[0],vs[0].sort)
+            ot = ilu.substitute_ast(iv,{vs[0].name:thing})
+            code.append('(' + some + ' ? (' + code_eval(header,ot) + ') : ('
+                        + code_eval(header,self.else_value()) + '))')
+            
 
 ivy_ast.Some.emit = emit_some
 
@@ -2276,6 +2298,8 @@ def emit_assert(self,header):
     code = []
     indent(code)
     code.append('ivy_assert(')
+    iu.dbg('self.lineno')
+    iu.dbg('self')
     with ivy_ast.ASTContext(self):
         il.close_formula(self.args[0]).emit(header,code)
     code.append(', "{}");\n'.format(iu.lineno_str(self)))    
@@ -3018,18 +3042,23 @@ public:
         return set(decl_name,3,args,value);
     }
 
+    void add_alit(const z3::expr &pred){
+        std::cout << "pred: " << pred << std::endl; // TEMP
+        std::ostringstream ss;
+        ss << "alit:" << alits.size();
+        z3::expr alit = ctx.bool_const(ss.str().c_str());
+        std::cout << "alit: " << alit << std::endl; // TEMP
+        alits.push_back(alit);
+        slvr.add(!alit || pred);
+    }
+
     void randomize(const z3::expr &apply_expr) {
         z3::sort range = apply_expr.get_sort();
         unsigned card = sort_card(range);
         int value = rand() % card;
         z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
-        // std::cout << "pred: " << pred << std::endl;
-        std::ostringstream ss;
-        ss << "alit:" << alits.size();
-        z3::expr alit = ctx.bool_const(ss.str().c_str());
-        alits.push_back(alit);
-        slvr.add(!alit || pred);
+        add_alit(pred);
     }
 
     void randomize(const char *decl_name, unsigned num_args, const int *args) {
@@ -3040,12 +3069,7 @@ public:
         int value = rand() % card;
         z3::expr val_expr = int_to_z3(range,value);
         z3::expr pred = apply_expr == val_expr;
-        // std::cout << "pred: " << pred << std::endl;
-        std::ostringstream ss;
-        ss << "alit:" << alits.size();
-        z3::expr alit = ctx.bool_const(ss.str().c_str());
-        alits.push_back(alit);
-        slvr.add(!alit || pred);
+        add_alit(pred);
     }
 
     void randomize(const char *decl_name) {
@@ -3150,8 +3174,11 @@ public:
             z3::expr_vector core = slvr.unsat_core();
             if (core.size() == 0)
                 return false;
+            for (unsigned i = 0; i < core.size(); i++)
+                std::cout << "core: " << core[i] << std::endl;
             unsigned idx = rand() % core.size();
             z3::expr to_delete = core[idx];
+            std::cout << "to delete: " << to_delete << std::endl;
             for (unsigned i = 0; i < alits.size(); i++)
                 if (z3::eq(alits[i],to_delete)) {
                     alits[i] = alits.back();
@@ -3161,7 +3188,7 @@ public:
         }
         model = slvr.get_model();
         alits.clear();
-        //        std::cout << model;
+        std::cout << model; // TEMP
         return true;
     }
 

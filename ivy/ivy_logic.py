@@ -204,6 +204,7 @@ class Definition(AST):
         return self.args[0].rep
     def to_constraint(self):
         if isinstance(self.args[1],Some):
+            iu.dbg('self')
             if self.args[1].if_value() != None:
                 return And(Implies(self.args[1].args[1],
                                    lg.Exists([self.args[1].args[0]],
