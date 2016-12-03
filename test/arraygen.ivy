@@ -1,0 +1,19 @@
+#lang ivy1.6
+
+include order
+include collections
+
+type domain
+type range
+
+instance arr : array(domain,range)
+
+action a(inp:arr.t) = {
+
+}
+
+interpret domain -> bv[4]
+interpret range -> bv[4]
+
+export a
+
