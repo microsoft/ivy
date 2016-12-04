@@ -631,6 +631,14 @@ def follow_definitions(ldfs,all_syms):
     for sym in list(all_syms):
         follow_definitions_rec(sym,dmap,all_syms,set())
 
+def empty_clone(action):
+    res = ia.Sequence()
+    res.lineno = action.lineno
+    res.formal_params = action.formal_params
+    res.formal_returns = action.formal_returns
+    return res
+
+
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_inits=None):
 
     global implementation_map
@@ -727,6 +735,17 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     for e in mod.exports:
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
             exported.add('ext:' + e.exported())
+            act = empty_clone(mod.actions[e.exported()])
+            for mixin in mod.mixins[e.exported()]:
+                mixin_name = mixin.args[0].relname
+                action1 = lookup_action(mixin,mod,mixin_name)
+                if use_mixin(mixin_name) and before_mixins(mixin):
+                    action1 = action1.assert_to_assume()
+                    action1 = mod_mixin(mixin_name,action1)
+                    act = ia.apply_mixin(mixin,action1,act)
+            mod.before_export['ext:' + e.exported()] = act
+            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
+            
     with_effects = set()
     for actname,action in mod.actions.iteritems():
         if not startswith_eq_some(actname,present,mod):

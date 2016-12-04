@@ -65,7 +65,8 @@ class Module(object):
         self.sort_order = [] # list of sorts names in order declared
         self.symbol_order = [] # list of symbols in order declared
         self.aliases = {} # map from name to name
-
+        self.before_export = {} # map from string to action
+        
         self.sig = il.sig.copy() # capture the current signature
 
     def __enter__(self):

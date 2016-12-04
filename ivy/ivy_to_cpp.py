@@ -636,6 +636,10 @@ def fix_definition(df):
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
+    iu.dbg('name')
+    if name in im.module.before_export:
+        action = im.module.before_export[name]
+        iu.dbg('action')
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
@@ -2895,7 +2899,8 @@ public:
     int eval(const z3::expr &apply_expr) {
         try {
             z3::expr foo = model.eval(apply_expr,true);
-            if (foo.is_bv()) {
+            std::cout << apply_expr << " = " << foo << std::endl; // TEMP
+            if (foo.is_bv() || foo.is_int()) {
                 assert(foo.is_numeral());
                 int v;
                 if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
@@ -3167,6 +3172,7 @@ public:
 
     bool solve() {
         // std::cout << alits.size();
+        static bool show_model = false;
         while(true){
             z3::check_result res = slvr.check(alits.size(),&alits[0]);
             if (res != z3::unsat)
@@ -3188,7 +3194,8 @@ public:
         }
         model = slvr.get_model();
         alits.clear();
-        std::cout << model; // TEMP
+        if(show_model)
+            std::cout << model;
         return true;
     }
 
