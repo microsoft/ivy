@@ -744,7 +744,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     action1 = mod_mixin(mixin_name,action1)
                     act = ia.apply_mixin(mixin,action1,act)
             mod.before_export['ext:' + e.exported()] = act
-            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
+#            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
             
     with_effects = set()
     for actname,action in mod.actions.iteritems():

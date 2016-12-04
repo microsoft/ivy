@@ -554,7 +554,7 @@ public:
     constraints = [im.module.init_cond.to_formula()]
     for a in im.module.axioms:
         constraints.append(a)
-    for ldf in im.module.definitions:
+    for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
         constraints.append(fix_definition(ldf.formula).to_constraint())
     for c in constraints:
         fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' ')
@@ -636,16 +636,13 @@ def fix_definition(df):
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     caname = varname(name)
-    iu.dbg('name')
     if name in im.module.before_export:
         action = im.module.before_export[name]
-        iu.dbg('action')
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
-    iu.dbg('pre_clauses')
-    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([fix_definition(ldf.formula).to_constraint() for ldf in im.module.definitions]))
-    iu.dbg('pre_clauses')
+    rdefs = im.relevant_definitions(ilu.symbols_clauses(pre_clauses))
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([fix_definition(ldf.formula).to_constraint() for ldf in rdefs]))
     pre = pre_clauses.to_formula()
     used = set(ilu.used_symbols_ast(pre))
     used_names = set(varname(s) for s in used)
@@ -653,7 +650,6 @@ def emit_action_gen(header,impl,name,action,classname):
         if varname(p) not in used_names:
             used.add(p)
     syms = [x for x in used if is_local_sym(x) and not x.is_numeral()]
-    iu.dbg('syms')
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
@@ -833,7 +829,6 @@ def emit_action(header,impl,name,classname):
     emit_some_action(header,impl,name,action,classname)
 
 def emit_some_action(header,impl,name,action,classname):
-    iu.dbg('name')
     global indent_level
     emit_method_decl(header,name,action)
     header.append(';\n')
@@ -1975,13 +1970,10 @@ def get_bound_exprs(v0,variables,body,exists,res):
             get_bound_exprs(v0,variables,arg,exists,res)
         return
     if il.is_app(body) and body.rep in is_derived and v0 in body.args:
-        iu.dbg('body')
         ldf = find_definition(body.rep)
         if all(il.is_variable(v) for v in ldf.formula.args[0].args):
             subst = dict((v.name,a) for v,a in zip(ldf.formula.args[0].args,body.args))
-            iu.dbg('subst')
             thing = ilu.substitute_ast(ldf.formula.args[1],subst)
-            iu.dbg('thing')
             get_bound_exprs(v0,variables,thing,exists,res)
     
 def sort_has_negative_values(sort):
@@ -2302,8 +2294,6 @@ def emit_assert(self,header):
     code = []
     indent(code)
     code.append('ivy_assert(')
-    iu.dbg('self.lineno')
-    iu.dbg('self')
     with ivy_ast.ASTContext(self):
         il.close_formula(self.args[0]).emit(header,code)
     code.append(', "{}");\n'.format(iu.lineno_str(self)))    
@@ -2899,7 +2889,7 @@ public:
     int eval(const z3::expr &apply_expr) {
         try {
             z3::expr foo = model.eval(apply_expr,true);
-            std::cout << apply_expr << " = " << foo << std::endl; // TEMP
+            // std::cout << apply_expr << " = " << foo << std::endl;
             if (foo.is_bv() || foo.is_int()) {
                 assert(foo.is_numeral());
                 int v;
@@ -3048,11 +3038,11 @@ public:
     }
 
     void add_alit(const z3::expr &pred){
-        std::cout << "pred: " << pred << std::endl; // TEMP
+        // std::cout << "pred: " << pred << std::endl;
         std::ostringstream ss;
         ss << "alit:" << alits.size();
         z3::expr alit = ctx.bool_const(ss.str().c_str());
-        std::cout << "alit: " << alit << std::endl; // TEMP
+        // std::cout << "alit: " << alit << std::endl;
         alits.push_back(alit);
         slvr.add(!alit || pred);
     }

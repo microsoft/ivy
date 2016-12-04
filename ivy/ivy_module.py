@@ -211,3 +211,9 @@ class ModuleTheoryContext(object):
     def __exit__(self,exc_type, exc_val, exc_tb):
         lu.instantiator = self.old_instantiator
         return False # don't block any exceptions
+
+def relevant_definitions(symbols):
+    dfn_map = dict((ldf.formula.defines(),ldf.formula.args[1]) for ldf in module.definitions)
+    rch = set(iu.reachable(symbols,lambda sym: lu.symbols_ast(dfn_map[sym]) if sym in dfn_map else []))
+    return [ldf for ldf in module.definitions if ldf.formula.defines() in rch]
+    

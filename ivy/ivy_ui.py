@@ -405,8 +405,6 @@ class AnalysisGraphUI(object):
                 self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
             if self.mode.get() == "induction":
-                iu.dbg('node.clauses')
-                iu.dbg('dual')
                 self.bmc(node,dual,bound=bound)
             else:
                 sg = self.g.concept_graph(node)
