@@ -2832,6 +2832,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             }
         }            
     }
+    std::cout << "test_completed" << std::endl;
 }
 """.replace('classname',classname))
 
@@ -3230,7 +3231,9 @@ def main():
         cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp -lz3".format(basename,basename)
         print cmd
         import os
-        exit(os.system(cmd))
+        import sys
+        status = os.system(cmd)
+        sys.exit(1 if status else 0)
 
 if __name__ == "__main__":
     main()

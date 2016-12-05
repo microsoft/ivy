@@ -23,6 +23,7 @@ isolate iso_p = proto with ref,trans,key,shard
 isolate iso_dm(me:id) = proto.impl.dm(me) with key
 isolate iso_hash(me:id) = proto.impl.hash(me) with key,shard
 isolate iso_key = key with impl
+isolate iso_key_iter = key.iter with impl
 
 export proto.set
 export proto.get

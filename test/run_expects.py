@@ -1,5 +1,6 @@
 import pexpect
 import os
+import sys
 
 checks = [
     ['../doc/examples',
@@ -42,20 +43,90 @@ checks = [
      ]
     ]
 
-for checkd in checks:
-    dir,checkl = checkd
-    oldcwd = os.getcwd()
-    os.chdir(dir)
-    for check in checkl:
-        name,res = check
-        print '{}/{} ...'.format(dir,name)
-        child = pexpect.spawn('timeout 100 ivy_check {}.ivy'.format(name))
+tests = [
+    ['../doc/examples/testing',
+      [
+          ['trivnet','test_completed'],
+          ['pingpong','isolate=iso_l','test_completed'],
+      ]
+    ]
+]
+
+
+class Test(object):
+    def __init__(self,dir,args):
+        self.dir,self.name,self.res,self.opts = dir,args[0],args[-1],args[1:-1]
+    def run(self):
+        oldcwd = os.getcwd()
+        os.chdir(self.dir)
+        print '{}/{} ...'.format(self.dir,self.name)
+        status = self.run_expect()
+        print 'PASS' if status else 'FAIL'
+        os.chdir(oldcwd)
+        return status
+    def run_expect(self):
+        for pc in self.preprocess_commands():
+            print 'executing: {}'.format(pc)
+            child = pexpect.spawn(pc)
+            child.logfile = sys.stdout
+            child.expect(pexpect.EOF)
+            if child.wait() != 0:
+                print child.before
+                return False
+        child = pexpect.spawn(self.command())
+#        child.logfile = sys.stdout
         try:
-            child.expect(res)
-            print 'PASS'
+            child.expect(self.res)
+            return True
         except pexpect.EOF:
             print child.before
-            print 'FAIL'
+            return False
+    def preprocess_commands(self):
+        return []
         
-    os.chdir(oldcwd)
+class IvyCheck(Test):
+    def command(self):
+        return 'timeout 100 ivy_check {}.ivy'.format(self.name)
+
+class IvyTest(Test):
+    def command(self):
+        return './'+self.name
+
+    def preprocess_commands(self):
+        return ['ivy_to_cpp target=test build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
+
+all_tests = []
+
+def get_tests(cls,arr):
+    for checkd in arr:
+        dir,checkl = checkd
+        for check in checkl:
+            all_tests.append(cls(dir,check))
+
+#get_tests(IvyCheck,checks)
+get_tests(IvyTest,tests)
+        
+num_failures = 0
+for test in all_tests:
+    status = test.run()
+    if not status:
+        num_failures += 1
+if num_failures:
+    print 'error: {} tests(s) failed'.format(num_failures)
+else:
+    print 'OK'
+
+# for checkd in checks:
+#     dir,checkl = checkd
+#     for check in checkl:
+#         name,res = check
+#         print '{}/{} ...'.format(dir,name)
+#         child = pexpect.spawn('timeout 100 ivy_check {}.ivy'.format(name))
+#         try:
+#             child.expect(res)
+#             print 'PASS'
+#         except pexpect.EOF:
+#             print child.before
+#             print 'FAIL'
+        
 
