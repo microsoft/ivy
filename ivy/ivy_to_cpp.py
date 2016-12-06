@@ -98,7 +98,7 @@ def varname(name):
     if name in special_names:
         return special_names[name]
 
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__')
     name = re.sub(puncs,'__',name)
     return name.split(':')[-1]
 
@@ -439,7 +439,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
     else:
         header.append((obj + '.' if obj else '')
                       + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
-                      + ' = eval_apply("{}"'.format(sname)
+                      + ' = ({})eval_apply("{}"'.format(ctype(sort.rng,classname=classname),sname)
                       + ''.join(",X{}".format(idx) for idx in range(len(domain)))
                       + ");\n")
     for idx,dsort in enumerate(domain):
@@ -879,7 +879,8 @@ def open_loop(impl,vs,declare=True,bounds=None):
         check_iterable_sort(idx.sort)
         indent(impl)
         bds = bounds[num] if bounds else ["0",str(sort_card(idx.sort))]
-        impl.append('for ('+ ('int ' if declare else '') + idx.name + ' = ' + bds[0] + '; ' + idx.name + ' < ' + bds[1] + '; ' + idx.name + '++) {\n')
+        vn = varname(idx.name)
+        impl.append('for ('+ ('int ' if declare else '') + vn + ' = ' + bds[0] + '; ' + vn + ' < ' + bds[1] + '; ' + vn + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
@@ -2242,7 +2243,8 @@ def emit_assign(self,header):
         header.append(';\n')
         for idx in vs:
             indent(header)
-            header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+            vn = varname(idx.name)
+            header.append('for (int ' + vn + ' = 0; ' + vn + ' < ' + str(sort_card(idx.sort)) + '; ' + vn + '++) {\n')
             indent_level += 1
         code = []
         indent(code)
@@ -2256,7 +2258,8 @@ def emit_assign(self,header):
             header.append('}\n')
         for idx in vs:
             indent(header)
-            header.append('for (int ' + idx.name + ' = 0; ' + idx.name + ' < ' + str(sort_card(idx.sort)) + '; ' + idx.name + '++) {\n')
+            vn = varname(idx.name)
+            header.append('for (int ' + vn + ' = 0; ' + vn + ' < ' + str(sort_card(idx.sort)) + '; ' + vn + '++) {\n')
             indent_level += 1
         code = []
         indent(code)
@@ -2777,7 +2780,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
     impl.append("""
 
-    for(int cycle = 0; cycle < 1000; cycle++) {
+    for(int cycle = 0; cycle < TEST_ITERS; cycle++) {
 
         int choices = generators.size() + readers.size() + timers.size();
         int rnd = choices ? (rand() % choices) : 0;
@@ -2834,8 +2837,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
     }
     std::cout << "test_completed" << std::endl;
 }
-""".replace('classname',classname))
-
+""".replace('classname',classname).replace('TEST_ITERS',opt_test_iters.get()))
 
 def emit_boilerplate1(header,impl,classname):
     header.append("""
@@ -3171,11 +3173,11 @@ public:
             z3::expr_vector core = slvr.unsat_core();
             if (core.size() == 0)
                 return false;
-            for (unsigned i = 0; i < core.size(); i++)
-                std::cout << "core: " << core[i] << std::endl;
+            //for (unsigned i = 0; i < core.size(); i++)
+            //    std::cout << "core: " << core[i] << std::endl;
             unsigned idx = rand() % core.size();
             z3::expr to_delete = core[idx];
-            std::cout << "to delete: " << to_delete << std::endl;
+            // std::cout << "to delete: " << to_delete << std::endl;
             for (unsigned i = 0; i < alits.size(); i++)
                 if (z3::eq(alits[i],to_delete)) {
                     alits[i] = alits.back();
@@ -3202,6 +3204,7 @@ target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
 opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
+opt_test_iters = iu.Parameter("test_iters","1000")
 
 def main():
     ia.set_determinize(True)

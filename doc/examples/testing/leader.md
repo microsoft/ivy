@@ -345,7 +345,7 @@ a read-eval-print loop as the environment:
     g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o leader_election_ring leader_election_ring.cpp -lz3
 
 This produces an executable that takes one parameter `me` on the
-command line. Let's create two terminals A annd B to run process 0 and
+command line. Let's create two terminals A and B to run process 0 and
 process 1 respectively:
 
     A: $ ./leader_election_ring 0
