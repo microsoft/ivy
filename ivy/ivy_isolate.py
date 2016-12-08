@@ -26,6 +26,7 @@ enforce_axioms = iu.BooleanParameter("enforce_axioms",False)
 do_check_interference = iu.BooleanParameter("interference",True)
 pedantic = iu.BooleanParameter("pedantic",False)
 opt_prefer_impls = iu.BooleanParameter("prefer_impls",False)
+opt_keep_destructors = iu.BooleanParameter("keep_destructors",False)
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -639,6 +640,13 @@ def empty_clone(action):
     return res
 
 
+def collect_relevant_destructors(sym,res):
+    if sym.sort.rng.name in im.module.sort_destructors:
+        for dstr in im.module.sort_destructors[sym.sort.rng.name]:
+            res.add(dstr)
+            collect_relevant_destructors(dstr,res)
+            
+
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_inits=None):
 
     global implementation_map
@@ -837,6 +845,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     all_syms = set(lu.used_symbols_asts(asts))
 
+    if opt_keep_destructors.get():
+        for sym in list(all_syms):
+            collect_relevant_destructors(sym,all_syms)
+    
     if filter_symbols.get() or cone_of_influence.get():
         old_syms = list(mod.sig.all_symbols())
         for sym in old_syms:

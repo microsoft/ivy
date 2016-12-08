@@ -3214,6 +3214,9 @@ def main():
     iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true'})
     if target.get() == "gen":
         iu.set_parameters({'filter_symbols':'false'})
+    else:
+        iu.set_parameters({'keep_destructors':'true'})
+        
         
     with im.Module():
         ivy.ivy_init()

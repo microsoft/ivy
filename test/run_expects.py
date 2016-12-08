@@ -3,6 +3,13 @@ import os
 import sys
 
 checks = [
+    ['../doc/examples/testing',
+      [
+          ['pingpong','trusted=true','OK'],
+          ['interference','trusted=true','interference.ivy: line 30: error: Call out to right_player.intf_ping'],
+          ['coveragefail','trusted=true','coveragefail.ivy: line 20: error: assertion is not checked'],
+      ]
+    ],
     ['../doc/examples',
      [
       ['account2','OK'],
@@ -41,29 +48,23 @@ checks = [
       ['udp_test','OK'],
       ]
      ],
-    ['../doc/examples/testing',
-      [
-          ['pingpong','trusted=true','OK'],
-          ['interference','trusted=true','interference.ivy: line 30: error: Call out to right_player.intf_ping[implement] may have visible effect on left_player.ball'],
-          ['coveragefail','trusted=true','coveragefail.ivy: line 20: error: assertion is not checked'],
-      ]
-    ],
 ]
 
 tests = [
     ['../doc/examples/testing',
       [
-          ['token_ring','isolate=iso_n','test_completed'],
-#          ['trivnet','test_completed'],
-#          ['pingpong','isolate=iso_l','test_completed'],
-#          ['pingpong_bad','isolate=iso_l','pingpong_bad.ivy: line 15: : assertion failed'],
-#          ['pingpong','isolate=iso_r','test_completed'],
-#          ['leader_election_ring','isolate=iso_p','test_completed'],
-#          ['leader_election_ring','isolate=iso_n','test_completed'],
-#          ['leader_election_ring','isolate=iso_t test_iters=5','test_completed'],
-#          ['token_ring','isolate=iso_p','test_completed'],
-#          ['token_ring','isolate=iso_t','test_completed'],
-#          ['token_ring_buggy','isolate=iso_t','trans_buggy.ivy: line 26: : assertion failed'],
+         ['trivnet','test_completed'],
+         ['pingpong','isolate=iso_l','test_completed'],
+         ['pingpong_bad','isolate=iso_l','pingpong_bad.ivy: line 15: : assertion failed'],
+         ['pingpong','isolate=iso_r','test_completed'],
+         ['leader_election_ring','isolate=iso_p','test_completed'],
+         ['leader_election_ring','isolate=iso_n','test_completed'],
+         ['leader_election_ring','isolate=iso_t test_iters=5','test_completed'],
+         ['token_ring','isolate=iso_p','test_completed'],
+         ['token_ring','isolate=iso_t','test_completed'],
+         ['token_ring_buggy','isolate=iso_t','trans_buggy.ivy: line 26: : assertion failed'],
+         ['token_ring','isolate=iso_n','test_completed'],
+         ['token_ring','isolate=iso_pt','test_completed'],
       ]
      ]
 ]
@@ -119,8 +120,8 @@ def get_tests(cls,arr):
         for check in checkl:
             all_tests.append(cls(dir,check))
 
-#get_tests(IvyCheck,checks)
-get_tests(IvyTest,tests)
+get_tests(IvyCheck,checks)
+#get_tests(IvyTest,tests)
         
 num_failures = 0
 for test in all_tests:
