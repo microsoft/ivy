@@ -90,6 +90,8 @@ class Test(object):
             if child.wait() != 0:
                 print child.before
                 return False
+        return self.expect()
+    def expect(self):
         child = pexpect.spawn(self.command())
 #        child.logfile = sys.stdout
         try:
@@ -112,6 +114,14 @@ class IvyTest(Test):
     def preprocess_commands(self):
         return ['ivy_to_cpp target=test build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
 
+class IvyRepl(Test):
+    def command(self):
+        return './'+self.name
+    def preprocess_commands(self):
+        return ['ivy_to_cpp target=repl build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
+    def expect(self):
+        pass
+    
 all_tests = []
 
 def get_tests(cls,arr):
