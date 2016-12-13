@@ -24,7 +24,7 @@ import re
 
 def all_state_symbols():
     syms = il.all_symbols()
-    return [s for s in syms if s not in il.sig.constructors]
+    return [s for s in syms if s not in il.sig.constructors and slv.solver_name(il.normalize_symbol(s)) != None]
 
 def sort_card(sort):
     if hasattr(sort,'card'):

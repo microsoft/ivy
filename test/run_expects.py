@@ -1,6 +1,7 @@
 import pexpect
 import os
 import sys
+import imp
 
 checks = [
     ['../doc/examples/testing',
@@ -69,6 +70,28 @@ tests = [
      ]
 ]
 
+repls = [
+    ['../doc/examples',
+      [
+         ['leader_election_ring_repl','isolate=iso_impl','leader_election_ring_repl_iso_impl_expect'],
+#         ['helloworld',None],
+#         ['account',None],
+#         ['account2',None],
+#         ['account3',None],
+#         ['leader_election_ring_repl',None],
+      ]
+     ]
+]
+
+to_cpps = [
+    ['../doc/examples',
+      [
+         ['leader_election_ring_repl_err','target=repl','isolate=iso_impl','leader_election_ring_repl_err.ivy: line 90: error: relevant axiom asgn.injectivity not enforced'],
+#         ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','leader_election_ring_repl.ivy: error: No implementation for action node.get_next'],
+      ]
+     ]
+]
+
 
 class Test(object):
     def __init__(self,dir,args):
@@ -120,8 +143,15 @@ class IvyRepl(Test):
     def preprocess_commands(self):
         return ['ivy_to_cpp target=repl build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
     def expect(self):
-        pass
+        print 'wd:{}'.format(os.getcwd())
+        modname = self.res if self.res != None else (self.name+'_expect')
+        mod = imp.load_source(modname,modname+'.py')
+        return mod.run(self.name,self.opts,self.res)
     
+class IvyToCpp(Test):
+    def command(self):
+        return 'ivy_to_cpp ' + ' '.join(self.opts) + ' '+self.name+'.ivy'
+
 all_tests = []
 
 def get_tests(cls,arr):
@@ -130,9 +160,11 @@ def get_tests(cls,arr):
         for check in checkl:
             all_tests.append(cls(dir,check))
 
-get_tests(IvyCheck,checks)
+#get_tests(IvyCheck,checks)
 #get_tests(IvyTest,tests)
-        
+#get_tests(IvyRepl,repls)
+get_tests(IvyToCpp,to_cpps)
+
 num_failures = 0
 for test in all_tests:
     status = test.run()
