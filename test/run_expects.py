@@ -73,12 +73,14 @@ tests = [
 repls = [
     ['../doc/examples',
       [
-         ['leader_election_ring_repl','isolate=iso_impl','leader_election_ring_repl_iso_impl_expect'],
+#         ['leader_election_ring_repl','isolate=iso_impl','leader_election_ring_repl_iso_impl_expect'],
 #         ['helloworld',None],
 #         ['account',None],
 #         ['account2',None],
 #         ['account3',None],
 #         ['leader_election_ring_repl',None],
+#         ['udp_test','isolate=iso_impl',None],
+         ['udp_test2','isolate=iso_impl',None],
       ]
      ]
 ]
@@ -110,7 +112,8 @@ class Test(object):
             child = pexpect.spawn(pc)
             child.logfile = sys.stdout
             child.expect(pexpect.EOF)
-            if child.wait() != 0:
+            child.close()
+            if child.exitstatus != 0:
                 print child.before
                 return False
         return self.expect()
@@ -162,8 +165,8 @@ def get_tests(cls,arr):
 
 #get_tests(IvyCheck,checks)
 #get_tests(IvyTest,tests)
-#get_tests(IvyRepl,repls)
-get_tests(IvyToCpp,to_cpps)
+get_tests(IvyRepl,repls)
+#get_tests(IvyToCpp,to_cpps)
 
 num_failures = 0
 for test in all_tests:
