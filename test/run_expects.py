@@ -80,7 +80,10 @@ repls = [
 #         ['account3',None],
 #         ['leader_election_ring_repl',None],
 #         ['udp_test','isolate=iso_impl',None],
-         ['udp_test2','isolate=iso_impl',None],
+#         ['udp_test2','isolate=iso_impl',None],
+#         ['leader_election_ring_udp','isolate=iso_impl',None],
+         ['timeout_test',None],
+         ['leader_election_ring_udp2','isolate=iso_impl',None],
       ]
      ]
 ]
