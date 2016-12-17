@@ -60,7 +60,11 @@ class EventTree(Tix.Tree,uu.WithMenuBar):
         sel = self.hlist.info_selection()
         anchor_addr = sel[0] if len(sel) else None
         anchor_ev = lookup(self.evs,anchor_addr) if anchor_addr else None
-        a,e = ev.find(ev.EventRevGen(anchor_addr)(self.evs),pats,anchor=anchor_ev)
+        res = ev.find(ev.EventRevGen(anchor_addr)(self.evs),pats,anchor=anchor_ev)
+        if res == None:
+            uu.ok_dialog(the_ui.tk,self,'Pattern not found')
+            return
+        a,e = res
         self.hlist.selection_clear()
         self.uncover(a)
         self.hlist.selection_set(a)
@@ -213,8 +217,7 @@ def opendir(tree, dir, evs):
 def browsedir(tree, dir, evs):
     pass
 
-if __name__ == '__main__':
-    
+def main():
     import sys
     def usage():
         print "usage: \n  {} <file>.iev ".format(sys.argv[0])
@@ -236,3 +239,6 @@ if __name__ == '__main__':
     tk = Tix.Tk()
     RunSample(tk,evs)
     tk.mainloop()
+
+if __name__ == '__main__':
+    main()

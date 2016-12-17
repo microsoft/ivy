@@ -5,7 +5,8 @@ import itertools
 import ivy_utils as iu
 
 def mymap(fun,obj):
-    return obj.map(fun)
+    res = obj.map(fun)
+    return res
 
 class Events(list):
     def __init__(self,*args):
@@ -171,10 +172,17 @@ class Anchor(object):
         self.anchor = anchor
     def __call__(self,s):
         if s.startswith('$'):
-            num = int(s[1:])-1
+            path = s[1:].split('.')
+            num = int(path[0])-1
             if num < 0 or num >= len(self.anchor.args):
                 raise iu.IvyError(None,'event has no argument {}'.format(s))
-            return self.anchor.args[num]
+            res = self.anchor.args[num]
+            for field in path[1:]:
+                if not isinstance(res,DictValue) or field not in res:
+                    raise iu.IvyError(None,'value has no field {}'.format(field))
+                res = res[field]
+            iu.dbg('res')
+            return res
         return Symbol(s)
 
 def filter(evs,pats,anchor=None):
@@ -229,7 +237,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-zA-Z0-9\.\$]+|\*'
+    r'[_a-zA-Z0-9\.\$]+|\*|".*?"'
     return t
 
 def t_error(t):
