@@ -1437,7 +1437,9 @@ class z3_thunk : public thunk<D,R> {
     enum_sort_names = [s for s in sorted(il.sig.sorts) if isinstance(il.sig.sorts[s],il.EnumeratedSort)]
     if True or target.get() == "repl":
 
-        for sort_name in sorted(im.module.sort_destructors):
+        for sort_name in im.module.sort_order:
+            if sort_name not in sorted(im.module.sort_destructors):
+                continue
             destrs = im.module.sort_destructors[sort_name]
             sort = im.module.sig.sorts[sort_name]
             csname = varname(sort_name)
@@ -1608,21 +1610,22 @@ class z3_thunk : public thunk<D,R> {
                 code_line(impl,'__deser(inp,pos,__res)')
                 code_line(impl,'res = ({})__res'.format(cfsname))
                 close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
-                code_line(impl,'int thing = val')
-                code_line(impl,'return __to_solver<int>(g,v,thing)')
-                close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
-                code_line(impl,'int temp')
-                code_line(impl,'__from_solver<int>(g,v,temp)')
-                code_line(impl,'res = ('+cfsname+')temp')
-                close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
-                code_line(impl,'__randomize<int>(g,v)')
-                close_scope(impl)
+                if target.get() in ["test","gen"]:
+                    impl.append('template <>\n')
+                    open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
+                    code_line(impl,'int thing = val')
+                    code_line(impl,'return __to_solver<int>(g,v,thing)')
+                    close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
+                    code_line(impl,'int temp')
+                    code_line(impl,'__from_solver<int>(g,v,temp)')
+                    code_line(impl,'res = ('+cfsname+')temp')
+                    close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
+                    code_line(impl,'__randomize<int>(g,v)')
+                    close_scope(impl)
 
 
 
@@ -1683,6 +1686,8 @@ class z3_thunk : public thunk<D,R> {
 
 def check_representable(sym,ast=None,skip_args=0):
     return True
+
+def really_check_representable(sym,ast=None,skip_args=0):
     sort = sym.sort
     if hasattr(sort,'dom'):
         for domsort in sort.dom[skip_args:]:
@@ -1737,7 +1742,7 @@ def assign_symbol_from_model(header,sym,m):
     if sym.name in im.module.destructor_sorts:
         return # skip structs
     name, sort = sym.name,sym.sort
-    check_representable(sym)
+    really_check_representable(sym)
     fun = lambda v: cstr(m.eval_to_constant(v))
     if hasattr(sort,'dom'):
         for args in itertools.product(*[range(sort_card(s)) for s in sym.sort.dom]):

@@ -156,6 +156,12 @@ class Exists(Quantifier):
     pass
 
 class This(AST):
+    @property
+    def rep(self):
+        return 'this'
+    @property
+    def relname(self):
+        return 'this'
     pass
 
 class Atom(Formula):

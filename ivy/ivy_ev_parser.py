@@ -166,6 +166,27 @@ class EventRevGen(object):
         for ev in self.rec(evs,self.addr):
             yield ev
 
+class EventFwdGen(object):
+    def __init__(self,addr):
+        self.addr = addr
+    def rec(self,things,addr,start=0):
+        if addr != None:
+            cs = addr.split('/',1)
+            num = int(cs[0])-start
+            thing = things[num]
+            caddr = cs[1] if len(cs) == 2 else None
+            for a,t in self.rec(thing.children,caddr,start=1):
+                yield (cs[0]+'/'+a,t)
+        else:
+            num = -1
+        for idx in range(num+1,len(things)):
+            thing = things[idx]
+            yield str(idx+start),thing
+            for a,t in self.rec(thing.children,None,start=1):
+                yield str(idx+start)+'/'+a,t
+    def __call__(self,evs):
+        for ev in self.rec(evs,self.addr):
+            yield ev
 
 class Anchor(object):
     def __init__(self,anchor):
@@ -391,7 +412,7 @@ if __name__ == '__main__':
        if not s: continue
        result = parser.parse(s)
 #       print result
-       for a,x in EventRevGen("2/2")(result):
+       for a,x in EventFwdGen("2/2")(result):
            print a + ':' + x.text()
 
 

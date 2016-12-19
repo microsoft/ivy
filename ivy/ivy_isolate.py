@@ -161,7 +161,7 @@ def startswith_some_rec(s,prefixes,mod):
     if s in mod.privates:
         return False
     parts = s.rsplit(iu.ivy_compose_character,1)
-    return len(parts)==2 and startswith_eq_some_rec(parts[0],prefixes,mod)
+    return startswith_eq_some_rec(parts[0],prefixes,mod) if len(parts)==2 else 'this' in prefixes
 
 #def startswith_eq_some(s,prefixes):
 #    return any(s.startswith(name+iu.ivy_compose_character) or s == name for name in prefixes)
@@ -382,6 +382,9 @@ def has_side_effect_rec(mod,new_actions,actname,memo):
     memo.add(actname)
     action = new_actions[actname]
     for sub in action.iter_subactions():
+        if isinstance(sub,ia.NativeAction):
+            if sub.impure:
+                return True
         for sym in sub.modifies():
             if sym.name in mod.sig.symbols:
                 return True
@@ -571,10 +574,12 @@ def set_privates_prefer(mod,isolate,preferred):
     verified = set(a.relname for a in (isolate.verified()))
     suff = "impl" if preferred == "spec" else "spec"
     mod.privates = set(mod.privates)
+    if 'this' not in verified and suff in mod.hierarchy and preferred in mod.hierarchy:
+        mod.privates.add(suff)
     for n,l in mod.hierarchy.iteritems():
         if n not in verified:
             if suff in l and preferred in l:
-                mod.privates.add(n+iu.ivy_compose_character+suff)
+                mod.privates.add(iu.compose_names(n,suff))
 
 def set_privates(mod,isolate,suff=None):
     if suff == None and opt_prefer_impls.get():
@@ -582,9 +587,11 @@ def set_privates(mod,isolate,suff=None):
         return
     suff = suff or ("spec" if isinstance(isolate,ivy_ast.ExtractDef) else "impl")
     mod.privates = set(mod.privates)
+    if suff in mod.hierarchy:
+        mod.privates.add(suff)
     for n,l in mod.hierarchy.iteritems():
         if suff in l:
-            mod.privates.add(n+iu.ivy_compose_character+suff)
+            mod.privates.add(iu.compose_names(n,suff))
 
 def get_props_proved_in_isolate(mod,isolate):
     save_privates = mod.privates
@@ -605,7 +612,7 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
 
     derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
     for name in present:
-        if (name not in mod.hierarchy
+        if (name != 'this' and name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
             and name not in derived
             and name not in ivy_logic.sig.interp
@@ -613,7 +620,7 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
             and name not in ivy_logic.sig.symbols):
             raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
 
-    xtra = set(a.relname + iu.ivy_compose_character + kind for a in isolate.verified())
+    xtra = set(iu.compose_names(a.relname,kind) for a in isolate.verified())
 
     verified.update(xtra)
     present.update(xtra)
@@ -651,9 +658,13 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     global implementation_map
     implementation_map = {}
-    if isolate_name not in mod.isolates:
-        raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
-    isolate = mod.isolates[isolate_name]
+    if isolate_name == None:
+        isolate = ivy_ast.IsolateDef(ivy_ast.Atom('iso'),ivy_ast.Atom('this'))
+        isolate.with_args = 0
+    else:
+        if isolate_name not in mod.isolates:
+            raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
+        isolate = mod.isolates[isolate_name]
     set_privates(mod,isolate)
     verified,present = get_isolate_info(mod,isolate,'impl',extra_with)
 

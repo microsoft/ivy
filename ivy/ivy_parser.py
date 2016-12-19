@@ -1187,6 +1187,13 @@ def p_callatom_atom(p):
     'callatom : atom'
     p[0] = p[1]
 
+if not (iu.get_numeric_version() <= [1,5]):
+    def p_callatom_this(p):
+        'callatom : THIS'
+        p[0] = This()
+        p[0].lineno = get_lineno(p,1)
+        
+
 if iu.get_numeric_version() <= [1,2]:
 
     def p_callatom_callatom_colon_callatom(p):

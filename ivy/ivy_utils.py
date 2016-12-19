@@ -470,6 +470,8 @@ def get_numeric_version():
     return map(int,string.split(ivy_language_version,'.'))
 
 def compose_names(*names):
+    if names[0] == 'this':
+        return ivy_compose_character.join(names[1:])
     return ivy_compose_character.join(names)
 
 def split_name(name):

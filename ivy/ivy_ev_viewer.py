@@ -57,10 +57,16 @@ class EventTree(Tix.Tree,uu.WithMenuBar):
         ask_pat(self,self.do_find_reverse,"Find")
 
     def do_find_reverse(self,pats):
+        self.do_find(pats,ev.EventRevGen)
+         
+    def do_find_forward(self,pats):
+        self.do_find(pats,ev.EventFwdGen)
+         
+    def do_find(self,pats,gen):
         sel = self.hlist.info_selection()
         anchor_addr = sel[0] if len(sel) else None
         anchor_ev = lookup(self.evs,anchor_addr) if anchor_addr else None
-        res = ev.find(ev.EventRevGen(anchor_addr)(self.evs),pats,anchor=anchor_ev)
+        res = ev.find(gen(anchor_addr)(self.evs),pats,anchor=anchor_ev)
         if res == None:
             uu.ok_dialog(the_ui.tk,self,'Pattern not found')
             return
@@ -134,7 +140,10 @@ class PatternList(Tix.Frame):
             self.notebook.current().do_find_reverse(self.patlist[item])
     
     def forward(self):
-        pass
+        sel = self.tlist.info_selection()
+        if len(sel):
+            item = int(sel[0])
+            self.notebook.current().do_find_forward(self.patlist[item])
     
     def plus(self):
         ask_pat(self,self.do_plus,command_label="Add")

@@ -82,7 +82,7 @@ module udp_wrapper(addr,pkt,me) = {
     }
 
     implement send(dst:addr,x:pkt) {
-	<<<
+	<<< impure
 	    `rdr`->write(`dst`,`x`);
 	>>>
     }

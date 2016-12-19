@@ -73,17 +73,19 @@ tests = [
 repls = [
     ['../doc/examples',
       [
-#         ['leader_election_ring_repl','isolate=iso_impl','leader_election_ring_repl_iso_impl_expect'],
-#         ['helloworld',None],
-#         ['account',None],
-#         ['account2',None],
-#         ['account3',None],
-#         ['leader_election_ring_repl',None],
-#         ['udp_test','isolate=iso_impl',None],
-#         ['udp_test2','isolate=iso_impl',None],
-#         ['leader_election_ring_udp','isolate=iso_impl',None],
+         ['leader_election_ring_repl','isolate=iso_impl','leader_election_ring_repl_iso_impl_expect'],
+         ['helloworld',None],
+         ['account',None],
+         ['account2',None],
+         ['account3',None],
+         ['leader_election_ring_repl',None],
+         ['udp_test','isolate=iso_impl',None],
+         ['udp_test2','isolate=iso_impl',None],
+         ['leader_election_ring_udp','isolate=iso_impl',None],
          ['timeout_test',None],
          ['leader_election_ring_udp2','isolate=iso_impl',None],
+         ['paraminit','isolate=iso_foo',None],
+         ['paraminit3','isolate=iso_foo',None],
       ]
      ]
 ]
@@ -92,7 +94,10 @@ to_cpps = [
     ['../doc/examples',
       [
          ['leader_election_ring_repl_err','target=repl','isolate=iso_impl','leader_election_ring_repl_err.ivy: line 90: error: relevant axiom asgn.injectivity not enforced'],
-#         ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','leader_election_ring_repl.ivy: error: No implementation for action node.get_next'],
+         ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','leader_election_ring_repl.ivy: error: No implementation for action node.get_next'],
+         ['leader_election_ring_udp2_warn','target=repl','isolate=iso_impl','leader_election_ring_udp2_warn.ivy: line 131: warning: action sec.timeout is implicitly exported'],
+         ['paraminit','target=repl','error: cannot compile "foo.bit" because type t is uninterpreted'],
+         ['paraminit2','target=repl','isolate=iso_foo','paraminit2.ivy: line 7: error: initial condition depends on stripped parameter'],
       ]
      ]
 ]
@@ -156,7 +161,9 @@ class IvyRepl(Test):
     
 class IvyToCpp(Test):
     def command(self):
-        return 'ivy_to_cpp ' + ' '.join(self.opts) + ' '+self.name+'.ivy'
+        res = 'ivy_to_cpp ' + ' '.join(self.opts) + ' '+self.name+'.ivy'
+        print 'compiling: {}'.format(res)
+        return res
 
 all_tests = []
 
@@ -168,8 +175,8 @@ def get_tests(cls,arr):
 
 #get_tests(IvyCheck,checks)
 #get_tests(IvyTest,tests)
-get_tests(IvyRepl,repls)
-#get_tests(IvyToCpp,to_cpps)
+#get_tests(IvyRepl,repls)
+get_tests(IvyToCpp,to_cpps)
 
 num_failures = 0
 for test in all_tests:

@@ -778,6 +778,16 @@ class LetAction(Action):
 
 class NativeAction(Action):
     """ Quote native code in an action """
+    def __init__(self,*args):
+        self.args = list(args)
+        self.impure = False
+        if isinstance(args[0].code,str) and args[0].code.split('\n')[0].strip() == "impure":
+            args[0].code = '\n'.join(args[0].code.split('\n')[1:])
+            self.impure = True
+    def clone(self,args):
+        res = Action.clone(self,args)
+        res.impure = self.impure
+        return res
     def name(self):
         return 'native'
     def __str__(self):
