@@ -1636,10 +1636,17 @@ class z3_thunk : public thunk<D,R> {
             for actname in sorted(im.module.public_actions):
                 username = actname[4:] if actname.startswith("ext:") else actname
                 action = im.module.actions[actname]
-                getargs = ','.join('_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params))
+                argstrings = ['_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params)]
+                getargs = ','.join(argstrings)
                 thing = "ivy.methodname(getargs)"
                 if action.formal_returns:
                     thing = 'std::cout << "= " << ' + thing + " << std::endl"
+                if target.get() == "repl" and opt_trace.get():
+                    if action.formal_params:
+                        trace_code = 'std::cout << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                    else:
+                        trace_code = 'std::cout << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
+                    thing = trace_code + ';\n                    ' + thing + ';\n                    std::cout << "}" << std::endl' 
                 impl.append("""
                 if (action == "actname") {
                     check_arity(args,numargs,action);
@@ -2653,13 +2660,23 @@ def emit_repl_boilerplate1a(header,impl,classname):
 
 class stdin_reader: public reader {
     std::string buf;
+    std::string eof_flag;
 
+public:
+    bool eof(){
+      return eof_flag.size();
+    }
     virtual int fdes(){
         return 0;
     }
     virtual void read() {
         char tmp[257];
         int chars = ::read(0,tmp,256);
+        if (chars == 0) {  // EOF
+            if (buf.size())
+                process(buf);
+            eof_flag = "eof";
+        }
         tmp[chars] = 0;
         buf += std::string(tmp);
         size_t pos;
@@ -2680,7 +2697,8 @@ public:
     classname_repl &ivy;    
 
     cmd_reader(classname_repl &_ivy) : ivy(_ivy) {
-        std::cout << "> "; std::cout.flush();
+        if (isatty(fdes()))
+            std::cout << "> "; std::cout.flush();
     }
 
     virtual void process(const std::string &cmd) {
@@ -2706,7 +2724,8 @@ def emit_repl_boilerplate2(header,impl,classname):
         catch (bad_arity &err) {
             std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
-        std::cout << "> "; std::cout.flush();
+        if (isatty(fdes()))
+            std::cout << "> "; std::cout.flush();
     }
 };
 
@@ -2726,13 +2745,17 @@ void install_timer(timer *r){
 
 def emit_repl_boilerplate3(header,impl,classname):
     impl.append("""
-    install_reader(new cmd_reader(ivy));
+    cmd_reader *cr = new cmd_reader(ivy);
+    install_reader(cr);
 
     while(true) {
 
         fd_set rdfds;
         FD_ZERO(&rdfds);
         int maxfds = 0;
+
+        if (cr->eof())
+            return 0;
 
         for (unsigned i = 0; i < readers.size(); i++) {
             reader *r = readers[i];

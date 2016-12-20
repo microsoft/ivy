@@ -258,7 +258,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-zA-Z0-9\.\$]+|\*|".*?"'
+    r'[_a-zA-Z0-9\.\$\-]+|\*|".*?"'
     return t
 
 def t_error(t):
@@ -400,8 +400,8 @@ def parse(s):
 # Build the parser
 import os
 tabdir = os.path.dirname(os.path.abspath(__file__))
-#parser = yacc.yacc(tabmodule='ev_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir)
-parser = yacc.yacc(tabmodule='ev_parsetab',outputdir=tabdir)
+parser = yacc.yacc(tabmodule='ev_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir)
+#parser = yacc.yacc(tabmodule='ev_parsetab',outputdir=tabdir)
 
 if __name__ == '__main__':
     while True:
