@@ -8,6 +8,7 @@ import ivy_utils as iu
 import tk_graph_ui
 import tk_cy
 from cy_elements import *
+from dot_layout import dot_layout
 from Tkinter import *
 import Tkconstants, tkFileDialog
 import Tix
@@ -252,7 +253,7 @@ class TkAnalysisGraphWidget(tk_cy.TkCyCanvas,uu.WithMenuBar):
 
         self.delete(ALL)
 
-        self.create_elements(self.g.as_cy_elements())
+        self.create_elements(self.g.as_cy_elements(dot_layout))
 
         # set the scroll region
         

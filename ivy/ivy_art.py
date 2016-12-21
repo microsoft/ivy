@@ -3,11 +3,9 @@
 #
 import ivy_actions
 from ivy_interp import *
-from ivy_graph import standard_graph
 import ivy_utils as iu
 import ivy_module as im
 from cy_elements import CyElements
-from dot_layout import dot_layout
 from string import *
 import copy
 import functools
@@ -305,7 +303,7 @@ class AnalysisGraph(object):
         self.transitions = [t for t in self.transitions if t[0].id != -1 and t[-1].id != -1]
         self.covering = [t for t in self.covering if t[0].id != -1 and t[-1].id != -1]
 
-    def concept_graph(self,state,clauses=None):
+    def concept_graph(self,state,standard_graph,clauses=None):
         if clauses == None:
             clauses = state.clauses
         bg = self.domain.background_theory(state.in_scope)
@@ -438,7 +436,7 @@ class AnalysisGraph(object):
                 if not eval_state_order(equation.args[1],fpc[equation.args[0]]):
                     yield equation
 
-    def as_cy_elements(self):
+    def as_cy_elements(self,dot_layout):
         return dot_layout(render_rg(self),edge_labels=True)
 
 def label_from_action(action):

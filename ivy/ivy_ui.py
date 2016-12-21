@@ -127,7 +127,7 @@ class AnalysisGraphUI(object):
 #            print "current cg: {}".format(type(self.current_concept_graph))
             self.current_concept_graph.set_parent_state(n,clauses,reset=reset)
             return
-        sg = self.g.concept_graph(n,clauses)
+        sg = self.g.concept_graph(n,standard_graph,clauses)
         self.current_concept_graph = self.show_graph(sg)
         return self.current_concept_graph
 
@@ -407,7 +407,7 @@ class AnalysisGraphUI(object):
             if self.mode.get() == "induction":
                 self.bmc(node,dual,bound=bound)
             else:
-                sg = self.g.concept_graph(node)
+                sg = self.g.concept_graph(node,standard_graph)
                 sg.current.add_constraints(dual.conjuncts)
                 self.show_graph(sg)
 
