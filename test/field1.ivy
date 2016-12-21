@@ -1,0 +1,27 @@
+#lang ivy1.6
+
+type t = struct {
+    foo : bool
+}
+
+individual bar : t
+
+action a = {
+    assert bar.foo
+}
+
+type q
+
+object baz = {
+    type t = struct {
+	foo(X:q) : bool
+    }
+}
+
+individual bif(Y:q) : baz.t
+
+action b(y:q,z:q) = {
+    assert bif(z).foo(y)
+}
+
+interpret q -> bv[1]

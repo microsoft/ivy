@@ -112,6 +112,32 @@ class TopContext(Context):
 expr_context = None
 top_context = None
 
+def compile_field_reference_rec(symbol_name,args,top=False):
+    try:
+        sym = ivy_logic.find_polymorphic_symbol(symbol_name)
+    except IvyError:
+        parent_name,child_name = iu.parent_child_name(symbol_name)
+        if parent_name == 'this':
+            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
+        base = compile_field_reference_rec(parent_name,args)
+        sort = base.sort
+        sort_parent,sort_child = iu.parent_child_name(sort.name)
+        destr_name = iu.compose_names(sort_parent,child_name)
+        sym = ivy_logic.find_polymorphic_symbol(destr_name)
+        args.insert(0,base)
+    if hasattr(sym.sort,'dom') and len(sym.sort.dom) > 0:
+        if len(args) < len(sym.sort.dom):
+            raise IvyError(None,'not enough arguments to {}'.format(sym))
+        if top and len(args) > len(sym.sort.dom):
+            raise IvyError(None,'too many arguments to {}'.format(sym))
+        res = sym(*args[:len(sym.sort.dom)])
+        del args[:len(sym.sort.dom)]
+        return res
+    return sym
+                           
+def compile_field_reference(symbol_name,args):
+    return compile_field_reference_rec(symbol_name,args,top=True)
+
 def compile_app(self):
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
@@ -137,7 +163,11 @@ def compile_app(self):
             args = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
         return res()
-    return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
+    try: 
+        return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
+    except:
+        res = compile_field_reference(self.rep,args)
+        return res
     
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))

@@ -480,6 +480,12 @@ def split_name(name):
 def base_name(name):
     return split_name(name)[0]
 
+def parent_child_name(name):
+    parts = name.rsplit(ivy_compose_character,1)
+    if len(parts) == 2:
+        return parts
+    return ['this',name]
+
 def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')
     lines = [s.strip() for s in lines]
