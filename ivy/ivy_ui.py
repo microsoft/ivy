@@ -579,24 +579,7 @@ def ui_main_loop(art, tk = None, frame = None):
     ui_create(art,tk,frame)
     ui.tk.mainloop()
 
-default_ui = iu.Parameter("ui",None)
-
 compile_kwargs = {}
-
-def get_default_ui_module():
-    defui = default_ui.get()
-    if defui is None:
-        return sys.modules[__name__]
-    return __import__('ivy.ivy_ui_' + defui).__dict__['ivy_ui_' + defui]
-    
-def get_default_ui_class():
-    mod = get_default_ui_module()
-    return mod.IvyUI
-
-def get_default_ui_compile_kwargs():
-    mod = get_default_ui_module()
-    return mod.compile_kwargs
-    
 
 
 if __name__ == '__main__':

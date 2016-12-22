@@ -517,6 +517,27 @@ use_numerals = BooleanParameter("use_numerals",True)
 use_new_ui = BooleanParameter("new_ui",False)
 catch = BooleanParameter("catch",True)
 
+default_ui = Parameter("ui","art")
+
+def get_default_ui_module():
+    defui = default_ui.get()
+    if defui == "art":
+        defui = 'ivy_ui'
+#        return sys.modules[__name__]
+    else:
+        defui = 'ivy_ui_' + defui
+    return __import__('ivy.'+defui).__dict__[defui]
+    
+def get_default_ui_class():
+    mod = get_default_ui_module()
+    return mod.IvyUI
+
+def get_default_ui_compile_kwargs():
+    mod = get_default_ui_module()
+    return mod.compile_kwargs
+    
+
+
 
 def dbg(*exprs):
     """Print expressions evaluated in the caller's frame."""

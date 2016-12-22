@@ -3,7 +3,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 
-import ivy
+import ivy_init
 import ivy_logic as il
 import ivy_module as im
 import ivy_utils as iu
@@ -3238,8 +3238,8 @@ def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
-    ivy.read_params()
-    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true'})
+    ivy_init.read_params()
+    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none'})
     if target.get() == "gen":
         iu.set_parameters({'filter_symbols':'false'})
     else:
@@ -3247,7 +3247,7 @@ def main():
         
         
     with im.Module():
-        ivy.ivy_init()
+        ivy_init.ivy_init()
 
         basename = opt_classname.get() or im.module.name
         classname = varname(basename)
