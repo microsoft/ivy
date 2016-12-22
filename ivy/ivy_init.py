@@ -14,8 +14,6 @@ if __name__ == "__main__":
 import pickle
 import string
 from ivy_compiler import IvyError, ivy_new, ivy_load_file
-from tk_ui import ui_main_loop
-from ivy_ui import get_default_ui_compile_kwargs
 from ivy_utils import Parameter, set_parameters
 import ivy_logic
 import proof as pf
