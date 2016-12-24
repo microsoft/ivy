@@ -97,6 +97,8 @@ def varname(name):
         name = name.name
     if name in special_names:
         return special_names[name]
+    if name.startswith('"'):
+        return name
 
     name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__')
     name = re.sub(puncs,'__',name)
@@ -209,7 +211,7 @@ struct hash_thunk {
     R &operator[](const D& arg){
         std::pair<typename hash_space::hash_map<D,R>::iterator,bool> foo = memo.insert(std::pair<D,R>(arg,R()));
         R &res = foo.first->second;
-        if (foo.second)
+        if (foo.second && fun)
             res = (*fun)(arg);
         return res;
     }

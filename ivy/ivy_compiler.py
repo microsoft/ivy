@@ -112,6 +112,16 @@ class TopContext(Context):
 expr_context = None
 top_context = None
 
+def pull_args(args,num,sym,top):
+    if len(args) < num:
+        raise IvyError(None,'not enough arguments to {}'.format(sym))
+    if top and len(args) > num:
+        raise IvyError(None,'too many arguments to {}'.format(sym))
+    res = args[:num]
+    del args[:num]
+    return res
+
+
 def compile_field_reference_rec(symbol_name,args,top=False):
     try:
         sym = ivy_logic.find_polymorphic_symbol(symbol_name)
@@ -119,50 +129,58 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         parent_name,child_name = iu.parent_child_name(symbol_name)
         if parent_name == 'this':
             raise IvyError(None,"unknown symbol: {}".format(symbol_name))
-        base = compile_field_reference_rec(parent_name,args)
+        try:
+            base = compile_field_reference_rec(parent_name,args)
+        except IvyError:
+            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
         sort = base.sort
         sort_parent,sort_child = iu.parent_child_name(sort.name)
         destr_name = iu.compose_names(sort_parent,child_name)
+        if expr_context and top_context and destr_name in top_context.actions:
+            args.insert(0,base)
+            return field_reference_action(destr_name,args,top)
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
         args.insert(0,base)
     if hasattr(sym.sort,'dom') and len(sym.sort.dom) > 0:
-        if len(args) < len(sym.sort.dom):
-            raise IvyError(None,'not enough arguments to {}'.format(sym))
-        if top and len(args) > len(sym.sort.dom):
-            raise IvyError(None,'too many arguments to {}'.format(sym))
-        res = sym(*args[:len(sym.sort.dom)])
-        del args[:len(sym.sort.dom)]
+        res = sym(*pull_args(args,len(sym.sort.dom),sym,top))
         return res
     return sym
                            
+def field_reference_action(actname,args,top):
+    nformals = len(top_context.actions[actname][0])
+    return compile_inline_call(ivy_ast.Atom(actname,[]),pull_args(args,nformals,actname,top))
+
 def compile_field_reference(symbol_name,args):
     return compile_field_reference_rec(symbol_name,args,top=True)
+
+def compile_inline_call(self,args):
+    params,returns = top_context.actions[self.rep]
+    if len(returns) != 1:
+        raise IvyError(self,"wrong number of return values")
+        # TODO: right now we can't do anything with multiple returns
+        sorts = [cmpl_sort(r.sort) for r in returns]
+        ress = []
+        for sort in sorts:
+            res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
+            expr_context.local_syms.append(res)
+            ress.append(res())
+        expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
+        return ivy_ast.Tuple(*ress)
+    sort = cmpl_sort(returns[0].sort)
+    res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
+    expr_context.local_syms.append(res)
+    with ASTContext(self):
+        if len(params) != len(args):
+            raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
+        args = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
+    expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
+    return res()
 
 def compile_app(self):
     args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
-        params,returns = top_context.actions[self.rep]
-        if len(returns) != 1:
-            raise IvyError(self,"wrong number of return values")
-            # TODO: right now we can't do anything with multiple returns
-            sorts = [cmpl_sort(r.sort) for r in returns]
-            ress = []
-            for sort in sorts:
-                res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
-                expr_context.local_syms.append(res)
-                ress.append(res())
-            expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
-            return ivy_ast.Tuple(*ress)
-        sort = cmpl_sort(returns[0].sort)
-        res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
-        expr_context.local_syms.append(res)
-        with ASTContext(self):
-            if len(params) != len(args):
-                raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
-            args = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
-        expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
-        return res()
+        return compile_inline_call(self,args)
     try: 
         return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
     except:

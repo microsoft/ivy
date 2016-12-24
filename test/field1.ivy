@@ -16,12 +16,17 @@ object baz = {
     type t = struct {
 	foo(X:q) : bool
     }
+    action blarg(inp:t) returns (out:t) = {
+	out := inp
+    }
 }
 
 individual bif(Y:q) : baz.t
 
 action b(y:q,z:q) = {
-    assert bif(z).foo(y)
+    assert bif(z).foo(y);
+    assert bif(z).blarg.foo(y)
 }
 
 interpret q -> bv[1]
+
