@@ -3262,7 +3262,9 @@ def main():
         f.write(impl)
         f.close()
     if opt_build.get():
-        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp -lz3".format(basename,basename)
+        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
+        if target.get() in ['gen','test']:
+            cmd = cmd + ' -lz3'
         print cmd
         import os
         import sys
