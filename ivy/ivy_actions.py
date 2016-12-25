@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -203,6 +203,14 @@ class Action(AST):
         return res
     def prefix_calls(self,pref):
         args = [a.prefix_calls(pref) if isinstance(a,Action) else a for a in self.args]
+        res = self.clone(args)
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
+    def unroll_loops(self,card):
+        args = [a.unroll_loops(card) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
@@ -725,7 +733,7 @@ class WhileAction(Action):
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self):
-        return self.clone(self.args[:2])
+        return self.clone([self.args[0],self.args[1].assert_to_assume()])
     def drop_invariants(self):
         res = self.clone(self.args[:2])
         if hasattr(self,'formal_params'):
@@ -733,7 +741,26 @@ class WhileAction(Action):
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
         return res
-
+    def unroll_loops(self,card):
+        cond = self.args[0]
+        if is_app(cond) and cond.rep.name in ['<','>','<=','>=']:
+            idx_sort = cond.args[0].sort
+        elif isinstance(cond,Not) and is_eq(cond.args[0]):
+            idx_sort = cond.args[0].args[0].sort
+        else:
+            raise IvyError(self,'cannot determine an index sort for loop')
+        cardsort = card(idx_sort)
+        if cardsort is None:
+            raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
+        res = AssumeAction(Not(cond))
+        for idx in range(cardsort):
+            res = IfAction(cond,Sequence(self.args[1],res))
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
+            
 
 
 local_action_ctr = 0

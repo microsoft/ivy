@@ -640,6 +640,9 @@ def emit_action_gen(header,impl,name,action,classname):
     caname = varname(name)
     if name in im.module.before_export:
         action = im.module.before_export[name]
+    def card(sort):
+        return sort_card(sort)
+    action = action.unroll_loops(card)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
