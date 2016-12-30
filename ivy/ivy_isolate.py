@@ -850,9 +850,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
-        asts += [y.formula for y in x]
-    asts += [action for action in new_actions.values()]
-
+        asts.extend(y.formula for y in x)
+    asts.extend(action for action in new_actions.values())
+    for a in new_actions.values():
+        asts.extend(a.formal_params)
+        asts.extend(a.formal_returns)
+    asts.extend(mod.natives)
 
     all_syms = set(lu.used_symbols_asts(asts))
 
