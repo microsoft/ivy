@@ -269,8 +269,19 @@ def compile_local(self):
     sig = ivy_logic.sig.copy()
     with sig:
         ls = self.args[0:-1]
-        cls = [compile_const(v,sig) for v in ls]
-        res = LocalAction(*(cls+[sortify(self.args[-1])]))
+        cls,asgns = [],[]
+        for v in ls:
+            if isinstance(v,AssignAction):
+                ... sortify the action ...
+                cls.append(vsorted.args[0])
+                asgns.append(vsorted)
+            else:
+                cls.append(compile_const(v,sig))
+        body = sortify(self.args[-1])
+        if asgns:
+            lines = body.args if isinstance(body,Sequence) else [body]
+            body = Sequence(*(asgns+lines))
+        res = LocalAction(*(cls+[body]))
         res.lineno = self.lineno
         return res
 
