@@ -33,6 +33,8 @@ def sort_card(sort):
         return sort.card
     if sort.is_relational():
         return 2
+    if sort in sort_to_cpptype:
+        return sort_to_cpptype[sort].card()
     return slv.sort_card(sort)
     if hasattr(sort,'name'):
         name = sort.name
@@ -260,6 +262,7 @@ def ctype_remaining_cases(sort,classname):
         return '__strlit'
     if sort in sort_to_cpptype:
         sn = sort_to_cpptype[sort].short_name()
+        return sn
         return ((classname+'::') if classname != None else '') + sn
     return 'int'
 
@@ -503,7 +506,8 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
         for destr in destrs:
             emit_set_field(header,destr,lhs1,rhs1,nvars+len(vs))
     else:
-        code_line(header,'slvr.add('+lhs1+'=='+int_to_z3(sort.rng,rhs1)+')')
+#        code_line(header,'slvr.add('+lhs1+'=='+int_to_z3(sort.rng,rhs1)+')')
+        code_line(header,'slvr.add(__to_solver(*this,'+lhs1+','+rhs1+'))')
     close_loop(header,vs)
 
 
@@ -574,7 +578,10 @@ def emit_clear_progress(impl,obj=None):
 
 def mk_rand(sort,classname=None):
     card = sort_card(sort)
-    return '('+ctype(sort,classname=classname)+')' + ('(rand() % {})'.format(card) if card else '((rand()%2) ? "a" : "b")' if has_string_interp(sort) else "0")
+    return '('+ctype(sort,classname=classname)+')' + ('(rand() % {})'.format(card) if card
+                                                      else '((rand()%2) ? "a" : "b")' if has_string_interp(sort)
+                                                      else sort_to_cpptype[sort].rand() if sort in sort_to_cpptype
+                                                      else "0")
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -799,7 +806,9 @@ def native_type(native):
 
 def native_declaration(atom):
     if atom.rep in im.module.sig.sorts:
-        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+        res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+#        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
+        return res
     res = varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
@@ -1162,6 +1171,9 @@ def module_to_cpp_class(classname,basename):
         header.append('    virtual void ivy_assume(bool,const char *){}\n')
         header.append('    virtual void ivy_check_progress(int,int){}\n')
     
+    with ivy_cpp.CppClassName(classname):
+        emit_cpp_sorts(header)
+
         
     impl = ivy_cpp.context.impls.code
     impl.append('#include "' + basename + '.h"\n\n')
@@ -1429,12 +1441,16 @@ class z3_thunk : public thunk<D,R> {
     for dom in all_ctuples():
         emit_ctuple_equality(impl,dom,classname)
 
+    for cpptype in cpptypes:
+        cpptype.emit_templates()
+
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "impl":
             global native_classname
             native_classname = classname
+#            print 'native_classname:{}'.format(native_classname)
             code = native_to_str(native)
             native_classname = None
             if code not in once_memo:
@@ -1459,12 +1475,6 @@ class z3_thunk : public thunk<D,R> {
         return 0;
     }
 """)
-
-    with ivy_cpp.CppClassName(classname):
-        emit_cpp_sorts(header)
-
-    for cpptype in cpptypes:
-        cpptype.emit_templates()
 
     declare_all_ctuples(header)
     declare_all_ctuples_hash(header,classname)
@@ -1914,6 +1924,9 @@ def emit_constant(self,header,code):
         if self.sort.name in il.sig.interp and il.sig.interp[self.sort.name].startswith('bv['):
             sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
             code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
+            return
+        if self.sort in sort_to_cpptype: 
+            code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
     code.append(varname(self.name))
 
@@ -2548,7 +2561,9 @@ def native_reference(atom):
         res += ''.join(', ' + varname(arg.rep) for arg in atom.args) + ')'
         return res
     if atom.rep in im.module.sig.sorts:
-        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+        res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+#        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
+        return res
     res = varname(atom.rep)
     for arg in atom.args:
         n = arg.name if hasattr(arg,'name') else arg.rep

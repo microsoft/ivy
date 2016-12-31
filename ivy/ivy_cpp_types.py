@@ -25,6 +25,7 @@ class StrBV(CppClass):
 CLASSNAME(){}
 CLASSNAME(const std::string &s) : std::string(s) {}
 CLASSNAME(const char *s) : std::string(s) {}
+size_t __hash() const { return hash_space::hash<std::string>()(*this); }
 #ifdef Z3PP_H_
 static z3::sort z3_sort(z3::context &ctx) {return ctx.bv_sort(BITS);}
 static hash_space::hash_map<std::string,int> string_to_bv_hash;
@@ -55,6 +56,7 @@ static std::string bv_to_string(int bv){
                bv_to_string_hash[bv] = s;
                return s;
             }
+            num++;
         }
     }
     return bv_to_string_hash[bv];
@@ -125,8 +127,14 @@ void __randomize<CLASSNAME>( gen &g, const  z3::expr &apply_expr) {
 #endif
 """.replace('CLASSNAME',self.short_name()))
 
+    def card(self):
+        return None # Note this is cardinality of the string type, not the bit vector type
 
+    def literal(self,s):
+        return '"' + (s[1,-1] if s.startswith('"') else s) + '"'
 
+    def rand(self):
+        return '((rand()%2) ? "a" : "b")' # TODO: let user control random string generation
 
 def parse_descr(name):
     things = name.split('[')
