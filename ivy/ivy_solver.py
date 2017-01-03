@@ -174,7 +174,7 @@ def check_native_compat_sym(sym):
     thing = lookup_native(sym,table,kind)
 #    print "check_native_compat_sym: {} {}".format(sym,thing)
     try:
-        if thing != None:
+        if thing is not None:
 #            print "check_native_compat_sym: {} {}".format(sym,thing)
             z3args = []
             for ds in sym.sort.dom:
@@ -201,7 +201,8 @@ def check_compat():
                 check_native_compat_sym(ivy_logic.Symbol(name,sort))
 
 def sort_card(sort):
-    sig = lookup_native(sort,sorts,"sort") or sort.to_z3()
+    sig = lookup_native(sort,sorts,"sort")
+    sig = sig if sig is not None else sort.to_z3()
     if z3.is_bv_sort(sig):
         return 2**sig.size()
     if isinstance(sig,z3.DatatypeSortRef):
@@ -277,7 +278,7 @@ def term_to_z3(term):
             else:
                 iso = term.rep.sort
                 # TODO: this is dangerous
-                sig = iso.to_z3() if iso != None else S
+                sig = iso.to_z3() if iso is not None else S
 #                print "term: {}, iso : {}, sig = {}".format(term,iso,sig)
                 res = z3.Const(term.rep.name,sig)
             z3_constants[term.rep] = res
@@ -414,7 +415,7 @@ def unsat_core(clauses1, clauses2, implies = None, unlikely=lambda x:False):
     for c in cc:
         s2.add(c)
     s2.add(clauses_to_z3(clauses2))
-    if implies != None:
+    if implies is not None:
         s2.add(not_clauses_to_z3(implies))
     is_sat = s2.check(alits)
     if is_sat == z3.sat:
@@ -444,7 +445,7 @@ def check_cube(s,cube,memo = None,memo_unsat_only = False):
     f = cube_to_z3(cube)
 ##    print f
     fid = get_id(f)
-    if memo != None and fid in memo :
+    if memo is not None and fid in memo :
 ##        print "memo %s" % memo[fid][1]
         res = memo[fid][1]
         if (not res) or (not memo_unsat_only):
@@ -453,7 +454,7 @@ def check_cube(s,cube,memo = None,memo_unsat_only = False):
     cr = s.check()
     s.pop()
     res = cr != z3.unsat
-    if memo != None:
+    if memo is not None:
         memo[fid] = (f,res) # keep reference to f to preserve id
 ##    print "res %s" % res
     return res
@@ -806,7 +807,7 @@ def model_if_none(clauses1,implied,model):
         s = z3.Solver()
         z3c = clauses_to_z3(clauses1)
         s.add(z3c)
-        if implied != None:
+        if implied is not None:
             s.add(not_clauses_to_z3(implied))
         sort_size = 1
         while True:
@@ -819,7 +820,7 @@ def model_if_none(clauses1,implied,model):
 ##        print "clauses1 = {}".format(clauses1)
 ##        print "z3c = {}".format(str(z3c))
                 syms = used_symbols_clauses(clauses1)
-                if implied != None:
+                if implied is not None:
                     syms.update(used_symbols_clauses(implied))
                 h = HerbrandModel(s,m,syms)
                 s.pop()
@@ -972,7 +973,7 @@ def clauses_model_to_clauses(clauses1,ignore = None, implied = None,model = None
     """
 ##    print "clauses_model_to_clauses clauses1 = {}".format(clauses1)
     h = model_if_none(clauses1,implied,model)
-    ignore = ignore if ignore != None else lambda x: False
+    ignore = ignore if ignore is not None else lambda x: False
     res = model_facts(h,ignore,clauses1)
 #    print "core after mode_facts: {} ".format(unsat_core(res,true_clauses()))
     # if using numerals, replace the universe elements with them
@@ -1048,7 +1049,7 @@ def clauses_model_to_diagram(clauses1,ignore = None, implied = None,model = None
     if axioms == None:
         axioms = true_clauses()
     h = model_if_none(and_clauses(clauses1,axioms),implied,model)
-    ignore = ignore if ignore != None else lambda x: False
+    ignore = ignore if ignore is not None else lambda x: False
     res = model_facts(h,(lambda x: False),clauses1,upclose=True) # why not pass axioms?
 #    print "clauses_model_to_diagram res = {}".format(res)
     # find representative elements
