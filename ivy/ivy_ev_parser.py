@@ -251,7 +251,7 @@ t_RCB  = r'\}'
 t_GT   = r'\>'
 t_LT   = r'\<'
 
-t_ignore  = ' \t'
+t_ignore  = ' \t\r'
 
 def t_newline(t):
     r'\n+'

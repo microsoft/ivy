@@ -11,7 +11,6 @@ setup(name='ms_ivy',
 #      include_package_data={'ivy':['include/*.ivy','include/*.h']},
       install_requires=[
           'ply',
-          'pygraphviz',
           'tarjan'
       ],
       entry_points = {

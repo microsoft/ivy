@@ -235,11 +235,13 @@ def main():
         usage()
         exit(1)
     fn = sys.argv[1]
+    import chardet # $ pip install chardet
     try:
         f = open(fn,'r')
     except:
         print "not found: %s" % fn
         sys.exit(1)
+
     with iu.ErrorPrinter():
         with iu.SourceFile(fn):
             s = f.read()

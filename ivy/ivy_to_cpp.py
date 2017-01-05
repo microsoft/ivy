@@ -547,7 +547,7 @@ public:
     init_gen();
 """)
     header.append("    bool generate(" + classname + "&);\n")
-    header.append("    bool execute(" + classname + "&){}\n};\n")
+    header.append("    void execute(" + classname + "&){}\n};\n")
     impl.append("init_gen::init_gen(){\n");
     indent_level += 1
     emit_sig(impl)
@@ -658,7 +658,7 @@ def emit_action_gen(header,impl,name,action,classname):
             declare_symbol(header,sym,classname=classname)
     header.append("    {}_gen();\n".format(caname))
     header.append("    bool generate(" + classname + "&);\n");
-    header.append("    bool execute(" + classname + "&);\n};\n");
+    header.append("    void execute(" + classname + "&);\n};\n");
     impl.append(caname + "_gen::" + caname + "_gen(){\n");
     indent_level += 1
     emit_sig(impl)
@@ -697,7 +697,7 @@ def emit_action_gen(header,impl,name,action,classname):
     return __res;
 }
 """)
-    open_scope(impl,line="bool " + caname + "_gen::execute(" + classname + "& obj)")
+    open_scope(impl,line="void " + caname + "_gen::execute(" + classname + "& obj)")
     if action.formal_params:
         code_line(impl,'std::cout << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     else:
@@ -1097,14 +1097,20 @@ def module_to_cpp_class(classname,basename):
 #include <iostream>
 #include <stdlib.h>
 #include <sys/types.h>          /* See NOTES */
+#ifdef _WIN32
+#include <winsock2.h>
+#include <io.h>
+#define isatty _isatty
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h> 
 #include <sys/select.h>
+#include <unistd.h>
+#endif
 #include <string.h>
 #include <stdio.h>
 #include <string>
-#include <unistd.h>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
 
@@ -1170,6 +1176,7 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
 
 std::ostream &operator <<(std::ostream &s, const __strlit &t){
     s << "\\"" << t.c_str() << "\\"";
+    return s;
 }
 
 template <>
@@ -2747,8 +2754,53 @@ void install_timer(timer *r){
 
 def emit_repl_boilerplate3(header,impl,classname):
     impl.append("""
+
+#ifdef _WIN32
+    // Boilerplate from windows docs
+
+    {
+        WORD wVersionRequested;
+        WSADATA wsaData;
+        int err;
+
+    /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+        wVersionRequested = MAKEWORD(2, 2);
+
+        err = WSAStartup(wVersionRequested, &wsaData);
+        if (err != 0) {
+            /* Tell the user that we could not find a usable */
+            /* Winsock DLL.                                  */
+            printf("WSAStartup failed with error: %d\\n", err);
+            return 1;
+        }
+
+    /* Confirm that the WinSock DLL supports 2.2.*/
+    /* Note that if the DLL supports versions greater    */
+    /* than 2.2 in addition to 2.2, it will still return */
+    /* 2.2 in wVersion since that is the version we      */
+    /* requested.                                        */
+
+        if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
+            /* Tell the user that we could not find a usable */
+            /* WinSock DLL.                                  */
+            printf("Could not find a usable version of Winsock.dll\\n");
+            WSACleanup();
+            return 1;
+        }
+    }
+#endif
+
+
+
     cmd_reader *cr = new cmd_reader(ivy);
     install_reader(cr);
+
+#ifdef _WIN32
+    // TODO: Windows can't do asynchronous console I/O. This will have to be handled with
+    // threads at some future time. For now, just read from the console unitl EOF.
+    while (true)
+        cr->read();
+#endif
 
     while(true) {
 
@@ -2759,13 +2811,7 @@ def emit_repl_boilerplate3(header,impl,classname):
         if (cr->eof())
             return 0;
 
-        for (unsigned i = 0; i < readers.size(); i++) {
-            reader *r = readers[i];
-            int fds = r->fdes();
-            FD_SET(fds,&rdfds);
-            if (fds > maxfds)
-                maxfds = fds;
-        }
+        int foo;
 
         int timer_min = 1000;
         for (unsigned i = 0; i < timers.size(); i++){
@@ -2774,15 +2820,77 @@ def emit_repl_boilerplate3(header,impl,classname):
                 timer_min = t;
         }
 
+#if 0
+        {
+            std::vector<WSAEVENT> handles;
+
+            for (unsigned i = 0; i < readers.size(); i++) {
+                reader *r = readers[i];
+                int fds = r->fdes();
+                WSAEVENT ev = WSACreateEvent();
+                if (ev == WSA_INVALID_EVENT)
+                { 
+                    printf("WSACreateEvent() failed with error %d\\n", WSAGetLastError());
+                    return 1;
+                }
+                if (WSAEventSelect(fds, ev, FD_READ) == SOCKET_ERROR)
+                {
+                     printf("WSAEventSelect() failed with error %d\\n", WSAGetLastError());
+                     return 1;
+                }
+                // HANDLE h = (HANDLE)_get_osfhandle(fds);
+                handles.push_back(ev);
+            }
+
+            int timer_min = 1000;
+            for (unsigned i = 0; i < timers.size(); i++){
+                int t = timers[i]->ms_delay();
+                if (t < timer_min) 
+                    timer_min = t;
+            }
+
+            struct timeval timeout;
+            timeout.tv_sec = timer_min/1000;
+            timeout.tv_usec = 1000 * (timer_min % 1000);
+
+            DWORD res = WaitForMultipleObjectsEx(handles.size(),&handles[0],false,timer_min,false);
+
+            if (res == WAIT_FAILED)
+            {
+                printf("select failed with error: %d\\n", GetLastError());
+                exit(1);
+            }
+
+            foo = res != WAIT_TIMEOUT;
+    
+            if (foo) {
+                int idx = res - WSA_WAIT_EVENT_0;
+
+            } 
+
+        }
+#else
+        for (unsigned i = 0; i < readers.size(); i++) {
+            reader *r = readers[i];
+            int fds = r->fdes();
+            FD_SET(fds,&rdfds);
+            if (fds > maxfds)
+                maxfds = fds;
+        }
+
+
         struct timeval timeout;
         timeout.tv_sec = timer_min/1000;
         timeout.tv_usec = 1000 * (timer_min % 1000);
 
-        int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+        foo = select(maxfds+1,&rdfds,0,0,&timeout);
 
         if (foo < 0)
-            {perror("select failed"); exit(1);}
-        
+        {
+            perror("select failed"); 
+            exit(1);
+        }
+#endif        
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
            for (unsigned i = 0; i < timers.size(); i++)
@@ -2904,7 +3012,7 @@ protected:
 
 public:
     virtual bool generate(classname& obj)=0;
-    virtual bool execute(classname& obj)=0;
+    virtual void execute(classname& obj)=0;
     virtual ~gen(){}
 
     z3::expr mk_apply_expr(const char *decl_name, unsigned num_args, const int *args){
@@ -3235,6 +3343,8 @@ opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
 opt_test_iters = iu.Parameter("test_iters","1000")
+opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl"],"g++")
+
 
 def main():
     ia.set_determinize(True)
@@ -3264,12 +3374,24 @@ def main():
         f.write(impl)
         f.close()
     if opt_build.get():
-        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
-        if target.get() in ['gen','test']:
-            cmd = cmd + ' -lz3'
+        import platform
+        if platform.system() == 'Windows':
+            if opt_compiler.get() == 'cl':
+                cmd = "cl /EHsc /Zi {}.cpp ws2_32.lib".format(basename)
+                if target.get() in ['gen','test']:
+                    cmd = 'cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib'.format(basename)
+            else:
+                cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -g -o {} {}.cpp -lws2_32".format(basename,basename)
+                if target.get() in ['gen','test']:
+                    cmd = cmd + ' -lz3'
+        else:
+            cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
+            if target.get() in ['gen','test']:
+                cmd = cmd + ' -lz3'
         print cmd
         import os
         import sys
+        sys.stdout.flush()
         status = os.system(cmd)
         sys.exit(1 if status else 0)
 
@@ -3803,7 +3925,9 @@ This string hash function is borrowed from Microsoft Z3
   c -= a; c -= b; c ^= (b>>15); \\
 }
 
+#ifndef __fallthrough
 #define __fallthrough
+#endif
 
 namespace hash_space {
 

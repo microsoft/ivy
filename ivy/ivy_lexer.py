@@ -142,7 +142,7 @@ t_COLON = r':'
 t_DOTS = r'\.\.'
 t_DOTDOTDOT = r'\.\.\.'
 
-t_ignore  = ' \t'
+t_ignore  = ' \t\r'
 t_ignore_COMMENT = r'\#.*'
 
 def t_newline(t):
