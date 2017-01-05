@@ -1259,6 +1259,33 @@ def p_action_local_params_lcb_action_rcb(p):
     p[0] = LocalAction(*(lsyms+[action]))
     p[0].lineno = get_lineno(p,1)
 
+if not (iu.get_numeric_version() <= [1,5]):
+    def p_opttypedsym_symbol(p):
+        'opttypedsym : SYMBOL'
+        p[0] = App(p[1])
+        p[0].lineno = get_lineno(p,1)
+        p[0].sort = None
+
+    def p_opttypedsym_symbol_colon_atype(p):
+        'opttypedsym : SYMBOL COLON atype'
+        p[0] = App(p[1])
+        p[0].lineno = get_lineno(p,1)
+        p[0].sort = p[3]
+
+    def p_action_var_opttypedsym_assign_fmla_semi_action(p):
+        'action : VAR opttypedsym ASSIGN fmla SEMI action'
+        lsym = p[2].prefix('loc:')
+        subst = {[p2]:lsym}
+        action = subst_prefix_atoms_ast(p[6],subst,None,None)
+        lines = action.args if isinstance(action,Sequence) else [action]
+        asgn = AssignAction(lsym,p[4])
+        asgn.lineno = get_lineno(p,3)
+        action = Sequence(*([asgn]+lines))
+        action.lineno = p[6].lineno
+        p[0] = LocalAction(*([lsym,action]))
+        p[0].lineno = get_lineno(p,1)
+        
+
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'
     p[0] = Equals(App(p[1]),App(p[3]))

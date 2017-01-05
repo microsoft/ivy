@@ -269,8 +269,19 @@ def compile_local(self):
     sig = ivy_logic.sig.copy()
     with sig:
         ls = self.args[0:-1]
-        cls = [compile_const(v,sig) for v in ls]
-        res = LocalAction(*(cls+[sortify(self.args[-1])]))
+        cls,asgns = [],[]
+        for v in ls:
+            if isinstance(v,AssignAction):
+                ... sortify the action ...
+                cls.append(vsorted.args[0])
+                asgns.append(vsorted)
+            else:
+                cls.append(compile_const(v,sig))
+        body = sortify(self.args[-1])
+        if asgns:
+            lines = body.args if isinstance(body,Sequence) else [body]
+            body = Sequence(*(asgns+lines))
+        res = LocalAction(*(cls+[body]))
         res.lineno = self.lineno
         return res
 
@@ -388,16 +399,26 @@ def compile_native_arg(arg):
         return sortify_with_inference(arg)
     return arg.clone(map(sortify_with_inference,arg.args)) # handles action names
 
+def compile_native_symbol(arg):
+    name = arg.rep
+    if name in ivy_logic.sig.symbols:
+        sym = ivy_logic.sig.symbols[name]
+        if not isinstance(sym,ivy_logic.UnionSort):
+            return sym
+    if name in ivy_logic.sig.sorts:
+        return ivy_logic.Variable('X',ivy_logic.sig.sorts[name])
+    raise iu.IvyError(arg,'{} is not a declared symbol or type'.format(name))
+
 def compile_native_action(self):
     fields = self.args[0].code.split('`')
-    args = [self.args[0]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else a for i,a in enumerate(self.args[1:])]
+    args = [self.args[0]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[1:])]
     return self.clone(args)
 
 NativeAction.cmpl = compile_native_action
 
 def compile_native_def(self):
     fields = self.args[1].code.split('`')
-    args = list(self.args[0:2]) + [compile_native_arg(a) if not fields[i*2].endswith('"') else a for i,a in enumerate(self.args[2:])]
+    args = list(self.args[0:2]) + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
     return self.clone(args)
 
 def compile_action_def(a,sig):

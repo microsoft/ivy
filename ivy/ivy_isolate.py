@@ -35,24 +35,16 @@ def lookup_action(ast,mod,name):
 
 def add_mixins(mod,actname,action2,assert_to_assume=lambda m:False,use_mixin=lambda:True,mod_mixin=lambda name,m:m):
     # TODO: mixins need to be in a fixed order
-    assert hasattr(action2,'lineno'), action2
-    assert hasattr(action2,'formal_params'), action2
     res = action2
     if create_imports.get():
         res = res.drop_invariants()
     for mixin in mod.mixins[actname]:
-        mixin_name = mixin.args[0].relname
+        mixin_name = mixin.mixer()
         action1 = lookup_action(mixin,mod,mixin_name)
-        assert hasattr(action1,'lineno')
-        assert hasattr(action1,'formal_params'), action1
         if use_mixin(mixin_name):
             if assert_to_assume(mixin):
                 action1 = action1.assert_to_assume()
-                assert hasattr(action1,'lineno')
-                assert hasattr(action1,'formal_params'), action1
-            action1 = mod_mixin(mixin_name,action1)
-            assert hasattr(action1,'lineno')
-            assert hasattr(action1,'formal_params'), action1
+            action1 = mod_mixin(mixin,action1)
             res = ia.apply_mixin(mixin,action1,res)
     return res
 
@@ -697,7 +689,9 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     new_actions = {}
     use_mixin = lambda name: startswith_some(name,present,mod)
-    mod_mixin = lambda name,m: m if startswith_some(name,verified,mod) else m.prefix_calls('ext:')
+    mod_mixin = lambda mixin,m: m if startswith_some(mixin.mixer(),verified,mod) else m.prefix_calls('ext:')
+    def ext_mod_mixin(ea):
+        return lambda mixin,m: m if startswith_some(mixin.mixer(),verified,mod) and not ea(mixin) else m.prefix_calls('ext:')
     all_mixins = lambda m: True
     no_mixins = lambda m: False
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
@@ -711,31 +705,21 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         ver = startswith_eq_some(actname,verified,mod)
         pre = startswith_eq_some(actname,present,mod)
         if pre: 
-            if not ver:
-                assert hasattr(action,'lineno')
-                assert hasattr(action,'formal_params'), action
+            if not ver or actname in delegates:
                 ext_action = action.assert_to_assume().prefix_calls('ext:')
-                assert hasattr(ext_action,'lineno')
-                assert hasattr(ext_action,'formal_params'), ext_action
                 if actname in delegates:
                     int_action = action.prefix_calls('ext:')
-                    assert hasattr(int_action,'lineno')
-                    assert hasattr(int_action,'formal_params'), int_action
                 else:
                     int_action = ext_action
-                    assert hasattr(int_action,'lineno')
-                    assert hasattr(int_action,'formal_params'), int_action
             else:
                 int_action = ext_action = action
-                assert hasattr(int_action,'lineno')
-                assert hasattr(int_action,'formal_params'), int_action
             # internal version of the action has mixins checked
             ea = no_mixins if ver else int_assumes
-            new_actions[actname] = add_mixins(mod,actname,int_action,ea,use_mixin,lambda name,m:m)
+            new_actions[actname] = add_mixins(mod,actname,int_action,ea,use_mixin,lambda mixin,m:m)
             # external version of the action assumes mixins are ok, unless they
             # are delegated to a currently verified object
             ea = ext_assumes if ver else ext_assumes_no_ver
-            new_action = add_mixins(mod,actname,ext_action,ea,use_mixin,mod_mixin)
+            new_action = add_mixins(mod,actname,ext_action,ea,use_mixin,ext_mod_mixin(ea))
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
             # public_actions.add('ext:'+actname)
@@ -744,8 +728,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             # have a call dependency on the isolated module
             summarized_actions.add(actname)
             action = summarize_action(action)
-            new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,mod_mixin)
-            new_actions['ext:'+actname] = add_mixins(mod,actname,action,all_mixins,use_mixin,mod_mixin)
+            new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,ext_mod_mixin(after_mixins))
+            new_actions['ext:'+actname] = add_mixins(mod,actname,action,all_mixins,use_mixin,ext_mod_mixin(all_mixins))
 
     # figure out what is exported:
     exported = set()
@@ -760,7 +744,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 action1 = lookup_action(mixin,mod,mixin_name)
                 if use_mixin(mixin_name) and before_mixins(mixin):
                     action1 = action1.assert_to_assume()
-                    action1 = mod_mixin(mixin_name,action1)
+                    action1 = ext_mod_mixin(all_mixins)(mixin,action1)
                     act = ia.apply_mixin(mixin,action1,act)
             mod.before_export['ext:' + e.exported()] = act
 #            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
@@ -850,9 +834,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
-        asts += [y.formula for y in x]
-    asts += [action for action in new_actions.values()]
-
+        asts.extend(y.formula for y in x)
+    asts.extend(action for action in new_actions.values())
+    for a in new_actions.values():
+        asts.extend(a.formal_params)
+        asts.extend(a.formal_returns)
+    asts.extend(mod.natives)
 
     all_syms = set(lu.used_symbols_asts(asts))
 

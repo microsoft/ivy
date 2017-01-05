@@ -97,6 +97,14 @@ module array(domain,range) = {
 
     object impl = {
 
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
 	interpret t -> <<< std::vector<`range`> >>>
 
 	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
@@ -197,7 +205,7 @@ module array(domain,range) = {
 
 	    #ifdef Z3PP_H_
 	    template <>
-            z3::expr __to_solver(gen& g, const z3::expr& z3val, std::vector<`range`>& val) {
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
 	        z3::expr z3end = g.apply("`end`",z3val);
 	        return z3end  == g.int_to_z3(z3end.get_sort(),val.size());
             }

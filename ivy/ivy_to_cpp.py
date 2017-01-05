@@ -17,6 +17,8 @@ import ivy_compiler as ic
 import ivy_isolate as iso
 import ivy_ast
 import itertools
+import ivy_cpp
+import ivy_cpp_types
 
 from collections import defaultdict
 from operator import mul
@@ -31,6 +33,8 @@ def sort_card(sort):
         return sort.card
     if sort.is_relational():
         return 2
+    if sort in sort_to_cpptype:
+        return sort_to_cpptype[sort].card()
     return slv.sort_card(sort)
     if hasattr(sort,'name'):
         name = sort.name
@@ -112,15 +116,16 @@ def mk_nondet(code,v,rng,name,unique_id):
 def is_native_sym(sym):
     return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    
 
+
 def mk_nondet_sym(code,sym,name,unique_id):
     global nondet_cnt
-    if is_native_sym(sym) or ctype(sym.sort.rng) == '__strlit':
+    if is_native_sym(sym) or ctype(sym.sort.rng) == '__strlit' or sym.sort.rng in sort_to_cpptype:
         return  # native classes have their own initializers
     if is_large_type(sym.sort):
         code_line(code,varname(sym) + ' = ' + make_thunk(code,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,name,unique_id)))
         return
     fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
-                     if not (is_native_sym(v) or ctype(v.sort) == '__strlit') else None)
+                     if not (is_native_sym(v) or ctype(v.sort) == '__strlit' or v.sort in sort_to_cpptype) else None)
     dom = sym.sort.dom
     if dom:
         vs = variables(dom)
@@ -245,25 +250,39 @@ def hashtype(sort,classname=None):
         return 'int'
     return ctype(sort,classname)
     
+def has_string_interp(sort):
+    return il.sort_interp(sort) == 'strlit'    
+
+def ctype_remaining_cases(sort,classname):
+    if isinstance(sort,il.EnumeratedSort):
+        return ((classname+'::') if classname != None else '') + varname(sort.name)
+    if sort.is_relational():
+        return 'bool'
+    if has_string_interp(sort):
+        return '__strlit'
+    if sort in sort_to_cpptype:
+        sn = sort_to_cpptype[sort].short_name()
+        return sn
+        return ((classname+'::') if classname != None else '') + sn
+    return 'int'
+
+
 def ctype(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
-    if isinstance(sort,il.EnumeratedSort):
-            return ((classname+'::') if classname != None else '') + varname(sort.name)
-    return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
+    return ctype_remaining_cases(sort,classname)
     
 def ctypefull(sort,classname=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types:
             if classname==None:
-                return native_type_full(im.module.native_types[sort.name])
+#                return native_type_full(im.module.native_types[sort.name])
+                return varname(sort.name)
             return classname+'::'+varname(sort.name)
         if sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
-    if isinstance(sort,il.EnumeratedSort):
-            return ((classname+'::') if classname != None else '') + varname(sort.name)
-    return 'bool' if sort.is_relational() else '__strlit' if il.sort_interp(sort) == 'strlit' else 'int'
+    return ctype_remaining_cases(sort,classname)
 
 def native_type_full(self):
     return self.args[0].inst(native_reference,self.args[1:])    
@@ -321,7 +340,11 @@ def make_thunk(impl,vs,expr):
         if lu.free_variables(expr):
             raise iu.IvyError(None,"cannot compile {}".format(expr))
         if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
-            code_line(impl,'z3::expr res = v == g.int_to_z3(g.sort("{}"),(int)({}))'.format(expr.sort.name,code_eval(impl,expr)))
+            if expr.sort in sort_to_cpptype:
+                code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
+            else:
+                cty = '__strlit' if has_string_interp(expr.sort) else 'int'
+                code_line(impl,'z3::expr res = v == g.int_to_z3(g.sort("{}"),({})({}))'.format(expr.sort.name,cty,code_eval(impl,expr)))
         else:
             raise iu.IvyError(None,"cannot compile {}".format(expr))
         code_line(impl,'return res')
@@ -346,7 +369,10 @@ def emit_cpp_sorts(header):
     for name in im.module.sort_order:
         if name in im.module.native_types:
             nt = native_type_full(im.module.native_types[name])
-            header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
+#            header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
+            header.append("    class " + varname(name) + ' : public ' + nt +  "{\n")
+            header.append("        public: size_t __hash() const { return hash_space::hash<"+nt+" >()(*this);};\n")
+            header.append("    };\n");
         elif name in im.module.sort_destructors:
             header.append("    struct " + varname(name) + " {\n");
             destrs = im.module.sort_destructors[name]
@@ -357,25 +383,39 @@ def emit_cpp_sorts(header):
         elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
             sort = il.sig.sorts[name]
             header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+        elif name in il.sig.interp:
+            itp = il.sig.interp[name]
+            if not (itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
+                cpptype = ivy_cpp_types.get_cpptype_constructor(itp)(varname(name))
+                cpptypes.append(cpptype)
+                sort_to_cpptype[il.sig.sorts[name]] = cpptype
+                
 
 
 def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
         if name == "bool":
             continue
-        if name in il.sig.interp:
-            sort = il.sig.interp[name]
         if not isinstance(sort,il.EnumeratedSort):
-            sortname = str(sort)
-#            print "sortname: {}".format(sortname)
-            if sortname.startswith('bv[') and sortname.endswith(']'):
-                width = int(sortname[3:-1])
+            if name in il.sig.interp:
+                sortname = il.sig.interp[name]
+#            print "name: {} sortname: {}".format(name,sortname)
+                if sortname.startswith('bv[') and sortname.endswith(']'):
+                    width = int(sortname[3:-1])
+                    indent(header)
+                    header.append('mk_bv("{}",{});\n'.format(name,width))
+                    continue
+                if sortname == 'int':
+                    indent(header)
+                    header.append('mk_int("{}");\n'.format(name))
+                    continue
+                if sortname == 'strlit':
+                    indent(header)
+                    header.append('mk_string("{}");\n'.format(name))
+                    continue
+            if sort in sort_to_cpptype:
                 indent(header)
-                header.append('mk_bv("{}",{});\n'.format(name,width))
-                continue
-            if sortname == 'int':
-                indent(header)
-                header.append('mk_int("{}");\n'.format(name))
+                header.append('enum_sorts.insert(std::pair<std::string, z3::sort>("'+ name + '",'+ctype(sort)+'::z3_sort(ctx)));\n')
                 continue
             header.append('mk_sort("{}");\n'.format(name))
             continue
@@ -436,7 +476,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     indent(header)
-    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types:
+    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types or sort.rng in sort_to_cpptype:
         code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
     else:
         header.append((obj + '.' if obj else '')
@@ -466,7 +506,8 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
         for destr in destrs:
             emit_set_field(header,destr,lhs1,rhs1,nvars+len(vs))
     else:
-        code_line(header,'slvr.add('+lhs1+'=='+int_to_z3(sort.rng,rhs1)+')')
+#        code_line(header,'slvr.add('+lhs1+'=='+int_to_z3(sort.rng,rhs1)+')')
+        code_line(header,'slvr.add(__to_solver(*this,'+lhs1+','+rhs1+'))')
     close_loop(header,vs)
 
 
@@ -537,7 +578,10 @@ def emit_clear_progress(impl,obj=None):
 
 def mk_rand(sort,classname=None):
     card = sort_card(sort)
-    return '('+ctype(sort,classname=classname)+')' + ('(rand() % {})'.format(card) if card else "0")
+    return '('+ctype(sort,classname=classname)+')' + ('(rand() % {})'.format(card) if card
+                                                      else '((rand()%2) ? "a" : "b")' if has_string_interp(sort)
+                                                      else sort_to_cpptype[sort].rand() if sort in sort_to_cpptype
+                                                      else "0")
 
 def emit_init_gen(header,impl,classname):
     global indent_level
@@ -569,6 +613,8 @@ public:
     used = ilu.used_symbols_asts(constraints)
     impl.append("bool init_gen::generate(" + classname + "& obj) {\n")
     indent_level += 1
+    for cpptype in cpptypes:
+        code_line(impl,cpptype.short_name()+'::prepare()')
     for sym in all_state_symbols():
         if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
             global is_derived
@@ -576,7 +622,9 @@ public:
                 if sym in used:
                     emit_randomize(impl,sym,classname=classname)
                 else:
-                    if not is_native_sym(sym) and not is_large_type(sym.sort):
+                    if is_large_type(sym.sort):
+                        code_line(impl,'obj.'+varname(sym) + ' = ' + make_thunk(impl,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,sym.name,0)))
+                    elif not is_native_sym(sym):
                         fun = lambda v: (mk_rand(v.sort,classname=classname) if not is_native_sym(v) else None)
                         assign_array_from_model(impl,sym,'obj.',fun)
     indent_level -= 1
@@ -592,6 +640,8 @@ public:
     impl.append("""
     }
 """)
+    for cpptype in cpptypes:
+        code_line(impl,cpptype.short_name()+'::cleanup()')
     impl.append("""
     obj.__init();
     return __res;
@@ -611,10 +661,12 @@ def emit_randomize(header,symbol,classname=None):
         indent(header)
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
-    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types:
+    if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types or sort.rng in sort_to_cpptype:
         code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
     else:
         indent(header)
+        if il.is_uninterpreted_sort(sort.rng):
+            raise iu.IvyError(None,'cannot create test generator because type {} is uninterpreted'.format(sort.rng))
         header.append('randomize("{}"'.format(sname)
                       + ''.join(",X{}".format(idx) for idx in range(len(domain)))
                       + ");\n")
@@ -640,6 +692,9 @@ def emit_action_gen(header,impl,name,action,classname):
     caname = varname(name)
     if name in im.module.before_export:
         action = im.module.before_export[name]
+    def card(sort):
+        return sort_card(sort)
+    action = action.unroll_loops(card)
     upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
@@ -671,6 +726,8 @@ def emit_action_gen(header,impl,name,action,classname):
     impl.append("}\n");
     impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
     indent_level += 1
+    for cpptype in cpptypes:
+        code_line(impl,cpptype.short_name()+'::prepare()')
     pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
         if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
@@ -691,7 +748,10 @@ def emit_action_gen(header,impl,name,action,classname):
             emit_eval(impl,sym,classname=classname)
     indent_level -= 2
     impl.append("""
-    }
+    }""")
+    for cpptype in cpptypes:
+        code_line(impl,cpptype.short_name()+'::cleanup()')
+    impl.append("""
     pop();
     obj.___ivy_gen = this;
     return __res;
@@ -746,7 +806,9 @@ def native_type(native):
 
 def native_declaration(atom):
     if atom.rep in im.module.sig.sorts:
-        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+        res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+#        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
+        return res
     res = varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
@@ -786,7 +848,7 @@ def native_typeof(arg):
     return int + len(arg.sort.dom) * '[]'
 
 def native_z3name(arg):
-    return str(arg.rep)
+    return arg.sort.name if il.is_variable(arg) else arg.rep.name
 
 def native_to_str(native,reference=False):
     tag,code = native_split(native.args[1].code)
@@ -1011,13 +1073,19 @@ def check_member_names(classname):
 def emit_ctuple_to_solver(header,dom,classname):
     ct_name = classname + '::' + ctuple(dom)
     ch_name = classname + '::' + ctuple_hash(dom)
+    emit_hash_thunk_to_solver(header,dom,classname,ct_name,ch_name)
+    
+def emit_hash_thunk_to_solver(header,dom,classname,ct_name,ch_name):
     open_scope(header,line='template<typename R> class to_solver_class<hash_thunk<D,R> >'.replace('D',ct_name).replace('H',ch_name))
     code_line(header,'public:')
     open_scope(header,line='z3::expr operator()( gen &g, const  z3::expr &v, hash_thunk<D,R> &val)'.replace('D',ct_name).replace('H',ch_name))
     code_line(header,'z3::expr res = g.ctx.bool_val(true)')
     code_line(header,'z3::expr disj = g.ctx.bool_val(false)')
     open_scope(header,line='for(typename hash_map<D,R>::iterator it=val.memo.begin(), en = val.memo.end(); it != en; it++)'.replace('D',ct_name).replace('H',ch_name))
-    code_line(header,'z3::expr cond = '+' && '.join('__to_solver(g,v.arg('+str(n)+'),it->first.arg'+str(n)+')' for n in range(len(dom))))
+    if dom is not None:
+        code_line(header,'z3::expr cond = '+' && '.join('__to_solver(g,v.arg('+str(n)+'),it->first.arg'+str(n)+')' for n in range(len(dom))))
+    else:
+        code_line(header,'z3::expr cond = __to_solver(g,v.arg(0),it->first)')
     code_line(header,'res = res && implies(cond,__to_solver(g,v,it->second))')
     code_line(header,'disj = disj || cond')
     close_scope(header)
@@ -1027,6 +1095,9 @@ def emit_ctuple_to_solver(header,dom,classname):
     close_scope(header,semi=True)
 
 def emit_all_ctuples_to_solver(header,classname):
+    emit_hash_thunk_to_solver(header,None,classname,'__strlit','hash<__strlit>')
+    for cpptype in cpptypes:
+        emit_hash_thunk_to_solver(header,None,classname,cpptype.short_name(),'hash<'+cpptype.short_name()+'>')
     for dom in all_ctuples():
         emit_ctuple_to_solver(header,dom,classname)
 
@@ -1036,6 +1107,9 @@ def emit_ctuple_equality(header,dom,classname):
     code_line(header,'return '+' && '.join('x.arg{} == y.arg{}'.format(n,n) for n in range(len(dom))))
     close_scope(header)
 
+def is_really_uninterpreted_sort(sort):
+    return il.is_uninterpreted_sort(sort) and not (
+        sort.name in im.module.sort_destructors or sort.name in im.module.native_types)
 
 def module_to_cpp_class(classname,basename):
     global the_classname
@@ -1045,6 +1119,10 @@ def module_to_cpp_class(classname,basename):
     is_derived = set()
     for ldf in im.module.definitions + im.module.native_definitions:
         is_derived.add(ldf.formula.defines())
+    global cpptypes
+    cpptypes = []
+    global sort_to_cpptype
+    sort_to_cpptype = {}
 
     # remove the actions not reachable from exported
         
@@ -1053,7 +1131,7 @@ def module_to_cpp_class(classname,basename):
 #    ra = iu.reachable(im.module.public_actions,lambda name: im.module.actions[name].iter_calls())
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
-    header = []
+    header = ivy_cpp.context.globals.code
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
         header.append('extern void ivy_assume(bool,const char *);\n')
@@ -1062,6 +1140,9 @@ def module_to_cpp_class(classname,basename):
     if target.get() in ["gen","test"]:
         header.append('struct ivy_gen {virtual int choose(int rng,const char *name) = 0;};\n')
 #    header.append('#include <vector>\n')
+
+    if target.get() in ["gen","test"]:
+         header.append('#include "z3++.h"\n')
 
 
     header.append(hash_h)
@@ -1090,7 +1171,12 @@ def module_to_cpp_class(classname,basename):
         header.append('    virtual void ivy_assume(bool,const char *){}\n')
         header.append('    virtual void ivy_check_progress(int,int){}\n')
     
-    impl = ['#include "' + basename + '.h"\n\n']
+    with ivy_cpp.CppClassName(classname):
+        emit_cpp_sorts(header)
+
+        
+    impl = ivy_cpp.context.impls.code
+    impl.append('#include "' + basename + '.h"\n\n')
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("""
@@ -1259,6 +1345,11 @@ void __from_solver<bool>( gen &g, const  z3::expr &v, bool &res) {
     res = g.eval(v);
 }
 
+template <>
+void __from_solver<__strlit>( gen &g, const  z3::expr &v, __strlit &res) {
+    res = g.eval_string(v);
+}
+
 template <class T>
 class to_solver_class {
 };
@@ -1278,6 +1369,12 @@ z3::expr __to_solver<bool>( gen &g, const  z3::expr &v, bool &val) {
     return v == g.int_to_z3(v.get_sort(),val);
 }
 
+template <>
+z3::expr __to_solver<__strlit>( gen &g, const  z3::expr &v, __strlit &val) {
+//    std::cout << v << ":" << v.get_sort() << std::endl;
+    return v == g.int_to_z3(v.get_sort(),val);
+}
+
 template <class T> void __randomize( gen &g, const  z3::expr &v);
 
 template <>
@@ -1288,6 +1385,15 @@ void __randomize<int>( gen &g, const  z3::expr &v) {
 template <>
 void __randomize<bool>( gen &g, const  z3::expr &v) {
     g.randomize(v);
+}
+
+template <>
+        void __randomize<__strlit>( gen &g, const  z3::expr &apply_expr) {
+    z3::sort range = apply_expr.get_sort();
+    __strlit value = (rand() % 2) ? "a" : "b";
+    z3::expr val_expr = g.int_to_z3(range,value);
+    z3::expr pred = apply_expr == val_expr;
+    g.add_alit(pred);
 }
 
 template<typename D, typename R>
@@ -1342,12 +1448,16 @@ class z3_thunk : public thunk<D,R> {
     for dom in all_ctuples():
         emit_ctuple_equality(impl,dom,classname)
 
+    for cpptype in cpptypes:
+        cpptype.emit_templates()
+
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "impl":
             global native_classname
             native_classname = classname
+#            print 'native_classname:{}'.format(native_classname)
             code = native_to_str(native)
             native_classname = None
             if code not in once_memo:
@@ -1373,7 +1483,6 @@ class z3_thunk : public thunk<D,R> {
     }
 """)
 
-    emit_cpp_sorts(header)
     declare_all_ctuples(header)
     declare_all_ctuples_hash(header,classname)
     for sym in all_state_symbols():
@@ -1595,6 +1704,8 @@ class z3_thunk : public thunk<D,R> {
                         vs = variables(sym.sort.dom[1:])
                         for v in vs:
                             open_loop(impl,[v])
+                        if is_really_uninterpreted_sort(sym.sort.rng):
+                            raise iu.IvyError(None,'cannot create test generator because type {} is uninterpreted'.format(sym.sort.rng))
                         code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
                         for v in vs:
                             close_loop(impl,[v])
@@ -1638,7 +1749,8 @@ class z3_thunk : public thunk<D,R> {
 
 
 
-            emit_all_ctuples_to_solver(impl,classname)
+            if target.get() in ["gen","test"]:
+                emit_all_ctuples_to_solver(impl,classname)
 
 
             emit_repl_boilerplate1a(header,impl,classname)
@@ -1697,7 +1809,7 @@ class z3_thunk : public thunk<D,R> {
 
 
         
-    return ''.join(header) , ''.join(impl)
+    return ivy_cpp.context.globals.get_file(), ivy_cpp.context.impls.get_file()
 
 
 def check_representable(sym,ast=None,skip_args=0):
@@ -1819,6 +1931,9 @@ def emit_constant(self,header,code):
         if self.sort.name in il.sig.interp and il.sig.interp[self.sort.name].startswith('bv['):
             sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
             code.append('(' + varname(self.name) + ' & ' + str((1 << sparms[0]) -1) + ')')
+            return
+        if self.sort in sort_to_cpptype: 
+            code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
     code.append(varname(self.name))
 
@@ -2453,7 +2568,9 @@ def native_reference(atom):
         res += ''.join(', ' + varname(arg.rep) for arg in atom.args) + ')'
         return res
     if atom.rep in im.module.sig.sorts:
-        return ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+        res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
+#        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
+        return res
     res = varname(atom.rep)
     for arg in atom.args:
         n = arg.name if hasattr(arg,'name') else arg.rep
@@ -2983,7 +3100,6 @@ def emit_boilerplate1(header,impl,classname):
 #include <vector>
 #include <sstream>
 #include <cstdlib>
-#include "z3++.h"
 """)
     header.append("""
 
@@ -3042,6 +3158,18 @@ public:
             if (foo.is_bool())
                 return (foo.decl().decl_kind() == Z3_OP_TRUE) ? 1 : 0;
             return enum_to_int[foo.decl().name()];
+        }
+        catch (const z3::exception &e) {
+            std::cout << e << std::endl;
+            throw e;
+        }
+    }
+
+    __strlit eval_string(const z3::expr &apply_expr) {
+        try {
+            z3::expr foo = model.eval(apply_expr,true);
+            assert(Z3_is_string(ctx,foo));
+            return Z3_get_string(ctx,foo);
         }
         catch (const z3::exception &e) {
             std::cout << e << std::endl;
@@ -3133,6 +3261,10 @@ public:
         return enum_values.find(range)->second[value]();
     }
 
+    z3::expr int_to_z3(const z3::sort &range, const std::string& value) {
+        return ctx.string_val(value);
+    }
+
     unsigned sort_card(const z3::sort &range) {
         if (range.is_bool())
             return 2;
@@ -3190,6 +3322,7 @@ public:
 
     void randomize(const z3::expr &apply_expr) {
         z3::sort range = apply_expr.get_sort();
+//        std::cout << apply_expr << " : " << range << std::endl;
         unsigned card = sort_card(range);
         int value = rand() % card;
         z3::expr val_expr = int_to_z3(range,value);
@@ -3264,6 +3397,12 @@ public:
 
     void mk_int(const char *sort_name) {
         z3::sort sort = ctx.int_sort();
+        // can't use operator[] here because the value classes don't have nullary constructors
+        enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
+    }
+
+    void mk_string(const char *sort_name) {
+        z3::sort sort = ctx.string_sort();
         // can't use operator[] here because the value classes don't have nullary constructors
         enum_sorts.insert(std::pair<std::string, z3::sort>(sort_name,sort));
     }
@@ -3364,7 +3503,8 @@ def main():
         basename = opt_classname.get() or im.module.name
         classname = varname(basename)
         with iu.ErrorPrinter():
-            header,impl = module_to_cpp_class(classname,basename)
+            with ivy_cpp.CppContext():
+                header,impl = module_to_cpp_class(classname,basename)
 #        print header
 #        print impl
         f = open(basename+'.h','w')
