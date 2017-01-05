@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -996,6 +996,24 @@ def p_actseq_actseq_semi_action(p):
     p[0] = p[1]
     p[0].append(p[3])
 
+def lower_var_stmts(stmts):
+    for idx,stmt in enumerate(stmts):
+        if isinstance(stmt,VarAction):
+            lhs = stmt.args[0]
+            rhs = stmt.args[1]
+            lsym = lhs.prefix('loc:')
+            subst = {lhs.rep:lsym.rep}
+            lines = lower_var_stmts(stmts[idx+1:])
+            lines = [subst_prefix_atoms_ast(s,subst,None,None) for s in lines]
+            asgn = AssignAction(lsym,rhs)
+            asgn.lineno = stmt.lineno
+            body = Sequence(*lines)
+            body.lineno = stmt.lineno
+            res = LocalAction(*[asgn,body])
+            res.lineno = body.lineno;
+            return [res]
+    return stmts
+
 def p_sequence_lcb_rcb(p):
     'sequence : LCB RCB'
     p[0] = Sequence()
@@ -1003,15 +1021,16 @@ def p_sequence_lcb_rcb(p):
 
 def p_sequence_lcb_actseq_rcb(p):
     'sequence : LCB actseq RCB'
-    if len(p[2]) == 1:
-        p[0] = p[2][0]
+    stmts = lower_var_stmts(p[2])
+    if len(stmts) == 1:
+        p[0] = stmts[0]
     else:
-        p[0] = Sequence(*p[2])
+        p[0] = Sequence(*lower_var_stmts(stmts))
         p[0].lineno = get_lineno(p,1)
 
 def p_sequence_lcb_actseq_semi_rcb(p):
     'sequence : LCB actseq SEMI RCB'
-    p[0] = Sequence(*p[2])
+    p[0] = Sequence(*lower_var_stmts(p[2]))
     p[0].lineno = get_lineno(p,1)
 
 def p_action_sequence(p):
@@ -1264,7 +1283,7 @@ if not (iu.get_numeric_version() <= [1,5]):
         'opttypedsym : SYMBOL'
         p[0] = App(p[1])
         p[0].lineno = get_lineno(p,1)
-        p[0].sort = None
+        p[0].sort = 'S'
 
     def p_opttypedsym_symbol_colon_atype(p):
         'opttypedsym : SYMBOL COLON atype'
@@ -1272,19 +1291,10 @@ if not (iu.get_numeric_version() <= [1,5]):
         p[0].lineno = get_lineno(p,1)
         p[0].sort = p[3]
 
-    def p_action_var_opttypedsym_assign_fmla_semi_action(p):
-        'action : VAR opttypedsym ASSIGN fmla SEMI action'
-        lsym = p[2].prefix('loc:')
-        subst = {[p2]:lsym}
-        action = subst_prefix_atoms_ast(p[6],subst,None,None)
-        lines = action.args if isinstance(action,Sequence) else [action]
-        asgn = AssignAction(lsym,p[4])
-        asgn.lineno = get_lineno(p,3)
-        action = Sequence(*([asgn]+lines))
-        action.lineno = p[6].lineno
-        p[0] = LocalAction(*([lsym,action]))
-        p[0].lineno = get_lineno(p,1)
-        
+    def p_action_var_opttypedsym_assign_fmla(p):
+        'action : VAR opttypedsym ASSIGN fmla'
+        p[0] = VarAction(p[2],p[4])
+        p[0].lineno = get_lineno(p,2)
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'

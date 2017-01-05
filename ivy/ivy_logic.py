@@ -89,16 +89,15 @@ class UnsortedContext(object):
         allow_unsorted = self.old_allow_unsorted
         return False # don't block any exceptions
 
-class top_sort_as_default(object):
-    """ Context in which TopSort is the default sort
+class sort_as_default(object):
+    """ Context in which a given sort is the default sort
     """
-    def __init__(self):
-        pass
+    def __init__(self,sort):
+        self.sort = sort
     def __enter__(self):
         global sig
-#        print "setting topsort as default"
         self.old_default_sort = sig.sorts.get('S',None)
-        sig.sorts['S'] = lg.TopS
+        sig.sorts['S'] = self.sort
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
@@ -107,6 +106,18 @@ class top_sort_as_default(object):
         else:
             del sig.sorts['S']
         return False # don't block any exceptions
+
+class top_sort_as_default(sort_as_default):
+    """ Context in which TopSort is the default sort
+    """
+    def __init__(self):
+        self.sort = lg.TopS
+
+class alpha_sort_as_default(sort_as_default):
+    """ Context in which alpha is the default sort
+    """
+    def __init__(self):
+        self.sort = lg.TopSort('alpha')
 
 Symbol = lg.Const
 

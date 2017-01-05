@@ -1,0 +1,19 @@
+#lang ivy1.6
+
+type t
+
+action b(x:t) returns (z:t) = {
+    z := x
+}
+
+action a(x:t) returns (z:t)= {
+    var y := b(x);
+    {
+       var q : t := b(y);
+       z := q
+    };
+    z := x;
+    z := y
+}
+
+export a
