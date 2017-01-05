@@ -269,18 +269,42 @@ def compile_local(self):
     sig = ivy_logic.sig.copy()
     with sig:
         ls = self.args[0:-1]
-        cls,asgns = [],[]
-        for v in ls:
-            if isinstance(v,AssignAction):
-                ... sortify the action ...
-                cls.append(vsorted.args[0])
-                asgns.append(vsorted)
-            else:
-                cls.append(compile_const(v,sig))
-        body = sortify(self.args[-1])
-        if asgns:
+        if len(ls) == 1 and isinstance(ls[0],AssignAction):
+            v = ls[0]
+            lhs = v.args[0]
+            rhs = v.args[1]
+            # temporarily rename lhs symbol in case it clashes with an existing symbol
+#            tmp_lhs = lhs.prefix('__var_tmp:')
+            tmp_lhs = lhs
+            code = []
+            local_syms = []
+            with ExprContext(code,local_syms):
+                with alpha_sort_as_default():
+                    sym = compile_const(tmp_lhs,sig)
+                    ctmp_lhs = tmp_lhs.compile()
+                    crhs = rhs.compile()
+            with ASTContext(self):
+                teq = sort_infer(Equals(ctmp_lhs,crhs))
+            clhs,crhs = list(teq.args)
+#            clhs = clhs.drop_prefix('__var_tmp:')
+            asgn = v.clone([clhs,crhs])
+            ivy_logic.remove_symbol(sym)
+            if clhs.rep.name in sig.symbols:
+                del sig.symbols[clhs.rep.name] # shadow the existing symbol
+            ivy_logic.add_symbol(clhs.rep.name,clhs.rep.sort)
+            body = sortify(self.args[-1])
             lines = body.args if isinstance(body,Sequence) else [body]
-            body = Sequence(*(asgns+lines))
+            body = Sequence(*([asgn]+lines))
+            code.append(LocalAction(clhs.rep,body))
+            for c in code:
+                c.lineno = self.lineno
+            if len(code) == 1:
+                return code[0]
+            res = LocalAction(*(local_syms + [Sequence(*code)]))
+            res.lineno = self.lineno
+            return res
+        cls = [compile_const(v,sig) for v in ls]
+        body = sortify(self.args[-1])
         res = LocalAction(*(cls+[body]))
         res.lineno = self.lineno
         return res
