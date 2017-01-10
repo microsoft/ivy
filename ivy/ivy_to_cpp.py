@@ -1132,6 +1132,7 @@ def module_to_cpp_class(classname,basename):
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = ivy_cpp.context.globals.code
+    header.append("#define _HAS_ITERATOR_DEBUGGING 0\n")
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
         header.append('extern void ivy_assume(bool,const char *);\n')
@@ -1779,6 +1780,15 @@ class z3_thunk : public thunk<D,R> {
 
 
             impl.append("int main(int argc, char **argv){\n")
+            impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+            impl.append("        argc--;\n")
+            impl.append("        int fd = open(argv[argc],0);\n")
+            impl.append("        if (fd < 0){\n")
+            impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
+            impl.append('            exit(1);\n')
+            impl.append('        }\n')
+            impl.append("        dup2(fd, 0);\n")
+            impl.append("    }\n")
             impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
             impl.append('        std::cerr << "usage: {} {}\\n";\n'
                         .format(classname,' '.join(map(varname,im.module.params))))
@@ -2597,7 +2607,7 @@ int ask_ret(int bound) {
         std::cin >> res;
         if (res >= 0 && res < bound) 
             return res;
-        std::cout << "value out of range" << std::endl;
+        std::cerr << "value out of range" << std::endl;
     }
 }
 
@@ -2656,7 +2666,7 @@ int ask_ret(int bound) {
 // Override methods to implement low-level network service
 
 bool is_white(int c) {
-    return (c == ' ' || c == '\\t' || c == '\\n');
+    return (c == ' ' || c == '\\t' || c == '\\n' || c == '\\r');
 }
 
 bool is_ident(int c) {
@@ -2673,6 +2683,10 @@ void skip_white(const std::string& str, int &pos){
 struct syntax_error {
 };
 
+void throw_syntax(){
+    throw syntax_error();
+}
+
 std::string get_ident(const std::string& str, int &pos) {
     std::string res = "";
     while (pos < str.size() && is_ident(str[pos])) {
@@ -2680,7 +2694,7 @@ std::string get_ident(const std::string& str, int &pos) {
         pos++;
     }
     if (res.size() == 0)
-        throw syntax_error();
+        throw_syntax();
     return res;
 }
 
@@ -2696,7 +2710,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             if (pos < cmd.size() && cmd[pos] == ']')
                 break;
             if (!(pos < cmd.size() && cmd[pos] == ','))
-                throw syntax_error();
+                throw_syntax();
         }
         pos++;
     }
@@ -2708,7 +2722,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             field.atom = get_ident(cmd,pos);
             skip_white(cmd,pos);
             if (!(pos < cmd.size() && cmd[pos] == ':'))
-                 throw syntax_error();
+                 throw_syntax();
             pos++;
             skip_white(cmd,pos);
             field.fields.push_back(parse_value(cmd,pos));
@@ -2717,7 +2731,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             if (pos < cmd.size() && cmd[pos] == '}')
                 break;
             if (!(pos < cmd.size() && cmd[pos] == ','))
-                throw syntax_error();
+                throw_syntax();
         }
         pos++;
     }
@@ -2727,7 +2741,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
         while (pos < cmd.size() && cmd[pos] != '"')
             res.atom.push_back(cmd[pos++]);
         if(pos == cmd.size())
-            throw syntax_error();
+            throw_syntax();
         pos++;
     }
     else 
@@ -2752,12 +2766,12 @@ void parse_command(const std::string &cmd, std::string &action, std::vector<ivy_
             args.push_back(parse_value(cmd,pos));
         }
         if (!(pos < cmd.size() && cmd[pos] == ')'))
-            throw syntax_error();
+            throw_syntax();
         pos++;
     }
     skip_white(cmd,pos);
     if (pos != cmd.size())
-        throw syntax_error();
+        throw_syntax();
 }
 
 struct bad_arity {
@@ -2838,17 +2852,17 @@ public:
 def emit_repl_boilerplate2(header,impl,classname):
     impl.append("""
             {
-                std::cout << "undefined action: " << action << std::endl;
+                std::cerr << "undefined action: " << action << std::endl;
             }
         }
         catch (syntax_error&) {
-            std::cout << "syntax error" << std::endl;
+            std::cerr << "syntax error" << std::endl;
         }
         catch (out_of_bounds &err) {
-            std::cout << err.txt << " out of bounds" << std::endl;
+            std::cerr << err.txt << " out of bounds" << std::endl;
         }
         catch (bad_arity &err) {
-            std::cout << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
+            std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
         if (isatty(fdes()))
             std::cout << "> "; std::cout.flush();
@@ -2915,8 +2929,9 @@ def emit_repl_boilerplate3(header,impl,classname):
 #ifdef _WIN32
     // TODO: Windows can't do asynchronous console I/O. This will have to be handled with
     // threads at some future time. For now, just read from the console unitl EOF.
-    while (true)
+    while (!cr->eof())
         cr->read();
+    return 0;
 #endif
 
     while(true) {
@@ -3160,7 +3175,7 @@ public:
             return enum_to_int[foo.decl().name()];
         }
         catch (const z3::exception &e) {
-            std::cout << e << std::endl;
+            std::cerr << e << std::endl;
             throw e;
         }
     }
@@ -3172,7 +3187,7 @@ public:
             return Z3_get_string(ctx,foo);
         }
         catch (const z3::exception &e) {
-            std::cout << e << std::endl;
+            std::cerr << e << std::endl;
             throw e;
         }
     }
@@ -3195,7 +3210,7 @@ public:
             return enum_to_int[foo.decl().name()];
         }
         catch (const z3::exception &e) {
-            std::cout << e << std::endl;
+            std::cerr << e << std::endl;
             throw e;
         }
     }

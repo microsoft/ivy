@@ -79,6 +79,7 @@ int CLASSNAME::next_bv = 0;
 
 std::ostream &operator <<(std::ostream &s, const CLASSNAME &t){
     s << "\\"" << t.c_str() << "\\"";
+    return s;
 }
 template <>
 CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, int bound) {

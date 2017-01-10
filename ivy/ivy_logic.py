@@ -296,7 +296,7 @@ def add_sort(sort):
         IvyError(None,"redefinition of sort {}".format(sort_name))
     sig.sorts[sort.name] = sort
 
-def find_symbol(symbol_name):
+def find_symbol(symbol_name,throw=True):
     if allow_unsorted:
         return Symbol(symbol_name,lg.TopS)
     try:
@@ -307,14 +307,17 @@ def find_symbol(symbol_name):
     except KeyError:
         if symbol_name == '=':
             return equals
-        raise IvyError(None,"unknown symbol: {}".format(symbol_name))
+        if not throw:
+            return None
+        else:
+            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
-def find_polymorphic_symbol(symbol_name):
+def find_polymorphic_symbol(symbol_name,throw=True):
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
     if symbol_name[0].isdigit() or symbol_name[0] == '"':
         return Symbol(symbol_name,alpha)
-    return find_symbol(symbol_name)
+    return find_symbol(symbol_name,throw)
 
 def normalize_symbol(symbol):
     if iu.ivy_use_polymorphic_macros and symbol.name in polymorphic_macros_map:

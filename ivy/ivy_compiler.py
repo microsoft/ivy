@@ -122,17 +122,20 @@ def pull_args(args,num,sym,top):
     return res
 
 
+class cfrfail(Exception):
+    def __init__(symbol_name):
+        self.symbol_name = symbol_name
+
 def compile_field_reference_rec(symbol_name,args,top=False):
-    try:
-        sym = ivy_logic.find_polymorphic_symbol(symbol_name)
-    except IvyError:
+    sym = ivy_logic.find_polymorphic_symbol(symbol_name,throw=False)
+    if sym is None:
         parent_name,child_name = iu.parent_child_name(symbol_name)
         if parent_name == 'this':
-            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
+            raise cfrfail(symbol_name)
         try:
             base = compile_field_reference_rec(parent_name,args)
-        except IvyError:
-            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
+        except cfrfail:
+            raise cfrfail(symbol_name)
         sort = base.sort
         sort_parent,sort_child = iu.parent_child_name(sort.name)
         destr_name = iu.compose_names(sort_parent,child_name)
@@ -151,8 +154,12 @@ def field_reference_action(actname,args,top):
     return compile_inline_call(ivy_ast.Atom(actname,[]),pull_args(args,nformals,actname,top))
 
 def compile_field_reference(symbol_name,args):
-    return compile_field_reference_rec(symbol_name,args,top=True)
+    try:
+        return compile_field_reference_rec(symbol_name,args,top=True)
+    except cfrfail as err:
+        raise IvyError(None,"unknown symbol: {}".format(err.symbol_name))
 
+    
 def compile_inline_call(self,args):
     params,returns = top_context.actions[self.rep]
     if len(returns) != 1:
@@ -181,11 +188,11 @@ def compile_app(self):
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
-    try: 
-        return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
-    except:
-        res = compile_field_reference(self.rep,args)
-        return res
+    sym = ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False)
+    if sym is not None:
+        return (sym)(*args)
+    res = compile_field_reference(self.rep,args)
+    return res
     
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))

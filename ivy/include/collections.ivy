@@ -168,7 +168,8 @@ module array(domain,range) = {
 		    s << a[i];
 		}
 	        s << ']';
-	    }
+		return s;
+            }
 
 	    template <>
 	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
