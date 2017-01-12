@@ -1235,6 +1235,7 @@ public:
 };
 void install_timer(timer *);
 struct ivy_value {
+    int pos;
     std::string atom;
     std::vector<ivy_value> fields;
     bool is_member() const {
@@ -1243,12 +1244,13 @@ struct ivy_value {
 };
 struct out_of_bounds {
     std::string txt;
-    out_of_bounds(int _idx) {
+    int pos;
+    out_of_bounds(int _idx, int pos = 0) : pos(pos){
         std::ostringstream os;
         os << "argument " << _idx+1;
         txt = os.str();
     }
-    out_of_bounds(const std::string &s) : txt(s) {}
+    out_of_bounds(const std::string &s, int pos = 0) : txt(s), pos(pos) {}
 };
 
 template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
@@ -1257,7 +1259,7 @@ template <>
 int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     int res = atoi(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
-        throw out_of_bounds(idx);
+        throw out_of_bounds(idx,args[idx].pos);
     return res;
 }
 
@@ -1269,7 +1271,7 @@ std::ostream &operator <<(std::ostream &s, const __strlit &t){
 template <>
 __strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     if (args[idx].fields.size())
-        throw out_of_bounds(idx);
+        throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom;
 }
 
@@ -1630,13 +1632,13 @@ class z3_thunk : public thunk<D,R> {
                 open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
                 code_line(impl,cfsname + ' res')
                 code_line(impl,'ivy_value &arg = args[idx]')
-                code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds(idx)'.format(len(destrs)))
+                code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds("wrong number of fields",args[idx].pos)'.format(len(destrs)))
                 code_line(impl,'std::vector<ivy_value> tmp_args(1)')
                 for idx,sym in enumerate(destrs):
                     open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
                     code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
                     fname = memname(sym)
-                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds("unexpected field: " + arg.fields[{}].atom)'.format(idx,fname,idx))
+                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds("unexpected field: " + arg.fields[{}].atom,arg.fields[{}].pos)'.format(idx,fname,idx,idx))
                     close_scope(impl)
                     open_scope(impl,line='else')
                     code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
@@ -1645,7 +1647,7 @@ class z3_thunk : public thunk<D,R> {
                     for v in vs:
                         open_scope(impl)
                         code_line(impl,'ivy_value tmp = tmp_args[0]')
-                        code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx)'.format(csortcard(v.sort)))
+                        code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx,tmp.pos)'.format(csortcard(v.sort)))
                         open_loop(impl,[v])
                         code_line(impl,'std::vector<ivy_value> tmp_args(1)')
                         code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
@@ -1654,7 +1656,7 @@ class z3_thunk : public thunk<D,R> {
                               +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
                     close_scope(impl)
                     open_scope(impl,line='catch(const out_of_bounds &err)')
-                    code_line(impl,'throw out_of_bounds("in field {}: " + err.txt)'.format(fname))
+                    code_line(impl,'throw out_of_bounds("in field {}: " + err.txt,err.pos)'.format(fname))
                     close_scope(impl)
                     for v in vs:
                         close_loop(impl,[v])
@@ -1720,10 +1722,10 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('template <>\n')
                 open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
                 code_line(impl,'ivy_value &arg = args[idx]')
-                code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx)')
+                code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos)')
                 for idx,sym in enumerate(sort.extension):
                     code_line(impl,'if(arg.atom == "{}") return {}'.format(memname(sym),classname + '::' + varname(sym)))
-                code_line(impl,'throw out_of_bounds("bad value: " + arg.atom)')
+                code_line(impl,'throw out_of_bounds("bad value: " + arg.atom,arg.pos)')
                 close_scope(impl)
                 impl.append('template <>\n')
                 open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
@@ -2681,10 +2683,12 @@ void skip_white(const std::string& str, int &pos){
 }
 
 struct syntax_error {
+    int pos;
+    syntax_error(int pos) : pos(pos) {}
 };
 
-void throw_syntax(){
-    throw syntax_error();
+void throw_syntax(int pos){
+    throw syntax_error(pos);
 }
 
 std::string get_ident(const std::string& str, int &pos) {
@@ -2694,23 +2698,26 @@ std::string get_ident(const std::string& str, int &pos) {
         pos++;
     }
     if (res.size() == 0)
-        throw_syntax();
+        throw_syntax(pos);
     return res;
 }
 
 ivy_value parse_value(const std::string& cmd, int &pos) {
     ivy_value res;
+    res.pos = pos;
     skip_white(cmd,pos);
     if (pos < cmd.size() && cmd[pos] == '[') {
         while (true) {
             pos++;
             skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == ']')
+                break;
             res.fields.push_back(parse_value(cmd,pos));
             skip_white(cmd,pos);
             if (pos < cmd.size() && cmd[pos] == ']')
                 break;
             if (!(pos < cmd.size() && cmd[pos] == ','))
-                throw_syntax();
+                throw_syntax(pos);
         }
         pos++;
     }
@@ -2722,7 +2729,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             field.atom = get_ident(cmd,pos);
             skip_white(cmd,pos);
             if (!(pos < cmd.size() && cmd[pos] == ':'))
-                 throw_syntax();
+                 throw_syntax(pos);
             pos++;
             skip_white(cmd,pos);
             field.fields.push_back(parse_value(cmd,pos));
@@ -2731,7 +2738,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
             if (pos < cmd.size() && cmd[pos] == '}')
                 break;
             if (!(pos < cmd.size() && cmd[pos] == ','))
-                throw_syntax();
+                throw_syntax(pos);
         }
         pos++;
     }
@@ -2741,7 +2748,7 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
         while (pos < cmd.size() && cmd[pos] != '"')
             res.atom.push_back(cmd[pos++]);
         if(pos == cmd.size())
-            throw_syntax();
+            throw_syntax(pos);
         pos++;
     }
     else 
@@ -2766,12 +2773,12 @@ void parse_command(const std::string &cmd, std::string &action, std::vector<ivy_
             args.push_back(parse_value(cmd,pos));
         }
         if (!(pos < cmd.size() && cmd[pos] == ')'))
-            throw_syntax();
+            throw_syntax(pos);
         pos++;
     }
     skip_white(cmd,pos);
     if (pos != cmd.size())
-        throw_syntax();
+        throw_syntax(pos);
 }
 
 struct bad_arity {
@@ -2788,7 +2795,7 @@ void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action
 template <>
 bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
-        throw out_of_bounds(idx);
+        throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom == "true";
 }
 
@@ -2832,11 +2839,12 @@ public:
 };
 
 class cmd_reader: public stdin_reader {
-
+    int lineno;
 public:
     classname_repl &ivy;    
 
     cmd_reader(classname_repl &_ivy) : ivy(_ivy) {
+        lineno = 1;
         if (isatty(fdes()))
             std::cout << "> "; std::cout.flush();
     }
@@ -2855,17 +2863,18 @@ def emit_repl_boilerplate2(header,impl,classname):
                 std::cerr << "undefined action: " << action << std::endl;
             }
         }
-        catch (syntax_error&) {
-            std::cerr << "syntax error" << std::endl;
+        catch (syntax_error& err) {
+            std::cerr << "line " << lineno << ":" << err.pos << ": syntax error" << std::endl;
         }
         catch (out_of_bounds &err) {
-            std::cerr << err.txt << " out of bounds" << std::endl;
+            std::cerr << "line " << lineno << ":" << err.pos << ": " << err.txt << " bad value" << std::endl;
         }
         catch (bad_arity &err) {
             std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
         if (isatty(fdes()))
             std::cout << "> "; std::cout.flush();
+        lineno++;
     }
 };
 
