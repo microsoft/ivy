@@ -1011,7 +1011,7 @@ def lower_var_stmts(stmts):
             body.lineno = stmt.lineno
             res = LocalAction(*[asgn,body])
             res.lineno = body.lineno;
-            return [res]
+            return stmts[:idx] + [res]
     return stmts
 
 def p_sequence_lcb_rcb(p):

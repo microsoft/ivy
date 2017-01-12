@@ -123,7 +123,7 @@ def pull_args(args,num,sym,top):
 
 
 class cfrfail(Exception):
-    def __init__(symbol_name):
+    def __init__(self,symbol_name):
         self.symbol_name = symbol_name
 
 def compile_field_reference_rec(symbol_name,args,top=False):
