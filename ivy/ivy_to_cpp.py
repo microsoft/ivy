@@ -233,16 +233,23 @@ def all_ctuples():
     for sym in all_members():
         if hasattr(sym.sort,'dom') and len(sym.sort.dom) > 1 and is_large_type(sym.sort):
             res = tuple(sym.sort.dom)
-            if res not in done:
-                done.add(res)
-                yield res
+            name = ctuple(res)
+            if name in done:
+                continue
+            done.add(name)
+            yield res
     
 def declare_all_ctuples(header):
     for dom in all_ctuples():
         declare_ctuple(header,dom)
 
 def declare_all_ctuples_hash(header,classname):
+    done = set()
     for dom in all_ctuples():
+        name = ctuple(dom)
+        if name in done:
+            continue
+        done.add(name)
         declare_ctuple_hash(header,dom,classname)
 
 def hashtype(sort,classname=None):
@@ -809,7 +816,7 @@ def native_declaration(atom):
         res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
 #        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
         return res
-    res = varname(atom.rep)
+    res = native_classname + '::' + varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
         res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
@@ -850,8 +857,9 @@ def native_typeof(arg):
 def native_z3name(arg):
     return arg.sort.name if il.is_variable(arg) else arg.rep.name
 
-def native_to_str(native,reference=False):
-    tag,code = native_split(native.args[1].code)
+def native_to_str(native,reference=False,code=None):
+    if code is None:
+        tag,code = native_split(native.args[1].code)
     fields = code.split('`')
     f = native_reference if reference else native_declaration
     def nfun(idx):
@@ -1114,6 +1122,8 @@ def is_really_uninterpreted_sort(sort):
 def module_to_cpp_class(classname,basename):
     global the_classname
     the_classname = classname
+    global encoded_sorts
+    encoded_sorts = set()
     check_member_names(classname)
     global is_derived
     is_derived = set()
@@ -1410,10 +1420,11 @@ class z3_thunk : public thunk<D,R> {
     for sort_name in [s for s in sorted(il.sig.sorts) if isinstance(il.sig.sorts[s],il.EnumeratedSort)]:
         csname = varname(sort_name)
         cfsname = classname + '::' + csname
-        impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
-        impl.append('template <>\n')
-        impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
-        impl.append('template <>\n')
+        if sort_name not in encoded_sorts:
+            impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
+            impl.append('template <>\n')
+            impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+            impl.append('template <>\n')
         impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
         impl.append('template <>\n')
         impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
@@ -1429,9 +1440,10 @@ class z3_thunk : public thunk<D,R> {
         for sort_name in sorted(im.module.sort_destructors):
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
-            impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
-            impl.append('template <>\n')
-            impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+            if sort_name not in encoded_sorts:
+                impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
+                impl.append('template <>\n')
+                impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
             impl.append('template <>\n')
             impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
             impl.append('template <>\n')
@@ -1457,7 +1469,7 @@ class z3_thunk : public thunk<D,R> {
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
-        if tag == "impl":
+        if tag == "impl" or tag.startswith('encode'):
             global native_classname
             native_classname = classname
 #            print 'native_classname:{}'.format(native_classname)
@@ -1501,6 +1513,16 @@ class z3_thunk : public thunk<D,R> {
 
     for native in im.module.natives:
         tag = native_type(native)
+        if tag.startswith('encode'):
+            tag = native_to_str(native,code=tag) # do the anti-quoting
+            tag = tag[6:].strip().replace('__','.')
+            iu.dbg('tag')
+            if tag not in il.sig.sorts:
+                raise iu.IvyError(native,"{} is not a declared sort".format(tag))
+            if tag in encoded_sorts:
+                raise iu.IvyError(native,"duplicate encoding for sort {}".format(tag))
+            encoded_sorts.add(tag)
+            continue
         if tag not in ["member","init","header","impl"]:
             raise iu.IvyError(native,"syntax error at token {}".format(tag))
         if tag == "member":
@@ -1565,25 +1587,26 @@ class z3_thunk : public thunk<D,R> {
             sort = im.module.sig.sorts[sort_name]
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
-            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
-            code_line(impl,'s<<"{"')
-            for idx,sym in enumerate(destrs):
-                if idx > 0:
-                    code_line(impl,'s<<","')
-                code_line(impl,'s<< "' + memname(sym) + ':"')
-                dom = sym.sort.dom[1:]
-                vs = variables(dom)
-                for d,v in zip(dom,vs):
-                    code_line(impl,'s << "["')
-                    open_loop(impl,[v])
-                    code_line(impl,'if ({}) s << ","'.format(varname(v)))
-                code_line(impl,'s << t.' + memname(sym) + subscripts(vs))
-                for d,v in zip(dom,vs):
-                    close_loop(impl,[v])
-                    code_line(impl,'s << "]"')
-            code_line(impl,'s<<"}"')
-            code_line(impl,'return s')
-            close_scope(impl)
+            if sort_name not in encoded_sorts:
+                open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
+                code_line(impl,'s<<"{"')
+                for idx,sym in enumerate(destrs):
+                    if idx > 0:
+                        code_line(impl,'s<<","')
+                    code_line(impl,'s<< "' + memname(sym) + ':"')
+                    dom = sym.sort.dom[1:]
+                    vs = variables(dom)
+                    for d,v in zip(dom,vs):
+                        code_line(impl,'s << "["')
+                        open_loop(impl,[v])
+                        code_line(impl,'if ({}) s << ","'.format(varname(v)))
+                    code_line(impl,'s << t.' + memname(sym) + subscripts(vs))
+                    for d,v in zip(dom,vs):
+                        close_loop(impl,[v])
+                        code_line(impl,'s << "]"')
+                code_line(impl,'s<<"}"')
+                code_line(impl,'return s')
+                close_scope(impl)
 
             open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
             s = il.Symbol('s',sort)
@@ -1608,11 +1631,12 @@ class z3_thunk : public thunk<D,R> {
             sort = im.module.sig.sorts[sort_name]
             csname = varname(sort_name)
             cfsname = classname + '::' + csname
-            open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
-            for idx,sym in enumerate(sort.extension):
-                code_line(impl,'if (t == {}) s<<"{}"'.format(classname + '::' + varname(sym),memname(sym)))
-            code_line(impl,'return s')
-            close_scope(impl)
+            if sort_name not in encoded_sorts:
+                open_scope(impl,line='std::ostream &operator <<(std::ostream &s, const {} &t)'.format(cfsname))
+                for idx,sym in enumerate(sort.extension):
+                    code_line(impl,'if (t == {}) s<<"{}"'.format(classname + '::' + varname(sym),memname(sym)))
+                code_line(impl,'return s')
+                close_scope(impl)
             impl.append('template <>\n')
             open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
             code_line(impl,'__ser(res,(int)t)')
@@ -1628,41 +1652,42 @@ class z3_thunk : public thunk<D,R> {
                 sort = im.module.sig.sorts[sort_name]
                 csname = varname(sort_name)
                 cfsname = classname + '::' + csname
-                impl.append('template <>\n')
-                open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
-                code_line(impl,cfsname + ' res')
-                code_line(impl,'ivy_value &arg = args[idx]')
-                code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds("wrong number of fields",args[idx].pos)'.format(len(destrs)))
-                code_line(impl,'std::vector<ivy_value> tmp_args(1)')
-                for idx,sym in enumerate(destrs):
-                    open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
-                    code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
-                    fname = memname(sym)
-                    code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds("unexpected field: " + arg.fields[{}].atom,arg.fields[{}].pos)'.format(idx,fname,idx,idx))
-                    close_scope(impl)
-                    open_scope(impl,line='else')
-                    code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
-                    close_scope(impl)
-                    vs = variables(sym.sort.dom[1:])
-                    for v in vs:
-                        open_scope(impl)
-                        code_line(impl,'ivy_value tmp = tmp_args[0]')
-                        code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx,tmp.pos)'.format(csortcard(v.sort)))
-                        open_loop(impl,[v])
-                        code_line(impl,'std::vector<ivy_value> tmp_args(1)')
-                        code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
-                    open_scope(impl,line='try')
-                    code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
-                              +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
-                    close_scope(impl)
-                    open_scope(impl,line='catch(const out_of_bounds &err)')
-                    code_line(impl,'throw out_of_bounds("in field {}: " + err.txt,err.pos)'.format(fname))
-                    close_scope(impl)
-                    for v in vs:
-                        close_loop(impl,[v])
+                if sort_name not in encoded_sorts:
+                    impl.append('template <>\n')
+                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                    code_line(impl,cfsname + ' res')
+                    code_line(impl,'ivy_value &arg = args[idx]')
+                    code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds("wrong number of fields",args[idx].pos)'.format(len(destrs)))
+                    code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+                    for idx,sym in enumerate(destrs):
+                        open_scope(impl,line='if (arg.fields[{}].is_member())'.format(idx))
+                        code_line(impl,'tmp_args[0] = arg.fields[{}].fields[0]'.format(idx))
+                        fname = memname(sym)
+                        code_line(impl,'if (arg.fields[{}].atom != "{}") throw out_of_bounds("unexpected field: " + arg.fields[{}].atom,arg.fields[{}].pos)'.format(idx,fname,idx,idx))
                         close_scope(impl)
-                code_line(impl,'return res')
-                close_scope(impl)
+                        open_scope(impl,line='else')
+                        code_line(impl,'tmp_args[0] = arg.fields[{}]'.format(idx))
+                        close_scope(impl)
+                        vs = variables(sym.sort.dom[1:])
+                        for v in vs:
+                            open_scope(impl)
+                            code_line(impl,'ivy_value tmp = tmp_args[0]')
+                            code_line(impl,'if(tmp.atom.size() || tmp.fields.size() != {}) throw out_of_bounds(idx,tmp.pos)'.format(csortcard(v.sort)))
+                            open_loop(impl,[v])
+                            code_line(impl,'std::vector<ivy_value> tmp_args(1)')
+                            code_line(impl,'tmp_args[0] = tmp.fields[{}]'.format(varname(v)))
+                        open_scope(impl,line='try')
+                        code_line(impl,'res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ' = _arg<'+ctype(sym.sort.rng,classname=classname)
+                                  +'>(tmp_args,0,{});\n'.format(csortcard(sym.sort.rng)))
+                        close_scope(impl)
+                        open_scope(impl,line='catch(const out_of_bounds &err)')
+                        code_line(impl,'throw out_of_bounds("in field {}: " + err.txt,err.pos)'.format(fname))
+                        close_scope(impl)
+                        for v in vs:
+                            close_loop(impl,[v])
+                            close_scope(impl)
+                    code_line(impl,'return res')
+                    close_scope(impl)
 
                 impl.append('template <>\n')
                 open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
@@ -1719,14 +1744,15 @@ class z3_thunk : public thunk<D,R> {
                 sort = im.module.sig.sorts[sort_name]
                 csname = varname(sort_name)
                 cfsname = classname + '::' + csname
-                impl.append('template <>\n')
-                open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
-                code_line(impl,'ivy_value &arg = args[idx]')
-                code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos)')
-                for idx,sym in enumerate(sort.extension):
-                    code_line(impl,'if(arg.atom == "{}") return {}'.format(memname(sym),classname + '::' + varname(sym)))
-                code_line(impl,'throw out_of_bounds("bad value: " + arg.atom,arg.pos)')
-                close_scope(impl)
+                if sort_name not in encoded_sorts:
+                    impl.append('template <>\n')
+                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                    code_line(impl,'ivy_value &arg = args[idx]')
+                    code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos)')
+                    for idx,sym in enumerate(sort.extension):
+                        code_line(impl,'if(arg.atom == "{}") return {}'.format(memname(sym),classname + '::' + varname(sym)))
+                    code_line(impl,'throw out_of_bounds("bad value: " + arg.atom,arg.pos)')
+                    close_scope(impl)
                 impl.append('template <>\n')
                 open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
                 code_line(impl,'int __res')
@@ -2028,6 +2054,9 @@ def emit_app(self,header,code,capture_args=None):
         self.args[1].emit(header,code)
         code.append(')')
         return 
+    # no way to deal with polymorphic ops, give up here
+    if il.symbol_is_polymorphic(self.func):
+        raise iu.IvyError(None,"symbol has no interpretation: {}".format(il.typed_symbol(self.func)))
     # handle destructors
     skip_params = 0
     if self.func.name in im.module.destructor_sorts:

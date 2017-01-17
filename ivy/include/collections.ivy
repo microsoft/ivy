@@ -240,6 +240,272 @@ module array(domain,range) = {
 
 ################################################################################
 #
+# Paths
+#
+# A path is similar to an array but differs in the way it is serialized.
+# That is, a path with elements e_0, e_1, ... is serialized as a string of
+# the form "e_0/e_1/...". To prevent misinterpretation, a separator character
+# '/' is replaced by '\/' and '\' by '\\'. Also, string quatation marks '"' are
+# elided from e_0, e_1 ...
+#
+# A path type thing.t can be created
+# like this:
+#
+#    instance thing : path(domain.t,range.t)
+#
+# The implementation of this type requires that domain.t be
+# interpreted as 'int'.
+
+
+module path(domain,range) = {
+
+    type t
+
+    # return an empty array
+
+    action empty returns (a:t)
+
+    # return an array with end=s and all values mapped to y
+    action create(s:domain,y:range) returns (a:t)
+
+    # mutate an array a so that x in [0,end) maps to y
+    action set(a:t,x:domain,y:range) returns (a:t)
+
+    # get the value y such that x in [0,end) maps to y in array a
+    action get(a:t,x:domain) returns (y:range) 
+
+    # get the value of end
+    action size(a:t) returns (s:domain)
+    
+    # change the size of the array
+    action resize(a:t,s:domain,v:range) returns (a:t)
+
+    # add one element to the array
+    action append(a:t,v:range) returns (a:t)
+
+    ########################################
+    # Representation
+    #
+    # Function "end" gives the end value of an array while value(a,x)
+    # gives the value that x maps to in a.
+
+    function end(A:t) : domain
+    function value(A:t,X:domain) : range
+
+    ########################################
+    # Specification
+    #
+    # Notice that get and set have the precondition that x is in
+    # [0,end).
+
+
+    object spec = {
+	property end(X) >= 0
+
+	after empty {
+	    assert end(a) = 0
+	}
+	before create {
+	    assert 0 <= s
+	}
+	after create {
+	    assert end(a) = s & value(a,X) = y
+	}
+        before set {
+	    assert 0 <= x & x < end(a)
+	}	       	 
+	after set {
+	    assert value(a,X) = y if X = x else value(old a,X)
+	}
+	before get {
+	    assert 0 <= x & x < end(a)
+	}
+	after get {
+	    assert value(a,x) = y
+	}
+	after size {
+	    assert s = end(a)
+	}
+	after resize {
+	    assert end(a) = s;
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert end(old a) <= X & X < s -> value(a,X) = v
+	}
+	after append {
+	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert value(a,end(old a)) = v
+	}
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
+
+	implement create {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+
+	implement resize {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
+	implement append {
+	    <<<
+	        `a`.push_back(`v`);
+            >>>
+        }
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '\"';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << '/';
+		    std::ostringstream os;
+		    os << a[i];
+		    std::string st = os.str();
+		    for (unsigned j = 0; j < st.size(); j++) {
+		        char c = st[j];
+			if (c == '/')
+			    s << "\\/";
+			else if (c == '\\')
+			    s << "\\\\";
+			else if (c != '\"')
+			    s << c;
+		    }
+		}
+	        s << '\"';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.fields.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+		ivy_value tmp;
+		tmp.fields.resize(1);
+		std::string str = arg.atom;
+		for (unsigned i = 0; i < str.size(); i++) {
+		    char c = str[i];
+		    if (c == '\\' && i+1 < str.size())
+	                tmp.fields.back().atom.push_back(str[++i]);
+                    else if (c == '/')
+		        tmp.fields.resize(tmp.fields.size()+1);
+		    else if (c != '\"')
+                        tmp.fields.back().atom.push_back(c);
+                }			
+	        a.resize(tmp.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<`range`>(tmp.fields,i,0x7fffffff);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(const std::vector<char> &inp, unsigned &pos, `t` &res) {
+	        int sz;
+	        __deser(inp,pos,sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+	            `range` v;
+	            __deser(inp,pos,v);
+	            res.push_back(v);
+                }
+	    }
+
+	    template <>
+	    void __ser<`t`>(std::vector<char> &res, const `t` &inp) {
+	        int sz = inp.size();
+	        __ser(res,sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+	            __ser(res,inp[i]);
+                }
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        return z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+            }
+
+	    template <>
+	    void  __from_solver<`t`>( gen &g, const  z3::expr &v,`t` &res){
+	        `domain` __end;
+	        __from_solver(g,g.apply("`end`",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<`t`>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("`domain`"),__sz);
+                z3::expr pred =  g.apply("`end`",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<`range`>(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)));
+	    }
+	    #endif
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+}
+
+################################################################################
+#
 # Maps. 
 #
 # This module provides a relational model of a function from a type

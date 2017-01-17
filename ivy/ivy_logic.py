@@ -964,6 +964,13 @@ def apply_drop_annotations(self,inferred_sort,annotated_vars):
 
 lg.Apply.drop_annotations = apply_drop_annotations
 
+def symbol_is_polymorphic(func):
+    return func.name in polymorphic_symbols
+
+# convert symbol to string with its type
+def typed_symbol(func):
+    return func.name + ' : ' + str(func.sort)
+
 def quant_drop_annotations(self,inferred_sort,annotated_vars):
     body = self.body.drop_annotations(True,annotated_vars)
     return type(self)([v.drop_annotations(False,annotated_vars) for v in self.variables],body)
