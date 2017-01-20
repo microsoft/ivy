@@ -88,24 +88,14 @@ CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, int bound)
     return args[idx].atom;
 }
 template <>
-void __ser<CLASSNAME>(std::vector<char> &res, const CLASSNAME &inp) {
-    __ser(res,(int)inp.size());
-    for (unsigned i = 0; i < inp.size(); i++)
-        res.push_back(inp[i]);
+void __ser<CLASSNAME>(ivy_ser &res, const CLASSNAME &inp) {
+    res.set(inp);
 }
 template <>
-void __deser<CLASSNAME>(const std::vector<char> &inp, unsigned &pos, CLASSNAME &res) {
-    int siz;
-    __deser(inp,pos,siz);
-    if (inp.size() < pos + siz)
-        throw deser_err();
-    res = "";
-    for (int i = 0; i < siz; i++){
-        char c = inp[pos++];
-        if (c == 0 || c == '"')
-            throw deser_err();
-        res.push_back(inp[pos++]);
-    }
+void __deser<CLASSNAME>(ivy_deser &inp, CLASSNAME &res) {
+    std::string tmp;
+    inp.get(tmp);
+    res = tmp;
 }
 #ifdef Z3PP_H_
 template <>
@@ -132,7 +122,7 @@ void __randomize<CLASSNAME>( gen &g, const  z3::expr &apply_expr) {
         return None # Note this is cardinality of the string type, not the bit vector type
 
     def literal(self,s):
-        return '"' + (s[1,-1] if s.startswith('"') else s) + '"'
+        return '"' + (s[1:-1] if s.startswith('"') else s) + '"'
 
     def rand(self):
         return '((rand()%2) ? "a" : "b")' # TODO: let user control random string generation

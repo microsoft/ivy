@@ -150,10 +150,13 @@ def memname(sym):
 
 
 
+def basename(name):
+    return name.split('::')[-1]
+
 def ctuple(dom,classname=None):
     if len(dom) == 1:
         return ctypefull(dom[0],classname=classname)
-    return (classname+'::' if classname else '') + '__tup__' + '__'.join(ctypefull(s) for s in dom)
+    return (classname+'::' if classname else '') + '__tup__' + '__'.join(basename(ctypefull(s)) for s in dom)
 
 declared_ctuples = set()
 
@@ -509,7 +512,7 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(var_to_z3_val,vs))) + ')'
     rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + memname(symbol)
     if sort.rng.name in im.module.sort_destructors:
-        destrs = im.module.sort_destructors[sort.name]
+        destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             emit_set_field(header,destr,lhs1,rhs1,nvars+len(vs))
     else:
@@ -1187,6 +1190,8 @@ def module_to_cpp_class(classname,basename):
 
         
     impl = ivy_cpp.context.impls.code
+    if opt_stdafx.get():
+        impl.append('#include "stdafx.h"\n')
     impl.append('#include "' + basename + '.h"\n\n')
     impl.append("#include <sstream>\n")
     impl.append("#include <algorithm>\n")
@@ -1252,6 +1257,106 @@ struct ivy_value {
         return atom.size() && fields.size();
     }
 };
+struct ivy_ser {
+    virtual void  set(int) = 0;
+    virtual void  set(bool) = 0;
+    virtual void  set(const std::string &) = 0;
+    virtual void  open_list(int len) = 0;
+    virtual void  close_list() = 0;
+    virtual void  open_list_elem() = 0;
+    virtual void  close_list_elem() = 0;
+    virtual void  open_struct() = 0;
+    virtual void  close_struct() = 0;
+    virtual void  open_field(const std::string &) = 0;
+    virtual void  close_field() = 0;
+    virtual ~ivy_ser(){}
+};
+struct ivy_binary_ser : public ivy_ser {
+    std::vector<char> res;
+    void set(int inp) {
+        for (int i = sizeof(int)-1; i >= 0 ; i--)
+            res.push_back((inp>>(8*i))&0xff);
+    }
+    void set(bool inp) {
+        set((int)inp);
+    }
+    void set(const std::string &inp) {
+        for (unsigned i = 0; i < inp.size(); i++)
+            res.push_back(inp[i]);
+        res.push_back(0);
+    }
+    void open_list(int len) {
+        set(len);
+    }
+    void close_list() {}
+    void open_list_elem() {}
+    void close_list_elem() {}
+    void open_struct() {}
+    void close_struct() {}
+    void open_field() {}
+    void close_field() {}
+};
+
+struct ivy_deser {
+    virtual void  get(int&) = 0;
+    virtual void  get(std::string &) = 0;
+    virtual void  open_list() = 0;
+    virtual void  close_list() = 0;
+    virtual bool  open_list_elem() = 0;
+    virtual void  close_list_elem() = 0;
+    virtual void  open_struct() = 0;
+    virtual void  close_struct() = 0;
+    virtual void  open_field(const std::string &) = 0;
+    virtual void  close_field() = 0;
+    virtual void  end() = 0;
+    virtual ~ivy_deser(){}
+};
+
+struct deser_err {
+};
+
+struct ivy_binary_deser : public ivy_deser {
+    std::vector<char> inp;
+    int pos;
+    std::vector<int> lenstack;
+    ivy_binary_deser(const std::vector<char> &inp) : inp(inp),pos(0) {}
+    void get(int &res) {
+        if (inp.size() < pos + sizeof(int))
+            throw deser_err();
+        res = 0;
+        for (int i = 0; i < sizeof(int); i++)
+            res = (res << 8) | (((int)inp[pos++]) & 0xff);
+    }
+    void get(std::string &res) {
+        while (pos < inp.size() && inp[pos]) {
+            if (inp[pos] == '\"')
+                throw deser_err();
+        }
+        res.push_back(inp[pos++]);
+    }
+    void open_list() {
+        int len;
+        get(len);
+        lenstack.push_back(len);
+    }
+    void close_list() {
+        lenstack.pop_back();
+    }
+    bool open_list_elem() {
+        return lenstack.back();
+    }
+    void close_list_elem() {
+        lenstack.back()--;
+    }
+    void open_struct() {}
+    void close_struct() {}
+    void open_field() {}
+    void close_field() {}
+    void end() {
+        if (pos != inp.size())
+            throw deser_err();
+    }
+};
 struct out_of_bounds {
     std::string txt;
     int pos;
@@ -1285,60 +1390,40 @@ __strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     return args[idx].atom;
 }
 
-template <class T> void __ser(std::vector<char> &res, const T &inp);
+template <class T> void __ser(ivy_ser &res, const T &inp);
 
 template <>
-void __ser<int>(std::vector<char> &res, const int &inp) {
-    for (int i = sizeof(int)-1; i >= 0 ; i--)
-        res.push_back((inp>>(8*i))&0xff);
+void __ser<int>(ivy_ser &res, const int &inp) {
+    res.set(inp);
 }
 
 template <>
-void __ser<bool>(std::vector<char> &res, const bool &inp) {
-        res.push_back(inp);
+void __ser<bool>(ivy_ser &res, const bool &inp) {
+    res.set(inp);
 }
 
 template <>
-void __ser<__strlit>(std::vector<char> &res, const __strlit &inp) {
-    __ser(res,(int)inp.size());
-    for (unsigned i = 0; i < inp.size(); i++)
-        res.push_back(inp[i]);
+void __ser<__strlit>(ivy_ser &res, const __strlit &inp) {
+    res.set(inp);
 }
 
-struct deser_err {
-};
-
-template <class T> void __deser(const std::vector<char> &inp, unsigned &pos, T &res);
+template <class T> void __deser(ivy_deser &inp, T &res);
 
 template <>
-void __deser<int>(const std::vector<char> &inp, unsigned &pos, int &res) {
-    if (inp.size() < pos + sizeof(int))
-        throw deser_err();
-    res = 0;
-    for (int i = 0; i < sizeof(int); i++)
-        res = (res << 8) | (((int)inp[pos++]) & 0xff);
+void __deser<int>(ivy_deser &inp, int &res) {
+    inp.get(res);
 }
 
 template <>
-void __deser<__strlit>(const std::vector<char> &inp, unsigned &pos, __strlit &res) {
-    int siz;
-    __deser(inp,pos,siz);
-    if (inp.size() < pos + siz)
-        throw deser_err();
-    res = "";
-    for (int i = 0; i < siz; i++){
-        char c = inp[pos++];
-        if (c == 0 || c == '"')
-            throw deser_err();
-        res.push_back(inp[pos++]);
-    }
+void __deser<__strlit>(ivy_deser &inp, __strlit &res) {
+    inp.get(res);
 }
 
 template <>
-void __deser<bool>(const std::vector<char> &inp, unsigned &pos, bool &res) {
-    if (inp.size() < pos + 1)
-        throw deser_err();
-    res = inp[pos++] ? true : false;
+void __deser<bool>(ivy_deser &inp, bool &res) {
+    int thing;
+    inp.get(thing);
+    res = thing;
 }
 
 class gen;
@@ -1425,9 +1510,9 @@ class z3_thunk : public thunk<D,R> {
             impl.append('template <>\n')
             impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
             impl.append('template <>\n')
-        impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
+        impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
         impl.append('template <>\n')
-        impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
+        impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
         if target.get() in ["test","gen"]:
             impl.append('template <>\n')
             impl.append('void __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &res);\n')
@@ -1445,9 +1530,9 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('template <>\n')
                 impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
             impl.append('template <>\n')
-            impl.append('void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&);\n')
+            impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
             impl.append('template <>\n')
-            impl.append('void  __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res);\n')                
+            impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
 
     if target.get() in ["test","gen"]:
         for sort_name in sorted(im.module.sort_destructors):
@@ -1498,11 +1583,12 @@ class z3_thunk : public thunk<D,R> {
     }
 """)
 
-    declare_all_ctuples(header)
-    declare_all_ctuples_hash(header,classname)
-    for sym in all_state_symbols():
-        if sym_is_member(sym):
-            declare_symbol(header,sym)
+    with ivy_cpp.CppClassName(classname):
+        declare_all_ctuples(header)
+        declare_all_ctuples_hash(header,classname)
+        for sym in all_state_symbols():
+            if sym_is_member(sym):
+                declare_symbol(header,sym)
 #    for sym in il.sig.constructors:
 #        declare_symbol(header,sym)
     for sname in il.sig.interp:
@@ -1516,7 +1602,6 @@ class z3_thunk : public thunk<D,R> {
         if tag.startswith('encode'):
             tag = native_to_str(native,code=tag) # do the anti-quoting
             tag = tag[6:].strip().replace('__','.')
-            iu.dbg('tag')
             if tag not in il.sig.sorts:
                 raise iu.IvyError(native,"{} is not a declared sort".format(tag))
             if tag in encoded_sorts:
@@ -1615,15 +1700,19 @@ class z3_thunk : public thunk<D,R> {
             close_scope(header)
 
             impl.append('template <>\n')
-            open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
+            open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
+            code_line(impl,"res.open_struct()")
             for idx,sym in enumerate(destrs):
                 dom = sym.sort.dom[1:]
                 vs = variables(dom)
                 for d,v in zip(dom,vs):
                     open_loop(impl,[v])
+                code_line(impl,'res.open_field("'+memname(sym)+'")')
                 code_line(impl,'__ser<' + ctype(sym.sort.rng,classname=classname) + '>(res,t.' + memname(sym) + subscripts(vs) + ')')
+                code_line(impl,'res.close_field()')
                 for d,v in zip(dom,vs):
                     close_loop(impl,[v])
+            code_line(impl,"res.close_struct()")
             close_scope(impl)
 
  
@@ -1638,7 +1727,7 @@ class z3_thunk : public thunk<D,R> {
                 code_line(impl,'return s')
                 close_scope(impl)
             impl.append('template <>\n')
-            open_scope(impl,line='void  __ser<' + cfsname + '>(std::vector<char> &res, const ' + cfsname + '&t)')
+            open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
             code_line(impl,'__ser(res,(int)t)')
             close_scope(impl)
 
@@ -1690,15 +1779,22 @@ class z3_thunk : public thunk<D,R> {
                     close_scope(impl)
 
                 impl.append('template <>\n')
-                open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
+                open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
+                code_line(impl,"inp.open_struct()")
                 for idx,sym in enumerate(destrs):
                     fname = memname(sym)
                     vs = variables(sym.sort.dom[1:])
+                    code_line(impl,'inp.open_field("'+fname+'")')
                     for v in vs:
+                        card = sort_card(v.sort)
+                        code_line(impl,'inp.open_list('+str(card)+')')
                         open_loop(impl,[v])
-                    code_line(impl,'__deser(inp,pos,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                    code_line(impl,'__deser(inp,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
                     for v in vs:
                         close_loop(impl,[v])
+                        code_line(impl,'inp.close_list()')
+                    code_line(impl,'inp.close_field()')
+                code_line(impl,"inp.close_struct()")
                 close_scope(impl)
                 if target.get() in ["gen","test"]:
                     impl.append('template <>\n')
@@ -1728,12 +1824,17 @@ class z3_thunk : public thunk<D,R> {
                     impl.append('template <>\n')
                     open_scope(impl,line='void  __randomize<' + cfsname + '>( gen &g, const  z3::expr &v)')
                     for idx,sym in enumerate(destrs):
+                        # we can't randomize a type that z3 is representing with an uninterpreted sort,
+                        # because z3 has no numerals for these sorts. Rather than throwing an error, however,
+                        # we just don't randomize, in case randomization for this type is not actually needed.
+                        # In principle, we should check whether randomiation is needed but this is pretty tricky.
+                        if is_really_uninterpreted_sort(sym.sort.rng):
+                            continue
+#                            raise iu.IvyError(None,'cannot create test generator because type {} is uninterpreted'.format(sym.sort.rng))
                         fname = memname(sym)
                         vs = variables(sym.sort.dom[1:])
                         for v in vs:
                             open_loop(impl,[v])
-                        if is_really_uninterpreted_sort(sym.sort.rng):
-                            raise iu.IvyError(None,'cannot create test generator because type {} is uninterpreted'.format(sym.sort.rng))
                         code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
                         for v in vs:
                             close_loop(impl,[v])
@@ -1754,9 +1855,9 @@ class z3_thunk : public thunk<D,R> {
                     code_line(impl,'throw out_of_bounds("bad value: " + arg.atom,arg.pos)')
                     close_scope(impl)
                 impl.append('template <>\n')
-                open_scope(impl,line='void __deser<' + cfsname + '>(const std::vector<char> &inp, unsigned &pos, ' + cfsname + ' &res)')
+                open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
                 code_line(impl,'int __res')
-                code_line(impl,'__deser(inp,pos,__res)')
+                code_line(impl,'__deser(inp,__res)')
                 code_line(impl,'res = ({})__res'.format(cfsname))
                 close_scope(impl)
                 if target.get() in ["test","gen"]:
@@ -1807,16 +1908,17 @@ class z3_thunk : public thunk<D,R> {
             emit_repl_boilerplate2(header,impl,classname)
 
 
-            impl.append("int main(int argc, char **argv){\n")
-            impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
-            impl.append("        argc--;\n")
-            impl.append("        int fd = open(argv[argc],0);\n")
-            impl.append("        if (fd < 0){\n")
-            impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
-            impl.append('            exit(1);\n')
-            impl.append('        }\n')
-            impl.append("        dup2(fd, 0);\n")
-            impl.append("    }\n")
+            impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
+            if opt_main.get() == "main":
+                impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+                impl.append("        argc--;\n")
+                impl.append("        int fd = open(argv[argc],0);\n")
+                impl.append("        if (fd < 0){\n")
+                impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
+                impl.append('            exit(1);\n')
+                impl.append('        }\n')
+                impl.append("        dup2(fd, 0);\n")
+                impl.append("    }\n")
             impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
             impl.append('        std::cerr << "usage: {} {}\\n";\n'
                         .format(classname,' '.join(map(varname,im.module.params))))
@@ -3096,6 +3198,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             gen &g = *generators[rnd];
             if (g.generate(ivy))
                 g.execute(ivy);
+            Sleep(3600000);
             continue;
         }
 
@@ -3144,6 +3247,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         }            
     }
     std::cout << "test_completed" << std::endl;
+    return 0;
 }
 """.replace('classname',classname).replace('TEST_ITERS',opt_test_iters.get()))
 
@@ -3306,7 +3410,7 @@ public:
 
     z3::expr int_to_z3(const z3::sort &range, int value) {
         if (range.is_bool())
-            return ctx.bool_val(value);
+            return ctx.bool_val((bool)value);
         if (range.is_bv())
             return ctx.bv_val(value,range.bv_size());
         if (range.is_int())
@@ -3536,6 +3640,8 @@ opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
 opt_test_iters = iu.Parameter("test_iters","1000")
 opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl"],"g++")
+opt_main = iu.Parameter("main","main")
+opt_stdafx = iu.BooleanParameter("stdafx",False)
 
 
 def main():
@@ -3652,7 +3758,7 @@ namespace hash_space {
         class hash<std::string> {
     public:
         size_t operator()(const std::string &s) const {
-            return string_hash(s.c_str(), s.size(), 0);
+            return string_hash(s.c_str(), (unsigned)s.size(), 0);
         }
     };
 

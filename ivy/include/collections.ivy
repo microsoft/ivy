@@ -185,23 +185,26 @@ module array(domain,range) = {
 	    }
 
 	    template <>
-	    void __deser<`t`>(const std::vector<char> &inp, unsigned &pos, `t` &res) {
-	        int sz;
-	        __deser(inp,pos,sz);
-	        for (unsigned i = 0; i < (unsigned)sz; i++) {
-	            `range` v;
-	            __deser(inp,pos,v);
-	            res.push_back(v);
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
                 }
+		inp.close_list();
 	    }
 
 	    template <>
-	    void __ser<`t`>(std::vector<char> &res, const `t` &inp) {
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
 	        int sz = inp.size();
-	        __ser(res,sz);
+	        res.open_list(sz);
 	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
 	            __ser(res,inp[i]);
+		    res.close_list_elem();
                 }
+	        res.close_list();
 	    }
 
 	    #ifdef Z3PP_H_
@@ -451,23 +454,26 @@ module path(domain,range) = {
 	    }
 
 	    template <>
-	    void __deser<`t`>(const std::vector<char> &inp, unsigned &pos, `t` &res) {
-	        int sz;
-	        __deser(inp,pos,sz);
-	        for (unsigned i = 0; i < (unsigned)sz; i++) {
-	            `range` v;
-	            __deser(inp,pos,v);
-	            res.push_back(v);
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
                 }
+		inp.close_list();
 	    }
 
 	    template <>
-	    void __ser<`t`>(std::vector<char> &res, const `t` &inp) {
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
 	        int sz = inp.size();
-	        __ser(res,sz);
+	        res.open_list(sz);
 	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
 	            __ser(res,inp[i]);
+		    res.close_list_elem();
                 }
+	        res.close_list();
 	    }
 
 	    #ifdef Z3PP_H_
