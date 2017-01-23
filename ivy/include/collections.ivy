@@ -567,7 +567,10 @@ module path(domain,range) = {
 	    template <>
             z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
 	        z3::expr z3end = g.apply("`end`",z3val);
-	        return z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        z3::expr cond = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        for (unsigned i = 0; i < val.size(); i++)
+		    cond = cond && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),i)),val[i]);
+	        return cond;
             }
 
 	    template <>

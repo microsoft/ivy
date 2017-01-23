@@ -1222,6 +1222,8 @@ def module_to_cpp_class(classname,basename):
 #include <iostream>
 #include <stdlib.h>
 #include <sys/types.h>          /* See NOTES */
+#include <sys/stat.h>
+#include <fcntl.h>
 #ifdef _WIN32
 #include <winsock2.h>
 #include <io.h>
