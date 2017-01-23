@@ -242,6 +242,17 @@ def all_ctuples():
             done.add(name)
             yield res
     
+def all_hash_thunk_domains(classname):
+    done = set()
+    for sym in all_members():
+        if hasattr(sym.sort,'dom') and len(sym.sort.dom) == 1 and is_large_type(sym.sort):
+            res = sym.sort.dom[0]
+            name = ctype(res,classname=classname)
+            if name in done:
+                continue
+            done.add(name)
+            yield name
+
 def declare_all_ctuples(header):
     for dom in all_ctuples():
         declare_ctuple(header,dom)
@@ -1106,9 +1117,11 @@ def emit_hash_thunk_to_solver(header,dom,classname,ct_name,ch_name):
     close_scope(header,semi=True)
 
 def emit_all_ctuples_to_solver(header,classname):
-    emit_hash_thunk_to_solver(header,None,classname,'__strlit','hash<__strlit>')
-    for cpptype in cpptypes:
-        emit_hash_thunk_to_solver(header,None,classname,cpptype.short_name(),'hash<'+cpptype.short_name()+'>')
+#    emit_hash_thunk_to_solver(header,None,classname,'__strlit','hash<__strlit>')
+#    for cpptype in cpptypes:
+#        emit_hash_thunk_to_solver(header,None,classname,cpptype.short_name(),'hash<'+cpptype.short_name()+'>')
+    for cname in all_hash_thunk_domains(classname):
+        emit_hash_thunk_to_solver(header,None,classname,cname,'hash<'+cname+'>')
     for dom in all_ctuples():
         emit_ctuple_to_solver(header,dom,classname)
 
@@ -1176,6 +1189,16 @@ def module_to_cpp_class(classname,basename):
 
 
     header.append('class ' + classname + ' {\n  public:\n')
+    header.append("""
+#ifdef _WIN32
+    HANDLE mutex;
+    void __lock() { WaitForSingleObject(mutex,INFINITE); }
+    void __unlock() { ReleaseMutex(mutex); }
+#else
+    void __lock() { }
+    void __unlock() { }
+#endif
+""")
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() in ["gen","test"]:
         header.append('    ivy_gen *___ivy_gen;\n')
@@ -1510,9 +1533,9 @@ class z3_thunk : public thunk<D,R> {
             impl.append('template <>\n')
             impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
             impl.append('template <>\n')
-        impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
-        impl.append('template <>\n')
-        impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
+            impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
+            impl.append('template <>\n')
+            impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
         if target.get() in ["test","gen"]:
             impl.append('template <>\n')
             impl.append('void __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v, ' + cfsname + ' &res);\n')
@@ -1529,10 +1552,10 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
                 impl.append('template <>\n')
                 impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
-            impl.append('template <>\n')
-            impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
-            impl.append('template <>\n')
-            impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
+                impl.append('template <>\n')
+                impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
+                impl.append('template <>\n')
+                impl.append('void  __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res);\n')                
 
     if target.get() in ["test","gen"]:
         for sort_name in sorted(im.module.sort_destructors):
@@ -1630,6 +1653,9 @@ class z3_thunk : public thunk<D,R> {
     impl.append(classname + '::')
     emit_param_decls(impl,classname,im.module.params)
     impl.append('{\n')
+    impl.append('#ifdef _WIN32\n');
+    impl.append('mutex = CreateMutex(NULL,FALSE,NULL);\n')
+    impl.append('#endif\n');
     enums = set(sym.sort.name for sym in il.sig.constructors)  
 #    for sortname in enums:
 #        for i,n in enumerate(il.sig.sorts[sortname].extension):
@@ -1699,21 +1725,22 @@ class z3_thunk : public thunk<D,R> {
             code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
             close_scope(header)
 
-            impl.append('template <>\n')
-            open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
-            code_line(impl,"res.open_struct()")
-            for idx,sym in enumerate(destrs):
-                dom = sym.sort.dom[1:]
-                vs = variables(dom)
-                for d,v in zip(dom,vs):
-                    open_loop(impl,[v])
-                code_line(impl,'res.open_field("'+memname(sym)+'")')
-                code_line(impl,'__ser<' + ctype(sym.sort.rng,classname=classname) + '>(res,t.' + memname(sym) + subscripts(vs) + ')')
-                code_line(impl,'res.close_field()')
-                for d,v in zip(dom,vs):
-                    close_loop(impl,[v])
-            code_line(impl,"res.close_struct()")
-            close_scope(impl)
+            if sort_name not in encoded_sorts:
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
+                code_line(impl,"res.open_struct()")
+                for idx,sym in enumerate(destrs):
+                    dom = sym.sort.dom[1:]
+                    vs = variables(dom)
+                    for d,v in zip(dom,vs):
+                        open_loop(impl,[v])
+                    code_line(impl,'res.open_field("'+memname(sym)+'")')
+                    code_line(impl,'__ser<' + ctype(sym.sort.rng,classname=classname) + '>(res,t.' + memname(sym) + subscripts(vs) + ')')
+                    code_line(impl,'res.close_field()')
+                    for d,v in zip(dom,vs):
+                        close_loop(impl,[v])
+                code_line(impl,"res.close_struct()")
+                close_scope(impl)
 
  
         for sort_name in enum_sort_names:
@@ -1726,10 +1753,10 @@ class z3_thunk : public thunk<D,R> {
                     code_line(impl,'if (t == {}) s<<"{}"'.format(classname + '::' + varname(sym),memname(sym)))
                 code_line(impl,'return s')
                 close_scope(impl)
-            impl.append('template <>\n')
-            open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
-            code_line(impl,'__ser(res,(int)t)')
-            close_scope(impl)
+                impl.append('template <>\n')
+                open_scope(impl,line='void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&t)')
+                code_line(impl,'__ser(res,(int)t)')
+                close_scope(impl)
 
 
         if target.get() in ["repl","test"]:
@@ -1778,24 +1805,24 @@ class z3_thunk : public thunk<D,R> {
                     code_line(impl,'return res')
                     close_scope(impl)
 
-                impl.append('template <>\n')
-                open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
-                code_line(impl,"inp.open_struct()")
-                for idx,sym in enumerate(destrs):
-                    fname = memname(sym)
-                    vs = variables(sym.sort.dom[1:])
-                    code_line(impl,'inp.open_field("'+fname+'")')
-                    for v in vs:
-                        card = sort_card(v.sort)
-                        code_line(impl,'inp.open_list('+str(card)+')')
-                        open_loop(impl,[v])
-                    code_line(impl,'__deser(inp,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
-                    for v in vs:
-                        close_loop(impl,[v])
-                        code_line(impl,'inp.close_list()')
-                    code_line(impl,'inp.close_field()')
-                code_line(impl,"inp.close_struct()")
-                close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
+                    code_line(impl,"inp.open_struct()")
+                    for idx,sym in enumerate(destrs):
+                        fname = memname(sym)
+                        vs = variables(sym.sort.dom[1:])
+                        code_line(impl,'inp.open_field("'+fname+'")')
+                        for v in vs:
+                            card = sort_card(v.sort)
+                            code_line(impl,'inp.open_list('+str(card)+')')
+                            open_loop(impl,[v])
+                        code_line(impl,'__deser(inp,res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                        for v in vs:
+                            close_loop(impl,[v])
+                            code_line(impl,'inp.close_list()')
+                        code_line(impl,'inp.close_field()')
+                    code_line(impl,"inp.close_struct()")
+                    close_scope(impl)
                 if target.get() in ["gen","test"]:
                     impl.append('template <>\n')
                     open_scope(impl,line='void  __from_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &res)')
@@ -1854,12 +1881,12 @@ class z3_thunk : public thunk<D,R> {
                         code_line(impl,'if(arg.atom == "{}") return {}'.format(memname(sym),classname + '::' + varname(sym)))
                     code_line(impl,'throw out_of_bounds("bad value: " + arg.atom,arg.pos)')
                     close_scope(impl)
-                impl.append('template <>\n')
-                open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
-                code_line(impl,'int __res')
-                code_line(impl,'__deser(inp,__res)')
-                code_line(impl,'res = ({})__res'.format(cfsname))
-                close_scope(impl)
+                    impl.append('template <>\n')
+                    open_scope(impl,line='void __deser<' + cfsname + '>(ivy_deser &inp, ' + cfsname + ' &res)')
+                    code_line(impl,'int __res')
+                    code_line(impl,'__deser(inp,__res)')
+                    code_line(impl,'res = ({})__res'.format(cfsname))
+                    close_scope(impl)
                 if target.get() in ["test","gen"]:
                     impl.append('template <>\n')
                     open_scope(impl,line='z3::expr  __to_solver<' + cfsname + '>( gen &g, const  z3::expr &v,' + cfsname + ' &val)')
@@ -2720,9 +2747,14 @@ def native_reference(atom):
         res += '[' + varname(n) + ']'
     return res
 
+
 def emit_native_action(self,header):
     fields = self.args[0].code.split('`')
-    fields = [(native_reference(self.args[int(s)+1]) if idx % 2 == 1 else s) for idx,s in enumerate(fields)]
+    def nfun(idx):
+        return native_typeof if fields[idx-1].endswith('%') else native_z3name if fields[idx-1].endswith('"') else native_reference
+    def dm(s):
+        return s[:-1] if s.endswith('%') else s
+    fields = [(nfun(idx)(self.args[int(s)+1]) if idx % 2 == 1 else dm(s)) for idx,s in enumerate(fields)]
     indent_code(header,''.join(fields))
 
 ia.NativeAction.emit = emit_native_action
@@ -3196,9 +3228,14 @@ def emit_repl_boilerplate3test(header,impl,classname):
         int rnd = choices ? (rand() % choices) : 0;
         if (rnd < generators.size()) {
             gen &g = *generators[rnd];
-            if (g.generate(ivy))
+            if (g.generate(ivy)){
+                ivy.__lock();
                 g.execute(ivy);
-            Sleep(3600000);
+                ivy.__unlock();
+#ifdef _WIN32
+                Sleep(1);
+#endif
+            }
             continue;
         }
 

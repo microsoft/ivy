@@ -243,13 +243,96 @@ module array(domain,range) = {
 
 ################################################################################
 #
+# Option types
+#
+# An option is either empty or has value or type range_t.
+
+module option(range_t) = {
+
+    type domain_t
+
+    instantiate array(domain_t,range_t)
+
+    # True if the option is empty
+    derived is_empty(X:t) = (end(X) = 0)
+
+    # If not empty, gives the value
+    derived contents(X:t) = value(X,0)
+
+    interpret domain_t -> bv[1]
+}
+
+################################################################################
+#
+# Null number types 
+#
+# A Null number type is one that has a special value representing "not a number".
+
+module null_type(range_t) = {
+
+    type t = struct {
+        is_null : bool,
+	contents : range_t
+    }
+
+    <<< encode `t`
+
+	std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	    if (a.is_null)
+	        s << "-1";
+	    else
+	        s << a.contents;
+	    return s;
+	}
+
+	template <>
+	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    ivy_value &arg = args[idx];
+	    if (arg.fields.size()) 
+		throw out_of_bounds(idx);
+	    `t` a;
+	    int val = atoi(arg.atom.c_str());
+	    a.is_null = (val == -1);
+	    a.contents = _arg<`range_t`>(args,idx,bound);
+	    return a;
+	}
+
+	template <>
+	void  __ser<`t`>(ivy_ser &res, const `t` &t){
+	    if (t.is_null)
+	        res.set(-1);
+	    else
+	        __ser(res,t.contents);
+	}
+
+	template <>
+	void __deser<`t`>(ivy_deser &inp, `t` &res){
+	    int val;
+	    inp.get(val);
+	    res.is_null = (val == -1);
+	    std::vector<ivy_value> args;
+	    args.resize(1);
+	    std::ostringstream sts;
+	    sts << val;
+	    args[0].atom = sts.str();
+	    res.contents = _arg<`range_t`>(args,0,0);	    
+        }
+    >>>
+}
+
+
+################################################################################
+#
 # Paths
 #
 # A path is similar to an array but differs in the way it is serialized.
 # That is, a path with elements e_0, e_1, ... is serialized as a string of
 # the form "e_0/e_1/...". To prevent misinterpretation, a separator character
 # '/' is replaced by '\/' and '\' by '\\'. Also, string quatation marks '"' are
-# elided from e_0, e_1 ...
+# elided from e_0, e_1 ... A further difference between paths and strings is
+# that paths are extensional -- if two paths have the same sequence of elements,
+# they are equal. This means that to stay decidable, the index type of paths must
+# be finite.
 #
 # A path type thing.t can be created
 # like this:
@@ -257,7 +340,7 @@ module array(domain,range) = {
 #    instance thing : path(domain.t,range.t)
 #
 # The implementation of this type requires that domain.t be
-# interpreted as 'int'.
+# interpreted as an integer type.
 
 
 module path(domain,range) = {
@@ -301,6 +384,10 @@ module path(domain,range) = {
     # Notice that get and set have the precondition that x is in
     # [0,end).
 
+    property [extensionality]
+       forall X,Y. (end(X) = end(Y))
+                   & (forall I. (I < end(X) -> value(X,I) = value(Y,I)))
+                   -> X = Y
 
     object spec = {
 	property end(X) >= 0

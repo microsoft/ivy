@@ -127,6 +127,7 @@ void __randomize<CLASSNAME>( gen &g, const  z3::expr &apply_expr) {
     def rand(self):
         return '((rand()%2) ? "a" : "b")' # TODO: let user control random string generation
 
+
 def parse_descr(name):
     things = name.split('[')
     title = things[0]
