@@ -780,23 +780,23 @@ def emit_action_gen(header,impl,name,action,classname):
 """)
     open_scope(impl,line="void " + caname + "_gen::execute(" + classname + "& obj)")
     if action.formal_params:
-        code_line(impl,'__out << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
+        code_line(impl,'__ivy_out << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     else:
-        code_line(impl,'__out << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
+        code_line(impl,'__ivy_out << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
     if opt_trace.get():
-        code_line(impl,'__out << "{" << std::endl')
+        code_line(impl,'__ivy_out << "{" << std::endl')
     call = 'obj.{}('.format(caname) + ','.join(varname(p) for p in action.formal_params) + ')'
     if len(action.formal_returns) == 0:
         code_line(impl,call)
         if opt_trace.get():
-            code_line(impl,'__out << "}" << std::endl')
+            code_line(impl,'__ivy_out << "}" << std::endl')
     else:
         if opt_trace.get():
             code_line(impl,ctypefull(action.formal_returns[0].sort,classname=classname)+' __res = '+call)
-            code_line(impl,'__out << "}" << std::endl')
-            code_line(impl,'__out << "= " << __res <<  std::endl')
+            code_line(impl,'__ivy_out << "}" << std::endl')
+            code_line(impl,'__ivy_out << "= " << __res <<  std::endl')
         else:
-            code_line(impl,'__out << "= " << ' + call + ' <<  std::endl')
+            code_line(impl,'__ivy_out << "= " << ' + call + ' <<  std::endl')
     close_scope(impl)
 
 
@@ -1243,7 +1243,7 @@ def module_to_cpp_class(classname,basename):
 #include <string>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
-    impl.append("std::ofstream __out;\n")
+    impl.append("std::ofstream __ivy_out;\n")
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
@@ -1923,13 +1923,13 @@ class z3_thunk : public thunk<D,R> {
                 getargs = ','.join(argstrings)
                 thing = "ivy.methodname(getargs)"
                 if action.formal_returns:
-                    thing = '__out << "= " << ' + thing + " << std::endl"
+                    thing = '__ivy_out << "= " << ' + thing + " << std::endl"
                 if target.get() == "repl" and opt_trace.get():
                     if action.formal_params:
-                        trace_code = '__out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                        trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
                     else:
-                        trace_code = '__out << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
-                    thing = trace_code + ';\n                    ' + thing + ';\n                    __out << "}" << std::endl' 
+                        trace_code = '__ivy_out << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
+                    thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
                 impl.append("""
                 if (action == "actname") {
                     check_arity(args,numargs,action);
@@ -1954,8 +1954,8 @@ class z3_thunk : public thunk<D,R> {
             std::string param = arg.substr(0,p);
             std::string value = arg.substr(p+1);
             if (param == "out") {
-                __out.open(value.c_str());
-                if (!__out) {
+                __ivy_out.open(value.c_str());
+                if (!__ivy_out) {
                     std::cerr << "cannot open to write: " << value << std::endl;
                     return 1;
                 }
@@ -1969,8 +1969,8 @@ class z3_thunk : public thunk<D,R> {
             }
         }
     }
-    if (!__out.is_open())
-        __out.basic_ios<char>::rdbuf(std::cout.rdbuf());
+    if (!__ivy_out.is_open())
+        __ivy_out.basic_ios<char>::rdbuf(std::cout.rdbuf());
     argc = pargs.size();
     argv = &pargs[0];
 """)
@@ -2534,7 +2534,7 @@ def emit_assign_simple(self,header):
     if opt_trace.get() and ':' not in self.args[0].rep.name:
         trace = []
         indent(trace)
-        trace.append('__out << "  write("')
+        trace.append('__ivy_out << "  write("')
         cargs = []
         if il.is_constant(self.args[0]):
             self.args[0].emit(header,code)
@@ -2805,7 +2805,7 @@ def emit_repl_boilerplate1(header,impl,classname):
 int ask_ret(int bound) {
     int res;
     while(true) {
-        __out << "? ";
+        __ivy_out << "? ";
         std::cin >> res;
         if (res >= 0 && res < bound) 
             return res;
@@ -2823,12 +2823,14 @@ int ask_ret(int bound) {
 
     virtual void ivy_assert(bool truth,const char *msg){
         if (!truth) {
+            __ivy_out << "assertion_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assertion failed\\n";
             exit(1);
         }
     }
     virtual void ivy_assume(bool truth,const char *msg){
         if (!truth) {
+            __ivy_out << "assumption_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assumption failed\\n";
             exit(1);
         }
@@ -2843,7 +2845,7 @@ int ask_ret(int bound) {
         if not imp.scope() and name in im.module.actions:
             action = im.module.actions[name]
             emit_method_decl(impl,name,action);
-            impl.append('{\n    __out << "< ' + name[5:] + '"')
+            impl.append('{\n    __ivy_out << "< ' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
                 first = True
@@ -3034,7 +3036,7 @@ public:
         }
     }
     virtual void process(const std::string &line) {
-        __out << line;
+        __ivy_out << line;
     }
 };
 
@@ -3046,7 +3048,7 @@ public:
     cmd_reader(classname_repl &_ivy) : ivy(_ivy) {
         lineno = 1;
         if (isatty(fdes()))
-            __out << "> "; __out.flush();
+            __ivy_out << "> "; __ivy_out.flush();
     }
 
     virtual void process(const std::string &cmd) {
@@ -3073,7 +3075,7 @@ def emit_repl_boilerplate2(header,impl,classname):
             std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
         if (isatty(fdes()))
-            __out << "> "; __out.flush();
+            __ivy_out << "> "; __ivy_out.flush();
         lineno++;
     }
 };
@@ -3320,7 +3322,10 @@ def emit_repl_boilerplate3test(header,impl,classname):
             }
         }            
     }
-    __out << "test_completed" << std::endl;
+#ifdef _WIN32
+                Sleep(10);  // HACK: wait for late responses
+#endif
+    __ivy_out << "test_completed" << std::endl;
     return 0;
 }
 """.replace('classname',classname))
