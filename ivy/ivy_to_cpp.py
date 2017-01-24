@@ -780,23 +780,23 @@ def emit_action_gen(header,impl,name,action,classname):
 """)
     open_scope(impl,line="void " + caname + "_gen::execute(" + classname + "& obj)")
     if action.formal_params:
-        code_line(impl,'std::cout << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
+        code_line(impl,'__out << "> {}("'.format(name.split(':')[-1]) + ' << "," '.join(' << {}'.format(varname(p)) for p in action.formal_params) + ' << ")" << std::endl')
     else:
-        code_line(impl,'std::cout << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
+        code_line(impl,'__out << "> {}"'.format(name.split(':')[-1]) + ' << std::endl')
     if opt_trace.get():
-        code_line(impl,'std::cout << "{" << std::endl')
+        code_line(impl,'__out << "{" << std::endl')
     call = 'obj.{}('.format(caname) + ','.join(varname(p) for p in action.formal_params) + ')'
     if len(action.formal_returns) == 0:
         code_line(impl,call)
         if opt_trace.get():
-            code_line(impl,'std::cout << "}" << std::endl')
+            code_line(impl,'__out << "}" << std::endl')
     else:
         if opt_trace.get():
             code_line(impl,ctypefull(action.formal_returns[0].sort,classname=classname)+' __res = '+call)
-            code_line(impl,'std::cout << "}" << std::endl')
-            code_line(impl,'std::cout << "= " << __res <<  std::endl')
+            code_line(impl,'__out << "}" << std::endl')
+            code_line(impl,'__out << "= " << __res <<  std::endl')
         else:
-            code_line(impl,'std::cout << "= " << ' + call + ' <<  std::endl')
+            code_line(impl,'__out << "= " << ' + call + ' <<  std::endl')
     close_scope(impl)
 
 
@@ -1217,6 +1217,7 @@ def module_to_cpp_class(classname,basename):
         impl.append('#include "stdafx.h"\n')
     impl.append('#include "' + basename + '.h"\n\n')
     impl.append("#include <sstream>\n")
+    impl.append("#include <fstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("""
 #include <iostream>
@@ -1234,6 +1235,8 @@ def module_to_cpp_class(classname,basename):
 #include <netinet/ip.h> 
 #include <sys/select.h>
 #include <unistd.h>
+#define _open open
+#define _dup2 dup2
 #endif
 #include <string.h>
 #include <stdio.h>
@@ -1920,13 +1923,13 @@ class z3_thunk : public thunk<D,R> {
                 getargs = ','.join(argstrings)
                 thing = "ivy.methodname(getargs)"
                 if action.formal_returns:
-                    thing = 'std::cout << "= " << ' + thing + " << std::endl"
+                    thing = '__out << "= " << ' + thing + " << std::endl"
                 if target.get() == "repl" and opt_trace.get():
                     if action.formal_params:
-                        trace_code = 'std::cout << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                        trace_code = '__out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
                     else:
-                        trace_code = 'std::cout << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
-                    thing = trace_code + ';\n                    ' + thing + ';\n                    std::cout << "}" << std::endl' 
+                        trace_code = '__out << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
+                    thing = trace_code + ';\n                    ' + thing + ';\n                    __out << "}" << std::endl' 
                 impl.append("""
                 if (action == "actname") {
                     check_arity(args,numargs,action);
@@ -1949,12 +1952,13 @@ class z3_thunk : public thunk<D,R> {
             pargs.push_back(argv[i]);
         else {
             std::string param = arg.substr(0,p);
-            std::string value = arg.substr(p);
+            std::string value = arg.substr(p+1);
             if (param == "out") {
                 __out.open(value.c_str());
                 if (!__out) {
                     std::cerr << "cannot open to write: " << value << std::endl;
                     return 1;
+                }
             }
             else if (param == "out") {
                 test_iters = atoi(value.c_str());
@@ -1964,23 +1968,21 @@ class z3_thunk : public thunk<D,R> {
                 return 1;
             }
         }
-    if (!__out)
+    }
+    if (!__out.is_open())
         __out.basic_ios<char>::rdbuf(std::cout.rdbuf());
     argc = pargs.size();
-    argv = *pargs[0];
+    argv = &pargs[0];
 """)
             impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
             impl.append("        argc--;\n")
-            impl.append("        __in.open(argv[argc]);\n")
-            impl.append("        if (__in){\n")
+            impl.append("        int fd = _open(argv[argc],0);\n")
+            impl.append("        if (fd < 0){\n")
             impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
             impl.append('            exit(1);\n')
             impl.append('        }\n')
+            impl.append("        _dup2(fd, 0);\n")
             impl.append("    }\n")
-            impl.append("""
-    if (!__in
-        __in.basic_ios<char>::rdbuf(std::cin.rdbuf());
-""")
             impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
             impl.append('        std::cerr << "usage: {} {}\\n";\n'
                         .format(classname,' '.join(map(varname,im.module.params))))
@@ -2532,7 +2534,7 @@ def emit_assign_simple(self,header):
     if opt_trace.get() and ':' not in self.args[0].rep.name:
         trace = []
         indent(trace)
-        trace.append('std::cout << "  write("')
+        trace.append('__out << "  write("')
         cargs = []
         if il.is_constant(self.args[0]):
             self.args[0].emit(header,code)
@@ -2803,7 +2805,7 @@ def emit_repl_boilerplate1(header,impl,classname):
 int ask_ret(int bound) {
     int res;
     while(true) {
-        std::cout << "? ";
+        __out << "? ";
         std::cin >> res;
         if (res >= 0 && res < bound) 
             return res;
@@ -2841,7 +2843,7 @@ int ask_ret(int bound) {
         if not imp.scope() and name in im.module.actions:
             action = im.module.actions[name]
             emit_method_decl(impl,name,action);
-            impl.append('{\n    std::cout << "< ' + name[5:] + '"')
+            impl.append('{\n    __out << "< ' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
                 first = True
@@ -3032,7 +3034,7 @@ public:
         }
     }
     virtual void process(const std::string &line) {
-        std::cout << line;
+        __out << line;
     }
 };
 
@@ -3044,7 +3046,7 @@ public:
     cmd_reader(classname_repl &_ivy) : ivy(_ivy) {
         lineno = 1;
         if (isatty(fdes()))
-            std::cout << "> "; std::cout.flush();
+            __out << "> "; __out.flush();
     }
 
     virtual void process(const std::string &cmd) {
@@ -3071,7 +3073,7 @@ def emit_repl_boilerplate2(header,impl,classname):
             std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
         if (isatty(fdes()))
-            std::cout << "> "; std::cout.flush();
+            __out << "> "; __out.flush();
         lineno++;
     }
 };
@@ -3318,7 +3320,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             }
         }            
     }
-    std::cout << "test_completed" << std::endl;
+    __out << "test_completed" << std::endl;
     return 0;
 }
 """.replace('classname',classname))
