@@ -1240,7 +1240,7 @@ def module_to_cpp_class(classname,basename):
 #include <string>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
-
+    impl.append("std::ofstream __out;\n")
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
@@ -1938,16 +1938,49 @@ class z3_thunk : public thunk<D,R> {
 
 
             impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
-            if opt_main.get() == "main":
-                impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
-                impl.append("        argc--;\n")
-                impl.append("        int fd = open(argv[argc],0);\n")
-                impl.append("        if (fd < 0){\n")
-                impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
-                impl.append('            exit(1);\n')
-                impl.append('        }\n')
-                impl.append("        dup2(fd, 0);\n")
-                impl.append("    }\n")
+            impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
+            impl.append("""
+    std::vector<char *> pargs; // positional args
+    pargs.push_back(argv[0]);
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        size_t p = arg.find('=');
+        if (p == std::string::npos)
+            pargs.push_back(argv[i]);
+        else {
+            std::string param = arg.substr(0,p);
+            std::string value = arg.substr(p);
+            if (param == "out") {
+                __out.open(value.c_str());
+                if (!__out) {
+                    std::cerr << "cannot open to write: " << value << std::endl;
+                    return 1;
+            }
+            else if (param == "out") {
+                test_iters = atoi(value.c_str());
+            }
+            else {
+                std::cerr << "unknown option: " << param << std::endl;
+                return 1;
+            }
+        }
+    if (!__out)
+        __out.basic_ios<char>::rdbuf(std::cout.rdbuf());
+    argc = pargs.size();
+    argv = *pargs[0];
+""")
+            impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+            impl.append("        argc--;\n")
+            impl.append("        __in.open(argv[argc]);\n")
+            impl.append("        if (__in){\n")
+            impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
+            impl.append('            exit(1);\n')
+            impl.append('        }\n')
+            impl.append("    }\n")
+            impl.append("""
+    if (!__in
+        __in.basic_ios<char>::rdbuf(std::cin.rdbuf());
+""")
             impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
             impl.append('        std::cerr << "usage: {} {}\\n";\n'
                         .format(classname,' '.join(map(varname,im.module.params))))
@@ -3224,7 +3257,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
     impl.append("""
 
-    for(int cycle = 0; cycle < TEST_ITERS; cycle++) {
+    for(int cycle = 0; cycle < test_iters; cycle++) {
 
         int choices = generators.size() + readers.size() + timers.size();
         int rnd = choices ? (rand() % choices) : 0;
@@ -3288,7 +3321,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
     std::cout << "test_completed" << std::endl;
     return 0;
 }
-""".replace('classname',classname).replace('TEST_ITERS',opt_test_iters.get()))
+""".replace('classname',classname))
 
 def emit_boilerplate1(header,impl,classname):
     header.append("""
