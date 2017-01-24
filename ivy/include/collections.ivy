@@ -267,6 +267,7 @@ module option(range_t) = {
 # Null number types 
 #
 # A Null number type is one that has a special value representing "not a number".
+# The "not a number" value is encoded as 2147483647, or 0x7fffffff.
 
 module null_type(range_t) = {
 
@@ -279,7 +280,7 @@ module null_type(range_t) = {
 
 	std::ostream &operator <<(std::ostream &s, const `t` &a) {
 	    if (a.is_null)
-	        s << "-1";
+	        s << "2147483647";
 	    else
 	        s << a.contents;
 	    return s;
@@ -292,7 +293,7 @@ module null_type(range_t) = {
 		throw out_of_bounds(idx);
 	    `t` a;
 	    int val = atoi(arg.atom.c_str());
-	    a.is_null = (val == -1);
+	    a.is_null = (val == 2147483647);
 	    a.contents = _arg<`range_t`>(args,idx,bound);
 	    return a;
 	}
@@ -300,7 +301,7 @@ module null_type(range_t) = {
 	template <>
 	void  __ser<`t`>(ivy_ser &res, const `t` &t){
 	    if (t.is_null)
-	        res.set(-1);
+	        res.set(2147483647);
 	    else
 	        __ser(res,t.contents);
 	}
@@ -309,7 +310,7 @@ module null_type(range_t) = {
 	void __deser<`t`>(ivy_deser &inp, `t` &res){
 	    int val;
 	    inp.get(val);
-	    res.is_null = (val == -1);
+	    res.is_null = (val == 2147483647);
 	    std::vector<ivy_value> args;
 	    args.resize(1);
 	    std::ostringstream sts;
