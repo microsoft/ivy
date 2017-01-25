@@ -288,13 +288,17 @@ def ctype_remaining_cases(sort,classname):
     return 'int'
 
 
+global_classname = None
+
 def ctype(sort,classname=None):
+    classname = classname or global_classname
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
             return ((classname+'::') if classname != None else '') + varname(sort.name)
     return ctype_remaining_cases(sort,classname)
     
 def ctypefull(sort,classname=None):
+    classname = classname or global_classname
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types:
             if classname==None:
@@ -358,17 +362,20 @@ def make_thunk(impl,vs,expr):
     close_scope(impl)
     if target.get() in ["gen","test"]:
         open_scope(impl,line = 'z3::expr to_z3(gen &g, const z3::expr &v)')
-        if lu.free_variables(expr):
-            raise iu.IvyError(None,"cannot compile {}".format(expr))
-        if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
-            if expr.sort in sort_to_cpptype:
-                code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
-            else:
-                cty = '__strlit' if has_string_interp(expr.sort) else 'int'
-                code_line(impl,'z3::expr res = v == g.int_to_z3(g.sort("{}"),({})({}))'.format(expr.sort.name,cty,code_eval(impl,expr)))
+        if isinstance(expr,HavocSymbol):
+            code_line(impl,'return g.ctx.bool_val(true)')
         else:
-            raise iu.IvyError(None,"cannot compile {}".format(expr))
-        code_line(impl,'return res')
+            if lu.free_variables(expr):
+                raise iu.IvyError(None,"cannot compile {}".format(expr))
+            if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
+                if expr.sort in sort_to_cpptype:
+                    code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
+                else:
+                    cty = '__strlit' if has_string_interp(expr.sort) else 'int'
+                    code_line(impl,'z3::expr res = v == g.int_to_z3(g.sort("{}"),({})({}))'.format(expr.sort.name,cty,code_eval(impl,expr)))
+            else:
+                raise iu.IvyError(None,"cannot compile {}".format(expr))
+            code_line(impl,'return res')
         close_scope(impl)
     close_scope(impl,semi=True)
     return 'hash_thunk<{},{}>(new {}({}))'.format(D,R,name,','.join(envnames))
@@ -606,6 +613,8 @@ def mk_rand(sort,classname=None):
 
 def emit_init_gen(header,impl,classname):
     global indent_level
+    global global_classname
+    global_classname = classname
     header.append("""
 class init_gen : public gen {
 public:
@@ -668,6 +677,7 @@ public:
     return __res;
 }
 """)
+    global_classname = None
     
 def emit_randomize(header,symbol,classname=None):
 
@@ -710,6 +720,8 @@ def fix_definition(df):
 
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
+    global global_classname
+    global_classname = classname
     caname = varname(name)
     if name in im.module.before_export:
         action = im.module.before_export[name]
@@ -798,6 +810,7 @@ def emit_action_gen(header,impl,name,action,classname):
         else:
             code_line(impl,'__ivy_out << "= " << ' + call + ' <<  std::endl')
     close_scope(impl)
+    global_classname = None
 
 
 def emit_derived(header,impl,df,classname):
@@ -1175,7 +1188,9 @@ def module_to_cpp_class(classname,basename):
     header.append(hash_h)
 
     header.append("typedef std::string __strlit;\n")
-
+    header.append("extern std::ofstream __ivy_out;\n")
+    header.append("void __ivy_exit(int);\n")
+    
     declare_hash_thunk(header)
 
     once_memo = set()
@@ -1217,7 +1232,6 @@ def module_to_cpp_class(classname,basename):
         impl.append('#include "stdafx.h"\n')
     impl.append('#include "' + basename + '.h"\n\n')
     impl.append("#include <sstream>\n")
-    impl.append("#include <fstream>\n")
     impl.append("#include <algorithm>\n")
     impl.append("""
 #include <iostream>
@@ -1244,6 +1258,8 @@ def module_to_cpp_class(classname,basename):
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
     impl.append("std::ofstream __ivy_out;\n")
+    impl.append("std::ofstream __ivy_modelfile;\n")
+    impl.append("void __ivy_exit(int code){exit(code);}\n")
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
@@ -1960,8 +1976,15 @@ class z3_thunk : public thunk<D,R> {
                     return 1;
                 }
             }
-            else if (param == "out") {
+            else if (param == "iters") {
                 test_iters = atoi(value.c_str());
+            }
+            else if (param == "modelfile") {
+                __ivy_modelfile.open(value.c_str());
+                if (!__ivy_modelfile) {
+                    std::cerr << "cannot open to write: " << value << std::endl;
+                    return 1;
+                }
             }
             else {
                 std::cerr << "unknown option: " << param << std::endl;
@@ -1979,14 +2002,14 @@ class z3_thunk : public thunk<D,R> {
             impl.append("        int fd = _open(argv[argc],0);\n")
             impl.append("        if (fd < 0){\n")
             impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
-            impl.append('            exit(1);\n')
+            impl.append('            __ivy_exit(1);\n')
             impl.append('        }\n')
             impl.append("        _dup2(fd, 0);\n")
             impl.append("    }\n")
             impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
             impl.append('        std::cerr << "usage: {} {}\\n";\n'
                         .format(classname,' '.join(map(varname,im.module.params))))
-            impl.append('        exit(1);\n    }\n')
+            impl.append('        __ivy_exit(1);\n    }\n')
             impl.append('    std::vector<std::string> args;\n')
             impl.append('    std::vector<ivy_value> arg_values(1);\n')
             impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
@@ -1999,10 +2022,10 @@ class z3_thunk : public thunk<D,R> {
                             .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
                 impl.append('    }\n    catch(out_of_bounds &) {\n')
                 impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
-                impl.append('        exit(1);\n    }\n')
+                impl.append('        __ivy_exit(1);\n    }\n')
                 impl.append('    catch(syntax_error &) {\n')
                 impl.append('        std::cerr << "syntax error in command argument\\n";\n')
-                impl.append('        exit(1);\n    }\n')
+                impl.append('        __ivy_exit(1);\n    }\n')
             cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
             impl.append('    {}_repl ivy{};\n'
                         .format(classname,cp))
@@ -2825,14 +2848,14 @@ int ask_ret(int bound) {
         if (!truth) {
             __ivy_out << "assertion_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assertion failed\\n";
-            exit(1);
+            __ivy_exit(1);
         }
     }
     virtual void ivy_assume(bool truth,const char *msg){
         if (!truth) {
             __ivy_out << "assumption_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assumption failed\\n";
-            exit(1);
+            __ivy_exit(1);
         }
     }
     """.replace('classname',classname))
@@ -3201,7 +3224,7 @@ def emit_repl_boilerplate3(header,impl,classname):
             if (res == WAIT_FAILED)
             {
                 printf("select failed with error: %d\\n", GetLastError());
-                exit(1);
+                __ivy_exit(1);
             }
 
             foo = res != WAIT_TIMEOUT;
@@ -3231,7 +3254,7 @@ def emit_repl_boilerplate3(header,impl,classname):
         if (foo < 0)
         {
             perror("select failed"); 
-            exit(1);
+            __ivy_exit(1);
         }
 #endif        
         if (foo == 0){
@@ -3267,14 +3290,17 @@ def emit_repl_boilerplate3test(header,impl,classname):
         int rnd = choices ? (rand() % choices) : 0;
         if (rnd < generators.size()) {
             gen &g = *generators[rnd];
+            ivy.__lock();
             if (g.generate(ivy)){
-                ivy.__lock();
                 g.execute(ivy);
                 ivy.__unlock();
 #ifdef _WIN32
                 Sleep(1);
 #endif
             }
+            else 
+                ivy.__unlock();
+    
             continue;
         }
 
@@ -3300,7 +3326,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         int foo = select(maxfds+1,&rdfds,0,0,&timeout);
 
         if (foo < 0)
-            {perror("select failed"); exit(1);}
+            {perror("select failed"); __ivy_exit(1);}
         
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            
@@ -3678,14 +3704,17 @@ public:
 
     bool solve() {
         // std::cout << alits.size();
-        static bool show_model = false;
+        static bool show_model = true;
         while(true){
             z3::check_result res = slvr.check(alits.size(),&alits[0]);
             if (res != z3::unsat)
                 break;
             z3::expr_vector core = slvr.unsat_core();
-            if (core.size() == 0)
+            if (core.size() == 0){
+//                if (__ivy_modelfile.is_open()) 
+//                    __ivy_modelfile << "begin unsat:\\n" << slvr << "end unsat:\\n" << std::endl;
                 return false;
+            }
             //for (unsigned i = 0; i < core.size(); i++)
             //    std::cout << "core: " << core[i] << std::endl;
             unsigned idx = rand() % core.size();
@@ -3700,8 +3729,8 @@ public:
         }
         model = slvr.get_model();
         alits.clear();
-        if(show_model)
-            std::cout << model;
+        if(__ivy_modelfile.is_open())
+            __ivy_modelfile << model;
         return true;
     }
 
@@ -3805,6 +3834,7 @@ hash_h = """
 #include <string>
 #include <vector>
 #include <iterator>
+#include <fstream>
 
 namespace hash_space {
 

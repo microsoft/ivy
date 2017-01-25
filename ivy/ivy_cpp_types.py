@@ -40,7 +40,9 @@ static int string_to_bv(const std::string &s){
                 return next_bv++;
             } 
         }
-        assert(0 && "Ran out of values for type CLASSNAME");
+        std::cerr << "Ran out of values for type CLASSNAME" << std::endl;
+        __ivy_out << "out_of_values(CLASSNAME)" << std::endl;
+        __ivy_exit(1);
     }
     return string_to_bv_hash[s];
 }
