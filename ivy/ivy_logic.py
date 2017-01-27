@@ -119,6 +119,9 @@ class alpha_sort_as_default(sort_as_default):
     def __init__(self):
         self.sort = lg.TopSort('alpha')
 
+def is_numeral_name(s):
+    return s[0].isdigit() or s[0] == '"'    
+
 Symbol = lg.Const
 
 Symbol.rep = property(lambda self: self)
@@ -149,7 +152,7 @@ Symbol.deskolem = lambda self,s: self.drop_prefix('__')
 Symbol.__call__ = lambda self,*args: App(self,*args) if len(args) > 0 or isinstance(self.sort,FunctionSort) else self
 Symbol.is_relation = lambda self: isinstance(self.sort.rng,lg.BooleanSort)
 Symbol.args = property(lambda self : [])
-Symbol.is_numeral  = lambda self : self.name[0].isdigit() or self.name[0] == '"'
+Symbol.is_numeral  = lambda self : is_numeral_name(self.name)
 Symbol.clone = lambda self,args : self
 
 BooleanSort = lg.BooleanSort

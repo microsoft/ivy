@@ -640,6 +640,8 @@ def empty_clone(action):
 
 
 def collect_relevant_destructors(sym,res):
+    if not hasattr(sym.sort,'rng'):
+        return 
     if sym.sort.rng.name in im.module.sort_destructors:
         for dstr in im.module.sort_destructors[sym.sort.rng.name]:
             res.add(dstr)

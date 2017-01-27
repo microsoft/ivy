@@ -68,6 +68,13 @@ class ActionContext(object):
         assert domain is not None
         return domain.new_state(clauses)
 
+class UnrollContext(ActionContext):
+    def __init__(self,card,domain = None):
+        """ card is a function that returns a cardinarlity bound for a sort,
+        to be used in bounding loop unrollings """
+        self.card = card
+        self.domain = domain
+
 context = ActionContext()
 
 class SymbolList(AST):
@@ -732,6 +739,9 @@ class WhileAction(Action):
         return res
             
     def int_update(self,domain,pvars):
+        global context
+        if isinstance(context,UnrollContext):
+            return self.unroll(context.card).int_update(domain,pvars)
         return self.expand(domain,pvars).int_update(domain,pvars)
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
@@ -745,6 +755,9 @@ class WhileAction(Action):
             res.formal_returns = self.formal_returns
         return res
     def unroll_loops(self,card):
+        body = self.args[1].unroll_loops(card)
+        return self.unroll(card,body)
+    def unroll(self,card,body=None):
         cond = self.args[0]
         if is_app(cond) and cond.rep.name in ['<','>','<=','>=']:
             idx_sort = cond.args[0].sort
@@ -757,7 +770,7 @@ class WhileAction(Action):
             raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
         res = AssumeAction(Not(cond))
         for idx in range(cardsort):
-            res = IfAction(cond,Sequence(self.args[1],res))
+            res = IfAction(cond,Sequence(body or self.args[1],res))
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):

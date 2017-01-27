@@ -438,6 +438,8 @@ def compile_native_symbol(arg):
             return sym
     if name in ivy_logic.sig.sorts:
         return ivy_logic.Variable('X',ivy_logic.sig.sorts[name])
+    if ivy_logic.is_numeral_name(name):
+        return ivy_logic.Symbol(name,ivy_logic.TopS)
     raise iu.IvyError(arg,'{} is not a declared symbol or type'.format(name))
 
 def compile_native_action(self):

@@ -332,7 +332,7 @@ thunk_counter = 0
 
 
 def expr_to_z3(expr):
-    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\n',' ') + ')'
+    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\n',' "\n"') + ')'
     return 'z3::expr(g.ctx,Z3_parse_smtlib2_string(ctx, "{}", sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]))'.format(fmla)
 
 
@@ -633,7 +633,7 @@ public:
     for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
         constraints.append(fix_definition(ldf.formula).to_constraint())
     for c in constraints:
-        fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' ')
+        fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' "\n"')
         indent(impl)
         impl.append("  {}\\\n".format(fmla))
     indent(impl)
@@ -727,8 +727,9 @@ def emit_action_gen(header,impl,name,action,classname):
         action = im.module.before_export[name]
     def card(sort):
         return sort_card(sort)
-    action = action.unroll_loops(card)
-    upd = action.update(im.module,None)
+#    action = action.unroll_loops(card)
+    with ia.UnrollContext(card):
+        upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     pre_clauses = ilu.trim_clauses(pre)
     rdefs = im.relevant_definitions(ilu.symbols_clauses(pre_clauses))
@@ -754,7 +755,7 @@ def emit_action_gen(header,impl,name,action,classname):
         emit_decl(impl,sym)
     
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n','\\\n')))
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"')))
     indent_level -= 1
     impl.append("}\n");
     impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
@@ -1206,13 +1207,10 @@ def module_to_cpp_class(classname,basename):
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("""
 #ifdef _WIN32
-    HANDLE mutex;
-    void __lock() { WaitForSingleObject(mutex,INFINITE); }
-    void __unlock() { ReleaseMutex(mutex); }
-#else
-    void __lock() { }
-    void __unlock() { }
+    void *mutex;  // forward reference to HANDLE
 #endif
+    void __lock();
+    void __unlock();
 """)
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() in ["gen","test"]:
@@ -1260,6 +1258,15 @@ def module_to_cpp_class(classname,basename):
     impl.append("std::ofstream __ivy_out;\n")
     impl.append("std::ofstream __ivy_modelfile;\n")
     impl.append("void __ivy_exit(int code){exit(code);}\n")
+    impl.append("""
+#ifdef _WIN32
+    void CLASSNAME::__lock() { WaitForSingleObject(mutex,INFINITE); }
+    void CLASSNAME::__unlock() { ReleaseMutex(mutex); }
+#else
+    void CLASSNAME::__lock() { }
+    void CLASSNAME::__unlock() { }
+#endif
+""".replace('CLASSNAME',classname))
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
@@ -1302,7 +1309,7 @@ struct ivy_value {
     }
 };
 struct ivy_ser {
-    virtual void  set(int) = 0;
+    virtual void  set(long long) = 0;
     virtual void  set(bool) = 0;
     virtual void  set(const std::string &) = 0;
     virtual void  open_list(int len) = 0;
@@ -1317,12 +1324,12 @@ struct ivy_ser {
 };
 struct ivy_binary_ser : public ivy_ser {
     std::vector<char> res;
-    void set(int inp) {
-        for (int i = sizeof(int)-1; i >= 0 ; i--)
+    void set(long long inp) {
+        for (int i = sizeof(long long)-1; i >= 0 ; i--)
             res.push_back((inp>>(8*i))&0xff);
     }
     void set(bool inp) {
-        set((int)inp);
+        set((long long)inp);
     }
     void set(const std::string &inp) {
         for (unsigned i = 0; i < inp.size(); i++)
@@ -1330,7 +1337,7 @@ struct ivy_binary_ser : public ivy_ser {
         res.push_back(0);
     }
     void open_list(int len) {
-        set(len);
+        set((long long)len);
     }
     void close_list() {}
     void open_list_elem() {}
@@ -1342,7 +1349,7 @@ struct ivy_binary_ser : public ivy_ser {
 };
 
 struct ivy_deser {
-    virtual void  get(int&) = 0;
+    virtual void  get(long long&) = 0;
     virtual void  get(std::string &) = 0;
     virtual void  open_list() = 0;
     virtual void  close_list() = 0;
@@ -1364,12 +1371,12 @@ struct ivy_binary_deser : public ivy_deser {
     int pos;
     std::vector<int> lenstack;
     ivy_binary_deser(const std::vector<char> &inp) : inp(inp),pos(0) {}
-    void get(int &res) {
-        if (inp.size() < pos + sizeof(int))
+    void get(long long &res) {
+        if (inp.size() < pos + sizeof(long long))
             throw deser_err();
         res = 0;
-        for (int i = 0; i < sizeof(int); i++)
-            res = (res << 8) | (((int)inp[pos++]) & 0xff);
+        for (int i = 0; i < sizeof(long long); i++)
+            res = (res << 8) | (((long long)inp[pos++]) & 0xff);
     }
     void get(std::string &res) {
         while (pos < inp.size() && inp[pos]) {
@@ -1379,7 +1386,7 @@ struct ivy_binary_deser : public ivy_deser {
         res.push_back(inp[pos++]);
     }
     void open_list() {
-        int len;
+        long long len;
         get(len);
         lenstack.push_back(len);
     }
@@ -1438,7 +1445,7 @@ template <class T> void __ser(ivy_ser &res, const T &inp);
 
 template <>
 void __ser<int>(ivy_ser &res, const int &inp) {
-    res.set(inp);
+    res.set((long long)inp);
 }
 
 template <>
@@ -1455,7 +1462,9 @@ template <class T> void __deser(ivy_deser &inp, T &res);
 
 template <>
 void __deser<int>(ivy_deser &inp, int &res) {
-    inp.get(res);
+    long long temp;
+    inp.get(temp);
+    res = temp;
 }
 
 template <>
@@ -1465,7 +1474,7 @@ void __deser<__strlit>(ivy_deser &inp, __strlit &res) {
 
 template <>
 void __deser<bool>(ivy_deser &inp, bool &res) {
-    int thing;
+    long long thing;
     inp.get(thing);
     res = thing;
 }
@@ -2848,6 +2857,7 @@ int ask_ret(int bound) {
         if (!truth) {
             __ivy_out << "assertion_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assertion failed\\n";
+            CLOSE_TRACE
             __ivy_exit(1);
         }
     }
@@ -2855,10 +2865,11 @@ int ask_ret(int bound) {
         if (!truth) {
             __ivy_out << "assumption_failed(\\"" << msg << "\\")" << std::endl;
             std::cerr << msg << ": assumption failed\\n";
+            CLOSE_TRACE
             __ivy_exit(1);
         }
     }
-    """.replace('classname',classname))
+    """.replace('classname',classname).replace('CLOSE_TRACE','__ivy_out << "}" << std::endl;' if opt_trace.get() else ''))
 
     emit_param_decls(impl,classname+'_repl',im.module.params)
     impl.append(' : '+classname+'('+','.join(map(varname,im.module.params))+'){}\n')
