@@ -347,7 +347,7 @@ def make_thunk(impl,vs,expr):
     thunk_counter += 1
     thunk_class = 'z3_thunk' if target.get() in ["gen","test"] else 'thunk'
     open_scope(impl,line='struct {} : {}<{},{}>'.format(name,thunk_class,D,R))
-    env = list(ilu.used_symbols_ast(expr))
+    env = [sym for sym in ilu.used_symbols_ast(expr) if not sym.is_numeral()]
     for sym in env:
         declare_symbol(impl,sym,classname=the_classname)
     envnames = [varname(sym) for sym in env]
@@ -3306,12 +3306,13 @@ def emit_repl_boilerplate3test(header,impl,classname):
                 g.execute(ivy);
                 ivy.__unlock();
 #ifdef _WIN32
-                Sleep(1);
+                Sleep(100);
 #endif
             }
-            else 
+            else {
                 ivy.__unlock();
-    
+                cycle--;
+            }
             continue;
         }
 
@@ -3360,7 +3361,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         }            
     }
 #ifdef _WIN32
-                Sleep(10);  // HACK: wait for late responses
+                Sleep(10000);  // HACK: wait for late responses
 #endif
     __ivy_out << "test_completed" << std::endl;
     return 0;
