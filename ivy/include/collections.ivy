@@ -179,7 +179,7 @@ module array(domain,range) = {
 	        `t` a;
 	        a.resize(arg.fields.size());
 		for (unsigned i = 0; i < a.size(); i++) {
-		    a[i] = _arg<`range`>(arg.fields,i,0x7fffffff);
+		    a[i] = _arg<`range`>(arg.fields,i,0);
 	        }
 	        return a;
 	    }
@@ -535,7 +535,7 @@ module path(domain,range) = {
                 }			
 	        a.resize(tmp.fields.size());
 		for (unsigned i = 0; i < a.size(); i++) {
-		    a[i] = _arg<`range`>(tmp.fields,i,0x7fffffff);
+		    a[i] = _arg<`range`>(tmp.fields,i,0);
 	        }
 	        return a;
 	    }
