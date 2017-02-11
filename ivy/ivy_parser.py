@@ -638,6 +638,10 @@ def p_sort_struct_lcb_names_rcb(p):
     'sort : STRUCT LCB tterms RCB'
     p[0] = StructSort(*p[3])
 
+def p_sort_struct_lcb_rcb(p):
+    'sort : STRUCT LCB RCB'
+    p[0] = StructSort()
+
 def p_names_symbol(p):
     'names : SYMBOL'
     p[0] = [p[1]]
