@@ -24,3 +24,6 @@ ivy_termtab.py
 ms_ivy.egg-info
 build
 dist
+
+# vagrant
+/.vagrant
