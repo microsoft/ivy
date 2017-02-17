@@ -11,12 +11,14 @@ set -x
 # exit on any unobserved failure.
 set -e
 
+gitroot=$(git rev-parse --show-toplevel)
+
 git submodule init
 git submodule update
 
 # this shouldn't do anything if we're using vagrant (see `/scripts/setup/vagrant.sh`).
-if [ "$(pwd)" == "/vagrant" ] && [ "$(whoami)" == "vagrant" ]; then
+if [ "x$1" == "x--vagrant" ]; then
    git submodule foreach '$SHELL ../../scripts/setup/git.sh'
 fi
 
-$SHELL scripts/setup/z3.sh
+$SHELL $gitroot/scripts/setup/z3.sh

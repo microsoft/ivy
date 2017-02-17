@@ -4,7 +4,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 
-# git repository setup script-- destructive and therefore 
+# git repository setup script-- destructive and therefore
 # normally only used when setting up git workspaces shared across
 # platforms (e.g. vagrant and WSL).
 

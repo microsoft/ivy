@@ -11,10 +11,11 @@ set -x
 # exit on any unobserved failure.
 set -e
 
-$SHELL scripts/setup/python.sh
+gitroot=$(git rev-parse --show-toplevel)
 
-if ! grep -q 'cd /vagrant' $HOME/.profile; then
+$SHELL $gitroot/scripts/setup/python.sh
+
+if [ "x$1" == "x--vagrant" ] && ! grep -q 'cd /vagrant' $HOME/.profile; then
    echo 'cd /vagrant' >> $HOME/.profile
 fi
-
 
