@@ -21,4 +21,4 @@ if [ "x$1" == "x--vagrant" ]; then
    git submodule foreach '$SHELL ../../scripts/setup/git.sh'
 fi
 
-$SHELL $gitroot/scripts/setup/z3.sh
+$SHELL $gitroot/scripts/setup/z3.sh build
