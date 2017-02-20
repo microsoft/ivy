@@ -844,7 +844,7 @@ def native_declaration(atom):
         res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
 #        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
         return res
-    res = native_classname + '::' + varname(atom.rep)
+    res = ((native_classname + '::') if native_classname else '') + varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
         res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
@@ -1205,6 +1205,7 @@ def module_to_cpp_class(classname,basename):
 
 
     header.append('class ' + classname + ' {\n  public:\n')
+    header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
 #ifdef _WIN32
     void *mutex;  // forward reference to HANDLE
@@ -1604,11 +1605,11 @@ class z3_thunk : public thunk<D,R> {
     for cpptype in cpptypes:
         cpptype.emit_templates()
 
+    global native_classname
     once_memo = set()
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "impl" or tag.startswith('encode'):
-            global native_classname
             native_classname = classname
 #            print 'native_classname:{}'.format(native_classname)
             code = native_to_str(native)
@@ -1698,7 +1699,7 @@ class z3_thunk : public thunk<D,R> {
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "init":
-            vs = [il.Symbol(v.rep,im.module.sig.sorts[v.sort]) for v in native.args[0].args]
+            vs = [il.Symbol(v.rep,im.module.sig.sorts[v.sort]) for v in native.args[0].args] if native.args[0] is not None else []
             global indent_level
             indent_level += 1
             open_loop(impl,vs)

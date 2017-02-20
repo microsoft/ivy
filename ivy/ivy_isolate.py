@@ -841,7 +841,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     for a in new_actions.values():
         asts.extend(a.formal_params)
         asts.extend(a.formal_returns)
-    asts.extend(mod.natives)
+    for tmp in mod.natives:
+        asts.extend(tmp.args[2:])
 
     all_syms = set(lu.used_symbols_asts(asts))
 
