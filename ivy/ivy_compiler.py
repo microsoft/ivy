@@ -618,6 +618,9 @@ class IvyDomainSetup(IvyDeclInterp):
         if isinstance(typedef.value,ivy_ast.StructSort):
             sort = ivy_logic.ConstantSort(typedef.name)
             self.domain.sig.sorts[typedef.name] = sort
+            # handle empty struct
+            if typedef.name not in self.domain.sort_destructors:
+                self.domain.sort_destructors[typedef.name] = []
             for a in typedef.value.args:
                 p = a.clone([ivy_ast.Variable('V:dstr',sort.name)]+a.args)
                 p.sort = a.sort

@@ -381,6 +381,8 @@ def make_thunk(impl,vs,expr):
     return 'hash_thunk<{},{}>(new {}({}))'.format(D,R,name,','.join(envnames))
 
 def struct_hash_fun(field_names,field_sorts):
+    if len(field_names) == 0:
+        return '0'
     return '+'.join('hash_space::hash<{}>()({})'.format(hashtype(s),varname(f)) for s,f in zip(field_sorts,field_names))
 
 def emit_struct_hash(header,the_type,field_names,field_sorts):
@@ -1525,6 +1527,22 @@ template <>
 z3::expr __to_solver<__strlit>( gen &g, const  z3::expr &v, __strlit &val) {
 //    std::cout << v << ":" << v.get_sort() << std::endl;
     return v == g.int_to_z3(v.get_sort(),val);
+}
+
+template <class T>
+class __random_string_class {
+public:
+    std::string operator()() {
+        std::string res;
+        res.push_back('a' + (rand() % 26)); // no empty strings for now
+        while (rand() %2)
+            res.push_back('a' + (rand() % 26));
+        return res;
+    }
+};
+
+template <class T> std::string __random_string(){
+    return __random_string_class<T>()();
 }
 
 template <class T> void __randomize( gen &g, const  z3::expr &v);
@@ -3742,8 +3760,10 @@ public:
         }
         model = slvr.get_model();
         alits.clear();
-        if(__ivy_modelfile.is_open())
+        if(__ivy_modelfile.is_open()){
             __ivy_modelfile << model;
+            __ivy_modelfile.flush();
+        }
         return true;
     }
 

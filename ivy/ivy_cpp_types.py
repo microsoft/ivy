@@ -31,6 +31,8 @@ static z3::sort z3_sort(z3::context &ctx) {return ctx.bv_sort(BITS);}
 static hash_space::hash_map<std::string,int> string_to_bv_hash;
 static hash_space::hash_map<int,std::string> bv_to_string_hash;
 static int next_bv;
+static std::vector<std::string> nonces;
+static std::string random_string();
 static int string_to_bv(const std::string &s){
     if(string_to_bv_hash.find(s) == string_to_bv_hash.end()){
         for (; next_bv < (1<<BITS); next_bv++) {
@@ -50,9 +52,10 @@ static std::string bv_to_string(int bv){
     if(bv_to_string_hash.find(bv) == bv_to_string_hash.end()){
         int num = 0;
         while (true) {
-            std::ostringstream str;
-            str << num;
-            std::string s = str.str();
+            // std::ostringstream str;
+            // str << num;
+            // std::string s = str.str();
+            std::string s = random_string();
             if(string_to_bv_hash.find(s) == string_to_bv_hash.end()){
                string_to_bv_hash[s] = bv;
                bv_to_string_hash[bv] = s;
@@ -77,6 +80,7 @@ static void cleanup() {
 """
 hash_space::hash_map<std::string,int> CLASSNAME::string_to_bv_hash;
 hash_space::hash_map<int,std::string> CLASSNAME::bv_to_string_hash;
+std::vector<std::string> CLASSNAME::nonces;
 int CLASSNAME::next_bv = 0;
 
 std::ostream &operator <<(std::ostream &s, const CLASSNAME &t){
@@ -112,10 +116,16 @@ z3::expr __to_solver<CLASSNAME>( gen &g, const  z3::expr &v, CLASSNAME &val) {
 template <>
 void __randomize<CLASSNAME>( gen &g, const  z3::expr &apply_expr) {
     z3::sort range = apply_expr.get_sort();
-    CLASSNAME value = (rand() % 2) ? "a" : "b";
+    if (CLASSNAME::nonces.size() == 0) 
+       for (int i = 0; i < 2; i++)
+           CLASSNAME::nonces.push_back(__random_string<CLASSNAME>());
+    CLASSNAME value = CLASSNAME::nonces[rand() % CLASSNAME::nonces.size()];
     z3::expr val_expr = g.int_to_z3(range,CLASSNAME::string_to_bv(value));
     z3::expr pred = apply_expr == val_expr;
     g.add_alit(pred);
+}
+std::string CLASSNAME::random_string(){
+    return __random_string<CLASSNAME>();
 }
 #endif
 """.replace('CLASSNAME',self.short_name()))
