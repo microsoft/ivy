@@ -548,7 +548,7 @@ def emit_set(header,symbol):
     cname = varname(name)
     sort = symbol.sort
     domain = sort_domain(sort)
-    if sort.rng.name in im.module.sort_destructors:
+    if sort.rng.name in im.module.sort_destructors and all(is_iterable_sort(s) for s in domain):
         destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             vs = variables(domain)
@@ -930,8 +930,23 @@ def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
     emit_some_action(header,impl,name,action,classname)
 
+def trace_action(impl,name,action):
+    indent(impl)
+    impl.append('__ivy_out << "< ' + name + '"')
+    if action.formal_params:
+        impl.append(' << "("')
+        first = True
+        for arg in action.formal_params:
+            if not first:
+                impl.append(' << ","')
+            first = False
+            impl.append(' << {}'.format(varname(arg.rep.name)))
+        impl.append(' << ")"')
+    impl.append(' << std::endl;\n')
+
 def emit_some_action(header,impl,name,action,classname):
     global indent_level
+    global import_callers
     emit_method_decl(header,name,action)
     header.append(';\n')
     global thunks
@@ -940,6 +955,10 @@ def emit_some_action(header,impl,name,action,classname):
     emit_method_decl(code,name,action,body=True,classname=classname)
     code.append('{\n')
     indent_level += 1
+    if name in import_callers:
+        trace_action(code,name,action)
+        if opt_trace.get():
+            code_line(code,'__ivy_out << "{" << std::endl')
     if len(action.formal_returns) == 1:
         indent(code)
         p = action.formal_returns[0]
@@ -948,6 +967,9 @@ def emit_some_action(header,impl,name,action,classname):
             mk_nondet_sym(code,p,p.name,0)
     with ivy_ast.ASTContext(action):
         action.emit(code)
+    if name in import_callers:
+        if opt_trace.get():
+            code_line(code,'__ivy_out << "}" << std::endl')
     if len(action.formal_returns) == 1:
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
@@ -969,6 +991,9 @@ def init_method():
     res.formal_params = []
     res.formal_returns = []
     return res
+
+def is_iterable_sort(sort):
+    return ctype(sort) in ["bool","int"]
 
 def check_iterable_sort(sort):
     if ctype(sort) not in ["bool","int"]:
@@ -1151,6 +1176,21 @@ def is_really_uninterpreted_sort(sort):
     return il.is_uninterpreted_sort(sort) and not (
         sort.name in im.module.sort_destructors or sort.name in im.module.native_types)
 
+# find the actions that wrap imports and flaf them so the we output a
+# trace. This is so that the trace of the action will appear before 
+# any assert failure in the precondition. To get the name of the caller
+# from the import, we remove the prefic 'imp__'.
+
+def find_import_callers():
+    global import_callers
+    import_callers = set()
+    if target.get() != "test":
+        return
+    for imp in im.module.imports:
+        name = imp.imported()
+        if not imp.scope() and name in im.module.actions:
+            import_callers.add(name[5:])
+            
 def module_to_cpp_class(classname,basename):
     global the_classname
     the_classname = classname
@@ -1665,6 +1705,7 @@ class z3_thunk : public thunk<D,R> {
 #        declare_symbol(header,sym)
     for sname in il.sig.interp:
         header.append('    int __CARD__' + varname(sname) + ';\n')
+    find_import_callers()
     for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
             emit_derived(header,impl,ldf.formula,classname)
@@ -2898,6 +2939,9 @@ int ask_ret(int bound) {
         if not imp.scope() and name in im.module.actions:
             action = im.module.actions[name]
             emit_method_decl(impl,name,action);
+            if target.get() == "test":
+                impl.append("{}\n")
+                continue
             impl.append('{\n    __ivy_out << "< ' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
