@@ -112,6 +112,7 @@ reserved = all_reserved = {
    'trusted' : 'TRUSTED',
    'this' : 'THIS',
    'var' : 'VAR',
+   'attribute' : 'ATTRIBUTE',
 }
 
 tokens += tuple(all_reserved.values())
@@ -173,6 +174,8 @@ def t_NATIVEQUOTE(t):
 
 def t_error(t):
     print "Illegal character '%s'" % t.value[0]
+    import sys
+    sys.exit(1)
     t.lexer.skip(1)
 
 lexer = lex.lex(errorlog=lex.NullLogger())
@@ -202,7 +205,7 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
-                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var']:
+                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var','attribute']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

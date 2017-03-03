@@ -983,6 +983,15 @@ def p_top_nativequote(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
+def p_top_attribute_callatom_eq_callatom(p):
+    'top : top ATTRIBUTE callatom EQ callatom'
+    p[0] = p[1]
+    defn = AttributeDef(p[3],p[5])
+    defn.lineno = get_lineno(p,2)
+    thing = AttributeDecl(defn)
+    thing.lineno = get_lineno(p,2)
+    p[0].declare(thing)   
+
 def p_loc(p):
     'loc : '
     p[0] = None

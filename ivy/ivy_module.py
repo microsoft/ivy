@@ -66,6 +66,7 @@ class Module(object):
         self.symbol_order = [] # list of symbols in order declared
         self.aliases = {} # map from name to name
         self.before_export = {} # map from string to action
+        self.attributes = {} # map from name to atom
         
         self.sig = il.sig.copy() # capture the current signature
 

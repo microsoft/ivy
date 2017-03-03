@@ -786,6 +786,17 @@ class NativeDecl(Decl):
     def defines(self):
         return []
         
+class AttributeDef(AST):
+    def name(self):
+        return 'attribute'
+    def __str__(self):
+        return 'attribute ' + str(self.args[0]) + ' = ' + str(self.args[1])
+
+class AttributeDecl(Decl):
+    def name(self):
+        return 'attribute'
+    def defines(self):
+        return []
 
 class TypeDef(Definition):
     def __init__(self,name,sort):

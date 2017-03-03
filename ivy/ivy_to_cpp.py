@@ -742,6 +742,9 @@ def emit_action_gen(header,impl,name,action,classname):
     for p in action.formal_params:
         if varname(p) not in used_names:
             used.add(p)
+    for x in used:
+        if x.is_numeral() and il.is_uninterpreted_sort(x.sort):
+            raise iu.IvyError(None,'Cannot compile numeral {} of uninterpreted sort {}'.format(x,x.sort))
     syms = [x for x in used if is_local_sym(x) and not x.is_numeral()]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
@@ -758,6 +761,7 @@ def emit_action_gen(header,impl,name,action,classname):
     
     indent(impl)
     impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"')))
+#    impl.append('__ivy_modelfile << slvr << std::endl;\n')
     indent_level -= 1
     impl.append("}\n");
     impl.append("bool " + caname + "_gen::generate(" + classname + "& obj) {\n    push();\n")
@@ -1145,6 +1149,7 @@ def emit_hash_thunk_to_solver(header,dom,classname,ct_name,ch_name):
     code_line(header,'z3::expr res = g.ctx.bool_val(true)')
     code_line(header,'z3::expr disj = g.ctx.bool_val(false)')
     open_scope(header,line='for(typename hash_map<D,R>::iterator it=val.memo.begin(), en = val.memo.end(); it != en; it++)'.replace('D',ct_name).replace('H',ch_name))
+#    code_line(header,'if ((*val.fun)(it->first) == it->second) continue;')
     if dom is not None:
         code_line(header,'z3::expr cond = '+' && '.join('__to_solver(g,v.arg('+str(n)+'),it->first.arg'+str(n)+')' for n in range(len(dom))))
     else:
@@ -3352,20 +3357,57 @@ def emit_repl_boilerplate3test(header,impl,classname):
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
+        std::vector<int> weights;
+
 """)
+    totalweight = 0
     for actname in sorted(im.module.public_actions):
         action = im.module.actions[actname]
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
+        aname = (actname[4:] if actname.startswith('ext:') else actname) +'.weight'
+        if aname in im.module.attributes:
+            aval = im.module.attributes[aname].rep
+            if not aval[0].isdigit():
+                raise iu.IvyError(None,'bad weight attribute for action{}: {}'.format(actname,aval))
+        else:
+            aval = "1"
+        impl.append("        weights.push_back({});\n".format(int(aval)))
+        totalweight += int(aval)
+    impl.append("        int totalweight = {};\n".format(totalweight))
+            
     impl.append("""
 
+#ifdef _WIN32
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+#endif
     for(int cycle = 0; cycle < test_iters; cycle++) {
 
-        int choices = generators.size() + readers.size() + timers.size();
+        int choices = totalweight + readers.size() + timers.size();
         int rnd = choices ? (rand() % choices) : 0;
-        if (rnd < generators.size()) {
-            gen &g = *generators[rnd];
+        if (rnd < totalweight) {
+            int idx = 0;
+            int sum = 0;
+            while (true) {
+                sum += weights[idx];
+                if (rnd < sum)
+                    break;
+                idx++;
+            }
+ 
+            gen &g = *generators[idx];
             ivy.__lock();
-            if (g.generate(ivy)){
+#ifdef _WIN32
+            LARGE_INTEGER before;
+            QueryPerformanceCounter(&before);
+#endif
+            bool sat = g.generate(ivy);
+#ifdef _WIN32
+            LARGE_INTEGER after;
+            QueryPerformanceCounter(&after);
+            std::cout << "idx: " << idx << " sat: " << sat << " time: " << (((double)(after.QuadPart-before.QuadPart))/freq.QuadPart) << std::endl;
+#endif
+            if (sat){
                 g.execute(ivy);
                 ivy.__unlock();
 #ifdef _WIN32
@@ -3805,6 +3847,7 @@ public:
         model = slvr.get_model();
         alits.clear();
         if(__ivy_modelfile.is_open()){
+            // __ivy_modelfile << slvr << std::endl;
             __ivy_modelfile << model;
             __ivy_modelfile.flush();
         }
@@ -3863,9 +3906,9 @@ def main():
             if opt_compiler.get() == 'cl':
                 cmd = "cl /EHsc /Zi {}.cpp ws2_32.lib".format(basename)
                 if target.get() in ['gen','test']:
-                    cmd = 'cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib'.format(basename)
+                    cmd = 'cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib /LIBPATH:%Z3DIR%\bin'.format(basename)
             else:
-                cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -g -o {} {}.cpp -lws2_32".format(basename,basename)
+                cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
                 if target.get() in ['gen','test']:
                     cmd = cmd + ' -lz3'
         else:

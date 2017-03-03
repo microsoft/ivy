@@ -523,6 +523,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
+defined_attributes = set(["weight"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -713,7 +714,21 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.delegates.append(exp)
     def native(self,native_def):
         self.mod.natives.append(compile_native_def(native_def))
-        
+    def attribute(self,a):
+        lhs,rhs = a.args
+        if len(lhs.args) != 0:
+            raise IvyError(a,'attribute names may not have parameters')
+        fields = lhs.rep.split(iu.ivy_compose_character)
+        oname = iu.ivy_compose_character.join(fields[:-1])
+        oname = 'this' if oname == '' else oname
+        aname = fields[-1]
+        if oname not in self.mod.actions:
+            raise IvyError(a,'"{}" does not name an action'.format(oname))
+        if aname not in defined_attributes:
+            raise IvyError(a,'"{}" does not name a defined attribute'.format(aname))
+        self.mod.attributes[lhs.rep] = rhs
+            
+            
         
 def ivy_new(filename = None):
 #    d = Interp()
