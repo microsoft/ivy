@@ -211,7 +211,11 @@ module array(domain,range) = {
 	    template <>
             z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
 	        z3::expr z3end = g.apply("`end`",z3val);
-	        return z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),__i)),val[__i]);
+                return __ret;
             }
 
 	    template <>
@@ -258,6 +262,10 @@ module option(range_t) = {
 
     # If not empty, gives the value
     derived contents(X:t) = value(X,0)
+
+    action just(inp:range_t) returns(out:t) = {
+        out := create(1,inp);
+    }
 
     interpret domain_t -> bv[1]
 }

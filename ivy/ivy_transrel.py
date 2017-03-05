@@ -32,7 +32,7 @@ from ivy_utils import UniqueRenamer, union_to_list, list_union, list_diff, IvyEr
 from ivy_logic import Variable, Constant, Literal, Atom, Not, And, Or,App, RelationSort, Definition, is_prenex_universal
 from ivy_logic_utils import used_symbols_clauses, rename_clauses, clauses_using_symbols, simplify_clauses,\
     used_variables_clauses, used_constants_clauses, substitute_constants_clause, substitute_constants_clauses, constants_clauses,\
-    relations_clauses, eq_lit, condition_clauses, or_clauses, and_clauses, false_clauses, true_clauses,\
+    relations_clauses, eq_lit, condition_clauses, or_clauses, ite_clauses, and_clauses, false_clauses, true_clauses,\
     formula_to_clauses, clauses_to_formula, formula_to_clauses_tseitin, is_ground_clause, \
     relations_clause, Clauses, sym_inst, negate_clauses, negate
 from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_sat, clauses_case, get_model_clauses, clauses_model_to_clauses, get_small_model
@@ -188,6 +188,21 @@ def join(s1,s2,relations,op):
     p = or_clauses(p1,p2)
     return (u,c,p)
 
+def ite(cond,s1,s2,relations,op):
+    u1,c1,p1 = s1
+    u2,c2,p2 = s2
+    df12 = diff_frame(u1,u2,relations,op)
+    df21 = diff_frame(u2,u1,relations,op)
+    c1 = and_clauses(c1,df12)
+    c2 = and_clauses(c2,df21)
+    p1 = and_clauses(p1,df12)
+    p2 = and_clauses(p2,df21)
+    u = updated_join(u1,u2)
+    c = ite_clauses(cond,[c1,c2])
+    p = ite_clauses(cond,[p1,p2])
+    return (u,c,p)
+
+
 # Bind the "old" symbols to their current values in an action
 # In practice, this just means dropping the "old" prefix.
 
@@ -242,6 +257,9 @@ def join_state(s1,s2,relations):
 
 def join_action(s1,s2,relations):
     return join(s1,s2,relations,new)
+
+def ite_action(cond,s1,s2,relations):
+    return ite(cond,s1,s2,relations,new)
 
 def condition_update_on_fmla(update,fmla,relations):
     """Given an update, return an update conditioned on fmla. Maybe an "else" would

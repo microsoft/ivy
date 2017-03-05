@@ -1062,3 +1062,57 @@ if __name__ == '__main__':
            [V1 == V2, V1 != V2],
            [x == V2, x != V2],
     ]
+
+def is_true(ast):
+    return isinstance(ast,And) and not ast.args
+
+def is_false(ast):
+    return isinstance(ast,Or) and not ast.args
+
+def simp_and(x,y):
+    if is_true(x):
+        return y
+    if is_false(x):
+        return x
+    if is_true(y):
+        return x
+    if is_false(y):
+        return y
+    return And(x,y)
+
+def simp_or(x,y):
+    if is_false(x):
+        return y
+    if is_true(x):
+        return x
+    if is_false(y):
+        return x
+    if is_true(y):
+        return y
+    return Or(x,y)
+
+def simp_not(x):
+    if isinstance(x,Not):
+        return x.args[0]
+    if is_true(x):
+        return Or()
+    if is_false(x):
+        return And()
+    return Not(x)
+
+def simp_ite(i,t,e):
+    if t == e:
+        return t
+    if is_true(i):
+        return t
+    if is_false(i):
+        return e
+    if is_true(t):
+        return simp_or(i,e)
+    if is_false(t):
+        return simp_and(simp_not(i),e)
+    if is_true(e):
+        return simp_or(simp_not(i),t)
+    if is_false(e):
+        return simp_and(i,t)
+    return Ite(i,t,e)

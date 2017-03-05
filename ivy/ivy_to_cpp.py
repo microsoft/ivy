@@ -647,6 +647,7 @@ public:
     indent_level += 1
     for cpptype in cpptypes:
         code_line(impl,cpptype.short_name()+'::prepare()')
+    code_line(impl,'alits.clear()')
     for sym in all_state_symbols():
         if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
             global is_derived
@@ -774,6 +775,7 @@ def emit_action_gen(header,impl,name,action,classname):
             if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
                 if sym_is_member(sym):
                     emit_set(impl,sym)
+    code_line(impl,'alits.clear()')
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
             emit_randomize(impl,sym,classname=classname)
@@ -3405,7 +3407,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #ifdef _WIN32
             LARGE_INTEGER after;
             QueryPerformanceCounter(&after);
-            std::cout << "idx: " << idx << " sat: " << sat << " time: " << (((double)(after.QuadPart-before.QuadPart))/freq.QuadPart) << std::endl;
+            __ivy_out << "idx: " << idx << " sat: " << sat << " time: " << (((double)(after.QuadPart-before.QuadPart))/freq.QuadPart) << std::endl;
 #endif
             if (sat){
                 g.execute(ivy);
@@ -3847,9 +3849,9 @@ public:
         model = slvr.get_model();
         alits.clear();
         if(__ivy_modelfile.is_open()){
-            // __ivy_modelfile << slvr << std::endl;
-            __ivy_modelfile << model;
-            __ivy_modelfile.flush();
+//            __ivy_modelfile << "begin sat:\\n" << slvr << "end sat:\\n" << std::endl;
+//            __ivy_modelfile << model;
+//            __ivy_modelfile.flush();
         }
         return true;
     }

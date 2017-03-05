@@ -8,7 +8,7 @@ from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants
     variables_distinct_ast, is_individual_ast, variables_distinct_list_ast, sym_placeholders, sym_inst, apps_ast,\
     eq_atom, eq_lit, eqs_ast, TseitinContext, formula_to_clauses_tseitin,\
     used_symbols_asts, symbols_asts, has_enumerated_sort, false_clauses, true_clauses, or_clauses, dual_formula, Clauses, and_clauses, substitute_constants_ast, rename_ast, bool_const, used_variables_ast, unfold_definitions_clauses, skolemize_formula
-from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action,\
+from ivy_transrel import state_to_action,new, compose_updates, condition_update_on_fmla, hide, join_action, ite_action, \
     subst_action, null_update, exist_quant, hide_state, hide_state_map, constrain_state, bind_olds_action, old
 from ivy_utils import unzip_append, IvyError, IvyUndefined, distinct_obj_renaming, dbg
 import ivy_ast
@@ -700,6 +700,12 @@ class IfAction(Action):
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
+        if not isinstance(self.args[0],ivy_ast.Some):
+            if not is_boolean(self.args[0]):
+                raise IvyError(self,'condition must be boolean') 
+            branches = [self.args[1],self.args[2] if len(self.args) >= 3 else Sequence()]
+            upds = [a.int_update(domain,pvars) for a in branches]
+            return ite_action(self.args[0],upds[0],upds[1],domain.relations)
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):

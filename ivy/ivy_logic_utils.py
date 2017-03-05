@@ -947,6 +947,14 @@ def or_clauses(*args):
     rn = UniqueRenamer('__ts0',used)
     return or_clauses_int(rn,args)
 
+def ite_clauses(cond,args):
+    assert len(args) == 2
+    args = coerce_args_to_clauses(args)
+    used = set(chain(*[arg.symbols() for arg in args]))
+    used.update(symbols_ast(cond))
+    rn = UniqueRenamer('__ts0',used)
+    return ite_clauses_int(rn,cond,args)
+
 def elim_definitions(clauses,dead):
     c2 = clauses.copy()
     fmlas = clauses.fmlas
@@ -992,6 +1000,29 @@ def or_clauses_int(rn,args):
             else:
                 defidx[s] = Definition(d.args[0],Ite(v,d.args[1],defidx[s].args[1]))
     defs = [d for n,d in defidx.iteritems()] # TODO: hash traversal dependency
+    res = Clauses(fmlas,defs)
+#    print "or_clauses_int res = {}".format(res)
+    return res
+
+def ite_clauses_int(rn,cond,args):
+    assert len(args) == 2
+#    print "or_clauses_int: args = {}".format(args)
+    args = elim_dead_definitions(rn,args)
+#    print "or_clauses_int: args = {}".format(args)
+    v = bool_const(rn())
+    argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
+    fmlas = [simp_ite(v,argfmlas[0],argfmlas[1])]
+    defidx = dict()
+    for d in args[0].defs:
+        s = d.defines()
+        defidx[s] = d
+    for d in args[1].defs:
+        s = d.defines()
+        if s not in defidx:
+            defidx[s] = d
+        else:
+            defidx[s] = Definition(d.args[0],simp_ite(v,defidx[s].args[1],d.args[1]))
+    defs = [d for n,d in defidx.iteritems()] + [Definition(v,cond)] # TODO: hash traversal dependency
     res = Clauses(fmlas,defs)
 #    print "or_clauses_int res = {}".format(res)
     return res
