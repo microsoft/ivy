@@ -722,6 +722,7 @@ class Sig(object):
         return sig_to_str(self)
 
 alpha = lg.TopSort('alpha')
+beta = lg.TopSort('beta')
 
 lg.BooleanSort.name = 'bool'
 
@@ -734,6 +735,7 @@ polymorphic_symbols_list = [
     ('*' , [alpha,alpha,alpha]),
     ('-' , [alpha,alpha,alpha]),
     ('/' , [alpha,alpha,alpha]),
+    ('*>' , [alpha,beta,lg.Boolean]),
 ]
 
 polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymorphic_symbols_list)
@@ -1116,3 +1118,6 @@ def simp_ite(i,t,e):
     if is_false(e):
         return simp_and(i,t)
     return Ite(i,t,e)
+
+def pto(*asorts):
+    return Symbol('*>',RelationSort(asorts))

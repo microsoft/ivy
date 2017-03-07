@@ -510,7 +510,9 @@ polymorphic_symbols = set(
     '+',
     '*',
     '-',
-    '/',]
+    '/',
+    '*>',
+    ]
 )
 
 use_numerals = BooleanParameter("use_numerals",True)

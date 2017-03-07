@@ -333,8 +333,12 @@ def compile_assign(self):
                 args = [a.compile() for a in self.args]
             if isinstance(args[1],ivy_ast.Tuple):
                 raise IvyError(self,"wrong number of values in assignment");
+            asorts = [a.sort for a in args]
             with ASTContext(self):
-                teq = sort_infer(Equals(*args))
+                if im.module.is_variant(*asorts):
+                    teq = sort_infer(ivy_logic.pto(*asorts)(*args))
+                else:
+                    teq = sort_infer(Equals(*args))
             args = list(teq.args)
             code.append(AssignAction(*args))
         for c in code:
@@ -637,6 +641,11 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.functions[sym] = 0
             self.domain.sig.symbols[c] = sym
             self.domain.sig.constructors.add(sym)
+    def variant(self,v):
+        for r in v.args:
+            if r.rep not in self.domain.sig.sorts:
+                raise IvyError(v,"undefined sort: {}".format(r.rep))
+        self.domain.variants[v.args[1].rep].append(self.domain.sig.sorts[v.args[0].rep])
     def interpret(self,thing):
         sig = self.domain.sig
         interp = sig.interp

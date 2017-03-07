@@ -246,6 +246,10 @@ def p_relop_ge(p):
 def p_relop_gt(p):
     'relop : GT'
     p[0] = p[1]
+
+def p_relop_pto(p):
+    'relop : PTO'
+    p[0] = p[1]
     
 def p_infix_plus(p):
     'infix : PLUS'

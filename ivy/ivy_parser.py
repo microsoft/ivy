@@ -21,7 +21,7 @@ if not (iu.get_numeric_version() <= [1,2]):
         ('left', 'OR'),
         ('left', 'AND'),
         ('left', 'TILDA'),
-        ('left', 'EQ','LE','LT','GE','GT'),
+        ('left', 'EQ','LE','LT','GE','GT','PTO'),
         ('left', 'TILDAEQ'),
         ('left', 'COLON'),
         ('left', 'PLUS'),
@@ -992,6 +992,29 @@ def p_top_attribute_callatom_eq_callatom(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
+def p_top_variant_symbol_of_symbol(p):
+    'top : top VARIANT SYMBOL OF SYMBOL'
+    p[0] = p[1]
+    scnst = Atom(p[3])
+    scnst.lineno = get_lineno(p,3)
+    tdfn = TypeDef(scnst,UninterpretedSort())
+    tdfn.lineno = get_lineno(p,4)
+    p[0].declare(TypeDecl(tdfn))
+    vdfn = VariantDef(scnst,Atom(p[5]))
+    p[0].declare(VariantDecl(vdfn))
+
+def p_top_variant_symbol_of_symbol_eq_sort(p):
+    'top : top VARIANT SYMBOL OF SYMBOL EQ sort'
+    p[0] = p[1]
+    scnst = Atom(p[3])
+    scnst.lineno = get_lineno(p,3)
+    tdfn = TypeDef(scnst,p[7])
+    tdfn.lineno = get_lineno(p,4)
+    p[0].declare(TypeDecl(tdfn))
+    vdfn = VariantDef(scnst,Atom(p[5]))
+    p[0].declare(VariantDecl(vdfn))
+
+
 def p_loc(p):
     'loc : '
     p[0] = None
@@ -1555,6 +1578,7 @@ def parse(s,nested=False):
         # shallow copy the parser and lexer to try for re-entrance (!!!)
         res = copy.copy(parser).parse(s,lexer=copy.copy(lexer))
     if error_list:
+        print error_list
         raise iu.ErrorList(error_list)
     return res
     

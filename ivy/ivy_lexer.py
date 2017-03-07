@@ -33,6 +33,7 @@ tokens = (
    'DOTS',
    'DOTDOTDOT',
    'NATIVEQUOTE',
+    'PTO',
 )
 
 reserved = all_reserved = {
@@ -113,6 +114,8 @@ reserved = all_reserved = {
    'this' : 'THIS',
    'var' : 'VAR',
    'attribute' : 'ATTRIBUTE',
+   'variant' : 'VARIANT',
+   'of' : 'OF',
 }
 
 tokens += tuple(all_reserved.values())
@@ -127,6 +130,7 @@ t_LT      = r'\<'
 t_LE      = r'\<='
 t_GT      = r'\>'
 t_GE      = r'\>='
+t_PTO      = r'\*>'
 t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
 t_OR = r'\|'
@@ -206,6 +210,11 @@ class LexerVersion(object):
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
                       'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var','attribute']:
+#                print "deleting {}".format(s)
+                if s in reserved:
+                    del reserved[s]
+        if self.version <= [1,5]:
+            for s in ['variant','of']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

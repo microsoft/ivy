@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -402,7 +402,13 @@ class AssignAction(Action):
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
             return ([mut_n], new_clauses, false_clauses())
 
-        new_clauses = mk_assign_clauses(lhs,rhs)
+        # For a variant assignment, we have to choose a new value that points to
+        # the rhs, and to nothing else.
+
+        if domain.is_variant(lhs.sort,rhs.sort):
+            new_clauses = mk_variant_assign_clauses(lhs,rhs)
+        else:
+            new_clauses = mk_assign_clauses(lhs,rhs)
 #        print "assign new_clauses = {}".format(new_clauses)
         return ([n], new_clauses, false_clauses())
 
@@ -421,6 +427,27 @@ def mk_assign_clauses(lhs,rhs):
     if eqs:
         drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
     new_clauses = Clauses([],[Definition(dlhs,drhs)])
+    return new_clauses
+
+
+def mk_variant_assign_clauses(lhs,rhs):
+    n = lhs.rep
+    new_n = new(n)
+    args = lhs.args
+    dlhs = new_n(*sym_placeholders(n))
+    vs = dlhs.args
+    eqs = [eq_atom(v,a) for (v,a) in zip(vs,args) if not isinstance(a,Variable)]
+    rn = dict((a.rep,v) for v,a in zip(vs,args) if isinstance(a,Variable))
+    drhs = substitute_ast(rhs,rn)
+    nondet = n.suffix("_nd").skolem()
+    if eqs:
+        nondet = Ite(And(*eqs),nondet,n(*dlhs.args))
+    lsort,rsort = lhs.sort,rhs.sort
+    fmlas = [Iff(pto(lsort,rsort)(dlhs,Variable('X',rsort)),Equals(Variable('X',rsort),drhs))]
+    for s in ivy_module.module.variants[lsort.name]:
+        if s != rsort:
+            fmlas.append(Not(pto(lsort,s)(dlhs,Variable('X',s))))
+    new_clauses = Clauses(fmlas,[Definition(dlhs,nondet)])
     return new_clauses
 
 

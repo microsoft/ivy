@@ -67,6 +67,7 @@ class Module(object):
         self.aliases = {} # map from name to name
         self.before_export = {} # map from string to action
         self.attributes = {} # map from name to atom
+        self.variants = defaultdict(list) # map from sort name to list of sort
         
         self.sig = il.sig.copy() # capture the current signature
 
@@ -153,6 +154,11 @@ class Module(object):
                 non_epr[ldf.formula.defines()] = (ldf,cnst)
         return ModuleTheoryContext(functools.partial(instantiate_non_epr,non_epr))
         
+
+    def is_variant(self,lsort,rsort):
+        """ true if rsort is a variant of lsort """
+        return (all(isinstance(a,il.UninterpretedSort) for a in (lsort,rsort))
+                and lsort.name in self.variants and rsort in self.variants[lsort.name])
 
     # This makes a semi-shallow copy so we can side-effect 
 

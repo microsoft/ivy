@@ -593,6 +593,12 @@ class TypeDecl(Decl):
         res = [a for a,b in self.args[0].defines()]
         return res
 
+class VariantDecl(Decl):
+    def name(self):
+        return 'variant'
+    def defines(self):
+        return []
+
 class AssertDecl(Decl):
     def name(self):
         return 'assert'
@@ -816,6 +822,13 @@ class TypeDef(Definition):
 
 class GhostTypeDef(TypeDef):
     pass
+
+class VariantDef(AST):
+    def __init__(self,name,sort):
+        self.args = [name,sort]
+    def __repr__(self):
+        return str(self.args[0]) + ' of ' + str(self.args[1])
+    
 
 class ActionDef(Definition):
     def __init__(self,atom,action,formals=[],returns=[]):

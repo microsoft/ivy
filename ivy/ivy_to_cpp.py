@@ -413,6 +413,10 @@ def emit_cpp_sorts(header):
         elif isinstance(il.sig.sorts[name],il.EnumeratedSort):
             sort = il.sig.sorts[name]
             header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
+        elif name in im.module.variants:
+            cpptype = ivy_cpp_types.VariantType(varname(name))
+            cpptypes.append(cpptype)
+            sort_to_cpptype[il.sig.sorts[name]] = cpptype
         elif name in il.sig.interp:
             itp = il.sig.interp[name]
             if not (itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
@@ -2649,7 +2653,11 @@ def emit_assign_simple(self,header):
     else:
         self.args[0].emit(header,code)
         code.append(' = ')
-        self.args[1].emit(header,code)
+        lsort,rsort = [a.sort for a in self.args]
+        if im.module.is_variant(lsort,rsort):
+            code.append(sort_to_cpptype[lsort].upcast(im.module.variant_index(lsort,rsort),code_eval(header,self.args[1])))
+        else:
+            self.args[1].emit(header,code)
     code.append(';\n')    
     header.extend(code)
 

@@ -140,6 +140,56 @@ std::string CLASSNAME::random_string(){
         return '((rand()%2) ? "a" : "b")' # TODO: let user control random string generation
 
 
+class VariantType(CppClass):
+    """ A type that represents an abstract IVy type with variants.
+    The parameter "variants" is a list of C types representing
+    the variants. 
+
+    The type is represented as a class with a tag field indicating
+    the variant sort and a void pointer to the actual value. 
+
+    """
+
+    def __init__(self,classname,variants):
+        """ variants is the list of variant sorts """
+        assert len(variants) >= 1
+        CppClass.__init__(self,classname)
+        self.variants = variants
+        with self:
+            add_member("template struct wrap {\n")
+            add_member("    virtual wrap *dup() = 0;")
+            add_member("    virtual ~wrap() {}")
+            add_member("};\n")
+            add_member("template <typename T> struct twrap {\n")
+            add_member("    T item;\n")
+            add_member("    twrap(const T &item) item(item) {}\n")
+            add_member("    virtual wrap *dup() {return new twrap(item);}\n")
+            add_member("};\n")
+            add_member("int tag;\n")
+            add_member("wrap *ptr;\n")
+            add_member(classname + '(){\ntag=-1;\nptr=0;\n}\n')
+            add_member(classname + '(int tag,wrap *ptr) : tag(tag),ptr(ptr) {}\n')
+            add_member(classname + '(const ' + classname + '&other){\n' +
+                       '    tag=other.tag;\n' +
+                       '    ptr = other.ptr->dup();\n' + 
+                       '};\n')
+            add_member('~' + classname + '(){if(ptr)delete ptr;}\n')
+
+    def isa(self,variant_idx,expr):
+        """ return a test indicating whether expr is of the variant
+        type with index variant_idx """
+        return '(' + expr + ').tag == {}'.format(variant_idx)
+
+    def downcast(self,ctype,expr):
+        """ downcast an expression of this type to the given variant type.
+        this is allowed to crash, if the value of the expression is not of
+        the given type. """
+        return '*(static_cast<{} *>('.format(ctype) + expr + ')'
+
+    def upcast(self,variant_idx,expr):
+        return long_name() + '(' + str(variant_idx) + ',' + long_name() +  '::twrap(' + expr + '))'
+
+
 def parse_descr(name):
     things = name.split('[')
     title = things[0]
