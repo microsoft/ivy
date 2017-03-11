@@ -527,7 +527,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight"])
+defined_attributes = set(["weight","test"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -731,8 +731,8 @@ class IvyARGSetup(IvyDeclInterp):
         oname = iu.ivy_compose_character.join(fields[:-1])
         oname = 'this' if oname == '' else oname
         aname = fields[-1]
-        if oname not in self.mod.actions:
-            raise IvyError(a,'"{}" does not name an action'.format(oname))
+        if oname not in self.mod.actions and oname not in self.mod.hierarchy:
+            raise IvyError(a,'"{}" does not name an action or object'.format(oname))
         if aname not in defined_attributes:
             raise IvyError(a,'"{}" does not name a defined attribute'.format(aname))
         self.mod.attributes[lhs.rep] = rhs

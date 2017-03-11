@@ -97,8 +97,16 @@ def stack_action_lookup(name,params=0):
 
 def inst_mod(ivy,module,pref,subst,vsubst):
     for decl in module.decls:
-#                print "before: %s" % (decl)
-        if vsubst:
+        if isinstance(decl,AttributeDecl):
+            if vsubst:
+                map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
+                vpref = substitute_ast(pref,map1)
+                vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
+                idecl = AttributeDecl(*[x.clone([compose_atoms(vpref,x.args[0]),x.args[1]]) for x in decl.args]) if vpref is not None else decl
+                idecl = substitute_constants_ast(idecl,vvsubst)
+            else:
+                idecl = AttributeDecl(*[x.clone([compose_atoms(pref,x.args[0]),x.args[1]]) for x in decl.args]) if pref is not None else decl
+        elif vsubst:
             map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
@@ -110,7 +118,6 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             for foo in idecl.args:
                 if not hasattr(foo.args[1],'lineno'):
                     print 'no lineno: {}'.format(foo)
-#                print "after: %s" % (idecl)
         ivy.declare(idecl)
 
 def do_insts(ivy,insts):
@@ -1578,7 +1585,6 @@ def parse(s,nested=False):
         # shallow copy the parser and lexer to try for re-entrance (!!!)
         res = copy.copy(parser).parse(s,lexer=copy.copy(lexer))
     if error_list:
-        print error_list
         raise iu.ErrorList(error_list)
     return res
     

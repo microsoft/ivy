@@ -57,6 +57,11 @@ module unbounded_sequence = {
     }
 
     isolate iso = impl,spec
+    
+    # When testing, use the integer implementation.
+
+    attribute test = impl
+
 }
 
 module order_iterator(range) = {
@@ -171,4 +176,38 @@ module sequence_iterator(range) = {
 	}
     }
 
+}
+
+################################################################################
+#
+# Queue
+#
+################################################################################
+
+module unbounded_queue(data) = {
+    instance index : unbounded_sequence
+    individual head : index.t
+    individual tail : index.t
+    function contents(X:index.t) : data
+
+    after init {
+	head := 0;
+	tail := 0;
+    }
+    
+    action empty returns (res:bool) = {
+	res := tail >= head;
+    }
+
+    action push(d:data) = {
+	contents(head) := d;
+	head := head.next;
+    }
+
+    action pop returns (res:data) = {
+	assert ~empty;
+	res := contents(tail);
+	tail := tail.next;
+    }
+    delegate pop
 }

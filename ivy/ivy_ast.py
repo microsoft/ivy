@@ -797,6 +797,8 @@ class AttributeDef(AST):
         return 'attribute'
     def __str__(self):
         return 'attribute ' + str(self.args[0]) + ' = ' + str(self.args[1])
+    def __repr__(self):
+        return 'attribute ' + str(self.args[0]) + ' = ' + str(self.args[1])
 
 class AttributeDecl(Decl):
     def name(self):

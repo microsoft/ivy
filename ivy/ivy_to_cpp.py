@@ -2626,6 +2626,8 @@ def emit_traced_lhs(self,trace,captured_args):
         if num_args > 1:
             trace.append(' << ","')
         num_args -= 1
+    if captured_args is None:
+        captured_args = []
     trace.append(' << ","'.join(' << ' + a for a in captured_args[:num_args]))
     if self.args:
         trace.append(' << ")"')
@@ -3367,23 +3369,28 @@ def emit_repl_boilerplate3test(header,impl,classname):
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
-        std::vector<int> weights;
+        std::vector<double> weights;
 
 """)
-    totalweight = 0
+    totalweight = 0.0
     for actname in sorted(im.module.public_actions):
         action = im.module.actions[actname]
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
         aname = (actname[4:] if actname.startswith('ext:') else actname) +'.weight'
         if aname in im.module.attributes:
-            aval = im.module.attributes[aname].rep
-            if not aval[0].isdigit():
-                raise iu.IvyError(None,'bad weight attribute for action{}: {}'.format(actname,aval))
+            astring = im.module.attributes[aname].rep
+            if astring.startswith('"'):
+                astring = astring[1:-1]
+            try:
+                aval = float(astring)
+            except ValueError:
+                raise iu.IvyError(None,'bad weight attribute for action{}: {}'.format(actname,astring))
         else:
-            aval = "1"
-        impl.append("        weights.push_back({});\n".format(int(aval)))
-        totalweight += int(aval)
-    impl.append("        int totalweight = {};\n".format(totalweight))
+            aval = 1.0
+        impl.append("        weights.push_back({});\n".format(aval))
+        totalweight += aval
+    impl.append("        double totalweight = {};\n".format(totalweight))
+    impl.append("        int num_gens = {};\n".format(len(im.module.public_actions)))
             
     impl.append("""
 
@@ -3393,18 +3400,18 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #endif
     for(int cycle = 0; cycle < test_iters; cycle++) {
 
-        int choices = totalweight + readers.size() + timers.size();
+        int choices = num_gens + readers.size() + timers.size();
         int rnd = choices ? (rand() % choices) : 0;
-        if (rnd < totalweight) {
+        if (rnd < num_gens) {
+            double frnd = totalweight * (((double)rand())/(((double)RAND_MAX)+1.0));
             int idx = 0;
-            int sum = 0;
-            while (true) {
+            double sum = 0.0;
+            while (idx < num_gens-1) {
                 sum += weights[idx];
-                if (rnd < sum)
+                if (frnd < sum)
                     break;
                 idx++;
             }
- 
             gen &g = *generators[idx];
             ivy.__lock();
 #ifdef _WIN32
@@ -3571,7 +3578,7 @@ public:
         //        std::cout << "apply_expr: " << apply_expr << std::endl;
         try {
             z3::expr foo = model.eval(apply_expr,true);
-            if (foo.is_bv()) {
+            if (foo.is_bv() || foo.is_int()) {
                 assert(foo.is_numeral());
                 int v;
                 if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
@@ -3857,9 +3864,9 @@ public:
         model = slvr.get_model();
         alits.clear();
         if(__ivy_modelfile.is_open()){
-//            __ivy_modelfile << "begin sat:\\n" << slvr << "end sat:\\n" << std::endl;
-//            __ivy_modelfile << model;
-//            __ivy_modelfile.flush();
+            __ivy_modelfile << "begin sat:\\n" << slvr << "end sat:\\n" << std::endl;
+            __ivy_modelfile << model;
+            __ivy_modelfile.flush();
         }
         return true;
     }
@@ -3887,7 +3894,7 @@ def main():
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
     ivy_init.read_params()
-    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none'})
+    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test'})
     if target.get() == "gen":
         iu.set_parameters({'filter_symbols':'false'})
     else:

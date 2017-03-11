@@ -27,6 +27,7 @@ do_check_interference = iu.BooleanParameter("interference",True)
 pedantic = iu.BooleanParameter("pedantic",False)
 opt_prefer_impls = iu.BooleanParameter("prefer_impls",False)
 opt_keep_destructors = iu.BooleanParameter("keep_destructors",False)
+isolate_mode = iu.Parameter("isolate_mode","check")
 
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
@@ -519,7 +520,19 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins):
                             raise iu.IvyError(action,"Call to {} may cause interfering callback to {}"
                                               .format(midcall,','.join(callbacks)))
                 
-                
+    for e in mod.exports:
+        called_name = canon_act(e.exported())
+        all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
+                                   + [m.mixer() for m in impl_mixins[called_name]])
+        for called in all_calls:
+            if called in summarized_actions:
+                cmods = set(mods[called])
+                if cmods:
+                    things = ','.join(sorted(map(str,cmods)))
+                    refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
+                    raise iu.IvyError(action,"External call to {} may have visible effect on {}{}"
+                                      .format(called,things,refs))
+            
 
 
 def ancestors(s):
@@ -573,6 +586,15 @@ def set_privates_prefer(mod,isolate,preferred):
             if suff in l and preferred in l:
                 mod.privates.add(iu.compose_names(n,suff))
 
+def get_private_from_attributes(mod,name,suff):
+    attrname = name + iu.ivy_compose_character + isolate_mode.get()
+    if attrname in mod.attributes:
+        aval = mod.attributes[attrname].rep
+        if aval not in ['spec','impl']:
+            raise iu.IvyError(None,'attribute {} has bad value "{}". should be "spec" or "impl"'.format(attrname,aval))
+        return 'spec' if aval == 'impl' else 'impl'
+    return suff
+
 def set_privates(mod,isolate,suff=None):
     if suff == None and opt_prefer_impls.get():
         set_privates_prefer(mod,isolate,"impl")
@@ -582,8 +604,9 @@ def set_privates(mod,isolate,suff=None):
     if suff in mod.hierarchy:
         mod.privates.add(suff)
     for n,l in mod.hierarchy.iteritems():
-        if suff in l:
-            mod.privates.add(iu.compose_names(n,suff))
+        nsuff = get_private_from_attributes(mod,n,suff)
+        if nsuff in l:
+            mod.privates.add(iu.compose_names(n,nsuff))
 
 def get_props_proved_in_isolate(mod,isolate):
     save_privates = mod.privates
@@ -1240,6 +1263,8 @@ def check_isolate_completeness(mod = None):
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
 
+    iu.dbg('delegates')
+
     # delegate all the stub actions to their implementations
     global implementation_map
     implementation_map = {}
@@ -1290,6 +1315,9 @@ def check_isolate_completeness(mod = None):
         for callee in action.iter_calls():
             if not (callee in checked or not has_assertions(mod,callee)
                     or callee in delegates and actname in checked_context[callee]):
+                iu.dbg('callee')
+                iu.dbg('actname')
+                iu.dbg('checked_context[callee]')
                 missing.append((actname,callee,None))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname

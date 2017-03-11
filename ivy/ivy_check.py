@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-import ivy
+import ivy_init
 import ivy_interp as itp
 import ivy_actions as act
 import ivy_utils as utl
@@ -149,13 +149,13 @@ def check_module():
 
 
 def main():
-    ivy.read_params()
+    ivy_init.read_params()
     iu.set_parameters({'mode':'induction'})
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
     with im.Module():
         with utl.ErrorPrinter():
-            ivy.source_file(sys.argv[1],ivy.open_read(sys.argv[1]),create_isolate=False)
+            ivy_init.source_file(sys.argv[1],ivy_init.open_read(sys.argv[1]),create_isolate=False)
             check_module()
     print "OK"
 
