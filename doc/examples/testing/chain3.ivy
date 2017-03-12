@@ -202,4 +202,4 @@ trusted isolate iso_tail = tail with headtail,ref,htspec,outspec,master
 
 interpret data -> bv[16]
 
-attribute master.tail_fail.weight = "0.01"
+attribute master.tail_fail.weight = "0.05"

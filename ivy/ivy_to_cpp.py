@@ -2039,6 +2039,8 @@ class z3_thunk : public thunk<D,R> {
             impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
             impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
             impl.append("""
+    int runs = 1;
+    int seed = 1;
     std::vector<char *> pargs; // positional args
     pargs.push_back(argv[0]);
     for (int i = 1; i < argc; i++) {
@@ -2059,6 +2061,12 @@ class z3_thunk : public thunk<D,R> {
             else if (param == "iters") {
                 test_iters = atoi(value.c_str());
             }
+            else if (param == "runs") {
+                runs = atoi(value.c_str());
+            }
+            else if (param == "seed") {
+                seed = atoi(value.c_str());
+            }
             else if (param == "modelfile") {
                 __ivy_modelfile.open(value.c_str());
                 if (!__ivy_modelfile) {
@@ -2072,6 +2080,7 @@ class z3_thunk : public thunk<D,R> {
             }
         }
     }
+    srand(seed);
     if (!__ivy_out.is_open())
         __ivy_out.basic_ios<char>::rdbuf(std::cout.rdbuf());
     argc = pargs.size();
@@ -2107,12 +2116,17 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('        std::cerr << "syntax error in command argument\\n";\n')
                 impl.append('        __ivy_exit(1);\n    }\n')
             cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+            if target.get() == "test":
+                impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
             impl.append('    {}_repl ivy{};\n'
                         .format(classname,cp))
             if target.get() == "test":
                 emit_repl_boilerplate3test(header,impl,classname)
             else:
                 emit_repl_boilerplate3(header,impl,classname)
+            if target.get() == "test":
+                impl.append('    }\n')
+            impl.append("    return 0;\n}\n")
 
 
         
@@ -3361,7 +3375,6 @@ def emit_repl_boilerplate3(header,impl,classname):
             }
         }            
     }
-}
 """.replace('classname',classname))
 
 def emit_repl_boilerplate3test(header,impl,classname):
@@ -3486,8 +3499,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
                 Sleep(10000);  // HACK: wait for late responses
 #endif
     __ivy_out << "test_completed" << std::endl;
-    return 0;
-}
+
 """.replace('classname',classname))
 
 def emit_boilerplate1(header,impl,classname):
