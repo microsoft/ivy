@@ -779,7 +779,12 @@ class WhileAction(Action):
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self):
-        return self.clone([self.args[0],self.args[1].assert_to_assume()])
+        res = self.clone([self.args[0],self.args[1].assert_to_assume()])
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
     def drop_invariants(self):
         res = self.clone(self.args[:2])
         if hasattr(self,'formal_params'):

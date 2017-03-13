@@ -2257,6 +2257,9 @@ def emit_constant(self,header,code):
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
     code.append(varname(self.name))
+    global is_derived
+    if self in is_derived:
+        code.append('()')
 
 il.Symbol.emit = emit_constant
 il.Variable.emit = emit_constant

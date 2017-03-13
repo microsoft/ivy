@@ -195,9 +195,11 @@ module unbounded_queue(data) = {
 	tail := 0;
     }
     
-    action empty returns (res:bool) = {
-	res := tail >= head;
-    }
+    derived empty = tail >= head
+    
+    # action empty returns (res:bool) = {
+    # 	res := tail >= head;
+    # }
 
     action push(d:data) = {
 	contents(head) := d;

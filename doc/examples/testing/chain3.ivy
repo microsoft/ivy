@@ -110,6 +110,8 @@ module head_node(req_chan1, req_chan2, out_chan, sysout_chan) = {
 	    call out_chan.send(inp);
 	}
 	else {
+	    call ref.commit(inp.tx); # this is ghost!
+	    inp.val := res;
 	    call sysout_chan.send(inp);
 	}	    
     }
@@ -186,10 +188,19 @@ object htspec = {
 	call queue.push(tx);
     }
 
-    before headtail.sndr.send(m : msg) {
+    before headtail.rcvr.recv(m : msg) {
 	assert m.val = ref.txs(m.tx);
 	assert m.tx = queue.pop;
     }
+    delegate headtail_rcvr_recv[before] -> head
+
+    after master.tail_fail {
+        while ~queue.empty {
+	    var tx := queue.pop;
+	    call ref.commit(tx);
+	}
+    }
+
 }
 
 export cl1.request_upd
@@ -197,8 +208,8 @@ export cl2.request_upd
 import sysout.rcvr.recv
 export master.tail_fail
 
-trusted isolate iso_head = head with cl1,cl2,clrq1,clrq2,ref,inspec,htspec,outspec,master
-trusted isolate iso_tail = tail with headtail,ref,htspec,outspec,master
+trusted isolate iso_head = head with cl1,cl2,clrq1,clrq2,ref,inspec,htspec,outspec,master,headtail
+trusted isolate iso_tail = tail with ref,htspec,outspec,master
 
 interpret data -> bv[16]
 
