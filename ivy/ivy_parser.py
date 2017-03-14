@@ -1043,13 +1043,16 @@ def lower_var_stmts(stmts):
     for idx,stmt in enumerate(stmts):
         if isinstance(stmt,VarAction):
             lhs = stmt.args[0]
-            rhs = stmt.args[1]
+            rhs = stmt.args[1] if len(stmt.args) > 1 else None
             lsym = lhs.prefix('loc:')
             subst = {lhs.rep:lsym.rep}
             lines = lower_var_stmts(stmts[idx+1:])
             lines = [subst_prefix_atoms_ast(s,subst,None,None) for s in lines]
-            asgn = AssignAction(lsym,rhs)
-            asgn.lineno = stmt.lineno
+            if rhs is not None:
+                asgn = AssignAction(lsym,rhs)
+                asgn.lineno = stmt.lineno
+            else:
+                asgn = lsym
             body = Sequence(*lines)
             body.lineno = stmt.lineno
             res = LocalAction(*[asgn,body])
@@ -1334,9 +1337,17 @@ if not (iu.get_numeric_version() <= [1,5]):
         p[0].lineno = get_lineno(p,1)
         p[0].sort = p[3]
 
+    def p_optinit(p):
+        'optinit : '
+        p[0] = None
+
+    def p_optinit_assign_fmla(p):
+        'optinit : ASSIGN fmla'
+        p[0] = p[2]
+
     def p_action_var_opttypedsym_assign_fmla(p):
-        'action : VAR opttypedsym ASSIGN fmla'
-        p[0] = VarAction(p[2],p[4])
+        'action : VAR opttypedsym optinit'
+        p[0] = VarAction(p[2],p[3]) if p[3] is not None else VarAction(p[2])
         p[0].lineno = get_lineno(p,2)
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):

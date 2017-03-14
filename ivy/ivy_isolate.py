@@ -754,7 +754,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             summarized_actions.add(actname)
             action = summarize_action(action)
             new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,ext_mod_mixin(after_mixins))
-            new_actions['ext:'+actname] = add_mixins(mod,actname,action,all_mixins,use_mixin,ext_mod_mixin(all_mixins))
+            new_actions['ext:'+actname] = add_mixins(mod,actname,action,ext_assumes_no_ver,use_mixin,ext_mod_mixin(all_mixins))
 
     # figure out what is exported:
     exported = set()
@@ -1263,7 +1263,6 @@ def check_isolate_completeness(mod = None):
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
 
-    iu.dbg('delegates')
 
     # delegate all the stub actions to their implementations
     global implementation_map

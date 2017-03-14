@@ -110,7 +110,6 @@ module head_node(req_chan1, req_chan2, out_chan, sysout_chan) = {
 	    call out_chan.send(inp);
 	}
 	else {
-	    call ref.commit(inp.tx); # this is ghost!
 	    inp.val := res;
 	    call sysout_chan.send(inp);
 	}	    
@@ -129,7 +128,6 @@ module tail_node(inp_chan, out_chan) = {
 
     action upd(inp : msg) = {
 	if ~master.tail_failed {
-	    call ref.commit(inp.tx);           # this is ghost!
 	    local out : msg {
 		out.val := rep.upd(inp.val);
 		out.tx := inp.tx;
@@ -152,6 +150,12 @@ object master = {
 
     action tail_fail = {
 	tail_failed := true;
+    }
+
+    object spec = {
+	before tail_fail {
+	    assert ~tail_failed;
+	}
     }
 }
 
@@ -186,11 +190,15 @@ object htspec = {
 
     after ref.serialize(tx:ref.txid) {
 	call queue.push(tx);
+	if master.tail_failed {
+	    call ref.commit(tx);
+	}
     }
 
     before headtail.rcvr.recv(m : msg) {
 	assert m.val = ref.txs(m.tx);
 	assert m.tx = queue.pop;
+	call ref.commit(m.tx);
     }
     delegate headtail_rcvr_recv[before] -> head
 

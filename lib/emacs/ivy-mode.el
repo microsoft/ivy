@@ -75,6 +75,11 @@
    "trusted"
    "this"
    "var"
+   "instance"
+   "attribute"
+   "variant"
+   "of"
+
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

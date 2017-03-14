@@ -412,7 +412,7 @@ class AssignAction(Action):
 #        print "assign new_clauses = {}".format(new_clauses)
         return ([n], new_clauses, false_clauses())
 
-class VarAction(AssignAction):
+class VarAction(AST):
     pass
 
 def mk_assign_clauses(lhs,rhs):

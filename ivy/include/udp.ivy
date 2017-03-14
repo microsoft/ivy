@@ -1,6 +1,6 @@
 #lang ivy1.6
 
-module udp_wrapper(addr,pkt,me) = {
+module udp_wrapper(addr,pkt,me,port_base) = {
 
     object rdr = {}
 
@@ -23,7 +23,7 @@ module udp_wrapper(addr,pkt,me) = {
 		memset((char *)&myaddr, 0, sizeof(myaddr));
 		myaddr.sin_family = AF_INET;
 		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		myaddr.sin_port = htons(4990+my_id);
+		myaddr.sin_port = htons(`port_base`+my_id);
 		if (bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
 		    { std::cerr << "bind failed\n"; exit(1); }
 
@@ -60,7 +60,7 @@ module udp_wrapper(addr,pkt,me) = {
 		memset((char *)&dstaddr, 0, sizeof(dstaddr));
 		dstaddr.sin_family = AF_INET;
 		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		dstaddr.sin_port = htons(4990+dst);
+		dstaddr.sin_port = htons(`port_base`+dst);
 
 	        std::vector<char> buf;
 	        __ser(buf,pkt);
@@ -108,7 +108,57 @@ module udp_simple(addr,pkt) = {
 	}
     }
 
-    instance impl(X:addr) : udp_wrapper(addr,pkt,X)
+    instance impl(X:addr) : udp_wrapper(addr,pkt,X,4990)
+}
+
+
+module nondup_endpoint(port,pkt) = {
+
+    action recv(v:pkt)
+    action send(v:pkt)
+
+    object spec = {
+        relation sent(V:pkt)
+
+        after init {
+	    sent(V) := false
+	}
+    
+	before send {
+	    assert ~sent(v);
+	    sent(v) := true
+	}
+	before recv {
+	    assert sent(v);
+	    sent(v) := false
+	}
+    }
+
+}
+
+
+module nondup_endpoint_set(addr,port_base,pkt) = {
+    
+    action recv(dst:addr,v:pkt)
+    action send(dst:addr,v:pkt)
+
+    object spec = {
+        relation sent(V:pkt, N:addr)
+
+        after init {
+	    sent(V, N) := false
+	}
+    
+	before send {
+	    assert ~sent(v,dst);
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst);
+	    sent(v,dst) := false
+	}
+    }
+
 }
 
 
