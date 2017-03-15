@@ -414,7 +414,8 @@ def emit_cpp_sorts(header):
             sort = il.sig.sorts[name]
             header.append('    enum ' + varname(name) + '{' + ','.join(varname(x) for x in sort.extension) + '};\n');
         elif name in im.module.variants:
-            cpptype = ivy_cpp_types.VariantType(varname(name))
+            sort = il.sig.sorts[name]
+            cpptype = ivy_cpp_types.VariantType(varname(name),sort,[(s,ctypefull(s,classname=the_classname)) for s in im.module.variants[name]])
             cpptypes.append(cpptype)
             sort_to_cpptype[il.sig.sorts[name]] = cpptype
         elif name in il.sig.interp:
@@ -447,7 +448,7 @@ def emit_sorts(header):
                     indent(header)
                     header.append('mk_string("{}");\n'.format(name))
                     continue
-            if sort in sort_to_cpptype:
+            if sort in sort_to_cpptype and sort.name not in im.module.variants:
                 indent(header)
                 header.append('enum_sorts.insert(std::pair<std::string, z3::sort>("'+ name + '",'+ctype(sort)+'::z3_sort(ctx)));\n')
                 continue
@@ -1362,6 +1363,9 @@ struct ivy_value {
         return atom.size() && fields.size();
     }
 };
+struct deser_err {
+};
+
 struct ivy_ser {
     virtual void  set(long long) = 0;
     virtual void  set(bool) = 0;
@@ -1374,6 +1378,8 @@ struct ivy_ser {
     virtual void  close_struct() = 0;
     virtual void  open_field(const std::string &) = 0;
     virtual void  close_field() = 0;
+    virtual void  open_tag(int, const std::string &) {throw deser_err();}
+    virtual void  close_tag() {}
     virtual ~ivy_ser(){}
 };
 struct ivy_binary_ser : public ivy_ser {
@@ -1400,6 +1406,10 @@ struct ivy_binary_ser : public ivy_ser {
     void close_struct() {}
     void open_field() {}
     void close_field() {}
+    virtual void  open_tag(int tag, const std::string &) {
+        set((long long)tag);
+    }
+    virtual void  close_tag() {}
 };
 
 struct ivy_deser {
@@ -1413,11 +1423,10 @@ struct ivy_deser {
     virtual void  close_struct() = 0;
     virtual void  open_field(const std::string &) = 0;
     virtual void  close_field() = 0;
+    virtual int   open_tag(const std::vector<std::string> &) {throw deser_err();}
+    virtual void  close_tag() {}
     virtual void  end() = 0;
     virtual ~ivy_deser(){}
-};
-
-struct deser_err {
 };
 
 struct ivy_binary_deser : public ivy_deser {
@@ -1457,6 +1466,13 @@ struct ivy_binary_deser : public ivy_deser {
     void close_struct() {}
     void open_field() {}
     void close_field() {}
+    int open_tag(const std::vector<std::string> &tags) {
+        long long res;
+        get(res);
+        if (res >= tags.size())
+            throw deser_err();
+        return res;
+    }
     void end() {
         if (pos != inp.size())
             throw deser_err();
@@ -2532,6 +2548,20 @@ def code_eval(impl,expr):
 
 def emit_some(self,header,code):
     if isinstance(self,ivy_ast.Some):
+        fmla = self.fmla()
+        if len(self.params()) == 1 and il.is_app(fmla) and fmla.func.name == '*>' and fmla.args[1] == self.params()[0]:
+            if fmla.args[0].sort.name in im.module.variants:
+                cpptype = sort_to_cpptype[fmla.args[0].sort]
+                for idx,sort in enumerate(im.module.variants[fmla.args[0].sort.name]):
+                    if sort == fmla.args[1].sort:
+                        lhs = code_eval(header,fmla.args[0])
+                        isa = cpptype.isa(idx,lhs)
+                        code_line(header,'if ({}) {} = {}'.format(isa,varname(fmla.args[1].name),cpptype.downcast(idx,lhs)))
+                        code.append(isa)
+                        return
+                code.append('false')
+                return
+            
         vs = [il.Variable('X__'+str(idx),p.sort) for idx,p in enumerate(self.params())]
         subst = dict(zip(self.params(),vs))
         fmla = ilu.substitute_constants_ast(self.fmla(),subst)
@@ -3520,10 +3550,10 @@ class gen : public ivy_gen {
 
 public:
     z3::context ctx;
-protected:
     z3::solver slvr;
     z3::model model;
 
+protected:
     gen(): slvr(ctx), model(ctx,(Z3_model)0) {}
 
     hash_map<std::string, z3::sort> enum_sorts;

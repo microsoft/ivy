@@ -936,10 +936,10 @@ class CallAction(Action):
         if len(formal_returns) != len(actual_returns):
             raise IvyError(self,"wrong number of output parameters");
         for x,y in zip(formal_params,actual_params):
-            if x.sort != y.sort:
+            if x.sort != y.sort and not domain.is_variant(x.sort,y.sort):
                 raise IvyError(self,"value for input parameter {} has wrong sort".format(x))
         for x,y in zip(formal_returns,actual_returns):
-            if x.sort != y.sort:
+            if x.sort != y.sort and not domain.is_variant(y.sort,x.sort):
                 raise IvyError(self,"value for output parameter {} has wrong sort".format(x))
         input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
         output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]

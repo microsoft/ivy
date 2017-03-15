@@ -160,6 +160,15 @@ def compile_field_reference(symbol_name,args):
         raise IvyError(None,"unknown symbol: {}".format(err.symbol_name))
 
     
+def sort_infer_contravariant(term,sort):
+    try:
+        return sort_infer(term,sort,True)
+    except ivy_logic.Error:
+        res = sort_infer(term)
+        if not(res.sort == sort or im.module.is_variant(sort,res.sort)):
+            raise IvyError(None,"cannot convert argument of type {} to {}".format(res.sort,sort))
+        return res
+
 def compile_inline_call(self,args):
     params,returns = top_context.actions[self.rep]
     if len(returns) != 1:
@@ -179,7 +188,7 @@ def compile_inline_call(self,args):
     with ASTContext(self):
         if len(params) != len(args):
             raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
-        args = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
+        args = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
     expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
     return res()
 

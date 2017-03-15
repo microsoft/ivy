@@ -160,6 +160,12 @@ class Module(object):
         return (all(isinstance(a,il.UninterpretedSort) for a in (lsort,rsort))
                 and lsort.name in self.variants and rsort in self.variants[lsort.name])
 
+    def variant_index(self,lsort,rsort):
+        """ returns the index of variant rsort of lsort """
+        for idx,sort in enumerate(self.variants[lsort.name]):
+            if sort == rsort:
+                return idx
+
     # This makes a semi-shallow copy so we can side-effect 
 
     def copy(self):

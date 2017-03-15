@@ -800,11 +800,15 @@ def is_constant(term):
 def is_variable(term):
     return isinstance(term,lg.Var)
         
-def sort_infer(term,sort=None):
+
+def sort_infer(term,sort=None,no_error=False):
     res = concretize_sorts(term,sort)
     for x in chain(lu.used_variables(res),lu.used_constants(res)):
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
+            if no_error:
+                raise lg.SortError
             raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
+
 #    print "sort_infer: res = {!r}".format(res)
     return res
 

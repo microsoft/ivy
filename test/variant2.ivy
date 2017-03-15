@@ -1,0 +1,25 @@
+#lang ivy1.6
+
+type t
+
+type a
+type b
+
+variant v1 of t = struct {
+    foo : a
+}
+
+variant v2 of t = struct {
+    bar : b
+}
+
+individual v : t
+
+action act (inp: t) = {
+}
+
+
+export act
+
+interpret a->bv[2]
+interpret b->bv[3]

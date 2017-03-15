@@ -1068,7 +1068,7 @@ def create_isolate(iso,mod = None,**kwargs):
 
         for name,mixins in mod.mixins.iteritems():
             for mixin in mixins:
-                with ASTContext(mixins):
+                with ASTContext(mixin):
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
 
         # check all the delagate declarations
@@ -1076,7 +1076,7 @@ def create_isolate(iso,mod = None,**kwargs):
         for dl in mod.delegates:
             lookup_action(dl.args[0],mod,dl.delegated())
             if dl.delegee() and dl.delegee() not in mod.hierarchy:
-                raise iu.IvyError(dl.args[1],"{} is not a module instance".format(name))
+                raise iu.IvyError(dl.args[1],"{} is not an object".format(dl.args[1]))
 
         # check all the export declarations
         for exp in mod.exports:

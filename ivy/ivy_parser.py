@@ -814,19 +814,19 @@ if not (iu.get_numeric_version() <= [1,1]):
         'top : top AFTER atype optargs optreturns sequence'
         p[0] = p[1]
         atom = Atom(p[3])
-        atom.lineno = get_lineno(p,3)
+        atom.lineno = get_lineno(p,2)
         handle_before_after("after",atom,p[6],p[0],p[4],p[5])
     def p_top_after_init_optargs_lcb_action_rcb(p):
         'top : top AFTER INIT optargs topseq'
         p[0] = p[1]
         atom = Atom("init")
-        atom.lineno = get_lineno(p,3)
+        atom.lineno = get_lineno(p,2)
         handle_before_after("after",atom,p[5],p[0],p[4],[])
     def p_top_implement_callatom_lcb_action_rcb(p):
         'top : top IMPLEMENT atype optargs optreturns topseq'
         p[0] = p[1]
         atom = Atom(p[3])
-        atom.lineno = get_lineno(p,3)
+        atom.lineno = get_lineno(p,2)
         handle_before_after("implement",atom,p[6],p[0],p[4],p[5])
     def p_opttrusted(p):
         'opttrusted :'

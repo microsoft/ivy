@@ -197,6 +197,8 @@ class CppClass(CppType):
         add_member(self)
     def short_name(self):
         return relname(self.parent,self.classname)
+    def long_name(self):
+        return fullname(self.parent,self.classname)
     def __str__(self):
         base = '' if self.baseclass is None else (' : public '+self.baseclass+' ')
         with self:
