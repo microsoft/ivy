@@ -68,6 +68,7 @@ class Module(object):
         self.before_export = {} # map from string to action
         self.attributes = {} # map from name to atom
         self.variants = defaultdict(list) # map from sort name to list of sort
+        self.ext_preconds = {} # map from action name to formula
         
         self.sig = il.sig.copy() # capture the current signature
 

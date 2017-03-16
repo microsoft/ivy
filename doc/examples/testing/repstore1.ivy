@@ -52,13 +52,16 @@ module replica = {
     }
 }
 
+object dest = {
+    ghost type t = {prim,sec}
+}
 
 module reference = {
     instance rep : replica
     
-    action create(inp : request_body.t) returns (tx : txid)
+    action create(inp : request_body.t, dst:dest.t) returns (tx : txid)
     action serialize(tx : txid)
-    action commit(tx : txid)
+    action commit(tx : txid,dst:dest.t)
     action eval(tx : txid) returns (res : response_body.t)
 
     individual next : txid
@@ -82,6 +85,7 @@ module reference = {
     implement serialize {
 	assert 0 <= tx & tx < next;
 	assert ~serialized(tx);
+	assert txs(tx).knd = write;
 	serialized(tx) := true;
     }
     delegate serialize
@@ -113,21 +117,17 @@ type req_msg = struct {
     req : request.t
 }
 
-object dest = {
-    type t = {prim,sec}
-}
 
 module client(cid,prim_chan,sec_chan,cl_chans) = {
     
-    action client_request(req : request_body.t, dst: dest.t)
+    action client_request(req : request_body.t, the_dst: dest.t)
 
     implement client_request {
 	local m : req_msg {
 	    m.cid := cid;
-	    m.dst := dst;
-	    m.req.tx := ref.create(req);
+	    m.req.tx := ref.create(req,the_dst);
 	    m.req.bd := req;
-	    if dst = dest.prim {
+	    if the_dst = dest.prim {
 	        call prim_chan.send(m);
 	    } else {
 	        call sec_chan.send(m);
@@ -152,7 +152,7 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	var rr := inp.req.bd;
         if rr.knd = read {
 	    if pending(rr.ky) = 0 {
-		call ref.commit(inp.req.tx);
+		call ref.commit(inp.req.tx,dest.prim);
 		var res : response.t;
 		res.tx := inp.req.tx;
 		res.bd := rep.exec(rr);
@@ -184,7 +184,7 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     implement req_chan.recv(inp : req_msg) {
 	var rr := inp.req.bd;
         if rr.knd = read {
-	    call ref.commit(inp.req.tx);
+	    call ref.commit(inp.req.tx,dest.sec);
 	    var res : response.t;
 	    res.tx := inp.req.tx;
 	    res.bd := rep.exec(rr);
@@ -228,7 +228,7 @@ object mid_spec = {
     before fwd_chan.rcvr.recv(inp : req_msg) {
 	assert inp.req.bd = ref.txs(inp.req.tx);
 	assert inp.req.tx = queue.pop;
-	call ref.commit(inp.req.tx);
+	call ref.commit(inp.req.tx,dest.sec);
     }
 
     delegate fwd_chan_rcvr_recv[before] -> prim
@@ -244,13 +244,29 @@ object mid_spec = {
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;
     }
+    
+    function req_dest(X:txid) : dest.t
+
+    after ref.create(inp : request_body.t, dst:dest.t) returns (tx : txid) {
+	req_dest(tx) := dst
+    }
+	
+    # Reads must be commited by the server they are addressed to, while
+    # all writes are committedby the secondary
+
+    before ref.commit(tx : txid,dst:dest.t) {
+	assert ref.txs(tx).knd = read -> req_dest(tx) = dst;
+	assert ref.txs(tx).knd = write -> dst = dest.sec
+    }
+
+
 }
 
 export cl.client_request
 import cl_chans.recv
 
 trusted isolate iso_prim = prim with cl,cl_chans,ref,service_spec,mid_spec,fwd_chan,rev_chan
-trusted isolate iso_sec = sec with ref,service_spec,mid_spec
+trusted isolate iso_sec = sec with cl,cl_chans,ref,service_spec,mid_spec
 
 interpret txid -> int
 interpret key -> strbv[3]

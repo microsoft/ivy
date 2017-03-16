@@ -669,7 +669,17 @@ def collect_relevant_destructors(sym,res):
         for dstr in im.module.sort_destructors[sym.sort.rng.name]:
             res.add(dstr)
             collect_relevant_destructors(dstr,res)
-            
+           
+def add_extern_precond(mod,subaction,preconds):
+    called = mod.actions[subaction.args[0].rep]
+    conjs = []
+    for fml,act in zip(called.formal_params,subaction.args[0].args):
+        if ivy_logic.is_numeral(act) or ivy_logic.is_constant(act) and act in mod.sig.constructors:
+            conjs.append(ivy_logic.Equals(fml,act))
+    if len(conjs) == 0:
+        del preconds[:]  # anything or true is true
+    preconds.append(ivy_logic.And(*conjs))
+
 
 def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_inits=None):
 
@@ -758,6 +768,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # figure out what is exported:
     exported = set()
+    export_preconds = defaultdict(list)
 #    save_implementation_map = implementation_map
 #    implementation_map = {}
     for e in mod.exports:
@@ -774,18 +785,35 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             mod.before_export['ext:' + e.exported()] = act
 #            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
             
+    explicit_exports = set(exported)
+
+    iu.dbg('mod.sig.constructors')
+
     with_effects = set()
     for actname,action in mod.actions.iteritems():
         if not startswith_eq_some(actname,present,mod):
-            for c in action.iter_calls():
-                if (startswith_eq_some(c,present,mod)
-                    or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
-                        if ('ext:' + c) in exported or c in with_effects:
-                            continue
-                        if not has_side_effect(mod,new_actions,c):
-                            with_effects.add(c)
-                            continue
-                        exported.add('ext:' + c)
+            for subaction in action.iter_subactions():
+                if isinstance(subaction,ia.CallAction):
+                    c = subaction.args[0].rep
+                    if (startswith_eq_some(c,present,mod)
+                        or any(startswith_some(m.mixer(),present,mod) for m in mod.mixins[c])) :
+                            if ('ext:' + c) not in explicit_exports:
+                                add_extern_precond(mod,subaction,export_preconds['ext:' + c])
+                            if ('ext:' + c) in exported or c in with_effects:
+                                continue
+                            if not has_side_effect(mod,new_actions,c):
+                                with_effects.add(c)
+                                continue
+                            exported.add('ext:' + c)
+
+    iu.dbg('export_preconds')
+
+    for actname in export_preconds:
+        pcs = export_preconds[actname]
+        mod.ext_preconds[actname] = pcs[0] if len(pcs) == 1 else ivy_logic.Or(*pcs)
+
+    iu.dbg('mod.ext_preconds')
+
 #    implementation_map = save_implementation_map
 
 

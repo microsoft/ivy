@@ -718,7 +718,7 @@ def emit_randomize(header,symbol,classname=None):
 
 def is_local_sym(sym):
     sym = il.normalize_symbol(sym)
-    return not il.sig.contains_symbol(sym) and slv.solver_name(il.normalize_symbol(sym)) != None
+    return not il.sig.contains_symbol(sym) and slv.solver_name(il.normalize_symbol(sym)) != None and sym not in il.sig.constructors
 
 def fix_definition(df):
     if all(il.is_variable(v) for v in df.args[0].args):
@@ -736,6 +736,14 @@ def emit_action_gen(header,impl,name,action,classname):
     def card(sort):
         return sort_card(sort)
 #    action = action.unroll_loops(card)
+    if name in im.module.ext_preconds:
+        orig_action = action
+        action = ia.Sequence(ia.AssumeAction(im.module.ext_preconds[name]),action)
+        action.lineno = orig_action.lineno
+        action.formal_params = orig_action.formal_params
+        action.formal_returns = orig_action.formal_returns
+        iu.dbg('action')
+
     with ia.UnrollContext(card):
         upd = action.update(im.module,None)
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
