@@ -553,7 +553,7 @@ def emit_set(header,symbol):
     cname = varname(name)
     sort = symbol.sort
     domain = sort_domain(sort)
-    if sort.rng.name in im.module.sort_destructors and all(is_iterable_sort(s) for s in domain):
+    if sort.rng.name in im.module.sort_destructors and all(is_finite_iterable_sort(s) for s in domain):
         destrs = im.module.sort_destructors[sort.rng.name]
         for destr in destrs:
             vs = variables(domain)
@@ -1005,6 +1005,9 @@ def init_method():
 
 def is_iterable_sort(sort):
     return ctype(sort) in ["bool","int"]
+
+def is_finite_iterable_sort(sort):
+    return is_iterable_sort(sort) and sort_card(sort) is not None
 
 def check_iterable_sort(sort):
     if ctype(sort) not in ["bool","int"]:

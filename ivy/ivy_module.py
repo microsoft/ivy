@@ -137,6 +137,12 @@ class Module(object):
                 ea = il.extensionality(destrs)
                 if il.is_epr(ea):
                     theory.append(ea)
+        # exclusivity axioms for variants
+        for sort in sorted(self.variants):
+            sort_variants = self.variants[sort]
+            if any(v.name in self.sig.sorts for v in sort_variants):
+                ea = il.exclusivity(self.sig.sorts[sort],sort_variants)
+                theory.append(ea) # these are always in EPR
         self.theory = lu.Clauses(theory)
 
 

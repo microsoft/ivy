@@ -522,6 +522,33 @@ def extensionality(destrs):
     res = Implies(And(*c),Equals(x,y))
     return res
     
+# Return a prediciate stating relation "rel" is a partial function
+def partial_function(rel):
+    lsort,rsort = rel.sort.dom
+    x,y,z = [Variable(n,s) for n,s in [('X',lsort),('Y',rsort),('Z',rsort)]]
+    return ForAll([x,y,z],Implies(And(rel(x,y),rel(x,z)),Equals(y,z)))
+
+# Return a prediciate stating the an element of "sort" can point to
+# only one variant of "sort". This is sadly quadratic.  TODO: maybe
+# use a function to an enumerated type to express this constraint.
+# We also include here extensionality for variants, that is to values
+# that point to the same value are the equal. A sore point, however, is that
+# null values may not be equal. 
+
+def exclusivity(sort,variants):
+    # partial funciton 
+    def pto(s):
+        return Symbol('*>',RelationSort([sort,s]))
+    excs = [partial_function(pto(s)) for s in variants]
+    for s in enumerate(variants):
+        x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',sort),('Z',s)]]
+        excs.append(Implies(And(pto(s)(x,z),pto(s)(y,z)),Equals(x,y)))
+    for i1,s1 in enumerate(variants):
+        for s2 in variants[:i1]:
+            x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',s1),('Z',s2)]]
+            excs.append(Not(And(pto(s1)(x,y),pto(s2)(x,z))))
+    return And(*excs)
+
 Variable = lg.Var
 Variable.args = property(lambda self: [])
 Variable.clone = lambda self,args: self

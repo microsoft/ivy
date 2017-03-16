@@ -7,37 +7,25 @@ type key
 type value
 ghost type txid
 
-type request_body
+type request_kind = {write,read}
 
-object write_req = {
-    variant t of request_body = struct {
+object request_body = {
+    type t = struct {
+	knd : request_kind,
 	ky : key,
 	vl : value
-    }
-}
-
-object read_req = {
-    variant t of request_body = struct {
-	ky : key
     }
 }
 
 object request = {
     type t = struct {
 	tx : txid,
-	bd : request_body
+	bd : request_body.t
     }
 }
 
-type response_body
-
-object write_resp = {
-    variant t of response_body = struct {
-    }
-}
-
-object read_resp = {
-    variant t of response_body = struct {
+object response_body = {
+    type t = struct {
 	vl : value
     }
 }
@@ -45,7 +33,7 @@ object read_resp = {
 object response = {
     type t = struct {
 	tx : txid,
-	bd : response_body
+	bd : response_body.t
     }
 }
 
@@ -54,16 +42,12 @@ module replica = {
     after init {
 	store(K) := 0
     }
-    action exec(inp : request_body) returns (out:response_body) = {
-	if some (r:write_req.t) inp *> r {
-	    store(r.ky) := r.vl;
-	    var wr : write_resp.t;
-	    out := wr
+    action exec(inp : request_body.t) returns (out:response_body.t) = {
+	if inp.knd = write {
+	    store(inp.ky) := inp.vl;
 	}
-	else if some (r:read_req.t) inp *> r {
-	    var rr : read_resp.t;
-	    rr.vl := store(r.ky);
-	    out := rr
+	else if inp.knd = read {
+	    out.vl := store(inp.ky);
 	}
     }
 }
@@ -71,16 +55,15 @@ module replica = {
 
 module reference = {
     instance rep : replica
-
     
-    action create(inp : request_body) returns (tx : txid)
+    action create(inp : request_body.t) returns (tx : txid)
     action serialize(tx : txid)
     action commit(tx : txid)
-    action eval(tx : txid) returns (res : response_body)
+    action eval(tx : txid) returns (res : response_body.t)
 
     individual next : txid
-    function txs(X:txid) : request_body
-    function txres(X:txid) : response_body
+    function txs(X:txid) : request_body.t
+    function txres(X:txid) : response_body.t
     relation serialized(X:txid)
     relation committed(X:txid)
 
@@ -105,7 +88,8 @@ module reference = {
 
     implement commit {
 	assert 0 <= tx & tx < next;
-	assert serialized(tx) & ~committed(tx);
+	assert ~committed(tx);
+	assert txs(tx).knd = write -> serialized(tx);
 	txres(tx) := rep.exec(txs(tx));
 	committed(tx) := true;
     }
@@ -131,7 +115,7 @@ type req_msg = struct {
 
 module client(cid,srvr_chan,cl_chans) = {
     
-    action client_request(req : request_body)
+    action client_request(req : request_body.t)
 
     implement client_request {
 	local m : req_msg {
@@ -156,7 +140,8 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     }
 	
     implement req_chan.recv(inp : req_msg) {
-        if some (rr:read_req.t) inp.req.bd *> rr {
+	var rr := inp.req.bd;
+        if rr.knd = read {
 	    if pending(rr.ky) = 0 {
 		call ref.commit(inp.req.tx);
 		var res : response.t;
@@ -166,17 +151,18 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	    } else {
                 call req_chan.send(inp);  # if cannot execute, recirculate
 	    }
-	} else if some (wr:write_req.t) inp.req.bd *> wr {
+	} else if rr.knd = write {
 	    call ref.serialize(inp.req.tx);           # this is ghost!
 	    call fwd_chan.send(inp);
-	    pending(wr.ky) := pending(wr.ky).next;
+	    pending(rr.ky) := pending(rr.ky).next;
 	    var res := rep.exec(inp.req.bd);
 	} 	    
     }
 
     implement rev_chan.recv(inp : req_msg) {
-	if some (wr:write_req.t) inp.req.bd *> wr {
-	    pending(wr.ky) := pending(wr.ky).prev;
+	var rr := inp.req.bd;
+	if rr.knd = write {
+	    pending(rr.ky) := pending(rr.ky).prev;
 	}
     }
 }
@@ -187,7 +173,9 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     instance req_chan : nondup_endpoint(port,req_msg)
 	
     implement req_chan.recv(inp : req_msg) {
-        if some (rr:read_req.t) inp.req.bd *> rr {
+	var rr := inp.req.bd;
+        if rr.knd = read {
+	    call ref.commit(inp.req.tx);
 	    var res : response.t;
 	    res.tx := inp.req.tx;
 	    res.bd := rep.exec(rr);
@@ -197,7 +185,6 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     }
 
     implement fwd_chan.recv(inp : req_msg) {
-	call ref.commit(inp.req.tx);
 	var res : response.t;
 	res.tx := inp.req.tx;
 	res.bd := rep.exec(inp.req.bd);
@@ -237,6 +224,17 @@ object mid_spec = {
 
     delegate fwd_chan_rcvr_recv[before] -> prim
 
+    relation acked(X:txid)
+
+    after init {
+	acked(X) := false;
+    }
+    
+    before rev_chan.sndr.send(inp : req_msg) {
+	assert ref.committed(inp.req.tx);
+	assert ~acked(inp.req.tx);
+	acked(inp.req.tx) := true;
+    }
 }
 
 export cl.client_request
@@ -245,5 +243,7 @@ import cl_chans.recv
 trusted isolate iso_prim = prim with cl,cl_chans,ref,service_spec,mid_spec,fwd_chan,rev_chan
 trusted isolate iso_sec = sec with ref,service_spec,mid_spec
 
+interpret txid -> int
+interpret key -> strbv[3]
 interpret value -> bv[16]
-
+interpret client_id -> bv[1]

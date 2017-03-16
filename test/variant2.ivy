@@ -5,6 +5,9 @@ type t
 type a
 type b
 
+individual v : t
+
+
 variant v1 of t = struct {
     foo : a
 }
@@ -13,11 +16,18 @@ variant v2 of t = struct {
     bar : b
 }
 
-individual v : t
+after init {
+    var w : v1;
+    w.foo := 2;
+    v := w;
+}
 
 action act (inp: t) = {
 }
 
+before act {
+    assume inp = v;
+}
 
 export act
 
