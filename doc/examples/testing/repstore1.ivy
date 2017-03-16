@@ -113,16 +113,25 @@ type req_msg = struct {
     req : request.t
 }
 
-module client(cid,srvr_chan,cl_chans) = {
+object dest = {
+    type t = {prim,sec}
+}
+
+module client(cid,prim_chan,sec_chan,cl_chans) = {
     
-    action client_request(req : request_body.t)
+    action client_request(req : request_body.t, dst: dest.t)
 
     implement client_request {
 	local m : req_msg {
 	    m.cid := cid;
+	    m.dst := dst;
 	    m.req.tx := ref.create(req);
 	    m.req.bd := req;
-	    call srvr_chan.send(m);
+	    if dst = dest.prim {
+	        call prim_chan.send(m);
+	    } else {
+	        call sec_chan.send(m);
+	    }
 	}
     }
 }
@@ -199,7 +208,7 @@ instance fwd_chan : tcp_channel("localhost:44090",req_msg)
 instance rev_chan : tcp_channel("localhost:44091",req_msg)
 
 instance cl_chans : nondup_endpoint_set(client_id,44100,response.t)
-instance cl(X:client_id) : client(X,prim.req_chan,cl_chans)
+instance cl(X:client_id) : client(X,prim.req_chan,sec.req_chan,cl_chans)
 instance prim : primary_node(44200,fwd_chan.sndr,rev_chan.rcvr,cl_chans)
 instance sec : secondary_node(44201,fwd_chan.rcvr,rev_chan.sndr,cl_chans)
 
