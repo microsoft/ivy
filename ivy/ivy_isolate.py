@@ -787,8 +787,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             
     explicit_exports = set(exported)
 
-    iu.dbg('mod.sig.constructors')
-
     with_effects = set()
     for actname,action in mod.actions.iteritems():
         if not startswith_eq_some(actname,present,mod):
@@ -806,13 +804,9 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                                 continue
                             exported.add('ext:' + c)
 
-    iu.dbg('export_preconds')
-
     for actname in export_preconds:
         pcs = export_preconds[actname]
         mod.ext_preconds[actname] = pcs[0] if len(pcs) == 1 else ivy_logic.Or(*pcs)
-
-    iu.dbg('mod.ext_preconds')
 
 #    implementation_map = save_implementation_map
 

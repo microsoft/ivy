@@ -742,7 +742,6 @@ def emit_action_gen(header,impl,name,action,classname):
         action.lineno = orig_action.lineno
         action.formal_params = orig_action.formal_params
         action.formal_returns = orig_action.formal_returns
-        iu.dbg('action')
 
     with ia.UnrollContext(card):
         upd = action.update(im.module,None)

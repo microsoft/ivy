@@ -365,13 +365,13 @@ trusted isolate iso_srvr = srvr with cl,cl_chans,ref,service_spec
 # strings for the keys, 16-bit unsigned integers for the values and 
 # one-bit integers for the client ids (meaning we have exactly two clients).
 #
-# The theory `strbv[3]` encodes strings with 3-bit vectors. This means
-# we can have at most 8 distinct keys in a test run. This limitation
+# The theory `strbv[1]` encodes strings with 1-bit vectors. This means
+# we can have at most 2 distinct keys in a test run. This limitation
 # is a good thing since it means we have a good chance to have
 # multiple transactions on the same key. Otherwise, we would be
 # unlikely to detect any data errors.
 
-interpret key -> strbv[3]
+interpret key -> strbv[1]
 interpret value -> bv[16]
 interpret client_id -> bv[1]
 

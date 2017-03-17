@@ -120,7 +120,6 @@ object dest = {
 
 object ref = {
     action create(inp : request_body.t, dst:dest.t) returns (tx : txid)
-    action serialize(tx : txid)
     action commit(tx : txid,dst:dest.t)
     action eval(tx : txid) returns (res : response_body.t)
 
@@ -166,7 +165,7 @@ object ref = {
 # primary and secondary. It has one action `serialize` that indicates when
 # a write transaction is serialized.
 
-object serializer = {
+object ser = {
     
     action serialize(tx : txid)
 
@@ -184,9 +183,9 @@ object serializer = {
     # only serialize write transactions.
 
     implement serialize {
-	assert 0 <= tx & tx < next;
+	assert 0 <= tx & tx < ref.next;
 	assert ~serialized(tx);
-	assert txs(tx).knd = write;
+	assert ref.txs(tx).knd = write;
 	serialized(tx) := true;
     }
     delegate serialize
@@ -194,8 +193,8 @@ object serializer = {
     # Further,we specify that a write transaction cannot be committed
     # until it is serialized.
 
-    before ref.commit {
-	assert txs(tx).knd = write -> serialized(tx);
+    before ref.commit(tx : txid,dst:dest.t) {
+	assert ref.txs(tx).knd = write -> serialized(tx);
     }
 }
 
@@ -222,11 +221,18 @@ type req_msg = struct {
     req : request.t
 }
 
-# The client endpoint is the same as before.
+# The client endpoint is the same as before, except that we now have
+# two servers, so the client must decide which of the servers to send
+# a request to.
 
 module client(cid,prim_chan,sec_chan,cl_chans) = {
     
     action client_request(req : request_body.t, the_dst: dest.t)
+    action client_response(req : response_body.t, tx : txid)
+
+    # To generate a request, we build a request message and send it to
+    # the server. The server endpoint we send to is determined by the
+    # parameter `the_dst`.
 
     implement client_request {
 	local m : req_msg {
@@ -239,6 +245,14 @@ module client(cid,prim_chan,sec_chan,cl_chans) = {
 	        call sec_chan.send(m);
 	    }
 	}
+    }
+
+    # To handle a response from the server, we simply pass it to the
+    # `client_response` callback. The transaction id parameter is
+    # "ghost" and is only used for specification.
+
+    implement cl_chans.recv(resp : response.t) {
+	call client_response(resp.bd,resp.tx)
     }
 }
 
@@ -269,7 +283,9 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     # node must first check whether it is a read or a write. In the case
     # of a read, we check if the key has a pending write. If not, we commit
     # the read, execute it, and return the response to the client. If there is
-    # a pending write, we postpone the read by forwarding it to ourself. 
+    # a pending write, we postpone the read by forwarding it to ourself. In
+    # case of a write, we serialize the write, forward it to the secondary,
+    # increment the pending count of the key, and finally execute it. 
     # 
 
     implement req_chan.recv(inp : req_msg) {
@@ -285,12 +301,15 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
                 call req_chan.send(inp);  # if cannot execute, recirculate
 	    }
 	} else if rr.knd = write {
-	    call ref.serialize(inp.req.tx);           # this is ghost!
+	    call ser.serialize(inp.req.tx);           # this is ghost!
 	    call fwd_chan.send(inp);
 	    pending(rr.ky) := pending(rr.ky).next;
 	    var res := rep.exec(inp.req.bd);
 	} 	    
     }
+
+    # When we receive a write request on the acknowledgement channel,
+    # we decrement the pending count of the key.
 
     implement rev_chan.recv(inp : req_msg) {
 	var rr := inp.req.bd;
@@ -299,6 +318,12 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	}
     }
 }
+
+# The secondary server handles only read request from clients.  Since
+# the secondary's replica refelects only committed writes, we cann
+# immediately response to a read. We commit the read, build a response
+# message by executing the read on the replica, and send the response
+# back to the client.
 
 module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     instance rep : replica
@@ -317,6 +342,11 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	# ignore writes!
     }
 
+    # When the secondary receives a forwarded write from the primary,
+    # it commits it, executes it, and sends the response to the
+    # client.
+    #
+
     implement fwd_chan.recv(inp : req_msg) {
 	var res : response.t;
 	res.tx := inp.req.tx;
@@ -327,27 +357,81 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
 
 }
 
+# The plumbing
+# ------------
+
+# Now we two servers, a primary and a secondary, and an array of
+# client endpoints, connecting them up with network channels.
+
+# We have two TCP (ordered) channels beteween the primary and
+# secondary, one forward (listening on port 44090) and one reverse
+# (listening on port 44091). Both carry request messages.
 
 instance fwd_chan : tcp_channel("localhost:44090",req_msg)
 instance rev_chan : tcp_channel("localhost:44091",req_msg)
 
+# As before, we use a parameterized array of (unordered) endpoints for
+# the clients called `cl_chans`. The endpoints will use a range of
+# port numbers beginning with `441000`.
+
 instance cl_chans : nondup_endpoint_set(client_id,44100,response.t)
+
+# We create a corresponding array of clients.
 instance cl(X:client_id) : client(X,prim.req_chan,sec.req_chan,cl_chans)
+
+# We create the primary and secondary servers, connecting them with
+# channels. The port numbers are for the client request channels of
+# the servers.
+
 instance prim : primary_node(44200,fwd_chan.sndr,rev_chan.rcvr,cl_chans)
 instance sec : secondary_node(44201,fwd_chan.rcvr,rev_chan.sndr,cl_chans)
 
+# The interface specifications
+# ----------------------------
+
+# The service specification is unchanged from the simple sequential
+# server.
+
 object service_spec = {
+
+    relation responded(X:txid)
+
+    after init {
+	responded(X) := false;
+    }
+    
     before cl_chans.send(p : client_id, m : response.t) {
+	assert ~responded(m.tx);
 	assert m.bd = ref.eval(m.tx);
+	responded(m.tx) := true;
     }
 }
+
+# Now, however, we need a specification for the interface between the
+# primary and the secondary. This will allow us to test the two
+# servers in isolation. We call this specification `mid_spec`. The state
+# of this interface keeps a FIFO queue of messages that have been serialized
+# but not yet transmitted over the interface. When a message is serialize,
+# we insert it in this queue
 
 object mid_spec = {
     instance queue : unbounded_queue(txid)
 
-    after ref.serialize(tx:txid) {
+    after ser.serialize(tx:txid) {
 	call queue.push(tx);
     }
+
+    # When a message is received at the secondary on the forward
+    # channel, its contents must be correct for the given transaction
+    # id.  Moreover, the transaction id must be the next on in the
+    # FIFO queue (in other words, the writes must arrive in
+    # serialization order).  To make things a little easier, we commit
+    # the message when it is received.  This gurantees that commits
+    # from the secondary always occur in order, without our having to
+    # explicitly specify that. Because the commit operation is
+    # "ghost", it doesn't matter whether we execute in implementation
+    # or specification code.  We can put it wherever it is most
+    # convenient.
 
     before fwd_chan.rcvr.recv(inp : req_msg) {
 	assert inp.req.bd = ref.txs(inp.req.tx);
@@ -355,7 +439,19 @@ object mid_spec = {
 	call ref.commit(inp.req.tx,dest.sec);
     }
 
+    # This tells IVy that the above specification is a guarantee for
+    # the primary server, not for the network, which is the actual
+    # caller of `fwd_chan.rcvr.recv`. This means that the assertions
+    # will be verified when we test the primary. Usually, IVy's
+    # default assignment of guarantees to object is what we want, but
+    # in this case the caller is not the guarantor of the assertions.
+
     delegate fwd_chan_rcvr_recv[before] -> prim
+
+    # The interface also requires that a given write message be acked
+    # at most once. Otherwise, the pending counts in the primary will
+    # be wrong. To ensure this, we maintain a set `acked` of
+    # acknowledgef transactions.
 
     relation acked(X:txid)
 
@@ -363,20 +459,32 @@ object mid_spec = {
 	acked(X) := false;
     }
     
+    # When an ack message is sent on the reverse channel, it must have
+    # been committed (this is the meaning of the message) and it must
+    # not already be acked. We record the fact that it is now acked.
+
     before rev_chan.sndr.send(inp : req_msg) {
 	assert ref.committed(inp.req.tx);
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;
     }
     
+    # When a request is created, we record the destination server. In
+    # this way we can determine which server is allowed to commit the
+    # request. This is a very common situation in specifications of
+    # distributed services.  Much of the interface state tends to be
+    # related to the question of who is allowed to commit shich
+    # transations.
+
     function req_dest(X:txid) : dest.t
 
     after ref.create(inp : request_body.t, dst:dest.t) returns (tx : txid) {
 	req_dest(tx) := dst
     }
 	
-    # Reads must be commited by the server they are addressed to, while
-    # all writes are committedby the secondary
+    # We now specify that all reads must be commited by the server
+    # they are addressed to, while all writes are committed by the
+    # secondary
 
     before ref.commit(tx : txid,dst:dest.t) {
 	assert ref.txs(tx).knd = read -> req_dest(tx) = dst;
@@ -386,13 +494,50 @@ object mid_spec = {
 
 }
 
-export cl.client_request
-import cl_chans.recv
+# We export/import our API.
 
-trusted isolate iso_prim = prim with cl,cl_chans,ref,service_spec,mid_spec,fwd_chan,rev_chan
-trusted isolate iso_sec = sec with cl,cl_chans,ref,service_spec,mid_spec
+export cl.client_request
+import cl.client_response
+
+# Finally, we create two isolates the allow us to verify our two
+# servers in isolation.  Each isolate verifies just the the guarentees
+# of given server, either the primary or secondary. In both cases we
+# use our interface specifications and our reference object. The other
+# server and the network are abstracted away. Their role is played by
+# the test generator. Because we placed our interface specification
+# `mid_spec` at the secondary end of the channels `fwd_chan` and
+# `rev_chan`, those channels are used in the primary's isolate, but
+# not in the secondary's. Notice also that the client endpoints `cl`
+# are present in both isolates. Since they are trivial "stubs", there
+# is no reason to separate them into their own isolate.
+
+trusted isolate iso_prim = prim with cl,cl_chans,ref,ser,service_spec,mid_spec,fwd_chan,rev_chan
+trusted isolate iso_sec = sec with cl,cl_chans,ref,ser,service_spec,mid_spec
+
+# As before, we have to give concrete interpretations for the abstarct
+# types in order to test.
 
 interpret txid -> int
-interpret key -> strbv[3]
+interpret key -> strbv[1]
 interpret value -> bv[16]
 interpret client_id -> bv[1]
+
+# The source file for this example is [here](repstore2.ivy). Try running this
+# example using commands like this:
+#
+#     $ ivy_to_cpp target=test isolate=iso_prim build=true repstore2.ivy  
+#     $ ./repstore1 iters=100 runs=10 out=file.iev
+#
+# This tests the primary server.  Look at the trace file `file.iev`
+# and notice which actions are generated by the tester and which by
+# the code. 
+#
+# To test the secondary, use these commands:
+#
+#     $ ivy_to_cpp target=test isolate=iso_sec build=true repstore2.ivy  
+#     $ ./repstore1 iters=100 runs=10 out=file.iev
+#
+# Again, see what actions the tester is generating.  Try putting some
+# errors in this example and see if they produce assertions
+# failures. If not, why not?
+# 
