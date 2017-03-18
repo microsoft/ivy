@@ -196,6 +196,7 @@ module unbounded_queue(data) = {
     }
     
     derived empty = tail >= head
+    derived first = contents(tail)
     
     # action empty returns (res:bool) = {
     # 	res := tail >= head;
