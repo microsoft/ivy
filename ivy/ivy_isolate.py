@@ -771,19 +771,28 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     export_preconds = defaultdict(list)
 #    save_implementation_map = implementation_map
 #    implementation_map = {}
-    for e in mod.exports:
-        if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
-            exported.add('ext:' + e.exported())
-            act = empty_clone(mod.actions[e.exported()])
-            for mixin in mod.mixins[e.exported()]:
+
+    def make_before_export(actname):
+            ver = startswith_eq_some(actname,verified,mod)
+            action = mod.actions[actname]
+            if not ver or actname in delegates:
+                act = action.assert_to_assume().prefix_calls('ext:')
+            else:
+                act = empty_clone(action)
+            for mixin in mod.mixins[actname]:
                 mixin_name = mixin.args[0].relname
                 action1 = lookup_action(mixin,mod,mixin_name)
                 if use_mixin(mixin_name) and before_mixins(mixin):
                     action1 = action1.assert_to_assume()
                     action1 = ext_mod_mixin(all_mixins)(mixin,action1)
                     act = ia.apply_mixin(mixin,action1,act)
-            mod.before_export['ext:' + e.exported()] = act
-#            print "before_export: {} = {}".format('ext:' + e.exported(),mod.before_export['ext:' + e.exported()])
+            mod.before_export['ext:' + actname] = act
+            print "before_export: {} = {}".format('ext:' + actname,mod.before_export['ext:' + actname])
+
+    for e in mod.exports:
+        if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
+            exported.add('ext:' + e.exported())
+            make_before_export(e.exported())
             
     explicit_exports = set(exported)
 
@@ -803,6 +812,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                                 with_effects.add(c)
                                 continue
                             exported.add('ext:' + c)
+                            make_before_export(c)
 
     for actname in export_preconds:
         pcs = export_preconds[actname]

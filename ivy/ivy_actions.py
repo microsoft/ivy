@@ -324,6 +324,35 @@ def type_ast(domain,ast):
         return Atom(ast.rep,ast.args)
     return ast
 
+def destr_asgn_val(lhs,fmlas):
+    mut = lhs.args[0]
+    rest = list(lhs.args[1:])
+    mut_n = mut.rep
+    if mut_n.name in ivy_module.module.destructor_sorts:
+        lval,new_clauses,mutated = destr_asgn_val(mut,new_clauses)
+    else:
+        nondet = mut_n.suffix("_nd").skolem()
+        new_clauseses = (mk_assign_clauses(mut_n,nondet(*sym_placeholders(mut_n))))
+        lval = nondet(*mut.args)
+        mutated = mut_n
+
+    n = lhs.rep
+    vs = sym_placeholders(n)
+    dlhs = n(*([lval] + vs[1:]))
+    drhs = n(*([mut] + vs[1:]))
+    eqs = [eq_atom(v,a) for (v,a) in zip(vs,lhs.args)[1:] if not isinstance(a,Variable)]
+    if eqs:
+        fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
+    for destr in ivy_module.module.sort_destructors[mut.sort.name]:
+        if destr != n:
+            phs = sym_placeholders(destr)
+            a1 = [lval] + phs[1:]
+            a2 = [mut] + phs[1:]
+            fmlas.append(eq_atom(destr(*a1),destr(*a2)))
+
+    return  lhs.rep(*([lval]+rest)), new_clauses, mutated
+
+
 class AssignAction(Action):
     def __init__(self,*args):
         assert len(args) == 2
@@ -379,6 +408,14 @@ class AssignAction(Action):
         # For a destructor assignment, we actually mutate the first argument
 
         if n.name in ivy_module.module.destructor_sorts:
+            fmlas = []
+            nondet_lhs,new_clauses,mut_n = destr_asgn_val(lhs,fmlas)
+            fmlas.append(equiv_ast(nondet_lhs,rhs))
+            new_clauses = and_clauses(new_clauses,Clauses(fmlas))
+            return ([mut_n], new_clauses, false_clauses())
+
+            # This is the old version that doesn't work for nested destructors
+
             mut = lhs.args[0]
             rest = list(lhs.args[1:])
             mut_n = mut.rep

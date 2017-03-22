@@ -695,6 +695,8 @@ def emit_randomize(header,symbol,classname=None):
     cname = varname(name)
     sort = symbol.sort
     domain = sort_domain(sort)
+    iu.dbg('symbol')
+    iu.dbg('symbol.sort')
     for idx,dsort in enumerate(domain):
         dcard = sort_card(dsort)
         indent(header)
@@ -730,6 +732,7 @@ def emit_action_gen(header,impl,name,action,classname):
     global indent_level
     global global_classname
     global_classname = classname
+    iu.dbg('name')
     caname = varname(name)
     if name in im.module.before_export:
         action = im.module.before_export[name]

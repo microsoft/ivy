@@ -174,21 +174,23 @@ include udp
 
 type client_id
 
-type req_msg = struct {
-    cid : client_id,
-    req : request.t
+object req_msg = {
+    type t = struct {
+	cid : client_id,
+	req : request.t
+    }
 }
 
 module client(cid,prim_chan,sec_chan,cl_chans) = {
     
-    action client_request(req : request_body.t, the_dst: dest.t)
-    action client_response(req : response_body.t, tx : txid)
+    action client_request(the_req : request_body.t, the_dst: dest.t)
+    action client_response(resp : response_body.t, tx : txid)
 
     implement client_request {
-	local m : req_msg {
+	local m : req_msg.t {
 	    m.cid := cid;
-	    m.req.tx := ref.create(req,the_dst);
-	    m.req.bd := req;
+	    m.req.tx := ref.create(the_req,the_dst);
+	    m.req.bd := the_req;
 	    if the_dst = dest.prim {
 	        call prim_chan.send(m);
 	    } else {
@@ -211,7 +213,7 @@ type fail_msg = struct {}
 module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     instance rep : replica
 
-    instance req_chan : nondup_endpoint(port,req_msg)
+    instance req_chan : nondup_endpoint(port,req_msg.t)
 
     instance fail_chan : nondup_endpoint(port,fail_msg)
     
@@ -235,7 +237,7 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     # We no longer foward write requests if the secondary has failed,
     # and we no longer wait for acks.
 
-    implement req_chan.recv(inp : req_msg) {
+    implement req_chan.recv(inp : req_msg.t) {
 	var rr := inp.req.bd;
         if rr.knd = read {
 	    if pending(rr.ky) = 0 | sec_failed {
@@ -260,7 +262,7 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     # When we receive a write request on the acknowledgement channel,
     # we decrement the pending count of the key.
 
-    implement rev_chan.recv(inp : req_msg) {
+    implement rev_chan.recv(inp : req_msg.t) {
 	var rr := inp.req.bd;
 	if rr.knd = write {
 	    pending(rr.ky) := pending(rr.ky).prev;
@@ -274,7 +276,7 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 module secondary_node(port, fwd_chan, rev_chan, fail_chan, cl_chans) = {
     instance rep : replica
 
-    instance req_chan : nondup_endpoint(port,req_msg)
+    instance req_chan : nondup_endpoint(port,req_msg.t)
 	
     individual failed : bool
 
@@ -288,7 +290,7 @@ module secondary_node(port, fwd_chan, rev_chan, fail_chan, cl_chans) = {
 	call fail_chan.send(m);
     }
 
-    implement req_chan.recv(inp : req_msg) {
+    implement req_chan.recv(inp : req_msg.t) {
 	if ~failed {
 	    var rr := inp.req.bd;
 	    if rr.knd = read {
@@ -307,7 +309,7 @@ module secondary_node(port, fwd_chan, rev_chan, fail_chan, cl_chans) = {
     # client.
     #
 
-    implement fwd_chan.recv(inp : req_msg) {
+    implement fwd_chan.recv(inp : req_msg.t) {
 	if ~failed {
 	    var res : response.t;
 	    res.tx := inp.req.tx;
@@ -323,8 +325,8 @@ module secondary_node(port, fwd_chan, rev_chan, fail_chan, cl_chans) = {
 # ------------
 
 
-instance fwd_chan : tcp_channel("localhost:44090",req_msg)
-instance rev_chan : tcp_channel("localhost:44091",req_msg)
+instance fwd_chan : tcp_channel("localhost:44090",req_msg.t)
+instance rev_chan : tcp_channel("localhost:44091",req_msg.t)
 
 # The client channels
 
@@ -370,7 +372,7 @@ object mid_spec = {
 	call queue.push(tx);
     }
 
-    before fwd_chan.rcvr.recv(inp : req_msg) {
+    before fwd_chan.rcvr.recv(inp : req_msg.t) {
 	assert inp.req.bd = ref.txs(inp.req.tx);
 	assert inp.req.tx = queue.pop;
 	call ref.commit(inp.req.tx,dest.sec);
@@ -389,7 +391,7 @@ object mid_spec = {
 	sec_failed := false;
     }
     
-    before rev_chan.sndr.send(inp : req_msg) {
+    before rev_chan.sndr.send(inp : req_msg.t) {
 	assert ref.committed(inp.req.tx);
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;
