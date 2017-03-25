@@ -251,11 +251,11 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	    }
 	} else if rr.knd = write {
 	    call ser.serialize(inp.req.tx);           # this is ghost!
-	    call fwd_chan.send(inp);
 	    if ~sec_failed {
+		call fwd_chan.send(inp);
 		pending(rr.ky) := pending(rr.ky).next;
-		var res := rep.exec(inp.req.bd);
-	    }
+	    };
+	    var res := rep.exec(inp.req.bd);
 	} 	    
     }
 
@@ -285,9 +285,11 @@ module secondary_node(port, fwd_chan, rev_chan, fail_chan, cl_chans) = {
     }
 
     action fail = {
-	failed := true;
-	var m : fail_msg;
-	call fail_chan.send(m);
+	if ~failed {
+	    failed := true;
+	    var m : fail_msg;
+	    call fail_chan.send(m);
+	}
     }
 
     implement req_chan.recv(inp : req_msg.t) {
@@ -393,7 +395,9 @@ object mid_spec = {
     
     before rev_chan.sndr.send(inp : req_msg.t) {
 	assert ref.committed(inp.req.tx);
+	assert ref.txs(inp.req.tx) = inp.req.bd;
 	assert ~acked(inp.req.tx);
+	assert ~sec_failed;
 	acked(inp.req.tx) := true;
     }
     
@@ -403,7 +407,11 @@ object mid_spec = {
 	req_dest(tx) := dst
     }
 	
-    # Here, we set the `sec_failed` flag.
+    before prim.fail_chan.send(m : fail_msg) {
+	assert ~sec_failed;
+    }
+
+    # Here, we set the `sec_failed` flag. 
 
     after prim.fail_chan.send(m : fail_msg) {
 	sec_failed := true;
@@ -431,10 +439,15 @@ object mid_spec = {
 
 	after ser.serialize(tx:txid) {
 	    call pending.push(tx);
+	    if sec_failed {
+		call ref.commit(tx,dest.prim)
+	    }
 	}
 
 	after ref.commit(tx : txid,dst:dest.t)  {
-	    var tmp := pending.pop;
+	    if ref.txs(tx).knd = write {
+		var tmp := pending.pop;
+	    }
 	}
 
 	# When the secondary says it has failed, we commit all of the
@@ -453,6 +466,10 @@ object mid_spec = {
 export cl.client_request
 import cl.client_response
 
+# The environment can cause the secondary to fail
+
+export sec.fail
+
 # Our isolates are as before
 
 trusted isolate iso_prim = prim with cl,cl_chans,ref,ser,service_spec,mid_spec,fwd_chan,rev_chan
@@ -466,6 +483,38 @@ interpret key -> strbv[1]
 interpret value -> bv[16]
 interpret client_id -> bv[1]
 
+#
+# Adjusting the test probability distribution
+# -------------------------------------------
+#
+
+# Here's one more detail to help make sure we thoroughly test our
+# servers.  Actions like failure of the secondary cause somce code to
+# become unreachable.  This means that if failures occur too
+# frequently, we won't test those parts of the code well.  We can fix
+# that by reducing the probability that the tester will choose a fail
+# action. The statements below do this. By making the "weight" of an
+# action less than one, we reduce the relative probability of the
+# tester choosing that action. We adjust the wieght so that emprically
+# failures occur in only about half the runs. That way, we know that
+# both the failure code and the non-failure code will be well tested.
+#
+# Notice another detail: when we're testing the primary, the tester
+# simulates a failure by calling the action that sends a failure
+# message `prim.fail_chan` as it simulates the environment of the
+# primary. This means we need to adjust the probability of this action
+# in addition to the exported action `sec.fail`, which the tester will
+# call when testing the secondary.
+
+# Other sorts of actions that we typically have to reduce the
+# probabilites of are resets and errors, both of which tend to cause
+# work to be cancelled, so they reduce test coverage if they occur too
+# frequently.  In general, it's a good idea to examine the test traces
+# to make sure that all the functionality of the system is being
+# exercized.
+
+attribute prim.fail_chan.send.weight = "0.05"
+attribute sec.fail.weight = "0.05"
 
 #
 # Exercise hints
@@ -480,3 +529,4 @@ interpret client_id -> bv[1]
 # Also, you can test whether a queue `q` is empty with `q.empty`. Try
 # using a queue to keep track of pending transaction commits and
 # perform them at the right moment.
+

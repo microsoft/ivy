@@ -368,10 +368,6 @@ object service_spec = {
 object mid_spec = {
     instance queue : unbounded_queue(txid)
 
-    after ser.serialize(tx:txid) {
-	call queue.push(tx);
-    }
-
     before fwd_chan.rcvr.recv(inp : req_msg) {
 	assert inp.req.bd = ref.txs(inp.req.tx);
 	assert inp.req.tx = queue.pop;
@@ -393,10 +389,21 @@ object mid_spec = {
     
     before rev_chan.sndr.send(inp : req_msg) {
 	assert ref.committed(inp.req.tx);
+	assert ref.txs(inp.req.tx) = inp.req.bd;
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;
     }
     
+    # If the secondary has failed, then write transactions are commited at the
+    # moment they are serialized.
+
+    after ser.serialize(tx:txid) {
+	call queue.push(tx);
+	if sec_failed {
+	    call ref.commit(tx)
+	}
+    }
+
     function req_dest(X:txid) : dest.t
 
     after ref.create(inp : request_body.t, dst:dest.t) returns (tx : txid) {

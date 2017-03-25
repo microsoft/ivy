@@ -460,11 +460,13 @@ object mid_spec = {
     }
     
     # When an ack message is sent on the reverse channel, it must have
-    # been committed (this is the meaning of the message) and it must
-    # not already be acked. We record the fact that it is now acked.
+    # the correct body, must have been committed (this is the meaning
+    # of the message) and it must not already be acked. We record the
+    # fact that it is now acked.
 
     before rev_chan.sndr.send(inp : req_msg) {
 	assert ref.committed(inp.req.tx);
+	assert ref.txs(inp.req.tx) = inp.req.bd;
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;
     }

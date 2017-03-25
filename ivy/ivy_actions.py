@@ -329,10 +329,10 @@ def destr_asgn_val(lhs,fmlas):
     rest = list(lhs.args[1:])
     mut_n = mut.rep
     if mut_n.name in ivy_module.module.destructor_sorts:
-        lval,new_clauses,mutated = destr_asgn_val(mut,new_clauses)
+        lval,new_clauses,mutated = destr_asgn_val(mut,fmlas)
     else:
         nondet = mut_n.suffix("_nd").skolem()
-        new_clauseses = (mk_assign_clauses(mut_n,nondet(*sym_placeholders(mut_n))))
+        new_clauses = (mk_assign_clauses(mut_n,nondet(*sym_placeholders(mut_n))))
         lval = nondet(*mut.args)
         mutated = mut_n
 
