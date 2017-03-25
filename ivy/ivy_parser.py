@@ -405,6 +405,10 @@ def p_constantdecl_constant_tterms(p):
     'constantdecl : INDIV tterms'
     p[0] = ConstantDecl(*p[2])
 
+def p_constantdecl_var_tterms(p):
+    'constantdecl : VAR tterms'
+    p[0] = ConstantDecl(*p[2])
+
 def p_relationdecl_relation_tatoms(p):
     'relationdecl : RELATION tatoms'
     p[0] = RelationDecl(*apps_to_atoms(p[2]))
