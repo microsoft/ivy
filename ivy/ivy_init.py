@@ -77,7 +77,7 @@ def source_file(fn,f,**kwargs):
         print str(e)
         sys.exit(1)
 
-def ivy_init():
+def ivy_init(**kwargs):
     read_params()
 
 #    if mode.get() == "ivy2":
@@ -101,7 +101,9 @@ def ivy_init():
         fn,f = files.pop(0)
         if not fn.endswith('.ivy') and not fn.endswith('.dfy'):
             usage()
-        source_file(fn,f,**iu.get_default_ui_compile_kwargs())
+        skwargs = dict(kwargs)
+        skwargs.update(iu.get_default_ui_compile_kwargs())
+        source_file(fn,f,**skwargs)
 
         if ag:
             ag.update_module()

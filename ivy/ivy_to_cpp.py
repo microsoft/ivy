@@ -3939,7 +3939,7 @@ opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
 opt_test_iters = iu.Parameter("test_iters","100")
-opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl"],"g++")
+opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl","default"],"default")
 opt_main = iu.Parameter("main","main")
 opt_stdafx = iu.BooleanParameter("stdafx",False)
 
@@ -3956,43 +3956,73 @@ def main():
         iu.set_parameters({'keep_destructors':'true'})
         
         
-    with im.Module():
-        ivy_init.ivy_init()
 
-        basename = opt_classname.get() or im.module.name
-        classname = varname(basename)
-        with iu.ErrorPrinter():
-            with ivy_cpp.CppContext():
-                header,impl = module_to_cpp_class(classname,basename)
-#        print header
-#        print impl
-        f = open(basename+'.h','w')
-        f.write(header)
-        f.close()
-        f = open(basename+'.cpp','w')
-        f.write(impl)
-        f.close()
-    if opt_build.get():
-        import platform
-        if platform.system() == 'Windows':
-            if opt_compiler.get() == 'cl':
-                cmd = "cl /EHsc /Zi {}.cpp ws2_32.lib".format(basename)
-                if target.get() in ['gen','test']:
-                    cmd = 'cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib /LIBPATH:%Z3DIR%\bin'.format(basename)
-            else:
-                cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
-                if target.get() in ['gen','test']:
-                    cmd = cmd + ' -lz3'
+    with im.Module():
+        ivy_init.ivy_init(create_isolate=False)
+
+        isolate = ic.isolate.get()
+        if isolate != None:
+            isolates = [isolate]
         else:
-            cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
-            if target.get() in ['gen','test']:
-                cmd = cmd + ' -lz3'
-        print cmd
-        import os
-        import sys
-        sys.stdout.flush()
-        status = os.system(cmd)
-        sys.exit(1 if status else 0)
+            if isolate == 'all':
+                if target.get() == 'repl':
+                    isolates = sorted(list(m for m in im.module.isolates if isinstance(m,ivy_ast.ExtractDef)))
+                else:
+                    isolates = sorted(list(m for m in im.module.isolates if not isinstance(m,ivy_ast.ExtractDef)))
+            else:
+                isolates = [isolate]
+                
+            if len(isolates) == 0:
+                isolates = [None]
+
+        for the_isolate in isolates:
+            with im.module.copy():
+                with iu.ErrorPrinter():
+
+                    if isolate:
+                        if len(isolates) > 1:
+                            print "Compiling isolate {}...".format(isolate)
+
+                    iso.create_isolate(isolate) # ,ext='ext'
+
+                    im.module.labeled_axioms.extend(im.module.labeled_props)
+                    with im.module.theory_context():
+                        basename = opt_classname.get() or im.module.name
+                        if len(isolates) > 1:
+                            basename = basename + '_' + isolate
+                        classname = varname(basename)
+                        with ivy_cpp.CppContext():
+                            header,impl = module_to_cpp_class(classname,basename)
+            #        print header
+            #        print impl
+                    f = open(basename+'.h','w')
+                    f.write(header)
+                    f.close()
+                    f = open(basename+'.cpp','w')
+                    f.write(impl)
+                    f.close()
+                if opt_build.get():
+                    import platform
+                    if platform.system() == 'Windows':
+                        if opt_compiler.get() != 'g++':
+                            cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(basename)
+                            if target.get() in ['gen','test']:
+                                cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib /LIBPATH:%Z3DIR%\bin'.format(basename)
+                        else:
+                            cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
+                            if target.get() in ['gen','test']:
+                                cmd = cmd + ' -lz3'
+                    else:
+                        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
+                        if target.get() in ['gen','test']:
+                            cmd = cmd + ' -lz3'
+                    print cmd
+                    import os
+                    import sys
+                    sys.stdout.flush()
+                    status = os.system(cmd)
+                    if status:
+                        exit(1)
 
 if __name__ == "__main__":
     main()
