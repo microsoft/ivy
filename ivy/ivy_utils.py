@@ -216,8 +216,10 @@ class LocationTuple(tuple):
     def line(self):
         return self[1]
     def __str__(self):
-        res =  (((str(self.filename) + ': ') if self.filename else '')
-                + ('line ' + str(self.line) + ': ') if self.line else '')
+        res =  (((str(self.filename)) if self.filename else '')
+                + ('(' + str(self.line) + ')') if self.line else '')
+        if res:
+            res += ': '
         return res
 
 def lineno_str(ast):

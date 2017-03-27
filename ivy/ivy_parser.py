@@ -56,8 +56,10 @@ class ParseError(Exception):
         if iu.filename:
             self.filename = iu.filename
     def __repr__(self):
-        return ( ("{}: ".format(self.filename) if hasattr(self,'filename') else '')
-                 + ("line {}: ".format(self.lineno) if self.lineno != None else '')
+        return ( ("{}".format(self.filename) if hasattr(self,'filename') else '')
+                 + ("({})".format(self.lineno) if self.lineno != None else '')
+                 + (': ' if (hasattr(self,'filename') or self.lineno != None) else '')
+                 + ('error: ')
                  + ("token '{}': ".format(self.token) if self.token != None else '')
                  + self.message )
     

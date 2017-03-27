@@ -4003,11 +4003,20 @@ def main():
                     f.close()
                 if opt_build.get():
                     import platform
+                    import os
                     if platform.system() == 'Windows':
+                        if 'Z3DIR' in os.environ:
+                            z3incspec = '/I %Z3DIR%\\include'
+                            z3libspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                        else:
+                            import z3
+                            z3path = os.path.dirname(os.path.abspath(z3.__file__))
+                            z3incspec = '/I {}'.format(z3path)
+                            z3libspec = '/LIBPATH:{}'.format(z3path)
                         if opt_compiler.get() != 'g++':
                             cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(basename)
                             if target.get() in ['gen','test']:
-                                cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi /I %Z3DIR%\include {}.cpp ws2_32.lib libz3.lib /link /LIBPATH:%Z3DIR%\lib /LIBPATH:%Z3DIR%\bin'.format(basename)
+                                cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(z3incspec,basename,z3libspec)
                         else:
                             cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
                             if target.get() in ['gen','test']:
@@ -4017,7 +4026,6 @@ def main():
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
                     print cmd
-                    import os
                     import sys
                     sys.stdout.flush()
                     status = os.system(cmd)
