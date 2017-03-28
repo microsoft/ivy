@@ -9,6 +9,7 @@ tokens = (
    'RPAREN',
    'PLUS',
    'TIMES',
+   'DIV',
    'TILDA',
    'AND',
    'OR',
@@ -125,6 +126,7 @@ t_TILDA    = r'\~'
 t_COMMA    = r'\,'
 t_PLUS    = r'\+'
 t_TIMES   = r'\*'
+t_DIV   = r'\/'
 t_MINUS   = r'\-'
 t_LT      = r'\<'
 t_LE      = r'\<='

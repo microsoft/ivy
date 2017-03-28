@@ -787,7 +787,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     action1 = ext_mod_mixin(all_mixins)(mixin,action1)
                     act = ia.apply_mixin(mixin,action1,act)
             mod.before_export['ext:' + actname] = act
-            print "before_export: {} = {}".format('ext:' + actname,mod.before_export['ext:' + actname])
+#            print "before_export: {} = {}".format('ext:' + actname,mod.before_export['ext:' + actname])
 
     for e in mod.exports:
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope

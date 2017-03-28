@@ -27,6 +27,7 @@ if not (iu.get_numeric_version() <= [1,2]):
         ('left', 'PLUS'),
         ('left', 'MINUS'),
         ('left', 'TIMES'),
+        ('left', 'DIV'),
     )
 
 else:
@@ -42,6 +43,7 @@ else:
         ('left', 'AND'),
         ('left', 'PLUS'),
         ('left', 'TIMES'),
+        ('left', 'DIV'),
         ('left', 'TILDA'),
         ('left', 'EQ','LE','LT','GE','GT'),
         ('left', 'TILDAEQ'),

@@ -2067,6 +2067,8 @@ class z3_thunk : public thunk<D,R> {
             impl.append("""
     int runs = 1;
     int seed = 1;
+    int sleep_ms = 10;
+    int final_ms = 0; 
     std::vector<char *> pargs; // positional args
     pargs.push_back(argv[0]);
     for (int i = 1; i < argc; i++) {
@@ -2092,6 +2094,12 @@ class z3_thunk : public thunk<D,R> {
             }
             else if (param == "seed") {
                 seed = atoi(value.c_str());
+            }
+            else if (param == "delay") {
+                sleep_ms = atoi(value.c_str());
+            }
+            else if (param == "wait") {
+                final_ms = atoi(value.c_str());
             }
             else if (param == "modelfile") {
                 __ivy_modelfile.open(value.c_str());
@@ -3478,13 +3486,13 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #ifdef _WIN32
             LARGE_INTEGER after;
             QueryPerformanceCounter(&after);
-            __ivy_out << "idx: " << idx << " sat: " << sat << " time: " << (((double)(after.QuadPart-before.QuadPart))/freq.QuadPart) << std::endl;
+//            __ivy_out << "idx: " << idx << " sat: " << sat << " time: " << (((double)(after.QuadPart-before.QuadPart))/freq.QuadPart) << std::endl;
 #endif
             if (sat){
                 g.execute(ivy);
                 ivy.__unlock();
 #ifdef _WIN32
-                Sleep(100);
+                Sleep(sleep_ms);
 #endif
             }
             else {
@@ -3539,7 +3547,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
         }            
     }
 #ifdef _WIN32
-                Sleep(10000);  // HACK: wait for late responses
+                Sleep(final_ms);  // HACK: wait for late responses
 #endif
     __ivy_out << "test_completed" << std::endl;
 
@@ -3942,6 +3950,7 @@ opt_test_iters = iu.Parameter("test_iters","100")
 opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl","default"],"default")
 opt_main = iu.Parameter("main","main")
 opt_stdafx = iu.BooleanParameter("stdafx",False)
+opt_outdir = iu.Parameter("outdir","")
 
 
 def main():
@@ -3995,10 +4004,10 @@ def main():
                             header,impl = module_to_cpp_class(classname,basename)
             #        print header
             #        print impl
-                    f = open(basename+'.h','w')
+                    f = open(outfile(basename+'.h'),'w')
                     f.write(header)
                     f.close()
-                    f = open(basename+'.cpp','w')
+                    f = open(outfile(basename+'.cpp'),'w')
                     f.write(impl)
                     f.close()
                 if opt_build.get():
@@ -4021,6 +4030,8 @@ def main():
                             cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
                             if target.get() in ['gen','test']:
                                 cmd = cmd + ' -lz3'
+                        if opt_outdir.get():
+                            cmd = 'cd {} & '.format(opt_outdir.get()) + cmd
                     else:
                         cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
                         if target.get() in ['gen','test']:
@@ -4031,6 +4042,10 @@ def main():
                     status = os.system(cmd)
                     if status:
                         exit(1)
+
+def outfile(name):
+    return (opt_outdir.get() + '/' + name) if opt_outdir.get() else name
+        
 
 if __name__ == "__main__":
     main()

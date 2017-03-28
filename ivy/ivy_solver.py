@@ -93,6 +93,7 @@ def relations(name):
 functions_dict = {"+":(lambda x,y: x + y),
              "-":my_minus,
              "*":(lambda x,y: x * y),
+             "/":(lambda x,y: x / y),
              "concat":(lambda x,y: z3.Concat(x,y)),
              }
 

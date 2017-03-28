@@ -95,6 +95,11 @@ if not (iu.get_numeric_version() <= [1,2]):
         p[0] = App(p[2],p[1],p[3])
         p[0].lineno = get_lineno(p,2)
 
+    def p_term_term_DIV_term(p):
+        'term : term DIV term'
+        p[0] = App(p[2],p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+
     def p_term_if_fmla_else_term(p):
         'term : term IF fmla ELSE term'
         p[0] = Ite(p[3],p[1],p[5])
@@ -261,6 +266,10 @@ def p_infix_minus(p):
 
 def p_infix_times(p):
     'infix : TIMES'
+    p[0] = p[1]
+
+def p_infix_times(p):
+    'infix : DIV'
     p[0] = p[1]
 
 # formulas are boolean combinations of terms and equalities between terms

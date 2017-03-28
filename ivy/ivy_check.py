@@ -6,7 +6,6 @@ import ivy_interp as itp
 import ivy_actions as act
 import ivy_utils as utl
 import ivy_logic_utils as lut
-import tk_ui as ui
 import ivy_logic as lg
 import ivy_utils as iu
 import ivy_module as im
@@ -26,6 +25,8 @@ opt_trusted = iu.BooleanParameter("trusted",False)
 
 def display_cex(msg,ag):
     if diagnose.get():
+        import tk_ui as ui
+        iu.set_parameters({'mode':'induction'})
         ui.ui_main_loop(ag)
         exit(1)
     raise iu.IvyError(None,msg)
@@ -34,6 +35,8 @@ def check_properties():
     if itp.false_properties():
         if diagnose.get():
             print "Some properties failed."
+            import tk_ui as ui
+            iu.set_parameters({'mode':'induction'})
             gui = ui.new_ui()
             gui.tk.update_idletasks() # so that dialog is on top of main window
             gui.try_property()
@@ -50,6 +53,8 @@ def check_conjectures(kind,msg,ag,state):
         if diagnose.get():
             print "{} failed.".format(kind)
             iu.dbg('ag.states[0].clauses')
+            import tk_ui as ui
+            iu.set_parameters({'mode':'induction'})
             gui = ui.new_ui()
             agui = gui.add(ag)
             gui.tk.update_idletasks() # so that dialog is on top of main window
@@ -150,7 +155,6 @@ def check_module():
 
 def main():
     ivy_init.read_params()
-    iu.set_parameters({'mode':'induction'})
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()
     with im.Module():

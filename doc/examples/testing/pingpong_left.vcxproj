@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{5D1E04F7-4717-4DC2-976E-0F5CD418F4D3}</ProjectGuid>
+    <ProjectGuid>{A48A9407-CA01-4B56-8D51-303F4FC5F6E1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>vstest1</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
@@ -71,6 +71,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)pingpong\$(Configuration)\</OutDir>
+    <TargetName>pingpong</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -149,10 +151,10 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="hello1.ivy">
+    <CustomBuild Include="pingpong.ivy">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">cmd /c "c:\ivy\Scripts\activate.bat &amp; ivy_to_cpp target=repl build=true outdir=$(TargetDir) %(Identity)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">hello1.exe</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">cmd /c "c:\ivy\Scripts\activate.bat &amp; ivy_to_cpp isolate=iso_l target=test build=true outdir=$(TargetDir) %(Identity)"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">pingpong.exe</Outputs>
     </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
