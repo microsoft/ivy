@@ -36,7 +36,11 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		//std::cout << "RECEIVING\n";
 	        int len=0;
                 socklen_t lenlen=4;
+#ifdef _WIN32
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&len,&lenlen))
+#else
 	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+#endif
 	            { perror("getsockopt failed"); exit(1); }
 	        std::vector<char> buf(len);
 	        int bytes;
@@ -45,9 +49,9 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	        buf.resize(bytes);
 	        `pkt` pkt;
 	        try {
-	            unsigned pos = 0;
-		    __deser(buf,pos,pkt);
-	            if (pos < buf.size())
+		    ivy_binary_deser ds(buf);
+		    __deser(ds,pkt);
+	            if (ds.pos < buf.size())
 	                throw deser_err();
                 } catch (deser_err &){
 		    std::cout << "BAD PACKET RECEIVED\n";
@@ -62,10 +66,10 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		dstaddr.sin_port = htons(`port_base`+dst);
 
-	        std::vector<char> buf;
-	        __ser(buf,pkt);
+		ivy_binary_ser sr;
+	        __ser(sr,pkt);
 		//std::cout << "SENDING\n";
-		if (sendto(sock,&buf[0],buf.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+		if (sendto(sock,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
 		     { std::cerr << "sendto failed\n"; exit(1); }
 	    }
 	};

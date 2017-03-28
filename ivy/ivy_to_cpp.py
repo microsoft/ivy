@@ -864,7 +864,7 @@ def native_declaration(atom):
         res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
 #        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
         return res
-    res = ((native_classname + '::') if native_classname else '') + varname(atom.rep)
+    res = ((native_classname + '::') if (native_classname and not atom.rep[0].isdigit() and not atom.rep[0] == '"') else '') + varname(atom.rep)
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
         res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
@@ -1304,6 +1304,7 @@ def module_to_cpp_class(classname,basename):
 #include <fcntl.h>
 #ifdef _WIN32
 #include <winsock2.h>
+#include <WS2tcpip.h>
 #include <io.h>
 #define isatty _isatty
 #else
@@ -1414,7 +1415,7 @@ struct ivy_binary_ser : public ivy_ser {
     void close_list_elem() {}
     void open_struct() {}
     void close_struct() {}
-    void open_field() {}
+    virtual void  open_field(const std::string &) {}
     void close_field() {}
     virtual void  open_tag(int tag, const std::string &) {
         set((long long)tag);
@@ -1474,7 +1475,7 @@ struct ivy_binary_deser : public ivy_deser {
     }
     void open_struct() {}
     void close_struct() {}
-    void open_field() {}
+    virtual void  open_field(const std::string &) {}
     void close_field() {}
     int open_tag(const std::vector<std::string> &tags) {
         long long res;
@@ -2816,7 +2817,7 @@ def emit_assert(self,header):
     code.append('ivy_assert(')
     with ivy_ast.ASTContext(self):
         il.close_formula(self.args[0]).emit(header,code)
-    code.append(', "{}");\n'.format(iu.lineno_str(self)))    
+    code.append(', "{}");\n'.format(iu.lineno_str(self).replace('\\','\\\\')))
     header.extend(code)
 
 ia.AssertAction.emit = emit_assert
@@ -2826,7 +2827,7 @@ def emit_assume(self,header):
     indent(code)
     code.append('ivy_assume(')
     il.close_formula(self.args[0]).emit(header,code)
-    code.append(', "{}");\n'.format(iu.lineno_str(self)))    
+    code.append(', "{}");\n'.format(iu.lineno_str(self).replace('\\','\\\\')))
     header.extend(code)
 
 ia.AssumeAction.emit = emit_assume
