@@ -10,14 +10,15 @@
 #
 # ### Bonus exercise
 #
-# At the end of the file, there is an isolate `iso_sys` that includes
+# Change the interpretation of type `key` to give it a larger range (say, `strbv[4]`).
+# Try testing isolates `iso_prim` and `iso_sec`. Do you still find the bug? If not,
+# can you explain why not?
+#
+# UNIX ONLY: At the end of the file, there is an isolate `iso_sys` that includes
 # the complete implmentation (including both servers and the
 # network). Try testing this isolate to see if you can find error. 
 # If not, can you explain why not?
 
-# Change the interpretation of type `key` to give it a larger range (say, `strbv[4]`).
-# Try testing isolates `iso_prim` and `iso_sec`. Do you still find the bug. If not,
-# can you explain why not?
 
 # Basic data types
 # ----------------
@@ -308,7 +309,6 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     implement req_chan.recv(inp : req_msg) {
 	var rr := inp.req.bd;
         if rr.knd = read {
-	    call ref.commit(inp.req.tx,dest.sec);
 	    var res : response.t;
 	    res.tx := inp.req.tx;
 	    res.bd := rep.exec(rr);
@@ -434,11 +434,13 @@ object mid_spec = {
 	acked(X) := false;
     }
     
-    # When an ack message is sent on the reverse channel, it must have
-    # been committed (this is the meaning of the message) and it must
-    # not already be acked. We record the fact that it is now acked.
+    # When an ack message is sent on the reverse channel, must have
+    # the correct body, it must have been committed (this is the
+    # meaning of the message) and it must not already be acked. We
+    # record the fact that it is now acked.
 
     before rev_chan.sndr.send(inp : req_msg) {
+	assert ref.txs(inp.req.tx) = inp.req.bd;
 	assert ref.committed(inp.req.tx);
 	assert ~acked(inp.req.tx);
 	acked(inp.req.tx) := true;

@@ -1,47 +1,29 @@
 #lang ivy1.6
 
-# Replicating key-value store
-# ===========================
+# Replicating key-value store exercise
+# ====================================
 #
-# Now we will consider a distributed implementation of the key/value
-# store.  This version is replicating. We will have two server
-# processes, a *primary* and a *secondary*. Each keeps a complete
-# replica of the store.  All write requsts go first to the primary and
-# then are passed along to the secondary. Read requests, on the other
-# hand, may be sent to either server. We will assume that the channel
-# between the primary and secondary is ordered.
 
-# Now we face a question: since transactions happen in parallel, and
-# no one server sees all the transactions, how do we define commit
-# points? At first we might imagine committing the write transactions
-# when they execute on the primary, and the reads transactions on
-# whichever server they arrive at. Clearly, this won't work, however.
-# Suppose a write has been committed on the primary and is on its way
-# to the secondary. If the secondary now commits a read for the same
-# key, it will return a stale value for that read. The situation is
-# reversed if we commit writes when they execute at the secondary,
-# since a read on the primary could returna "future" value.
 #
-# In fact, there is no easy way out of this dilemma. If we don't add
-# some additional concurrency control, we will necessarily violate
-# linearizability. To fix the problem, we will add a reverse channel
-# from the secondary to the primary to acknowldege when writes have
-# been committed on the secondary. If there is a pending,
-# unacknowledged write on the primary, it must wait to serve any reads
-# for that key until write is acknowledged.
+# The original version of the replicating key-value store
+# has the primary server delay any read of a key with a pending write
+# until the ack returns from the secondary. In this exercise, we
+# will modify the server so instead of delaying, the primary forwards
+# the read to the secondary over the forward channel.
 #
-# The key property we must then maintain on the channel is that writes
-# occur *in the same order* in which they are executed on the primary.
-# This does not mean that forwarding of a write cannot occur before
-# the actual execution on the primrary. It just means the order must
-# be preserved. We will call this the *serialization* order. Thus,
-# writes are serialized on the primary (meaning their order is
-# determined) but *committed* on the secondary).
+# This means we have to make several changes:
 
-# Using this specification, we can test the primary and secondary
-# servers in isolation, and if they are correct according to their
-# assume.guarantee specifications, we can conclude that the together
-# provide a correct service according to our reference object,
+# - Modify the primary to do the forwarding
+# - Modify the secondary to handle read requests on the forward channel
+# - Modify `mid_spec`, the specification of the interface between primary
+#   and secondary to reflect this change.
+
+# What do we need to guarantee about reads in the forward channel?
+# Are any other changes needed to `mid_spec`?
+
+# There are some hints below (search for HINT) on where the code might
+# need to be modified.
+
 
 # Basic data types
 # ----------------
@@ -298,7 +280,7 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
 		res.bd := rep.exec(rr);
 		call cl_chans(inp.cid).send(res)
 	    } else {
-                call req_chan.send(inp);  # if cannot execute, recirculate
+                call req_chan.send(inp);  # if cannot execute, recirculate (HINT)
 	    }
 	} else if rr.knd = write {
 	    call ser.serialize(inp.req.tx);           # this is ghost!
@@ -347,6 +329,9 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     #
 
     implement fwd_chan.recv(inp : req_msg) {
+
+        # HINT: do something here (see req_chan.recv above)
+
 	var res : response.t;
 	res.tx := inp.req.tx;
 	res.bd := rep.exec(inp.req.bd);
@@ -477,6 +462,9 @@ object mid_spec = {
     # related to the question of who is allowed to commit shich
     # transations.
 
+    # HINT: what happens to the request destination? When does it need
+    # to change?
+
     function req_dest(X:txid) : dest.t
 
     after ref.create(inp : request_body.t, dst:dest.t) returns (tx : txid) {
@@ -499,6 +487,7 @@ object mid_spec = {
     	    call ref.commit(inp.req.tx,dest.sec)
 	}
     }
+
 }
 
 # We export/import our API.
