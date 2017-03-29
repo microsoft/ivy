@@ -468,6 +468,13 @@ object mid_spec = {
 	assert ref.txs(tx).knd = write -> dst = dest.sec
     }
 
+    # Commit immediately all read requests from client to secondary
+
+    before sec.req_chan.recv(inp : req_msg) {
+	if inp.req.bd.knd = read {
+    	    call ref.commit(inp.req.tx,dest.sec)
+	}
+    }
 
 }
 
