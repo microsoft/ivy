@@ -4023,10 +4023,11 @@ def main():
                             z3path = os.path.dirname(os.path.abspath(z3.__file__))
                             z3incspec = '/I {}'.format(z3path)
                             z3libspec = '/LIBPATH:{}'.format(z3path)
+                        vsdir = find_vs()
                         if opt_compiler.get() != 'g++':
-                            cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(basename)
+                            cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(vsdir,basename)
                             if target.get() in ['gen','test']:
-                                cmd = '"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(z3incspec,basename,z3libspec)
+                                cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,z3incspec,basename,z3libspec)
                         else:
                             cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
                             if target.get() in ['gen','test']:
@@ -4047,6 +4048,13 @@ def main():
 def outfile(name):
     return (opt_outdir.get() + '/' + name) if opt_outdir.get() else name
         
+def find_vs():
+    import os
+    for v in range(15,9,-1):
+        dir = 'C:\\Program Files (x86)\\Microsoft Visual Studio {}.0'.format(v)
+        if os.path.exists(dir):
+            return dir
+    raise iu.IvyError(None,'Cannot find a suitable version of Visual Studio (require 10.0-15.0)')
 
 if __name__ == "__main__":
     main()
