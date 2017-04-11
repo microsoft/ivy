@@ -95,6 +95,9 @@ functions_dict = {"+":(lambda x,y: x + y),
              "*":(lambda x,y: x * y),
              "/":(lambda x,y: x / y),
              "concat":(lambda x,y: z3.Concat(x,y)),
+             "bvand":(lambda x,y: x & y),
+             "bvor":(lambda x,y: x | y),
+             "bvnot":(lambda x: ~x),
              }
 
 
