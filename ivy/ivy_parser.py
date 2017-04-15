@@ -819,7 +819,7 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom.lineno = get_lineno(p,2)
         handle_before_after("before",atom,p[6],p[0],p[4],p[5])
     def p_top_after_callatom_lcb_action_rcb(p):
-        'top : top AFTER atype optargs optreturns sequence'
+        'top : top AFTER atype optargs optreturns topseq'
         p[0] = p[1]
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,2)

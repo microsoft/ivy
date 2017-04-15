@@ -834,6 +834,8 @@ class WhileAction(Action):
         return self.unroll(card,body)
     def unroll(self,card,body=None):
         cond = self.args[0]
+        while isinstance(cond,And) and len(cond.args) > 0:
+            cond = cond.args[0]
         if is_app(cond) and cond.rep.name in ['<','>','<=','>=']:
             idx_sort = cond.args[0].sort
         elif isinstance(cond,Not) and is_eq(cond.args[0]):
@@ -843,9 +845,9 @@ class WhileAction(Action):
         cardsort = card(idx_sort)
         if cardsort is None:
             raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
-        res = AssumeAction(Not(cond))
+        res = AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
-            res = IfAction(cond,Sequence(body or self.args[1],res))
+            res = IfAction(self.args[0],Sequence(body or self.args[1],res))
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
