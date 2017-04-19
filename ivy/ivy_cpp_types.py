@@ -45,7 +45,9 @@ static int string_to_bv(const std::string &s){
             } 
         }
         std::cerr << "Ran out of values for type CLASSNAME" << std::endl;
-        __ivy_out << "out_of_values(CLASSNAME)" << std::endl;
+        __ivy_out << "out_of_values(CLASSNAME,\\"" << s << "\\")" << std::endl;
+        for (int i = 0; i < (1<<BITS); i++)
+            __ivy_out << "value(\\"" << bv_to_string_hash[i] << "\\")" << std::endl;
         __ivy_exit(1);
     }
     return string_to_bv_hash[s];
@@ -118,10 +120,15 @@ z3::expr __to_solver<CLASSNAME>( gen &g, const  z3::expr &v, CLASSNAME &val) {
 template <>
 void __randomize<CLASSNAME>( gen &g, const  z3::expr &apply_expr) {
     z3::sort range = apply_expr.get_sort();
-    if (CLASSNAME::nonces.size() == 0) 
-       for (int i = 0; i < 2; i++)
-           CLASSNAME::nonces.push_back(__random_string<CLASSNAME>());
-    CLASSNAME value = CLASSNAME::nonces[rand() % CLASSNAME::nonces.size()];
+    CLASSNAME value;
+    if (CLASSNAME::bv_to_string_hash.size() == (1<<BITS)) {
+        value = CLASSNAME::bv_to_string(rand() % (1<<BITS));
+    } else {
+        if (CLASSNAME::nonces.size() == 0) 
+           for (int i = 0; i < 2; i++)
+               CLASSNAME::nonces.push_back(__random_string<CLASSNAME>());
+        value = CLASSNAME::nonces[rand() % CLASSNAME::nonces.size()];
+    }
     z3::expr val_expr = g.int_to_z3(range,CLASSNAME::string_to_bv(value));
     z3::expr pred = apply_expr == val_expr;
     g.add_alit(pred);
@@ -130,7 +137,7 @@ std::string CLASSNAME::random_string(){
     return __random_string<CLASSNAME>();
 }
 #endif
-""".replace('CLASSNAME',self.short_name()))
+""".replace('BITS',str(self.bits)).replace('CLASSNAME',self.short_name()))
 
     def card(self):
         return None # Note this is cardinality of the string type, not the bit vector type
