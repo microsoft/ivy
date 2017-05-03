@@ -864,7 +864,8 @@ def native_declaration(atom):
         res = ctype(im.module.sig.sorts[atom.rep],classname=native_classname)
 #        print 'type(atom): {} atom.rep: {} res: {}'.format(type(atom),atom.rep,res)
         return res
-    res = ((native_classname + '::') if (native_classname and not atom.rep[0].isdigit() and not atom.rep[0] == '"') else '') + varname(atom.rep)
+    vname = varname(atom.rep)
+    res = ((native_classname + '::') if (native_classname and not vname[0].isdigit() and not vname[0] == '"') else '') + vname
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
         res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
@@ -2332,13 +2333,20 @@ def emit_special_op(self,op,header,code):
         return
     raise iu.IvyError(self,"operator {} cannot be emitted as C++".format(op))
 
+bv_ops = {
+    'bvand' : '&',
+    'bvor' : '|',
+    'bvnot' : '~',
+}
+
 def emit_bv_op(self,header,code):
     sname,sparms = parse_int_params(il.sig.interp[self.sort.name])
     code.append('(')
     code.append('(')
-    self.args[0].emit(header,code)
-    code.append(' {} '.format(self.func.name))
-    self.args[1].emit(header,code)
+    if len(self.args) == 2:
+        self.args[0].emit(header,code)
+    code.append(' {} '.format(bv_ops.get(self.func.name,self.func.name)))
+    self.args[-1].emit(header,code)
     code.append(') & {})'.format((1 << sparms[0])-1))
 
 def is_bv_term(self):
@@ -2365,10 +2373,10 @@ def emit_app(self,header,code,capture_args=None):
             op = il.sig.interp[self.func.name]
             emit_special_op(self,op,header,code)
             return
-        assert len(self.args) == 2 # handle only binary ops for now
         if is_bv_term(self):
             emit_bv_op(self,header,code)
             return
+        assert len(self.args) == 2 # handle only binary ops for now
         code.append('(')
         self.args[0].emit(header,code)
         code.append(' {} '.format(self.func.name))
@@ -4050,8 +4058,13 @@ def outfile(name):
         
 def find_vs():
     import os
+    try:
+        windir = os.getenv('WINDIR')
+        drive = windir[0]
+    except:
+        drive = 'C'
     for v in range(15,9,-1):
-        dir = 'C:\\Program Files (x86)\\Microsoft Visual Studio {}.0'.format(v)
+        dir = '{}:\\Program Files (x86)\\Microsoft Visual Studio {}.0'.format(drive,v)
         if os.path.exists(dir):
             return dir
     raise iu.IvyError(None,'Cannot find a suitable version of Visual Studio (require 10.0-15.0)')

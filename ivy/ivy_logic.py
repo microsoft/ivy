@@ -763,6 +763,9 @@ polymorphic_symbols_list = [
     ('-' , [alpha,alpha,alpha]),
     ('/' , [alpha,alpha,alpha]),
     ('*>' , [alpha,beta,lg.Boolean]),
+    ('bvand' , [alpha,alpha,alpha]),
+    ('bvor' , [alpha,alpha,alpha]),
+    ('bvnot' , [alpha,alpha]),
 ]
 
 polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymorphic_symbols_list)
