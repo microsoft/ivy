@@ -22,7 +22,6 @@
     <ProjectGuid>{5D1E04F7-4717-4DC2-976E-0F5CD418F4D3}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>vstest1</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -151,8 +150,8 @@
   <ItemGroup>
     <CustomBuild Include="hello1.ivy">
       <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">cmd /c "c:\ivy\Scripts\activate.bat &amp; ivy_to_cpp target=repl build=true outdir=$(TargetDir) %(Identity)"</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">hello1.exe</Outputs>
+      <Command>cmd /c "c:\ivy\Scripts\activate.bat &amp; ivy_to_cpp target=repl build=true outdir=$(TargetDir) %(Identity)"</Command>
+      <Outputs>hello1.exe</Outputs>
     </CustomBuild>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

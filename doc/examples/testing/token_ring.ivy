@@ -19,7 +19,7 @@ object node = {
     interpret t -> bv[1]
 
     action next(x:t) returns (y:t) = {
-	y := x + 1
+	    y := x + 1
     }
 }
 
@@ -81,7 +81,7 @@ object serv = {
 
 object proto(me:node.t) = {
 
-    relation token
+    var token : bool
     after init {
 	token := me = 0
     }
@@ -89,9 +89,8 @@ object proto(me:node.t) = {
     implement serv.release {
 	if token {
 	    token := false;
-	    local pkt : packet.t {
+	    var pkt : packet.t;
 		call trans.send(me,node.next(me),pkt)
-	    }
 	}
     }
 
