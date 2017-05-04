@@ -7,7 +7,7 @@ def run(name,opts,res):
     try:
         child.expect('>')
         child.sendline('account.withdraw(4)')
-        child.expect('account2.ivy: line 29: : assumption failed')
+        child.expect('assumption failed')
         return True
     except pexpect.EOF:
         print child.before

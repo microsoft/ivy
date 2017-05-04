@@ -9,7 +9,7 @@ from ivy import ivy_to_cpp as i2c
 from ivy import ivy_actions as ia
 from ivy import ivy_solver as slv
 from ivy import ivy_isolate as iso
-
+from ivy import ivy_cpp
 
 prog = """#lang ivy1.5
 
@@ -44,7 +44,8 @@ with im.Module():
     ivy_from_string(prog,create_isolate=True)
 
     classname = 'foo'
-    header,impl = i2c.module_to_cpp_class(classname,classname)
+    with ivy_cpp.CppContext():
+        header,impl = i2c.module_to_cpp_class(classname,classname)
     print header
     print impl
 

@@ -16,7 +16,7 @@ def run(name,opts,res):
         child.expect(r'serv.elect\(0\)')
         child.expect('>')
         child.sendline('trans.recv(0,0)')
-        child.expect(r'leader_election_ring_repl.ivy: line 113: : assumption failed')
+        child.expect(r'assumption failed')
         return True
     except pexpect.EOF:
         print child.before
