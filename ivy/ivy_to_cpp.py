@@ -73,9 +73,8 @@ def indent_code(header,code):
 def sym_decl(sym,c_type = None,skip_params=0,classname=None):
     name, sort = sym.name,sym.sort
     dims = []
-    if not c_type:
-        c_type,dims = ctype_function(sort,skip_params=skip_params,classname=classname)
-    res = c_type + ' '
+    the_c_type,dims = ctype_function(sort,skip_params=skip_params,classname=classname)
+    res = (c_type or the_c_type) + ' '
     res += memname(sym) if skip_params else varname(sym.name)
     for d in dims:
         res += '[' + str(d) + ']'
@@ -420,7 +419,7 @@ def emit_cpp_sorts(header):
             sort_to_cpptype[il.sig.sorts[name]] = cpptype
         elif name in il.sig.interp:
             itp = il.sig.interp[name]
-            if not (itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
+            if not (isinstance(itp,il.EnumeratedSort) or itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
                 cpptype = ivy_cpp_types.get_cpptype_constructor(itp)(varname(name))
                 cpptypes.append(cpptype)
                 sort_to_cpptype[il.sig.sorts[name]] = cpptype
@@ -431,6 +430,10 @@ def emit_sorts(header):
     for name,sort in il.sig.sorts.iteritems():
         if name == "bool":
             continue
+        if name in il.sig.interp:
+            sortname = il.sig.interp[name]
+            if isinstance(sortname,il.EnumeratedSort):
+                sort = sortname
         if not isinstance(sort,il.EnumeratedSort):
             if name in il.sig.interp:
                 sortname = il.sig.interp[name]
@@ -3935,11 +3938,16 @@ public:
         }
         model = slvr.get_model();
         alits.clear();
+""".replace('classname',classname))
+    if target.get() != "gen":
+        header.append("""
         if(__ivy_modelfile.is_open()){
             __ivy_modelfile << "begin sat:\\n" << slvr << "end sat:\\n" << std::endl;
             __ivy_modelfile << model;
             __ivy_modelfile.flush();
         }
+""")
+    header.append("""
         return true;
     }
 

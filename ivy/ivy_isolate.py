@@ -925,7 +925,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         for actname,action in mod.actions.iteritems():
             if startswith_eq_some(actname,present,mod):
                 for c in action.iter_calls():
-                    called = mod.actions[c]
+                    imp = implementation_map.get(c,c)
+                    called = mod.actions[imp]
                     if not startswith_eq_some(c,present,mod) and c not in extra_with and not c.startswith('imp__'):
                         if not(type(called) == ia.Sequence and not called.args):
                             if (isinstance(called,ia.NativeAction) or 
@@ -1167,7 +1168,7 @@ def create_isolate(iso,mod = None,**kwargs):
                 if name in orig_imports or not(iso and iso in mod.isolates
                                                and isinstance(mod.isolates[iso],ivy_ast.ExtractDef)):
                     newimps.append(ivy_ast.ImportDef(ivy_ast.Atom(extname),ivy_ast.Atom('')))
-                extra_with.append(ivy_ast.Atom(impname))
+                    extra_with.append(ivy_ast.Atom(impname))
 #                    extra_with.append(ivy_ast.Atom(extname))
                 if iso and iso in mod.isolates and name in orig_imports:
                     ps = mod.isolates[iso].params()

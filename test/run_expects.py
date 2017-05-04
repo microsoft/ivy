@@ -7,8 +7,8 @@ checks = [
     ['../doc/examples/testing',
       [
           ['pingpong','trusted=true','OK'],
-          ['interference','trusted=true','interference.ivy: line 30: error: Call out to right_player.intf_ping'],
-          ['coveragefail','trusted=true','coveragefail.ivy: line 20: error: assertion is not checked'],
+          ['interference','trusted=true','error: Call out to right_player.intf_ping'],
+          ['coveragefail','trusted=true','error: assertion is not checked'],
       ]
     ],
     ['../doc/examples',
@@ -27,7 +27,7 @@ checks = [
       ['interference2','OK'],
       ['interference3','OK'],
       ['interference4','OK'],
-      ['interference','interference.ivy: line 30: error: Call out to right_player.intf_ping'],
+      ['interference','error: Call out to right_player.intf_ping'],
       ['leader_election_ring2','error: Some assertions are not checked'],
       ['leader_election_ring_btw','error: Some assertions are not checked'],
       ['leader_election_ring','error: Some assertions are not checked'],
@@ -56,14 +56,14 @@ tests = [
       [
          ['trivnet','test_completed'],
          ['pingpong','isolate=iso_l','test_completed'],
-         ['pingpong_bad','isolate=iso_l','pingpong_bad.ivy: line 15: : assertion failed'],
+         ['pingpong_bad','isolate=iso_l','assertion failed'],
          ['pingpong','isolate=iso_r','test_completed'],
          ['leader_election_ring','isolate=iso_p','test_completed'],
          ['leader_election_ring','isolate=iso_n','test_completed'],
          ['leader_election_ring','isolate=iso_t test_iters=5','test_completed'],
          ['token_ring','isolate=iso_p','test_completed'],
          ['token_ring','isolate=iso_t','test_completed'],
-         ['token_ring_buggy','isolate=iso_t','trans_buggy.ivy: line 26: : assertion failed'],
+         ['token_ring_buggy','isolate=iso_t','assertion failed'],
          ['token_ring','isolate=iso_n','test_completed'],
          ['token_ring','isolate=iso_pt','test_completed'],
       ]
@@ -93,11 +93,11 @@ repls = [
 to_cpps = [
     ['../doc/examples',
       [
-         ['leader_election_ring_repl_err','target=repl','isolate=iso_impl','leader_election_ring_repl_err.ivy: line 90: error: relevant axiom asgn.injectivity not enforced'],
-         ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','leader_election_ring_repl.ivy: error: No implementation for action node.get_next'],
-         ['leader_election_ring_udp2_warn','target=repl','isolate=iso_impl','leader_election_ring_udp2_warn.ivy: line 131: warning: action sec.timeout is implicitly exported'],
+         ['leader_election_ring_repl_err','target=repl','isolate=iso_impl','error: relevant axiom asgn.injectivity not enforced'],
+         ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','error: No implementation for action node.get_next'],
+         ['leader_election_ring_udp2_warn','target=repl','isolate=iso_impl','warning: action sec.timeout is implicitly exported'],
          ['paraminit','target=repl','error: cannot compile "foo.bit" because type t is uninterpreted'],
-         ['paraminit2','target=repl','isolate=iso_foo','paraminit2.ivy: line 7: error: initial condition depends on stripped parameter'],
+         ['paraminit2','target=repl','isolate=iso_foo','initial condition depends on stripped parameter'],
       ]
      ]
 ]
@@ -173,9 +173,9 @@ def get_tests(cls,arr):
         for check in checkl:
             all_tests.append(cls(dir,check))
 
-#get_tests(IvyCheck,checks)
-#get_tests(IvyTest,tests)
-#get_tests(IvyRepl,repls)
+get_tests(IvyCheck,checks)
+get_tests(IvyTest,tests)
+get_tests(IvyRepl,repls)
 get_tests(IvyToCpp,to_cpps)
 
 num_failures = 0
