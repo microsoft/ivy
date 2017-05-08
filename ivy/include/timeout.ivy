@@ -11,9 +11,10 @@ module timeout_wrapper = {
 	class sec_timer : public timer {
 	    %`handle_timeout` rcb;
             int ttl;
+	    ivy_class *ivy;
 	  public:
-	    sec_timer(%`handle_timeout` rcb)
-	        : rcb(rcb) {
+	    sec_timer(%`handle_timeout` rcb, ivy_class *ivy)
+	        : rcb(rcb), ivy(ivy) {
                 ttl = 1000;
 	    }
 	    virtual int ms_delay() {
@@ -23,7 +24,9 @@ module timeout_wrapper = {
                 ttl -= elapse;
                 if (ttl <= 0) {
                     ttl = 1000;
+		    ivy->__lock();
 		    rcb();
+		    ivy->__unlock();
                 }
 	    }
 	};
@@ -32,7 +35,7 @@ module timeout_wrapper = {
 	sec_timer *`tmr`;
     >>>
     <<< init
-	install_timer(`tmr` = new sec_timer(`handle_timeout`));
+	install_timer(`tmr` = new sec_timer(`handle_timeout`,this));
     >>>
 
     action handle_timeout = {

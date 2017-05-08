@@ -3,6 +3,9 @@ import os
 import sys
 import imp
 
+import pexpect.popen_spawn
+spawn = pexpect.popen_spawn.PopenSpawn
+
 checks = [
     ['../doc/examples/testing',
       [
@@ -117,16 +120,19 @@ class Test(object):
     def run_expect(self):
         for pc in self.preprocess_commands():
             print 'executing: {}'.format(pc)
-            child = pexpect.spawn(pc)
+            child = spawn(pc)
             child.logfile = sys.stdout
             child.expect(pexpect.EOF)
-            child.close()
-            if child.exitstatus != 0:
+#            child.close()
+#            if child.exitstatus != 0:
+            if child.wait() != 0:
                 print child.before
                 return False
         return self.expect()
     def expect(self):
-        child = pexpect.spawn(self.command())
+        command = self.command()
+        print command
+        child = spawn(command)
 #        child.logfile = sys.stdout
         try:
             child.expect(self.res)
@@ -139,10 +145,14 @@ class Test(object):
         
 class IvyCheck(Test):
     def command(self):
+        import platform
+        if platform.system() == 'Windows':
+            return 'ivy_check {}.ivy'.format(self.name)
         return 'timeout 100 ivy_check {}.ivy'.format(self.name)
 
 class IvyTest(Test):
     def command(self):
+        import platform
         return './'+self.name
 
     def preprocess_commands(self):

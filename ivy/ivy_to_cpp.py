@@ -2155,6 +2155,7 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('        std::cerr << "syntax error in command argument\\n";\n')
                 impl.append('        __ivy_exit(1);\n    }\n')
             cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+            emit_winsock_init(impl)
             if target.get() == "test":
                 impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
             impl.append('    {}_repl ivy{};\n'
@@ -3247,6 +3248,7 @@ public:
         std::vector<ivy_value> args;
         try {
             parse_command(cmd,action,args);
+            ivy.__lock();
 """.replace('classname',classname))
 
 
@@ -3255,6 +3257,7 @@ def emit_repl_boilerplate2(header,impl,classname):
             {
                 std::cerr << "undefined action: " << action << std::endl;
             }
+            ivy.__unlock();
         }
         catch (syntax_error& err) {
             std::cerr << "line " << lineno << ":" << err.pos << ": syntax error" << std::endl;
@@ -3283,11 +3286,32 @@ std::vector<timer *> timers;
 void install_timer(timer *r){
     timers.push_back(r);
 }
+
+#ifdef _WIN32
+DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
+{
+    reader *cr = (reader *) lpParam;
+    while (true)
+        cr->read();
+    return 0;
+} 
+
+DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
+{
+    while (true) {
+        int timer_min = 15; // (ms)
+        Sleep(timer_min);
+        for (unsigned i = 0; i < timers.size(); i++)
+            timers[i]->timeout(timer_min);
+    }
+    return 0;
+} 
+#endif 
+
 """.replace('classname',classname))
 
-def emit_repl_boilerplate3(header,impl,classname):
+def emit_winsock_init(impl):
     impl.append("""
-
 #ifdef _WIN32
     // Boilerplate from windows docs
 
@@ -3322,15 +3346,54 @@ def emit_repl_boilerplate3(header,impl,classname):
         }
     }
 #endif
+""")
 
+
+def emit_repl_boilerplate3(header,impl,classname):
+    impl.append("""
 
 
     cmd_reader *cr = new cmd_reader(ivy);
     install_reader(cr);
 
 #ifdef _WIN32
-    // TODO: Windows can't do asynchronous console I/O. This will have to be handled with
-    // threads at some future time. For now, just read from the console unitl EOF.
+    // Windows can't do asynchronous console I/O. Reeaders other than the console
+    // reader are handled with threads. 
+
+    for (unsigned i = 0; i < readers.size() - 1; i++) {
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            ReaderThreadFunction,   // thread function name
+            readers[i],             // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+    }
+
+    // Also create a thread to advance timers
+
+    {
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            TimerThreadFunction,    // thread function name
+            0,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+    }
+
+    // The main thread runs the console reader
+
     while (!cr->eof())
         cr->read();
     return 0;
@@ -3527,16 +3590,34 @@ def emit_repl_boilerplate3test(header,impl,classname):
                 maxfds = fds;
         }
 
+#ifdef _WIN32
+        int timer_min = 15;
+#else
         int timer_min = 1;
+#endif
 
         struct timeval timeout;
         timeout.tv_sec = timer_min/1000;
         timeout.tv_usec = 1000 * (timer_min % 1000);
 
+#ifdef _WIN32
+        int foo;
+        if (readers.size() == 0){  // winsock can't handle empty fdset!
+            Sleep(timer_min);
+            foo = 0;
+        }
+        else
+            foo = select(maxfds+1,&rdfds,0,0,&timeout);
+#else
         int foo = select(maxfds+1,&rdfds,0,0,&timeout);
+#endif
 
         if (foo < 0)
+#ifdef _WIN32
+            {std::cerr << "select failed: " << WSAGetLastError() << std::endl; __ivy_exit(1);}
+#else
             {perror("select failed"); __ivy_exit(1);}
+#endif
         
         if (foo == 0){
             // std::cout << "TIMEOUT\\n";            

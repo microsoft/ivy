@@ -12,9 +12,10 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	    int sock;
 	    int my_id;
 	    %`handle_recv` rcb;
+	    ivy_class *ivy;
 	  public:
-	    udp_reader(int _my_id, %`handle_recv` rcb)
-	        : my_id(_my_id), rcb(rcb) {
+	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy)
+	        : my_id(_my_id), rcb(rcb), ivy(ivy) {
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 		if (sock < 0)
 		    { std::cerr << "cannot create socket\n"; exit(1); }
@@ -57,20 +58,22 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		    std::cout << "BAD PACKET RECEIVED\n";
 		    return;
 		}
+		ivy->__lock();
 		rcb(pkt);
+		ivy->__unlock();
 	    }
 	    virtual void write(int dst, `pkt` pkt) {
 		struct sockaddr_in dstaddr;
 		memset((char *)&dstaddr, 0, sizeof(dstaddr));
 		dstaddr.sin_family = AF_INET;
-		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		dstaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // htonl(INADDR_ANY)
 		dstaddr.sin_port = htons(`port_base`+dst);
 
 		ivy_binary_ser sr;
 	        __ser(sr,pkt);
 		//std::cout << "SENDING\n";
 		if (sendto(sock,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
-		     { std::cerr << "sendto failed\n"; exit(1); }
+		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
 	    }
 	};
     >>>
@@ -78,7 +81,7 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	udp_reader *`rdr`;
     >>>
     <<< init
-	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`));
+	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this));
     >>>
 
     action handle_recv(x:pkt) = {
