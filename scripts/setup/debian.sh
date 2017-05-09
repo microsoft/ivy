@@ -9,7 +9,7 @@ set -x
 # exit on any unobserved failure.
 set -e
 
-APT_PACKAGES="vim-tiny git python python-dev python-pip libgmp-dev graphviz graphviz-dev"
+APT_PACKAGES="vim-tiny git python python-dev python-pip libgmp-dev graphviz graphviz-dev pkg-config"
 
 apt-get update && apt-get -y upgrade
 apt-get -y install $APT_PACKAGES
