@@ -4,7 +4,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 
-# userspace setup script
+# userland setup script
 
 # show what's happening.
 set -x
