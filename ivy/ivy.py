@@ -32,7 +32,7 @@ def usage():
 
 def open_read(fn):
     try:
-        f = open(fn,'r')
+        f = open(fn,'rU')
         return f
     except:
         print "not found: %s" % fn
@@ -67,8 +67,8 @@ def read_params():
 #         e.filename = fn
 #         print repr(e)
 #         sys.exit(1)
-    
-    
+
+
 def source_file(fn,f,**kwargs):
     try:
         with iu.SourceFile(fn):
@@ -108,7 +108,7 @@ def ivy_init():
 
         if ag:
             ag.update_module()
-        else: 
+        else:
             ag = ivy_new()
 
     return ag
