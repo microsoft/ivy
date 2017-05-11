@@ -2,7 +2,10 @@
 {
     "files.exclude": {
         "**/.vagrant": true,
-        "*.pyc":true,
-        "*.egg-info":true
+        "**/.vs": true,
+        "**/*.egg-info": true,
+        "**/*.pyc": true,
+        "**/dist": true,
+        "**/tags": true
     }
 }
