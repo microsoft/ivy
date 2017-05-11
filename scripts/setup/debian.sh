@@ -9,7 +9,7 @@ set -x
 # exit on any unobserved failure.
 set -e
 
-APT_PACKAGES="vim-tiny git pkg-config python python-dev python-pip python-tk libgmp-dev graphviz graphviz-dev tix"
+APT_PACKAGES="pkg-config python python-dev python-pip python-tk libgmp-dev graphviz graphviz-dev tix"
 
 # the following workaround saves us from a long-standing concurrency bug in `apt` that
 # i have observed when using vagrant on windows systems.
@@ -25,7 +25,7 @@ echo "Acquire::BrokenProxy true;" >> $apt_fix_path
 
 # install all of the packages specified at the top of this script.
 apt-get update
-apt-get -y install $APT_PACKAGES
+apt-get -y install vim-tiny x11-apps git $APT_PACKAGES
 
 # let's install security updates and ensure an editor is installed, to be safe.
 apt-get -y install unattended-upgrades
