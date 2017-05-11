@@ -31,7 +31,7 @@ if not (iu.get_numeric_version() <= [1,2]):
 
 else:
 
-    # This is for versio 1.2 and older, where * is used 
+    # This is for versio 1.2 and older, where * is used
     # in "concept space" descriptions, but not terms
 
     precedence = (
@@ -60,7 +60,7 @@ class ParseError(Exception):
                  + ("line {}: ".format(self.lineno) if self.lineno != None else '')
                  + ("token '{}': ".format(self.token) if self.token != None else '')
                  + self.message )
-    
+
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
         msg = 'redefining ' + str(name)
@@ -210,7 +210,7 @@ def p_labeledfmla_fmla(p):
     'labeledfmla : fmla'
     p[0] = LabeledFormula(None,p[1])
     p[0].lineno = p[1].lineno
-    
+
 def p_labeledfmla_label_fmla(p):
     'labeledfmla : LABEL fmla'
     p[0] = LabeledFormula(Atom(p[1][1:-1],[]),p[2])
@@ -241,12 +241,12 @@ def p_modulestart(p):
     'modulestart :'
     stack[-1].is_module=True
     p[0] = None
- 
+
 def p_moduleend(p):
     'moduleend :'
     stack[-1].is_module=False
     p[0] = None
-   
+
 def p_top_module_atom_eq_lcb_top_rcb(p):
     'top : top MODULE modulestart atom EQ LCB top RCB moduleend'
     p[0] = p[1]
@@ -575,7 +575,7 @@ def p_optargs_params(p):
 def p_optreturns(p):
     'optreturns :'
     p[0] = []
-    
+
 def p_optreturns_tsyms(p):
     'optreturns : RETURNS LPAREN lparams RPAREN'
     p[0] = p[3]
@@ -730,7 +730,7 @@ else:
   def p_optimpex_export(p):
       'optimpex : EXPORT'
       p[0] = ExportDecl
-      
+
   def p_optimpex_import(p):
       'optimpex : IMPORT'
       p[0] = ImportDecl
@@ -783,7 +783,7 @@ def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
         df.lineno = atom.lineno
         ivy.declare(ActionDecl(df))
         handle_mixin(kind,mixer,atom,ivy)
-    
+
 if not (iu.get_numeric_version() <= [1,1]):
     def p_top_mixin_callatom_before_callatom(p):
         'top : top MIXIN callatom BEFORE callatom'
@@ -944,7 +944,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
     thing = InterpretDecl(mk_lf(impl))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
-    
+
 def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     'top : top INTERPRET oper ARROW LCB SYMBOL DOTS SYMBOL RCB'
     p[0] = p[1]
@@ -979,7 +979,7 @@ def p_top_nativequote(p):
     defn.lineno = get_lineno(p,2)
     thing = NativeDecl(defn)
     thing.lineno = get_lineno(p,2)
-    p[0].declare(thing)   
+    p[0].declare(thing)
 
 def p_loc(p):
     'loc : '
@@ -1022,7 +1022,7 @@ def p_termtuple_lp_term_comma_terms_rp(p):
     'termtuple : LPAREN term COMMA terms RPAREN'
     p[0] = Tuple(*([p[3]]+p[5]))
     p[0].lineno = get_lineno(p,1)
-    
+
 def p_action_term_assign_fmla(p):
     'action : term ASSIGN fmla'
     p[0] = AssignAction(p[1],p[3])
@@ -1082,7 +1082,7 @@ else:
         fmla = subst_prefix_atoms_ast(p[3],subst,None,None)
         p[0] = Some(*(lsyms+[fmla]))
         p[0].lineno = get_lineno(p,1)
-    
+
     def p_somefmla_some_bounds_fmla_minimizing_term(p):
         'somefmla : SOME bounds fmla MINIMIZING term'
         lsyms = [s.prefix('loc:') for s in p[2]]
@@ -1293,12 +1293,12 @@ def p_defnlhs_symbol(p):
     'defnlhs : SYMBOL'
     p[0] = Atom(p[1],[])
     p[0].lineno = get_lineno(p,1)
-    
+
 def p_defnlhs_symbol_lparen_defargs_rparen(p):
     'defnlhs : SYMBOL LPAREN defargs RPAREN'
     p[0] = Atom(p[1],p[3])
     p[0].lineno = get_lineno(p,1)
-    
+
 def p_defargs_defarg(p):
     'defargs : defarg'
     p[0] = [p[1]]
@@ -1404,11 +1404,11 @@ def p_expr_lparen_expr_rparen(p):
 def p_expr_prod(p):
     'expr : prod'
     p[0] = ProductSpace(p[1])
-    
+
 def p_expr_sum(p):
     'expr : sum'
     p[0] = SumSpace(p[1])
-    
+
 def p_prod_expr_expr(p):
     'prod : expr TIMES expr'
     p[0] = [p[1],p[3]]
@@ -1454,7 +1454,7 @@ def p_state_expr_state_expr_or_state_expr(p):
 def p_state_expr_lcb_requires_modifies_ensures_rcb(p):
     'state_expr : LCB requires modifies ensures RCB'
     p[0] = RME(p[2],p[3],p[4])
-    
+
 def p_state_expr_entry(p):
     'state_expr : ENTRY'
     p[0] = RME(And(),[],And())
@@ -1488,7 +1488,7 @@ def parse(s,nested=False):
     if error_list:
         raise iu.ErrorList(error_list)
     return res
-    
+
 def to_formula(s):
     return formula_parser.parse(s)
 
@@ -1499,7 +1499,7 @@ if __name__ == '__main__':
 #       except EOFError:
 #           break
 #       if not s: continue
-       s = open('test.ivy','r').read()
+       s = open('test.ivy','rU').read()
        try:
            result = parse(s)
            print result
@@ -1514,4 +1514,4 @@ def clauses_to_concept(name,clauses):
     ss = ps[0] if len(ps) == 1 else SumSpace(ps)
     return (Atom(name,vars),ss)
 
-    
+

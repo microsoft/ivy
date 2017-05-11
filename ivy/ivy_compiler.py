@@ -46,7 +46,7 @@ def thing(self):
     with ASTContext(self):
         return self.cmpl()
 
-# "roots" are AST objects that bind variables, such as assignment, assume, etc. 
+# "roots" are AST objects that bind variables, such as assignment, assume, etc.
 # some roots have symbols as args instead of terms (e.g., field assign)
 def compile_root_args(self):
     return [(find_symbol(a) if isinstance(a,str) else a.compile()) for a in self.args]
@@ -138,7 +138,7 @@ def compile_app(self):
         expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
         return res()
     return (ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep))(*args)
-    
+
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))
 
@@ -170,13 +170,13 @@ ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,sortify_with_i
 def UpdatePattern_cmpl(self):
     with ivy_logic.sig.copy():
         return ivy_ast.AST.cmpl(self)
-        
+
 UpdatePattern.cmpl = UpdatePattern_cmpl
 
 def ConstantDecl_cmpl(self):
     return self.clone([compile_const(v,ivy_logic.sig) for v in self.args])
 
-ConstantDecl.cmpl =  ConstantDecl_cmpl 
+ConstantDecl.cmpl =  ConstantDecl_cmpl
 
 def Old_cmpl(self):
     foo = self.args[0].compile()
@@ -189,7 +189,7 @@ def get_arg_sorts(sig,args,term=None):
         args = sortify_with_inference(ivy_ast.AST(*(args+[term]))).args[0:-1]
         return [arg.get_sort() for arg in args]
     return [arg.compile().get_sort() for arg in args]
-                
+
 def get_function_sort(sig,args,rng,term=None):
     return ivy_logic.FunctionSort(*(get_arg_sorts(sig,args,term)+[rng])) if args else rng
 
@@ -215,7 +215,7 @@ def compile_const(v,sig):
     with ASTContext(v):
       rng = cmpl_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
       return add_symbol(v.rep,get_function_sort(sig,v.args,rng))
-    
+
 
 def compile_local(self):
     sig = ivy_logic.sig.copy()
@@ -358,7 +358,7 @@ def compile_action_def(a,sig):
     with sig:
         with ASTContext(a.args[1]):
             params = a.args[0].args
-            pformals = [v.to_const('prm:') for v in params] 
+            pformals = [v.to_const('prm:') for v in params]
             if params:
                 subst = dict((x.rep,y) for x,y in zip(params,pformals))
                 a = ivy_ast.substitute_ast(a,subst)
@@ -409,9 +409,9 @@ def compile_defn(df):
                 eqn = sortify_with_inference(eqn)
                 df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
             return df
-    
-    
-def resolve_alias(name): 
+
+
+def resolve_alias(name):
     if name in im.module.aliases:
         return im.module.aliases[name]
     parts = name.rsplit(iu.ivy_compose_character,1)
@@ -551,7 +551,7 @@ class IvyDomainSetup(IvyDeclInterp):
                 interp[lhs] = rhs
                 return
         raise IvyUndefined(thing,lhs)
-            
+
 class IvyConjectureSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
@@ -599,19 +599,19 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.delegates.append(exp)
     def native(self,native_def):
         self.mod.natives.append(compile_native_def(native_def))
-        
-        
+
+
 def ivy_new(filename = None):
 #    d = Interp()
     if filename:
-        f = open(filename,'r')
+        f = open(filename,'rU')
         if not f:
             raise IvyError(None,"not found: %s" % filename)
         ivy_load_file(f)
     ag = AnalysisGraph()
     return ag
 
-isolate = iu.Parameter("isolate")    
+isolate = iu.Parameter("isolate")
 
 # collect actions in case of forward reference
 def collect_actions(decls):
@@ -699,7 +699,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
             if not hasattr(action,'lineno'):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
-    
+
             # print "actions:"
             # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
@@ -732,7 +732,7 @@ def read_module(f,nested=False):
         iu.set_string_version(version)
         if version != old_version:
             if nested:
-                raise IvyError(None,'#lang ivy{} expected'.format(old_version)) 
+                raise IvyError(None,'#lang ivy{} expected'.format(old_version))
 #            print "version: {}, old_version: {}".format(version,old_version)
             clear_rules('ivy_logic_parser')
             clear_rules('ivy_parser')
@@ -752,12 +752,12 @@ def read_module(f,nested=False):
 
 def import_module(name):
     fname = name + '.ivy'
-    try: 
-        f = open(fname,'r')
+    try:
+        f = open(fname,'rU')
     except Exception:
         fname = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
         try:
-            f = open(fname,'r')
+            f = open(fname,'rU')
         except Exception:
             raise IvyError(None,"module {} not found in current directory or module path".format(name))
     with iu.SourceFile(fname):
