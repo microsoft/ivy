@@ -9,7 +9,7 @@ set -x
 # exit on any unobserved failure.
 set -e
 
-APT_PACKAGES="vim-tiny git python python-dev python-pip libgmp-dev graphviz graphviz-dev pkg-config"
+APT_PACKAGES="vim-tiny git pkg-config python python-dev python-pip python-tk libgmp-dev graphviz graphviz-dev tix"
 
 # the following workaround saves us from a long-standing concurrency bug in `apt` that
 # i have observed when using vagrant on windows systems.

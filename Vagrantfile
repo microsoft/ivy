@@ -37,7 +37,7 @@ Vagrant.configure("2") do |config|
       override.vm.box = "tknerr/baseimage-ubuntu-16.04"
    end
 
-   config.vm.network "forwarded_port", guest: 8888, host: 8888, auto_correct: true
+   config.ssh.forward_x11 = true
 
    config.vm.provision "shell", inline: <<-SHELL
       /bin/sh /vagrant/scripts/setup/vagrant.sh
