@@ -1,6 +1,6 @@
 #lang ivy1.5
 
-# As an exercize, let's try elaborating the pingpong example a bit.
+# As an exercise, let's try elaborating the pingpong example a bit.
 #
 # We'll add a numeric parameter to actions `ping` and `pong`.
 # We want to specify the the paramater of `ping` is always even
@@ -30,7 +30,7 @@ object spec = {
 	side := right
     }
 
-    # When `pong` occurs, the ball must be on the rightr. It moves to the left.
+    # When `pong` occurs, the ball must be on the right. It moves to the left.
 
     before intf.pong {
 	assert side = right & ...;
@@ -42,9 +42,9 @@ object spec = {
 # values start at zero and increment with each `ping` or `pong`.
 
 object left_player = {
-    individual ball : bool
+    var ball : bool
     init ball
-    ...
+    ...  # hint: remember something so the value increments
 
     action hit = {
 	if ball {
@@ -62,7 +62,7 @@ object left_player = {
 
 
 object right_player = {
-    individual ball : bool
+    var ball : bool
     init ~ball
     ...
     

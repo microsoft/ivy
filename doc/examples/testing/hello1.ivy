@@ -54,7 +54,7 @@ interpret t -> bv[4]
 # interpret the types differently for different purposes.
 
 # One way to run this program is to generate a read-eval-print loop (a
-# REPL). In this case, the user at a terminal plays the rols of the
+# REPL). In this case, the user at a terminal plays the role of the
 # environment. We build a REPL with a command line this:
 #
 #     $ ivy_to_cpp target=repl build=true hello1.ivy

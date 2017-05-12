@@ -20,7 +20,7 @@
 # time between its begin and end events. This moment is called the
 # *commit point* of the transaction.
 #
-# To illustrate how we specify and verify a linearziable concurrent
+# To illustrate how we specify and verify a linearizable concurrent
 # system, we will use a simple server that acts as a key/value store
 # for multiple clients. The transactions implemented by the store are
 # `read(K)` and `write(K,V)`, where `K` is a key and `V` is a value.
@@ -383,6 +383,6 @@ interpret client_id -> bv[1]
 #
 # Look at the trace file `file.iev` to see the test generator, server
 # and reference object interact.  Try putting some errors in this
-# example and see if they produce assertions failures. If not, why
+# example and see if they produce assertions failure. If not, why
 # not?
 # 

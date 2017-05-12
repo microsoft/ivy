@@ -253,7 +253,8 @@ trusted isolate iso_p = proto with serv,node,trans
 trusted isolate iso_t = trans with net,node
 trusted isolate iso_n = net with node
 
-trusted isolate iso_pt = proto with serv,trans.impl,net.impl,node
+#trusted isolate iso_pt = proto with serv,trans.impl,net.impl,node,trans.seq_num,trans.impl.timer
+trusted isolate iso_pt = proto,trans,net,node,trans.impl.timer with serv
 
 extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num
 

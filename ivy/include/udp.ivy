@@ -29,7 +29,13 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		    { std::cerr << "bind failed\n"; exit(1); }
 
 	    }
-
+	    virtual ~udp_reader() {
+#ifdef _WIN32
+                closesocket(sock);
+#else
+	        close(sock);
+#endif
+	    }
 	    virtual int fdes() {
 		return sock;
 	    }

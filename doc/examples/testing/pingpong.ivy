@@ -51,7 +51,7 @@ object spec = {
 # `pong`, it records the fact that it now has the ball again.
 
 object left_player = {
-    individual ball : bool
+    var ball : bool
     init ball
 
     action hit = {
@@ -71,7 +71,7 @@ object left_player = {
 # `pong`.
 
 object right_player = {
-    individual ball : bool
+    var ball : bool
     init ~ball
 
     action hit = {

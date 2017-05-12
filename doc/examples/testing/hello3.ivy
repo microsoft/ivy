@@ -2,7 +2,7 @@
 
 # Now let's try to specify something a little more interesting about
 # the "hello world" program. We want the value of the `world` response
-# to be beigger thatn the value of the `hello` it responds to.
+# to be bigger than the value of the `hello` it responds to.
 
 # We'll define the same interface that we had before:
 
@@ -68,13 +68,13 @@ interpret t -> bv[4]
 #     < world(2)
 #     > hello(15)
 #     < world(0)
-#     assertion_failed("hello3.ivy: line 41: ")
-#     hello3.ivy: line 41: : assertion failed
+#     assertion_failed("hello3.ivy(41)")
+#     hello3.ivy(41): error: assertion failed
 #
 # Yikes! It looks like we got an overflow. Since we are using 4-bit
 # numbers, 15 + 1 = 0. So our implementation fails the specification.
-# Notice that if we had used, say 32-bit integers as our data type,
-# we probably wouldn'[t have found this error, since the chance of randomly
+# Notice that if we had used, say 32-bit, integers as our data type,
+# we probably wouldn't have found this error, since the chance of randomly
 # drawing 2^32 - 1 would be too samll. This is one good reason to set limits
 # low in testing. It becomes more likely that we will reach them.
 #

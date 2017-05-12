@@ -225,7 +225,10 @@ class LocationTuple(tuple):
 def lineno_str(ast):
     if not hasattr(ast,'lineno'):
         return ''
-    return str(ast.lineno)
+    r = str(ast.lineno)
+    if r.endswith(': '):
+        r = r[:-2]
+    return r
 
 class IvyError(Exception):
     def __init__(self,ast,msg):

@@ -1,8 +1,8 @@
 #lang ivy1.6
 
 # Now let's changte our spec so that we require the environment not to
-# say `hello` with the maximum value. That is, we want this to be a *guarantee* of the environment,
-# but an *assumption* of our program.
+# say `hello` with the maximum value. That is, we want this to be a
+# *guarantee* of the environment, but an *assumption* of our program.
 
 # We'll define the same interface that we had before:
 
@@ -17,8 +17,9 @@ import world
 
 # Now we add an assertion that executes before the implementation of
 # `hello`, stating that `val` is not max. Notice we state this in a
-# way that will for any integer type, even an unbounded type with no
-# max. That way our spec will work for various interpretations of `t`.
+# way that will work for any integer type, even an unbounded type with
+# no max. That way our spec will work for various interpretations of
+# `t`.
 
 object spec = {
 

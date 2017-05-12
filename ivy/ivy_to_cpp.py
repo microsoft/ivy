@@ -1362,6 +1362,7 @@ class reader {
 public:
     virtual int fdes() = 0;
     virtual void read() = 0;
+    virtual ~reader() {}
 };
 void install_reader(reader *);
 class timer {
@@ -3011,7 +3012,7 @@ int ask_ret(int bound) {
     virtual void ivy_assert(bool truth,const char *msg){
         if (!truth) {
             __ivy_out << "assertion_failed(\\"" << msg << "\\")" << std::endl;
-            std::cerr << msg << ": assertion failed\\n";
+            std::cerr << msg << ": error: assertion failed\\n";
             CLOSE_TRACE
             __ivy_exit(1);
         }
@@ -3019,7 +3020,7 @@ int ask_ret(int bound) {
     virtual void ivy_assume(bool truth,const char *msg){
         if (!truth) {
             __ivy_out << "assumption_failed(\\"" << msg << "\\")" << std::endl;
-            std::cerr << msg << ": assumption failed\\n";
+            std::cerr << msg << ": error: assumption failed\\n";
             CLOSE_TRACE
             __ivy_exit(1);
         }
@@ -3643,6 +3644,13 @@ def emit_repl_boilerplate3test(header,impl,classname):
                 Sleep(final_ms);  // HACK: wait for late responses
 #endif
     __ivy_out << "test_completed" << std::endl;
+    for (unsigned i = 0; i < readers.size(); i++)
+        delete readers[i];
+    readers.clear();
+    for (unsigned i = 0; i < timers.size(); i++)
+        delete timers[i];
+    timers.clear();
+
 
 """.replace('classname',classname))
 
@@ -4153,9 +4161,10 @@ def find_vs():
     except:
         drive = 'C'
     for v in range(15,9,-1):
-        dir = '{}:\\Program Files (x86)\\Microsoft Visual Studio {}.0'.format(drive,v)
-        if os.path.exists(dir):
-            return dir
+        for w in ['',' (x86)']:
+            dir = '{}:\\Program Files{}\\Microsoft Visual Studio {}.0'.format(drive,w,v)
+            if os.path.exists(dir):
+                return dir
     raise iu.IvyError(None,'Cannot find a suitable version of Visual Studio (require 10.0-15.0)')
 
 if __name__ == "__main__":
