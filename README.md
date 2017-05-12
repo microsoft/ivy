@@ -28,7 +28,7 @@ On Windows, [Virtualbox](http://virtualbox.org) is currently the recommended con
 4. Type `vagrant plugin install vagrant-vbguest` to install the [`vagrant-vbguest`](https://github.com/dotless-de/vagrant-vbguest) plugin (optional but recommended).
 5. Download and install an X11 server for Windows (e.g. [Xming](http://www.straightrunning.com/XmingNotes/)).
 6. Type `vagrant up` [from an administrator console](https://github.com/mitchellh/vagrant/issues/3854) to prepare a new development environment. This is likely to take some time to complete the first time it is done, because [z3](https://github.com/Z3Prover/z3) must be compiled from its sources.
-7. Launch your X11 server and type `vagrant ssh` to get access to IVy from the console.
+7. Launch your X11 server and type `vagrant ssh` in a console window to get access to IVy from a shell within the container.
 
 #### Linux
 
