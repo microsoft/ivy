@@ -20,7 +20,7 @@ IVy users and contributors may also deploy IVy within an container using Vagrant
 
 #### Windows
 
-On Windows, Virtualbox is currently the recommended container provider.
+On Windows, [Virtualbox](http://virtualbox.org) is currently the recommended container provider.
 
 1. Clone the `IVy` repository (e.g. `git clone https://github.com/Microsoft/ivy.git`).
 2. Download and install [Vagrant](http://vagrantup.com).
@@ -46,9 +46,7 @@ Linux users also have the option of directly executing the provisioning scripts 
 #### MacOS
 
 - MacOS installation instructions should be similar to the Windows instructions, with the exception that [an X11 server for MacOS](https://www.xquartz.org/) should be used.
-- Docker support for may function in Linux but this remains unconfirmed at the time of this writing.
-
-
+- Docker support for may function in MacOS but this remains unconfirmed at the time of this writing.
 
 ## Further Reading
 
