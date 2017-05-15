@@ -110,7 +110,8 @@ def varname(name):
 def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
-    code.append(varname(v) + ' = ('+ctype(v.sort)+')___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
+    ct = 'int' if isinstance(v,str) else ctype(v.sort)
+    code.append(varname(v) + ' = ('+ct+')___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def is_native_sym(sym):
     return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    

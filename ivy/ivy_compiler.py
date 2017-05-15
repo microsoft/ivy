@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, has_code
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, ChoiceAction, has_code
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -684,6 +684,13 @@ class IvyDomainSetup(IvyDeclInterp):
                 interp[lhs] = rhs
                 return
         raise IvyUndefined(thing,lhs)
+    def scenario(self,scen):
+        for (s,lineno) in scen.defines():
+            with ASTContext(scen):
+                sym = add_symbol(s,ivy_logic.RelationSort([]))
+                self.domain.all_relations.append((sym,0))
+                self.domain.relations[sym] = 0
+
             
 class IvyConjectureSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -745,9 +752,60 @@ class IvyARGSetup(IvyDeclInterp):
         if aname not in defined_attributes:
             raise IvyError(a,'"{}" does not name a defined attribute'.format(aname))
         self.mod.attributes[lhs.rep] = rhs
-            
-            
+    def scenario(self,scen):
+        init_tokens = set(p.rep for p in scen.args[0].args)
+        transs_by_action = defaultdict(list)
+        for tr in scen.args[1:]:
+            transs_by_action[tr.args[2].args[1].rep].append(tr)
+        for (place_name,lineno) in scen.defines():
+            sym = find_symbol(place_name)
+            iname = place_name + '[init]'
+            iact = AssignAction(sym,ivy_logic.And() if (place_name in init_tokens) else ivy_logic.Or())
+            iact.formal_params = []
+            iact.formal_returns = []
+            iact.lineno = scen.lineno
+            self.mod.actions[iname] = iact
+            self.mixin(ivy_ast.MixinAfterDef(ivy_ast.Atom(iname),ivy_ast.Atom('init')))
+        for actname,trs in transs_by_action.iteritems():
+            choices = []
+            params = None
+            for tr in trs:
+                scmix = tr.args[2]
+                df = ActionDef(scmix.args[0],scmix.args[4],scmix.args[2],scmix.args[3])
+                body = compile_action_def(df,self.mod.sig)
+                seq = []
+                for p in tr.args[0].args:
+                    seq.append(AssumeAction(find_symbol(p.rep)))
+                for p in tr.args[0].args:
+                    seq.append(AssignAction(find_symbol(p.rep),ivy_logic.Or()))
+                for p in tr.args[1].args:
+                    seq.append(AssignAction(find_symbol(p.rep),ivy_logic.And()))
+                seq.append(body)
+                seq = Sequence(*seq)
+                if params is None:
+                    params = df.formal_params
+                    returns = df.formal_returns
+                    mixer = tr.args[2].args[0]
+                    mixee = tr.args[2].args[1]
+                else:
+                    aparams = df.formal_params + df.formal_returns
+                    subst = dict(zip(aparams,params+returns))
+                    seq = substitute_constants_ast(seq,subst)
+                seq.lineno = tr.lineno
+                choices.append(seq)
+            choice = BalancedChoice(choices)
+            choice.lineno = choices[0].lineno
+            choice.formal_params = params
+            choice.formal_returns = returns
+            self.mod.actions[mixer.rep] = choice
+            self.mixin(ivy_ast.MixinBeforeDef(mixer,mixee))
         
+def BalancedChoice(choices):
+    if len(choices) == 1:
+        return choices[0]
+    return ChoiceAction(BalancedChoice(choices[0:len(choices)/2]),
+                        BalancedChoice(choices[len(choices)/2:]))
+
 def ivy_new(filename = None):
 #    d = Interp()
     if filename:

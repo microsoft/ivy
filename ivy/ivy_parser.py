@@ -1029,6 +1029,49 @@ def p_top_variant_symbol_of_symbol_eq_sort(p):
     vdfn = VariantDef(scnst,Atom(p[5]))
     p[0].declare(VariantDecl(vdfn))
 
+def p_places_symbol(p):
+    'places : SYMBOL'
+    p[0] = [Atom(p[1])]
+    p[0][0].lineno = get_lineno(p,1)
+
+def p_places_places_comma_symbol(p):
+    'places : places COMMA SYMBOL'
+    p[0] = p[1]
+    p[0].append(Atom(p[3]))
+    p[0][-1].lineno = get_lineno(p,3)
+    
+def p_sceninit_arrow_places(p):
+    'sceninit : ARROW places'
+    p[0] = PlaceList(*p[2])
+    p[0].lineno = get_lineno(p,1)
+
+def p_scenariomixin_before_callatom_lcb_action_rcb(p):
+    'scenariomixin : BEFORE atype optargs optreturns sequence'
+    atom = Atom(p[2])
+    atom.lineno = get_lineno(p,2)
+    mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[before]')
+    optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
+    p[0] = ScenarioBeforeMixin(mixer,atom,optargs,optreturns,p[5])
+    p[0].lineno = get_lineno(p,1)
+
+def p_scentranss(p):
+    'scentranss : '
+    p[0] = []
+
+def p_scentranss_scentranss_places_arrow_places_colon_scenariomixin(p):
+    'scentranss : scentranss places ARROW places COLON scenariomixin'
+    p[0] = p[1]
+    tr = ScenarioTransition(PlaceList(*p[2]),PlaceList(*p[4]),p[6])
+    tr.lineno = get_lineno(p,5)
+    p[0].append(tr)
+    
+    
+def p_top_scenario_lcb_sceninit_semi_scentranss_rcb(p):
+    'top : top SCENARIO LCB sceninit SEMI scentranss RCB'
+    p[0] = p[1]
+    sdef = ScenarioDef(*([p[4]] + p[6]))
+    sdef.lineno = get_lineno(p,2)
+    p[0].declare(ScenarioDecl(sdef))
 
 def p_loc(p):
     'loc : '
@@ -1588,8 +1631,8 @@ def p_error(token):
 # Build the parsers
 import os
 tabdir = os.path.dirname(os.path.abspath(__file__))
-parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir,debug=None)
-#parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',outputdir=tabdir,debug=None)
+#parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir,debug=None)
+parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',outputdir=tabdir,debug=None)
 #parser = yacc.yacc(start='top',tabmodule='ivy_parsetab')
 # formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 

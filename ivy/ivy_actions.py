@@ -674,7 +674,7 @@ class ChoiceAction(Action):
     def int_update(self,domain,pvars):
         if determinize and len(self.args) == 2:
             cond = bool_const('___branch:' + str(self.unique_id))
-            ite = IfAction(cond,self.args[0],self.args[1])
+            ite = IfAction(Not(cond),self.args[0],self.args[1])
             return ite.int_update(domain,pvars)
         result = [], false_clauses(), false_clauses()
         for a in self.args:

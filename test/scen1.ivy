@@ -1,0 +1,23 @@
+#lang ivy1.6
+
+action a = {
+}
+
+var q : bool
+
+after init {
+    q := false;
+}
+
+export a
+
+scenario {
+    -> s0;
+    s0 -> s1 : before a {
+	q := true
+    }
+    s1 -> s0 : before a {
+	q := false
+    }
+}
+

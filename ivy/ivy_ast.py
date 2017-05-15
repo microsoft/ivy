@@ -874,6 +874,46 @@ class StateDef(Definition):
     def __repr__(self):
         return self.args[0].relname + ' = ' + repr(self.args[1])
 
+class ScenarioDecl(Decl):
+    def name(self):
+        return 'scenario'
+    def defines(self):
+        res = []
+        for a in self.args:
+            res.extend(a.defines())
+        return res
+
+class PlaceList(AST):
+    def __repr__(self):
+        return ','.join(repr(a) for a in self.args)
+    
+class ScenarioBeforeMixin(AST):
+    def __repr__(self):
+        inps = ('(' + ','.join(__repr__(a) for a in self.args[2]) + ')') if self.args[2] else ''
+        outs = (' returns(' + ','.join(__repr__(a) for a in self.args[3]) + ')') if self.args[3] else ''
+        return 'before ' + __repr__(self.args[1]) + inps + outs + __repr(self.args[5])
+
+class ScenarioTransition(AST):
+    def __repr__(self):
+        return repr(self.args[0]) + '->' + repr(self.args[1]) + ' : ' + repr(self.args[2])
+
+class ScenarioDef(AST):
+    def __repr__(self):
+        return 'scenario {->' + repr(self.args[0]) + ';' + ''.join(repr(a) for a in self.args[1:]) + '}'
+    def defines(self):
+        done = set()
+        places = list(self.args[0].args)
+        for tr in self.args[1:]:
+            places.extend(tr.args[0].args)
+            places.extend(tr.args[1].args)
+        res = []
+        for pl in places:
+            if pl.rep not in done:
+                res.append((pl.rep,lineno(pl)))
+                done.add(pl.rep)
+        return res
+
+
 # predefined things
 
 universe = 'S'
