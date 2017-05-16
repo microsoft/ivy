@@ -41,12 +41,12 @@ On Linux, [Docker](http://docker.com) is also available as a container provider,
 5. Type `vagrant up --provider=docker`.
 6. Type `vagrant ssh` to get access to IVy from a shell.
 
-Linux users also have the option of directly executing the provisioning scripts in the `scripts/setup` directory, bypassing a container. Those interested should take note that the scripts have only been tested with Ubuntu and Debian Vagrant guest images.
+Linux users also have the option of directly executing the provisioning scripts in the `scripts/setup` directory, bypassing any inconvenience a container might impose. The scripts are divided in such a way as to facilitate this. Those interested should take note, however, that the scripts have only been tested with Ubuntu and Debian Vagrant guest images so far.
 
 #### MacOS
 
 - MacOS installation instructions should be similar to the Windows instructions, with the exception that [an X11 server for MacOS](https://www.xquartz.org/) should be used.
-- Docker support for may function in MacOS but this remains unconfirmed at the time of this writing.
+- Docker support may work in MacOS as it does in Linux with little-or-no modification but whether this is indeed the case remains unconfirmed at the time of this writing.
 
 ## Further Reading
 
