@@ -1,0 +1,30 @@
+#lang ivy1.6
+
+action a(x:bool) = {
+  call b
+}
+
+action b = {
+}
+
+var q : bool
+
+after init {
+    q := false;
+}
+
+export a
+import b
+
+object scen = {
+    scenario {
+	-> s0;
+	s0 -> s1 : before a(x:bool) {
+	    q := x
+	}
+	s1 -> s0 : after b {
+	    q := false
+	}
+    }
+}
+

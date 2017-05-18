@@ -889,9 +889,7 @@ class PlaceList(AST):
     
 class ScenarioMixin(AST):
     def __repr__(self):
-        inps = ('(' + ','.join(__repr__(a) for a in self.args[2]) + ')') if self.args[2] else ''
-        outs = (' returns(' + ','.join(__repr__(a) for a in self.args[3]) + ')') if self.args[3] else ''
-        return self.kind() + ' ' + __repr__(self.args[1]) + inps + outs + __repr(self.args[5])
+        return self.kind() + ' ' +repr(self.args[1])
 
 class ScenarioBeforeMixin(ScenarioMixin):
     def kind(self):
@@ -908,7 +906,7 @@ class ScenarioTransition(AST):
 class ScenarioDef(AST):
     def __repr__(self):
         return 'scenario {->' + repr(self.args[0]) + ';' + ''.join(repr(a) for a in self.args[1:]) + '}'
-    def defines(self):
+    def places(self):
         done = set()
         places = list(self.args[0].args)
         for tr in self.args[1:]:
@@ -920,7 +918,17 @@ class ScenarioDef(AST):
                 res.append((pl.rep,lineno(pl)))
                 done.add(pl.rep)
         return res
-
+    def defines(self):
+        res = []
+        done = set()
+        for tr in self.args[1:]:
+            mixer = tr.args[2].args[0].rep
+            if mixer not in done:
+                done.add(mixer)
+                res.append((mixer,tr.args[2].args[0].lineno))
+        res.extend(self.places())
+        return res
+    
 
 # predefined things
 
@@ -1147,6 +1155,8 @@ def variables_ast(ast):
         if not hasattr(ast,'args'):
             print ast
             print type(ast)
+        if any(isinstance(c,list) for c in ast.args):
+            print "foo: " + repr(ast)
         for arg in ast.args:
             for x in variables_ast(arg):
                 yield x

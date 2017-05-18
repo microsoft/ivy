@@ -685,7 +685,7 @@ class IvyDomainSetup(IvyDeclInterp):
                 return
         raise IvyUndefined(thing,lhs)
     def scenario(self,scen):
-        for (s,lineno) in scen.defines():
+        for (s,lineno) in scen.places():
             with ASTContext(scen):
                 sym = add_symbol(s,ivy_logic.RelationSort([]))
                 self.domain.all_relations.append((sym,0))
@@ -756,8 +756,8 @@ class IvyARGSetup(IvyDeclInterp):
         init_tokens = set(p.rep for p in scen.args[0].args)
         transs_by_action = defaultdict(list)
         for tr in scen.args[1:]:
-            transs_by_action[tr.args[2].args[1].rep].append(tr)
-        for (place_name,lineno) in scen.defines():
+            transs_by_action[tr.args[2].args[1].args[0].rep].append(tr)
+        for (place_name,lineno) in scen.places():
             sym = find_symbol(place_name)
             iname = place_name + '[init]'
             iact = AssignAction(sym,ivy_logic.And() if (place_name in init_tokens) else ivy_logic.Or())
@@ -773,7 +773,7 @@ class IvyARGSetup(IvyDeclInterp):
             for tr in trs:
                 scmix = tr.args[2]
                 is_after = isinstance(scmix,ivy_ast.ScenarioAfterMixin)
-                df = ActionDef(scmix.args[0],scmix.args[4],scmix.args[2],scmix.args[3])
+                df = scmix.args[1]
                 body = compile_action_def(df,self.mod.sig)
                 seq = []
                 if not is_after:
@@ -794,10 +794,10 @@ class IvyARGSetup(IvyDeclInterp):
                     seq = Sequence(*seq)
                     seq = IfAction(And(*[find_symbol(p.rep) for p in tr.args[0].args]),seq)
                 if params is None:
-                    params = df.formal_params
-                    returns = df.formal_returns
-                    mixer = tr.args[2].args[0]
-                    mixee = tr.args[2].args[1]
+                    params = body.formal_params
+                    returns = body.formal_returns
+                    mixer = scmix.args[0]
+                    mixee = scmix.args[1].args[0]
                 else:
                     aparams = df.formal_params + df.formal_returns
                     subst = dict(zip(aparams,params+returns))

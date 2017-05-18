@@ -1069,6 +1069,9 @@ def apply_mixin(decl,action1,action2):
     if len(action1.formal_returns) != len(action2.formal_returns):
         raise IvyError(decl,"mixin {} has wrong number of output parameters for {}".format(name1,name2))
     formals1,formals2 = (a.formal_params + a.formal_returns for a in (action1,action2)) 
+    iu.dbg('[type(x) for x in formals1]')
+    iu.dbg('formals1')
+    iu.dbg('formals2')
     for x,y in zip(formals1,formals2):
         if x.sort != y.sort:
             raise IvyError(decl,"parameter {} of mixin {} has wrong sort".format(str(x),name1))

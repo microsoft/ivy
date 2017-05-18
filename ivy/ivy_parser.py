@@ -1051,7 +1051,8 @@ def p_scenariomixin_before_callatom_lcb_action_rcb(p):
     atom.lineno = get_lineno(p,2)
     mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[before]')
     optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
-    p[0] = ScenarioBeforeMixin(mixer,atom,optargs,optreturns,p[5])
+    df = ActionDef(atom,p[5],formals=optargs,returns=optreturns)
+    p[0] = ScenarioBeforeMixin(mixer,df)
     p[0].lineno = get_lineno(p,1)
 
 def p_scenariomixin_after_callatom_lcb_action_rcb(p):
@@ -1060,7 +1061,9 @@ def p_scenariomixin_after_callatom_lcb_action_rcb(p):
     atom.lineno = get_lineno(p,2)
     mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[after]')
     optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
-    p[0] = ScenarioAfterMixin(mixer,atom,optargs,optreturns,p[5])
+    optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
+    df = ActionDef(atom,p[5],formals=optargs,returns=optreturns)
+    p[0] = ScenarioAfterMixin(mixer,df)
     p[0].lineno = get_lineno(p,1)
 
 def p_scentranss(p):
