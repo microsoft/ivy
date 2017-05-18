@@ -29,7 +29,7 @@ def usage():
 
 def open_read(fn):
     try:
-        f = open(fn,'r')
+        f = open(fn,'rU')
         return f
     except:
         print "not found: %s" % fn

@@ -38,7 +38,7 @@ if len(sys.argv) != 3:
     exit(1)
 
 if sys.argv[1].endswith('.a2g'):
-    f = open(sys.argv[1],'r')
+    f = open(sys.argv[1],'rU')
     if not f:
         print "not found: %s" % sys.argv[1]
         exit(1)

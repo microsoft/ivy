@@ -1,0 +1,11 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+    "files.exclude": {
+        "**/.vagrant": true,
+        "**/.vs": true,
+        "**/*.egg-info": true,
+        "**/*.pyc": true,
+        "**/dist": true,
+        "**/tags": true
+    }
+}

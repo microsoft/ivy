@@ -1660,7 +1660,7 @@ if __name__ == '__main__':
 #       except EOFError:
 #           break
 #       if not s: continue
-       s = open('test.ivy','r').read()
+       s = open('test.ivy','rU').read()
        try:
            result = parse(s)
            print result

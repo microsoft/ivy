@@ -60,7 +60,7 @@ class FileBrowser(Frame):
     def set(self,filename,lineno):
         print "set: {} {}".format(filename,lineno)
         if filename != self.filename:
-            f = open(filename,'r')
+            f = open(filename,'rU')
             if not f:
                 raise IvyError(None,"file {} not found".format(filename))
             self.filename = filename

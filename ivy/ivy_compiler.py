@@ -809,7 +809,7 @@ def BalancedChoice(choices):
 def ivy_new(filename = None):
 #    d = Interp()
     if filename:
-        f = open(filename,'r')
+        f = open(filename,'rU')
         if not f:
             raise IvyError(None,"not found: %s" % filename)
         ivy_load_file(f)
@@ -958,11 +958,11 @@ def read_module(f,nested=False):
 def import_module(name):
     fname = name + '.ivy'
     try: 
-        f = open(fname,'r')
+        f = open(fname,'rU')
     except Exception:
         fname = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
         try:
-            f = open(fname,'r')
+            f = open(fname,'rU')
         except Exception:
             raise IvyError(None,"module {} not found in current directory or module path".format(name))
     with iu.SourceFile(fname):
