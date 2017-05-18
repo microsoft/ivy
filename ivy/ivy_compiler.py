@@ -769,19 +769,30 @@ class IvyARGSetup(IvyDeclInterp):
         for actname,trs in transs_by_action.iteritems():
             choices = []
             params = None
+            afters = []
             for tr in trs:
                 scmix = tr.args[2]
+                is_after = isinstance(scmix,ivy_ast.ScenarioAfterMixin)
                 df = ActionDef(scmix.args[0],scmix.args[4],scmix.args[2],scmix.args[3])
                 body = compile_action_def(df,self.mod.sig)
                 seq = []
-                for p in tr.args[0].args:
-                    seq.append(AssumeAction(find_symbol(p.rep)))
-                for p in tr.args[0].args:
-                    seq.append(AssignAction(find_symbol(p.rep),ivy_logic.Or()))
-                for p in tr.args[1].args:
-                    seq.append(AssignAction(find_symbol(p.rep),ivy_logic.And()))
-                seq.append(body)
-                seq = Sequence(*seq)
+                if not is_after:
+                    for p in tr.args[0].args:
+                        seq.append(AssumeAction(find_symbol(p.rep)))
+                    for p in tr.args[0].args:
+                        seq.append(AssignAction(find_symbol(p.rep),ivy_logic.Or()))
+                    for p in tr.args[1].args:
+                        seq.append(AssignAction(find_symbol(p.rep),ivy_logic.And()))
+                    seq.append(body)
+                    seq = Sequence(*seq)
+                else:
+                    for p in tr.args[0].args:
+                        seq.append(AssignAction(find_symbol(p.rep),ivy_logic.Or()))
+                    for p in tr.args[1].args:
+                        seq.append(AssignAction(find_symbol(p.rep),ivy_logic.And()))
+                    seq.append(body)
+                    seq = Sequence(*seq)
+                    seq = IfAction(And(*[find_symbol(p.rep) for p in tr.args[0].args]),seq)
                 if params is None:
                     params = df.formal_params
                     returns = df.formal_returns
@@ -792,13 +803,25 @@ class IvyARGSetup(IvyDeclInterp):
                     subst = dict(zip(aparams,params+returns))
                     seq = substitute_constants_ast(seq,subst)
                 seq.lineno = tr.lineno
-                choices.append(seq)
-            choice = BalancedChoice(choices)
-            choice.lineno = choices[0].lineno
-            choice.formal_params = params
-            choice.formal_returns = returns
-            self.mod.actions[mixer.rep] = choice
-            self.mixin(ivy_ast.MixinBeforeDef(mixer,mixee))
+                if not is_after:
+                    choices.append(seq)
+                else:
+                    afters.append(seq)
+            if choices:
+                choice = BalancedChoice(choices)
+                choice.lineno = choices[0].lineno
+                choice.formal_params = params
+                choice.formal_returns = returns
+                self.mod.actions[mixer.rep] = choice
+                self.mixin(ivy_ast.MixinBeforeDef(mixer,mixee))
+            if afters:
+                choice = Sequence(*afters)
+                choice.lineno = afters[0].lineno
+                choice.formal_params = params
+                choice.formal_returns = returns
+                self.mod.actions[mixer.rep] = choice
+                self.mixin(ivy_ast.MixinAfterDef(mixer,mixee))
+                
         
 def BalancedChoice(choices):
     if len(choices) == 1:

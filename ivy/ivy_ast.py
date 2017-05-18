@@ -887,11 +887,19 @@ class PlaceList(AST):
     def __repr__(self):
         return ','.join(repr(a) for a in self.args)
     
-class ScenarioBeforeMixin(AST):
+class ScenarioMixin(AST):
     def __repr__(self):
         inps = ('(' + ','.join(__repr__(a) for a in self.args[2]) + ')') if self.args[2] else ''
         outs = (' returns(' + ','.join(__repr__(a) for a in self.args[3]) + ')') if self.args[3] else ''
-        return 'before ' + __repr__(self.args[1]) + inps + outs + __repr(self.args[5])
+        return self.kind() + ' ' + __repr__(self.args[1]) + inps + outs + __repr(self.args[5])
+
+class ScenarioBeforeMixin(ScenarioMixin):
+    def kind(self):
+        return 'before'
+
+class ScenarioAfterMixin(ScenarioMixin):
+    def kind(self):
+        return 'before'
 
 class ScenarioTransition(AST):
     def __repr__(self):
