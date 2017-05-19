@@ -1077,6 +1077,12 @@ def p_scentranss_scentranss_places_arrow_places_colon_scenariomixin(p):
     tr.lineno = get_lineno(p,5)
     p[0].append(tr)
     
+def p_scentranss_scentranss_places_colon_scenariomixin(p):
+    'scentranss : scentranss places COLON scenariomixin'
+    p[0] = p[1]
+    tr = ScenarioTransition(PlaceList(*p[2]),PlaceList(),p[4])
+    tr.lineno = get_lineno(p,3)
+    p[0].append(tr)
     
 def p_top_scenario_lcb_sceninit_semi_scentranss_rcb(p):
     'top : top SCENARIO LCB sceninit SEMI scentranss RCB'
