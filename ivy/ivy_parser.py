@@ -255,7 +255,6 @@ def p_modulestart(p):
  
 def p_moduleend(p):
     'moduleend :'
-    stack[-1].is_module=False
     p[0] = None
    
 def p_top_module_atom_eq_lcb_top_rcb(p):
@@ -265,6 +264,7 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
     p[0].declare(ModuleDecl(d))
     p[0].modules[d.defines()] = d
     stack.pop()
+    stack[-1].is_module=False
 
 def p_optdotdotdot(p):
     'optdotdotdot : '
