@@ -1,0 +1,106 @@
+#lang ivy1.6
+
+# Now let's changte our spec so that we require the environment not to
+# say `hello` with the maximum value. That is, we want this to be a
+# *guarantee* of the environment, but an *assumption* of our program.
+
+# We'll define the same interface that we had before:
+
+
+type t
+
+action hello(val:t)
+action world(val:t)
+
+export hello
+import world
+
+# Now we add an assertion that executes before the implementation of
+# `hello`, stating that `val` is not max. Notice we state this in a
+# way that will work for any integer type, even an unbounded type with
+# no max. That way our spec will work for various interpretations of
+# `t`.
+
+object spec = {
+
+    var pending : bool
+
+    var hello_value : t
+
+    after init {
+	pending := false
+    }
+
+    before hello(val:t) {
+	assert val + 1 ~= 0;      # val is not max
+	pending := true;
+	hello_value := val
+    }
+
+    before world(val:t) {
+	assert pending;
+	assert val > hello_value;
+	pending := false
+    }
+}
+
+# This demonstrates a special feature of `before`. That is, any
+# assertion in a `before` monitor is a *guarantee* for the caller of
+# the action and an *assumption* for the implementer of the action.
+# In this case, the caller is the environment.
+
+# The rest is the same as before.
+
+object impl = {
+    implement hello {
+	call world(val+1)
+    }
+}
+
+interpret t -> bv[4]
+
+# Now build a tester and run it. What happens?
+#
+# You might see something like this:
+#
+#     > hello(1)
+#     < world(2)
+#     > hello(12)
+#     < world(13)
+#     > hello(10)
+#     ...
+#     > hello(6)
+#     < world(7)
+#     test_completed
+#
+# Why din't we see a `hello(15)` in trace? The tester only generates
+# environment actions that satisfy the assumptions of the program. In
+# this case the value 15 violates that assumption, so the tester
+# doesn't generate it. This technique is called "specification-based
+# testing".
+#
+# How is this actually accomplished? The tester executes the
+# specification code symbolically. This means it puts symbolic
+# variables in place of the inputs and generates an expression that is
+# true exactly when execution passes thorugh without violating any
+# assertions. The SMT solver Z3 is then used to solve for input values
+# that make the expression true. IVy tries to produce values that are
+# uniformly distributed over the satisfying set, though in practice
+# the distribution can be skewed. 
+#
+# The nice thing about specification-based testing is that it
+# eliminates human bias in the test generation. Plus, of course, it's
+# completely automatic, so you don't have to write tests manually.
+#
+# By the way, the tester executable has some useful command-line options.
+# For example, to generate 1000 input events and write the event log to file foo.iev,
+# you could use the following command line:
+#
+#      $ ./hello4 iters=1000 out=file.iev
+#
+# The extension "iev" stands for "IVy event log".
+
+
+
+
+

@@ -19,7 +19,7 @@ object node = {
     interpret t -> bv[1]
 
     action next(x:t) returns (y:t) = {
-	y := x + 1
+	    y := x + 1
     }
 }
 
@@ -81,7 +81,7 @@ object serv = {
 
 object proto(me:node.t) = {
 
-    relation token
+    var token : bool
     after init {
 	token := me = 0
     }
@@ -89,9 +89,8 @@ object proto(me:node.t) = {
     implement serv.release {
 	if token {
 	    token := false;
-	    local pkt : packet.t {
+	    var pkt : packet.t;
 		call trans.send(me,node.next(me),pkt)
-	    }
 	}
     }
 
@@ -108,6 +107,6 @@ trusted isolate iso_p = proto with serv,node,trans
 trusted isolate iso_t = trans with net,node
 trusted isolate iso_n = net with node
 
-trusted isolate iso_pt = proto with serv,trans.impl,net.impl,node
+trusted isolate iso_pt = proto with serv,trans.impl,trans.seq_num,net.impl,node
 
 extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num

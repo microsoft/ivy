@@ -22,6 +22,8 @@ instance udp : udp_simple(id,trans.net_msg.t)
 isolate iso_p = proto with ref,trans,key,shard
 isolate iso_dm(me:id) = proto.impl.dm(me) with key
 isolate iso_hash(me:id) = proto.impl.hash(me) with key,shard
+isolate iso_key = key with impl
+isolate iso_key_iter = key.iter with impl
 
 export proto.set
 export proto.get
@@ -30,6 +32,7 @@ import proto.answer
 
 object impl = {
     interpret id -> bv[1]
+    interpret key.t -> bv[16]
 }
 
 object debug = {

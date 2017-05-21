@@ -87,7 +87,7 @@ The reference object's specification starts like this:
 We have an emumerated `otype` to represent the operation type, and an
 uninterpreted ghost type `txid` to represent transactions. Because
 `txid` is a ghost type, values of this type can't occur in extracted
-code. We'll see how ghost types are used shorty.  The functions
+code. We'll see how ghost types are used shortly.  The functions
 `type_`, `key_` and `data_` tell us respectively the operation type, key
 and data value associate with the transaction.
 

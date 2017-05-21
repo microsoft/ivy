@@ -3,6 +3,79 @@ layout: page
 title: Installing IVy
 ---
 
+# Installing a release
+
+Binary releases of IVy are available 
+on [IVy's Github release page](https://github.com/Microsoft/ivy/releases).
+
+### Linux
+
+On Debian-based linux ditributions such as Ubuntu, download and
+install the file `ms-ivy_X.X_YYYY.deb` where `X.X` is the IVy version and
+`YYYY` is the machine architecture. Use your system's package manager to
+install this package, or the following commands:
+
+    $ sudo dpkg -i ms-ivy_X.X_YYYY.deb
+    $ sudo apt-get install -f
+
+The first command will report missing dependencies, which will be
+installed by the second command.
+
+### Windows
+
+The Windows binary distribution is in the form of a zip
+archive. Download the file `ivy.X.Y-.Windows-z86.zip`, where `X.X` is
+the IVy version (this will work on both 32-bit and 64 bit Intel
+Windows). Use Windows Explorere to extract this archive in the
+directory `C:\`. This should give you a directory `C:\ivy`. To use IVy
+in a command window, first execute this command:
+
+    > C:\ivy\scripts\activate
+
+### Mac
+
+There currently is no binary distribution for Mac. Use instead the
+virtual machine approach or an installation from source, as described
+below.
+
+# Installing in a virtual environment with Vagrant
+
+IVy users and contributors may also deploy IVy within an container
+using [Vagrant](http://vagrantup.com).
+
+### Windows
+
+On Windows, [Virtualbox](http://virtualbox.org) is currently the recommended container provider.
+
+1. Clone the `IVy` repository (e.g. `git clone https://github.com/Microsoft/ivy.git`).
+2. Download and install [Vagrant](http://vagrantup.com).
+3. Download and install [Virtualbox](http://virtualbox.org).
+4. Type `vagrant plugin install vagrant-vbguest` to install the [`vagrant-vbguest`](https://github.com/dotless-de/vagrant-vbguest) plugin (optional but recommended).
+5. Download and install an X11 server for Windows (e.g. [Xming](http://www.straightrunning.com/XmingNotes/)).
+6. Type `vagrant up` [from an administrator console](https://github.com/mitchellh/vagrant/issues/3854) to prepare a new development environment. This is likely to take some time to complete the first time it is done, because [z3](https://github.com/Z3Prover/z3) must be compiled from its sources.
+7. Launch your X11 server and type `vagrant ssh` in a console window to get access to IVy from a shell within the container.
+
+### Linux
+
+On Linux, [Docker](http://docker.com) is also available as a container provider, and will yield better performance than the Virtualbox backend.
+
+1. Clone the `IVy` repository (e.g. `git clone https://github.com/Microsoft/ivy.git`).
+2. Install [Vagrant](http://vagrantup.com).
+3. Install [Docker](http://docker.com).
+4. (Debian-based systems) Ensure your user is in the `docker` group.
+5. Type `vagrant up --provider=docker`.
+6. Type `vagrant ssh` to get access to IVy from a shell.
+
+Linux users also have the option of directly executing the provisioning scripts in the `scripts/setup` directory, bypassing any inconvenience a container might impose. The scripts are divided in such a way as to facilitate this. Those interested should take note, however, that the scripts have only been tested with Ubuntu and Debian Vagrant guest images so far.
+
+
+### MacOS
+
+- MacOS installation instructions should be similar to the Windows instructions, with the exception that [an X11 server for MacOS](https://www.xquartz.org/) should be used.
+- Docker support may work in MacOS as it does in Linux with little-or-no modification but whether this is indeed the case remains unconfirmed at the time of this writing.
+
+# Installing from source
+
 This document describes the steps need to install IVy from the github
 repository. The specific commands given apply to Ubuntu Linux version
 14.04. Windows and Mac users should also refer to the Windows and Mac

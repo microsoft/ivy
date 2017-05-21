@@ -3,13 +3,54 @@ layout: page
 title: The IVy language
 ---
 
-IVy's language is designed to let you to model systems in a way that
-is both convenient and conducive to automated
+IVy's language is designed to let you to specify and implement systems
+in a way that is both convenient and conducive to automated
 verification. Technically, this means that important verification
 problems like invariant checking and bounded model checking fall
 within a [decidable fragment][df] of first-order logic.
 
 [df]: https://en.wikipedia.org/wiki/Bernays%E2%80%93Sch%C3%B6nfinkel_class
+
+For this reason, the IVy language has certain unusual features. IVy
+divides the world into three categories of things:
+
+- Data values,
+- Function values and
+- Procedures.
+
+Data values are the kinds of things that can be printed out, stored in
+files, transmitted over the internet and so on. These are sometimes
+refered to as POD types for "plain old data". Function values are pure
+mathematical functions. They can be evaluated on arguments to produce
+deterministic results, and they have no side effects. In other words,
+evaluating a function does not modify the value of any variable. On
+the other hand, a procedure, when called, has an *effect*. In addition
+to returning values, it may also modify the values of variables.
+
+Data values and function values can be stored in variables and passed
+as arguments. That is, data and functions are "first class" values. On
+the other hand, procedures cannot be stored in variables or passed as
+arguments.
+
+A particularly unusual aspect of the IVy langauge is that there are
+*no references*. Two distinct variables are never "aliases" for the
+same underlying "object". Modifying variable `a` never has an effect
+on the value of variable `b`. IVy's philosphy is that references are a
+low-level optimization that should be used by compilers to avoid
+copying, but should never appear in high-level programs. The absense
+of aliases enormously simplifies the analysis, testing and
+verification of programs.
+
+Another unusual aspect of the IVy language is that it is *synchronous*. This means that:
+
+- All actions occur in reaction to input from the environment, and
+- all actions are *isolated*, that is, they appear to occur
+instantantaneously, with no interruption.
+
+This aspect of IVy's semantics greatly simplifies reasoning about
+concurrent and distributed systems.
+
+We will now consider the basic elements of an IVy program.
 
 ## The language specifier
 
@@ -21,10 +62,11 @@ This tells IVy what version of the language we are using.
 
 ## State and actions
 
-An IVy program describes objects that have state and provide actions
-that operate on state. State is described using mathematical relations
-and functions (much as in the [Alloy][al] language, but
-with important differences that we will discuss later).
+An IVy program describes *objects* that have state variables and
+provide *actions* that operate on state. State variables may hold
+either plain old data or mathematical relations and functions (much as
+in the [Alloy][al] language, but with important differences that we
+will discuss later).
 
 [al]: http://alloy.mit.edu
 
@@ -38,29 +80,40 @@ relation `link` like this:
 
     relation link(X:node,Y:node)
 
-This says that `link` is a set of pairs (*X*,*Y*) where *X* and *Y*
-are nodes. In IVy, as in [Prolog][pl], identifiers beginning with capital
-letters are variables. The colon introduces a type annotation. In the
-above declaration, the variables *X* and *Y* are just taking up space,
-telling us what sort of relation `link` is. 
+This says that `node` is a POD type, but tells us nothing yet about
+how values of type `node` are represented. At this point, we say that
+`node` is an *uninterpreted* type. Further, we declared 
+that `link` is a set of pairs (*X*,*Y*) where *X* and *Y*
+are nodes.
+
+In IVy, as in [Prolog][pl], identifiers beginning with capital letters
+are logical variables, or place-holders. These are not to be confused
+with program variables, which hold the program state.  The colons
+introduce type annotations. In the above declaration, the variables
+*X* and *Y* are just taking up space, telling us what sort of relation
+`link` is (that is, for every *X* and *Y* of type `node`, `link(X,Y)`
+is a Boolean value.
 
 [pl]: https://en.wikipedia.org/wiki/Prolog
 
-We can also declare a function, for example, one that gives an ID to each node:
+We could equivalently have written the relation declaration as:
+
+    function link(X:node,Y:node) : bool
+
+Either way, we create a variable `link` that holds a function value, in particular
+a function from pairs of `node` to `bool`.
+
+As another example, here is a declaration of a function that gives an
+ID to each node:
 
     type id
 
     function node_id(X:node) : id
 
-An individual of a given type can be declared like this:
+A variable that holds just a node value can be declared like this:
 
     individual root:node
 
-In logic, `root` would be called a *constant* (it might also be
-considered a function of zero arguments). In IVy, though, since the
-values of declared symbols can be mutated by actions, the term constant
-could be misleading. Instead, we will refer to relations, functions and
-individuals collectively as *components*.
 
 ### Enumerated types
 
@@ -71,26 +124,27 @@ explicitly. An example of an enumerated type in IVy would be:
 
     type color = {red,green,blue}
 
-This declares a type with exactly three values, and also declares
+This declares a type with exactly three distinct values, and also declares
 individuals `red`, `green` and `blue` as its elements.
 
 ### Actions
 
-An *action* in IVy mutates components of the state. For example, here
-is a declaration of an action that adds a link between two nodes:
+An *action* in IVy mutates the values of state variables. For example,
+here is a declaration of an action that adds a link between two nodes:
 
     action connect(x:node, y:node) = {
         link(x,y) := true
     }
 
 The action `connect` is defined in terms of one of IVy's primitive
-actions: an assignment. An assignment modifies the value of a function
-or relation. In this case, the single pair (*x*,*y*) is added to
-`link` (or put another way, the value of the expression `link(x,y)` is
-set to true, without otherwise modifying `link`). The values of all other
-components remain unchanged by the assignment.
+actions: an assignment. An assignment modifies the value of a
+variable.  In this case, the single pair (*x*,*y*) is added to the
+relation `link` (or put another way, the value of the expression
+`link(x,y)` is set to true, without otherwise modifying
+`link`). Because there is no aliasing in IVy.  the values of all other
+variables remain unchanged by the assignment.
 
-We can use variables to make larger modifications to a relation. For
+We can use place-holders to make larger modifications to a relation. For
 example, here is an action that removes all links from a given node *x*:
 
     action clear(x:node) = {
@@ -115,7 +169,7 @@ If there are no parameters, we don't use parentheses. For example:
         bit := ~bit
     }
 
-An action can also have return parameters. For example:
+In fact, you will never see a pair of empty parentheses in IVY. An action can also have return parameters. For example:
 
     action swap(a:t,b:y) returns (c:t,d:t) = {
         c := b;
@@ -136,8 +190,10 @@ links *x* to *y*:
     }
 
 The semicolon is a sequential composition operator in IVy, not a
-statement terminator. In this case, we could have written the sequence
-of assignments equivalently as:
+statement terminator. However, an extra semicolon is allowed before an
+ending brace `}` to make editing sequences of statements easier. In
+this case, we could have written the sequence of two assignments
+equivalently as:
 
     link(x,Y) := Y = y
 
@@ -150,11 +206,12 @@ We could also have written `connect_unique` by *calling* `clear` and `connect`:
         call connect(a,b)
     }
     
-IVy uses the [call-by-value][cbv] convention. That is, when we call
-`clear(a)` a local variable *x* is created during the execution of
-`clear` and assigned the value *a*. This means that, as in the [C
-programming language][cpl], modifying the value of *x* in `clear` would
-not result in modifying the value of *a*.
+Since there are no references in IVy, so in effect, IVy uses the
+[call-by-value][cbv] convention. That is, when we call `clear(a)` a
+local variable *x* is created during the execution of `clear` and
+assigned the value *a*. This means that, as in the [C programming
+language][cpl], modifying the value of *x* in `clear` would not result
+in modifying the value of *a* in `connect_unique`.
 
 [cbv]: https://en.wikipedia.org/wiki/Evaluation_strategy#Call_by_value
 [cpl]: https://en.wikipedia.org/wiki/C_(programming_language)
@@ -187,6 +244,13 @@ For example, if we have:
 then we would write:
 
     x := y + next
+
+The lack of paretheses introduces no ambiguity, since the action
+`next` is not a value and cannot itself be passed as an argument to
+the function `+`. An advantage of this convetion is that we don't have
+to remember whether `next` is an action or a variable, and we can
+easily replace a variable by an action without modifying all references
+to the variable.
 
 ### Conditionals
 
@@ -269,7 +333,8 @@ When a loop is needed, it can be written like this:
     i := x;
     while i > 0
     {
-        sum := sum + f(i)
+        sum := sum + f(i);
+	i := i - 1
     }
 
 This loop computes the sum of `f(i)` for `i` in the range `(0,x]`.
@@ -278,7 +343,8 @@ A loop can be decorated with a invariants, like this:
     while i > 0
     invariant sum >= 0
     {
-        sum := sum + f(i)
+        sum := sum + f(i);
+	i := i - 1
     }
 
 The invariant `sum >= 0` is a special assertion that is applied
@@ -413,27 +479,33 @@ declaration. In fact, we don't need the non-deterministic assignment
 to *y* since the value of *y* is already non-deterministic at the
 beginning of the `local` action.
 
-## Interleaving concurrency
+## Modelling interleaving concurrency in IVy
 
-IVy is intended for modeling concurrent systems, such as network
-protocols and distributed services. However, there is no explicit
-model of concurrency in the IVy language. Instead concurrency is
-modeled by interleaving guarded commands.
+Actions in an IVy program execute only in response to calls from the
+program's environment. IVy makes the synchronous hypothesis: when the
+environment calls an action, it waits for the action to complete
+before issuing another call. Put another way, IVy actions appear to
+execute in zero time. At first blush, it might seem that this
+eliminates the possiblity of concurrency. In fact, the synchronous
+hypothesis is intended to make the implementation of concurrent and
+distributed systems simpler. The key idea is that only the
+*appearance* of synchronicity is required. In practice actions can
+execute concurrently, provided that to an outside observer they appear
+to have executed sequentially.
+
+For now, we will leave aside the question of how to enforce the
+synchronous hypothesis in practice. Instead, we will consider how to
+use the synchronous IVY language to model a distributed protocol at an
+abstract level using *interleaving* concurrency. In an interleaving
+model, processes take turns executing actions in isolation (that is,
+in apparently zero time) in a non-deterministic order. 
 
 An IVy program exports a set of actions to its environment. Each of
-these actions can be used to model a single atomic step of a process
-in a system of concurrent processes, or perhaps a single step of a
-non-deterministically chosen process. Since the environment is allowed
-to call these action arbitrarily, the IVy program can be used to model
-arbitrary interleaving of atomic actions.
+these actions can be used to model a single isolated step of a
+process.  Since the environment is allowed to call these actions in an
+arbitrary order, the IVy program can be used to model arbitrary
+interleaving of process actions.
 
-There is one important caveat in this approach, however: IVy actions
-are atomic.  This means that it is not possible for the execution of
-one action to preempt another.  Because there is no preemption in IVy,
-there is no reasonable way to model threaded programs with shared
-memory. This is by design. The language is intended for
-modeling distributed protocols at a level of abstraction that hides
-low-level concurrency control mechanisms.
 
 ### An abstract interface model
 
@@ -575,19 +647,11 @@ annotations to operators.
 IVy provides for this in a limited way. Certain symbols, such as `<`
 and `+` are always polymorphic. This allows us to declare relations
 with the same symbol over different sorts and to disambiguate them
-based on type inference. Unlike built-in equality, however, these
-relations must still be declared explicitly. So we might write:
+based on type inference.
 
-    relation (X:id < Y:id)
-    relation (X:length < Y:length)
-
-These are two distinct relations and might obey different axioms.  To
-make type inference stronger, the operators also come with type
-constraints. In functional language terms, `<` has type `alpha * alpha
--> bool` and `+` has type `alpha * alpha -> alpha`. 
-
-The language might be extended in the future to allow user-defined
-polymorphic symbols.
+To make type inference stronger, the polymorphic operators also come
+with type constraints. In functional language terms, `<` has type
+`alpha * alpha -> bool` and `+` has type `alpha * alpha -> alpha`.
 
 ### Numerals
 
@@ -607,6 +671,13 @@ mod 2.
 Section [Interpretations] describes how to give concrete
 interpretations to IVy types, so that symbols like `+` and `0` have
 specific meanings.
+
+### Quoted symbols
+
+A quoted symbols a possibly-empty sequence of characters enclosed in
+double quote characters (and not containing a double quote character).
+An example would be `"ab$c"`. Quoted symbols are similar to numerals:
+their type is inferred from context. 
 
 ## Modules
 
@@ -660,7 +731,6 @@ axioms stating that `lt` is transitive and antisymmetric. We might instantiate i
 like this:
 
     type foo
-    relation (X:foo < Y:foo)
 
     instantiate po(foo,<)
 
@@ -755,7 +825,7 @@ An alternative way to write the above would be:
     }
 
 Notice that the object parameter is given as a logical constant rather
-than a variable. This constant can be referred to in the body of the
+than a place-holder. This constant can be referred to in the body of the
 object.
 
 Types in IVy are never parameterized. For example, if we write:
@@ -876,7 +946,6 @@ For example, suppose we have the following program with two objects:
     #lang ivy1.5
 
     type nat
-    function (X:nat + Y:nat) := nat
 
     relation even(N:nat), odd(N:nat)
     axiom even(0) & (even(N) -> odd(N+1))
@@ -1053,7 +1122,7 @@ are guarantees.
 
 ## Action implementations
 
-Often it is useful two separate the declaration of an action from
+Often it is useful to separate the declaration of an action from
 its implementation. We can declare an action like this:
 
     action incr(x:t) returns(y:t)
@@ -1061,7 +1130,7 @@ its implementation. We can declare an action like this:
 and then give its implementation like this:
 
     implement incr {
-        y := x
+        y := x + 1
     }
 
 This is useful for defining and specifying interfaces. For example,
@@ -1084,7 +1153,7 @@ we could define the interface between "evens" and "odds" like this:
         }
     }
 
-The `event` object would then be:
+The `even` object would then be:
 
     object evens = {
         individual number : nat
@@ -1225,7 +1294,7 @@ write the definition like this:
 
     definition rng(x:t) = exists Y. f(x) = Y
 
-Notice that the argument of `rng` is a constant `x`, not a variable
+Notice that the argument of `rng` is a constant `x`, not a place-holder
 `X`. This definition acts like a macro (or an axiom *schema*) that can be
 instantiated for specific values of `x`. So, for example, if we have an assertion
 to prove like this:

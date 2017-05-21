@@ -27,7 +27,7 @@ object left_player = {
     init ball
 
     action hit = {
-	call intf.ping;
+	call intf.ping; # forgot to test ball!
 	ball := false
     }
     

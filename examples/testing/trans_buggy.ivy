@@ -94,7 +94,7 @@ module transport(lower,packet,id) = {
 		if net_msg.mty(msg) = ack_t {
 		    call mq(src).delete_all(seq)
 		}
-		else if seq = recv_seq(src) {
+		else if seq >= recv_seq(src) {
 		    recv_seq(src) := seq_num.next(recv_seq(src));
 		    call recv(me,net_msg.payload(msg))
 		}
