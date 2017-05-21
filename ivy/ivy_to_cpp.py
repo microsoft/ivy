@@ -4141,7 +4141,12 @@ def main():
                         if opt_outdir.get():
                             cmd = 'cd {} & '.format(opt_outdir.get()) + cmd
                     else:
-                        cmd = "g++ -I $Z3DIR/include -L $Z3DIR/lib -g -o {} {}.cpp".format(basename,basename)
+                        if 'Z3DIR' in os.environ:
+                            paths = '-I $Z3DIR/include -L $Z3DIR/lib -Wl,-rpath=$Z3DIR/lib' 
+                        else:
+                            _dir = os.path.dirname(os.path.abspath(__file__))
+                            paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
+                        cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
                     print cmd
