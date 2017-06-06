@@ -93,7 +93,9 @@ clients `X` and `Z` and server `Y`.
 # Discovering a safety invariant
 
 To try to construct a safety invariant for this program, we run IVy in
-its CTI mode. Here is the command line:
+its CTI mode. Download the file [client_server_example.ivy](client_server_example.ivy) or just
+copy the above IVy text (both parts) into a file `client_server_example.ivy`. Then use this
+command to start IVy:
 
     $ ivy ui=cti client_server_example.ivy
 
