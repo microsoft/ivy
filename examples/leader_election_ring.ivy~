@@ -1,0 +1,125 @@
+#lang ivy1.3
+
+################################################################################
+#
+# A module for axiomatizing a total order
+#
+################################################################################
+
+module total_order(r) = {
+    axiom r(X,X)                        # Reflexivity
+    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X, Y) | r(Y, X)             # Totality
+}
+
+
+################################################################################
+#
+# Module describing a ring topology.
+#
+# The module includes a ring_head and ring_tail elements, and a ring
+# total order relation.
+#
+# The module also includes get_next and get_prev actions.
+#
+# In this module, the ring topology is arbitrary and fixed.
+#
+################################################################################
+
+module ring_topology(carrier) = {
+    individual head:carrier  # ring head
+    individual tail:carrier  # ring tail
+    relation le(X:carrier,Y:carrier)  # total order describing ring topology
+
+    # Axioms that ensure that le is a total order, with head the
+    # minimal element and tail the maximal element.
+    instantiate total_order(le)  # total order
+    axiom le(head, X)            # head is minimal
+    axiom le(X, tail)            # tail is maximal
+
+    action get_next(x:carrier) returns (y:carrier) = {
+       assume (x = tail & y = head) | (le(x,y) & x ~= y & ((le(x, Z) & x ~= Z) -> le(y, Z)))
+    }
+
+    action get_prev(y:carrier) returns (x:carrier) = {
+       assume (x = tail & y = head) | (le(x,y) & x ~= y & ((le(x, Z) & x ~= Z) -> le(y, Z)))
+    }
+
+}
+
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type node
+type id
+
+# A ring topology of nodes
+instantiate ring : ring_topology(node)
+
+# A total order on ids
+relation le(X:id, Y:id)
+instantiate total_order(le)
+
+# A function relating a node to its id
+individual idn(X:node) : id
+axiom idn(X)=idn(Y) -> X=Y  # the idn function is injective
+
+# A relation that keeps track of nodes that think they are the leader
+relation leader(N:node)
+init ~leader(N)
+
+# A relation for pending messages, a message is just an id
+relation pending(V:id, N:node) # The identity V is pending at node N
+init ~pending(V, N)
+
+
+################################################################################
+#
+# Protocol description
+#
+# Two action: send and receive
+#
+################################################################################
+
+action send = {
+    local n1:node, n2:node {
+        # send my own id to the next node
+        n2 := ring.get_next(n1);
+        pending(idn(n1), n2) := true
+    }
+}
+
+action receive = {
+    local n1:node, n2:node, m:id {
+        # receive a message from the right neighbor
+        assume pending(m, n1);
+        pending(m, n1) := *; # abstract the number of pending messages
+        if m = idn(n1) {  # Found a leader
+            leader(n1) := true
+        } else {
+            if le(idn(n1), m) { # pass message to next node
+                n2 := ring.get_next(n1);
+                pending(m, n2) := true
+            } # otherwise drop the message...
+        }
+    }
+}
+
+export send
+export receive
+
+# The safety property:
+conjecture leader(X) & leader(Y) -> X = Y  # at most one leader
+conjecture leader(X) -> le(idn(Y), idn(X)) # leader has highest id
+
+
+# conjectures obtained via CTI's
+# conjecture ~(le(idn(N1),idn(N0)) & pending(idn(N1),N1) & idn(N1) ~= idn(N0))
+# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N0,N1) & ring.le(N2,N0) & N0 ~= N2 & N1 ~= N0)
+# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N0,N1) & ring.le(N1,N2) & N1 ~= N0)
+# conjecture ~(le(idn(N2),idn(N0)) & pending(idn(N2),N1) & ring.le(N1,N2) & ring.le(N2,N0) & N0 ~= N2)

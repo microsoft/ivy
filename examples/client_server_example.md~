@@ -1,0 +1,106 @@
+---
+layout: page
+title: Invariants
+---
+
+The most basic technique for proving correctness in IVy is to
+construct an inductive invariant. IVy makes this easier by providing
+tools to visualize the failures of inductive proofs and suggest
+possible refinements to the proof.
+
+An *safety invariant* is a formula or a set of formulas that has the
+following properties:
+
+- *initiation*: It is true in all initial states of the program.
+
+- *safety*: If it is true in a program state, then no exported action
+can cause an assertion failure starting in that state.
+
+- *consecution*: If it is true in a state, then after executing any
+exported action, the formula remains true.
+
+In this example, we will use IVy's CTI method. CTI stands for
+"counter-example to induction". If one of the above conditions fails,
+IVy tries to construct a *simple* example of the failure. We can
+attempt to correct the proof by *generalizing* from this
+counter-example.
+
+# An abstract protocol model
+
+The following is a very abstract model of a protocol that establishes
+connections between clients and servers. Each server has a semaphore
+that is used to guarantee that at any time at most one client can be
+connected to the server.
+
+    #lang ivy1.5
+
+    type client
+    type server
+
+    relation link(X:client, Y:server)
+    relation semaphore(X:server)
+
+    init semaphore(W) & ~link(X,Y)
+
+    action connect(x:client,y:server) = {
+      assume semaphore(y);
+      link(x,y) := true;
+      semaphore(y) := false
+    }
+
+    action disconnect(x:client,y:server) = {
+      assume link(x,y);
+      link(x,y) := false;
+      semaphore(y) := true
+    }
+
+    export connect
+    export disconnect
+
+This program declares two types `client` and `server`. The state of
+the protocol model consists of two relations. The relation `link`
+tells us which clients are connected to which servers, while
+`semaphore` tells us which servers have their semaphore "up".
+
+The program exports two actions to the environment: `connect` and
+`disconnect`. The `connect` actions creates a link from client `x` to
+server `y`, putting the server's semaphore down. Notice that `connect`
+assumes the server's semaphore is initially up. The `disconnect`
+action removes a link and puts the semaphore up. The two `export`
+declarations at the end tell us that the environment may call
+`connect` and `disconnect` in arbitrary sequence, though it must obey
+the stated assumptions.
+
+## Safety and invariant conjectures
+
+A program is *safe* if the environment cannot call it in any way that
+causes an assertion to be false. There are various way to use
+assertions to specify desired safety properties of a program. A simple
+one is to add a test action that asserts some property of the program
+state. In the client/server example above, we might specify that no
+two distinct clients can be connected to a single server using the
+following test action:
+
+    action test = {
+      assert ~(X ~= Z & link(X,Y) & link(Z,Y))
+    }
+
+    export test
+
+The assertion is implicitly universally quantified over (distinct)
+clients `X` and `Z` and server `Y`. 
+
+# Discovering a safety invariant
+
+To try to construct a safety invariant for this program, we run IVy in
+its CTI mode. Here is the command line:
+
+    $ ivy ui=cti client_server_example.ivy
+
+This produces the following rather uninformative display:
+
+![IVy screenshot](images/client_server1.png)
+
+
+
+

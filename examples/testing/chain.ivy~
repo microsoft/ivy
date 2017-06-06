@@ -1,0 +1,102 @@
+#lang ivy1.6
+
+include tcp
+
+type data
+
+module client(req_chan,rsp_chan) = {
+    
+    action request_upd(val : data) = {
+	call req_chan.sender.send(val);
+    }
+
+    action response_upd(val : data)
+
+    implement rsp_chan.receiver.recv(val : data) {
+	call response_upd(val : data)
+    }
+}
+
+module replica = {
+    individual value : data
+    after init {
+	value := 0;
+    }
+    action upd(inp : data) returns (out : data) = {
+	out := value;
+	value := value + inp;
+    }
+}
+
+module head_node(req_chan1, req_chan2, out_chan) = {
+    instance rep : replica
+
+    action upd(inp : data) = {
+	var res := rep.upd(inp);
+	out_chan.send(inp);
+    }
+	
+    implement req_chan1.recv(inp : data) {
+	upd(inp);
+    }
+    implement req_chan2.recv(inp : data) {
+	upd(inp);
+    }
+}
+
+module tail_node(inp_chan, resp_chan) = {
+    instance rep : replica
+
+    action upd(inp : data) = {
+	var res := rep.upd(inp);
+	resp_chan.send(res);
+    }
+	
+    implement inp_chan.recv(inp : data) {
+	upd(inp);
+    }
+}
+
+module reference = {
+    type txid
+    instance rep : replica
+
+    action create(inp : data) returns (tx : txid)
+    action commit(tx : txid)
+    action eval(tx : txid) returns (res : data)
+
+    individual next : txid
+    function txs(X:txid) : data
+    function txres(X:txid) : data
+    relation committed(X:txid)
+
+    after init {
+	next := 0;
+	committed(X) := false;
+    }
+
+    implement create {
+	tx := next;
+	txs(tx) := inp;
+	next := next + 1;
+    }
+
+    implement commit {
+	txres(tx) := rep.upd(txs(tx));
+	committed(tx) := true;
+    }
+
+    implement eval {
+	res = txres(tx);
+    }
+
+    object spec {
+	before commit {
+	    assert ~committed(tx);
+	}
+	before eval {
+	    assert committed(tx);
+	}
+    }
+
+}

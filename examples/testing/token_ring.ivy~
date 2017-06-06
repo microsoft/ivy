@@ -1,0 +1,103 @@
+#lang ivy 1.6
+
+type packet
+
+################################################################################
+#
+# Concrete type of node addresses.
+#
+################################################################################
+
+
+object node = {
+    type t
+
+    interpret t -> bv[1]
+
+    action next(x:t) returns (y:t) = {
+	y := x + 1
+    }
+}
+
+
+################################################################################
+#
+# The network service specification
+#
+################################################################################
+
+include udp
+instance net : udp_simple(node.t,id.t)
+
+
+################################################################################
+#
+# The transport service specification
+#
+################################################################################
+
+include trans
+instance trans : transport(net,packet,node.t)
+
+
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    action grant(v:node.t)                 # grant lock to client
+    action release(v:node.t)               # client releases lock
+
+    object spec = {
+	lock(X:node.t)
+	init lock(X) = 0
+	
+	before grant {
+	    assert ~lock(X);
+	    lock(v) := true
+	}
+	
+	before release {
+	    assert lock(X);
+	    lock(v) := false
+	}
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+object proto = {
+
+    relation token(X:node)
+    individual pkt : packet
+
+    implement serv.release(me:node.t) {
+	if token(me) {
+	    token(me) := false;
+	    call trans.send(me,node.next(me),pkt)
+	}
+    }
+
+    implement trans.recv(me:node.t,v:id.t) {
+	token(me) := true;
+	call serv.grant(me);
+    }
+}
+
+import serv.elect
+
+trusted isolate iso_p = proto with serv,node,trans
+trusted isolate iso_t = trans,trans.mq with net,node,seq_num
+trusted isolate iso_n = net with node
+
+extract iso_impl(me:node.t) = proto(me),net(me),timer(me),node,id,asgn
+object proto

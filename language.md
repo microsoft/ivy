@@ -171,9 +171,9 @@ If there are no parameters, we don't use parentheses. For example:
 
 In fact, you will never see a pair of empty parentheses in IVY. An action can also have return parameters. For example:
 
-    action swap(a:t,b:y) returns (c:t,d:t) = {
+    action swap(a:t,b:t) returns (c:t,d:t) = {
         c := b;
-        d := t
+        d := a
     }
 
 ## Control
@@ -558,7 +558,7 @@ the stated assumptions.
 ## Safety and invariant conjectures
 
 A program is *safe* if the environment cannot call it in any way that
-causes an assertion to be false. There are various way to use
+causes an assertion to be false. There are various ways to use
 assertions to specify desired safety properties of a program. A simple
 one is to add a test action that asserts some property of the program
 state. In the client/server example above, we might specify that no
@@ -622,15 +622,18 @@ We can ensure that `<` is a total order by writing axioms:
     axiom ~(X:id < X)
     axiom X:id < Y | X = Y | Y < X
 
-These axioms say, respectively, that `<` is [transitive][tr], [anti-symmetric][as]
-and [total][to]. As in other cases, the free variables are universally
-quantified. You may also notice that we annotated the variable *X*
-with its type.  This has to do with the fact that `<` is polymorphic,
-an issue we will deal with shortly.
+These axioms say, respectively, that `<` is
+[transitive](https://en.wikipedia.org/wiki/Transitive_relation),
+[anti-symmetric](https://en.wikipedia.org/wiki/Antisymmetric_relation)
+and [total](https://en.wikipedia.org/wiki/Total_relation). As in other
+cases, the free variables are universally quantified. You may also
+notice that we annotated the variable *X* with its type.  This has to
+do with the fact that `<` is *polymorphic*, an issue we will deal with
+shortly.
 
 Of course, axioms are assumptions and assumptions are dangerous.  We
 want to make sure that our axioms are consistent, that is, that they
-have at least one [model][mo]. The IVy tool can be helpful in
+have at least one [model](https://en.wikipedia.org/wiki/Logic_model). The IVy tool can be helpful in
 determining this.
 
 ### Polymorphic operators.
@@ -835,7 +838,7 @@ Types in IVy are never parameterized. For example, if we write:
     }
 
 this creates a single type called `foo.t`, not a collection of types
-`f.t(self)` for all values of `self`.
+`foo.t(self)` for all values of `self`.
 
 ## Monitors
 
@@ -885,7 +888,7 @@ As a shorthand, we can write out monitor action like this:
 This creates a monitor action called `post.after` that is executed after `c.post`.
 Similarly, we can write:
 
-    before pre_connect(x:client,y:server) {
+    before connect(x:client,y:server) {
         assert semaphore(y)
     }        
 
@@ -980,7 +983,7 @@ For example, suppose we have the following program with two objects:
     export evens.step
     export odds.step
 
-Each object stores a number and sends this number plus one to the
+Each object stores a number when its `put` action is called and sends this number plus one to the
 other object when its `step` action is called by the environment. We want to
 prove that `even.put` only receives even numbers, while `odd.put` only receives
 odd numbers. Here is a specification of this property as a monitor:
@@ -1016,7 +1019,7 @@ IVy calls the two parts of the proof *isolates*. They are declared like this:
 In the first isolate, we prove the assertion that `evens`
 guarantees. We do this in context of the `spec` object, but we forget
 about the state of the `odds` object. What this means is that in isolate `iso_even`,
-the `assert` statement in `even_put` becomes an `assume` statement.
+the `assert` statement in `even.put` becomes an `assume` statement.
 
 The result is as if we had actually entered the following program:
 
@@ -1163,7 +1166,7 @@ The `even` object would then be:
             call intf.put_odd(number + 1)
         }
 
-        implement intf.even_put(n:nat) = {
+        implement intf.put_even(n:nat) = {
             number := n;
         }
     }
@@ -1257,7 +1260,7 @@ We can define the value of a previously declared function like this:
 
 Notice we don't have to give the type of X in the definition, since it
 can be inferred from the type of `square`. Logically, the definition
-is equivalence to writing:
+is equivalent to writing:
 
     axiom square(X) = X * X
 
@@ -1279,12 +1282,12 @@ example, let's say we want to define a predicate `rng` that is true of
 all the elements in range of function `f`. We could write it like
 this:
 
-    definition rng(X) = exists Y. f(X) = Y
+    definition rng(X) = exists Y. f(Y) = X
 
 The corresponding axiom might be problematic, however. Writing it out
 with explicit quantifiers, we have:
 
-    axiom forall X. (rng(X) <-> exists Y. f(X) = Y)
+    axiom forall X. (rng(X) <-> exists Y. f(Y) = X)
 
 This formula has an alternation of quantifiers that might result in
 verification conditions that IVy can't decide (see the
@@ -1292,20 +1295,20 @@ verification conditions that IVy can't decide (see the
 to know the truth value of `rng` for some specific arguments. We can instead
 write the definition like this:
 
-    definition rng(x:t) = exists Y. f(x) = Y
+    definition rng(x:t) = exists Y. f(Y) = x
 
 Notice that the argument of `rng` is a constant `x`, not a place-holder
 `X`. This definition acts like a macro (or an axiom *schema*) that can be
 instantiated for specific values of `x`. So, for example, if we have an assertion
 to prove like this:
 
-    assert r(y)
+    assert rng(y)
 
 Ivy will instantiate the definition like this:
 
-    axiom rng(y) <-> exists Y. f(y) = Y
+    axiom rng(y) <-> exists Y. f(Y) = y
 
-In fact, all instances if the macro will be alternation-free, since
+In fact, all instances of the macro will be alternation-free, since
 IVy guarantees to instantiate the macro using only ground terms for
 the constant arguments.  A macro can have both variables and constants
 as arguments. For example, consider this definition:
@@ -1327,7 +1330,7 @@ This special form of definition says that `finv(X)` is `Y` for *some*
 `Y` such that `f(Y) = X`. If there is no such `Y`, `finv(X)` is left
 undefined. The corresponding axiom is:
 
-    axiom forall X. ((exists Y. f(X) = Y) -> f(finv(Y)) = Y)
+    axiom forall X. ((exists Y. f(Y) = X) -> f(finv(X)) = X)
 
 With this definition, `finv` is a function, but it isn't fully
 specified.  If a given element `Y` has two inverses, `finv` will yield
@@ -1378,8 +1381,7 @@ When we declare `idx` as `int`, certain polymorphic functions and
 relations on `idx` are also automatically interpreted by the
 corresponding operators on integers, as are numerals of that
 type. So, for example, `+` is interpreted as addition and `<` as
-'less than' in the theory of integers. These operators still must be
-declared to be used, however.  Numerals are given their normal
+'less than' in the theory of integers. Numerals are given their normal
 interpretations in the theory, so `0:idx = 1:idx` would be false.
 
 Concrete sorts that are currently available for interpreting IVy types
