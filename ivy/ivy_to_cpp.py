@@ -2057,7 +2057,7 @@ class z3_thunk : public thunk<D,R> {
                     if action.formal_params:
                         trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
                     else:
-                        trace_code = '__ivy_out << "{} {"'.format(actname.split(':')[-1]) + ' << std::endl'
+                        trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
                     thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
                 impl.append("""
                 if (action == "actname") {
