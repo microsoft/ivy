@@ -28,18 +28,18 @@ object spec = {
     var hello_value : t
 
     after init {
-	pending := false
+        pending := false
     }
 
     before hello(val:t) {
-	pending := true;
-	hello_value := val        # remember the value
+        pending := true;
+        hello_value := val        # remember the value
     }
 
     before world(val:t) {
-	assert pending;
-	assert val > hello_value;  #  new assertion
-	pending := false
+        assert pending;
+        assert val > hello_value;  #  new assertion
+        pending := false
     }
 }
 
@@ -47,7 +47,7 @@ object spec = {
 
 object impl = {
     implement hello {
-	call world(val+1)
+        call world(val+1)
     }
 }
 

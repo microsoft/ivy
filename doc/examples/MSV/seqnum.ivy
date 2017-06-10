@@ -12,7 +12,7 @@ module sequence_numbers = {
 
     interpret t->bv[8]
     implement next {
-	res := seq + 1
+        res := seq + 1
     }
 
 }

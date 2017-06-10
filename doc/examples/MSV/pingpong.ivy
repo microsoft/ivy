@@ -26,21 +26,21 @@ object spec = {
     var side : side_t
 
     after init {
-	side := left
+        side := left
     }
 
     # When `ping` occurs, the ball must be on the left. It moves to the right.
 
     before intf.ping {
-	assert side = left;
-	side := right
+        assert side = left;
+        side := right
     }
 
     # When `pong` occurs, the ball must be on the rightr. It moves to the left.
 
     before intf.pong {
-	assert side = right;
-	side := left
+        assert side = right;
+        side := left
     }
 }
 
@@ -55,14 +55,14 @@ object left_player = {
     init ball
 
     action hit = {
-	if ball {
-	    call intf.ping;
-	    ball := false
-	}
+        if ball {
+            call intf.ping;
+            ball := false
+        }
     }
     
     implement intf.pong {
-	ball := true
+        ball := true
     }
 
 }
@@ -75,14 +75,14 @@ object right_player = {
     init ~ball
 
     action hit = {
-	if ball {
-	    call intf.pong;
-	    ball := false
-	}
+        if ball {
+            call intf.pong;
+            ball := false
+        }
     }
     
     implement intf.ping {
-	ball := true
+        ball := true
     }
 
 }

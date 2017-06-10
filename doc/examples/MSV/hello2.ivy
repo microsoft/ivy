@@ -34,14 +34,14 @@ object spec = {
     # This says to initialize `pending` to `false`.
 
     after init {
-	pending := false
+        pending := false
     }
 
     # This says, before executing the implementation of `hello`, set
     # `pending` to true.
 
     before hello(val:t) {
-	pending := true
+        pending := true
     }
 
     # This says, before executing the implementation of `world`,
@@ -49,8 +49,8 @@ object spec = {
     # an unsolicited call to `world`, this assertion will fail.
 
     before world(val:t) {
-	assert pending;
-	pending := false
+        assert pending;
+        pending := false
     }
 }
 
@@ -59,7 +59,7 @@ object spec = {
 
 object impl = {
     implement hello {
-	call world(val+1)
+        call world(val+1)
     }
 }
 
