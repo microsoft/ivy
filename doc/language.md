@@ -56,7 +56,7 @@ We will now consider the basic elements of an IVy program.
 
 Every IVy file begins with a line like the following:
 
-    #lang ivy1.5
+    #lang ivy1.6
 
 This tells IVy what version of the language we are using.
 
@@ -334,7 +334,7 @@ When a loop is needed, it can be written like this:
     while i > 0
     {
         sum := sum + f(i);
-	i := i - 1
+        i := i - 1
     }
 
 This loop computes the sum of `f(i)` for `i` in the range `(0,x]`.
@@ -344,7 +344,7 @@ A loop can be decorated with a invariants, like this:
     invariant sum >= 0
     {
         sum := sum + f(i);
-	i := i - 1
+        i := i - 1
     }
 
 The invariant `sum >= 0` is a special assertion that is applied
