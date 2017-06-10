@@ -42,6 +42,9 @@ module tcp_channel(addr,pkt) = {
 	action internal(p:pkt) = {
 	    call rcvr.recv(p);
 	}
+	implement sndr.send(p : pkt) {
+	    # seriously need to do something here!
+	}
     }
 
     trusted isolate iso = impl with spec
