@@ -39,29 +39,29 @@ type request_kind = {write,read}
 
 object request_body = {
     type t = struct {
-	knd : request_kind,
-	ky : key,
-	vl : value
+        knd : request_kind,
+        ky : key,
+        vl : value
     }
 }
 
 object request = {
     type t = struct {
-	tx : txid,
-	bd : request_body.t
+        tx : txid,
+        bd : request_body.t
     }
 }
 
 object response_body = {
     type t = struct {
-	vl : value
+        vl : value
     }
 }
 
 object response = {
     type t = struct {
-	tx : txid,
-	bd : response_body.t
+        tx : txid,
+        bd : response_body.t
     }
 }
 
@@ -70,15 +70,15 @@ object response = {
 module replica = {
     function store(K:key) : value
     after init {
-	store(K) := 0
+        store(K) := 0
     }
     action exec(inp : request_body.t) returns (out:response_body.t) = {
-	if inp.knd = write {
-	    store(inp.ky) := inp.vl;
-	}
-	else if inp.knd = read {
-	    out.vl := store(inp.ky);
-	}
+        if inp.knd = write {
+            store(inp.ky) := inp.vl;
+        }
+        else if inp.knd = read {
+            out.vl := store(inp.ky);
+        }
     }
 }
 
@@ -108,27 +108,27 @@ object ref = {
     relation committed(X:txid)
 
     after init {
-	next := 0;
-	committed(X) := false;
+        next := 0;
+        committed(X) := false;
     }
 
     implement create {
-	tx := next;
-	txs(tx) := inp;
-	next := next + 1;
+        tx := next;
+        txs(tx) := inp;
+        next := next + 1;
     }
 
     implement commit {
-	assert 0 <= tx & tx < next;
-	assert ~committed(tx);
-	txres(tx) := rep.exec(txs(tx));
-	committed(tx) := true;
+        assert 0 <= tx & tx < next;
+        assert ~committed(tx);
+        txres(tx) := rep.exec(txs(tx));
+        committed(tx) := true;
     }
     delegate commit
 
     implement eval {
-	assert committed(tx);
-	res := txres(tx);
+        assert committed(tx);
+        res := txres(tx);
     }
     delegate eval
 
@@ -152,7 +152,7 @@ object ser = {
     relation serialized(X:txid)
 
     after init {
-	serialized(X) := false;
+        serialized(X) := false;
     }
 
     # To serialzie a write, we must guarantee that transaction exists,
@@ -160,10 +160,10 @@ object ser = {
     # only serialize write transactions.
 
     implement serialize {
-	assert 0 <= tx & tx < ref.next;
-	assert ~serialized(tx);
-	assert ref.txs(tx).knd = write;
-	serialized(tx) := true;
+        assert 0 <= tx & tx < ref.next;
+        assert ~serialized(tx);
+        assert ref.txs(tx).knd = write;
+        serialized(tx) := true;
     }
     delegate serialize
 
@@ -171,7 +171,7 @@ object ser = {
     # until it is serialized.
 
     before ref.commit(tx : txid,dst:dest.t) {
-	assert ref.txs(tx).knd = write -> serialized(tx);
+        assert ref.txs(tx).knd = write -> serialized(tx);
     }
 }
 
@@ -212,15 +212,15 @@ module client(cid,prim_chan,sec_chan,cl_chans) = {
     # parameter `the_dst`.
 
     implement client_request {
-	var m : req_msg;
-	m.cid := cid;
-	m.req.tx := ref.create(req,the_dst);
-	m.req.bd := req;
-	if the_dst = dest.prim {
-	    call prim_chan.send(m);
-	} else {
-	    call sec_chan.send(m);
-	}
+        var m : req_msg;
+        m.cid := cid;
+        m.req.tx := ref.create(req,the_dst);
+        m.req.bd := req;
+        if the_dst = dest.prim {
+            call prim_chan.send(m);
+        } else {
+            call sec_chan.send(m);
+        }
     }
 
     # To handle a response from the server, we simply pass it to the
@@ -228,7 +228,7 @@ module client(cid,prim_chan,sec_chan,cl_chans) = {
     # "ghost" and is only used for specification.
 
     implement cl_chans.recv(resp : response.t) {
-	call client_response(resp.bd,resp.tx)
+        call client_response(resp.bd,resp.tx)
     }
 }
 
@@ -252,9 +252,9 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     # Initially, all the counters are zero.
 
     after init {
-	pending(K) := 0;
+        pending(K) := 0;
     }
-	
+        
     # When receiving a request message from a client, the primary
     # node must first check whether it is a read or a write. In the case
     # of a read, we check if the key has a pending write. If not, we commit
@@ -265,32 +265,32 @@ module primary_node(port, fwd_chan, rev_chan, cl_chans) = {
     # 
 
     implement req_chan.recv(inp : req_msg) {
-	var rr := inp.req.bd;
+        var rr := inp.req.bd;
         if rr.knd = read {
-	    if pending(rr.ky) = 0 {
-		call ref.commit(inp.req.tx,dest.prim);
-		var res : response.t;
-		res.tx := inp.req.tx;
-		res.bd := rep.exec(rr);
-		call cl_chans(inp.cid).send(res)
-	    } else {
+            if pending(rr.ky) = 0 {
+                call ref.commit(inp.req.tx,dest.prim);
+                var res : response.t;
+                res.tx := inp.req.tx;
+                res.bd := rep.exec(rr);
+                call cl_chans(inp.cid).send(res)
+            } else {
                 call req_chan.send(inp);  # if cannot execute, recirculate
-	    }
-	} else if rr.knd = write {
-	    call ser.serialize(inp.req.tx);           # this is ghost!
-	    call fwd_chan.send(inp);
-	    var res := rep.exec(inp.req.bd);
-	} 	    
+            }
+        } else if rr.knd = write {
+            call ser.serialize(inp.req.tx);           # this is ghost!
+            call fwd_chan.send(inp);
+            var res := rep.exec(inp.req.bd);
+        }             
     }
 
     # When we receive a write request on the acknowledgement channel,
     # we decrement the pending count of the key.
 
     implement rev_chan.recv(inp : req_msg) {
-	var rr := inp.req.bd;
-	if rr.knd = write {
-	    pending(rr.ky) := pending(rr.ky).prev;
-	}
+        var rr := inp.req.bd;
+        if rr.knd = write {
+            pending(rr.ky) := pending(rr.ky).prev;
+        }
     }
 }
 
@@ -304,16 +304,16 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     instance rep : replica
 
     instance req_chan : nondup_endpoint(port,req_msg)
-	
+        
     implement req_chan.recv(inp : req_msg) {
-	var rr := inp.req.bd;
+        var rr := inp.req.bd;
         if rr.knd = read {
-	    var res : response.t;
-	    res.tx := inp.req.tx;
-	    res.bd := rep.exec(rr);
-	    call cl_chans(inp.cid).send(res);
-	} 	    
-	# ignore writes!
+            var res : response.t;
+            res.tx := inp.req.tx;
+            res.bd := rep.exec(rr);
+            call cl_chans(inp.cid).send(res);
+        }             
+        # ignore writes!
     }
 
     # When the secondary receives a forwarded write from the primary,
@@ -322,11 +322,11 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
     #
 
     implement fwd_chan.recv(inp : req_msg) {
-	var res : response.t;
-	res.tx := inp.req.tx;
-	res.bd := rep.exec(inp.req.bd);
-	call cl_chans(inp.cid).send(res);
-	call rev_chan.send(inp);
+        var res : response.t;
+        res.tx := inp.req.tx;
+        res.bd := rep.exec(inp.req.bd);
+        call cl_chans(inp.cid).send(res);
+        call rev_chan.send(inp);
     }
 
 }
@@ -371,13 +371,13 @@ object service_spec = {
     relation responded(X:txid)
 
     after init {
-	responded(X) := false;
+        responded(X) := false;
     }
     
     before cl_chans.send(p : client_id, m : response.t) {
-	assert ~responded(m.tx);
-	assert m.bd = ref.eval(m.tx);
-	responded(m.tx) := true;
+        assert ~responded(m.tx);
+        assert m.bd = ref.eval(m.tx);
+        responded(m.tx) := true;
     }
 }
 
@@ -392,7 +392,7 @@ object mid_spec = {
     instance queue : unbounded_queue(txid)
 
     after ser.serialize(tx:txid) {
-	call queue.push(tx);
+        call queue.push(tx);
     }
 
     # When a message is received at the secondary on the forward
@@ -408,9 +408,9 @@ object mid_spec = {
     # convenient.
 
     before fwd_chan.rcvr.recv(inp : req_msg) {
-	assert inp.req.bd = ref.txs(inp.req.tx);
-	assert inp.req.tx = queue.pop;
-	call ref.commit(inp.req.tx,dest.sec);
+        assert inp.req.bd = ref.txs(inp.req.tx);
+        assert inp.req.tx = queue.pop;
+        call ref.commit(inp.req.tx,dest.sec);
     }
 
     # This tells IVy that the above specification is a guarantee for
@@ -430,7 +430,7 @@ object mid_spec = {
     relation acked(X:txid)
 
     after init {
-	acked(X) := false;
+        acked(X) := false;
     }
     
     # When an ack message is sent on the reverse channel, must have
@@ -439,10 +439,10 @@ object mid_spec = {
     # record the fact that it is now acked.
 
     before rev_chan.sndr.send(inp : req_msg) {
-	assert ref.txs(inp.req.tx) = inp.req.bd;
-	assert ref.committed(inp.req.tx);
-	assert ~acked(inp.req.tx);
-	acked(inp.req.tx) := true;
+        assert ref.txs(inp.req.tx) = inp.req.bd;
+        assert ref.committed(inp.req.tx);
+        assert ~acked(inp.req.tx);
+        acked(inp.req.tx) := true;
     }
     
     # When a request is created, we record the destination server. In
@@ -455,24 +455,24 @@ object mid_spec = {
     function req_dest(X:txid) : dest.t
 
     after ref.create(inp : request_body.t, dst:dest.t) returns (tx : txid) {
-	req_dest(tx) := dst
+        req_dest(tx) := dst
     }
-	
+        
     # We now specify that all reads must be commited by the server
     # they are addressed to, while all writes are committed by the
     # secondary
 
     before ref.commit(tx : txid,dst:dest.t) {
-	assert ref.txs(tx).knd = read -> req_dest(tx) = dst;
-	assert ref.txs(tx).knd = write -> dst = dest.sec
+        assert ref.txs(tx).knd = read -> req_dest(tx) = dst;
+        assert ref.txs(tx).knd = write -> dst = dest.sec
     }
 
     # Commit immediately all read requests from client to secondary
 
     before sec.req_chan.recv(inp : req_msg) {
-	if inp.req.bd.knd = read {
-    	    call ref.commit(inp.req.tx,dest.sec)
-	}
+        if inp.req.bd.knd = read {
+                call ref.commit(inp.req.tx,dest.sec)
+        }
     }
 
 }

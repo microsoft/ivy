@@ -159,6 +159,9 @@ module nondup_endpoint(port,pkt) = {
 	action internal(p:pkt) = {
 	    call recv(p);
 	}
+	implement send(p : pkt) {
+	    # seriously need to do something here!
+	}
     }
 
     trusted isolate iso = impl with spec
@@ -191,6 +194,9 @@ module nondup_endpoint_set(addr,port_base,pkt) = {
     object impl = {
 	action internal(dst:addr,p:pkt) = {
 	    call recv(dst,p);
+	}
+	implement send(dst:addr,v:pkt) {
+	    # seriously need to do something here!
 	}
     }
 

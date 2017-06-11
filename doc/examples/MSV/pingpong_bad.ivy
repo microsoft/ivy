@@ -12,13 +12,13 @@ object spec = {
     init side = left
 
     before intf.ping {
-	assert side = left;
-	side := right
+        assert side = left;
+        side := right
     }
 
     before intf.pong {
-	assert side = right;
-	side := left
+        assert side = right;
+        side := left
     }
 }
 
@@ -27,12 +27,12 @@ object left_player = {
     init ball
 
     action hit = {
-	call intf.ping; # forgot to test ball!
-	ball := false
+        call intf.ping; # forgot to test ball!
+        ball := false
     }
     
     implement intf.pong {
-	ball := true
+        ball := true
     }
 
     conjecture left_player.ball -> spec.side = left
@@ -43,14 +43,14 @@ object right_player = {
     init ~ball
 
     action hit = {
-	if ball {
-	    call intf.pong;
-	    ball := false
-	}
+        if ball {
+            call intf.pong;
+            ball := false
+        }
     }
     
     implement intf.ping {
-	ball := true
+        ball := true
     }
 
     conjecture right_player.ball -> spec.side = right

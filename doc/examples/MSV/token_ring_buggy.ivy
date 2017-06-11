@@ -50,7 +50,7 @@ object node = {
     interpret t -> bv[1]
 
     action next(x:t) returns (y:t) = {
-	y := x + 1
+        y := x + 1
     }
 }
 
@@ -75,19 +75,19 @@ module transport(lower,packet,id) = {
 
     object spec = {
 
-	after init {
-	    sent(D,P) := false
-	}
+        after init {
+            sent(D,P) := false
+        }
 
-	before send {
-	    assert ~sent(dst,pkt);
-	    sent(dst,pkt) := true
-	}
+        before send {
+            assert ~sent(dst,pkt);
+            sent(dst,pkt) := true
+        }
 
-	before recv {
-	    assert sent(dst,pkt);
-	    sent(dst,pkt) := false
-	}
+        before recv {
+            assert sent(dst,pkt);
+            sent(dst,pkt) := false
+        }
     }
 
     instance seq_num : sequence_numbers
@@ -97,79 +97,79 @@ module transport(lower,packet,id) = {
     type mtype = {msg_t, ack_t}
     
     object net_msg = {
-	type t = struct {
-	    mty : mtype,
-	    src : id,
-	    num : seq_num.t,
-	    payload : packet
-	}
+        type t = struct {
+            mty : mtype,
+            src : id,
+            num : seq_num.t,
+            payload : packet
+        }
     }
 
     object impl(me:id) = {
 
 
 
-	# Create one outgoing message queue for each host
-	# and a timout for each queue.
+        # Create one outgoing message queue for each host
+        # and a timout for each queue.
 
-	instance mq(D:id) : message_queue(net_msg,seq_num)
-	instance timer(D:id) : timeout_sec
+        instance mq(D:id) : message_queue(net_msg,seq_num)
+        instance timer(D:id) : timeout_sec
 
-	# Keep track of the latest sequence number sent and received
-	# on each channel.
+        # Keep track of the latest sequence number sent and received
+        # on each channel.
 
-	var send_seq(S:id) : seq_num.t
-	var recv_seq(S:id) : seq_num.t
+        var send_seq(S:id) : seq_num.t
+        var recv_seq(S:id) : seq_num.t
 
-	init recv_seq(S) = 0 & send_seq(S) = 0
+        init recv_seq(S) = 0 & send_seq(S) = 0
 
-	# Implementations of interface actions
+        # Implementations of interface actions
 
-	implement send(dst:id,pkt:packet) {
-	    var msg : net_msg.t;
-	    var seq : seq_num.t;
-	    msg.mty := msg_t;
-	    msg.src := me;
-	    msg.num := send_seq(dst);
-	    msg.payload := pkt;
-	    send_seq(dst) := send_seq(dst).next;
-	    call mq(dst).enqueue(msg);
-	    call lower.send(me,dst,msg)
-	}
+        implement send(dst:id,pkt:packet) {
+            var msg : net_msg.t;
+            var seq : seq_num.t;
+            msg.mty := msg_t;
+            msg.src := me;
+            msg.num := send_seq(dst);
+            msg.payload := pkt;
+            send_seq(dst) := send_seq(dst).next;
+            call mq(dst).enqueue(msg);
+            call lower.send(me,dst,msg)
+        }
 
-	# Receiving a message is the most complicated. First, we send
-	# an ack. Then, if the sequence number is correct, we call the
-	# application layer action determined by the message type.
+        # Receiving a message is the most complicated. First, we send
+        # an ack. Then, if the sequence number is correct, we call the
+        # application layer action determined by the message type.
 
-	implement lower.recv(msg:net_msg.t) {
-	    var src:id;
-	    var seq:seq_num.t;
-	    seq := msg.num;
-	    src := msg.src;
-	    if seq <= recv_seq(src) & msg.mty ~= ack_t  {
-		var ack : net_msg.t;
-		ack.mty := ack_t;
-		ack.src := me;
-		ack.num := seq;
-		call lower.send(me,src,ack)
-	    };
-	    if msg.mty = ack_t {
-		call mq(src).delete_all(seq)
-	    }
-	    else if seq >= recv_seq(src) {
-		recv_seq(src) := seq_num.next(recv_seq(src));
-		call recv(me,msg.payload)
-	    }
-	}
+        implement lower.recv(msg:net_msg.t) {
+            var src:id;
+            var seq:seq_num.t;
+            seq := msg.num;
+            src := msg.src;
+            if seq <= recv_seq(src) & msg.mty ~= ack_t  {
+                var ack : net_msg.t;
+                ack.mty := ack_t;
+                ack.src := me;
+                ack.num := seq;
+                call lower.send(me,src,ack)
+            };
+            if msg.mty = ack_t {
+                call mq(src).delete_all(seq)
+            }
+            else if seq >= recv_seq(src) {
+                recv_seq(src) := seq_num.next(recv_seq(src));
+                call recv(me,msg.payload)
+            }
+        }
 
-	# If an outgoing channel times out and the queue is not empty,
-	# we pick an arbitrary message in the queue and retransmit it.
+        # If an outgoing channel times out and the queue is not empty,
+        # we pick an arbitrary message in the queue and retransmit it.
 
-	implement timer.timeout(dst:id) {
-	    if ~mq(dst).empty {
-		call lower.send(me,dst,mq(dst).pick_one)
-	    }
-	}
+        implement timer.timeout(dst:id) {
+            if ~mq(dst).empty {
+                call lower.send(me,dst,mq(dst).pick_one)
+            }
+        }
 
 
     }
@@ -202,18 +202,18 @@ object serv = {
     action release(v:node.t)               # client releases lock
 
     object spec = {
-	relation lock(X:node.t)
-	init lock(X) <-> X = 0
-	
-	before grant {
-	    assert ~lock(X);
-	    lock(v) := true
-	}
-	
-	before release {
-	    assert lock(v);
-	    lock(v) := false
-	}
+        relation lock(X:node.t)
+        init lock(X) <-> X = 0
+        
+        before grant {
+            assert ~lock(X);
+            lock(v) := true
+        }
+        
+        before release {
+            assert lock(v);
+            lock(v) := false
+        }
     }
 }
 
@@ -227,20 +227,20 @@ object proto(me:node.t) = {
 
     relation token
     after init {
-	token := me = 0
+        token := me = 0
     }
 
     implement serv.release {
-	if token {
-	    token := false;
-	    var pkt : packet.t;
-	    call trans.send(me,node.next(me),pkt)
-	}
+        if token {
+            token := false;
+            var pkt : packet.t;
+            call trans.send(me,node.next(me),pkt)
+        }
     }
 
     implement trans.recv(pkt:packet.t) {
-	token := true;
-	call serv.grant(me)
+        token := true;
+        call serv.grant(me)
     }
 }
 

@@ -60,9 +60,9 @@ type request_kind = {write,read}
 
 object request_body = {
     type t = struct {
-	knd : request_kind,
-	ky : key,
-	vl : value
+        knd : request_kind,
+        ky : key,
+        vl : value
     }
 }
 
@@ -72,8 +72,8 @@ object request_body = {
 
 object request = {
     type t = struct {
-	tx : txid,
-	bd : request_body.t
+        tx : txid,
+        bd : request_body.t
     }
 }
 
@@ -83,7 +83,7 @@ object request = {
 
 object response_body = {
     type t = struct {
-	vl : value
+        vl : value
     }
 }
 
@@ -92,8 +92,8 @@ object response_body = {
 
 object response = {
     type t = struct {
-	tx : txid,
-	bd : response_body.t
+        tx : txid,
+        bd : response_body.t
     }
 }
 
@@ -107,15 +107,15 @@ object response = {
 module replica = {
     function store(K:key) : value
     after init {
-	store(K) := 0
+        store(K) := 0
     }
     action exec(inp : request_body.t) returns (out:response_body.t) = {
-	if inp.knd = write {
-	    store(inp.ky) := inp.vl;
-	}
-	else if inp.knd = read {
-	    out.vl := store(inp.ky);
-	}
+        if inp.knd = write {
+            store(inp.ky) := inp.vl;
+        }
+        else if inp.knd = read {
+            out.vl := store(inp.ky);
+        }
     }
 }
 
@@ -164,17 +164,17 @@ object ref = {
     relation committed(X:txid)
 
     after init {
-	next := 0;
-	committed(X) := false;
+        next := 0;
+        committed(X) := false;
     }
 
 # The create action simply generates a new transaction id and stores
 # the request.
 
     implement create {
-	tx := next;
-	txs(tx) := inp;
-	next := next + 1;
+        tx := next;
+        txs(tx) := inp;
+        next := next + 1;
     }
 
 # The commit action asserts that the transaction id must be for an
@@ -184,10 +184,10 @@ object ref = {
 # that the assertions are guarantees for the caller.
 
     implement commit {
-	assert 0 <= tx & tx < next;
-	assert ~committed(tx);
-	txres(tx) := rep.exec(txs(tx));
-	committed(tx) := true;
+        assert 0 <= tx & tx < next;
+        assert ~committed(tx);
+        txres(tx) := rep.exec(txs(tx));
+        committed(tx) := true;
     }
     delegate commit
 
@@ -195,8 +195,8 @@ object ref = {
 # be committed, then returns the stored result.
 
     implement eval {
-	assert committed(tx);
-	res := txres(tx);
+        assert committed(tx);
+        res := txres(tx);
     }
     delegate eval
 
@@ -250,11 +250,11 @@ module client(cid,srvr_chan,cl_chans) = {
     # server.
 
     implement client_request {
-	var m : req_msg;
-	m.cid := cid;
-	m.req.tx := ref.create(req,dst);
-	m.req.bd := req;
-	call srvr_chan.send(m);
+        var m : req_msg;
+        m.cid := cid;
+        m.req.tx := ref.create(req,dst);
+        m.req.bd := req;
+        call srvr_chan.send(m);
     }
 
     # To handle a response from the server, we simply pass it to the
@@ -262,7 +262,7 @@ module client(cid,srvr_chan,cl_chans) = {
     # "ghost" and is only used for specification.
 
     implement cl_chans.recv(resp : response.t) {
-	call client_response(resp.bd,resp.tx)
+        call client_response(resp.bd,resp.tx)
     }
 
 }
@@ -276,7 +276,7 @@ module server_node(port, cl_chans) = {
     instance rep : replica
 
     instance req_chan : nondup_endpoint(port,req_msg)
-	
+        
 # When we receive a request message on our port, we first commit the
 # transaction id, then build a response message by executing the
 # trasnaction on the replica, then send the response to the client. In
@@ -289,12 +289,12 @@ module server_node(port, cl_chans) = {
 # verification.
 
     implement req_chan.recv(inp : req_msg) {
-	call ref.commit(inp.req.tx,dest.srvr);
-	var rr := inp.req.bd;
-	var res : response.t;
-	res.tx := inp.req.tx;
-	res.bd := rep.exec(rr);
-	call cl_chans(inp.cid).send(res)
+        call ref.commit(inp.req.tx,dest.srvr);
+        var rr := inp.req.bd;
+        var res : response.t;
+        res.tx := inp.req.tx;
+        res.bd := rep.exec(rr);
+        call cl_chans(inp.cid).send(res)
     }
 }
 
@@ -334,13 +334,13 @@ object service_spec = {
     relation responded(X:txid)
 
     after init {
-	responded(X) := false;
+        responded(X) := false;
     }
     
     before cl_chans.send(p : client_id, m : response.t) {
-	assert ~responded(m.tx);
-	assert m.bd = ref.eval(m.tx);
-	responded(m.tx) := true;
+        assert ~responded(m.tx);
+        assert m.bd = ref.eval(m.tx);
+        responded(m.tx) := true;
     }
 }
 
