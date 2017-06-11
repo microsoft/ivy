@@ -1,0 +1,56 @@
+#lang ivy1.6
+
+module indexset(index) = {
+
+    # index is the type of elements
+
+    type set # the type of sets of elements
+    
+    individual n : index.t             # the number of elements
+    relation member(E:index.t,S:set)   # E is a member of set S
+
+    relation disjoint(X:set,Y:set)
+    function card(S:set) : index.t
+
+    relation sum(X:index.t,Y:index.t,Z:index.t)
+    axiom sum(X,0,X)
+    axiom sum(X,Y,Z) & index.succ(Y,SY) & index.succ(Z,SZ) -> sum(X,SY,SZ)
+
+    object spec = {
+	property disjoint(X,Y) & sum(card(X),card(Y),SXY) -> SXY <= n
+    }
+    
+    object impl = {
+	
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+
+	relation cardUpTo(S:set,B:index.t,C:index.t)
+
+	# axioms of card
+
+	axiom cardUpTo(S,0,0)
+	axiom cardUpTo(S,B,C) & member(B,S) & index.succ(B,BS) & index.succ(C,CS) -> cardUpTo(S,BS,CS)
+	axiom cardUpTo(S,B,C) & ~member(B,S) & index.succ(B,BS) -> cardUpTo(S,BS,C)
+	axiom cardUpTo(S,n,C) <-> card(S) = C
+
+	# invariant
+
+	relation inv(B:index.t)
+	definition inv(b:index.t) = 
+	    forall X,Y,CX,CY.
+               disjoint(X,Y) & cardUpTo(X,b,CX) & cardUpTo(X,b,CY) & sum(CX,CY,SXY) -> SXY <= b
+
+	# instance of induction schema for index
+
+	derived lerr = some E. (E >= 0 & ~inv(E))
+	axiom ~(X >= 0 & ~inv(X) & X < lerr)
+    }
+}
+
+	
+    
+include order
+instance idx : unbounded_sequence
+instance s : indexset(idx)
+
+isolate iso = s with idx
