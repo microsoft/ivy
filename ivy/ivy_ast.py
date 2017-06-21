@@ -740,6 +740,22 @@ class DelegateDef(AST):
         return s
 
 
+class ImplementTypeDecl(Decl):    
+    def name(self):
+        return 'implementtype'
+    def defines(self):
+        return []
+    
+class ImplementTypeDef(AST):
+    def implemented(self):
+        return self.args[0].relname
+    def implementer(self):
+        return self.args[1].relname
+    def __repr__(self):
+        s = self.implemented()
+        s += ' with ' + self.implementer
+        return s
+
 class NativeCode(AST):
     def __init__(self,string):
         self.args = []

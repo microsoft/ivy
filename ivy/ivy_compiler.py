@@ -23,6 +23,7 @@ import ivy_theory as ith
 import ivy_isolate as iso
 import ivy_printer
 from collections import defaultdict
+from tarjan import tarjan
 
 class IvyDeclInterp(object):
     def __call__(self,ivy):
@@ -655,6 +656,21 @@ class IvyDomainSetup(IvyDeclInterp):
             if r.rep not in self.domain.sig.sorts:
                 raise IvyError(v,"undefined sort: {}".format(r.rep))
         self.domain.variants[v.args[1].rep].append(self.domain.sig.sorts[v.args[0].rep])
+    def implementtype(self,thing):
+        v = thing.formula
+        for r in v.args:
+            if r.rep not in self.domain.sig.sorts:
+                raise IvyError(v,"undefined sort: {}".format(r.rep))
+        impd = v.implemented()
+        impr = v.implementer()
+        if (impd in self.domain.native_types or
+            impd in self.domain.sig.interp):
+            raise IvyError(v,"{} is already interpreted".format(impd))
+#        if impd in ivy_logic.sort_dependencies(impr):
+#            raise IvyError(v,"cannot implement type {} with {} because {} depends on {}".format(impd,impr,impr,impd))
+        ivy_logic.implement_type(ivy_logic.find_sort(impd),ivy_logic.find_sort(impr))
+        self.domain.interps[impd].append(thing)
+        
     def interpret(self,thing):
         sig = self.domain.sig
         interp = sig.interp
@@ -903,6 +919,33 @@ def check_instantiations(mod,decls):
                     raise IvyError(inst,"{} undefined in instantiation".format(inst.relname))
 
 
+def sort_dependencies(mod,sortname):
+    if sortname in mod.sort_destructors:
+        for destr in mod.sort_destructors[sortname]:
+            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
+    if sortname in mod.interps:
+        t = mod.interps[sortname]
+        if isinstance(t,ivy_ast.NativeType):
+            return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
+    return []
+
+def create_sort_order(mod):
+    arcs = [(x,s) for s in mod.sort_order for x in sort_dependencies(mod,s)]
+    # do nothing if sccs already sorted
+    number = dict((x,i) for i,x in enumerate(mod.sort_order))
+    if all(number[x] < number[y] for x,y in arcs):
+        return
+    m = defaultdict(set)
+    for x,y in arcs:
+        m[x].add(y)
+    sccs = tarjan(m)
+    # remove trivial sccs
+    sccs = [scc for scc in sccs if len(scc) > 1 or scc[0] in sort_dependencies(mod,scc[0])]
+    if len(sccs) > 0:
+        raise iu.IvyError(None,'these sorts form a dependency cycle: {}.'.format(','.join(sccs[0])))
+    mod.sort_order = iu.topological_sort(mod.sort_order,arcs)
+
+
 
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
@@ -932,6 +975,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
             # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
 
+        create_sort_order(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)

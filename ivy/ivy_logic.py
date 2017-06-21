@@ -1045,6 +1045,27 @@ def close_formula(fmla):
 
 free_variables = lu.free_variables
 
+def implement_type(sort1,sort2):
+    sig.interp[sort1.name] = sort2
+
+def is_canonical_sort(sort):
+    if isinstance(sort,UninterpretedSort):
+        s = sig.interp.get(sort.name,None)
+        return not isinstance(s,UninterpretedSort)
+    return True
+
+def canonize_sort(sort):
+    if isinstance(sort,UninterpretedSort):
+        s = sig.interp.get(sort.name,None)
+        if isinstance(s,UninterpretedSort):
+            return canonize_sort(s)
+    return sort
+
+def sort_refinement():
+    return dict((s,canonize_sort(s)) for s in sig.sorts.values() if not is_canonical_sort(s))
+
+# This returns only the *canonical* uninterpreted sorts
+
 def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
 
@@ -1052,16 +1073,27 @@ def interpreted_sorts():
     return [s for s in sig.sorts.values() if is_interpreted_sort(s)]
 
 def is_uninterpreted_sort(s):
+    s = canonize_sort(s)
     return isinstance(s,UninterpretedSort) and s.name not in sig.interp
 
 def is_interpreted_sort(s):
+    s = canonize_sort(s)
     return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
 
 def sort_interp(s):
-    return sig.interp.get(s.name,None)
+    return sig.interp.get(canonize_sort(s).name,None)
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()
+
+def is_interpreted_symbol(s):
+    return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and is_interpreted_sort(s.sort.dom[0])
+
+def is_deterministic_fmla(f):
+    if isinstance(f,Some) and len(s.args) < 4:
+        return False
+    return all(is_deterministic_fmla(a) for a in f.args)
+
 
 def sig_to_str(self):
     res = ''

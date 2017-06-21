@@ -187,6 +187,48 @@ def rename_ast(ast,subs):
         return subs.get(ast.rep,ast.rep)(*args)
     return ast.clone(args)
 
+
+def resort_sort(sort,subs):
+    """
+    Substitute sorts for sorts in a sort.
+    """
+    if isinstance(sort,UnionSort):
+        res = UnionSort()
+        res.sorts = [resort_sort(s,subs) for s in sort.sorts]
+        return res
+    if sort in subs:
+        return subs[sort]
+    if isinstance(sort,FunctionSort):
+        return FunctionSort(*[resort_sort(s,subs) for s in (sort.dom+(sort.rng,))])
+    return sort
+
+def resort_symbol(sym,subs):
+    return Symbol(sym.name,resort_sort(sym.sort,subs))
+
+def resort_var(sym,subs):
+    return Var(sym.name,resort_sort(sym.sort,subs))
+
+def resort_ast(ast,subs):
+    """
+    Substitute sorts for sorts in an ast.
+    """
+    args = [resort_ast(x,subs) for x in ast.args]
+    if is_app(ast):
+        return resort_symbol(ast.rep)(*args)
+    if is_quantifier(ast):
+        return type(ast)([resort_var(x,subs) for x in quantifier_vars(ast)],resort_ast(quantifier_body(ast)))
+    if is_variable(ast):
+        return resort_var(ast,subs)
+    return ast.clone(args)
+
+
+def resort_sig(subs):
+    ivy_logic.sig.symbols = dict((n,resort_symbol(s,subs)) for n,s in ivy_logic.sig.symbols.iteritems())
+    refd = set(s.name for s in subs)
+    ivy_logic.sig.sorts = dict((n,resort_sort(s,subs)) for n,s in ivy_logic.sig.sorts.iteritems() if n not in refd)
+    ivy_logic.sig.interp = dict((n,s) for n,s in ivy_logic.sig.interp.iteritems() if n not in refd)
+
+
 # aliases for backward compat
 substitute_term = substitute_lit = substitute_ast
 substitute_constants_term = substitute_constants_lit = substitute_constants_ast
@@ -202,6 +244,7 @@ substitute_constants_clause = substitute_constants_cube = apply_func_to_list(sub
 substitute_constants_clauses = substitute_constants_cubes = apply_func_to_clauses(substitute_constants_ast)
 rename_clause = rename_cube = apply_func_to_list(rename_ast)
 rename_clauses = rename_cubes = apply_func_to_clauses(rename_ast)
+resort_clauses = resort_cubes = apply_func_to_clauses(resort_ast)
 
 
 # get free variables

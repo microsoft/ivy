@@ -185,6 +185,75 @@ class Module(object):
                 m.__dict__[x] = copy(y)
         return m
 
+    # This removes implemented types
+
+    def canonize_types(self):
+        global sort_refinement
+        with self.sig:
+            sort_refinement = il.sort_refinement()
+            if len(list(sort_refinement)) == 0:
+                return # save time if nothing to do
+            self.definitions = resort_labeled_asts(self.definitions)
+            self.labeled_axioms = resort_labeled_asts(self.labeled_axioms)
+            self.labeled_props = resort_labeled_asts(self.labeled_props)
+            self.labeled_inits = resort_labeled_asts(self.labeled_inits)
+            self.init_cond = resort_clauses(self.init_cond)
+            self.concept_spaces = resort_concept_spaces(self.concept_spaces)
+            self.labeled_conjs = resort_labeled_asts(self.labeled_conjs)
+            self.assertions = resort_labeled_asts(self.assertions)
+            self.progress = resort_asts(self.progress)
+            self.initializers = resort_name_ast_pairs(self.initializers)
+            self.params = resort_symbols(self.params)
+            self.ghost_sorts = remove_refined_sortnames_from_set(self.ghost_sorts)
+            self.sort_order = remove_refined_sortnames_from_list(self.sort_order)
+            self.symbol_order = resort_symbols(self.symbol_order)
+            self.aliases = resort_aliases_map(self.aliases)
+            self.before_export = resort_map_any_ast(self.before_export)
+            self.ext_preconds = resort_map_any_ast(self.ext_preconds)
+            lu.resort_sig(sort_refinement)
+
+            
+def resort_ast(ast):
+    return lu.resort_ast(ast,sort_refinement)
+
+def resort_clauses(clauses):
+    return lu.resort_clauses(clauses,sort_refinement)
+
+def resort_asts(asts):
+    return [lu.resort_ast(ast,sort_refinement) for ast in asts]
+
+def resort_labeled_asts(asts):
+    return [ast.clone([ast.args[0],lu.resort_ast(ast.args[1],sort_refinement)]) for ast in asts]
+
+resort_concept_spaces = resort_asts
+
+def resort_map_symbol_sort(m):
+    return dict((lu.resort_symbol(sym,sort_refinement),lu.resort_sort(sort,sort_refinement))
+                for sym,sort in m.iteritems())
+
+def resort_name_ast_pairs(pairs):
+    return [(n,lu.resort_ast(a,sort_refinement)) for n,a in pairs]
+
+def resort_symbols(symbols):
+    return [lu.resort_symbol(symbol,sort_refinement) for symbol in symbols]
+
+def remove_refined_sortnames_from_set(sorts):
+    refd = set(s.name for s in sort_refinement)
+    return set(n for n in sorts if n not in refd)
+
+def remove_refined_sortnames_from_list(sorts):
+    refd = set(s.name for s in sort_refinement)
+    return list(n for n in sorts if n not in refd)
+
+def resort_aliases_map(amap):
+    res = dict(amap.iteritems())
+    for s1,s2 in sort_refinement.iteritems():
+        res[s1.name] = s2.name
+
+def resort_map_any_ast(m):
+    return dict((a,lu.resort_ast(b,sort_refinement)) for a,b in m.iteritems())
+
+
 module = None
 
 def instantiate_non_epr(non_epr,ground_terms):

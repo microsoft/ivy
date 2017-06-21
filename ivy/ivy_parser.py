@@ -836,6 +836,17 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,2)
         handle_before_after("implement",atom,p[6],p[0],p[4],p[5])
+    def p_top_implement_type_symbol_with_symbol(p):
+        'top : top IMPLEMENT TYPE SYMBOL WITH SYMBOL'
+        a1,a2 = Atom(p[4]),Atom(p[6])
+        a1.lineno = get_lineno(p,4)
+        a2.lineno = get_lineno(p,6)
+        impl = ImplementTypeDef(a1,a2)
+        impl.lineno = get_lineno(p,5)
+        d = ImplementTypeDecl(mk_lf(impl))
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
     def p_opttrusted(p):
         'opttrusted :'
         p[0] = False

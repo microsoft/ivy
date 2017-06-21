@@ -918,10 +918,14 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         return s.label if s.label else ""
 
     if enforce_axioms.get():
+        determined = set()
+        for dfn in mod.definitions:
+            if ivy_logic.is_deterministic_fmla(dfn.formula.args[1]):
+                determined.add(dfn.formula.defines())
         for a in dropped_axioms:
             for x in lu.used_symbols_ast(a.formula):
-                if x in all_syms:
-                    raise iu.IvyError(a,"relevant axiom {} not enforced".format(pname(a)))
+                if x in all_syms and not ivy_logic.is_interpreted_symbol(x) and x not in determined:
+                    raise iu.IvyError(a,"relevant axiom {} not enforced (uses symbol {})".format(pname(a),x))
         for actname,action in mod.actions.iteritems():
             if startswith_eq_some(actname,present,mod):
                 for c in action.iter_calls():
@@ -1265,6 +1269,8 @@ def create_isolate(iso,mod = None,**kwargs):
                     
 
         fix_initializers(mod,after_inits)
+
+        mod.canonize_types()
 
         # show the compiled code if requested
 

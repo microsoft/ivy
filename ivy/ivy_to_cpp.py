@@ -2183,10 +2183,8 @@ def really_check_representable(sym,ast=None,skip_args=0):
     if hasattr(sort,'dom'):
         for domsort in sort.dom[skip_args:]:
             card = sort_card(domsort)
-            if card == None:
-                raise iu.IvyError(ast,'cannot compile "{}" because type {} is uninterpreted'.format(sym,domsort))
-            if card > large_thresh:
-                raise iu.IvyError(ast,'cannot compile "{}" because type {} is large'.format(sym,domsort))
+            if card == None or card > large_thresh:
+                raise iu.IvyError(ast,'cannot compile initial constraint on "{}" because type {} is large. suggest using "after init"'.format(sym,domsort))
 
 def cstr(term):
     if isinstance(term,il.Symbol):
