@@ -323,6 +323,18 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
 
+class Lambda(recstruct('Lambda', ['variables'], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, variables, body):
+        if not all(type(v) is Var for v in variables):
+            raise IvyError("Can only abstract over variables")
+        return frozenset(variables), body
+    def __str__(self):
+        return '(Lambda {}. {})'.format(
+            ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
+            self.body)
 
 true = Const('true', Boolean)
 false = Const('false', Boolean)

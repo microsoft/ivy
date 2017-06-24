@@ -279,7 +279,9 @@ ivy_ast.AST.compile_with_sort_inference = sortify_with_inference
 def compile_const(v,sig):
     with ASTContext(v):
       rng = cmpl_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
-      return add_symbol(v.rep,get_function_sort(sig,v.args,rng))
+      sort = get_function_sort(sig,v.args,rng)
+      with sig:
+          return add_symbol(v.rep,sort)
     
 
 def compile_local(self):
@@ -528,7 +530,41 @@ def compile_defn(df):
                 df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
             return df
     
+def compile_schema_prem(self,sig):
+    if isinstance(self,ivy_ast.ConstantDecl):
+        sym = compile_const(self.args[0],sig)
+        return self.clone([sym])
+    elif isinstance(self,ivy_ast.DerivedDecl):
+        raise IvyErr(self,'derived functions in schema premises not supported yet')
     
+def compile_schema_conc(self,sig):
+    iu.dbg('type(self)')
+    iu.dbg('self')
+    if isinstance(self,ivy_ast.Definition):
+        with ivy_logic.WithSymbols(sig.all_symbols()):
+            return compile_defn(self)
+
+def compile_schema_body(self):
+    sig = ivy_logic.Sig()
+    prems = [compile_schema_prem(p,sig) for p in self.args[:-1]]
+    res = ivy_ast.SchemaBody(*(prems+[compile_schema_conc(self.args[-1],sig)]))
+    res.instances = []
+    iu.dbg('res')
+    return res
+
+ivy_ast.SchemaBody.compile = compile_schema_body    
+
+def compile_schema_instantiation(self):
+    if self.schemaname() not in im.module.schemata:
+        raise iu.IvyError(self,'schema {} does not exist'.format(self.schemaname()))
+    schema = im.module.schemata[self.schemaname()]
+    schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
+    with ivy_logic.WithSymbols(schemasyms):
+        defns = [compile_defn(x) for x in self.match()]
+    return self.clone([self.args[0]]+defns)
+
+ivy_ast.SchemaInstantiation.compile = compile_schema_instantiation    
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
@@ -551,7 +587,10 @@ class IvyDomainSetup(IvyDeclInterp):
     def property(self,ax):
         self.domain.labeled_props.append(ax.compile())
     def schema(self,sch):
-        self.domain.schemata[sch.defn.defines()] = sch
+        if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
+            self.domain.schemata[sch.defn.defines()] = sch.defn.args[1].compile()
+        else:
+            self.domain.schemata[sch.defn.defines()] = sch
     def instantiate(self,inst):
         try:
             self.domain.schemata[inst.relname].instantiate(inst.args)
@@ -579,6 +618,7 @@ class IvyDomainSetup(IvyDeclInterp):
     def add_definition(self,ldf):
         defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.definitions
         defs.append(ldf)
+        self.last_fact = ldf
 
     def derived(self,ldf):
         try:
@@ -606,6 +646,9 @@ class IvyDomainSetup(IvyDeclInterp):
         if not self.domain.sig.contains_symbol(df.args[0].rep):
             add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
             
+    def proof(self,pf):
+        self.domain.proofs.append((self.last_fact,pf.compile()))
+
     def progress(self,df):
         rel = df.args[0]
         with ASTContext(rel):
@@ -945,6 +988,34 @@ def create_sort_order(mod):
         raise iu.IvyError(None,'these sorts form a dependency cycle: {}.'.format(','.join(sccs[0])))
     mod.sort_order = iu.topological_sort(mod.sort_order,arcs)
 
+def tarjan_arcs(arcs,notriv=True):
+    m = defaultdict(set)
+    for x,y in arcs:
+        m[x].add(y)
+    sccs = tarjan(m)
+    if notriv:
+        sccs = [scc for scc in sccs if len(scc) > 1 or scc[0] in m[scc[0]]]
+    return sccs
+        
+
+def check_definitions(mod):
+    arcs = [(d.formula.defines().name,x.name)
+            for d in mod.definitions
+            for x in lu.symbols_ast(d.formula.args[1])]
+    dmap = dict((d.formula.defines().name,d) for d in mod.definitions)
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
+    sccs = tarjan_arcs(arcs)
+    import ivy_proof
+    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    for scc in sccs:
+        if len(scc) > 1:
+            raise iu.IvyError(None,'these definitions form a dependency cycle: {}'.format(','.join(scc)))
+        d = dmap[scc[0]]
+        if d.id not in pmap:
+            raise iu.IvyError(d,'definition of {} requires an recursion schema'.format(d.formula.defines()))
+        prover.admit_definition(d,pmap[d.id])
+        
+    
 
 
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
@@ -976,6 +1047,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
             #     print iu.pretty("action {} = {}".format(x,y))
 
         create_sort_order(mod)
+        check_definitions(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)

@@ -314,8 +314,38 @@ def p_top_macro_atom_eq_lcb_action_rcb(p):
     d = Definition(app_to_atom(p[3]),p[5])
     p[0].declare(MacroDecl(d))
 
+def p_schdefnrhs_fmla(p):
+    'schdefnrhs : fmla'
+    p[0] = p[1]
+
+def p_schdecl_funcdecl(p):
+    'schdecl : FUNCTION funs'
+    p[0] = p[2]
+
+def p_schconc_defdecl(p):
+    'schconc : DEFINITION defn'
+    p[0] = p[2]
+
+def p_schdecls(p):
+    'schdecls :'
+    p[0] = []
+
+def p_schdecls_schdecls_schdecl(p):
+    'schdecls : schdecls schdecl'
+    p[0] = p[1]
+    p[0].extend(p[2])
+
+def p_schdefnrhs_lcb_schdecls_rcb(p):
+    'schdefnrhs : LCB schdecls schconc RCB'
+    p[0] = SchemaBody(*(p[2]+[p[3]]))
+
+def p_schdefn_atom_eq_fmla(p):
+    'schdefn : defnlhs EQ schdefnrhs'
+    p[0] = Definition(app_to_atom(p[1]),p[3])
+    p[0].lineno = get_lineno(p,2)
+
 def p_top_schema_defn(p):
-    'top : top SCHEMA defn'
+    'top : top SCHEMA schdefn'
     p[0] = p[1]
     p[0].declare(SchemaDecl(Schema(p[3],[])))
 
@@ -475,10 +505,30 @@ def p_top_derived_defns(p):
     p[0] = p[1]
     p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
 
+def p_optproof(p):
+    'optproof :'
+    p[0] = None
+
+def p_optproof_symbol(p):
+    'optproof : PROOF SYMBOL'
+    a = Atom(p[2])
+    a.lineno = get_lineno(p,2)
+    p[0] = SchemaInstantiation(a)
+    p[0].lineno = get_lineno(p,1)
+    
+def p_optproof_symbol_with_defns(p):
+    'optproof : PROOF SYMBOL WITH defns'
+    a = Atom(p[2])
+    a.lineno = get_lineno(p,2)
+    p[0] = SchemaInstantiation(*([a]+p[4]))
+    p[0].lineno = get_lineno(p,1)
+
 def p_top_definition_defns(p):
-    'top : top DEFINITION defns'
+    'top : top DEFINITION defns optproof'
     p[0] = p[1]
     p[0].declare(DefinitionDecl(*[mk_lf(x) for x in p[3]]))
+    if p[4] is not None:
+        p[0].declare(ProofDecl(p[4]))
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'

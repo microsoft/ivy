@@ -66,7 +66,7 @@ from ivy_utils import flatten, IvyError
 import ivy_utils as iu
 import logic as lg
 import logic_util as lu
-from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists
+from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
 from type_inference import concretize_sorts
 from collections import defaultdict
 from itertools import chain
@@ -216,6 +216,10 @@ class Definition(AST):
         return ' = '.join([repr(x) for x in self.args])
     def defines(self):
         return self.args[0].rep
+    def lhs(self):
+        return self.args[0]
+    def rhs(self):
+        return self.args[1]
     def to_constraint(self):
         if isinstance(self.args[1],Some):
             if self.args[1].if_value() != None:
@@ -234,16 +238,15 @@ class Definition(AST):
     def sort(self):
         return lg.Boolean
 
-
                 
 
-lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists]
+lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda]
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
     cls.clone = lambda self,args: type(self)(*args)
 
-for cls in [lg.ForAll, lg.Exists]:
+for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.clone = lambda self,args: type(self)(self.variables,*args)
 
 lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
@@ -335,19 +338,7 @@ class UnionSort(object):
 
 def add_symbol(symbol_name,sort):
 #    print "add symbol: {} : {}".format(symbol_name,sort)
-    if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
-        if symbol_name not in sig.symbols:
-            sig.symbols[symbol_name] = Symbol(symbol_name,UnionSort())
-        u = sig.symbols[symbol_name].sort
-        if sort not in u.sorts:
-            u.sorts.append(sort)
-        return Symbol(symbol_name,sort)
-    elif symbol_name in sig.symbols:
-        if sort != sig.symbols[symbol_name].sort:
-            raise IvyError(None,"redefining symbol: {}".format(symbol_name))
-    else:
-        sig.symbols[symbol_name] = Symbol(symbol_name,sort)
-    return sig.symbols[symbol_name]
+    return sig.add_symbol(symbol_name,sort)
 
 def remove_symbol(symbol):
     sig.remove_symbol(symbol)
@@ -728,6 +719,22 @@ class Sig(object):
                     yield Symbol(sym.name,sort)
             else:
                 yield sym
+    def add_symbol(self,symbol_name,sort):
+        #    print "add symbol: {} : {}".format(symbol_name,sort)
+        if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
+            if symbol_name not in self.symbols:
+                self.symbols[symbol_name] = Symbol(symbol_name,UnionSort())
+            u = self.symbols[symbol_name].sort
+            if sort not in u.sorts:
+                u.sorts.append(sort)
+            return Symbol(symbol_name,sort)
+        elif symbol_name in self.symbols:
+            if sort != self.symbols[symbol_name].sort:
+                raise IvyError(None,"redefining symbol: {}".format(symbol_name))
+        else:
+            self.symbols[symbol_name] = Symbol(symbol_name,sort)
+        return self.symbols[symbol_name]
+
     def remove_symbol(self,symbol):
         assert symbol.name in self.symbols, symbol.name
         sort = self.symbols[symbol.name].sort
@@ -747,6 +754,29 @@ class Sig(object):
 
     def __str__(self):
         return sig_to_str(self)
+
+# Environment that temporarily adds symbols to a signature.
+
+class WithSymbols(object):
+    def __init__(self,symbols):
+        self.symbols = list(symbols)
+    def __enter__(self):
+        global sig
+        self.saved = []
+        for sym in self.symbols:
+            if sig.contains_symbol(sym):
+                self.saved.append(sym)
+                sig.remove_symbol(sym)
+            sig.add_symbol(sym.name,sym.sort)
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global sig
+        for sym in self.symbols:
+            sig.remove_symbol(sym)
+        for sym in self.saved:
+            sig.add_symbol(sym.name,sym.sort)
+        return False # don't block any exceptions
+
 
 alpha = lg.TopSort('alpha')
 beta = lg.TopSort('beta')
@@ -946,14 +976,13 @@ lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() fo
 lg.Apply.ugly = app_ugly
 
 def quant_ugly(self):
-    res = 'forall ' if isinstance(self,lg.ForAll) else 'exists '
+    res = 'forall ' if isinstance(self,lg.ForAll) else 'exists ' if isinstance(self,lg.Exists) else 'lambda '
     res += ','.join(v.ugly() for v in self.variables)
     res += '. ' + self.body.ugly()
     return res
 
-for cls in [lg.ForAll,lg.Exists]:
+for cls in [lg.ForAll,lg.Exists, lg.Lambda]:
     cls.ugly = quant_ugly
-
 
 # Drop the type annotations of variables and polymorphic
 # constants that can be inferred using the current signature. Here,
@@ -1014,7 +1043,7 @@ def quant_drop_annotations(self,inferred_sort,annotated_vars):
     body = self.body.drop_annotations(True,annotated_vars)
     return type(self)([v.drop_annotations(False,annotated_vars) for v in self.variables],body)
 
-for cls in [lg.ForAll, lg.Exists]:
+for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.drop_annotations = quant_drop_annotations
 
 def default_drop_annotations(self,inferred_sort,annotated_vars):
@@ -1031,7 +1060,7 @@ def pretty_fmla(self):
     return d.ugly()
 
 for cls in [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists,
-            lg.Apply, lg.Var, lg.Const]:
+            lg.Apply, lg.Var, lg.Const, lg.Lambda]:
     cls.__str__ = pretty_fmla
 
 # end string conversion stuff
@@ -1187,3 +1216,9 @@ def simp_ite(i,t,e):
 
 def pto(*asorts):
     return Symbol('*>',RelationSort(asorts))
+
+def lambda_apply(self,args):
+    assert len(args) == len(self.variables)
+    return lu.substitute(self.body,dict(zip(self.variables,args)))
+
+lg.Lambda.__call__ = lambda self,*args: lambda_apply(self,args)

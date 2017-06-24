@@ -476,7 +476,14 @@ class ObjectDecl(Decl):
         return [(c.relname,lineno(c)) for c in self.args]
 #        return []
 
+lf_counter = 0
+
 class LabeledFormula(AST):
+    def __init__(self,*args):
+        global lf_counter
+        self.args = args
+        self.id = lf_counter
+        lf_counter += 1
     @property
     def label(self):
         return self.args[0]
@@ -485,6 +492,12 @@ class LabeledFormula(AST):
         return self.args[1]
     def __str__(self):
         return '[' + str(self.label) + '] ' + str(self.formula) if self.label else str(self.formula)
+    def clone(self,args):
+        global lf_counter
+        res = AST.clone(self,args)
+        lf_counter -= 1
+        res.id = self.id
+        return res
 
 class AxiomDecl(Decl):
     def name(self):
@@ -498,11 +511,34 @@ class ConjectureDecl(Decl):
     def name(self):
         return 'conjecture'
 
+class ProofDecl(Decl):
+    def name(self):
+        return 'proof'
+
 class SchemaDecl(Decl):
     def name(self):
         return 'schema'
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
+
+class SchemaBody(AST):
+    def __str__(self):
+        return '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
+    def prems(self):
+        return self.args[:-1]
+    def conc(self):
+        return self.args[-1]
+
+class SchemaInstantiation(AST):
+    def __init__(self,*args):
+        self.args = args
+    def schemaname(self):
+        return self.args[0].rep
+    def match(self):
+        return self.args[1:]
+    def __str__(self):
+        return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+
 
 class Instantiation(AST):
     def __init__(self,*args):
