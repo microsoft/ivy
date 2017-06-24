@@ -1,0 +1,54 @@
+#lang ivy1.6
+
+type t
+type q
+
+
+schema foo = {
+    function base(X:t) : q
+    function step(X:q) : q
+    function fun(X:t) : q
+    #---------------------------------------------------------
+    definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1))
+}
+
+function bif(X:t):q
+
+definition bif(X) = 0 if X <= 0 else bif(X-1) + 1
+proof foo with base(X) = 0, step(X) = X + 1
+
+function succ(X:t,Y:t) = (Y-1 = X)
+
+property [bif_base] bif(0) = 0
+property [bif_step] F > 0 & succ(E,F) -> bif(F) = bif(E) + 1
+
+
+# fun(X) = bif(X)
+# base(X) = 0
+# step(fun(X-1)) = bif(X-1) + 1
+
+
+# step(bif(X-1)) -> bif(X-1) + 1
+
+# discharge[(Y1,bif(X-1))](bif(X-1) + 1) = Y1 + 1
+
+# step |-> lambda Y1.Y1 + 1
+
+# base(X) if X <= 0 else step(fun(X-1))
+#      --> 0 if X <= 0 else bif(X-1) + 1
+
+#     base(X) -> 0
+
+#         discharge[(Y1,X)](0) = 0
+#         {base |-> labmda Y1. 0}
+
+#     X <= 0 -> X <= 0
+
+#         {}
+
+
+# f 3 --> 3 + 3
+
+#     discharge[(Y1,3)](3+3) = Y1 + Y1
+#     {f |-> lambda Y1. Y1 + Y1}
+
