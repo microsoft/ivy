@@ -252,7 +252,7 @@ resort_clauses = resort_cubes = apply_func_to_clauses(resort_ast)
 def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
-    elif is_quantifier(ast):
+    elif is_binder(ast):
         bounds = set(quantifier_vars(ast))
         for x in variables_ast(quantifier_body(ast)):
             if x not in bounds:
@@ -949,6 +949,12 @@ def variables_distinct_ast(ast1,ast2):
     """
     map1 = distinct_variable_renaming(used_variables_ast(ast1),used_variables_ast(ast2))
     return substitute_ast(ast1,map1)
+
+def rename_variables_distinct_ast(vars,ast2):
+    """ rename variables in vars so they don't occur in ast2.
+    """
+    map1 = distinct_variable_renaming(vars,used_variables_ast(ast2))
+    return [map1[v.name] for v in vars]
 
 def variables_distinct_list_ast(ast_list,ast2):
     """ rename variables in ast_list so they don't occur in ast2.

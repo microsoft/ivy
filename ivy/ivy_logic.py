@@ -477,6 +477,9 @@ def is_exists(term):
 def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
 
+def is_binder(term):
+    return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists) or isinstance(term,lg.Lambda) 
+
 def quantifier_vars(term):
     return term.variables
 

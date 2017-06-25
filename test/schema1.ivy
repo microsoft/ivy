@@ -15,9 +15,14 @@ schema foo = {
 function bif(X:t):q
 
 definition bif(X) = 0 if X <= 0 else bif(X-1) + 1
-proof foo with base(X) = 0, step(X) = X + 1
+#proof foo with base(X) = 0, step(X) = X + 1
+proof foo
 
 function succ(X:t,Y:t) = (Y-1 = X)
+
+axiom (T:t < U & U < V) -> (T < V)
+axiom ~(T:t < U & U < T)
+axiom T:t < U | T = U | U < T
 
 property [bif_base] bif(0) = 0
 property [bif_step] F > 0 & succ(E,F) -> bif(F) = bif(E) + 1

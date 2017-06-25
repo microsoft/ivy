@@ -536,6 +536,8 @@ def compile_schema_prem(self,sig):
         return self.clone([sym])
     elif isinstance(self,ivy_ast.DerivedDecl):
         raise IvyErr(self,'derived functions in schema premises not supported yet')
+    elif isinstance(self,ivy_ast.TypeDecl):
+        return il.UninterpretedSort(self.arg[0].rep)
     
 def compile_schema_conc(self,sig):
     iu.dbg('type(self)')

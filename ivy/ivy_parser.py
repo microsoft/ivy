@@ -322,6 +322,14 @@ def p_schdecl_funcdecl(p):
     'schdecl : FUNCTION funs'
     p[0] = p[2]
 
+def p_schdecl_typedecl(p):
+    'schdecl : TYPE SYMBOL'
+    scnst = Atom(p[2])
+    scnst.lineno = get_lineno(p,2)
+    tdfn = TypeDef(scnst,UninterpretedSort())
+    tdfn.lineno = get_lineno(p,1)
+    p[0] = tdfn
+
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
     p[0] = p[2]

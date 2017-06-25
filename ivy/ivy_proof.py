@@ -89,11 +89,15 @@ class ProofChecker(object):
             pat = concrhs
         else:
             raise ProofError(proof,"Property schemata not supported yet")
-        pmatch = compile_match(proof.match())
+        freesyms = set(x.args[0] for x in schema.prems() if isinstance(x,ia.ConstantDecl))
+        freesyms.update(x for x in schema.prems() if isinstance(x,il.UninterpretedSort))
+        pmatch = compile_match(proof,freesyms,schemaname)
         iu.dbg('pmatch')
         pat = apply_match(pmatch,pat)
         iu.dbg('pat')
-        res = match(pat,inst)
+        iu.dbg('freesyms')
+        res = match(pat,inst,freesyms)
+        iu.dbg('res')
         res = merge_matches(res,pmatch)
         print res
         return res
@@ -101,11 +105,17 @@ class ProofChecker(object):
 
 # A "match" is a map from symbols to lambda terms
     
-def compile_match(match):
-    """ compiles a list of definitions to a match """
+def compile_match(proof,freesyms,schemaname):
+    """ Compiles match in a proof. Only the symbols in
+    freesyms may be used in the match."""
+
+    match = proof.match
     res = dict()
-    for m in match:
-        res[m.defines()] = il.Lambda(m.lhs().args,m.rhs())
+    for m in proof.match():
+        sym = m.defines()
+        if sym not in freesyms:
+            raise ProofError(proof,'{} is not a premise of schema {}'.format(sym))
+        res[sym] = il.Lambda(m.lhs().args,m.rhs())
     return res
 
 def apply_match(match,fmla):
@@ -121,20 +131,85 @@ def apply_match(match,fmla):
             return match[fmla.rep](*args)
     return fmla.clone(args)
 
-def match(pat,inst):
-    """ match an instance to a pattern. for now, pat matches
-    inst iff pat == inst  """
+def func_sorts(func):
+    return func.sort.dom + [func.sort.rng]
 
-    return dict() if pat == inst else None
+def term_sorts(term):
+    """ Returns a list of the domain and range sorts of the head function of a term, if any """
+    return func_sorts(term.func) if il.is_app(term) else []
 
-def merge_matches(match1,match2):
-    if match1 is None or match2 is None:
+def funcs_match(pat,inst,freesyms):
+    psorts,isorts = map(func_sorts,(pat,inst))
+    return (pat.name == inst.name and len(psorts) == len(isorts)
+            and all(x == y for x,y in zip(psorts,isorts) if x not in freesyms))
+
+def heads_match(pat,inst,freesyms):
+    """Returns true if the heads of two terms match. This means they have
+    the same top-level operator and same number of
+    arguments. Quantifiers do not match anything. A function symbol matches
+    if it has the same name and if it agrees on the non-free sorts in
+    its type.
+    """
+    return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms)
+        or not il.is_app(pat) and not il.is_quantifier(pat)
+           and type(pat) is type(inst) and len(pat.args) == len(inst.args))
+    
+def extract_terms(inst,terms):
+    """ Returns a lambda term t such that t(terms) = inst and
+    terms do not occur in t. vars is a list of distinct variables
+    of same types as terms that are not free in inst. """
+
+    vars = [il.Variable('V'+str(i),t.sort) for i,t in enumerate(terms)]
+    vars = lu.rename_variables_distinct_ast(vars,inst)
+    def rec(inst):
+        for term,var in zip(terms,vars):
+            if term == inst:
+                return var
+        return inst.clone(map(rec,inst.args))
+    return il.Lambda(vars,rec(inst))
+
+def match(pat,inst,freesyms):
+    """ Match an instance to a pattern.
+
+    A match is an assignment sigma to freesyms such
+    that sigma pat =_alpha inst.
+
+    """
+
+    iu.dbg('pat')
+    iu.dbg('inst')
+    if heads_match(pat,inst,free_syms):
+        matches = [match(x,y,freesyms) for x,y in zip(pat.args,inst.args)]
+        matches.extend([match_sort(x,y,freesyms) for x,y in zip(map(term_sorts,(pat,inst)))])
+        return merge_matches(*matches)
+    if il.is_app(pat) and pat.rep in freesyms:
+        B = extract_terms(inst,pat.args)
+        iu.dbg('B')
+        if lu.is_ground_ast(B):
+            return {pat.rep:B}
+
+def match_sort(pat,inst,freesyms):
+    if pat in freesyms:
+        return {pat:inst}
+    return dict if pat == inst else None
+
+def merge_matches(*matches):
+    if len(matches) == 0:
+        return dict()
+    if any(match is None for match in matches):
         return None
-    res = dict(match1.iteritems())
-    for sym,lmda in match2.iteritems():
-        if sym in res:
-            if not lambda_equiv(lmda,res[sym]):
-                return None
-        else:
-            res[sym] = lmda
+    res = dict(matches[0].iteritems())
+    for match2 in matches[1:]:
+        for sym,lmda in match2.iteritems():
+            if sym in res:
+                if not lambda_equiv(lmda,res[sym]):
+                    return None
+            else:
+                res[sym] = lmda
     return res
+
+def alpha_equiv(x,y):
+    """check if two closed terms are equivalent module alpha
+    conversion. for now, we assume the terms are closed
+    """
+    pass
