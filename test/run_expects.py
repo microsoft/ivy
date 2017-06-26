@@ -3,8 +3,13 @@ import os
 import sys
 import imp
 
-import pexpect.popen_spawn
-spawn = pexpect.popen_spawn.PopenSpawn
+import platform
+
+if platform.system() == 'Windows':
+    import pexpect.popen_spawn
+    spawn = pexpect.popen_spawn.PopenSpawn
+else:
+    spawn = pexpect.spawn
 
 checks = [
     ['../doc/examples/testing',
