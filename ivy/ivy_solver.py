@@ -22,6 +22,11 @@ import ivy_utils as iu
 import ivy_unitres as ur
 import logic as lg
 
+# Following accounts for Z3 API symbols that are hidden as of Z3-4.5.0
+
+z3_to_ast_array = z3._to_ast_array if '_to_ast_array' in z3.__dict__ else z3.z3._to_ast_array
+z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to_expr_ref
+
 use_z3_enums = False
 
 def set_use_native_enums(t):
@@ -229,8 +234,8 @@ def apply_z3_func(pred,tup):
         return pred
     if not isinstance(pred,z3.FuncDeclRef):
         return pred(*tup)
-    _args, sz = z3._to_ast_array(tup)
-    fact = z3._to_expr_ref(z3.Z3_mk_app(pred.ctx_ref(), pred.ast, sz, _args), pred.ctx)
+    _args, sz = z3_to_ast_array(tup)
+    fact = z3_to_expr_ref(z3.Z3_mk_app(pred.ctx_ref(), pred.ast, sz, _args), pred.ctx)
     return fact
 
 def numeral_to_z3(num):
@@ -1226,7 +1231,7 @@ def substitute(t, *m):
     for i in range(num):
         _from[i] = m[i][0].as_ast()
         _to[i]   = m[i][1].as_ast()
-    return z3._to_expr_ref(z3.Z3_substitute(t.ctx.ref(), t.as_ast(), num, _from, _to), t.ctx)
+    return z3_to_expr_ref(z3.Z3_substitute(t.ctx.ref(), t.as_ast(), num, _from, _to), t.ctx)
 
 
 if __name__ == '__main__':
