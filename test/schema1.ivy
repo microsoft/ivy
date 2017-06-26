@@ -1,10 +1,11 @@
 #lang ivy1.6
 
 type t
-type q
+type r
 
 
 schema foo = {
+    type q
     function base(X:t) : q
     function step(X:q) : q
     function fun(X:t) : q
@@ -12,7 +13,7 @@ schema foo = {
     definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1))
 }
 
-function bif(X:t):q
+function bif(X:t):r
 
 definition bif(X) = 0 if X <= 0 else bif(X-1) + 1
 #proof foo with base(X) = 0, step(X) = X + 1

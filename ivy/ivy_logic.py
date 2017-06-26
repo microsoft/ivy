@@ -474,6 +474,9 @@ def is_forall(term):
 def is_exists(term):
     return isinstance(term,lg.Exists)
 
+def is_lambda(term):
+    return isinstance(term,lg.ForAll)
+
 def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
 
@@ -778,6 +781,25 @@ class WithSymbols(object):
             sig.remove_symbol(sym)
         for sym in self.saved:
             sig.add_symbol(sym.name,sym.sort)
+        return False # don't block any exceptions
+
+class WithSorts(object):
+    def __init__(self,sorts):
+        self.sorts = list(sorts)
+    def __enter__(self):
+        global sig
+        self.saved = []
+        for sym in self.sorts:
+            if sym.name in sig.sorts:
+                self.saved.append(sym)
+            sig.sorts[sym.name] = sym
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global sig
+        for sym in self.sorts:
+            del sig.sorts[sym.name]
+        for sym in self.saved:
+            sig.sorts[sym.name] = sym
         return False # don't block any exceptions
 
 
@@ -1225,3 +1247,6 @@ def lambda_apply(self,args):
     return lu.substitute(self.body,dict(zip(self.variables,args)))
 
 lg.Lambda.__call__ = lambda self,*args: lambda_apply(self,args)
+
+substitute = lu.substitute
+    

@@ -328,7 +328,7 @@ def p_schdecl_typedecl(p):
     scnst.lineno = get_lineno(p,2)
     tdfn = TypeDef(scnst,UninterpretedSort())
     tdfn.lineno = get_lineno(p,1)
-    p[0] = tdfn
+    p[0] = [tdfn]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -345,6 +345,7 @@ def p_schdecls_schdecls_schdecl(p):
 
 def p_schdefnrhs_lcb_schdecls_rcb(p):
     'schdefnrhs : LCB schdecls schconc RCB'
+    iu.dbg('[type(x) for x in p[2]]')
     p[0] = SchemaBody(*(p[2]+[p[3]]))
 
 def p_schdefn_atom_eq_fmla(p):

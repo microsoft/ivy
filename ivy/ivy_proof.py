@@ -73,6 +73,8 @@ class ProofChecker(object):
             iu.dbg('type(conc)')
             iu.dbg('type(decl)')
             return None
+        freesyms = set(x.args[0] for x in schema.prems() if isinstance(x,ia.ConstantDecl))
+        freesyms.update(x for x in schema.prems() if isinstance(x,il.UninterpretedSort))
         if isinstance(decl,il.Definition):
             declsym = decl.defines()
             concsym = conc.defines()
@@ -82,15 +84,25 @@ class ProofChecker(object):
                 return None
             declrhs = decl.rhs()
             concrhs = conc.rhs()
-            vmap = dict((x.name,y) for x,y in zip(concargs,declargs))
+            vmap = dict((x.name,il.Variable(y.name,x.sort)) for x,y in zip(concargs,declargs))
             concrhs = lu.substitute_ast(concrhs,vmap)
-            concrhs = lu.rename_ast(concrhs,{concsym:declsym})
+            dmatch = {concsym:declsym}
+            for x,y in zip(func_sorts(concsym),func_sorts(declsym)):
+                if x in freesyms:
+                    if x in dmatch and dmatch[x] != y:
+                        print "lhs sorts didn't match"
+                        return None
+                    dmatch[x] = y
+                else:
+                    if x != y:
+                        print "lhs sorts didn't match"
+                        return None
+            concrhs = apply_match(dmatch,concrhs)
+            iu.dbg('concrhs')
             inst = declrhs
             pat = concrhs
         else:
             raise ProofError(proof,"Property schemata not supported yet")
-        freesyms = set(x.args[0] for x in schema.prems() if isinstance(x,ia.ConstantDecl))
-        freesyms.update(x for x in schema.prems() if isinstance(x,il.UninterpretedSort))
         pmatch = compile_match(proof,freesyms,schemaname)
         iu.dbg('pmatch')
         pat = apply_match(pmatch,pat)
@@ -129,14 +141,18 @@ def apply_match(match,fmla):
     if il.is_app(fmla):
         if fmla.rep in match:
             return match[fmla.rep](*args)
+        sorts = func_sorts(fmla.rep)
+        sorts = [match.get(s,s) for s in sorts]
+        func = il.Symbol(fmla.rep.name,sorts[0] if len(sorts) == 1 else il.FunctionSort(*sorts))
+        return func(*args)
     return fmla.clone(args)
 
 def func_sorts(func):
-    return func.sort.dom + [func.sort.rng]
+    return list(func.sort.dom) + [func.sort.rng]
 
 def term_sorts(term):
     """ Returns a list of the domain and range sorts of the head function of a term, if any """
-    return func_sorts(term.func) if il.is_app(term) else []
+    return func_sorts(term.rep) if il.is_app(term) else []
 
 def funcs_match(pat,inst,freesyms):
     psorts,isorts = map(func_sorts,(pat,inst))
@@ -178,9 +194,9 @@ def match(pat,inst,freesyms):
 
     iu.dbg('pat')
     iu.dbg('inst')
-    if heads_match(pat,inst,free_syms):
+    if heads_match(pat,inst,freesyms):
         matches = [match(x,y,freesyms) for x,y in zip(pat.args,inst.args)]
-        matches.extend([match_sort(x,y,freesyms) for x,y in zip(map(term_sorts,(pat,inst)))])
+        matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),term_sorts(inst))])
         return merge_matches(*matches)
     if il.is_app(pat) and pat.rep in freesyms:
         B = extract_terms(inst,pat.args)
@@ -191,25 +207,31 @@ def match(pat,inst,freesyms):
 def match_sort(pat,inst,freesyms):
     if pat in freesyms:
         return {pat:inst}
-    return dict if pat == inst else None
+    return dict() if pat == inst else None
 
 def merge_matches(*matches):
     if len(matches) == 0:
         return dict()
     if any(match is None for match in matches):
         return None
+    iu.dbg('matches[0]')
     res = dict(matches[0].iteritems())
     for match2 in matches[1:]:
         for sym,lmda in match2.iteritems():
             if sym in res:
-                if not lambda_equiv(lmda,res[sym]):
+                if not equiv_alpha(lmda,res[sym]):
                     return None
             else:
                 res[sym] = lmda
     return res
 
-def alpha_equiv(x,y):
+def equiv_alpha(x,y):
     """check if two closed terms are equivalent module alpha
     conversion. for now, we assume the terms are closed
     """
+    if x == y:
+        return True
+    if il.is_lambda(x) and il.is_lambda(y):
+        return x.body == il.substitute(y.body,zip(x.variables,y.variables))
+    return false
     pass

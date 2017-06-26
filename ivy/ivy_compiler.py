@@ -532,12 +532,19 @@ def compile_defn(df):
     
 def compile_schema_prem(self,sig):
     if isinstance(self,ivy_ast.ConstantDecl):
-        sym = compile_const(self.args[0],sig)
+        iu.dbg('sig.sorts.values()')
+        with ivy_logic.WithSorts(sig.sorts.values()):
+            print ivy_logic.sig
+            sym = compile_const(self.args[0],sig)
         return self.clone([sym])
     elif isinstance(self,ivy_ast.DerivedDecl):
         raise IvyErr(self,'derived functions in schema premises not supported yet')
-    elif isinstance(self,ivy_ast.TypeDecl):
-        return il.UninterpretedSort(self.arg[0].rep)
+    elif isinstance(self,ivy_ast.TypeDef):
+        t = ivy_logic.UninterpretedSort(self.args[0].rep)
+        iu.dbg('t')
+        sig.sorts[t.name] = t
+        return t
+    iu.dbg('type(self)')
     
 def compile_schema_conc(self,sig):
     iu.dbg('type(self)')

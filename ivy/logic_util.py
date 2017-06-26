@@ -126,7 +126,7 @@ def substitute(t, subs):
     elif type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff):
         return type(t)(*(substitute(x, subs) for x in t))
 
-    elif type(t) in (ForAll, Exists):
+    elif type(t) in (ForAll, Exists, Lambda):
         forbidden_variables = free_variables(*subs.values())
         if forbidden_variables.isdisjoint(t.variables):
             return type(t)(t.variables, substitute(t.body, (
