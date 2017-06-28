@@ -55,18 +55,31 @@ object counting = {
             0 if B <= 0 else (cardUpTo(S,B-1)+1 if member(B-1,S) else cardUpTo(S,B-1))
 	proof rec[t]
 
-	definition succ(X:t,Y:t) = (Y-1 = X)
+	object succ_def = {
+	    definition succ(X:t,Y:t) = (Y-1 = X)
+	}
 
     }
 
     isolate iso = spec with impl
 }
 
+object successor = {
+    object spec = {
+	
+	property succ(X,Y) -> X < Y
+	property ~(X < Y & Y < Z & succ(X,Z))
+
+    }
+    object impl = {
+	interpret t -> int
+    }
+    isolate iso = spec with impl,counting.impl.succ_def
+}
+
 object disjointness = {
 
     object spec = {
-	axiom succ(X,Y) -> X < Y
-	axiom ~(X < Y & Y < Z & succ(X,Z))
 
 	relation disjoint(X:s,Y:s)
 
@@ -79,7 +92,12 @@ object disjointness = {
 	named lerr(X,Y)
 	proof lep[t]
 
-	axiom [induc] exists E. succ(E,lerr(X,Y))
+	object succ_lemma = {
+	    object spec = {
+		property [induc] exists E. succ(E,lerr(X,Y))
+	    }
+	    isolate iso = spec with counting.impl.succ_def
+	}
 
 	definition card(S) = cardUpTo(S,n)
 
@@ -88,7 +106,7 @@ object disjointness = {
 	interpret r->int
     }
 
-    isolate iso = spec with counting
+    isolate iso = spec with counting,successor
 }
 
 

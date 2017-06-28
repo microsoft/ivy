@@ -945,6 +945,27 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+    def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_with_callatoms(p):
+        'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB'
+        p[0] = p[1]
+        module = p[8]
+        prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
+        pref = Atom(p[3],prefargs)
+    #    p[0].define((pref.rep,get_lineno(p,2)))
+        if not p[7]:
+            p[0].declare(ObjectDecl(pref))
+        vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
+        inst_mod(p[0],module,pref,{},vsubst)
+        # for decl in module.decls:
+        #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+        #     p[0].declare(idecl)
+        stack.pop()
+        ty = TrustedIsolateDef if p[2] else IsolateDef
+        d = IsolateDecl(ty(*([Atom(p[4],p[5])] + p[7] + p[9])))
+        d.args[0].with_args = len(p[9])
+        d.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(d)
     def p_top_extract_callatom_eq_callatoms(p):
         'top : top EXTRACT SYMBOL optargs EQ callatoms'
         d = IsolateDecl(ExtractDef(*([Atom(p[3],p[4])] + p[6])))
