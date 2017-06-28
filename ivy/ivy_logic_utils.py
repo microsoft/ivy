@@ -264,7 +264,7 @@ def variables_ast(ast):
 
 # extend to clauses, etc...
 
-variables_clause = variables_cube = apply_gen_to_list(variables_ast)
+variables_clause = variables_cube = used_variables_asts = apply_gen_to_list(variables_ast)
 variables_clauses = variables_cubes = apply_gen_to_clauses(variables_ast)
 
 # get set of variables occurring
@@ -950,10 +950,10 @@ def variables_distinct_ast(ast1,ast2):
     map1 = distinct_variable_renaming(used_variables_ast(ast1),used_variables_ast(ast2))
     return substitute_ast(ast1,map1)
 
-def rename_variables_distinct_ast(vars,ast2):
-    """ rename variables in vars so they don't occur in ast2.
+def rename_variables_distinct_asts(vars,asts):
+    """ rename variables in vars so they don't occur in asts.
     """
-    map1 = distinct_variable_renaming(vars,used_variables_ast(ast2))
+    map1 = distinct_variable_renaming(vars,used_variables_asts(asts))
     return [map1[v.name] for v in vars]
 
 def variables_distinct_list_ast(ast_list,ast2):

@@ -234,12 +234,25 @@ def p_top_axiom_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_optskolem(p):
+    'optskolem : '
+    p[0] = None
+
+def p_optskolem_symbol(p):
+    'optskolem : NAMED defnlhs'
+    p[0] = p[2]
+    p[0].lineno = get_lineno(p,1)
+
 def p_top_property_labeledfmla(p):
-    'top : top PROPERTY labeledfmla'
+    'top : top PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
     d = PropertyDecl(p[3])
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
+    if p[4] is not None:
+        p[0].declare(NamedDecl(p[4]))
+    if p[5] is not None:
+        p[0].declare(ProofDecl(p[5]))
 
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
@@ -332,6 +345,10 @@ def p_schdecl_typedecl(p):
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
+    p[0] = p[2]
+
+def p_schconc_propdecl(p):
+    'schconc : PROPERTY fmla'
     p[0] = p[2]
 
 def p_schdecls(p):
@@ -1394,7 +1411,7 @@ def p_callatom_atom(p):
 if not (iu.get_numeric_version() <= [1,5]):
     def p_callatom_this(p):
         'callatom : THIS'
-        p[0] = This()
+        p[0] = Atom(This())
         p[0].lineno = get_lineno(p,1)
         
 

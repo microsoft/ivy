@@ -154,6 +154,7 @@ Symbol.is_relation = lambda self: isinstance(self.sort.rng,lg.BooleanSort)
 Symbol.args = property(lambda self : [])
 Symbol.is_numeral  = lambda self : is_numeral_name(self.name)
 Symbol.clone = lambda self,args : self
+Symbol.resort = lambda self,sort : Symbol(self.name,sort)
 
 BooleanSort = lg.BooleanSort
 
@@ -668,6 +669,9 @@ def is_boolean(term):
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
 
+def FuncConstSort(*sorts):
+    return FunctionSort(*sorts) if len(sorts) > 1 else sorts[0]
+
 def RelationSort(dom):
     return FunctionSort(*(list(dom) + [lg.Boolean])) if len(dom) else lg.Boolean
 
@@ -681,6 +685,9 @@ TopS = lg.TopS
 
 def apply(symbol,args):
     return App(symbol,*args)
+
+def is_topsort(sort):
+    return isinstance(sort,lg.TopSort)
 
 def sortify(ast):
     args = [sortify(arg) for arg in ast.args]

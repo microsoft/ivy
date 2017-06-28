@@ -515,6 +515,12 @@ class ProofDecl(Decl):
     def name(self):
         return 'proof'
 
+class NamedDecl(Decl):
+    def name(self):
+        return 'named'
+    def defines(self):
+        return [(c.rep,lineno(c)) for c in self.args]
+
 class SchemaDecl(Decl):
     def name(self):
         return 'schema'

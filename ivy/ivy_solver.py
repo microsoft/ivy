@@ -527,7 +527,8 @@ def collect_numerals(z3term):
 
 def from_z3_numeral(z3term,sort):
     name = str(z3term)
-    assert name[0].isdigit() or name[0] == '"'
+    if not(name[0].isdigit() or name[0] == '"'):
+        print "unexpected numeral from Z3 model: {}".format(name)
     return ivy_logic.Symbol(name,sort)
 
 def collect_model_values(sort,model,sym):

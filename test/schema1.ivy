@@ -2,31 +2,95 @@
 
 type t
 type r
-
-
-schema foo = {
-    type q
-    function base(X:t) : q
-    function step(X:q) : q
-    function fun(X:t) : q
-    #---------------------------------------------------------
-    definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1))
-}
-
-function bif(X:t):r
-
-definition bif(X) = 0 if X <= 0 else bif(X-1) + 1
-#proof foo with base(X) = 0, step(X) = X + 1
-proof foo
-
-function succ(X:t,Y:t) = (Y-1 = X)
+type s
 
 axiom (T:t < U & U < V) -> (T < V)
 axiom ~(T:t < U & U < T)
 axiom T:t < U | T = U | U < T
 
-property [bif_base] bif(0) = 0
-property [bif_step] F > 0 & succ(E,F) -> bif(F) = bif(E) + 1
+relation succ(X:t,Y:t)
+
+
+schema rec[t] = {
+    type q
+    function base(X:t) : q
+    function step(X:q,Y:t) : q
+    function fun(X:t) : q
+    #---------------------------------------------------------
+    definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+}
+
+schema lep[t] = {
+    function p(X:t) : bool
+    #---------------------------------------------------------
+    property exists L. (L >= 0 & forall B. (B >= 0 & p(B)-> p(L) & L <= B))
+}
+
+relation member(X:t,S:s)
+
+function cnt(X:t):r
+function card(S:s) : r
+function cardUpTo(S:s,B:t) : r
+individual n : t
+axiom n > 0
+
+object counting = {
+
+    object spec = {
+	
+	property [cnt_base] cnt(0) = 0
+	property [cnt_step] F > 0 & succ(E,F) -> cnt(F) = cnt(E) + 1
+
+	property [cardUpTo_base] cardUpTo(S,0) = 0
+	property [cardUpTo_step] succ(B,BS) & BS > 0 ->
+                                    cardUpTo(S,BS) = cardUpTo(S,B)+1 if member(B,S) else cardUpTo(S,B)
+    }
+
+    object impl = {
+
+	definition cnt(X) = 0 if X <= 0 else cnt(X-1) + 1
+	proof rec[t]
+
+	definition cardUpTo(S,B) =
+            0 if B <= 0 else (cardUpTo(S,B-1)+1 if member(B-1,S) else cardUpTo(S,B-1))
+	proof rec[t]
+
+	definition succ(X:t,Y:t) = (Y-1 = X)
+
+    }
+
+    isolate iso = spec with impl
+}
+
+object disjointness = {
+
+    object spec = {
+	axiom succ(X,Y) -> X < Y
+	axiom ~(X < Y & Y < Z & succ(X,Z))
+
+	relation disjoint(X:s,Y:s)
+
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+
+	derived inv(X,Y,B) = 
+	    disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
+
+	property exists L. (L >= 0 & forall B. (B >= 0 & ~inv(X,Y,B) -> ~inv(X,Y,L) & L <= B))
+	named lerr(X,Y)
+	proof lep[t]
+
+	axiom [induc] exists E. succ(E,lerr(X,Y))
+
+	definition card(S) = cardUpTo(S,n)
+
+	property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+
+	interpret r->int
+    }
+
+    isolate iso = spec with counting
+}
+
 
 
 # fun(X) = bif(X)

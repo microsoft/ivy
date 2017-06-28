@@ -119,6 +119,7 @@ reserved = all_reserved = {
    'of' : 'OF',
    'scenario' : 'SCENARIO',
    'proof' : 'PROOF',
+   'named' : 'NAMED',
 }
 
 tokens += tuple(all_reserved.values())

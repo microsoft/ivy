@@ -234,7 +234,8 @@ class And(recstruct('And', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'And({})'.format(
             ', '.join(str(t) for t in self)
@@ -330,7 +331,7 @@ class Lambda(recstruct('Lambda', ['variables'], ['body'])):
     def _preprocess_(cls, variables, body):
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only abstract over variables")
-        return frozenset(variables), body
+        return tuple(variables), body
     def __str__(self):
         return '(Lambda {}. {})'.format(
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),

@@ -70,6 +70,7 @@ class Module(object):
         self.variants = defaultdict(list) # map from sort name to list of sort
         self.ext_preconds = {} # map from action name to formula
         self.proofs = [] # list of pair (labeled formula, proof)
+        self.named = [] # list of pair (labeled formula, atom)
         
         self.sig = il.sig.copy() # capture the current signature
 

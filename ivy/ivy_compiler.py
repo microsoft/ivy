@@ -549,9 +549,10 @@ def compile_schema_prem(self,sig):
 def compile_schema_conc(self,sig):
     iu.dbg('type(self)')
     iu.dbg('self')
-    if isinstance(self,ivy_ast.Definition):
-        with ivy_logic.WithSymbols(sig.all_symbols()):
+    with ivy_logic.WithSymbols(sig.all_symbols()):
+        if isinstance(self,ivy_ast.Definition):
             return compile_defn(self)
+        return sortify_with_inference(self)
 
 def compile_schema_body(self):
     sig = ivy_logic.Sig()
@@ -594,7 +595,42 @@ class IvyDomainSetup(IvyDeclInterp):
     def axiom(self,ax):
         self.domain.labeled_axioms.append(ax.compile())
     def property(self,ax):
-        self.domain.labeled_props.append(ax.compile())
+        lf = ax.compile()
+        self.domain.labeled_props.append(lf)
+        self.last_fact = lf
+    def named(self,lhs):
+        cond = ivy_logic.drop_universals(self.last_fact.formula)
+        if not ivy_logic.is_exists(cond) or len(cond.variables) != 1:
+            raise IvyError(lhs,'property is not existential')
+        rng = list(cond.variables)[0].sort
+        vmap = dict((x.name,x) for x in lu.variables_ast(cond))
+        used = set()
+        print 'foo!'
+        iu.dbg('lhs.args[0].sort')
+        with ivy_logic.UnsortedContext():
+            args = [arg.compile() for arg in lhs.args]
+        print 'bar!'
+        targs = []
+        for a in args:
+            if a.name in used:
+                raise IvyError(lhs,'repeat parameter: {}'.format(a.name))
+            used.add(a.name)
+            if a.name in vmap:
+                v = vmap[a.name]
+                targs.append(v)
+                if not (ivy_logic.is_topsort(a.sort) or a.sort != v.sort):
+                    raise IvyError(lhs,'bad sort for {}'.format(a.name))
+            else:
+                if ivy_logic.is_topsort(a.sort):
+                    raise IvyError(lhs,'cannot infer sort for {}'.format(a.name))
+                targs.append(a)
+        for x in vmap:
+            if x not in used:
+                raise IvyError(lhs,'{} must be a parameter of {}'.format(x,lhs.rep))
+        dom = [x.sort for x in targs]
+        sym = self.domain.sig.add_symbol(lhs.rep,ivy_logic.FuncConstSort(*(dom+[rng])))
+        iu.dbg('repr(sym)')
+        self.domain.named.append((self.last_fact,sym(*targs) if targs else sym))
     def schema(self,sch):
         if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
             self.domain.schemata[sch.defn.defines()] = sch.defn.args[1].compile()
@@ -1024,7 +1060,30 @@ def check_definitions(mod):
             raise iu.IvyError(d,'definition of {} requires an recursion schema'.format(d.formula.defines()))
         prover.admit_definition(d,pmap[d.id])
         
-    
+def check_properties(mod):
+    props = mod.labeled_props
+    mod.labeled_props = []
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
+    nmap = dict((lf.id,n) for lf,n in mod.named)
+    import ivy_proof
+    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    for prop in props:
+        if prop.id in pmap:
+            print 'checking {}...'.format(prop.label)
+            prover.admit_proposition(prop,pmap[prop.id])
+            if prop.id in nmap:
+                name = nmap[prop.id]
+                fmla = ivy_logic.drop_universals(prop.formula)
+                v = list(fmla.variables)[0]
+                fmla = fmla.body
+                iu.dbg('v.sort')
+                iu.dbg('name.sort')
+                fmla = lu.substitute_ast(fmla,{v.name:name})
+                iu.dbg('fmla')
+                prop = prop.clone([prop.label,fmla])
+            mod.labeled_axioms.append(prop)
+        else:
+            mod.labeled_props.append(prop)
 
 
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
@@ -1057,6 +1116,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
 
         create_sort_order(mod)
         check_definitions(mod)
+        check_properties(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)
