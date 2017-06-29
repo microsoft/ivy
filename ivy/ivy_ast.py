@@ -686,6 +686,10 @@ class IsolateDecl(Decl):
     def defines(self):
         return [(c.name(),lineno(c)) for c in self.args]
     
+class IsolateObjectDecl(IsolateDecl):    
+    def defines(self):
+        return []
+
 class IsolateDef(AST):
     def name(self):
         return self.args[0].relname

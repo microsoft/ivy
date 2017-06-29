@@ -34,7 +34,7 @@ function cardUpTo(S:s,B:t) : r
 individual n : t
 axiom n > 0
 
-object counting = {
+isolate counting = {
 
     object spec = {
 	
@@ -60,24 +60,25 @@ object counting = {
 	}
 
     }
-
-    isolate iso = spec with impl
 }
 
-object successor = {
+isolate successor = {
+
     object spec = {
 	
 	property succ(X,Y) -> X < Y
 	property ~(X < Y & Y < Z & succ(X,Z))
 
     }
+
     object impl = {
 	interpret t -> int
     }
-    isolate iso = spec with impl,counting.impl.succ_def
-}
 
-object disjointness = {
+}
+with counting.impl.succ_def
+
+isolate disjointness = {
 
     object spec = {
 
@@ -106,9 +107,8 @@ object disjointness = {
 	interpret r->int
     }
 
-    isolate iso = spec with counting,successor
 }
-
+with counting,successor
 
 
 # fun(X) = bif(X)

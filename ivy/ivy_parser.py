@@ -67,6 +67,7 @@ class ParseError(Exception):
     
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
+        assert False
         msg = 'redefining ' + str(name)
         if orig_lineno != None:
             msg += " (from {})".format(str(orig_lineno)[:-2])
@@ -297,21 +298,23 @@ def p_objectend(p):
     stack[-1].is_object=False
     p[0] = None
 
+def create_object(top,name,objectargs,module,continuation=False):
+    prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(objectargs)]
+    pref = Atom(name,prefargs)
+#    top.define((pref.rep,get_lineno(p,2)))
+    if not continuation:
+        top.declare(ObjectDecl(pref))
+    vsubst = dict((pr.rep,v) for pr,v in zip(objectargs,prefargs))
+    inst_mod(top,module,pref,{},vsubst)
+    # for decl in module.decls:
+    #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+    #     top.declare(idecl)
+    stack.pop()
+
 def p_top_object_symbol_eq_lcb_top_rcb(p):
     'top : top OBJECT SYMBOL objectargs EQ LCB optdotdotdot top RCB objectend'
     p[0] = p[1]
-    module = p[8]
-    prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
-    pref = Atom(p[3],prefargs)
-#    p[0].define((pref.rep,get_lineno(p,2)))
-    if not p[7]:
-        p[0].declare(ObjectDecl(pref))
-    vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
-    inst_mod(p[0],module,pref,{},vsubst)
-    # for decl in module.decls:
-    #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
-    #     p[0].declare(idecl)
-    stack.pop()
+    create_object(p[0],p[3],p[4],p[8],p[7])
 
 def p_optsemi(p):
     'optsemi : '
@@ -945,26 +948,20 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
-    def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_with_callatoms(p):
-        'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB'
+    def p_optwith(p):
+        'optwith : '
+        p[0] = []
+    def p_optwith_with_callatoms(p):
+        'optwith : WITH callatoms'
+        p[0] = p[2]
+    def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_optwith(p):
+        'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB optwith'
         p[0] = p[1]
-        module = p[8]
-        prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
-        pref = Atom(p[3],prefargs)
-    #    p[0].define((pref.rep,get_lineno(p,2)))
-        if not p[7]:
-            p[0].declare(ObjectDecl(pref))
-        vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
-        inst_mod(p[0],module,pref,{},vsubst)
-        # for decl in module.decls:
-        #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
-        #     p[0].declare(idecl)
-        stack.pop()
+        create_object(p[0],p[4],p[5],p[8])
         ty = TrustedIsolateDef if p[2] else IsolateDef
-        d = IsolateDecl(ty(*([Atom(p[4],p[5])] + p[7] + p[9])))
-        d.args[0].with_args = len(p[9])
-        d.lineno = get_lineno(p,2)
-        p[0] = p[1]
+        d = IsolateObjectDecl(ty(*([Atom(p[4],p[5]),Atom(p[4],p[5])]+p[10])))
+        d.args[0].with_args = len(p[10])
+        d.lineno = get_lineno(p,3)
         p[0].declare(d)
     def p_top_extract_callatom_eq_callatoms(p):
         'top : top EXTRACT SYMBOL optargs EQ callatoms'
