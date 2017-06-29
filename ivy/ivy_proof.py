@@ -94,6 +94,11 @@ class ProofChecker(object):
         pmatch = compile_match(proof,prob,schemaname)
         prob.pat = apply_match(pmatch,prob.pat)
         iu.dbg('prob')
+        fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+        iu.dbg('fomatch')
+        if fomatch is not None:
+            prob.pat = apply_match(fomatch,prob.pat)
+            prob.freesyms = apply_match_freesyms(fomatch,prob.freesyms)
         res = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         res = merge_matches(res,pmatch)
         show_match(res)
@@ -222,6 +227,8 @@ def apply_match(match,fmla):
             func = match[fmla.rep]
             return func(*args)
         return apply_match_func(match,fmla.rep)(*args)
+    if il.is_variable(fmla) and fmla in match:
+        return match[fmla]
     return fmla.clone(args)
 
 def apply_match_func(match,func):
@@ -275,6 +282,31 @@ def extract_terms(inst,terms):
                 return var
         return inst.clone(map(rec,inst.args))
     return il.Lambda(vars,rec(inst))
+
+def fo_match(pat,inst,freesyms,constants):
+    """ Compute a partial first-order match. Matches free FO variables to ground terms,
+    but ignores variable occurrences under free second-order symbols. """
+
+    if il.is_variable(pat):
+        if pat in freesyms and all(x in constants for x in lu.variables_ast(inst)):
+            res = {pat:inst}
+            if pat.sort == inst.sort:
+                return res
+            if pat.sort in freesyms:
+                res[pat.sort] = inst.sort
+                return res
+    if il.is_quantifier(pat) and il.is_quantifier(inst):
+        with RemoveSymbols(freesyms,pat.variables):
+            return fo_match(pat.body,inst.body,freesyms,constants)
+    if heads_match(pat,inst,freesyms):
+        matches = [fo_match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
+        iu.dbg('matches')
+        res =  merge_matches(*matches)
+        iu.dbg('res')
+        return res
+    return dict()
+    
+            
 
 def match(pat,inst,freesyms,constants):
     """ Match an instance to a pattern.
@@ -346,7 +378,7 @@ def equiv_alpha(x,y):
         return True
     if il.is_lambda(x) and il.is_lambda(y):
         return x.body == il.substitute(y.body,zip(x.variables,y.variables))
-    return false
+    return False
     pass
 
 class AddSymbols(object):
@@ -366,6 +398,24 @@ class AddSymbols(object):
         global sig
         for sym in self.symlist:
             self.symset.remove(sym)
+        for sym in self.saved:
+            self.symset.add(sym)
+        return False # don't block any exceptions
+
+class RemoveSymbols(object):
+    """ temporarily add some symbols to a set of symbols """
+    def __init__(self,symset,symlist):
+        self.symset,self.symlist = symset,list(symlist)
+    def __enter__(self):
+        global sig
+        self.saved = []
+        for sym in self.symlist:
+            if sym in self.symset:
+                self.saved.append(sym)
+                self.remove(sym)
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global sig
         for sym in self.saved:
             self.symset.add(sym)
         return False # don't block any exceptions

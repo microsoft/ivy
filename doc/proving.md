@@ -6,7 +6,7 @@ title: IVy as a theorem prover
 IVy is intended primarily for the development of distributed
 systems. In this process, we sometimes have to reason about
 mathematical functions and relations in ways that automated theorem
-provers can't handle. IVy provides facilities for the user to provide
+provers can't handle. IVy provides facilities for the user to supply
 the necessary proofs. IVy's approach to theorem proving is designed to
 make maximal use of automated provers. We do this by localizing the
 proof into "isolates". Our proof obligations in each isolate are
@@ -93,14 +93,18 @@ Theory instantiations
 
 IVy has built-in theories that can be instantation with a specific
 type as their carrier. For example, the theory of integer arithmetic
-is called `int`. It has the signature `{+,-,*,/}` provides the axioms
-of Peano arithmetic. To instantiate the theory `int` using type *t*
-for the integers, we write:
+is called `int`. It has the signature `{+,-,*,/}`, plus the integer
+numerals, and provides the axioms of Peano arithmetic. To instantiate
+the theory `int` using type *t* for the integers, we write:
 
     interpret t -> int
 
 This declaration requires that type `t` as well as the symbols
-`{+,-,*,/}` in the signature of `int` be fresh. 
+`{+,-,*,/}` in the signature of `int` be fresh. Notice, though, that
+the symbols `{+,-,*,/}` are polymorphic. This means that `+` over
+distinct types is considered to be a distinct symbol.  This means we
+can we can instantiate the `int` theory over different types (and also
+instantiate other theorys that have these symbols in their signature).
 
 Inference rules
 ===============
@@ -132,7 +136,7 @@ Any schema that is defined in the current context can be used in a proof.
 Here is an example:
 
     property [prop_n] Z=n -> Z + 1 = n + 1
-    proof concruence1
+    proof congruence1
 
 The `proof` declaration tells IVy to use schema `congruence1` to prove the property. 
 IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
@@ -244,6 +248,36 @@ For example, if we say:
     intepret t -> int
 
 then the above induction schema automatically becomes available.
+
+### Extended matching
+
+Suppose we want to define a function that takes an additional
+parameter. For example, before summing, we want to divide all the
+numbers by *N*. We can define such a function like this:
+
+    definition sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
+    proof rec[t]
+
+In matching the recursion schema `rec[t]`, IVy will extend the free function symbols in the schema with an extra
+parameter *N* so that schema becomes:
+
+    schema rec[t] = {
+	type q
+	function base(N:t,X:t) : q
+	function step(N:t,X:q,Y:t) : q
+	fresh function fun(N:t,X:t) : q
+	#---------------------------------------------------------
+	definition fun(N:t,X:t) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
+    }
+
+The extended schema matches the definition, with the following assignment:
+
+    q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
+    
+This is somewhat as if functions were "Curried", in which case the free symbol `fun`
+would match the term `sum2 N`. The upshot of this is that to match the
+recursion schema, a function definition must be recursive in its last
+parameter.
 
 Induction
 ---------
