@@ -1,0 +1,18 @@
+#lang ivy1.6
+
+    type t
+
+    individual n : t
+
+    function f(X:t) : t
+
+    schema congruence1 = {
+        type d
+	type r
+        function f(X:d) : r
+        #--------------------------
+        property X=Y -> f(X) = f(Y)
+    }
+
+    property [prop_n] Z=n -> Z + 1 = n + 1
+    proof congruence1
