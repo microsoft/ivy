@@ -1,4 +1,4 @@
-#
+
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
@@ -338,6 +338,32 @@ def p_schdecl_funcdecl(p):
     'schdecl : FUNCTION funs'
     p[0] = p[2]
 
+def p_schdecl_fresh_funcdecl(p):
+    'schdecl : FRESH FUNCTION funs'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
+def p_schdecl_relationdecl(p):
+    'schdecl : relationdecl'
+    p[0] = [ConstantDecl(App(x.rep,*x.args)) for x in p[1]]
+    for x in p[0]:
+        x.sort = "bool"
+
+def p_schdecl_relationdecl(p):
+    'schdecl : relationdecl'
+    p[0] = [ConstantDecl(App(x.rep,*x.args)) for x in p[1].args]
+    for x in p[0]:
+        x.args[0].sort = "bool"
+
+def p_schdecl_fresh_relationdecl(p):
+    'schdecl : FRESH relationdecl'
+    p[0] = [FreshConstantDecl(App(x.rep,*x.args)) for x in p[2]]
+    for x in p[0]:
+        x.args[0].sort = "bool"
+
+def p_schdecl_fresh_funcdecl(p):
+    'schdecl : FRESH FUNCTION funs'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
 def p_schdecl_typedecl(p):
     'schdecl : TYPE SYMBOL'
     scnst = Atom(p[2])
@@ -345,6 +371,10 @@ def p_schdecl_typedecl(p):
     tdfn = TypeDef(scnst,UninterpretedSort())
     tdfn.lineno = get_lineno(p,1)
     p[0] = [tdfn]
+
+def p_schdecl_propdecl(p):
+    'schdecl : PROPERTY labeledfmla'
+    p[0] = [p[2]]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -534,24 +564,50 @@ def p_top_derived_defns(p):
     p[0] = p[1]
     p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
 
+def p_proofstep_symbol(p):
+    'proofstep : SYMBOL'
+    a = Atom(p[1])
+    a.lineno = get_lineno(p,1)
+    p[0] = SchemaInstantiation(a)
+    p[0].lineno = get_lineno(p,1)
+    
+def p_match_defn(p):
+    'match : defn'
+    p[0] = p[1]
+
+def p_match_var_eq_fmla(p):
+    'match : var EQ fmla'
+    p[0] = Definition(p[1],p[3])
+    p[0].lineno = get_lineno(p,2)
+
+def p_matches(p):
+    'matches : match'
+    p[0] = [p[1]]
+
+def p_matches_matches_comma_match(p):
+    'matches : matches COMMA match'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_proofstep_symbol_with_defns(p):
+    'proofstep : SYMBOL WITH matches'
+    a = Atom(p[1])
+    a.lineno = get_lineno(p,1)
+    p[0] = SchemaInstantiation(*([a]+p[3]))
+    p[0].lineno = get_lineno(p,1)
+
+def p_proofstep_proofstep_semi_proofstep(p):
+    'proofstep : proofstep SEMI proofstep'
+    p[0] = ComposeTactics(p[1],p[3])
+
 def p_optproof(p):
     'optproof :'
     p[0] = None
 
 def p_optproof_symbol(p):
-    'optproof : PROOF SYMBOL'
-    a = Atom(p[2])
-    a.lineno = get_lineno(p,2)
-    p[0] = SchemaInstantiation(a)
-    p[0].lineno = get_lineno(p,1)
+    'optproof : PROOF proofstep'
+    p[0] = p[2]
     
-def p_optproof_symbol_with_defns(p):
-    'optproof : PROOF SYMBOL WITH defns'
-    a = Atom(p[2])
-    a.lineno = get_lineno(p,2)
-    p[0] = SchemaInstantiation(*([a]+p[4]))
-    p[0].lineno = get_lineno(p,1)
-
 def p_top_definition_defns(p):
     'top : top DEFINITION defns optproof'
     p[0] = p[1]

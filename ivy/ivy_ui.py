@@ -568,6 +568,7 @@ class IvyUI(object):
                 filename,lineno = prop.lineno
                 self.browse(filename,lineno)
             dual = dual_clauses(formula_to_clauses(prop.formula))
+            dual = and_clauses(dual,get_property_context(prop))
             ag = AnalysisGraph(initializer=top_alpha)
             oag = ag.bmc(ag.states[0],dual)
             self.add(oag)

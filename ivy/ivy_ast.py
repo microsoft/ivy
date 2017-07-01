@@ -104,6 +104,10 @@ class Definition(Formula):
         return ' = '.join([repr(x) for x in self.args])
     def defines(self):
         return self.args[0].rep
+    def lhs(self):
+        return self.args[0]
+    def rhs(self):
+        return self.args[1]
     def to_constraint(self):
         if isinstance(self.args[0],App):
             return Atom(equals,self.args)
@@ -545,6 +549,10 @@ class SchemaInstantiation(AST):
     def __str__(self):
         return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
 
+class ComposeTactics(AST):
+    def __str__(self):
+        return '; '.join(map(str,self.args))
+
 
 class Instantiation(AST):
     def __init__(self,*args):
@@ -567,6 +575,9 @@ class ConstantDecl(Decl):
         return 'individual'
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
+
+class FreshConstantDecl(ConstantDecl):
+    pass
 
 class DestructorDecl(ConstantDecl):
     def name(self):

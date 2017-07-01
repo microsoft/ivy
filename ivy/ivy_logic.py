@@ -67,7 +67,7 @@ import ivy_utils as iu
 import logic as lg
 import logic_util as lu
 from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
-from type_inference import concretize_sorts
+from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
 
@@ -408,7 +408,8 @@ def is_ea(term):
         return is_ae(term.args[0])
     return is_qf(term)
 
-logics = ["epr","qf"]
+logics = ["epr","qf","fo"]
+decidable_logics = ["epr","qf"]
 
 def subterms(term):
     yield term
@@ -464,6 +465,14 @@ def is_in_logic(term,logic,unstrat = False):
         return True
     elif logic == "qf":
         return is_qf(term)
+    elif logic == "fo":
+        cs = lu.used_constants(term)
+        for s in cs:
+            if s.name in sig.interp:
+                reason_text = "'{}' is iterpreted".format(s)
+                return False
+        return True
+        
 
 
 def Constant(sym):
@@ -893,19 +902,40 @@ def is_variable(term):
     return isinstance(term,lg.Var)
         
 
+def all_concretely_sorted(*terms):
+    return True
+
+def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
+    for x in chain(lu.used_variables(term),lu.used_constants(term)):
+        if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
+            iu.dbg('unsorted_var_names')
+            iu.dbg('x.name')
+            if x.name not in unsorted_var_names:
+                if no_error:
+                    raise lg.SortError
+                raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
+    
+
 def sort_infer(term,sort=None,no_error=False):
     res = concretize_sorts(term,sort)
-    for x in chain(lu.used_variables(res),lu.used_constants(res)):
-        if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
-            if no_error:
-                raise lg.SortError
-            raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
+    check_concretely_sorted(res,no_error)
+    return res
 
-#    print "sort_infer: res = {!r}".format(res)
+def sort_infer_list(terms,sorts=None,no_error=False,unsorted_var_names=()):
+    iu.dbg('[str(t) for t in terms]')
+    iu.dbg('sorts')
+    res = concretize_terms(terms,sorts)
+    for term in res:
+        check_concretely_sorted(term,no_error,unsorted_var_names)
+    iu.dbg('res')
     return res
 
 def sorts():
     return [s for n,s in sig.sorts.iteritems()]
+
+def is_ui_sort(s):
+    return type(s) is lg.UninterpretedSort
+
 
 def is_concretely_sorted(term):
     return not lg.contains_topsort(term) and not lg.is_polymorphic(term)
@@ -1256,4 +1286,16 @@ def lambda_apply(self,args):
 lg.Lambda.__call__ = lambda self,*args: lambda_apply(self,args)
 
 substitute = lu.substitute
-    
+
+def rename_vars_no_clash(fmlas1,fmlas2):
+    """ Rename the free variables in formula list fmlas1
+    so they occur nowhere in fmlas2, avoiding capture """
+    uvs = lu.used_variables(*fmlas2)
+    uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
+    rn = iu.UniqueRenamer('',(v.name for v in uvs))
+    vs = lu.free_variables(*fmlas1)
+    vmap = dict((v.name,Variable(rn(v.name),v.sort)) for v in vs)
+    return [lu.substitute(f,vmap) for f in fmlas1]
+
+
+

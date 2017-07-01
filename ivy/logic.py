@@ -78,7 +78,6 @@ class TopSort(recstruct('TopSort', ['name="TopSort"'], [])):
 
 TopS = TopSort()
 
-
 def first_order_sort(s):
     return type(s) is not FunctionSort
 

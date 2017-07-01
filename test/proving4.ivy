@@ -1,0 +1,24 @@
+#lang ivy1.6
+
+    type t
+
+    relation man(X:t)
+    relation mortal(X:t)
+    individual socrates : t
+
+    schema socrates_species = {
+        #------------------
+	property man(socrates)
+    }
+
+    schema mortality_of_man = {
+        property [prem] man(X)
+        #---------------
+        property mortal(X)
+    }
+
+    property mortal(socrates)
+    proof mortality_of_man; socrates_species
+
+
+

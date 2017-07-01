@@ -682,6 +682,40 @@ def clauses_imply_list(clauses1, clauses2_list):
         s.pop()
     return res
 
+class AssumeAssert(object):
+    def __init__(self,clauses):
+        self.clauses = clauses
+
+class Assume(AssumeAssert):
+    pass
+
+class Assert(AssumeAssert):
+    pass
+
+def check_sequence(assume_assert_list):
+    """True if clauses1 imply clauses2.
+    """
+    s = z3.Solver()
+
+    res = []
+
+    for aa in assume_assert_list:
+        if isinstance(aa,Assume):
+            print "assume {}".format(aa.clauses)
+            z1 = clauses_to_z3(aa.clauses)
+            s.add(z1)
+            res.append(True)
+        else:
+            print "assert {}".format(aa.clauses)
+            clauses2 = dual_clauses(aa.clauses)
+            z2 = clauses_to_z3(clauses2)
+            s.push()
+            s.add(z2)
+            res.append(s.check() == z3.unsat)
+            s.pop()
+    return res
+
+
 def not_clauses_to_z3(clauses):
     # Separate the definition of skolems
     sdefs,defs = [],[]

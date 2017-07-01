@@ -135,3 +135,36 @@ def check_theory():
 
     raise iu.ErrorList(errs)
     
+theories = {
+'int' : """#lang ivy1.6
+    schema rec[t] = {
+	type q
+	function base(X:t) : q
+	function step(X:q,Y:t) : q
+	function fun(X:t) : q
+	#---------------------------------------------------------
+	definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+    }
+
+    schema ind[t] = {
+        relation p(X:t)
+        property X <= 0 -> p(X)
+        property p(X) -> p(X+1)
+        #--------------------------
+        property p(X)    
+    }
+
+    schema lep[t] = {
+        function n : t
+        function p(X:t) : bool
+        #---------------------------------------------------------
+        property exists L. (L >= n & forall B. (B >= n & p(B)-> p(L) & L <= B))
+    }
+"""
+}
+
+def get_theory(name):
+    return theories.get(name,None)
+
+
+    

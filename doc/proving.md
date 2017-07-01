@@ -17,9 +17,9 @@ reliably.
 Primitives
 ==========
 
-A logical development in IVy is a succession of statements. Each
-statement must be justified by a primitive axiom or inference rule of
-the system.
+A logical development in IVy is a succession of statements or
+*judgments*. Each statement must be justified by a primitive axiom or
+inference rule of the system.
 
 Type declarations
 -----------------
@@ -28,8 +28,8 @@ On such primitive is a type declaration, like this:
 
     type t
 
-This can be read as "let `t` be a type". This judgement is admissible
-provided `t` is fresh symbol that has not been used up to this point
+This can be read as "let `t` be a type". This judgemnt is admissible
+provided `t` is new symbol that has not been used up to this point
 in the development.
 
 Functions and individuals
@@ -39,7 +39,7 @@ We can introduce a constant like this:
 
     individual n : t
 
-where `n` is fresh. This can be read as "let `n` be of type
+where `n` is new. This can be read as "let `n` be of type
 `t`". Every type has at least one element in it. This judgement gives
 a name to such an element.
 
@@ -59,19 +59,22 @@ An *axiom* is a statement that is admitted by fiat. For example:
 The free variable *X* in the formula is taken as universally
 quantified. The text "idempotence" between brackets is a name for the
 axiom and is optional. The axiom is simply admitted in the current
-context without proof. 
+context without proof. Axioms are dangerous, since they can introduce
+inconsistencies. You should use axioms only if you are developing a
+foundational theory and you know what you are doing.
 
 Properties
 ----------
 
 A *property* is a statement that can be admitted only if it follows
-logically from the facts in the current context. For example:
+logically from judgments in the current context. For example:
 
     property [idem_n] f(n) = n -> f(f(n)) = n
 
-A property requires a proof. If a proof is not supplied, IVy applies its proof tactic `auto`.
-This calls the automated prover Z3 to attempt to prove the property from the judgments
-in the current context.
+A property requires a proof (see below). If a proof is not supplied,
+IVy applies its proof tactic `auto`.  This calls the automated prover
+Z3 to attempt to prove the property from the judgments in the current
+context.
 
 Definitions
 -----------
@@ -85,15 +88,15 @@ inconsistency. As an example:
 This is read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
 definition is admissible if the symbol *g* is "fresh", meaning it does
 not occur in any existing properties or definitions. Further *g* must
-not occur on the right-hand side of the equality (that is, a
-definition may not be recursive, but see "Recursion" below).
+not occur on the right-hand side of the equality (that is, a recursive
+definition is not admissible without proof -- see "Recursion" below).
 
 Theory instantiations
 ---------------------
 
-IVy has built-in theories that can be instantation with a specific
-type as their carrier. For example, the theory of integer arithmetic
-is called `int`. It has the signature `{+,-,*,/}`, plus the integer
+IVy has built-in theories that can be instantated with a specific type
+as their carrier. For example, the theory of integer arithmetic is
+called `int`. It has the signature `{+,-,*,/}`, plus the integer
 numerals, and provides the axioms of Peano arithmetic. To instantiate
 the theory `int` using type *t* for the integers, we write:
 
@@ -102,20 +105,20 @@ the theory `int` using type *t* for the integers, we write:
 This declaration requires that type `t` as well as the symbols
 `{+,-,*,/}` in the signature of `int` be fresh. Notice, though, that
 the symbols `{+,-,*,/}` are polymorphic. This means that `+` over
-distinct types is considered to be a distinct symbol.  This means we
-can we can instantiate the `int` theory over different types (and also
+distinct types is considered to be a distinct symbol.  Thus, we can we
+can instantiate the `int` theory over different types (and also
 instantiate other theorys that have these symbols in their signature).
 
 Inference rules
 ===============
 
 An inference rule takes a collection of judgments as input (the
-premises) and produces a judment as output (the conclusion). The rule
+premises) and produces a judgment as output (the conclusion). The rule
 is *sound* if the conclusion logically follows from the premises.
 
 Here is a simple example of an inference rule:
 
-    schema congruence1 = {
+    schema congruence = {
         type d
 	type r
         function f(X:d) : r
@@ -136,9 +139,9 @@ Any schema that is defined in the current context can be used in a proof.
 Here is an example:
 
     property [prop_n] Z=n -> Z + 1 = n + 1
-    proof congruence1
+    proof congruence
 
-The `proof` declaration tells IVy to use schema `congruence1` to prove the property. 
+The `proof` declaration tells IVy to use schema `congruence` to prove the property. 
 IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
 values for types *d*,*r* function *f* and the free variables *X*,*Y*. In this case, it
 discovers the following assignment:
@@ -155,7 +158,7 @@ the property to be proved, so the property is admitted.
 In case IVY did not succeed in finding this match, we could also write
 the proof more explicitly, like this:
 
-    proof concruence1 with d=t, r=t, X=Z, Y=n, f(X)=X+1
+    proof congruence with d=t, r=t, X=Z, Y=n, f(X)=X+1
 
 We could also give a subset of this assignment, relying on IVY's
 matching algorithm to fill in the rest.
@@ -186,7 +189,7 @@ Suppose on the other hand that we have this rule available:
 
     schema socrates_species = {
         #------------------
-	man(socrates)
+	property man(socrates)
     }
 
 We could chain this rule to the first one like this:
@@ -199,14 +202,23 @@ possibly replacing it with sub-goals. At the end of the proof, the
 prover applies its default tactic `auto` to the remaining goals.
 
 Generally speaking, it isn't a good idea to build up complex proof
-sequences, since the sub-goals are not visible. We could instead have
-been a bit more explicit, like this:
+sequences. Such proofs are difficult to read, since the sub-goals are
+not visible. We could instead have been a bit more explicit, like
+this:
 
     property man(socrates)
     proof socrates_species
     
     property mortal(socrates)
     proof mortality_of_man with X=socrates
+
+A note on matching. There may be many ways to match a given proof goal
+to the conclusion of a rule. Different matches can result in different
+sub-goals, which may affect whether a proof succeeds. IVy doesn't
+attempt to verify that the match it finds is unique. For this
+reasing, when sub-goals are produced, it may be a good idea to give
+the match explicitly (as we did above, though in this case there is
+only one match).
 
 Recursion
 ---------
@@ -258,8 +270,9 @@ numbers by *N*. We can define such a function like this:
     definition sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
     proof rec[t]
 
-In matching the recursion schema `rec[t]`, IVy will extend the free function symbols in the schema with an extra
-parameter *N* so that schema becomes:
+In matching the recursion schema `rec[t]`, IVy will extend the free
+function symbols in the schema with an extra parameter *N* so that
+schema becomes:
 
     schema rec[t] = {
 	type q
@@ -290,7 +303,7 @@ an example of such a schema:
    schema ind[t] = {
        relation p(X:t)
        property X <= 0 -> p(X)
-       property p(X) -> p(X) + 1
+       property p(X) -> p(X+1)
        #--------------------------
        property p(X)    
    }
@@ -306,7 +319,9 @@ This produces two sub-goals:
     property X <= 0 -> sum(X) <= X
     property sum(X) <= X -> sum(X+1) <= X + 1
 
-The `auto` tactic can prove both of these using the definition of `sum`.
+The `auto` tactic can prove both of these using the definition of
+`sum`, if we allow it to use undecidable theories. Later, we'll se a
+more reliable way to do this, however.
 
 Generally, when a theory such as the theory of integer arithmetic is instantiated,
 a suitable induction schema such as the above is made available.

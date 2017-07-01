@@ -8,7 +8,7 @@ from itertools import product, chain
 from functools import partial
 
 from logic import (Var, Const, Apply, Eq, Ite, Not, And, Or, Implies,
-                   Iff, ForAll, Exists)
+                   Iff, ForAll, Exists, Lambda)
 from logic import contains_topsort
 
 
@@ -35,7 +35,7 @@ def used_variables(*terms):
                      Implies, Iff):
         return union(*(used_variables(x) for x in t))
 
-    elif type(t) in (ForAll, Exists):
+    elif type(t) in (ForAll, Exists, Lambda):
         return union(used_variables(t.body), t.variables)
 
     elif hasattr(t,'args'):
@@ -66,11 +66,35 @@ def free_variables(*terms, **kwargs):
                      Implies, Iff):
         return union(*(_free_variables(x) for x in t))
 
-    elif type(t) in (ForAll, Exists):
+    elif type(t) in (ForAll, Exists, Lambda):
         return _free_variables(t.body) - _free_variables(*t.variables)
 
     elif hasattr(t,'args'):
         return union(*(_free_variables(x) for x in t.args))
+
+    else:
+        assert False, type(t)
+
+def bound_variables(*terms):
+    """
+    Returns a frozenset of variables bound in given terms.
+
+    """
+
+    t = terms[0] if len(terms) == 1 else terms
+
+    if type(t) is Var:
+        return frozenset()
+
+    elif type(t) in (tuple, Const, Apply, Eq, Ite, Not, And, Or,
+                     Implies, Iff):
+        return union(*(used_variables(x) for x in t))
+
+    elif type(t) in (ForAll, Exists, Lambda):
+        return union(used_variables(t.body), t.variables)
+
+    elif hasattr(t,'args'):
+        return union(*(used_variables(x) for x in t.args))
 
     else:
         assert False, type(t)

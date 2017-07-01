@@ -1,0 +1,21 @@
+#lang ivy1.6
+
+    type t
+    relation succ(X:t,Y:t)
+
+    schema naming = {
+        type t
+	relation p(X:t)
+        property exists X. p(X)
+	fresh function n:t
+	#----------------------
+	property p(n)
+    }
+
+    property exists Y. succ(X,Y)
+
+    function next(X:t):t
+
+    property succ(X,next(X))
+    proof naming with n = next(X), p(Y) = succ(X,Y)
+

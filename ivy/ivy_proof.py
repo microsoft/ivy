@@ -57,8 +57,11 @@ class ProofChecker(object):
             # Recursive definitions must match a schema
             if proof is None:
                 raise NoMatch(defn,"no proof given for recursive definition")
-            if self.match_schema(defn.formula,proof) is None:
+            subgoals = self.match_schema(defn.formula,proof)
+            if subgoals is None:
                 raise NoMatch(defn,"recursive definition does not match the given schema")
+        else:
+            subgoals = []
         self.definitions[sym] = defn
         
     def admit_proposition(self,prop,proof=None):
@@ -71,9 +74,30 @@ class ProofChecker(object):
 
         if proof is None:
             raise NoMatch(prop,"no proof given for property")
-        if self.match_schema(prop.formula,proof) is None:
+        subgoals = self.apply_proof([prop],proof)
+        if subgoals is None:
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
+        return subgoals
+
+    def apply_proof(self,decls,proof):
+        """ Apply a proof to a list of goals, producing subgoals, or None if
+        the proof fails. """
+
+        if len(decls) == 0:
+            return []
+        if isinstance(proof,ia.SchemaInstantiation):
+            return self.match_schema(decls[0].formula,proof) + decls[1:]
+        elif isinstance(proof,ia.ComposeTactics):
+            return self.compose_proofs(decls,proof.args)
+        assert False,"unknown proof type {}".format(type(proof))
+
+    def compose_proofs(self,decls,proofs):
+        for proof in proofs:
+            decls = self.apply_proof(decls,proof)
+            if decls is None:
+                return None
+        return decls
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
@@ -92,7 +116,7 @@ class ProofChecker(object):
         prob = match_problem(schema,decl)
         prob = transform_defn_match(prob)
         pmatch = compile_match(proof,prob,schemaname)
-        prob.pat = apply_match(pmatch,prob.pat)
+        prob.pat = apply_match_alt(pmatch,prob.pat)
         iu.dbg('prob')
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         iu.dbg('fomatch')
@@ -100,9 +124,34 @@ class ProofChecker(object):
             prob.pat = apply_match(fomatch,prob.pat)
             prob.freesyms = apply_match_freesyms(fomatch,prob.freesyms)
         res = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        res = merge_matches(res,pmatch)
         show_match(res)
-        return res
+        if res is not None:
+            subgoals = []
+            for x in schema.prems():
+                if isinstance(x,ia.LabeledFormula):
+                    iu.dbg('x.formula')
+                    fmla = apply_match_alt(remove_vars_match(pmatch,x.formula),x.formula)
+                    iu.dbg('fmla')
+                    fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
+                    iu.dbg('fmla')
+                    fmla = apply_match(remove_vars_match(res,fmla),fmla)
+                    iu.dbg('fmla')
+                    g = ia.LabeledFormula(x.label,fmla)
+                    subgoals.append(g)
+                    iu.dbg('g')
+            return subgoals
+        return None
+
+def remove_vars_match(mat,fmla):
+    """ Remove the variables bindings from a match. This is used to
+    prevent variable capture when applying the match to premises. Make sure free variables
+    are not captured by fmla """
+    res = dict((s,v) for s,v in mat.iteritems() if il.is_ui_sort(s))
+    sympairs = [(s,v) for s,v in mat.iteritems() if il.is_constant(s)]
+    symfmlas = il.rename_vars_no_clash([v for s,v in sympairs],[fmla])
+    res.update((s,w) for (s,v),w in zip(sympairs,symfmlas))
+    return res
+
 
 def show_match(m):
     if m is None:
@@ -204,14 +253,22 @@ def compile_match(proof,prob,schemaname):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
-    match = proof.match
+    match = proof.match()
+    iu.dbg('match')
     freesyms = prob.freesyms
     res = dict()
     for m in proof.match():
-        sym = m.defines()
-        if sym not in freesyms:
-            raise ProofError(proof,'{} is not a premise of schema {}'.format(sym))
-        res[sym] = il.Lambda(m.lhs().args,m.rhs())
+        if il.is_app(m.lhs()):
+            res[m.defines()] = il.Lambda(m.lhs().args,m.rhs())
+        else:
+            res[m.lhs()] = m.rhs()
+    # iu.dbg('freesyms')
+    # freesyms = apply_match_freesyms(res,freesyms)
+    # iu.dbg('freesyms')
+    # for sym in res:
+    #     if sym not in freesyms:
+    #         raise ProofError(proof,'{} is not a premise of schema {}'.format(repr(sym),schemaname))
+    iu.dbg('res')
     return res
 
 def apply_match(match,fmla):
@@ -231,16 +288,44 @@ def apply_match(match,fmla):
         return match[fmla]
     return fmla.clone(args)
 
+def apply_match_alt(match,fmla):
+    """ apply a match to a formula. 
+
+    In effect, substitute all symbols in the match with the
+    corresponding lambda terms and apply beta reduction
+    """
+
+    args = [apply_match_alt(match,f) for f in fmla.args]
+    if il.is_app(fmla):
+        func = apply_match_func(match,fmla.rep)
+        if func in match:
+            func = match[func]
+            return func(*args)
+        iu.dbg('repr(func)')
+        iu.dbg('args')
+        return func(*args)
+    if il.is_variable(fmla):
+        fmla = il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
+        fmla = match.get(fmla,fmla)
+        return fmla
+    return fmla.clone(args)
+
 def apply_match_func(match,func):
     sorts = func_sorts(func)
     sorts = [match.get(s,s) for s in sorts]
     return il.Symbol(func.name,sorts[0] if len(sorts) == 1 else il.FunctionSort(*sorts))
 
 def apply_match_sym(match,sym):
+    if il.is_variable(sym):
+        return il.Variable(sym.name,match.get(sym.sort,sym.sort))
     return match.get(sym,sym) if isinstance(sym,il.UninterpretedSort) else apply_match_func(match,sym)
 
 def apply_match_freesyms(match,freesyms):
     return [apply_match_sym(match,sym) for sym in freesyms if sym not in match]
+
+def apply_match_freesyms_alt(match,freesyms):
+    msyms = [apply_match_sym(match,sym) for sym in freesyms]
+    return [sym for sym in msyms if sym not in match]
 
 def func_sorts(func):
     return list(func.sort.dom) + [func.sort.rng]
