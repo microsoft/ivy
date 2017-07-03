@@ -18,7 +18,7 @@ class ProofError(iu.IvyError):
 
 class MatchProblem(object):
     def __init__(self,pat,inst,freesyms,constants):
-        self.pat,self.inst,self.freesyms,self.constants = pat,inst,freesyms,constants
+        self.pat,self.inst,self.freesyms,self.constants = pat,inst,set(freesyms),constants
     def __str__(self):
         return '{{pat:{},inst:{},freesyms:{}}}'.format(self.pat,self.inst,map(str,self.freesyms))
 
@@ -150,6 +150,7 @@ def remove_vars_match(mat,fmla):
     sympairs = [(s,v) for s,v in mat.iteritems() if il.is_constant(s)]
     symfmlas = il.rename_vars_no_clash([v for s,v in sympairs],[fmla])
     res.update((s,w) for (s,v),w in zip(sympairs,symfmlas))
+    show_match(res)
     return res
 
 
@@ -321,7 +322,7 @@ def apply_match_sym(match,sym):
     return match.get(sym,sym) if isinstance(sym,il.UninterpretedSort) else apply_match_func(match,sym)
 
 def apply_match_freesyms(match,freesyms):
-    return [apply_match_sym(match,sym) for sym in freesyms if sym not in match]
+    return set(apply_match_sym(match,sym) for sym in freesyms if sym not in match)
 
 def apply_match_freesyms_alt(match,freesyms):
     msyms = [apply_match_sym(match,sym) for sym in freesyms]

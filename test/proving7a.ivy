@@ -14,8 +14,6 @@
 
     axiom exists Y. succ(X,Y)
 
-    function next(X:t):t
+    property exists Y. succ(X,Y) named next(X)
 
-    property succ(X,next(X))
-    proof existsE with n = next(X), p(Y) = succ(X,Y)
 

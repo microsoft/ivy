@@ -11,20 +11,20 @@ axiom T:t < U | T = U | U < T
 relation succ(X:t,Y:t)
 
 
-schema rec[t] = {
-    type q
-    function base(X:t) : q
-    function step(X:q,Y:t) : q
-    function fun(X:t) : q
-    #---------------------------------------------------------
-    definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
-}
+# schema rec[t] = {
+#     type q
+#     function base(X:t) : q
+#     function step(X:q,Y:t) : q
+#     function fun(X:t) : q
+#     #---------------------------------------------------------
+#     definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+# }
 
-schema lep[t] = {
-    function p(X:t) : bool
-    #---------------------------------------------------------
-    property exists L. (L >= 0 & forall B. (B >= 0 & p(B)-> p(L) & L <= B))
-}
+# schema lep[t] = {
+#     function p(X:t) : bool
+#     #---------------------------------------------------------
+#     property exists L. (L >= 0 & forall B. (B >= 0 & p(B)-> p(L) & L <= B))
+# }
 
 relation member(X:t,S:s)
 
@@ -33,6 +33,22 @@ function card(S:s) : r
 function cardUpTo(S:s,B:t) : r
 individual n : t
 axiom n > 0
+
+isolate successor = {
+
+    object spec = {
+	
+	property succ(X,Y) -> X < Y
+	property ~(X < Y & Y < Z & succ(X,Z))
+
+    }
+
+    object impl = {
+	interpret t -> int
+    }
+
+}
+with counting.impl.succ_def
 
 isolate counting = {
 
@@ -62,21 +78,6 @@ isolate counting = {
     }
 }
 
-isolate successor = {
-
-    object spec = {
-	
-	property succ(X,Y) -> X < Y
-	property ~(X < Y & Y < Z & succ(X,Z))
-
-    }
-
-    object impl = {
-	interpret t -> int
-    }
-
-}
-with counting.impl.succ_def
 
 isolate disjointness = {
 

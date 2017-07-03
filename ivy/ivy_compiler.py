@@ -159,6 +159,8 @@ def compile_field_reference(symbol_name,args):
     try:
         return compile_field_reference_rec(symbol_name,args,top=True)
     except cfrfail as err:
+        print im.module.sig
+        print ivy_logic.sig
         raise IvyError(None,"unknown symbol: {}".format(err.symbol_name))
 
     
@@ -532,34 +534,24 @@ def compile_defn(df):
             return df
     
 def compile_schema_prem(self,sig):
-    iu.dbg('repr(self)')
     if isinstance(self,ivy_ast.ConstantDecl):
-        iu.dbg('sig.sorts.values()')
         with ivy_logic.WithSorts(sig.sorts.values()):
-            print ivy_logic.sig
             sym = compile_const(self.args[0],sig)
-            iu.dbg('repr(sym)')
         return self.clone([sym])
     elif isinstance(self,ivy_ast.DerivedDecl):
         raise IvyErr(self,'derived functions in schema premises not supported yet')
     elif isinstance(self,ivy_ast.TypeDef):
         t = ivy_logic.UninterpretedSort(self.args[0].rep)
-        iu.dbg('t')
         sig.sorts[t.name] = t
         return t
     elif isinstance(self,ivy_ast.LabeledFormula):
         with ivy_logic.WithSymbols(sig.all_symbols()):
             return self.compile()
-    print "unknown:"
-    iu.dbg('type(self)')
     
 def compile_schema_conc(self,sig):
-    iu.dbg('type(self)')
-    iu.dbg('self')
     with ivy_logic.WithSymbols(sig.all_symbols()):
         if isinstance(self,ivy_ast.Definition):
             return compile_defn(self)
-        iu.dbg('self')
         return sortify_with_inference(self)
 
 def compile_schema_body(self):
@@ -567,7 +559,6 @@ def compile_schema_body(self):
     prems = [compile_schema_prem(p,sig) for p in self.args[:-1]]
     res = ivy_ast.SchemaBody(*(prems+[compile_schema_conc(self.args[-1],sig)]))
     res.instances = []
-    iu.dbg('res')
     return res
 
 ivy_ast.SchemaBody.compile = compile_schema_body    
@@ -577,7 +568,6 @@ def compile_schema_instantiation(self,fmla):
         raise iu.IvyError(self,'schema {} does not exist'.format(self.schemaname()))
     schema = im.module.schemata[self.schemaname()]
     schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
-    iu.dbg('schema.prems()')
     schemasorts = [s for s in schema.prems() if isinstance(s,ivy_logic.UninterpretedSort)]
     sortmap = dict()
     pairs = []
@@ -593,14 +583,11 @@ def compile_schema_instantiation(self,fmla):
         else:
             pairs.append((x,y))
     sorted_pairs = []
-    iu.dbg('sortmap')
     with top_sort_as_default():
         for x,y in pairs:
             with ivy_logic.WithSymbols(schemasyms):
                 x,_ = ivy_logic.sort_infer_list([x.compile(),schema.conc()])
-            iu.dbg('repr(x)')
             x = ip.apply_match_alt(sortmap,x)
-            iu.dbg('repr(x)')
             y,_,_ = ivy_logic.sort_infer_list([y.compile(),fmla,x])
             sorted_pairs.append((x,y))
 
@@ -643,7 +630,6 @@ class IvyDomainSetup(IvyDeclInterp):
         vmap = dict((x.name,x) for x in lu.variables_ast(cond))
         used = set()
         print 'foo!'
-        iu.dbg('lhs.args[0].sort')
         with ivy_logic.UnsortedContext():
             args = [arg.compile() for arg in lhs.args]
         print 'bar!'
@@ -666,7 +652,6 @@ class IvyDomainSetup(IvyDeclInterp):
                 raise IvyError(lhs,'{} must be a parameter of {}'.format(x,lhs.rep))
         dom = [x.sort for x in targs]
         sym = self.domain.sig.add_symbol(lhs.rep,ivy_logic.FuncConstSort(*(dom+[rng])))
-        iu.dbg('repr(sym)')
         self.domain.named.append((self.last_fact,sym(*targs) if targs else sym))
     def schema(self,sch):
         if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
@@ -825,7 +810,6 @@ class IvyDomainSetup(IvyDeclInterp):
                 if not y(rhs):
                     raise IvyError(thing,"{} not a native {}".format(rhs,z))
                 interp[lhs] = rhs
-                print '{} -> {}'.format(lhs,rhs)
                 if z == 'sort' and isinstance(rhs,str):
                     compile_theory(self.domain,lhs,rhs)
                 return
@@ -1107,22 +1091,24 @@ def check_properties(mod):
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)
+
+    def named_trans(prop):
+        if prop.id in nmap:
+            name = nmap[prop.id]
+            fmla = ivy_logic.drop_universals(prop.formula)
+            v = list(fmla.variables)[0]
+            fmla = fmla.body
+            fmla = lu.substitute_ast(fmla,{v.name:name})
+            prop = prop.clone([prop.label,fmla])
+        return prop
+            
     import ivy_proof
     prover = ivy_proof.ProofChecker([],[],mod.schemata)
     for prop in props:
         if prop.id in pmap:
             print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
-            if prop.id in nmap:
-                name = nmap[prop.id]
-                fmla = ivy_logic.drop_universals(prop.formula)
-                v = list(fmla.variables)[0]
-                fmla = fmla.body
-                iu.dbg('v.sort')
-                iu.dbg('name.sort')
-                fmla = lu.substitute_ast(fmla,{v.name:name})
-                iu.dbg('fmla')
-                prop = prop.clone([prop.label,fmla])
+            prop = named_trans(prop)
             if len(subgoals) == 0:
                 mod.labeled_axioms.append(prop)
             else:
@@ -1132,6 +1118,11 @@ def check_properties(mod):
                 mod.subgoals.append((prop,subgoals))
         else:
             mod.labeled_props.append(prop)
+            if prop.id in nmap:
+                nprop = named_trans(prop)
+                mod.labeled_props.append(nprop)
+                mod.subgoals.append((nprop,[prop]))
+                
 
 
 def ivy_compile_theory(mod,decls,**kwargs):
@@ -1143,8 +1134,6 @@ def ivy_compile_theory_from_string(mod,theory,sortname,**kwargs):
     module = read_module(sio)
     ivy = Ivy()
     inst_mod(ivy,module,None,{'t':sortname},dict())
-    for d in ivy.decls:
-        print d
     ivy_compile_theory(mod,ivy,**kwargs)
 
 def compile_theory(mod,sortname,theoryname,**kwargs):
@@ -1153,9 +1142,7 @@ def compile_theory(mod,sortname,theoryname,**kwargs):
         ivy_compile_theory_from_string(mod,theory,sortname,**kwargs)
     
 def compile_theories(mod,**kwargs):
-    iu.dbg('mod.sig.interp.iteritems()')
     for name,value in mod.sig.interp.iteritems():
-        iu.dbg('name')
         if name in mod.sig.sorts and isinstance(value,str):
             theory = th.get_theory(value)
             ivy_compile_theory_from_string(mod,theory,name,**kwargs)

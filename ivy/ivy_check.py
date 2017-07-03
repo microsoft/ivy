@@ -95,8 +95,6 @@ def check_module():
 
     missing = []
 
-    for x,y in im.module.isolates.iteritems():
-        print 'isolate= {}:{} '.format(x,y)
     isolate = ivy_compiler.isolate.get()
     if isolate != None:
         isolates = [isolate]

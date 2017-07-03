@@ -1,9 +1,9 @@
 #lang ivy1.6
 
 module totally_ordered(t) = {
-    property (T:t < U & U < V) -> (T < V)
-    property ~(T:t < U & U < T)
-    property T:t < U | T = U | U < T
+    property [transitivity] (T:t < U & U < V) -> (T < V)
+    property [antisymmetry] ~(T:t < U & U < T)
+    property [totality] T:t < U | T = U | U < T
 }
 
 module totally_ordered_with_zero(t) = {

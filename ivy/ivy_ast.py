@@ -531,6 +531,7 @@ class SchemaDecl(Decl):
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
 
+    
 class SchemaBody(AST):
     def __str__(self):
         return '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'

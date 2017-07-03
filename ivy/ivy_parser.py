@@ -395,7 +395,6 @@ def p_schdecls_schdecls_schdecl(p):
 
 def p_schdefnrhs_lcb_schdecls_rcb(p):
     'schdefnrhs : LCB schdecls schconc RCB'
-    iu.dbg('[type(x) for x in p[2]]')
     p[0] = SchemaBody(*(p[2]+[p[3]]))
 
 def p_schdefn_atom_eq_fmla(p):

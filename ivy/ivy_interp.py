@@ -564,7 +564,7 @@ def get_property_context(prop):
     for x in im.module.labeled_props:
         if x.id == prop.id:
             break
-        if x.id in subgoal_map:
+        if x.id in subgoalmap:
             res = and_clauses(res,formula_to_clauses(x.formula))
     return res
 

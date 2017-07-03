@@ -716,14 +716,16 @@ class Sig(object):
         self._default_sort = None
         self.default_numeric_sort = ConstantSort("int")
         self.sorts["bool"] = RelationSort([])
+        self.old_sigs = []
     def __enter__(self):
         global sig
-        self.old_sig = sig
+        self.old_sigs.append(sig)
         sig = self
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
-        sig = self.old_sig
+        sig = self.old_sigs[-1]
+        self.old_sigs = self.old_sigs[:-1]
         return False # don't block any exceptions
     def copy(self):
         res = Sig()
@@ -1292,9 +1294,12 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     so they occur nowhere in fmlas2, avoiding capture """
     uvs = lu.used_variables(*fmlas2)
     uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
+    iu.dbg('uvs')
     rn = iu.UniqueRenamer('',(v.name for v in uvs))
     vs = lu.free_variables(*fmlas1)
-    vmap = dict((v.name,Variable(rn(v.name),v.sort)) for v in vs)
+    iu.dbg('vs')
+    vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
+    iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
 

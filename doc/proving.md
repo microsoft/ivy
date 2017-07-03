@@ -216,7 +216,7 @@ A note on matching. There may be many ways to match a given proof goal
 to the conclusion of a rule. Different matches can result in different
 sub-goals, which may affect whether a proof succeeds. IVy doesn't
 attempt to verify that the match it finds is unique. For this
-reasing, when sub-goals are produced, it may be a good idea to give
+reason, when sub-goals are produced, it may be a good idea to give
 the match explicitly (as we did above, though in this case there is
 only one match).
 
@@ -238,7 +238,7 @@ definitional schema. As an example, consider the following schema:
 This schema shows how to construct a fresh function `fun` from two functions:
 
 - `base` gives the value of the function for inputs less than or equal to zero.
-- `step` gives the value for positive *X* in terms of `X` and the value for `X-1`
+- `step` gives the value for positive *X* in terms of *X* and the value for *X*-1
 
 A definition schema such as this requires that the defined function
 symbol be fresh. With this schema, we can define a recursive function that
@@ -332,7 +332,7 @@ Naming
 If we can prove that something exists, we can give it a name. That is,
 we can reason according to this schema:
 
-    schema naming = {
+    schema existsE = {
         type t
 	relation p(X:t)
         property exists X. p(X)
@@ -346,19 +346,20 @@ This rule gives a name to a value satisfying *p*, provided we can show that such
     property exists Y. succ(X,Y)
 
     function next(X:t):t
+
     property succ(X,next(X))
-    proof naming with n = next(X), p(Y) = succ(X,Y)
+    proof existsE with n = next(X), p(Y) = succ(X,Y)
 
-This generates a proof goal `exists Y. succ(X,Y)` that is discharged by `auto` using the property above.
+This generates a proof goal `exists Y. succ(X,Y)` that is discharged
+by `auto` using the property above.
 
-This kind of argument is common enough that IVy provides a shorthand for it:
+This kind of argument is common enough that IVy provides a shorthand
+for it:
 
-    function next(X:t):t
     property exists Y. succ(X,Y) named next(X)
 
 This transforms the property to `succ(X,next(X))`, provided `next` is
-fresh. Readers familiar with logic may recognize this transformation as
-"Skolemization".
+new. Readers may recognize this transformation as "Skolemization".
 
 
 Hierarchical proof development
@@ -411,12 +412,12 @@ Now suppose we want to prove an extra property using `t_theory`:
         property [prop] f(f(X)) > X
 
     }
-    with t_theory.expanding, t_theory.transivity
+    with t_theory.expanding, t_theory.transitivity
 
 The 'with' clause says that the properties `expanding` and
 `transitivy` from isolate `t_theory` should be included in the context when
 proving `extra.prop`. The interpretation of *t* as the integers
-and the definiton of *f* as the successor function will be ignored.
+and the definiton of *f* as the successor function are ignored.
 
 Exporting properties
 --------------------
