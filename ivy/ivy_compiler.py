@@ -140,7 +140,9 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         sort = base.sort
         sort_parent,sort_child = iu.parent_child_name(sort.name)
         destr_name = iu.compose_names(sort_parent,child_name)
-        if expr_context and top_context and destr_name in top_context.actions:
+        if top_context and destr_name in top_context.actions:
+            if not expr_context:
+                raise IvyError(None,'call to action {} not allowed outside an action'.format('destr_name'))
             args.insert(0,base)
             return field_reference_action(destr_name,args,top)
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
@@ -158,6 +160,8 @@ def compile_field_reference(symbol_name,args):
     try:
         return compile_field_reference_rec(symbol_name,args,top=True)
     except cfrfail as err:
+        if symbol_name in ivy_logic.sig.sorts:
+            raise IvyError(None,"type {} used where a function or individual symbol is expected".format(err.symbol_name))
         raise IvyError(None,"unknown symbol: {}".format(err.symbol_name))
 
     

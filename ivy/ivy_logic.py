@@ -313,6 +313,8 @@ def find_symbol(symbol_name,throw=True):
         if not throw:
             return None
         else:
+            if symbol_name in sig.sorts:
+                IvyError(None,"type {} used where a function or individual symbol is expected".format(symbol_name))
             raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
 def find_polymorphic_symbol(symbol_name,throw=True):
