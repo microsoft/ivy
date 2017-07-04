@@ -55,8 +55,6 @@ module indexset(basis,index) = {
     
     object spec = {
 
-	property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
-
 	after empty {
 	    assert ~member(E,s);
 	}
@@ -107,10 +105,13 @@ module indexset(basis,index) = {
 
     	object spec = {
 
-
     	    definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
 
     	    property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+
+    	    definition majority(X) = 2 * card(X) > cnt(n)
+
+	    property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
 
     	}
 
@@ -135,32 +136,19 @@ module indexset(basis,index) = {
     	}
 
     }
-    with counting,basis
+    with counting,basis,nodeset.n_positive
 
 
-    object impl = {
+    isolate api = {
 	
-    	object spec = {
+    	# Here is the implementation of the set type using an unsorted array.
 
-    	definition majority(X) = 2 * card(X) > cnt(n)
-
-    	# tricky: we interpret the index type as the integers, so we can use addition
-    	# without axioms. we have set up the above so the index type is never the domain of
-    	# a function. a bug in IVy's logic fragmetn checker seems to allow us to get away with this,
-    	# and it works, but I don't know if Z3 is actually a decision procedure for this case.
-
-    	interpret index.t -> int
-
-    	# Here is the implementation of the set type using an unsorted array. The above reasoning
-    	# is actually independent of the definition of "member" below. Hopefully, this definition
-    	# will not confuse Z3. If it did, we would have to put these definitions into their own isolate.
-	
     	instance arridx : unbounded_sequence
     	instance arr:array(arridx.t,basis.t)
 
     	# Tricky: this is a bit of aspect-orientation. It turns the type `set` into a struct
     	# with just one field called `repr`. This field gives the concrete representation of a
-    	# set as an array. To an isolate the doesn't use the definition of `member` below,
+    	# set as an array. To an isolate that doesn't use the definition of `member` below,
     	# the tpye `set` will still appear to be uninterpreted.
 
     	destructor repr(X:set) : arr.t
@@ -176,8 +164,7 @@ module indexset(basis,index) = {
     		repr(s) := repr(s).resize(repr(s).end.next,e)
     	    }
     	}
-    }
-    }
+    } with spec
 }
 
 
@@ -185,5 +172,7 @@ instance nodeord : unbounded_sequence
 instance nodecard : unbounded_sequence
 instance nodeset : indexset(nodeord,nodecard)
 
-isolate iso_n = nodeset with nodeord,nodecard
+export nodeset.empty
+export nodeset.add
+
     
