@@ -1656,6 +1656,9 @@ def p_error(token):
         report_error(ParseError(token.lineno,token.value,"syntax error"))
     else:
         report_error(ParseError(None,None,'unexpected end of input'));
+    # TEMORARY: parser goes into into infinite loop on recovery from parse errors
+    # Stop here on any parse error to prevent this
+    raise iu.ErrorList(error_list)
 
 # Build the parsers
 import os
