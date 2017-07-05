@@ -969,7 +969,7 @@ def create_sort_order(mod):
     arcs = [(x,s) for s in mod.sort_order for x in sort_dependencies(mod,s)]
     # do nothing if sccs already sorted
     number = dict((x,i) for i,x in enumerate(mod.sort_order))
-    if all(number[x] < number[y] for x,y in arcs):
+    if all(x == 'bool' or number[x] < number[y] for x,y in arcs):
         return
     m = defaultdict(set)
     for x,y in arcs:

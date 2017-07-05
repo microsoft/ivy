@@ -47,7 +47,7 @@ checks = [
       ['object_example','OK'],
       ['paraminit2','OK'],
       ['paraminit3','OK'],
-      ['paraminit','OK'],
+      ['paraminit','isolate=iso_foo','OK'],
       ['pingpongclock','OK'],
       ['pingpong','OK'],
       ['po_example','OK'],
@@ -104,7 +104,7 @@ to_cpps = [
          ['leader_election_ring_repl_err','target=repl','isolate=iso_impl','error: relevant axiom asgn.injectivity not enforced'],
          ['leader_election_ring_repl_err2','target=repl','isolate=iso_impl','error: No implementation for action node.get_next'],
          ['leader_election_ring_udp2_warn','target=repl','isolate=iso_impl','warning: action sec.timeout is implicitly exported'],
-         ['paraminit','target=repl','error: cannot compile "foo.bit" because type t is uninterpreted'],
+         ['paraminit','target=repl','error: cannot compile initial constraint on "foo.bit" because type t is large. suggest using "after init"'],
          ['paraminit2','target=repl','isolate=iso_foo','initial condition depends on stripped parameter'],
       ]
      ]

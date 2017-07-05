@@ -393,10 +393,6 @@ def p_top_symdecl(p):
     p[0] = p[1]
     p[0].declare(p[2])
 
-def p_symdecl_relationdecl(p):
-    'symdecl : relationdecl'
-    p[0] = p[1]
-
 def p_symdecl_constantdecl(p):
     'symdecl : constantdecl'
     p[0] = p[1]
@@ -413,9 +409,29 @@ def p_constantdecl_var_tterms(p):
     'constantdecl : VAR tterms'
     p[0] = ConstantDecl(*p[2])
 
-def p_relationdecl_relation_tatoms(p):
-    'relationdecl : RELATION tatoms'
-    p[0] = RelationDecl(*apps_to_atoms(p[2]))
+def p_rel_defnlhs(p):
+    'rel : defnlhs'
+    p[1].sort = 'bool'
+    p[0] = ConstantDecl(p[1])
+
+def p_rel_defn(p):
+    'rel : defn'
+    p[0] = DerivedDecl(mk_lf(p[1]))
+
+def p_rels_rel(p):
+    'rels : rel'
+    p[0] = [p[1]]
+
+def p_rels_rels_comma_rel(p):
+    'rels : rels COMMA rel'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_top_relation_rels(p):
+    'top : top RELATION rels'
+    p[0] = p[1]
+    for d in p[3]:
+        p[0].declare(d)
 
 def p_tatoms_tatom(p):
     'tatoms : tatom'
