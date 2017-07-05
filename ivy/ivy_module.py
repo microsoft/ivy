@@ -69,6 +69,9 @@ class Module(object):
         self.attributes = {} # map from name to atom
         self.variants = defaultdict(list) # map from sort name to list of sort
         self.ext_preconds = {} # map from action name to formula
+        self.proofs = [] # list of pair (labeled formula, proof)
+        self.named = [] # list of pair (labeled formula, atom)
+        self.subgoals = [] # (labeled formula * labeled formula list) list
         
         self.sig = il.sig.copy() # capture the current signature
 
@@ -278,7 +281,7 @@ def background_theory(symbols = None):
 def find_action(name):
     return module.actions.get(name,None)
 
-param_logic = iu.Parameter("complete",','.join(il.logics),
+param_logic = iu.Parameter("complete",','.join(il.decidable_logics),
                            check=lambda ls: all(s in il.logics for s in ls.split(',')))
 
 def logics():

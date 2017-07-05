@@ -104,6 +104,10 @@ class Definition(Formula):
         return ' = '.join([repr(x) for x in self.args])
     def defines(self):
         return self.args[0].rep
+    def lhs(self):
+        return self.args[0]
+    def rhs(self):
+        return self.args[1]
     def to_constraint(self):
         if isinstance(self.args[0],App):
             return Atom(equals,self.args)
@@ -476,7 +480,14 @@ class ObjectDecl(Decl):
         return [(c.relname,lineno(c)) for c in self.args]
 #        return []
 
+lf_counter = 0
+
 class LabeledFormula(AST):
+    def __init__(self,*args):
+        global lf_counter
+        self.args = args
+        self.id = lf_counter
+        lf_counter += 1
     @property
     def label(self):
         return self.args[0]
@@ -485,6 +496,12 @@ class LabeledFormula(AST):
         return self.args[1]
     def __str__(self):
         return '[' + str(self.label) + '] ' + str(self.formula) if self.label else str(self.formula)
+    def clone(self,args):
+        global lf_counter
+        res = AST.clone(self,args)
+        lf_counter -= 1
+        res.id = self.id
+        return res
 
 class AxiomDecl(Decl):
     def name(self):
@@ -498,11 +515,45 @@ class ConjectureDecl(Decl):
     def name(self):
         return 'conjecture'
 
+class ProofDecl(Decl):
+    def name(self):
+        return 'proof'
+
+class NamedDecl(Decl):
+    def name(self):
+        return 'named'
+    def defines(self):
+        return [(c.rep,lineno(c)) for c in self.args]
+
 class SchemaDecl(Decl):
     def name(self):
         return 'schema'
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
+
+    
+class SchemaBody(AST):
+    def __str__(self):
+        return '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
+    def prems(self):
+        return self.args[:-1]
+    def conc(self):
+        return self.args[-1]
+
+class SchemaInstantiation(AST):
+    def __init__(self,*args):
+        self.args = args
+    def schemaname(self):
+        return self.args[0].rep
+    def match(self):
+        return self.args[1:]
+    def __str__(self):
+        return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+
+class ComposeTactics(AST):
+    def __str__(self):
+        return '; '.join(map(str,self.args))
+
 
 class Instantiation(AST):
     def __init__(self,*args):
@@ -525,6 +576,9 @@ class ConstantDecl(Decl):
         return 'individual'
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
+
+class FreshConstantDecl(ConstantDecl):
+    pass
 
 class DestructorDecl(ConstantDecl):
     def name(self):
@@ -644,6 +698,10 @@ class IsolateDecl(Decl):
     def defines(self):
         return [(c.name(),lineno(c)) for c in self.args]
     
+class IsolateObjectDecl(IsolateDecl):    
+    def defines(self):
+        return []
+
 class IsolateDef(AST):
     def name(self):
         return self.args[0].relname

@@ -22,6 +22,7 @@ import ivy_actions
 import ivy_transrel as tr
 import ivy_utils as iu
 import ivy_module as im
+import ivy_solver as islvr
   
 def type_check_list(domain,l):
     for x in l:
@@ -549,10 +550,23 @@ def undecided_conjectures(state1):
 def false_properties():
     axioms = im.background_theory()
     props = im.module.labeled_props
-    goals = [formula_to_clauses(prop.formula) for prop in props]
-    truths = clauses_imply_list(axioms,goals)
-    return [c for c,t in zip(props,truths) if not t]
+    subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
+    aas = ([islvr.Assume(axioms)]
+           + [(islvr.Assume if prop.id in subgoalmap else islvr.Assert)
+              (formula_to_clauses(prop.formula)) for prop in props])
+    truths = islvr.check_sequence(aas)
+    return [c for c,t in zip(props,truths[1:]) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
+
+def get_property_context(prop):
+    res = true_clauses()
+    subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
+    for x in im.module.labeled_props:
+        if x.id == prop.id:
+            break
+        if x.id in subgoalmap:
+            res = and_clauses(res,formula_to_clauses(x.formula))
+    return res
 
 def filter_conjectures(state1,model):
     keep = []

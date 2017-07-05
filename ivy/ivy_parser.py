@@ -1,4 +1,4 @@
-#
+
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
@@ -67,6 +67,7 @@ class ParseError(Exception):
     
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
+        assert False
         msg = 'redefining ' + str(name)
         if orig_lineno != None:
             msg += " (from {})".format(str(orig_lineno)[:-2])
@@ -234,12 +235,25 @@ def p_top_axiom_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+def p_optskolem(p):
+    'optskolem : '
+    p[0] = None
+
+def p_optskolem_symbol(p):
+    'optskolem : NAMED defnlhs'
+    p[0] = p[2]
+    p[0].lineno = get_lineno(p,1)
+
 def p_top_property_labeledfmla(p):
-    'top : top PROPERTY labeledfmla'
+    'top : top PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
     d = PropertyDecl(p[3])
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
+    if p[4] is not None:
+        p[0].declare(NamedDecl(p[4]))
+    if p[5] is not None:
+        p[0].declare(ProofDecl(p[5]))
 
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
@@ -284,27 +298,29 @@ def p_objectend(p):
     stack[-1].is_object=False
     p[0] = None
 
+def create_object(top,name,objectargs,module,continuation=False):
+    prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(objectargs)]
+    pref = Atom(name,prefargs)
+#    top.define((pref.rep,get_lineno(p,2)))
+    if not continuation:
+        top.declare(ObjectDecl(pref))
+    vsubst = dict((pr.rep,v) for pr,v in zip(objectargs,prefargs))
+    inst_mod(top,module,pref,{},vsubst)
+    # for decl in module.decls:
+    #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
+    #     top.declare(idecl)
+    stack.pop()
+
 def p_top_object_symbol_eq_lcb_top_rcb(p):
     'top : top OBJECT SYMBOL objectargs EQ LCB optdotdotdot top RCB objectend'
     p[0] = p[1]
-    module = p[8]
-    prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(p[4])]
-    pref = Atom(p[3],prefargs)
-#    p[0].define((pref.rep,get_lineno(p,2)))
-    if not p[7]:
-        p[0].declare(ObjectDecl(pref))
-    vsubst = dict((pr.rep,v) for pr,v in zip(p[4],prefargs))
-    inst_mod(p[0],module,pref,{},vsubst)
-    # for decl in module.decls:
-    #     idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined)
-    #     p[0].declare(idecl)
-    stack.pop()
+    create_object(p[0],p[3],p[4],p[8],p[7])
 
 def p_optsemi(p):
     'optsemi : '
     p[0] = None
 
-def p_optsemi(p):
+def p_optsemi_semi(p):
     'optsemi : SEMI'
     p[0] = None
 
@@ -314,8 +330,66 @@ def p_top_macro_atom_eq_lcb_action_rcb(p):
     d = Definition(app_to_atom(p[3]),p[5])
     p[0].declare(MacroDecl(d))
 
+def p_schdefnrhs_fmla(p):
+    'schdefnrhs : fmla'
+    p[0] = p[1]
+
+def p_schdecl_funcdecl(p):
+    'schdecl : FUNCTION funs'
+    p[0] = p[2]
+
+def p_schdecl_fresh_funcdecl(p):
+    'schdecl : FRESH FUNCTION funs'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
+def p_schdecl_relation_rel(p):
+    'schdecl : RELATION rels'
+    p[0] = p[2]
+
+def p_schdecl_fresh_relation_rel(p):
+    'schdecl : FRESH RELATION rels'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
+def p_schdecl_typedecl(p):
+    'schdecl : TYPE SYMBOL'
+    scnst = Atom(p[2])
+    scnst.lineno = get_lineno(p,2)
+    tdfn = TypeDef(scnst,UninterpretedSort())
+    tdfn.lineno = get_lineno(p,1)
+    p[0] = [tdfn]
+
+def p_schdecl_propdecl(p):
+    'schdecl : PROPERTY labeledfmla'
+    p[0] = [p[2]]
+
+def p_schconc_defdecl(p):
+    'schconc : DEFINITION defn'
+    p[0] = p[2]
+
+def p_schconc_propdecl(p):
+    'schconc : PROPERTY fmla'
+    p[0] = p[2]
+
+def p_schdecls(p):
+    'schdecls :'
+    p[0] = []
+
+def p_schdecls_schdecls_schdecl(p):
+    'schdecls : schdecls schdecl'
+    p[0] = p[1]
+    p[0].extend(p[2])
+
+def p_schdefnrhs_lcb_schdecls_rcb(p):
+    'schdefnrhs : LCB schdecls schconc RCB'
+    p[0] = SchemaBody(*(p[2]+[p[3]]))
+
+def p_schdefn_atom_eq_fmla(p):
+    'schdefn : defnlhs EQ schdefnrhs'
+    p[0] = Definition(app_to_atom(p[1]),p[3])
+    p[0].lineno = get_lineno(p,2)
+
 def p_top_schema_defn(p):
-    'top : top SCHEMA defn'
+    'top : top SCHEMA schdefn'
     p[0] = p[1]
     p[0].declare(SchemaDecl(Schema(p[3],[])))
 
@@ -491,10 +565,56 @@ def p_top_derived_defns(p):
     p[0] = p[1]
     p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
 
+def p_proofstep_symbol(p):
+    'proofstep : SYMBOL'
+    a = Atom(p[1])
+    a.lineno = get_lineno(p,1)
+    p[0] = SchemaInstantiation(a)
+    p[0].lineno = get_lineno(p,1)
+    
+def p_match_defn(p):
+    'match : defn'
+    p[0] = p[1]
+
+def p_match_var_eq_fmla(p):
+    'match : var EQ fmla'
+    p[0] = Definition(p[1],p[3])
+    p[0].lineno = get_lineno(p,2)
+
+def p_matches(p):
+    'matches : match'
+    p[0] = [p[1]]
+
+def p_matches_matches_comma_match(p):
+    'matches : matches COMMA match'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_proofstep_symbol_with_defns(p):
+    'proofstep : SYMBOL WITH matches'
+    a = Atom(p[1])
+    a.lineno = get_lineno(p,1)
+    p[0] = SchemaInstantiation(*([a]+p[3]))
+    p[0].lineno = get_lineno(p,1)
+
+def p_proofstep_proofstep_semi_proofstep(p):
+    'proofstep : proofstep SEMI proofstep'
+    p[0] = ComposeTactics(p[1],p[3])
+
+def p_optproof(p):
+    'optproof :'
+    p[0] = None
+
+def p_optproof_symbol(p):
+    'optproof : PROOF proofstep'
+    p[0] = p[2]
+    
 def p_top_definition_defns(p):
-    'top : top DEFINITION defns'
+    'top : top DEFINITION defns optproof'
     p[0] = p[1]
     p[0].declare(DefinitionDecl(*[mk_lf(x) for x in p[3]]))
+    if p[4] is not None:
+        p[0].declare(ProofDecl(p[4]))
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'
@@ -623,7 +743,7 @@ def p_optactualreturns(p):
     'optactualreturns :'
     p[0] = []
 
-def p_optactualreturns(p):
+def p_optactualreturns_callatoms_assign(p):
     'optactualreturns : callatoms ASSIGN'
     p[0] = p[1]
 
@@ -884,6 +1004,21 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.args[0].with_args = len(p[9])
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
+        p[0].declare(d)
+    def p_optwith(p):
+        'optwith : '
+        p[0] = []
+    def p_optwith_with_callatoms(p):
+        'optwith : WITH callatoms'
+        p[0] = p[2]
+    def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_optwith(p):
+        'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB optwith'
+        p[0] = p[1]
+        create_object(p[0],p[4],p[5],p[8])
+        ty = TrustedIsolateDef if p[2] else IsolateDef
+        d = IsolateObjectDecl(ty(*([Atom(p[4],p[5]),Atom(p[4],p[5])]+p[10])))
+        d.args[0].with_args = len(p[10])
+        d.lineno = get_lineno(p,3)
         p[0].declare(d)
     def p_top_extract_callatom_eq_callatoms(p):
         'top : top EXTRACT SYMBOL optargs EQ callatoms'
@@ -1199,11 +1334,6 @@ def p_action_set_lit(p):
     p[0] = SetAction(p[2])
     p[0].lineno = get_lineno(p,1)
 
-def p_termtuple_lp_term_comma_terms_rp(p):
-    'termtuple : LPAREN term COMMA terms RPAREN'
-    p[0] = Tuple(*([p[3]]+p[5]))
-    p[0].lineno = get_lineno(p,1)
-    
 def p_action_term_assign_fmla(p):
     'action : term ASSIGN fmla'
     p[0] = AssignAction(p[1],p[3])
@@ -1351,7 +1481,7 @@ def p_callatom_atom(p):
 if not (iu.get_numeric_version() <= [1,5]):
     def p_callatom_this(p):
         'callatom : THIS'
-        p[0] = This()
+        p[0] = Atom(This())
         p[0].lineno = get_lineno(p,1)
         
 

@@ -79,7 +79,7 @@
    "attribute"
    "variant"
    "of"
-
+   "proof"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

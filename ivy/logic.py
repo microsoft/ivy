@@ -78,7 +78,6 @@ class TopSort(recstruct('TopSort', ['name="TopSort"'], [])):
 
 TopS = TopSort()
 
-
 def first_order_sort(s):
     return type(s) is not FunctionSort
 
@@ -234,7 +233,8 @@ class And(recstruct('And', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'And({})'.format(
             ', '.join(str(t) for t in self)
@@ -323,6 +323,18 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
 
+class Lambda(recstruct('Lambda', ['variables'], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, variables, body):
+        if not all(type(v) is Var for v in variables):
+            raise IvyError("Can only abstract over variables")
+        return tuple(variables), body
+    def __str__(self):
+        return '(Lambda {}. {})'.format(
+            ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
+            self.body)
 
 true = Const('true', Boolean)
 false = Const('false', Boolean)

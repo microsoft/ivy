@@ -532,7 +532,8 @@ def collect_numerals(z3term):
 
 def from_z3_numeral(z3term,sort):
     name = str(z3term)
-    assert name[0].isdigit() or name[0] == '"'
+    if not(name[0].isdigit() or name[0] == '"'):
+        print "unexpected numeral from Z3 model: {}".format(name)
     return ivy_logic.Symbol(name,sort)
 
 def collect_model_values(sort,model,sym):
@@ -685,6 +686,40 @@ def clauses_imply_list(clauses1, clauses2_list):
         res.append(s.check() == z3.unsat)
         s.pop()
     return res
+
+class AssumeAssert(object):
+    def __init__(self,clauses):
+        self.clauses = clauses
+
+class Assume(AssumeAssert):
+    pass
+
+class Assert(AssumeAssert):
+    pass
+
+def check_sequence(assume_assert_list):
+    """True if clauses1 imply clauses2.
+    """
+    s = z3.Solver()
+
+    res = []
+
+    for aa in assume_assert_list:
+        if isinstance(aa,Assume):
+            print "assume {}".format(aa.clauses)
+            z1 = clauses_to_z3(aa.clauses)
+            s.add(z1)
+            res.append(True)
+        else:
+            print "assert {}".format(aa.clauses)
+            clauses2 = dual_clauses(aa.clauses)
+            z2 = clauses_to_z3(clauses2)
+            s.push()
+            s.add(z2)
+            res.append(s.check() == z3.unsat)
+            s.pop()
+    return res
+
 
 def not_clauses_to_z3(clauses):
     # Separate the definition of skolems
@@ -869,17 +904,17 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
     
+    # res = decide(s)
+    # if res == z3.unsat:
+    #     return None
+
+    if final_cond is not None:
+        s.add(clauses_to_z3(final_cond))
     res = decide(s)
     if res == z3.unsat:
         return None
 
-    if final_cond is not None:
-        s.add(clauses_to_z3(final_cond))
-        res = decide(s)
-        if res == z3.unsat:
-            return None
-
-#    print "shrinking model {"
+    print "shrinking model {"
     for x in chain(sorts_to_minimize, relations_to_minimize):
         for n in itertools.count(1):
             s.push()
@@ -890,7 +925,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 break
             else:
                 s.pop()
-#    print "} shrinking model"
+    print "} shrinking model"
     m = get_model(s)
     h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h

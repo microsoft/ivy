@@ -1,0 +1,30 @@
+#lang ivy1.6
+
+    type t
+    interpret t->int
+
+
+    schema rec[t] = {
+	type q
+	function base(X:t) : q
+	function step(X:q,Y:t) : q
+	function fun(X:t) : q
+	#---------------------------------------------------------
+	definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+    }
+
+    function sum(X:t) : t
+    definition sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
+    proof rec[t]
+
+   schema ind[t] = {
+       relation p(X:t)
+       property X <= 0 -> p(X)
+       property p(X) -> p(X+1)
+       #--------------------------
+       property p(X)    
+   }
+
+    property sum(X) >= X
+    proof ind[t]
+

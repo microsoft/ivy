@@ -268,7 +268,7 @@ def p_infix_times(p):
     'infix : TIMES'
     p[0] = p[1]
 
-def p_infix_times(p):
+def p_infix_div(p):
     'infix : DIV'
     p[0] = p[1]
 

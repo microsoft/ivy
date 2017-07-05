@@ -231,6 +231,26 @@ def concretize_sorts(t, sort=None):
         unify(s, sort)
     return tt()
 
+def concretize_terms(terms,sorts=None):
+    """ Concretize the sorts in a list of terms. Free variables must have
+    the same sort in all terms. The list 'sorts' gives a sort upper bound for
+    each term (use TopS to leave the sort unspecified). """
+
+    # give sort names to all the free variables and constants:
+
+    names = free_variables(*terms, by_name=True).union(
+               x.name for x in used_constants(*terms)
+            )
+    env = dict((name, SortVar()) for name in names)
+
+    pairs = [infer_sorts(term,env) for term in terms]
+
+    if sorts is not None:
+        for (s,tt),sort in zip(pairs,sorts):
+            unify(s,sort)
+
+    return [tt() for s,tt in pairs]
+
 
 if __name__ == '__main__':
     S = UninterpretedSort('S')

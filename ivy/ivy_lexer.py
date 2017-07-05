@@ -118,6 +118,9 @@ reserved = all_reserved = {
    'variant' : 'VARIANT',
    'of' : 'OF',
    'scenario' : 'SCENARIO',
+   'proof' : 'PROOF',
+   'named' : 'NAMED',
+   'fresh' : 'FRESH',
 }
 
 tokens += tuple(all_reserved.values())
@@ -159,7 +162,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*|".*?"'
+    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9.]*\])*|".*?"'
     t.type = reserved.get(t.value,'SYMBOL')
     return t
 
@@ -212,7 +215,7 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,4]:
             for s in ['function','class','object','method','execute','destructor',
-                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var','attribute','scenario']:
+                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var','attribute','scenario','proof','named','fresh']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]
