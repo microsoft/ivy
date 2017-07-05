@@ -580,8 +580,6 @@ class History(object):
 #        print "concrete state: {}".format(self.post)
 #        print "background: {}".format(axioms)
         post = and_clauses(self.post,axioms)
-        iu.dbg('post')
-        iu.dbg('final_cond')
 #        print "bounded check {"
         model = _get_model_clauses(post,final_cond=final_cond)
 #        print "} bounded check"

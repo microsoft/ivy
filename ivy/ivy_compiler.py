@@ -475,7 +475,8 @@ def compile_native_arg(arg):
         return sortify_with_inference(arg)
     if arg.rep in ivy_logic.sig.symbols:
         return sortify_with_inference(arg)
-    return arg.clone(map(sortify_with_inference,arg.args)) # handles action names
+    res = arg.clone(map(sortify_with_inference,arg.args)) # handles action names
+    return res.rename(resolve_alias(res.rep))
 
 def compile_native_symbol(arg):
     name = arg.rep
@@ -483,6 +484,7 @@ def compile_native_symbol(arg):
         sym = ivy_logic.sig.symbols[name]
         if not isinstance(sym,ivy_logic.UnionSort):
             return sym
+    name = resolve_alias(name)
     if name in ivy_logic.sig.sorts:
         return ivy_logic.Variable('X',ivy_logic.sig.sorts[name])
     if ivy_logic.is_numeral_name(name):
