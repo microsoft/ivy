@@ -97,7 +97,7 @@ module indexset(basis,index) = {
     	    proof rec[basis.t]
 
     	}
-    } with basis.spec.transitivity, basis.spec.antisymmetry, basis.spec.totality, succ_fact,nodeset.n_positive
+    } with basis.spec.antisymmetry, basis.spec.totality, succ_fact
 
     relation disjoint(X:set,Y:set)
 
