@@ -128,9 +128,9 @@ class Test(object):
             child = spawn(pc)
             child.logfile = sys.stdout
             child.expect(pexpect.EOF)
-#            child.close()
-#            if child.exitstatus != 0:
-            if child.wait() != 0:
+            child.close()
+            if child.exitstatus != 0:
+#            if child.wait() != 0:
                 print child.before
                 return False
         return self.expect()

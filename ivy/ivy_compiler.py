@@ -87,6 +87,13 @@ class Context(object):
         globals()[self.name] = self.old_context
         return False # don't block any exceptions
 
+class ReturnContext(Context):
+    def __init__(self,values,lineno=None):
+        self.values = values
+        self.lineno = lineno
+        self.name = 'return_context'
+    
+
 class ExprContext(Context):
     """ Context Manager for compiling an expression. """
     def __init__(self,code=None,local_syms=None,lineno=None):
@@ -110,6 +117,7 @@ class TopContext(Context):
         self.actions = actions
         self.name = 'top_context'
 
+return_context = None
 expr_context = None
 top_context = None
 
@@ -134,7 +142,8 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         if parent_name == 'this':
             raise cfrfail(symbol_name)
         try:
-            base = compile_field_reference_rec(parent_name,args)
+            with ReturnContext(None):
+                base = compile_field_reference_rec(parent_name,args)
         except cfrfail:
             raise cfrfail(symbol_name)
         sort = base.sort
@@ -142,7 +151,7 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         destr_name = iu.compose_names(sort_parent,child_name)
         if top_context and destr_name in top_context.actions:
             if not expr_context:
-                raise IvyError(None,'call to action {} not allowed outside an action'.format('destr_name'))
+                raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
             args.insert(0,base)
             return field_reference_action(destr_name,args,top)
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
@@ -176,26 +185,34 @@ def sort_infer_contravariant(term,sort):
 
 def compile_inline_call(self,args):
     params,returns = top_context.actions[self.rep]
-    if len(returns) != 1:
-        raise IvyError(self,"wrong number of return values")
-        # TODO: right now we can't do anything with multiple returns
-        sorts = [cmpl_sort(r.sort) for r in returns]
-        ress = []
-        for sort in sorts:
-            res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
-            expr_context.local_syms.append(res)
-            ress.append(res())
-        expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
-        return ivy_ast.Tuple(*ress)
-    sort = cmpl_sort(returns[0].sort)
-    res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
-    expr_context.local_syms.append(res)
+    if return_context is None or return_context.values is None:
+        if len(returns) != 1:
+            raise IvyError(self,"wrong number of return values")
+            # TODO: right now we can't do anything with multiple returns
+            sorts = [cmpl_sort(r.sort) for r in returns]
+            ress = []
+            for sort in sorts:
+                res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
+                expr_context.local_syms.append(res)
+                ress.append(res())
+            expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
+            return ivy_ast.Tuple(*ress)
+        sort = cmpl_sort(returns[0].sort)
+        res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
+        expr_context.local_syms.append(res)
+        return_values = [res]
+    else:
+        return_values = return_context.values
+        if len(returns) != len(return_values):
+            raise IvyError(self,"wrong number of return values")
     with ASTContext(self):
         if len(params) != len(args):
             raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
         args = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
-    expr_context.code.append(CallAction(ivy_ast.Atom(self.rep,args),res))
-    return res()
+    expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+return_values)))
+    if return_context is None or return_context.values is None:
+        return res()
+    return None
 
 def compile_app(self):
     args = [a.compile() for a in self.args]
@@ -370,7 +387,16 @@ def compile_call(self):
     ctx = ExprContext(lineno = self.lineno)
     name = self.args[0].rep
     if name not in top_context.actions:
-        raise iu.IvyError(self,"call to unknown action: {}".format(name))
+        with ctx:
+            with ReturnContext([a.cmpl() for a in self.args[1:]]):
+                res = compile_field_reference(name,[a.compile() for a in self.args[0].args])
+        if res is not None:
+            raise IvyError(self,'call to non-action')
+        res = ctx.extract()
+        return res
+    #    print "compiled call action: {}".format(res)
+        return res
+
     with ctx:
         args = [a.cmpl() for a in self.args[0].args]
     params,returns = top_context.actions[name]
@@ -719,6 +745,10 @@ class IvyConjectureSetup(IvyDeclInterp):
         cax = ax.compile()
         self.domain.labeled_conjs.append(cax)
 
+def check_is_action(mod,ast,name):
+    if name not in mod.actions:
+        raise IvyError(ast,'{} is not an action'.format(name))
+
 class IvyARGSetup(IvyDeclInterp):
     def __init__(self,mod):
         self.mod = mod
@@ -750,8 +780,10 @@ class IvyARGSetup(IvyDeclInterp):
     def isolate(self,iso):
         self.mod.isolates[iso.name()] = iso
     def export(self,exp):
+        check_is_action(self.mod,exp,exp.exported())
         self.mod.exports.append(exp)
     def import_(self,imp):
+        check_is_action(self.mod,imp,imp.imported())
         self.mod.imports.append(imp)
     def private(self,pvt):
         self.mod.privates.add(pvt.privatized())

@@ -1280,6 +1280,7 @@ def create_isolate(iso,mod = None,**kwargs):
 
 
 def has_assertions(mod,callee):
+    assert callee in mod.actions, callee
     return any(isinstance(action,ia.AssertAction) for action in mod.actions[callee].iter_subactions())
 
 def find_some_assertion(mod,actname):
