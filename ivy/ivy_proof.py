@@ -201,7 +201,7 @@ def transform_defn_match(prob):
         return None
     declrhs = decl.rhs()
     concrhs = conc.rhs()
-    vmap = dict((x.name,il.Variable(y.name,x.sort)) for x,y in zip(concargs,declargs))
+    vmap = dict((x.name,y.resort(x.sort)) for x,y in zip(concargs,declargs))
     concrhs = lu.substitute_ast(concrhs,vmap)
     dmatch = {concsym:declsym}
     print 'func_sorts(concsym) = {}'.format(func_sorts(concsym))

@@ -89,11 +89,11 @@ module indexset(basis,index) = {
 
     	object impl = {
 
-    	    definition cnt(X) = 0 if X <= 0 else cnt(X-1) + 1
+    	    definition cnt(x:basis.t) = 0 if x <= 0 else cnt(x-1) + 1
     	    proof rec[basis.t]
 
-    	    definition cardUpTo(S,B) =
-    		0 if B <= 0 else (cardUpTo(S,B-1)+1 if member(B-1,S) else cardUpTo(S,B-1))
+    	    definition cardUpTo(s:set,b:basis.t) =
+    		0 if b <= 0 else (cardUpTo(s,b-1)+1 if member(b-1,s) else cardUpTo(s,b-1))
     	    proof rec[basis.t]
 
     	}

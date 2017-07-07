@@ -443,6 +443,47 @@ def reason():
     global reason_text
     return reason_text
 
+class NotEssentiallyUninterpreted(Exception):
+    pass
+
+def check_essentially_uninterpreted(fmla):
+    if is_variable(fmla):
+        return False
+    if is_binder(fmla):
+        return check_essentially_uninterpreted(fmla.body) and len(fmla.variables) == 0
+    argres = all([check_essentially_uninterpreted(a) for a in fmla.args])
+    if is_app(fmla) and is_interpreted_symbol(fmla.rep):
+        if not argres:
+            raise NotEssentiallyUninterpreted()
+    return argres
+
+def symbols_over_universals_rec(fmla,syms,pos,univs):
+    if is_variable(fmla):
+        return fmla not in univs
+    if is_quantifier(fmla):
+        if pos == isinstance(fmla,lg.ForAll):
+            univs.update(fmla.variables)
+            res = symbols_over_universals_rec(fmla,syms,pos,univs)
+            for v in fmla.variables:
+                univs.remove(v)
+            return res
+    if isinstance(fmla,Not):
+        pos = not pos
+    argres = all([symbols_over_universals_rec(fmla,syms,pos,univs) for a in fmla.args])
+    if is_app(fmla) and not is_eq(fmla) and not argres:
+        syms.add(fmla.rep)
+    return argres
+
+def symbols_over_universals(fmla):
+    syms = set()
+    symbols_over_universals_rec(fmla,syms,True,set())
+    return syms
+    
+# def check_essentially_uninterpreted(fmla):
+#     syms = symbols_over_universals(fmla)
+#     if any(is_interpreted_symbol(sym) for sym in syms):
+#         raise NotEssentiallyUninterpreted()
+
 def is_in_logic(term,logic,unstrat = False):
     global reason_text
     assert logic in logics
@@ -452,6 +493,11 @@ def is_in_logic(term,logic,unstrat = False):
         # if not ok:
         #     reason_text = "of quantifier alternation"
         #     return False
+        try:
+            check_essentially_uninterpreted(term)
+        except NotEssentiallyUninterpreted:
+            reason_text = "a variable occurs under an interpreted function symbol"
+            return False
         cs = lu.used_constants(term)
         for s in cs:
             if s.name in sig.interp:
@@ -466,6 +512,7 @@ def is_in_logic(term,logic,unstrat = False):
                 return False
         return True
     elif logic == "qf":
+        reason_text = "a formula contains a quantifier"
         return is_qf(term)
     elif logic == "fo":
         cs = lu.used_constants(term)
@@ -564,6 +611,7 @@ Variable.clone = lambda self,args: self
 Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
 Variable.rename = lambda self,name: Variable(name,self.sort)
+Variable.resort = lambda self,sort : Variable(self.name,sort)
 
     
 class Literal(AST):
@@ -891,6 +939,9 @@ def is_eq(ast):
 
 def is_equals(symbol):
     return isinstance(symbol,Symbol) and symbol.name == '='
+
+def is_ite(ast):
+    return isinstance(ast,lg.Ite)
 
 def is_enumerated(term):
     return isinstance(term.get_sort(),EnumeratedSort)
@@ -1304,5 +1355,26 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
+class VariableUniqifier(object):
+    """ An object that alpha-converts formulas so that all variables are unique. """
+    def __init__(self):
+        self.rn = iu.UniqueRenamer()
+    def __call__(self,fmla):
+        return self.rec(fmla,dict())
+    def rec(self,fmla,vmap):
+        if is_binder(fmla):
+            # save the old bindings
+            obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
+            newvars = tuple(Variable(rn(v.name),v.sort) for v in fmla.variables)
+            vmap.update(zip(fmla.variables,newvars))
+            res = type(fmla)(rec(fmla.body,vmap))
+            vmap.update(obs)
+            return res
+        if is_variable(fmla):
+            if fmla not in vmap:
+                vmap[fmla] = Variable(self.rn(fmla.name),fmla.sort)
+            vmap[fmla]
+        args = [self.rec(f,vmap) for f in fmla.args]
+        return fmla.clone(args)
 
 
