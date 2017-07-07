@@ -67,7 +67,6 @@ class ParseError(Exception):
     
 class Redefining(ParseError):
     def __init__(self,name,lineno,orig_lineno):
-        assert False
         msg = 'redefining ' + str(name)
         if orig_lineno != None:
             msg += " (from {})".format(str(orig_lineno)[:-2])
