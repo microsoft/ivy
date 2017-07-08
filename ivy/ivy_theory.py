@@ -22,8 +22,9 @@ class UFNode(object):
         self.instance = None
         self.id = ufidctr
         ufidctr += 1
+        self.variables = set()
     def __str__(self):
-        return str(self.id)
+        return str(self.id) + '[' + ','.join(str(x) for x in self.variables) + ']'
     def __repr__(self):
         return str(self.id)
 
@@ -45,6 +46,9 @@ def unify(s1, s2):
     """
     Unify nodes s1 and s2.
     """
+    if s1 is None or s2 is None:
+        return
+
     s1 = find(s1)
     s2 = find(s2)
 
@@ -97,7 +101,7 @@ def get_sort_arcs(assumes,asserts,strat_map):
 
     show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
-        if isinstance(func,tuple):
+        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
             yield (find(node),find(strat_map[func[0]]),func[0])
 
     for fmla,ast in assumes + asserts:
@@ -115,6 +119,7 @@ def get_sort_sccs(arcs):
         m[ds].add(rng)
 
     sccs = tarjan(m)
+
     return sccs
                     
 
@@ -123,7 +128,9 @@ def map_fmla(fmla,strat_map):
         return map_fmla(fmla.body,strat_map)
     if il.is_variable(fmla):
         if fmla not in strat_map:
-            strat_map[fmla] = UFNode()
+            res = UFNode()
+            res.variables.add(fmla)
+            strat_map[fmla] = res
         return strat_map[fmla]
     nodes = [map_fmla(f,strat_map) for f in fmla.args]
     if il.is_eq(fmla):
@@ -134,7 +141,7 @@ def map_fmla(fmla,strat_map):
         return nodes[1]
     if il.is_app(fmla):
         func = fmla.rep
-        if not il.is_interpreted_symbol(func):
+        if func in symbols_over_universals:
             for idx,node in enumerate(nodes):
                 if node is not None:
                     unify(strat_map[(func,idx)],node)
@@ -142,6 +149,16 @@ def map_fmla(fmla,strat_map):
     return None
                 
 def create_strat_map(assumes,asserts):
+    global symbols_over_universals
+    global universally_quantified_variables
+    all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
+    all_fmlas.extend(pair[0] for pair in asserts)
+    for f in all_fmlas:
+        print f
+    symbols_over_universals = il.symbols_over_universals(all_fmlas)
+    universally_quantified_variables = il.universal_variables(all_fmlas)
+    
+    print 'symbols_over_universals : {}'.format(symbols_over_universals)
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts:
         map_fmla(pair[0],strat_map)
@@ -170,9 +187,35 @@ def get_unstratified_funs(assumes,asserts):
         if scc_map[ds] == scc_map[rng]:
             scc_arcs[scc_map[ds]].append(ast)
             
-    fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs) if y]
+    for y in strat_map.values():
+        find(y).variables.update(y.variables)
 
-    return fun_sccs
+    fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs)
+                if y and any(len(n.variables) > 0 for n in x)]
+
+    arc_map = defaultdict(list)
+    for x,y,z in arcs:
+        arc_map[x].append(y)
+    for scc in sccs:
+        for n in scc:
+            for m in arc_map[n]:
+                m.variables.update(n.variables)
+    
+    print 'sccs:'
+    for scc in sccs:
+        print [str(x) for x in scc]
+
+
+    bad_interpreted = set()
+    for x,y in strat_map.iteritems():
+        y = find(y)
+        if isinstance(x,tuple) and il.is_interpreted_symbol(x[0]):
+            iu.dbg('y.variables')
+            if any(v in universally_quantified_variables and 
+                   v.sort == x[0].sort.dom[x[1]] for v in y.variables):
+                bad_interpreted.add(x[0])
+
+    return fun_sccs, bad_interpreted
 
 
 def get_assumes_and_asserts():    
@@ -200,40 +243,60 @@ def get_assumes_and_asserts():
 
     return assumes,asserts
 
-def report_error(logic,note,ast,unstrat):
+def report_error(logic,note,ast):
     msg = "The verification condition is not in logic {}{} because {}.".format(logic,note,il.reason())
     if il.reason() == "functions are not stratified":
         for sorts,asts in unstrat:
             msg += "\n\nNote: the following functions form a cycle:\n"
             for a in asts:
                 if isinstance(a,il.Symbol):
-                    msg += '  function {}\n'.format(a)
+                    msg += '  {}\n'.format(il.sym_decl_to_str(a))
                 else:
                     msg += '  {}\n'.format(iu.IvyError(a,"quantifier alternation"))                
     iu.dbg('ast.lineno')
     raise iu.IvyError(ast,msg)
 
-def check_can_assert(logic,fmla,ast,unstrat):
-    check_can_assume(logic,fmla,ast,unstrat)
-    if not il.is_in_logic(il.Not(fmla),logic,unstrat):
-        report_error(logic," when negated",ast,unstrat)
+def report_epr_error(unstrat,bad_interpreted):
+    msg = "The verification condition is not in logic epr."
+    for sorts,asts in unstrat:
+        msg += "\n\nNote: the following functions form a cycle:\n"
+        for a in asts:
+            if isinstance(a,il.Symbol):
+                msg += '  {}\n'.format(il.sym_decl_to_str(a))
+            else:
+                msg += '  {}\n'.format(iu.IvyError(a,"skolem function"))                
+    if bad_interpreted:
+        msg += "\n\nNote: the following interpreted functions occur over variables:\n"
+        for sym in bad_interpreted:
+            msg += '  {}\n'.format(il.sym_decl_to_str(sym))
+            
+    raise iu.IvyError(None,msg)
 
-def check_can_assume(logic,fmla,ast,unstrat):
-    if not il.is_in_logic(il.close_formula(fmla),logic,unstrat):
-        report_error(logic,"",ast,unstrat)
+def check_can_assert(logic,fmla,ast):
+    check_can_assume(logic,fmla,ast)
+    if not il.is_in_logic(il.Not(fmla),logic):
+        report_error(logic," when negated",ast)
+
+def check_can_assume(logic,fmla,ast):
+    if not il.is_in_logic(il.close_formula(fmla),logic):
+        report_error(logic,"",ast)
     
 def check_theory():
     assumes,asserts = get_assumes_and_asserts()
-    unstrat = get_unstratified_funs(assumes,asserts)
-    
+
     errs = []
     for logic in im.logics():
         try:
-            for a in assumes:
-                check_can_assume(logic,*a,unstrat=unstrat)
+            if logic == 'epr':
+                unstrat,bad_interpreted = get_unstratified_funs(assumes,asserts)
+                if unstrat or bad_interpreted:
+                    report_epr_error(unstrat,bad_interpreted)
+            else:
+                for a in assumes:
+                    check_can_assume(logic,*a)
 
-            for a in asserts:
-                check_can_assert(logic,*a,unstrat=unstrat)
+                for a in asserts:
+                    check_can_assert(logic,*a)
             return
         except iu.IvyError as err:
             errs.append(err)
