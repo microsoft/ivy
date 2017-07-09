@@ -4,12 +4,13 @@
 # subsets of S, then |X| + |Y| <= |S|. This can be used to show that any two
 # majorities of S have an element in common.
 
-# We set up the problem with two types: the *basis* type and the
-# *index* type, both isomorphic to the integers. Our sets are subsets
-# of the basis type, while their cardinalities a members of the index
-# type. In other words ordinals are in basis, while cardinals are in
-# index. The separation of these two types is used to avoid
-# non-stratified functions.
+# We set up the problem with two types: the *basis* type (which we can
+# think of as ordinal numbers) and the *index* type (which we can
+# think of as cardinal numbers). Both are isomorphic to the
+# integers. Our sets are subsets of the basis type, while their
+# cardinalities a members of the index type. The separation of these
+# two types is used to keep us in the "essentially uninterpreted"
+# fragment, as we will see below.
 
 # We definte a module that takes basis and index types, and provides the following
 # interface:
@@ -19,22 +20,25 @@
 # 3) a *member* relation
 # 4) a relation *disjoint* beteween sets
 # 5) a function *card* giving the cardinality of a set as an index
-# 6) a function *cnt* gives the cardinality of the basis elements less than E
+# 6) a function *cnt* gives the cardinality of the set of basis elements less than E
 # 7) an action `empty` returning the empty set
+# 8) an action `add` that adds an element to a set
 
 # The spec can then be stated as disjoint(X,Y) -> card(X)+card(Y) <= cnt(n).
 
-# The implementation defines card and cnt recursively over the basis type. Ideally, the
-# basis type should provide a recursion schema, but here we just give the instantions
-# of the recursion schema as axioms.
+# The implementation defines card and cnt as recursive functions over the basis type.
 
-# We then give an inductive invariant with parameter B. This states that the theorem holds
-# for elements of the sets X and Y less than B. We then instantiate the induction schema for
-# basis using the invariant.
+# We then give an inductive invariant with parameter B. This states
+# that the theorem holds for elements of the sets X and Y less than
+# B. This fact is proved by induction on B, using the induction schema
+# for the basis type.
 
-# This all seems straightforward, but it was tricky to figure out how to set up the problem
-# without function cycles. Also, see the comment below about integer arithmetic. For the
-# basis type, we used the succesor relation to avoid using airthmetic on this type.
+# This all seems straightforward, but it was tricky to figure out how
+# to set up the problem without function cycles. The key was to give
+# ordinals and cardinal distinct types. The functions are stratified
+# in this order: set -> basis.t -> index.t. In particular, this allows
+# us to state the inductive lemma in a way that does not involve
+# quantified variables under arithmetic operators. 
 
 include collections
 include order
@@ -51,6 +55,11 @@ module indexset(basis,index) = {
     action empty returns(s:set)
     action add(s:set,e:basis.t) returns (s:set)
 
+    # This symbol n gives the upper bound on ordinals. So the set S
+    # consists by definiton of all the ordinals N suct that 0 <= N <
+    # n. In principle, n should be a parameter of the module, and the
+    # module should require the property n > 0.
+
     axiom [n_positive] n > 0
     
     object spec = {
@@ -65,41 +74,88 @@ module indexset(basis,index) = {
     }
     
     function cnt(E:basis.t) : index.t
-    function cardUpTo(S:set,B:basis.t) : index.t
     relation disjoint(X:set,Y:set)
 
     
     isolate disjointness = {
 
-    	definition cnt(x:basis.t) = 0 if x <= 0 else cnt(x-1) + 1
+	# The funtion cnt(x) returns the cardinaility of the set of
+	# ordinals < x. We define it recursively by instantiating the
+	# recursion scheman fo the basis type.
+
+	# Note here we use a constant symbol x for the argument. This
+	# tells IVy that the defintion should only be unfolded for
+	# ground terms x occurring in the proof goal. Without this, we
+	# would exit the decidable fragment, due to a quantified
+	# variable under an arithmetic operator.
+
+	definition cnt(x:basis.t) = 0 if x <= 0 else cnt(x-1) + 1
     	proof rec[basis.t]
+	
+	# We define cardinality in terms of a recursive function
+	# cardUpTo that counts the number of elements in a set that
+	# are less than a bound B.
+
+	function cardUpTo(S:set,B:basis.t) : index.t
+
+	# Note again the we deal with recursion by restricting the
+	# instantion of the definition.
 	
     	definition cardUpTo(s:set,b:basis.t) =
     	    0 if b <= 0 else (cardUpTo(s,b-1)+1 if member(b-1,s) else cardUpTo(s,b-1))
     	proof rec[basis.t]
 	
-    	definition card(S) = cardUpTo(S,n)
+	# The cardinality function is then defined in terms of cardUpTo.
 
-    	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+	definition card(S) = cardUpTo(S,n)
+
+	# This is the definition of dijoint sets in terms of the member relation.
+	# Notice that there is a quantifier alternation in the direction set -> basis.t.
+
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
 	
 #    	definition majority(X) = 2 * card(X) > cnt(n)
 	
 #	property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
 	
-#    	relation inv(X,Y,B) = disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
-	
+	# This is our inductive invariant. It says that, for disjoint
+	# sets, the sum of the cardinailities up to bound B is less
+	# than the total number of elements less than B. We prove it
+	# by induction on B, using the induction schema for
+	# basis.t. We had to rename the variable X in the property to
+	# avoid a name clash with X in the conclusion of the rule
+	# (which is the inducation parameter). Obviously, IVy should
+	# have done this renaming for us. Also, notice we had to
+	# explicitly say that the induction is over B, since Ivy can't
+	# infer this automatically.
+
+	# Most importantly, notice how arithmetic is used here, We
+	# have a + operation over a quantified variable B. However, B
+	# is of ordinal type, while the + operator is over cardinals.
+	# This means the formulas in our proof context are still
+	# essentially uninterpreted. Without the seperate types, IVy
+	# would complain about this property. Question: is it possible
+	# to automatically detect this kind of sorting of theories so
+	# we don't have to explicitly use distinct types?
+
 	property disjoint(Xa,Y) -> cardUpTo(Xa,B) + cardUpTo(Y,B) <= cnt(B)
 	proof ind[basis.t] with X = B
 	
+	# With the above lemma, the desired property is trivial.
+
     	property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
 	
-    	interpret index.t -> int
+	# We can interpret both the ordinals and cardinals as integers
+	# without running afoul of the fragment checker.
 
+	interpret index.t -> int
 	interpret basis.t -> int
 
     }
     with nodeset.n_positive
 
+    # Note that `nodeset.n_positive` is a workaround to an IVY bug. We
+    # should be able to say just `n_positive`.
 
     isolate api = {
 	
