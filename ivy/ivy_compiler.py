@@ -659,10 +659,8 @@ class IvyDomainSetup(IvyDeclInterp):
         rng = list(cond.variables)[0].sort
         vmap = dict((x.name,x) for x in lu.variables_ast(cond))
         used = set()
-        print 'foo!'
         with ivy_logic.UnsortedContext():
             args = [arg.compile() for arg in lhs.args]
-        print 'bar!'
         targs = []
         for a in args:
             if a.name in used:

@@ -1404,7 +1404,7 @@ class VariableUniqifier(object):
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
-            res = type(fmla)(rec(fmla.body,vmap))
+            res = type(fmla)(newvars,self.rec(fmla.body,vmap))
             vmap.update(obs)
             return res
         if is_variable(fmla):

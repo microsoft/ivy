@@ -3,6 +3,7 @@ import ivy_module as im
 import ivy_logic as il
 import ivy_utils as iu
 import logic_util as lu
+import ivy_logic_utils as ilu
 from collections import defaultdict
 from tarjan import tarjan
 from itertools import chain
@@ -59,6 +60,7 @@ def unify(s1, s2):
 def show_strat_map(m):
     print 'strat_map = {'
     for x,y in m.iteritems():
+        y = find(y)
         if isinstance(x,tuple):
             print '({},{}) : {}'.format(x[0],x[1],y)
         else:
@@ -99,7 +101,7 @@ def get_sort_arcs(assumes,asserts,strat_map):
     #             if il.is_uninterpreted_sort(ds):
     #                 yield (ds,rng,sym)
 
-    show_strat_map(strat_map)
+#    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
         if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
             yield (find(node),find(strat_map[func[0]]),func[0])
@@ -135,6 +137,8 @@ def map_fmla(fmla,strat_map):
     nodes = [map_fmla(f,strat_map) for f in fmla.args]
     if il.is_eq(fmla):
         unify(*nodes)
+        if il.is_interpreted_sort(fmla.args[0].sort):
+            unify(strat_map[(fmla.rep,0)],nodes[0])
         return None
     if il.is_ite(fmla):
         unify(*nodes[1:])
@@ -148,23 +152,26 @@ def map_fmla(fmla,strat_map):
             return strat_map[func]
     return None
                 
-def create_strat_map(assumes,asserts):
+def create_strat_map(assumes,asserts,macros):
     global symbols_over_universals
     global universally_quantified_variables
     all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
-    all_fmlas.extend(pair[0] for pair in asserts)
-    for f in all_fmlas:
-        print f
+    all_fmlas.extend(il.Not(pair[0]) for pair in asserts)
+    all_fmlas.extend(pair[0] for pair in macros)
+#    for f in all_fmlas:
+#        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
-    print 'symbols_over_universals : {}'.format(symbols_over_universals)
     strat_map = defaultdict(UFNode)
-    for pair in assumes+asserts:
+    for pair in assumes+asserts+macros:
         map_fmla(pair[0],strat_map)
+
+    show_strat_map(strat_map)
+    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
     return strat_map
 
-def get_unstratified_funs(assumes,asserts):
+def get_unstratified_funs(assumes,asserts,macros):
 
     vu = il.VariableUniqifier()
     
@@ -173,10 +180,11 @@ def get_unstratified_funs(assumes,asserts):
 
     assumes = map(vupair,assumes)
     asserts = map(vupair,asserts)
-    strat_map = create_strat_map(assumes,asserts)
+    macros = map(vupair,macros)
+    strat_map = create_strat_map(assumes,asserts,macros)
     
 
-    arcs = list(get_sort_arcs(assumes,asserts,strat_map))
+    arcs = list(get_sort_arcs(assumes+macros,asserts,strat_map))
 
     sccs = get_sort_sccs(arcs)
     scc_map = dict((name,idx) for idx,scc in enumerate(sccs) for name in scc)
@@ -201,16 +209,17 @@ def get_unstratified_funs(assumes,asserts):
             for m in arc_map[n]:
                 m.variables.update(n.variables)
     
-    print 'sccs:'
-    for scc in sccs:
-        print [str(x) for x in scc]
+    # print 'sccs:'
+    # for scc in sccs:
+    #     print [str(x) for x in scc]
 
+
+    show_strat_map(strat_map)
 
     bad_interpreted = set()
     for x,y in strat_map.iteritems():
         y = find(y)
-        if isinstance(x,tuple) and il.is_interpreted_symbol(x[0]):
-            iu.dbg('y.variables')
+        if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or il.is_equals(x)):
             if any(v in universally_quantified_variables and 
                    v.sort == x[0].sort.dom[x[1]] for v in y.variables):
                 bad_interpreted.add(x[0])
@@ -221,6 +230,7 @@ def get_unstratified_funs(assumes,asserts):
 def get_assumes_and_asserts():    
     assumes = []
     asserts = []
+    macros = []
     for name,action in im.module.actions.iteritems():
         for sa in action.iter_subactions():
             if isinstance(sa,ia.AssumeAction):
@@ -231,7 +241,10 @@ def get_assumes_and_asserts():
                 asserts.append((sa.get_cond(),sa))
 
     for ldf in im.module.definitions:
-        assumes.append((ldf.formula.to_constraint(),ldf))
+        if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
+            macros.append((ldf.formula.to_constraint(),ldf))
+        else: # can't treat recursive definition as macro
+            assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         assumes.append((ldf.formula,ldf))
@@ -241,7 +254,7 @@ def get_assumes_and_asserts():
 
     # TODO: check axioms, inits, conjectures
 
-    return assumes,asserts
+    return assumes,asserts,macros
 
 def report_error(logic,note,ast):
     msg = "The verification condition is not in logic {}{} because {}.".format(logic,note,il.reason())
@@ -253,7 +266,6 @@ def report_error(logic,note,ast):
                     msg += '  {}\n'.format(il.sym_decl_to_str(a))
                 else:
                     msg += '  {}\n'.format(iu.IvyError(a,"quantifier alternation"))                
-    iu.dbg('ast.lineno')
     raise iu.IvyError(ast,msg)
 
 def report_epr_error(unstrat,bad_interpreted):
@@ -282,17 +294,17 @@ def check_can_assume(logic,fmla,ast):
         report_error(logic,"",ast)
     
 def check_theory():
-    assumes,asserts = get_assumes_and_asserts()
+    assumes,asserts,macros = get_assumes_and_asserts()
 
     errs = []
     for logic in im.logics():
         try:
             if logic == 'epr':
-                unstrat,bad_interpreted = get_unstratified_funs(assumes,asserts)
+                unstrat,bad_interpreted = get_unstratified_funs(assumes,asserts,macros)
                 if unstrat or bad_interpreted:
                     report_epr_error(unstrat,bad_interpreted)
             else:
-                for a in assumes:
+                for a in chain(assumes,macros):
                     check_can_assume(logic,*a)
 
                 for a in asserts:
