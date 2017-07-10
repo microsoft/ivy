@@ -167,8 +167,8 @@ def create_strat_map(assumes,asserts,macros):
     for pair in assumes+asserts+macros:
         map_fmla(pair[0],strat_map)
 
-    show_strat_map(strat_map)
-    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
+#    show_strat_map(strat_map)
+#    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
     return strat_map
 
 def get_unstratified_funs(assumes,asserts,macros):
@@ -214,12 +214,12 @@ def get_unstratified_funs(assumes,asserts,macros):
     #     print [str(x) for x in scc]
 
 
-    show_strat_map(strat_map)
+#    show_strat_map(strat_map)
 
     bad_interpreted = set()
     for x,y in strat_map.iteritems():
         y = find(y)
-        if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or il.is_equals(x)):
+        if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
             if any(v in universally_quantified_variables and 
                    v.sort == x[0].sort.dom[x[1]] for v in y.variables):
                 bad_interpreted.add(x[0])

@@ -264,7 +264,7 @@ def is_numeral(term):
 for cls in [lg.Const, lg.Var, lg.Apply]:
     cls.get_sort = lambda self: self.sort
 
-lg.Eq.rep = property(lambda self: equals)
+lg.Eq.rep = property(lambda self: Symbol('=',RelationSort([x.sort for x in self.args])))
 
 App = lg.Apply
 def Atom(rel,args):

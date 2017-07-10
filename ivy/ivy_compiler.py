@@ -1147,7 +1147,9 @@ def check_properties(mod):
                 mod.labeled_axioms.append(prop)
             else:
                 for g in subgoals:
-                    mod.labeled_props.append(g)
+                    label = ia.compose_atoms(prop.label,g.label)
+                    iu.dbg('label')
+                    mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
                 mod.subgoals.append((prop,subgoals))
         else:
