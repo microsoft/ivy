@@ -114,9 +114,10 @@ module indexset(basis,index) = {
 
 	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
 	
-#    	definition majority(X) = 2 * card(X) > cnt(n)
-	
-#	property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
+	# A majority is a set whose cardinality is greater than 1/2 of
+	# the basis set.
+
+    	definition majority(X) = 2 * card(X) > cnt(n)
 	
 	# This is our inductive invariant. It says that, for disjoint
 	# sets, the sum of the cardinailities up to bound B is less
@@ -133,7 +134,7 @@ module indexset(basis,index) = {
 	# have a + operation over a quantified variable B. However, B
 	# is of ordinal type, while the + operator is over cardinals.
 	# This means the formulas in our proof context are still
-	# essentially uninterpreted. Without the seperate types, IVy
+	# essentially uninterpreted. Without the separate types, IVy
 	# would complain about this property. Question: is it possible
 	# to automatically detect this kind of sorting of theories so
 	# we don't have to explicitly use distinct types?
@@ -144,6 +145,10 @@ module indexset(basis,index) = {
 	# With the above lemma, the desired property is trivial.
 
     	property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+	
+	# We can also prove that two majorities have an element in common.
+	
+	property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
 	
 	# We can interpret both the ordinals and cardinals as integers
 	# without running afoul of the fragment checker.
