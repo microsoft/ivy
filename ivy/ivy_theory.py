@@ -95,7 +95,6 @@ def get_sort_arcs(assumes,asserts,strat_map):
     #             if il.is_uninterpreted_sort(ds):
     #                 yield (ds,rng,sym)
 
-    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
         if isinstance(func,tuple):
             yield (find(node),find(strat_map[func[0]]),func[0])
