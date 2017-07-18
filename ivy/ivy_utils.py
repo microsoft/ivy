@@ -547,16 +547,18 @@ def get_default_ui_compile_kwargs():
     return mod.compile_kwargs
     
 
-
+enable_debug = BooleanParameter("debug",False)
 
 def dbg(*exprs):
     """Print expressions evaluated in the caller's frame."""
+    assert enable_debug,"must use debug=true to enable debug output"
     import inspect
     frame = inspect.currentframe()
     try:
         locs = frame.f_back.f_locals
+        globs = frame.f_back.f_globals
         for e in exprs:
-            print "{}:{}".format(e,eval(e,globals(),locs))
+            print "{}:{}".format(e,eval(e,globs,locs))
     finally:
         del frame
 

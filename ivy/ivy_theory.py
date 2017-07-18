@@ -221,7 +221,8 @@ def get_unstratified_funs(assumes,asserts,macros):
         y = find(y)
         if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
             if any(v in universally_quantified_variables and 
-                   v.sort == x[0].sort.dom[x[1]] for v in y.variables):
+                   v.sort == x[0].sort.dom[x[1]] and
+                   il.has_infinite_interpretation(v.sort) for v in y.variables):
                 bad_interpreted.add(x[0])
 
     return fun_sccs, bad_interpreted

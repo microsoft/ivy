@@ -70,6 +70,7 @@ from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
 from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
+import ivy_smtlib
 
 allow_unsorted = False
 repr = str
@@ -1248,6 +1249,11 @@ def interpreted_sorts():
 def is_uninterpreted_sort(s):
     s = canonize_sort(s)
     return isinstance(s,UninterpretedSort) and s.name not in sig.interp
+
+# For now, int is the only infinite interpreted sort
+def has_infinite_interpretation(s):
+    s = canonize_sort(s)
+    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(s.name)
 
 def is_interpreted_sort(s):
     s = canonize_sort(s)
