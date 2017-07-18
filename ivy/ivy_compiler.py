@@ -659,10 +659,8 @@ class IvyDomainSetup(IvyDeclInterp):
         rng = list(cond.variables)[0].sort
         vmap = dict((x.name,x) for x in lu.variables_ast(cond))
         used = set()
-        print 'foo!'
         with ivy_logic.UnsortedContext():
             args = [arg.compile() for arg in lhs.args]
-        print 'bar!'
         targs = []
         for a in args:
             if a.name in used:
@@ -1149,7 +1147,9 @@ def check_properties(mod):
                 mod.labeled_axioms.append(prop)
             else:
                 for g in subgoals:
-                    mod.labeled_props.append(g)
+                    label = ia.compose_atoms(prop.label,g.label)
+                    iu.dbg('label')
+                    mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
                 mod.subgoals.append((prop,subgoals))
         else:

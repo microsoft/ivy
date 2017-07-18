@@ -154,6 +154,8 @@ def check_module():
 
 
 def main():
+    import signal
+    signal.signal(signal.SIGINT,signal.SIG_DFL)
     ivy_init.read_params()
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()

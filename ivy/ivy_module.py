@@ -281,7 +281,7 @@ def background_theory(symbols = None):
 def find_action(name):
     return module.actions.get(name,None)
 
-param_logic = iu.Parameter("complete",','.join(il.decidable_logics),
+param_logic = iu.Parameter("complete",','.join(il.default_logics),
                            check=lambda ls: all(s in il.logics for s in ls.split(',')))
 
 def logics():

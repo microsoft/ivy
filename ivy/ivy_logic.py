@@ -70,6 +70,7 @@ from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
 from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
+import ivy_smtlib
 
 allow_unsorted = False
 repr = str
@@ -264,7 +265,7 @@ def is_numeral(term):
 for cls in [lg.Const, lg.Var, lg.Apply]:
     cls.get_sort = lambda self: self.sort
 
-lg.Eq.rep = property(lambda self: equals)
+lg.Eq.rep = property(lambda self: Symbol('=',RelationSort([x.sort for x in self.args])))
 
 App = lg.Apply
 def Atom(rel,args):
@@ -412,6 +413,7 @@ def is_ea(term):
 
 logics = ["epr","qf","fo"]
 decidable_logics = ["epr","qf"]
+default_logics = ["epr"]
 
 def subterms(term):
     yield term
@@ -461,26 +463,52 @@ def symbols_over_universals_rec(fmla,syms,pos,univs):
     if is_variable(fmla):
         return fmla not in univs
     if is_quantifier(fmla):
-        if pos == isinstance(fmla,lg.ForAll):
+        if pos == isinstance(fmla,lg.ForAll) or len(univs) > 0:
             univs.update(fmla.variables)
-            res = symbols_over_universals_rec(fmla,syms,pos,univs)
+            res = symbols_over_universals_rec(fmla.body,syms,pos,univs)
             for v in fmla.variables:
                 univs.remove(v)
             return res
     if isinstance(fmla,Not):
         pos = not pos
-    argres = all([symbols_over_universals_rec(fmla,syms,pos,univs) for a in fmla.args])
+    argres = all([symbols_over_universals_rec(a,syms,pos,univs) for a in fmla.args])
     if is_app(fmla) and not is_eq(fmla) and not argres:
         syms.add(fmla.rep)
     return argres
 
-def symbols_over_universals(fmla):
+def symbols_over_universals(fmlas):
+    """ Return the set of function symbols that occur over universally
+    quantified variables after skolemization.  In the formula 'forall
+    X. exists Y. p(X)', p occurs over a universal, since this
+    skolemizes to 'forall X. p(f(X))'. We don't count free variables,
+    however. If you want free variabes to be considered quantified,
+    you have to add a quantifier (see close_formula)."""
+
     syms = set()
-    symbols_over_universals_rec(fmla,syms,True,set())
+    for fmla in fmlas:
+        symbols_over_universals_rec(fmla,syms,True,set())
     return syms
     
+def universal_variables_rec(fmla,pos,univs):
+    if is_quantifier(fmla):
+        if pos == isinstance(fmla,lg.ForAll):
+            univs.update(fmla.variables)
+            return
+    if isinstance(fmla,Not):
+        pos = not pos
+    for a in fmla.args:
+        universal_variables_rec(a,pos,univs)
+
+def universal_variables(fmlas):
+    """ Return the set of variables quantified universally after skolemization."""
+
+    univs = set()
+    for fmla in fmlas:
+        universal_variables_rec(fmla,True,univs)
+    return univs
+
 # def check_essentially_uninterpreted(fmla):
-#     syms = symbols_over_universals(fmla)
+#     syms = symbols_over_universals([fmla])
 #     if any(is_interpreted_symbol(sym) for sym in syms):
 #         raise NotEssentiallyUninterpreted()
 
@@ -1222,6 +1250,11 @@ def is_uninterpreted_sort(s):
     s = canonize_sort(s)
     return isinstance(s,UninterpretedSort) and s.name not in sig.interp
 
+# For now, int is the only infinite interpreted sort
+def has_infinite_interpretation(s):
+    s = canonize_sort(s)
+    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(s.name)
+
 def is_interpreted_sort(s):
     s = canonize_sort(s)
     return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
@@ -1240,6 +1273,16 @@ def is_deterministic_fmla(f):
         return False
     return all(is_deterministic_fmla(a) for a in f.args)
 
+
+def sym_decl_to_str(sym):
+    sort = sym.sort
+    res =  'relation ' if sort.is_relational() else 'function ' if sort.dom else 'individual '
+    res += sym.name
+    if sort.dom:
+        res += '(' + ','.join('V{}:{}'.format(idx,s) for idx,s in enumerate(sort.dom)) + ')'
+    if not sort.is_relational():
+        res += ' : {}'.format(sort.rng)
+    return res
 
 def sig_to_str(self):
     res = ''
@@ -1365,9 +1408,9 @@ class VariableUniqifier(object):
         if is_binder(fmla):
             # save the old bindings
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
-            newvars = tuple(Variable(rn(v.name),v.sort) for v in fmla.variables)
+            newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
-            res = type(fmla)(rec(fmla.body,vmap))
+            res = type(fmla)(newvars,self.rec(fmla.body,vmap))
             vmap.update(obs)
             return res
         if is_variable(fmla):

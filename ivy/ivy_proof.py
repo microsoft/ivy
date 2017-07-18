@@ -117,28 +117,21 @@ class ProofChecker(object):
         prob = transform_defn_match(prob)
         pmatch = compile_match(proof,prob,schemaname)
         prob.pat = apply_match_alt(pmatch,prob.pat)
-        iu.dbg('prob')
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        iu.dbg('fomatch')
         if fomatch is not None:
             prob.pat = apply_match(fomatch,prob.pat)
             prob.freesyms = apply_match_freesyms(fomatch,prob.freesyms)
         res = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        show_match(res)
+#        show_match(res)
         if res is not None:
             subgoals = []
             for x in schema.prems():
                 if isinstance(x,ia.LabeledFormula):
-                    iu.dbg('x.formula')
                     fmla = apply_match_alt(remove_vars_match(pmatch,x.formula),x.formula)
-                    iu.dbg('fmla')
                     fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
-                    iu.dbg('fmla')
                     fmla = apply_match(remove_vars_match(res,fmla),fmla)
-                    iu.dbg('fmla')
                     g = ia.LabeledFormula(x.label,fmla)
                     subgoals.append(g)
-                    iu.dbg('g')
             return subgoals
         return None
 
@@ -150,7 +143,7 @@ def remove_vars_match(mat,fmla):
     sympairs = [(s,v) for s,v in mat.iteritems() if il.is_constant(s)]
     symfmlas = il.rename_vars_no_clash([v for s,v in sympairs],[fmla])
     res.update((s,w) for (s,v),w in zip(sympairs,symfmlas))
-    show_match(res)
+#    show_match(res)
     return res
 
 
@@ -179,7 +172,6 @@ def transform_defn_schema(schema,decl):
     concargs = conc.lhs().args
     if len(declargs) > len(concargs):
         schema = parameterize_schema([x.sort for x in declargs[:len(declargs)-len(concargs)]],schema)
-        iu.dbg('schema')
     return schema
 
 def transform_defn_match(prob):
@@ -204,8 +196,6 @@ def transform_defn_match(prob):
     vmap = dict((x.name,y.resort(x.sort)) for x,y in zip(concargs,declargs))
     concrhs = lu.substitute_ast(concrhs,vmap)
     dmatch = {concsym:declsym}
-    print 'func_sorts(concsym) = {}'.format(func_sorts(concsym))
-    print 'func_sorts(declsym) = {}'.format(func_sorts(declsym))
     for x,y in zip(func_sorts(concsym),func_sorts(declsym)):
         if x in freesyms:
             if x in dmatch and dmatch[x] != y:
@@ -216,14 +206,10 @@ def transform_defn_match(prob):
             if x != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
                 return None
-    iu.dbg('dmatch')
-    iu.dbg('concrhs')
     concrhs = apply_match(dmatch,concrhs)
     freesyms = apply_match_freesyms(dmatch,freesyms)
     freesyms = [x for x in freesyms if x not in concargs]
     constants = set(x for x in prob.constants if x not in declargs)
-    iu.dbg('freesyms')
-    iu.dbg('concrhs')
     return MatchProblem(concrhs,declrhs,freesyms,constants)
 
 
@@ -240,7 +226,6 @@ def parameterize_schema(sorts,schema):
             sym = prem.args[0]
             vs2 = [il.Variable('X'+str(i),y) for i,y in enumerate(sym.sort.dom)]
             sym2 = sym.resort(il.FuncConstSort(*(sorts + list(sym.sort.dom) + [sym.sort.rng])))
-            print repr(sym2)
             match[sym] = il.Lambda(vs2,sym2(*(vars+vs2)))
             prems.append(ia.ConstantDecl(sym2))
         else:
@@ -255,7 +240,6 @@ def compile_match(proof,prob,schemaname):
     freesyms may be used in the match."""
 
     match = proof.match()
-    iu.dbg('match')
     freesyms = prob.freesyms
     res = dict()
     for m in proof.match():
@@ -269,7 +253,6 @@ def compile_match(proof,prob,schemaname):
     # for sym in res:
     #     if sym not in freesyms:
     #         raise ProofError(proof,'{} is not a premise of schema {}'.format(repr(sym),schemaname))
-    iu.dbg('res')
     return res
 
 def apply_match(match,fmla):
@@ -302,8 +285,6 @@ def apply_match_alt(match,fmla):
         if func in match:
             func = match[func]
             return func(*args)
-        iu.dbg('repr(func)')
-        iu.dbg('args')
         return func(*args)
     if il.is_variable(fmla):
         fmla = il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
@@ -386,9 +367,7 @@ def fo_match(pat,inst,freesyms,constants):
             return fo_match(pat.body,inst.body,freesyms,constants)
     if heads_match(pat,inst,freesyms):
         matches = [fo_match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
-        iu.dbg('matches')
         res =  merge_matches(*matches)
-        iu.dbg('res')
         return res
     return dict()
     
@@ -402,8 +381,6 @@ def match(pat,inst,freesyms,constants):
 
     """
 
-    iu.dbg('pat')
-    iu.dbg('inst')
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
     if heads_match(pat,inst,freesyms):
@@ -412,11 +389,8 @@ def match(pat,inst,freesyms,constants):
         return merge_matches(*matches)
     if il.is_app(pat) and pat.rep in freesyms:
         B = extract_terms(inst,pat.args)
-        iu.dbg('B')
         if all(v in constants for v in lu.variables_ast(B)):
             return {pat.rep:B}
-        else:
-            iu.dbg('constants')
 
 
 def match_quants(pat,inst,freesyms,constants):
