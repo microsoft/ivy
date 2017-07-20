@@ -145,8 +145,8 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         try:
             with ReturnContext(None):
                 base = compile_field_reference_rec(parent_name,args)
-        except cfrfail:
-            raise cfrfail(symbol_name)
+        except cfrfail as err:
+            raise cfrfail(symbol_name if err.symbol_name in im.module.hierarchy else err.symbol_name)
         sort = base.sort
         sort_parent,sort_child = iu.parent_child_name(sort.name)
         destr_name = iu.compose_names(sort_parent,child_name)
@@ -849,6 +849,9 @@ class IvyDomainSetup(IvyDeclInterp):
                 self.domain.all_relations.append((sym,0))
                 self.domain.relations[sym] = 0
 
+    def mixin(self,m):
+        if m.args[1].relname  != 'init' and m.args[1].relname not in top_context.actions:
+            raise IvyError(m,'unknown action: {}'.format(m.args[1].relname))
             
 class IvyConjectureSetup(IvyDeclInterp):
     def __init__(self,domain):
