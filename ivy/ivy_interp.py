@@ -542,6 +542,7 @@ def state_implies_formula(state1, fmla2):
     return clauses_imply_formula(clauses1,fmla2)
 
 def undecided_conjectures(state1):
+    print "got here"
     clauses1 = and_clauses(state1.clauses,state1.domain.background_theory(state1.in_scope))
     truths = clauses_imply_list(clauses1,state1.conjs)
     return [c for c,t in zip(state1.conjs,truths) if not t]

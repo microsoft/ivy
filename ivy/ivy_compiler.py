@@ -1148,7 +1148,6 @@ def check_properties(mod):
             else:
                 for g in subgoals:
                     label = ia.compose_atoms(prop.label,g.label)
-                    iu.dbg('label')
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
                 mod.subgoals.append((prop,subgoals))

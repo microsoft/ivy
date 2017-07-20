@@ -366,7 +366,7 @@ def update_relbuttons(gw,relbuttons):
         foo.grid(row = idx+1, column = 2)
         foo = Label(btns,text=label,fg=line_color(num),justify=LEFT,anchor="w")
         foo.grid(sticky=W,row = idx+1, column = 3)
-        foo.bind("<Button-1>", lambda e: askcolor())
+#        foo.bind("<Button-1>", lambda e: askcolor())
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=gw.update)
         foo.grid(row = idx+1, column = 4)
         

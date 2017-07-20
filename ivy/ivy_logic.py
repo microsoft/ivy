@@ -1005,12 +1005,9 @@ def sort_infer(term,sort=None,no_error=False):
     return res
 
 def sort_infer_list(terms,sorts=None,no_error=False,unsorted_var_names=()):
-    iu.dbg('[str(t) for t in terms]')
-    iu.dbg('sorts')
     res = concretize_terms(terms,sorts)
     for term in res:
         check_concretely_sorted(term,no_error,unsorted_var_names)
-    iu.dbg('res')
     return res
 
 def sorts():
@@ -1390,12 +1387,9 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     so they occur nowhere in fmlas2, avoiding capture """
     uvs = lu.used_variables(*fmlas2)
     uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
-    iu.dbg('uvs')
     rn = iu.UniqueRenamer('',(v.name for v in uvs))
     vs = lu.free_variables(*fmlas1)
-    iu.dbg('vs')
     vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
-    iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
 class VariableUniqifier(object):

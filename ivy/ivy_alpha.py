@@ -19,7 +19,7 @@ def alpha(state):
 #    print "poststate: {}".format(state.clauses)
     
 #log = Parameter("log.alpha")
-log = False
+log = True
 
 class ProgressiveDomain(object):
     def __init__(self, cs = [], verbose = True):
@@ -111,7 +111,9 @@ class ProgressiveDomain(object):
             print "concrete state: %s" % theory
             print "background: %s" % background_theory
         add_clauses(self.solver, and_clauses(theory,background_theory))
-        self.unsat = self.solver.check() == z3.unsat
+#        self.unsat = self.solver.check() == z3.unsat
+        self.unsat = False
+        print "got here!!!"
         if self.unsat:
             print "core: %s" % unsat_core(and_clauses(theory,background_theory),true_clauses())
         

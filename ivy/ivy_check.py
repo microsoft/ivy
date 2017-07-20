@@ -48,11 +48,11 @@ def check_properties():
 
 
 def check_conjectures(kind,msg,ag,state):
+    print "foo!!!"
     failed = itp.undecided_conjectures(state)
     if failed:
         if diagnose.get():
             print "{} failed.".format(kind)
-            iu.dbg('ag.states[0].clauses')
             import tk_ui as ui
             iu.set_parameters({'mode':'induction'})
             gui = ui.new_ui()
