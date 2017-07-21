@@ -103,7 +103,9 @@ def center_window_on_window(toplevel,win):
     toplevel.geometry("%dx%d+%d+%d" % (size + (x, y)))
 
 def destroy_then_aux(dlg,command):
+    iu.dbg('"command started"')
     command()
+    iu.dbg('"command finished"')
     dlg.destroy()
 
 def destroy_then(dlg,command):

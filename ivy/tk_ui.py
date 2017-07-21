@@ -19,10 +19,10 @@ class RunContext(object):
         """ parent should be a window """
         self.parent = parent
     def __enter__(self):
-        self.parent.busy()
+#        self.parent.busy()
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
-        self.parent.ready()
+#        self.parent.ready()
         if exc_type == iu.IvyError:
             dlg = Toplevel(self.parent.frame)
             Label(dlg, text=repr(exc_val)).pack(side=TOP)

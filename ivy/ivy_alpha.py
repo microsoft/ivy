@@ -19,7 +19,7 @@ def alpha(state):
 #    print "poststate: {}".format(state.clauses)
     
 #log = Parameter("log.alpha")
-log = True
+log = False
 
 class ProgressiveDomain(object):
     def __init__(self, cs = [], verbose = True):
@@ -74,7 +74,7 @@ class ProgressiveDomain(object):
 
     def test_cube(self,cube):
         canon_cube = canonize_clause(cube)
-        if log:
+        if log or True:
             print "cube: {}".format([str(c) for c in canon_cube])
         my_id = self.cube_id(canon_cube)
         if my_id in self.inhabited_cubes:
@@ -113,7 +113,6 @@ class ProgressiveDomain(object):
         add_clauses(self.solver, and_clauses(theory,background_theory))
 #        self.unsat = self.solver.check() == z3.unsat
         self.unsat = False
-        print "got here!!!"
         if self.unsat:
             print "core: %s" % unsat_core(and_clauses(theory,background_theory),true_clauses())
         

@@ -1050,7 +1050,10 @@ def str_subst(s,subst):
 def subst_subscripts_comp(s,subst):
     assert s!=None
 #    print 's: {} subst: {}'.format(s,subst)
-    g = name_parser.findall(s)
+    try:
+        g = name_parser.findall(s)
+    except:
+        assert False, s
 #    print 'g: {}'.format(g)
     if not g:
         return s

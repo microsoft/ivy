@@ -48,7 +48,6 @@ def check_properties():
 
 
 def check_conjectures(kind,msg,ag,state):
-    print "foo!!!"
     failed = itp.undecided_conjectures(state)
     if failed:
         if diagnose.get():
