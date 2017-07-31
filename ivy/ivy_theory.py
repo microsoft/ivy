@@ -161,6 +161,7 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
+    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)
@@ -232,15 +233,26 @@ def get_assumes_and_asserts():
     assumes = []
     asserts = []
     macros = []
-    for name,action in im.module.actions.iteritems():
-        for sa in action.iter_subactions():
-            if isinstance(sa,ia.AssumeAction):
-                assumes.append((sa.args[0],sa))
-            if isinstance(sa,ia.AssertAction):
-                asserts.append((sa.args[0],sa))
-            if isinstance(sa,ia.IfAction):
-                asserts.append((sa.get_cond(),sa))
-
+#    for name,action in im.module.actions.iteritems():
+        # for sa in action.iter_subactions():
+        #     if isinstance(sa,ia.AssumeAction):
+        #         assumes.append((sa.args[0],sa))
+        #     if isinstance(sa,ia.AssertAction):
+        #         asserts.append((sa.args[0],sa))
+        #     if isinstance(sa,ia.IfAction):
+        #         asserts.append((sa.get_cond(),sa))
+    for name in im.module.public_actions:
+        action = im.module.actions[name]
+        triple = action.update(im.module,[])
+        #        print 'ivy_theory.py: triple[1]: {}'.format(triple[1])
+        foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
+        #       print 'ivy_theory.py: foo (1): {}'.format(foo)
+        assumes.append((foo,action))
+        #        print 'ivy_theory.py: triple[2]: {}'.format(triple[2])
+        foo = ilu.close_epr(ilu.clauses_to_formula(triple[2]))
+#        print 'ivy_theory.py: foo (2): {}'.format(foo)
+        assumes.append((foo,action))
+        
     for ldf in im.module.definitions:
         if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
             macros.append((ldf.formula.to_constraint(),ldf))
@@ -253,6 +265,9 @@ def get_assumes_and_asserts():
     for ldf in im.module.labeled_props:
         asserts.append((ldf.formula,ldf))
 
+    for ldf in im.module.labeled_conjs:
+        asserts.append((ldf.formula,ldf))
+        assumes.append((ldf.formula,ldf))
     # TODO: check axioms, inits, conjectures
 
     return assumes,asserts,macros

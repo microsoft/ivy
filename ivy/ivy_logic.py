@@ -486,7 +486,11 @@ def symbols_over_universals(fmlas):
 
     syms = set()
     for fmla in fmlas:
-        symbols_over_universals_rec(fmla,syms,True,set())
+        try:
+            symbols_over_universals_rec(fmla,syms,True,set())
+        except Exception as foo:
+            print fmla
+            raise foo
     return syms
     
 def universal_variables_rec(fmla,pos,univs):
@@ -1405,12 +1409,14 @@ class VariableUniqifier(object):
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
             res = type(fmla)(newvars,self.rec(fmla.body,vmap))
+            for v in fmla.variables:
+                del vmap[v]
             vmap.update(obs)
             return res
         if is_variable(fmla):
             if fmla not in vmap:
                 vmap[fmla] = Variable(self.rn(fmla.name),fmla.sort)
-            vmap[fmla]
+            return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
 

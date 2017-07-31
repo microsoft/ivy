@@ -29,6 +29,8 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 
 use_z3_enums = False
 
+z3.set_param('smt.mbqi.trace',True)
+
 def set_use_native_enums(t):
     global use_z3_enums
     use_z3_enums = t
