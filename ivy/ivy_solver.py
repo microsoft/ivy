@@ -29,7 +29,8 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 
 use_z3_enums = False
 
-z3.set_param('smt.mbqi.trace',True)
+#z3.set_param('smt.mbqi.trace',True)
+z3.set_param('smt.macro_finder',True)
 
 def set_use_native_enums(t):
     global use_z3_enums
@@ -244,7 +245,7 @@ def numeral_to_z3(num):
     # TODO: allow other numeric types
     z3sort = lookup_native(num.sort,sorts,"sort")
     if z3sort == None:
-        return z3.Const(num.name,num.sort.to_z3()) # uninterpreted sort
+        return z3.Const(num.name+':'+num.sort.name,num.sort.to_z3()) # uninterpreted sort
     try:
         name = num.name[1:-1] if num.name.startswith('"') else num.name
         if isinstance(z3sort,z3.SeqSortRef) and z3sort.is_string():
@@ -465,6 +466,9 @@ def check_cube(s,cube,memo = None,memo_unsat_only = False):
         if (not res) or (not memo_unsat_only):
             return memo[fid][1]
     s.add(f)
+#    f = open("ivy.smt2","w")
+#    f.write(s.to_smt2())
+#    f.close()
     cr = s.check()
     s.pop()
     res = cr != z3.unsat
