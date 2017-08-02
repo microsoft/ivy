@@ -76,6 +76,12 @@ def get_qa_arcs(fmla,ast,pol,univs,strat_map):
         for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
             yield a
         return
+    if isinstance(fmla,il.Implies):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+        for a in get_qa_arcs(fmla.args[1],ast,pol,univs,strat_map):
+            yield a
+        return
     is_e = il.is_exists(fmla)
     is_a = il.is_forall(fmla)
     if is_e and pol or is_a and not pol:
