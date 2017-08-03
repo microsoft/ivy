@@ -787,6 +787,22 @@ module witness(rng) = {
 
 }
 
+# This module makes a relation functional, meaning that it
+# is total and injective. 
+
+module functional(rel) = {
+    property [totality] exists Y. rel(X,Y)
+    property [injectivity] rel(X,Y) & rel(X,Z) -> Y = Z
+}
+
+# This module makes a relation inverse functional, meaning that its
+# transpose is total and injective. 
+
+module inverse_functional(rel) = {
+    property [totality] exists Y. rel(Y,X)
+    property [injectivity] rel(Y,X) & rel(Z,X) -> Y = Z
+}
+
 module set_wrapper(key) = {
 
     object s = {}

@@ -498,9 +498,13 @@ def compile_native_action(self):
 
 NativeAction.cmpl = compile_native_action
 
+def compile_native_name(atom):
+    assert all(isinstance(a,ivy_ast.Variable) and isinstance(a.sort,str) for a in atom.args)
+    return ivy_ast.Atom(atom.rep,[ivy_ast.Variable(a.rep,resolve_alias(a.sort)) for a in atom.args])
+
 def compile_native_def(self):
     fields = self.args[1].code.split('`')
-    args = list(self.args[0:2]) + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
+    args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
     return self.clone(args)
 
 def compile_action_def(a,sig):

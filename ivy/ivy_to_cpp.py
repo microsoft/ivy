@@ -1802,6 +1802,7 @@ class z3_thunk : public thunk<D,R> {
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "init":
+            iu.dbg('native')
             vs = [il.Symbol(v.rep,im.module.sig.sorts[v.sort]) for v in native.args[0].args] if native.args[0] is not None else []
             global indent_level
             indent_level += 1
@@ -2269,6 +2270,7 @@ def emit_one_initial_state(header):
     clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
     m = slv.get_model_clauses(clauses)
     if m == None:
+        print clauses
         raise IvyError(None,'Initial condition is inconsistent')
     used = ilu.used_symbols_clauses(clauses)
     for sym in all_state_symbols():
