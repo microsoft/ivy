@@ -783,7 +783,7 @@ module witness(rng) = {
 	}
     }
 
-    trusted isolate iso = impl
+    trusted isolate iso = impl with spec
 
 }
 
