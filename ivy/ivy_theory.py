@@ -235,7 +235,7 @@ def get_unstratified_funs(assumes,asserts,macros):
     return fun_sccs, bad_interpreted
 
 
-def get_assumes_and_asserts():    
+def get_assumes_and_asserts(preconds_only):    
     assumes = []
     asserts = []
     macros = []
@@ -247,17 +247,24 @@ def get_assumes_and_asserts():
         #         asserts.append((sa.args[0],sa))
         #     if isinstance(sa,ia.IfAction):
         #         asserts.append((sa.get_cond(),sa))
-    for name in im.module.public_actions:
-        action = im.module.actions[name]
-        triple = action.update(im.module,[])
-        #        print 'ivy_theory.py: triple[1]: {}'.format(triple[1])
-        foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
-        #       print 'ivy_theory.py: foo (1): {}'.format(foo)
-        assumes.append((foo,action))
-        #        print 'ivy_theory.py: triple[2]: {}'.format(triple[2])
-        foo = ilu.close_epr(ilu.clauses_to_formula(triple[2]))
-#        print 'ivy_theory.py: foo (2): {}'.format(foo)
-        assumes.append((foo,action))
+    if preconds_only:
+        for name in im.module.before_export:
+            action = im.module.before_export[name]
+            triple = action.update(im.module,[])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
+            assumes.append((foo,action))
+    else:
+        for name in im.module.public_actions:
+            action = im.module.actions[name]
+            triple = action.update(im.module,[])
+            #        print 'ivy_theory.py: triple[1]: {}'.format(triple[1])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
+            #       print 'ivy_theory.py: foo (1): {}'.format(foo)
+            assumes.append((foo,action))
+            #        print 'ivy_theory.py: triple[2]: {}'.format(triple[2])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[2]))
+            #        print 'ivy_theory.py: foo (2): {}'.format(foo)
+            assumes.append((foo,action))
         
     for ldf in im.module.definitions:
         if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
@@ -315,8 +322,8 @@ def check_can_assume(logic,fmla,ast):
     if not il.is_in_logic(il.close_formula(fmla),logic):
         report_error(logic,"",ast)
     
-def check_theory():
-    assumes,asserts,macros = get_assumes_and_asserts()
+def check_theory(preconds_only=False):
+    assumes,asserts,macros = get_assumes_and_asserts(preconds_only)
 
     errs = []
     for logic in im.logics():
@@ -371,6 +378,8 @@ theories = {
 }
 
 def get_theory(name):
+    if name.startswith('bv['):
+        return theories['int']
     return theories.get(name,None)
 
 

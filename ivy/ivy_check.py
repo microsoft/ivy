@@ -15,6 +15,7 @@ import ivy_interp
 import ivy_compiler
 import ivy_isolate
 import ivy_ast
+import ivy_theory as ith
 
 import sys
 
@@ -119,6 +120,7 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
+            ith.check_theory()
             with im.module.theory_context():
                 check_properties()
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)

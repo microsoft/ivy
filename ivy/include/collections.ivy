@@ -243,6 +243,8 @@ module array(domain,range) = {
     }
 
     trusted isolate iso = spec,impl
+
+    attribute test = impl
 }
 
 ################################################################################
@@ -768,6 +770,11 @@ module witness(rng) = {
     object impl = {
 	relation full
 	individual val : rng
+
+	after init {
+	    full := false
+	}
+
 	implement set {
 	    val := v;
 	    full := true
@@ -781,10 +788,13 @@ module witness(rng) = {
 	implement is_empty {
 	    r := ~full
 	}
+
+	conjecture (present <-> full) & (full -> is(val))
     }
 
-    trusted isolate iso = impl with spec
+    isolate iso = this
 
+    attribute test = impl
 }
 
 # This module makes a relation functional, meaning that it

@@ -909,8 +909,8 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.natives.append(compile_native_def(native_def))
     def attribute(self,a):
         lhs,rhs = a.args
-        if len(lhs.args) != 0:
-            raise IvyError(a,'attribute names may not have parameters')
+#        if len(lhs.args) != 0:
+#            raise IvyError(a,'attribute names may not have parameters')
         fields = lhs.rep.split(iu.ivy_compose_character)
         oname = iu.ivy_compose_character.join(fields[:-1])
         oname = 'this' if oname == '' else oname

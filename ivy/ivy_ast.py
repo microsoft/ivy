@@ -1048,6 +1048,8 @@ def str_subst(s,subst):
 #    return subst.get(s,s)
 
 def subst_subscripts_comp(s,subst):
+    if isinstance(s,This):
+        return s
     assert s!=None
 #    print 's: {} subst: {}'.format(s,subst)
     try:
@@ -1093,7 +1095,8 @@ class AstRewriteSubstPrefix(object):
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
     def rewrite_atom(self,atom,always=False):
-        if not (self.pref and (always or self.to_pref == None or split_name(atom.rep)[0] in self.to_pref)):
+        if not (self.pref and (always or self.to_pref == None or isinstance(atom.rep,This) or 
+                split_name(atom.rep)[0] in self.to_pref)):
             return atom
         the_pref = self.pref
         if self.static != None and atom.rep in self.static:
@@ -1138,7 +1141,7 @@ def ast_rewrite(x,rewrite):
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
             atom.sort = rewrite_sort(rewrite,x.sort)
-        if base_name_differs(x.rep,atom.rep):
+        if not isinstance(x.rep,This) and base_name_differs(x.rep,atom.rep):
             return atom
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
@@ -1243,7 +1246,7 @@ used_variables_ast = gen_to_set(variables_ast)
 def compose_atoms(pr,atom):
     if atom == None:
         return pr
-    hname = compose_names(pr.rep,atom.rep)
+    hname = pr.rep if isinstance(atom.rep,This) else compose_names(pr.rep,atom.rep)
     args = pr.args + atom.args
     res = type(atom)(hname,args)
     copy_attributes_ast(atom,res)

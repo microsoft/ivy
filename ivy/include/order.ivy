@@ -64,6 +64,71 @@ module unbounded_sequence = {
 
 }
 
+module bounded_sequence(interp) = {
+    
+    type t
+
+    # returns the least key greater than x
+    action next(x:t) returns (y:t)
+
+    # returns the greatest key less than x
+    action prev(x:t) returns (y:t)
+
+    # returns true if key is the maximum value
+    action is_max(x:t) returns (r:bool)
+
+    relation succ(X:t,Y:t)
+
+    object spec = {
+
+	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
+
+	instantiate totally_ordered(t)
+
+	before next {
+	    assert exists S. S > x;
+	}
+	after next {
+	    assert x < y & (x < Y -> y <= Y);
+	    assert succ(x,y)
+	}
+	before prev {
+	    assert 0 < x
+	}
+	after prev {
+	    assert y < x & (Y < x -> Y <= y);
+	    assert succ(y,x)
+	}
+	after is_max {
+	    assert r <-> ~exists S. S > x
+	}
+    }
+
+    object impl = {
+
+	interpret t -> interp
+
+	definition succ(X,Y) = (Y = X + 1 & X < Y)
+
+	implement next {
+	    y := x + 1
+	}
+	implement prev {
+	    y := x - 1
+	}
+	implement is_max {
+	    r := ~(x + 1 > x)
+	}
+    }
+
+    isolate iso = impl,spec
+    
+    # When testing, use the integer implementation.
+
+    attribute test = impl
+
+}
+
 module order_iterator(range) = {
     type t = struct {
 	is_end : bool,
@@ -104,6 +169,9 @@ module order_iterator(range) = {
 	    val(y) := 0
 	}
     }
+
+    isolate iso = impl,spec with range
+    attribute test = impl
 
 }
 
@@ -165,7 +233,7 @@ module sequence_iterator(range) = {
     object impl = {
 	...
 	implement next {
-	    if range.is_max(x) {
+	    if range.is_max(val(x)) {
 		y := end
 	    } else {
 		y := create(range.next(val(x)))

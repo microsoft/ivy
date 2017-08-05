@@ -592,7 +592,7 @@ def get_private_from_attributes(mod,name,suff):
         aval = mod.attributes[attrname].rep
         if aval not in ['spec','impl']:
             raise iu.IvyError(None,'attribute {} has bad value "{}". should be "spec" or "impl"'.format(attrname,aval))
-        return 'spec' if aval == 'impl' else 'impl'
+        suff = 'spec' if aval == 'impl' else 'impl'
     return suff
 
 def set_privates(mod,isolate,suff=None):
@@ -1262,8 +1262,6 @@ def create_isolate(iso,mod = None,**kwargs):
             sym = ivy_logic.Symbol(csname,sort)
             space = ics.NamedSpace(ivy_logic.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
-
-        ith.check_theory()
 
         # get rid of useless actions
 

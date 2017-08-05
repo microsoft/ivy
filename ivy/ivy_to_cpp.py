@@ -19,6 +19,7 @@ import ivy_ast
 import itertools
 import ivy_cpp
 import ivy_cpp_types
+import ivy_theory as ith
 
 from collections import defaultdict
 from operator import mul
@@ -317,6 +318,11 @@ large_thresh = 1024
 def is_large_type(sort):
     cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
     return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
+
+def is_large_lhs(term):
+    cards = [sort_card(v.sort) for v in lu.free_variables(term)]
+    return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
+    
 
 def ctype_function(sort,classname=None,skip_params=0):
     cards = map(sort_card,sort.dom[skip_params:] if hasattr(sort,'dom') else [])
@@ -872,7 +878,10 @@ def native_declaration(atom):
     res = ((native_classname + '::') if (native_classname and not vname[0].isdigit() and not vname[0] == '"') else '') + vname
     for arg in atom.args:
         sort = arg.sort if isinstance(arg.sort,str) else arg.sort.name
-        res += '[' + str(sort_card(im.module.sig.sorts[sort])) + ']'
+        card = sort_card(im.module.sig.sorts[sort])
+        if card is None:
+            raise iu.IvyError(atom,'cannot allocate an array over sort {} because it is not finite'.format(im.module.sig.sorts[sort]))
+        res += '[' + str(card) + ']'
     return res
 
 thunk_counter = 0
@@ -923,7 +932,8 @@ def native_to_str(native,reference=False,code=None):
     return ''.join(fields)
 
 def emit_native(header,impl,native,classname):
-    header.append(native_to_str(native))
+    with ivy_ast.ASTContext(native):
+        header.append(native_to_str(native))
 
 def emit_param_decls(header,name,params,extra=[],classname=None):
     header.append(varname(name) + '(')
@@ -2756,7 +2766,8 @@ def emit_assign_large(self,header):
 def emit_assign(self,header):
     global indent_level
     with ivy_ast.ASTContext(self):
-        if is_large_type(self.args[0].rep.sort) and lu.free_variables(self.args[0]):
+#        if is_large_type(self.args[0].rep.sort) and lu.free_variables(self.args[0]):
+        if is_large_lhs(self.args[0]):
             emit_assign_large(self,header)
             return
         vs = list(lu.free_variables(self.args[0]))
@@ -4102,6 +4113,9 @@ def main():
                     iso.create_isolate(isolate) # ,ext='ext'
 
                     im.module.labeled_axioms.extend(im.module.labeled_props)
+                    im.module.labeled_props = []
+                    if target.get() != 'repl':
+                        ith.check_theory(True)
                     with im.module.theory_context():
                         basename = opt_classname.get() or im.module.name
                         if len(isolates) > 1:
