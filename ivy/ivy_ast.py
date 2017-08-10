@@ -1059,7 +1059,12 @@ def subst_subscripts_comp(s,subst):
 #    print 'g: {}'.format(g)
     if not g:
         return s
-    res =  str_subst(g[0],subst) + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+    pref = str_subst(g[0],subst)
+    if isinstance(pref,This):
+        if len(g) > 1:
+            raise iu.IvyError(None,'cannot substitute "this" for {} in {}'.format(g[0],s))
+        return pref
+    res =  pref + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
 #    print "res: {}".format(res)
     return res
 
@@ -1067,8 +1072,11 @@ def subst_subscripts(s,subst):
 #    return compose_names(*[subst_subscripts_comp(t,subst) for t in split_name(s)])
     return subst_subscripts_comp(s,subst)
 
+def my_base_name(x):
+    return x if isinstance(x,This) else base_name(x)
+
 def base_name_differs(x,y):
-    return base_name(x) != base_name(y)
+    return my_base_name(x) != my_base_name(y)
 
 class AstRewriteSubstConstants(object):
     def __init__(self,subst):
@@ -1141,7 +1149,7 @@ def ast_rewrite(x,rewrite):
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
             atom.sort = rewrite_sort(rewrite,x.sort)
-        if not isinstance(x.rep,This) and base_name_differs(x.rep,atom.rep):
+        if base_name_differs(x.rep,atom.rep):
             return atom
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):

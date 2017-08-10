@@ -270,15 +270,10 @@ class TkGraphWidget(TkCyCanvas,uu.WithMenuBar):
     # Call this when UI needs to be updated.
 
     def update(self):
-        iu.dbg('"updating graph"')
         self.delete(ALL)
-        iu.dbg('"after delete"')
         self.sync_checkboxes()
-        iu.dbg('"after sync checkboxes"')
         self.g.recompute()
-        iu.dbg('"after recompute"')
         self.rebuild()
-        iu.dbg('"after rebuild"')
 
 
 # Wrap a concept graph object in a user interface
@@ -379,7 +374,6 @@ def update_relbuttons(gw,rb):
     line_color = gw.line_color
     command = gw.update
     for idx,(num,rel) in enumerate(rels):
-        iu.dbg('rel')
         label = gw.g.concept_label(gw.g.concept_from_id(rel))
         btns.add(str(idx+1))
         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[0],command=command)
@@ -419,7 +413,6 @@ def update_relbuttons(gw,rb):
 # #        foo.bind("<Button-1>", lambda e: askcolor())
 #         foo = Checkbutton(btns,fg=line_color(num),variable=gw.get_enabled(rel)[3],command=command)
 #         foo.grid(row = idx+1, column = 4)
-    iu.dbg('"finished updating relbuttons"')
         
 
 def onFrameConfigure(canvas):

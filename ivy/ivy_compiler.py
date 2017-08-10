@@ -531,10 +531,10 @@ def compile_action_def(a,sig):
             for suba in res.iter_subactions():
                 if isinstance(suba,CallAction):
                     if any(lu.used_variables_ast(a) for a in suba.args[0].args):
-                        iu.dbg('a.args[0]')
-                        iu.dbg('a.formal_params')
-                        iu.dbg('suba.lineno')
-                        iu.dbg('suba')
+#                        iu.dbg('a.args[0]')
+#                        iu.dbg('a.formal_params')
+#                        iu.dbg('suba.lineno')
+#                        iu.dbg('suba')
                         raise iu.IvyError(suba,"call may not have free variables")
             res.formal_params = formals
             res.formal_returns = returns

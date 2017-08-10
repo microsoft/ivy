@@ -1371,9 +1371,6 @@ def check_isolate_completeness(mod = None):
         for callee in action.iter_calls():
             if not (callee in checked or not has_assertions(mod,callee)
                     or callee in delegates and actname in checked_context[callee]):
-                iu.dbg('callee')
-                iu.dbg('actname')
-                iu.dbg('checked_context[callee]')
                 missing.append((actname,callee,None))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname

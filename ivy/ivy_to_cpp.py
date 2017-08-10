@@ -1812,7 +1812,6 @@ class z3_thunk : public thunk<D,R> {
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "init":
-            iu.dbg('native')
             vs = [il.Symbol(v.rep,im.module.sig.sorts[v.sort]) for v in native.args[0].args] if native.args[0] is not None else []
             global indent_level
             indent_level += 1

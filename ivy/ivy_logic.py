@@ -995,8 +995,6 @@ def all_concretely_sorted(*terms):
 def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
     for x in chain(lu.used_variables(term),lu.used_constants(term)):
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
-            iu.dbg('unsorted_var_names')
-            iu.dbg('x.name')
             if x.name not in unsorted_var_names:
                 if no_error:
                     raise lg.SortError

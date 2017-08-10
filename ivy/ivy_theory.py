@@ -167,7 +167,7 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
-    iu.dbg('[str(x) for x in symbols_over_universals]')
+#    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)

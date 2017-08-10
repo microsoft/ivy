@@ -12,6 +12,8 @@ from ivy_logic_utils import *
 from ivy_concept_space import *
 from ivy_utils import Parameter
 
+test_bottom = True
+
 def alpha(state):
 #    print "prestate: {}".format(state.clauses)
     d = ProgressiveDomain(state.domain.concept_spaces,verbose = False)
@@ -111,8 +113,7 @@ class ProgressiveDomain(object):
             print "concrete state: %s" % theory
             print "background: %s" % background_theory
         add_clauses(self.solver, and_clauses(theory,background_theory))
-#        self.unsat = self.solver.check() == z3.unsat
-        self.unsat = False
+        self.unsat = test_bottom and self.solver.check() == z3.unsat
         if self.unsat:
             print "core: %s" % unsat_core(and_clauses(theory,background_theory),true_clauses())
         

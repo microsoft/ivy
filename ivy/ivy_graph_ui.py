@@ -311,8 +311,6 @@ class GraphWidget(object):
             with self.ui_parent.run_context():  # to catch errors
                 lit = self.g.string_to_concept(text)
                 self.add_concept(lit)
-                iu.dbg('"after add_concept"')
-            iu.dbg('"after with"')
 
 
     # Record the current goal with a string name
@@ -329,9 +327,7 @@ class GraphWidget(object):
 
     def update_relations(self):
         if self.update_callback != None:
-            iu.dbg('"before update_callback"')
             self.update_callback()
-            iu.dbg('"after update_callback"')
             
         
 
