@@ -592,7 +592,7 @@ def get_private_from_attributes(mod,name,suff):
         aval = mod.attributes[attrname].rep
         if aval not in ['spec','impl']:
             raise iu.IvyError(None,'attribute {} has bad value "{}". should be "spec" or "impl"'.format(attrname,aval))
-        return 'spec' if aval == 'impl' else 'impl'
+        suff = 'spec' if aval == 'impl' else 'impl'
     return suff
 
 def set_privates(mod,isolate,suff=None):
@@ -608,11 +608,28 @@ def set_privates(mod,isolate,suff=None):
         if nsuff in l:
             mod.privates.add(iu.compose_names(n,nsuff))
 
-def get_props_proved_in_isolate(mod,isolate):
+def get_props_proved_in_isolate_orig(mod,isolate):
     save_privates = mod.privates
     mod.privates = set()
     set_privates(mod,isolate,'spec')
     verified,present = get_isolate_info(mod,isolate,'spec')
+    check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
+    not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
+    proved = [a for a in mod.labeled_props if check_pr(a.label)]
+    mod.privates = save_privates
+    return proved,not_proved
+
+def get_props_proved_in_isolate(mod,isolate):
+    save_privates = mod.privates
+    mod.privates = set()
+    set_privates(mod,isolate,'impl')
+    verified,present = get_isolate_info(mod,isolate,'impl')
+    for other_iso in mod.isolates.values():
+        if other_iso is not isolate:
+            for other_verified in other_iso.verified():
+                ovn = other_verified.relname
+                if startswith_some(ovn,verified,mod):
+                    mod.privates.add(ovn)
     check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
     not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
     proved = [a for a in mod.labeled_props if check_pr(a.label)]
@@ -1246,8 +1263,6 @@ def create_isolate(iso,mod = None,**kwargs):
             space = ics.NamedSpace(ivy_logic.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
 
-        ith.check_theory()
-
         # get rid of useless actions
 
         cone = get_mod_cone(mod)        
@@ -1356,9 +1371,6 @@ def check_isolate_completeness(mod = None):
         for callee in action.iter_calls():
             if not (callee in checked or not has_assertions(mod,callee)
                     or callee in delegates and actname in checked_context[callee]):
-                iu.dbg('callee')
-                iu.dbg('actname')
-                iu.dbg('checked_context[callee]')
                 missing.append((actname,callee,None))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname

@@ -15,6 +15,7 @@ import ivy_interp
 import ivy_compiler
 import ivy_isolate
 import ivy_ast
+import ivy_theory as ith
 
 import sys
 
@@ -52,7 +53,6 @@ def check_conjectures(kind,msg,ag,state):
     if failed:
         if diagnose.get():
             print "{} failed.".format(kind)
-            iu.dbg('ag.states[0].clauses')
             import tk_ui as ui
             iu.set_parameters({'mode':'induction'})
             gui = ui.new_ui()
@@ -120,6 +120,7 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
+            ith.check_theory()
             with im.module.theory_context():
                 check_properties()
                 ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
@@ -156,6 +157,8 @@ def check_module():
 def main():
     import signal
     signal.signal(signal.SIGINT,signal.SIG_DFL)
+    import ivy_alpha
+    ivy_alpha.test_bottom = False # this prevents a useless SAT check
     ivy_init.read_params()
     if len(sys.argv) != 2 or not sys.argv[1].endswith('ivy'):
         usage()

@@ -486,7 +486,11 @@ def symbols_over_universals(fmlas):
 
     syms = set()
     for fmla in fmlas:
-        symbols_over_universals_rec(fmla,syms,True,set())
+        try:
+            symbols_over_universals_rec(fmla,syms,True,set())
+        except Exception as foo:
+            print fmla
+            raise foo
     return syms
     
 def universal_variables_rec(fmla,pos,univs):
@@ -991,8 +995,6 @@ def all_concretely_sorted(*terms):
 def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
     for x in chain(lu.used_variables(term),lu.used_constants(term)):
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
-            iu.dbg('unsorted_var_names')
-            iu.dbg('x.name')
             if x.name not in unsorted_var_names:
                 if no_error:
                     raise lg.SortError
@@ -1005,12 +1007,9 @@ def sort_infer(term,sort=None,no_error=False):
     return res
 
 def sort_infer_list(terms,sorts=None,no_error=False,unsorted_var_names=()):
-    iu.dbg('[str(t) for t in terms]')
-    iu.dbg('sorts')
     res = concretize_terms(terms,sorts)
     for term in res:
         check_concretely_sorted(term,no_error,unsorted_var_names)
-    iu.dbg('res')
     return res
 
 def sorts():
@@ -1390,12 +1389,9 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     so they occur nowhere in fmlas2, avoiding capture """
     uvs = lu.used_variables(*fmlas2)
     uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
-    iu.dbg('uvs')
     rn = iu.UniqueRenamer('',(v.name for v in uvs))
     vs = lu.free_variables(*fmlas1)
-    iu.dbg('vs')
     vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
-    iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
 class VariableUniqifier(object):
@@ -1411,12 +1407,14 @@ class VariableUniqifier(object):
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
             res = type(fmla)(newvars,self.rec(fmla.body,vmap))
+            for v in fmla.variables:
+                del vmap[v]
             vmap.update(obs)
             return res
         if is_variable(fmla):
             if fmla not in vmap:
                 vmap[fmla] = Variable(self.rn(fmla.name),fmla.sort)
-            vmap[fmla]
+            return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
 

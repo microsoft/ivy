@@ -1048,13 +1048,23 @@ def str_subst(s,subst):
 #    return subst.get(s,s)
 
 def subst_subscripts_comp(s,subst):
+    if isinstance(s,This):
+        return s
     assert s!=None
 #    print 's: {} subst: {}'.format(s,subst)
-    g = name_parser.findall(s)
+    try:
+        g = name_parser.findall(s)
+    except:
+        assert False, s
 #    print 'g: {}'.format(g)
     if not g:
         return s
-    res =  str_subst(g[0],subst) + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+    pref = str_subst(g[0],subst)
+    if isinstance(pref,This):
+        if len(g) > 1:
+            raise iu.IvyError(None,'cannot substitute "this" for {} in {}'.format(g[0],s))
+        return pref
+    res =  pref + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
 #    print "res: {}".format(res)
     return res
 
@@ -1062,8 +1072,11 @@ def subst_subscripts(s,subst):
 #    return compose_names(*[subst_subscripts_comp(t,subst) for t in split_name(s)])
     return subst_subscripts_comp(s,subst)
 
+def my_base_name(x):
+    return x if isinstance(x,This) else base_name(x)
+
 def base_name_differs(x,y):
-    return base_name(x) != base_name(y)
+    return my_base_name(x) != my_base_name(y)
 
 class AstRewriteSubstConstants(object):
     def __init__(self,subst):
@@ -1090,7 +1103,8 @@ class AstRewriteSubstPrefix(object):
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
     def rewrite_atom(self,atom,always=False):
-        if not (self.pref and (always or self.to_pref == None or split_name(atom.rep)[0] in self.to_pref)):
+        if not (self.pref and (always or self.to_pref == None or isinstance(atom.rep,This) or 
+                split_name(atom.rep)[0] in self.to_pref)):
             return atom
         the_pref = self.pref
         if self.static != None and atom.rep in self.static:
@@ -1240,7 +1254,7 @@ used_variables_ast = gen_to_set(variables_ast)
 def compose_atoms(pr,atom):
     if atom == None:
         return pr
-    hname = compose_names(pr.rep,atom.rep)
+    hname = pr.rep if isinstance(atom.rep,This) else compose_names(pr.rep,atom.rep)
     args = pr.args + atom.args
     res = type(atom)(hname,args)
     copy_attributes_ast(atom,res)

@@ -76,6 +76,12 @@ def get_qa_arcs(fmla,ast,pol,univs,strat_map):
         for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
             yield a
         return
+    if isinstance(fmla,il.Implies):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+        for a in get_qa_arcs(fmla.args[1],ast,pol,univs,strat_map):
+            yield a
+        return
     is_e = il.is_exists(fmla)
     is_a = il.is_forall(fmla)
     if is_e and pol or is_a and not pol:
@@ -161,6 +167,7 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
+#    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)
@@ -228,19 +235,37 @@ def get_unstratified_funs(assumes,asserts,macros):
     return fun_sccs, bad_interpreted
 
 
-def get_assumes_and_asserts():    
+def get_assumes_and_asserts(preconds_only):    
     assumes = []
     asserts = []
     macros = []
-    for name,action in im.module.actions.iteritems():
-        for sa in action.iter_subactions():
-            if isinstance(sa,ia.AssumeAction):
-                assumes.append((sa.args[0],sa))
-            if isinstance(sa,ia.AssertAction):
-                asserts.append((sa.args[0],sa))
-            if isinstance(sa,ia.IfAction):
-                asserts.append((sa.get_cond(),sa))
-
+#    for name,action in im.module.actions.iteritems():
+        # for sa in action.iter_subactions():
+        #     if isinstance(sa,ia.AssumeAction):
+        #         assumes.append((sa.args[0],sa))
+        #     if isinstance(sa,ia.AssertAction):
+        #         asserts.append((sa.args[0],sa))
+        #     if isinstance(sa,ia.IfAction):
+        #         asserts.append((sa.get_cond(),sa))
+    if preconds_only:
+        for name in im.module.before_export:
+            action = im.module.before_export[name]
+            triple = action.update(im.module,[])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
+            assumes.append((foo,action))
+    else:
+        for name in im.module.public_actions:
+            action = im.module.actions[name]
+            triple = action.update(im.module,[])
+            #        print 'ivy_theory.py: triple[1]: {}'.format(triple[1])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[1]))
+            #       print 'ivy_theory.py: foo (1): {}'.format(foo)
+            assumes.append((foo,action))
+            #        print 'ivy_theory.py: triple[2]: {}'.format(triple[2])
+            foo = ilu.close_epr(ilu.clauses_to_formula(triple[2]))
+            #        print 'ivy_theory.py: foo (2): {}'.format(foo)
+            assumes.append((foo,action))
+        
     for ldf in im.module.definitions:
         if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
             macros.append((ldf.formula.to_constraint(),ldf))
@@ -253,6 +278,9 @@ def get_assumes_and_asserts():
     for ldf in im.module.labeled_props:
         asserts.append((ldf.formula,ldf))
 
+    for ldf in im.module.labeled_conjs:
+        asserts.append((ldf.formula,ldf))
+        assumes.append((ldf.formula,ldf))
     # TODO: check axioms, inits, conjectures
 
     return assumes,asserts,macros
@@ -294,8 +322,8 @@ def check_can_assume(logic,fmla,ast):
     if not il.is_in_logic(il.close_formula(fmla),logic):
         report_error(logic,"",ast)
     
-def check_theory():
-    assumes,asserts,macros = get_assumes_and_asserts()
+def check_theory(preconds_only=False):
+    assumes,asserts,macros = get_assumes_and_asserts(preconds_only)
 
     errs = []
     for logic in im.logics():
@@ -350,6 +378,8 @@ theories = {
 }
 
 def get_theory(name):
+    if name.startswith('bv['):
+        return theories['int']
     return theories.get(name,None)
 
 

@@ -498,9 +498,13 @@ def compile_native_action(self):
 
 NativeAction.cmpl = compile_native_action
 
+def compile_native_name(atom):
+    assert all(isinstance(a,ivy_ast.Variable) and isinstance(a.sort,str) for a in atom.args)
+    return ivy_ast.Atom(atom.rep,[ivy_ast.Variable(a.rep,resolve_alias(a.sort)) for a in atom.args])
+
 def compile_native_def(self):
     fields = self.args[1].code.split('`')
-    args = list(self.args[0:2]) + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
+    args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
     return self.clone(args)
 
 def compile_action_def(a,sig):
@@ -527,10 +531,10 @@ def compile_action_def(a,sig):
             for suba in res.iter_subactions():
                 if isinstance(suba,CallAction):
                     if any(lu.used_variables_ast(a) for a in suba.args[0].args):
-                        iu.dbg('a.args[0]')
-                        iu.dbg('a.formal_params')
-                        iu.dbg('suba.lineno')
-                        iu.dbg('suba')
+#                        iu.dbg('a.args[0]')
+#                        iu.dbg('a.formal_params')
+#                        iu.dbg('suba.lineno')
+#                        iu.dbg('suba')
                         raise iu.IvyError(suba,"call may not have free variables")
             res.formal_params = formals
             res.formal_returns = returns
@@ -908,8 +912,8 @@ class IvyARGSetup(IvyDeclInterp):
         self.mod.natives.append(compile_native_def(native_def))
     def attribute(self,a):
         lhs,rhs = a.args
-        if len(lhs.args) != 0:
-            raise IvyError(a,'attribute names may not have parameters')
+#        if len(lhs.args) != 0:
+#            raise IvyError(a,'attribute names may not have parameters')
         fields = lhs.rep.split(iu.ivy_compose_character)
         oname = iu.ivy_compose_character.join(fields[:-1])
         oname = 'this' if oname == '' else oname
@@ -1151,7 +1155,6 @@ def check_properties(mod):
             else:
                 for g in subgoals:
                     label = ia.compose_atoms(prop.label,g.label)
-                    iu.dbg('label')
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
                 mod.subgoals.append((prop,subgoals))

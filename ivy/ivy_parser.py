@@ -1624,13 +1624,21 @@ def p_defns_defns_comma_defn(p):
     p[0] = p[1]
     p[0].append(p[3])
 
+def p_dotsym_symbol(p):
+    'dotsym : SYMBOL'
+    p[0] = p[1]
+
+def p_dotsym_dotsym_dot_symbol(p):
+    'dotsym : dotsym DOT SYMBOL'
+    p[0] = p[1] + iu.ivy_compose_character + p[3]
+
 def p_defnlhs_symbol(p):
-    'defnlhs : SYMBOL'
+    'defnlhs : dotsym'
     p[0] = Atom(p[1],[])
     p[0].lineno = get_lineno(p,1)
     
 def p_defnlhs_symbol_lparen_defargs_rparen(p):
-    'defnlhs : SYMBOL LPAREN defargs RPAREN'
+    'defnlhs : dotsym LPAREN defargs RPAREN'
     p[0] = Atom(p[1],p[3])
     p[0].lineno = get_lineno(p,1)
     

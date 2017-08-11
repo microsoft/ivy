@@ -243,6 +243,8 @@ module array(domain,range) = {
     }
 
     trusted isolate iso = spec,impl
+
+    attribute test = impl
 }
 
 ################################################################################
@@ -714,6 +716,101 @@ module partial_function(dom,rng) = {
 
     conjecture map(K,L) & map(K,M) -> L = M
 
+}
+
+################################################################################
+#
+# Witness
+#
+# This is similar to partial_function, but has no domain. Useful for storing a witness
+# to an existential quantifier without creating a function cycle.
+#
+################################################################################
+
+module witness(rng) = {
+
+    action set(v:rng)
+
+    action get returns (v:rng)
+
+    action is_empty returns (r:bool)
+
+    action clear 
+
+    relation is(Y:rng)
+
+    relation present
+
+    object spec = {
+
+	after init {
+	    is(Y) := false;
+	    present := false
+	}
+
+	after set {
+	    is(Y) := Y = v;
+	    present := true
+	}
+
+	after get {
+	    assert present -> is(v)
+	}
+
+	after clear {
+	    is(Y) := false;
+	    present := false
+	}
+
+	after is_empty {
+	    assert r <-> ~present
+	}
+    }
+
+    object impl = {
+	relation full
+	individual val : rng
+
+	after init {
+	    full := false
+	}
+
+	implement set {
+	    val := v;
+	    full := true
+	}
+	implement get {
+	    v := val
+	}
+	implement clear {
+	    full := false
+	}
+	implement is_empty {
+	    r := ~full
+	}
+
+	conjecture (present <-> full) & (full -> is(val))
+    }
+
+    isolate iso = this
+
+    attribute test = impl
+}
+
+# This module makes a relation functional, meaning that it
+# is total and injective. 
+
+module functional(rel) = {
+    property [totality] exists Y. rel(X,Y)
+    property [injectivity] rel(X,Y) & rel(X,Z) -> Y = Z
+}
+
+# This module makes a relation inverse functional, meaning that its
+# transpose is total and injective. 
+
+module inverse_functional(rel) = {
+    property [totality] exists Y. rel(Y,X)
+    property [injectivity] rel(Y,X) & rel(Z,X) -> Y = Z
 }
 
 module set_wrapper(key) = {
