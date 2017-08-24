@@ -12,9 +12,8 @@
 
 from ivy_printer import print_module
 from ivy_actions import (AssignAction, Sequence, ChoiceAction,
-                         AssumeAction, concat_actions)
+                         AssumeAction, AssertAction, concat_actions)
 import logic as lg
-import ivy_logic_utils as ilu
 
 def l2s(mod, lf):
     # modify mod in place
@@ -34,13 +33,39 @@ def l2s(mod, lf):
     #    print
     #print
 
-    # TODO: change wait_for to be from the tableau, this is a mock
-    wait_for = [c for c in mod.sig.symbols.values() if c.sort == lg.Boolean]
+    reset_a = [
+        AssignAction(l2s_a(s)(v), l2s_d(s)(v))
+        for s in uninterpreted_sorts
+        for v in [lg.Var('X',s)]
+    ]
+
+    # TODO: change wait_for to be from the tableau or conjectures, this is a mock
+    wait_for = [] # list of (variables, term)
+    wait_for += [((), c) for c in mod.sig.symbols.values() if c.sort == lg.Boolean]
     wait_for += [
-        f(*[lg.Var('X{}'.format(i), s) for i,s in enumerate(f.sort.domain)])
+        (vs, f(*vs))
         for f in mod.sig.symbols.values()
-        if isinstance(f.sort, lg.FunctionSort) and f.sort.range == lg.Boolean]
-    done_waiting = [ilu.close_epr(lg.Not(l2s_w(w))) for w in wait_for]
+        if isinstance(f.sort, lg.FunctionSort) and f.sort.range == lg.Boolean
+        for vs in [tuple(lg.Var('X{}'.format(i), s) for i,s in enumerate(f.sort.domain))]
+    ]
+    done_waiting = [
+        lg.ForAll(vs, lg.Not(l2s_w(t))) if len(vs) > 0 else lg.Not(l2s_w(t))
+        for vs, t in wait_for
+    ]
+    reset_w = [
+        AssignAction(
+            l2s_w(t),
+            lg.And(*(l2s_d(v.sort)(v) for v in vs))
+        )
+        for vs, t in wait_for
+    ]
+    update_w = [
+        AssignAction(
+            l2s_w(t),
+            lg.And(l2s_w(t), lg.Not(t), lg.Not(lg.Globally(lg.Not(t))))
+        )
+        for vs, t in wait_for
+    ]
 
     # TODO: change to_save to be taken from the conjectures
     to_save = [] # list of (variables, term) corresponding to l2s_s
@@ -50,35 +75,45 @@ def l2s(mod, lf):
             to_save.append((vs, f(*vs)))
         else:
             to_save.append(((), f))
+    save_state = [
+        AssignAction(l2s_s(vs,t)(*vs) if len(vs) > 0 else l2s_s(vs,t), t)
+        for vs, t in to_save
+    ]
 
-    prelude = ChoiceAction(
+    fair_cycle = [l2s_saved]
+    fair_cycle += done_waiting
+    fair_cycle += [
+        lg.ForAll(vs, lg.Implies(
+            lg.And(*(l2s_a(v.sort)(v) for v in vs)),
+            lg.Iff(l2s_s(vs, t)(*vs), t)
+        ))
+        if len(vs) > 0 else
+        lg.Iff(l2s_s(vs, t), t)
+        for vs, t in to_save
+        if t.sort == lg.Boolean or isinstance(t.sort, lg.FunctionSort) and t.sort.range == lg.Boolean
+    ]
+
+    edge = lambda s1, s2: [
+        AssumeAction(s1),
+        AssignAction(s1, lg.false),
+        AssignAction(s2, lg.true),
+    ]
+    change_monitor_state = [ChoiceAction(
         # waiting -> frozen
-        Sequence(*([
-            AssumeAction(l2s_waiting)
-        ] +[
-            AssumeAction(x) for x in done_waiting
-        ] + [
-            AssignAction(l2s_waiting, lg.false),
-            AssignAction(l2s_frozen, lg.true),
-        ] + [
-            AssignAction(l2s_a(s)(v), l2s_d(s)(v))
-            for s in uninterpreted_sorts
-            for v in [lg.Var('X',s)]
-        ])),
+        Sequence(*(
+            edge(l2s_waiting, l2s_frozen) +
+            [AssumeAction(x) for x in done_waiting] +
+            reset_a
+        )),
         # frozen -> saved
-        Sequence(*([
-            AssumeAction(l2s_frozen),
-            AssignAction(l2s_frozen, lg.false),
-            AssignAction(l2s_saved, lg.true),
-        ] + [
-            AssignAction(l2s_s(vs,t)(*vs) if len(vs) > 0 else l2s_s(vs,t), t)
-            for vs, t in to_save
-            # TODO copy relations and functions
-            # TODO reset l2s_w from l2s_d
-        ])),
-        # stay
+        Sequence(*(
+            edge(l2s_frozen, l2s_saved) +
+            save_state +
+            reset_w
+        )),
+        # stay in same state (self edge)
         Sequence(),
-    )
+    )]
 
     add_consts_to_d = [
         AssignAction(l2s_d(s)(c), lg.true)
@@ -95,10 +130,12 @@ def l2s(mod, lf):
             for p in action.formal_params
         ]
         new_action = concat_actions(*(
-            [prelude] +
+            change_monitor_state +
             add_params_to_d +
             [action] +
-            add_consts_to_d
+            add_consts_to_d +
+            update_w +
+            [AssertAction(lg.Not(lg.And(*fair_cycle)))]
         ))
         new_action.lineno = action.lineno
         new_action.formal_params = action.formal_params
@@ -111,7 +148,7 @@ def l2s(mod, lf):
         AssignAction(l2s_saved, lg.false),
     ]
     l2s_init += add_consts_to_d
-    # TODO: initialize w
+    l2s_init += reset_w
     # TODO: assume [~property]
     mod.initializers.append(('l2s_init', Sequence(*l2s_init)))
 
