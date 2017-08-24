@@ -66,7 +66,7 @@ from ivy_utils import flatten, IvyError
 import ivy_utils as iu
 import logic as lg
 import logic_util as lu
-from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
+from logic import And,Or,Not,Globally,Eventually,Implies,Iff,Ite,ForAll,Exists,Lambda,Binder
 from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
@@ -242,7 +242,7 @@ class Definition(AST):
 
                 
 
-lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda]
+lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.Binder]
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
@@ -250,6 +250,8 @@ for cls in lg_ops:
 
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.clone = lambda self,args: type(self)(self.variables,*args)
+
+lg.Binder.clone = lambda self,args: lg.Binder(self.name, self.variables, *args)
 
 lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
 lg.Apply.args = property(lambda self: self.terms)
@@ -1090,7 +1092,10 @@ def fmla_to_str_ambiguous(term):
     return res
 
 def app_ugly(self):
-    name = self.func.name
+    if type(self.func) is lg.Binder:
+        name = str(self.func)
+    else:
+        name = self.func.name
     args = [a.ugly() for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)
@@ -1113,6 +1118,8 @@ lg.Or.ugly = lambda self: nary_ugly('|',self.args) if self.args else 'false'
 lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
                                if type(self.body) is lg.Eq
                                else '~{}'.format(self.body.ugly()))
+lg.Globally.ugly = lambda self: ('globally {}'.format(self.body.ugly()))
+lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
 lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
@@ -1120,12 +1127,15 @@ lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() fo
 lg.Apply.ugly = app_ugly
 
 def quant_ugly(self):
-    res = 'forall ' if isinstance(self,lg.ForAll) else 'exists ' if isinstance(self,lg.Exists) else 'lambda '
+    res = ('forall ' if isinstance(self,lg.ForAll) else
+           'exists ' if isinstance(self,lg.Exists) else
+           'lambda ' if isinstance(self,lg.Lambda) else
+           '$' + self.name)
     res += ','.join(v.ugly() for v in self.variables)
     res += '. ' + self.body.ugly()
     return res
 
-for cls in [lg.ForAll,lg.Exists, lg.Lambda]:
+for cls in [lg.ForAll,lg.Exists, lg.Lambda, lg.Binder]:
     cls.ugly = quant_ugly
 
 # Drop the type annotations of variables and polymorphic
@@ -1190,13 +1200,16 @@ def quant_drop_annotations(self,inferred_sort,annotated_vars):
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.drop_annotations = quant_drop_annotations
 
+lg.Binder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.Binder(
+    self.name,
+    [v.drop_annotations(False,annotated_vars) for v in self.variables],
+    self.body.drop_annotations(True,annotated_vars)
+)
+
 def default_drop_annotations(self,inferred_sort,annotated_vars):
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 
-for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff]:
-    cls.drop_annotations = default_drop_annotations
- 
-for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff,]:
+for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff,]: # should binder be here?
     cls.drop_annotations = default_drop_annotations
 
 def pretty_fmla(self):

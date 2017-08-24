@@ -75,6 +75,30 @@ class Not(Formula):
             return ' ~= '.join(repr(x) for x in self.args[0].args)
         return '~' + repr(self.args[0])
 
+class Globally(Formula):
+    """
+    Temporal globally of a formula.
+    """
+    def __init__(self,*args):
+        assert len(args) == 1
+        self.args = args
+    def __repr__(self):
+        return '(globally ' + repr(self.args[0]) + ')'
+
+class Eventually(Formula):
+    """
+    Temporal eventually of a formula.
+    """
+    def __init__(self,*args):
+        assert len(args) == 1
+        self.args = args
+    def __repr__(self):
+        return '(eventually ' + repr(self.args[0]) + ')'
+
+def has_temporal(f):
+    assert f is not None
+    return (type(f) in [Globally, Eventually]) or any(has_temporal(x) for x in f.args)
+
 class Let(Formula):
     """
     Formula of the form let p(X,...,Z) <-> fmla[X,...,Z], ... in fmla
@@ -158,6 +182,17 @@ class Forall(Quantifier):
 
 class Exists(Quantifier):
     pass
+
+class Binder(Formula):
+    def __init__(self, name, bounds, body):
+        self.name = name
+        self.bounds = bounds
+        self.args = [body]
+    def clone(self,args):
+        res = type(self)(self.name,self.bounds,*args)
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
 class This(AST):
     @property
@@ -487,6 +522,7 @@ class LabeledFormula(AST):
         global lf_counter
         self.args = args
         self.id = lf_counter
+        self.temporal = None
         lf_counter += 1
     @property
     def label(self):
@@ -501,6 +537,7 @@ class LabeledFormula(AST):
         res = AST.clone(self,args)
         lf_counter -= 1
         res.id = self.id
+        res.temporal = self.temporal
         return res
 
 class AxiomDecl(Decl):

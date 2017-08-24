@@ -112,7 +112,7 @@ class Module(object):
 
     @property
     def axioms(self):
-        return map(drop_label,self.labeled_axioms)
+        return [drop_label(x) for x in self.labeled_axioms if not x.temporal]
 
     @property
     def conjs(self):

@@ -178,7 +178,7 @@ def p_app_term_infix_term(p):
     'app : term infix term'
     p[0] = App(p[2],p[1],p[3])
     p[0].lineno = get_lineno(p,2)
-    
+
 
 def p_apps_app(p):
     'apps : app'
@@ -255,7 +255,7 @@ def p_relop_gt(p):
 def p_relop_pto(p):
     'relop : PTO'
     p[0] = p[1]
-    
+
 def p_infix_plus(p):
     'infix : PLUS'
     p[0] = p[1]
@@ -296,7 +296,7 @@ def p_fmla_true(p):
     'fmla : TRUE'
     p[0] = And()
     p[0].lineno = get_lineno(p,1)
-    
+
 def p_fmla_false(p):
     'fmla : FALSE'
     p[0] = Or()
@@ -345,4 +345,24 @@ def p_fmla_forall_vars_dot_fmla(p):
 def p_fmla_exists_vars_dot_fmla(p):
     'fmla : EXISTS simplevars DOT fmla'
     p[0] = Exists(p[2],p[4])
+    p[0].lineno = get_lineno(p,1)
+
+def p_fmla_globally_fmla(p):
+    'fmla : GLOBALLY fmla'
+    p[0] = Globally(p[2])
+    p[0].lineno = get_lineno(p,1)
+
+def p_fmla_eventually_fmla(p):
+    'fmla : EVENTUALLY fmla'
+    p[0] = Eventually(p[2])
+    p[0].lineno = get_lineno(p,1)
+
+def p_fmla_binder_vars_dot_fmla(p):
+    'fmla : DOLLAR SYMBOL simplevars DOT fmla'
+    p[0] = Binder(p[2], p[3],p[5])
+    p[0].lineno = get_lineno(p,1)
+
+def p_fmla_binder_dot_fmla(p):
+    'fmla : DOLLAR SYMBOL DOT fmla'
+    p[0] = Binder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)

@@ -8,7 +8,7 @@ from itertools import product, chain
 from functools import partial
 
 from logic import (Var, Const, Apply, Eq, Ite, Not, And, Or, Implies,
-                   Iff, ForAll, Exists, Lambda)
+                   Iff, ForAll, Exists, Lambda, Binder)
 from logic import contains_topsort
 
 
@@ -35,7 +35,7 @@ def used_variables(*terms):
                      Implies, Iff):
         return union(*(used_variables(x) for x in t))
 
-    elif type(t) in (ForAll, Exists, Lambda):
+    elif type(t) in (ForAll, Exists, Lambda, Binder):
         return union(used_variables(t.body), t.variables)
 
     elif hasattr(t,'args'):
@@ -66,7 +66,7 @@ def free_variables(*terms, **kwargs):
                      Implies, Iff):
         return union(*(_free_variables(x) for x in t))
 
-    elif type(t) in (ForAll, Exists, Lambda):
+    elif type(t) in (ForAll, Exists, Lambda, Binder):
         return _free_variables(t.body) - _free_variables(*t.variables)
 
     elif hasattr(t,'args'):
@@ -90,7 +90,7 @@ def bound_variables(*terms):
                      Implies, Iff):
         return union(*(used_variables(x) for x in t))
 
-    elif type(t) in (ForAll, Exists, Lambda):
+    elif type(t) in (ForAll, Exists, Lambda, Binder):
         return union(used_variables(t.body), t.variables)
 
     elif hasattr(t,'args'):
@@ -111,7 +111,7 @@ def used_constants(*terms):
         return frozenset((t,))
 
     elif type(t) in (tuple, Var, Apply, Eq, Ite, Not, And, Or,
-                     Implies, Iff, ForAll, Exists):
+                     Implies, Iff, ForAll, Exists, Lambda, Binder):
         return union(*(used_constants(x) for x in t))
 
     elif hasattr(t,'args'):
@@ -150,7 +150,7 @@ def substitute(t, subs):
     elif type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff):
         return type(t)(*(substitute(x, subs) for x in t))
 
-    elif type(t) in (ForAll, Exists, Lambda):
+    elif type(t) in (ForAll, Exists, Lambda, Binder):
         forbidden_variables = free_variables(*subs.values())
         if forbidden_variables.isdisjoint(t.variables):
             return type(t)(t.variables, substitute(t.body, (
@@ -209,7 +209,7 @@ def substitute_apply(t, subs, by_name=False):
     elif type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff):
         return type(t)(*(_substitute_apply(x) for x in t))
 
-    elif type(t) in (ForAll, Exists):
+    elif type(t) in (ForAll, Exists, Lambda, Binder):
         return type(t)(t.variables, _substitute_apply(t.body, subs=dict(
             (k, v) for k, v in subs.iteritems()
             if k not in t.variables

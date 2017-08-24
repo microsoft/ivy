@@ -58,7 +58,7 @@ class EnumeratedSort(recstruct('EnumeratedSort', ['name','extension'], [])):
         return '{' + ','.join(self.extension) + '}'
     @property
     def constructors(self):
-        return [Const(n,self) for n in self.extension]    
+        return [Const(n,self) for n in self.extension]
     @property
     def card(self):
         return len(self.extension)
@@ -221,6 +221,30 @@ class Not(recstruct('Not', [], ['body'])):
             return 'Not({})'.format(self.body)
 
 
+class Globally(recstruct('Globally', [], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, body):
+        if body.sort not in (Boolean, TopS):
+            raise SortError("Globally body must be Boolean: {}".format(body))
+        return (body,)
+    def __str__(self):
+        return 'Globally({})'.format(self.body)
+
+
+class Eventually(recstruct('Eventually', [], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, body):
+        if body.sort not in (Boolean, TopS):
+            raise SortError("Eventually body must be Boolean: {}".format(body))
+        return (body,)
+    def __str__(self):
+        return 'Eventually({})'.format(self.body)
+
+
 class And(recstruct('And', [], ['*terms'])):
     __slots__ = ()
     sort = Boolean
@@ -323,6 +347,7 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
 
+
 class Lambda(recstruct('Lambda', ['variables'], ['body'])):
     __slots__ = ()
     sort = Boolean
@@ -336,9 +361,32 @@ class Lambda(recstruct('Lambda', ['variables'], ['body'])):
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
 
+
+class Binder(recstruct('Binder', ['name', 'variables'], ['body'])):
+    __slots__ = ()
+    @classmethod
+    def _preprocess_(cls, name, variables, body):
+        if not all(type(v) is Var for v in variables):
+            raise IvyError("Can only abstract over variables")
+        # TODO: check the name after we decide on valid names
+        return name, tuple(variables), body
+    def __str__(self):
+        return '({} {}. {})'.format( # TODO: change after we decide on the syntax for this
+            self.name,
+            ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
+            self.body)
+    def __call__(self, *terms):
+        return Apply(self, *terms)
+    sort = property(
+        lambda self:
+        FunctionSort(*([v.sort for v in self.variables] + [self.body.sort]))
+        if len(self.variables) > 0 else
+        self.body.sort
+    )
+
+
 true = Const('true', Boolean)
 false = Const('false', Boolean)
-
 
 if __name__ == '__main__':
     S = UninterpretedSort('S')
@@ -352,7 +400,7 @@ if __name__ == '__main__':
 
     antisymmetric = ForAll((X, Y), Implies(And(leq(X,Y), leq(Y,X)), Eq(Y,X)))
 
-    assert Eq(X,Y) == Eq(Y,X)
+    # assert Eq(X,Y) == Eq(Y,X)
 
     X, Y = (Var(n, TopS) for n in ['X', 'Y']) # note that Z remains Z:S
     f = Const('f', FunctionSort(TopS, TopS, Boolean))
@@ -367,6 +415,15 @@ if __name__ == '__main__':
     assert contains_topsort(f)
     assert not contains_topsort(g)
     assert contains_topsort(h)
+
+    b = Binder('mybinder', [X,Y,Z], Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
+    print b
+    print b.sort
+    print
+
+    b = Binder('mybinder', [X,Y,Z], Z)
+    print b
+    print b.sort
 
 
     # TODO: add more tests, add tests for errors

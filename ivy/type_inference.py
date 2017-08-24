@@ -9,14 +9,12 @@ Note that the top sorts do not have type variables.
 Type inference identifies variables and constants by name, so any two
 symbols with the same name will be unified, and a SortError will be
 raised if the unification fails.
-
-TODO: add support for Ite and Iff.
 """
 
 from itertools import product, chain
 
 from logic import (Var, Const, Apply, Eq, Ite, Not, And, Or, Implies,
-                   Iff, ForAll, Exists)
+                   Iff, ForAll, Exists, Binder)
 from logic import (UninterpretedSort, FunctionSort, Boolean, TopSort,
                    SortError, contains_topsort, is_polymorphic)
 from logic_util import used_constants, free_variables
@@ -209,13 +207,31 @@ def infer_sorts(t, env=None):
             body_t(),
         )
 
+    elif type(t) is Binder:
+        # create a copy of the environment and shadow that quantified
+        # variables
+        env = env.copy()
+        env.update((v.name, SortVar()) for v in t.variables)
+        xys = [infer_sorts(v, env) for v in t.variables]
+        vars_s = [x for x,y in xys]
+        vars_t = [y for x,y in xys]
+        body_s, body_t = infer_sorts(t.body, env)
+        return (
+            FunctionSort(vars_s + [body_s]) if len(t.variables) > 0 else body_s,
+            lambda: Binder(
+                t.name,
+                [x() for x in vars_t],
+                body_t(),
+            )
+        )
+
     elif hasattr(t,'clone'):
         xys = [infer_sorts(tt, env) for tt in t.args]
         terms_t = [y for x, y in xys]
         return TopSort(), lambda: t.clone([
             x() for x in terms_t
         ])
-        
+
     else:
         assert False, type(t)
 
@@ -296,6 +312,31 @@ if __name__ == '__main__':
     cf4 = concretize_sorts(f4)
     print repr(f4)
     print repr(cf4)
+    print
+
+    # alpha = SortVar()
+    # polyfS = FunctionSort(alpha, alpha)
+    # polyf = Const('ff', polyfS)
+    # f5 = (ps(xs)))
+    # cf5 = concretize_sorts(f5)
+    # print repr(f5)
+    # print repr(cf5)
+    # print
+
+    f6 = Binder('mybinder', [XT], ps(XT))
+    cf6 = concretize_sorts(f6)
+    print repr(f6)
+    print f6.sort
+    print repr(cf6)
+    print cf6.sort
+    print
+
+    f7 = Binder('mybinder', [], ps(XT))
+    cf7 = concretize_sorts(f7)
+    print repr(f7)
+    print f7.sort
+    print repr(cf7)
+    print cf7.sort
     print
 
 

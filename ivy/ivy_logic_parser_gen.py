@@ -7,6 +7,7 @@ import ply.yacc as yacc
 # Parser for formulas
 
 precedence = (
+    ('left', 'GLOBALLY', 'EVENTUALLY'),
     ('left', 'IF'),
     ('left', 'ELSE'),
     ('left', 'OR'),
@@ -19,6 +20,7 @@ precedence = (
     ('left', 'MINUS'),
     ('left', 'TIMES'),
     ('left', 'DIV'),
+    ('left', 'DOLLAR'),
 )
 
 from ivy_logic_parser import *
