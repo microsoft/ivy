@@ -14,8 +14,17 @@ from ivy_printer import print_module
 from ivy_actions import (AssignAction, Sequence, ChoiceAction,
                          AssumeAction, AssertAction, concat_actions)
 import logic as lg
+import ivy_logic_utils as ilu
+
+def forall(vs, body):
+    return lg.ForAll(vs, body) if len(vs) > 0 else body
+
 
 def l2s(mod, lf):
+
+    print ilu.used_symbols_asts(mod.labeled_conjs)
+    print '='*40
+    print list(ilu.named_binders_asts(mod.labeled_conjs))
     # modify mod in place
 
     l2s_waiting = lg.Const('l2s_waiting', lg.Boolean)
@@ -23,8 +32,8 @@ def l2s(mod, lf):
     l2s_saved = lg.Const('l2s_saved', lg.Boolean)
     l2s_d = lambda sort: lg.Const('l2s_d',lg.FunctionSort(sort,lg.Boolean))
     l2s_a = lambda sort: lg.Const('l2s_a',lg.FunctionSort(sort,lg.Boolean))
-    l2s_w = lambda x: lg.Binder('l2s_w', [], x)
-    l2s_s = lambda vs, t: lg.Binder('l2s_s', vs, t)
+    l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, t)
+    l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, t)
 
     uninterpreted_sorts = [s for s in mod.sig.sorts.values() if type(s) is lg.UninterpretedSort]
 
@@ -49,20 +58,20 @@ def l2s(mod, lf):
         for vs in [tuple(lg.Var('X{}'.format(i), s) for i,s in enumerate(f.sort.domain))]
     ]
     done_waiting = [
-        lg.ForAll(vs, lg.Not(l2s_w(t))) if len(vs) > 0 else lg.Not(l2s_w(t))
+        forall(vs, lg.Not(l2s_w(vs,t)(*vs)))
         for vs, t in wait_for
     ]
     reset_w = [
         AssignAction(
-            l2s_w(t),
+            l2s_w(vs,t)(*vs),
             lg.And(*(l2s_d(v.sort)(v) for v in vs))
         )
         for vs, t in wait_for
     ]
     update_w = [
         AssignAction(
-            l2s_w(t),
-            lg.And(l2s_w(t), lg.Not(t), lg.Not(lg.Globally(lg.Not(t))))
+            l2s_w(vs,t)(*vs),
+            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), lg.Not(lg.Globally(lg.Not(t))))
         )
         for vs, t in wait_for
     ]
@@ -76,7 +85,7 @@ def l2s(mod, lf):
         else:
             to_save.append(((), f))
     save_state = [
-        AssignAction(l2s_s(vs,t)(*vs) if len(vs) > 0 else l2s_s(vs,t), t)
+        AssignAction(l2s_s(vs,t)(*vs), t)
         for vs, t in to_save
     ]
 
@@ -90,7 +99,23 @@ def l2s(mod, lf):
         if len(vs) > 0 else
         lg.Iff(l2s_s(vs, t), t)
         for vs, t in to_save
-        if t.sort == lg.Boolean or isinstance(t.sort, lg.FunctionSort) and t.sort.range == lg.Boolean
+        if (t.sort == lg.Boolean or
+            isinstance(t.sort, lg.FunctionSort) and t.sort.range == lg.Boolean
+        )
+    ]
+    fair_cycle += [
+        forall(vs, lg.Implies(
+            lg.And(*(
+                [l2s_a(v.sort)(v) for v in vs] +
+                [lg.Or(l2s_a(t.sort)(l2s_s(vs, t)(*vs)),
+                       l2s_a(t.sort)(t))]
+            )),
+            lg.Eq(l2s_s(vs, t)(*vs), t)
+        ))
+        for vs, t in to_save
+        if (isinstance(t.sort, lg.UninterpretedSort) or
+            isinstance(t.sort, lg.FunctionSort) and isinstance(t.sort.range, lg.UninterpretedSort)
+        )
     ]
 
     edge = lambda s1, s2: [
@@ -120,6 +145,7 @@ def l2s(mod, lf):
         for s in uninterpreted_sorts
         for c in mod.sig.symbols.values() if c.sort == s
     ]
+    # TODO add all ground terms, not just consts (if stratified)
 
     # TODO: add conjectures that constants are in d and a
 

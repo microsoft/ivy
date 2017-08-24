@@ -57,6 +57,7 @@ object ticket_protocol = {
     individual service:ticket
     individual next_ticket:ticket
     relation m(T:thread, K:ticket)  # use relation and not a function to be in EPR
+    individual testfunction(K:ticket):thread  # use relation and not a function to be in EPR
 
     init pc1(T)
     init ~pc2(T)
@@ -72,9 +73,8 @@ object ticket_protocol = {
     #temporal property [nonstravation]   forall T:thread. globally  pc2(T) -> eventually pc3(T)
     # proof of nonstravation by l2s {
     temporal property ($l2s_w. request_flag) <-> ~request_flag
-    #     conjecture l2s_frozen -> request_flag
-    #     conjecture l2s_saved -> request_flag
-    # }
+    conjecture l2s_frozen -> request_flag
+    conjecture l2s_saved -> request_flag
     temporal axiom [fairness] forall T:thread. globally eventually pc1(T)
     #axiom [fairness] forall T:thread. globally eventually pc1(T)
     # temporal axiom [fairness] forall T:thread. globally eventually (
@@ -85,6 +85,8 @@ object ticket_protocol = {
     # )
     # # naming for use in the inductive invariant
     # let t0 = nonstravation.T
+    individual t0:thread
+    relation last_scheduled(T:thread)
     # let request_flag = pc2(t0) & globally ~pc3(t0)
     # let last_scheduled(T) = (
     #     (exists K1,K2. after step12(T,K1,K2)) |
@@ -185,29 +187,29 @@ object ticket_protocol = {
     #
     # The liveness to safety construction introduces the following symbols:
     #
-    # relation   nonstravation.l2s.waiting
-    # relation   nonstravation.l2s.frozen
-    # relation   nonstravation.l2s.saved
+    # relation   nonstravation.l2s_waiting
+    # relation   nonstravation.l2s_frozen
+    # relation   nonstravation.l2s_saved
     #
-    # relation   nonstravation.l2s.d_thread(T:thread)
-    # relation   nonstravation.l2s.d_ticket(K:ticket)
+    # relation   nonstravation.l2s_d_thread(T:thread)
+    # relation   nonstravation.l2s_d_ticket(K:ticket)
     #
-    # relation   nonstravation.l2s.a_thread(T:thread)
-    # relation   nonstravation.l2s.a_ticket(K:ticket)
+    # relation   nonstravation.l2s_a_thread(T:thread)
+    # relation   nonstravation.l2s_a_ticket(K:ticket)
     #
-    # relation   nonstravation.l2s.w[phi] for phi in FO-LTL(original vocabulary)
-    # relation   nonstravation.l2s.wa[A] for A in fair-actions = {step12(T,K1,K2),
+    # relation   nonstravation.l2s_w[phi] for phi in FO-LTL(original vocabulary)
+    # relation   nonstravation.l2s_wa[A] for A in fair-actions = {step12(T,K1,K2),
     #                                                             step22(T,K1),
     #                                                             step23(T,K1),
     #                                                             step31(T,K1,K2)}
     #
-    # relation   nonstravation.l2s.s.pc1(T:thread)
-    # relation   nonstravation.l2s.s.pc2(T:thread)
-    # relation   nonstravation.l2s.s.pc3(T:thread)
-    # individual nonstravation.l2s.s.service : ticket
-    # individual nonstravation.l2s.s.next_ticket : ticket
-    # relation   nonstravation.l2s.s.m(T:thread, K:ticket)
-    # relation   nonstravation.l2s.s.[phi] for phi in FO-LTL(original vocabulary)
+    # relation   nonstravation.l2s_s.pc1(T:thread)
+    # relation   nonstravation.l2s_s.pc2(T:thread)
+    # relation   nonstravation.l2s_s.pc3(T:thread)
+    # individual nonstravation.l2s_s.service : ticket
+    # individual nonstravation.l2s_s.next_ticket : ticket
+    # relation   nonstravation.l2s_s.m(T:thread, K:ticket)
+    # relation   nonstravation.l2s_s.[phi] for phi in FO-LTL(original vocabulary)
     #
     ################################################################################
 
@@ -220,72 +222,74 @@ object ticket_protocol = {
 
 
     # all safety conjectures for saved state are autumatically added
-    # conjecture X.l2s.saved -> phi(X.l2s.s) for phi in conjectures over original vocabulary
+    # conjecture X.l2s_saved -> phi(X.l2s_s) for phi in conjectures over original vocabulary
 
     # # basic
-    # conjecture nonstravation.l2s.w[request_flag] <-> ~request_flag
-    # conjecture nonstravation.l2s.frozen -> request_flag
-    # conjecture nonstravation.l2s.saved -> request_flag
-    # conjecture request_flag -> pc2(t0)
-    # conjecture nonstravation.l2s.saved -> nonstravation.l2s.s_m(t0,K) <-> m(t0,K)
-    # conjecture nonstravation.l2s.saved -> le(nonstravation.l2s.s_service, service)
+    conjecture ($l2s_w. request_flag) <-> ~request_flag
+    conjecture l2s_frozen -> request_flag
+    conjecture l2s_saved -> request_flag
+    conjecture request_flag -> pc2(t0)
+    conjecture l2s_saved -> ($l2s_s X,Y. m(X,Y))(t0,K) <-> m(t0,K)
+    conjecture ($l2s_s X, Y. m(X,Y))(X,Y)
+    conjecture ($l2s_w X, Y. m(X,Y))(X,Y)
+    conjecture l2s_saved -> le( ($ l2s_s . service) , service)
 
     # # more properties of reachable protocol states
-    # conjecture pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
-    # conjecture forall K:ticket. ~le(next_ticket, K) & le(service, K) ->
-    #     exists T:thread. m(T,K) & ~pc1(T)
-    #  conjecture exists M. m(t0, M)
+    conjecture pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
+    conjecture forall K:ticket. ~le(next_ticket, K) & le(service, K) ->
+        exists T:thread. m(T,K) & ~pc1(T)
+     conjecture exists M. m(t0, M)
     # # their saved counterpars are automatically added
 
-    # # conjecture that nonstravation.l2s.d is large enough
-    # conjecture nonstravation.l2s.d_thread(t0)
-    # conjecture ~pc1(T) -> nonstravation.l2s.d_thread(T)
-    # conjecture le(K,next_ticket) -> nonstravation.l2s.d_ticket(K)
-    # # conjecture that nonstravation.l2s.a is large enough
-    # conjecture ~nonstravation.l2s.waiting -> nonstravation.l2s.a_thread(t0)
-    # conjecture ~nonstravation.l2s.waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> nonstravation.l2s.a_thread(T)
-    # conjecture ~nonstravation.l2s.waiting & m(t0,K0) & le(K,K0) -> nonstravation.l2s.a_ticket(K)
+    # conjecture that l2s_d is large enough
+    conjecture l2s_d(t0)
+    conjecture ~pc1(T) -> l2s_d(T)
+    conjecture le(K,next_ticket) -> l2s_d(K)
+    # conjecture that l2s_a is large enough
+    conjecture ~l2s_waiting -> l2s_a(t0)
+    conjecture ~l2s_waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> l2s_a(T)
+    conjecture ~l2s_waiting & m(t0,K0) & le(K,K0) -> l2s_a(K)
 
-    # # thread that have not been scheduled have not changed
-    # # conjecture l2s.saved & l2s.w_last_scheduled(T) -> (l2s.s_pc1(T) <-> pc1(T))
-    # # conjecture l2s.saved & l2s.w_last_scheduled(T) -> (l2s.s_pc2(T) <-> pc2(T))
-    # # conjecture l2s.saved & l2s.w_last_scheduled(T) -> (l2s.s_pc3(T) <-> pc3(T))
-    # # conjecture l2s.saved & l2s.w_last_scheduled(T) -> (l2s.s_m(T,K) <-> m(T,K))
-    # # this now will be written as:
-    # conjecture (nonstravation.l2s.saved &
-    #             nonstravation.l2s.s.pc1(T) &
-    #             nonstravation.l2s.wa[step12(T,K1,K2)] problem with K1,K2 not being in d_...
-    # # for now, try with last_scheduled
-    # conjecture nonstravation.l2s.saved & nonstravation.l2s.w[last_scheduled](T) -> (
-    #     (nonstravation.l2s.s_pc1(T) <-> pc1(T)) &
-    #     (nonstravation.l2s.s_pc2(T) <-> pc2(T)) &
-    #     (nonstravation.l2s.s_pc3(T) <-> pc3(T)) &
-    #     (nonstravation.l2s.s_m(T,K) <-> m(T,K))
-    # )
+    # thread that have not been scheduled have not changed
+    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc1(T) <-> pc1(T))
+    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc2(T) <-> pc2(T))
+    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc3(T) <-> pc3(T))
+    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_m(T,K) <-> m(T,K))
+    # this now will be written as:
+    # conjecture (l2s_saved &
+    #             l2s_s.pc1(T) &
+    #             l2s_wa[step12(T,K1,K2)] problem with K1,K2 not being in d_...
+    # for now, try with last_scheduled
+    conjecture l2s_saved & ($l2s_w T. last_scheduled(T))(T) -> (
+        (($l2s_s T. pc1(T))(T) <-> pc1(T)) &
+        (($l2s_s T. pc2(T))(T) <-> pc2(T)) &
+        (($l2s_s T. pc3(T))(T) <-> pc3(T)) &
+        (($l2s_s T,K. m(T,K))(T,K) <-> m(T,K))
+    )
 
-    # # the thread that must advance - the thread that had the service as its local ticket at the save point
-    # conjecture (
-    #     nonstravation.l2s.saved &
-    #     nonstravation.l2s.s_m(T,nonstravation.l2s.s_service) &
-    #     ~nonstravation.l2s.w[last_scheduled](T) &
-    #     nonstravation.l2s.s_pc2(T) &
-    #     m(T,K) &
-    #     m(t0,K0)
-    # ) -> (
-    #     (pc1(T) & K = nonstravation.l2s.s_service) |
-    #     (pc2(T) & ~le(K,K0)) |
-    #     (pc3(T) & K = nonstravation.l2s.s_service)
-    # )
-    # conjecture (
-    #     nonstravation.l2s.saved &
-    #     nonstravation.l2s.s_m(T,nonstravation.l2s.s_service) &
-    #     ~nonstravation.l2s.w[last_scheduled](T) &
-    #     nonstravation.l2s.s_pc3(T) &
-    #     m(T,K) &
-    #     m(t0,K0)
-    # ) -> (
-    #     (pc1(T) & K = nonstravation.l2s.s_service & ~le(service, nonstravation.l2s.s_service)) |
-    #     (pc2(T) & ~le(K,K0))
-    # )
+    # the thread that must advance - the thread that had the service as its local ticket at the save point
+    conjecture (
+        l2s_saved &
+        ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+        ~($l2s_w T. last_scheduled(T))(T) &
+        ($l2s_s T. pc2(T))(T) &
+        m(T,K) &
+        m(t0,K0)
+    ) -> (
+        (pc1(T) & K = ($l2s_s. service)) |
+        (pc2(T) & ~le(K,K0)) |
+        (pc3(T) & K = ($l2s_s. service))
+    )
+    conjecture (
+        l2s_saved &
+        ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+        ~($l2s_w T. last_scheduled(T))(T) &
+        ($l2s_s T. pc3(T))(T) &
+        m(T,K) &
+        m(t0,K0)
+    ) -> (
+        (pc1(T) & K = ($l2s_s. service) & ~le(service, ($l2s_s. service))) |
+        (pc2(T) & ~le(K,K0))
+    )
 
 }

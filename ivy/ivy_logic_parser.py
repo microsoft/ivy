@@ -357,12 +357,16 @@ def p_fmla_eventually_fmla(p):
     p[0] = Eventually(p[2])
     p[0].lineno = get_lineno(p,1)
 
-def p_fmla_binder_vars_dot_fmla(p):
-    'fmla : DOLLAR SYMBOL simplevars DOT fmla'
-    p[0] = Binder(p[2], p[3],p[5])
+def p_term_namedbinder_vars_dot_fmla(p):
+    'term : LPAREN DOLLAR SYMBOL simplevars DOT fmla RPAREN LPAREN terms RPAREN'
+    x = NamedBinder(p[3], p[4],p[6])
+    x.lineno = get_lineno(p,2)
+    p[0] = App(x, p[9])
+    p[0].lineno = get_lineno(p,2)
+
+def p_term_namedbinder_dot_fmla(p):
+    'term : DOLLAR SYMBOL DOT fmla'
+    p[0] = NamedBinder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)
 
-def p_fmla_binder_dot_fmla(p):
-    'fmla : DOLLAR SYMBOL DOT fmla'
-    p[0] = Binder(p[2], [],p[4])
-    p[0].lineno = get_lineno(p,1)
+# TODO: should the above rules create formulas also or only for terms

@@ -183,7 +183,7 @@ class Forall(Quantifier):
 class Exists(Quantifier):
     pass
 
-class Binder(Formula):
+class NamedBinder(Formula):
     def __init__(self, name, bounds, body):
         self.name = name
         self.bounds = bounds
@@ -1182,17 +1182,22 @@ def ast_rewrite(x,rewrite):
         return Variable(x.rep,rewrite_sort(rewrite,x.sort))
     if isinstance(x,Atom) or isinstance(x,App):
 #        print "rewrite: x = {!r}, type(x.rep) = {!r}".format(x,type(x.rep))
-        atom = type(x)(rewrite.rewrite_name(x.rep),ast_rewrite(x.args,rewrite))
+        if isinstance(x.rep, NamedBinder):
+            atom = type(x)(ast_rewrite(x.rep,rewrite),ast_rewrite(x.args,rewrite))
+        else:
+            atom = type(x)(rewrite.rewrite_name(x.rep),ast_rewrite(x.args,rewrite))
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
             atom.sort = rewrite_sort(rewrite,x.sort)
-        if base_name_differs(x.rep,atom.rep):
+        if isinstance(x.rep, NamedBinder) or base_name_differs(x.rep,atom.rep):
             return atom
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
         return Literal(x.polarity,ast_rewrite(x.atom,rewrite))
-    if isinstance(x,Quantifier):
+    if isinstance(x, Quantifier):
         return type(x)(ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
+    if isinstance(x, NamedBinder):
+        return type(x)(x.name,ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
     if hasattr(x,'rewrite'):
         return x.rewrite(rewrite)
     if isinstance(x,LabeledFormula) or isinstance(x,NativeDef):

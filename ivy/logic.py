@@ -116,7 +116,7 @@ class Var(recstruct('Var', ['name', 'sort'], [])):
     def __str__(self):
         return self.name
     def __call__(self, *terms):
-        return Apply(self, *terms)
+        return Apply(self, *terms) if len(terms) > 0 else self
 
 
 class Const(recstruct('Const', ['name', 'sort'], [])):
@@ -129,7 +129,7 @@ class Const(recstruct('Const', ['name', 'sort'], [])):
     def __str__(self):
         return self.name
     def __call__(self, *terms):
-        return Apply(self, *terms)
+        return Apply(self, *terms) if len(terms) > 0 else self
 
 
 class Apply(recstruct('Apply', [], ['func', '*terms'])):
@@ -321,6 +321,8 @@ class ForAll(recstruct('ForAll', ['variables'], ['body'])):
     sort = Boolean
     @classmethod
     def _preprocess_(cls, variables, body):
+        if len(variables) == 0:
+            raise IvyError("Must quantify over at least one variable")
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only quantify over variables")
         if body.sort not in (Boolean, TopS):
@@ -337,6 +339,8 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
     sort = Boolean
     @classmethod
     def _preprocess_(cls, variables, body):
+        if len(variables) == 0:
+            raise IvyError("Must quantify over at least one variable")
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only quantify over variables")
         if body.sort not in (Boolean, TopS):
@@ -362,7 +366,7 @@ class Lambda(recstruct('Lambda', ['variables'], ['body'])):
             self.body)
 
 
-class Binder(recstruct('Binder', ['name', 'variables'], ['body'])):
+class NamedBinder(recstruct('NamedBinder', ['name', 'variables'], ['body'])):
     __slots__ = ()
     @classmethod
     def _preprocess_(cls, name, variables, body):
@@ -371,12 +375,12 @@ class Binder(recstruct('Binder', ['name', 'variables'], ['body'])):
         # TODO: check the name after we decide on valid names
         return name, tuple(variables), body
     def __str__(self):
-        return '({} {}. {})'.format( # TODO: change after we decide on the syntax for this
+        return '(${} {}. {})'.format( # TODO: change after we decide on the syntax for this
             self.name,
             ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
             self.body)
     def __call__(self, *terms):
-        return Apply(self, *terms)
+        return Apply(self, *terms) if len(terms) > 0 else self
     sort = property(
         lambda self:
         FunctionSort(*([v.sort for v in self.variables] + [self.body.sort]))
@@ -416,12 +420,12 @@ if __name__ == '__main__':
     assert not contains_topsort(g)
     assert contains_topsort(h)
 
-    b = Binder('mybinder', [X,Y,Z], Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
+    b = NamedBinder('mybinder', [X,Y,Z], Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
     print b
     print b.sort
     print
 
-    b = Binder('mybinder', [X,Y,Z], Z)
+    b = NamedBinder('mybinder', [X,Y,Z], Z)
     print b
     print b.sort
 

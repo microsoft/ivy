@@ -14,7 +14,7 @@ raised if the unification fails.
 from itertools import product, chain
 
 from logic import (Var, Const, Apply, Eq, Ite, Not, And, Or, Implies,
-                   Iff, ForAll, Exists, Binder)
+                   Iff, ForAll, Exists, NamedBinder)
 from logic import (UninterpretedSort, FunctionSort, Boolean, TopSort,
                    SortError, contains_topsort, is_polymorphic)
 from logic_util import used_constants, free_variables
@@ -207,7 +207,7 @@ def infer_sorts(t, env=None):
             body_t(),
         )
 
-    elif type(t) is Binder:
+    elif type(t) is NamedBinder:
         # create a copy of the environment and shadow that quantified
         # variables
         env = env.copy()
@@ -217,8 +217,8 @@ def infer_sorts(t, env=None):
         vars_t = [y for x,y in xys]
         body_s, body_t = infer_sorts(t.body, env)
         return (
-            FunctionSort(vars_s + [body_s]) if len(t.variables) > 0 else body_s,
-            lambda: Binder(
+            FunctionSort(*(vars_s + [body_s])) if len(t.variables) > 0 else body_s,
+            lambda: NamedBinder(
                 t.name,
                 [x() for x in vars_t],
                 body_t(),
@@ -323,7 +323,7 @@ if __name__ == '__main__':
     # print repr(cf5)
     # print
 
-    f6 = Binder('mybinder', [XT], ps(XT))
+    f6 = NamedBinder('mybinder', [XT], ps(XT))
     cf6 = concretize_sorts(f6)
     print repr(f6)
     print f6.sort
@@ -331,7 +331,7 @@ if __name__ == '__main__':
     print cf6.sort
     print
 
-    f7 = Binder('mybinder', [], ps(XT))
+    f7 = NamedBinder('mybinder', [], ps(XT))
     cf7 = concretize_sorts(f7)
     print repr(f7)
     print f7.sort

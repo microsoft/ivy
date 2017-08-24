@@ -223,7 +223,7 @@ def compile_app(self):
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
-    sym = ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False)
+    sym = self.rep.cmpl() if isinstance(self.rep,ivy_ast.NamedBinder) else ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False) 
     if sym is not None:
         return (sym)(*args)
     res = compile_field_reference(self.rep,args)
@@ -254,7 +254,7 @@ def cquant(q):
 
 ivy_ast.Quantifier.cmpl = lambda self: cquant(self)([v.compile() for v in self.bounds],self.args[0].compile())
 
-ivy_ast.Binder.cmpl = lambda self: ivy_logic.Binder(
+ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
     [v.compile() for v in self.bounds],
     self.args[0].compile()

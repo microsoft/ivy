@@ -183,7 +183,7 @@ def rename_ast(ast,subs):
     a sort conflict.
     """
     args = [rename_ast(x,subs) for x in ast.args]
-    if is_app(ast):
+    if is_app(ast) and not is_named_binder(ast):
         return subs.get(ast.rep,ast.rep)(*args)
     return ast.clone(args)
 
@@ -322,9 +322,25 @@ uses_constants_clauses = uses_constants_cubes = any_in(constants_clauses)
 
 def symbols_ast(ast):
     if is_app(ast):
-        yield ast.rep
+        if is_binder(ast.rep):
+            for x in symbols_ast(ast.rep.body):
+                yield x
+        else:
+            yield ast.rep
     for arg in ast.args:
         for x in symbols_ast(arg):
+            yield x
+
+def named_binders_ast(ast):
+    if is_named_binder(ast):
+        yield ast
+    elif is_app(ast):
+        if is_named_binder(ast.rep):
+            yield ast.rep
+            for x in named_binders_ast(ast.rep.body):
+                yield x
+    for arg in ast.args:
+        for x in named_binders_ast(arg):
             yield x
 
 # extend to clauses, etc...
@@ -332,6 +348,8 @@ def symbols_ast(ast):
 
 symbols_asts = symbols_clause = symbols_cube = apply_gen_to_list(symbols_ast)
 symbols_clauses = symbols_cubes = apply_gen_to_clauses(symbols_ast)
+
+named_binders_asts = apply_gen_to_list(named_binders_ast)
 
 # get set of symbols occurring
 
@@ -1134,7 +1152,7 @@ def eqcm_upd(lhs,rhs,symset,map2):
         del l[:]
         return True
     return False
-    
+
 def exists_quant_clauses_map(syms,clauses):
     used = used_symbols_clauses(clauses)
     symset = set(syms)
@@ -1179,13 +1197,13 @@ def true_clauses():
 instantiator = None
 
 def definition_instances(fmla):
-    if instantiator != None: 
+    if instantiator != None:
         gts = ground_apps_ast(fmla)
         return instantiator(gts)
     return Clauses([])
 
 def unfold_definitions_clauses(clauses):
-    if instantiator != None: 
+    if instantiator != None:
         gts = ground_apps_clauses(clauses)
         insts = instantiator(gts)
         if insts.fmlas:
@@ -1199,7 +1217,7 @@ def dual_clauses(clauses, skolemizer=None):
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     clauses = substitute_clauses(clauses,sksubs)
     fmla = negate(clauses_to_formula(clauses))
-    if instantiator != None: 
+    if instantiator != None:
         gts = ground_apps_clauses(clauses)
         insts = instantiator(gts)
         fmla = And(fmla,clauses_to_formula(insts))
@@ -1211,7 +1229,7 @@ def dual_formula(fmla, skolemizer=None):
     vs = used_variables_in_order_ast(fmla)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     fmla = negate(substitute_ast(fmla,sksubs))
-    if instantiator != None: 
+    if instantiator != None:
         gts = ground_apps_ast(fmla)
         insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
@@ -1226,7 +1244,7 @@ def skolemize_formula(fmla, skolemizer=None):
         fmla = fmla.body
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     fmla = substitute_ast(fmla,sksubs)
-    if instantiator != None: 
+    if instantiator != None:
         gts = ground_apps_ast(fmla)
         insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
