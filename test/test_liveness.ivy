@@ -57,7 +57,10 @@ object ticket_protocol = {
     individual service:ticket
     individual next_ticket:ticket
     relation m(T:thread, K:ticket)  # use relation and not a function to be in EPR
-    individual testfunction(K:ticket):thread  # use relation and not a function to be in EPR
+    # individual testfunction(K:ticket):thread  # use relation and not a function to be in EPR
+
+    individual t0:thread
+    relation last_scheduled(T:thread)
 
     init pc1(T)
     init ~pc2(T)
@@ -65,17 +68,17 @@ object ticket_protocol = {
     init service = zero
     init next_ticket = zero
     init m(T,K) <-> K = zero
-
-    relation request_flag
+    init ~last_scheduled(T)
 
     # temporal specification
-    temporal property [mutualexclusion] globally forall T1,T2. pc3(T1) & pc3(T2) -> T1 = T2
-    #temporal property [nonstravation]   forall T:thread. globally  pc2(T) -> eventually pc3(T)
+    temporal axiom [fairness] forall T:thread. globally eventually last_scheduled(T)
+    # temporal property [mutualexclusion] globally forall T1,T2. pc3(T1) & pc3(T2) -> T1 = T2
+    # temporal property [nonstravation]   forall T:thread. globally (pc2(T) -> eventually pc3(T)) # TODO parsing precedence bug
+    temporal property [nonstravation] globally (pc2(t0) -> eventually pc3(t0)) # TODO parsing precedence bug
     # proof of nonstravation by l2s {
-    temporal property ($l2s_w. request_flag) <-> ~request_flag
-    conjecture l2s_frozen -> request_flag
-    conjecture l2s_saved -> request_flag
-    temporal axiom [fairness] forall T:thread. globally eventually pc1(T)
+    # conjecture ($l2s_w. (pc2(t0) & (globally ~pc3(t0)))) <-> ~(pc2(t0) & (globally ~pc3(t0)))
+    # conjecture l2s_frozen -> (pc2(t0) & (globally ~pc3(t0)))
+    # conjecture l2s_saved -> (pc2(t0) & (globally ~pc3(t0)))
     #axiom [fairness] forall T:thread. globally eventually pc1(T)
     # temporal axiom [fairness] forall T:thread. globally eventually (
     #     (exists K1,K2. after step12(T,K1,K2)) |
@@ -85,8 +88,6 @@ object ticket_protocol = {
     # )
     # # naming for use in the inductive invariant
     # let t0 = nonstravation.T
-    individual t0:thread
-    relation last_scheduled(T:thread)
     # let request_flag = pc2(t0) & globally ~pc3(t0)
     # let last_scheduled(T) = (
     #     (exists K1,K2. after step12(T,K1,K2)) |
@@ -126,13 +127,15 @@ object ticket_protocol = {
         next_ticket := k2;
         pc1(t) := false;
         pc2(t) := true;
+        last_scheduled(T) := T = t;
     }
 
     action step22(t:thread, k1:ticket) = {
         assume pc2(t);
         assume m(t,k1);
-        assume ~le(k1,service)
+        assume ~le(k1,service);
         # stay in pc2
+        last_scheduled(T) := T = t;
     }
 
     action step23(t:thread, k1:ticket) = {
@@ -141,6 +144,7 @@ object ticket_protocol = {
         assume le(k1,service);
         pc2(t) := false;
         pc3(t) := true;
+        last_scheduled(T) := T = t;
     }
 
     action step31(t:thread, k1:ticket, k2:ticket) = {
@@ -149,7 +153,8 @@ object ticket_protocol = {
         assume k2 = succ(k1);
         service := k2;
         pc3(t) := false;
-        pc1(t) := true
+        pc1(t) := true;
+        last_scheduled(T) := T = t;
     }
 
     export step12
@@ -221,75 +226,100 @@ object ticket_protocol = {
     ################################################################################
 
 
-    # all safety conjectures for saved state are autumatically added
-    # conjecture X.l2s_saved -> phi(X.l2s_s) for phi in conjectures over original vocabulary
+    # # all safety conjectures for saved state are autumatically added
+    # # conjecture X.l2s_saved -> phi(X.l2s_s) for phi in conjectures over original vocabulary
+    conjecture l2s_saved -> ( ($l2s_s T. pc1(T))(T) | ($l2s_s T. pc2(T))(T) | ($l2s_s T. pc3(T))(T) )
+    conjecture l2s_saved -> ( ~($l2s_s T. pc1(T))(T) | ~($l2s_s T. pc2(T))(T) )
+    conjecture l2s_saved -> ( ~($l2s_s T. pc1(T))(T) | ~($l2s_s T. pc3(T))(T) )
+    conjecture l2s_saved -> ( ~($l2s_s T. pc2(T))(T) | ~($l2s_s T. pc3(T))(T) )
+    conjecture l2s_saved -> ( ($l2s_s T,K. m(T,K))(T,K1) & ($l2s_s T,K. m(T,K))(T,K2) -> K1 = K2 )
+    conjecture l2s_saved -> ( ($l2s_s T. pc3(T))(T1) & ($l2s_s T. pc3(T))(T2) -> T1 = T2 )
+    conjecture l2s_saved -> ( ($l2s_s. next_ticket) = ($l2s_s. zero) -> ($l2s_s T,K. m(T,K))(T,($l2s_s. zero)) )
+    conjecture l2s_saved -> ( ($l2s_s. next_ticket) ~= ($l2s_s. zero) & ($l2s_s T,K. m(T,K))(T,M) -> ~($l2s_s K1,K2. le(K1,K2))(($l2s_s. next_ticket),M) )
+    conjecture l2s_saved -> ( (($l2s_s T. pc2(T))(T) | ($l2s_s T. pc3(T))(T)) -> ($l2s_s. next_ticket) ~= ($l2s_s. zero) )
+    conjecture l2s_saved -> ( ($l2s_s T,K. m(T,K))(T1,M) & ($l2s_s T,K. m(T,K))(T2,M) & M ~= ($l2s_s. zero) -> T1 = T2 )
+    conjecture l2s_saved -> ( ($l2s_s T. pc2(T))(T) & ($l2s_s T,K. m(T,K))(T,M) -> ($l2s_s K1,K2. le(K1,K2))(($l2s_s. service),M) )
+    conjecture l2s_saved -> ( ($l2s_s T. pc3(T))(T) -> ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) )
+    conjecture l2s_saved -> ( ($l2s_s K1,K2. le(K1,K2))(($l2s_s. service),($l2s_s. next_ticket)) )
+    conjecture l2s_saved -> ( ~(~($l2s_s T. pc1(T))(T1) & ~($l2s_s T. pc1(T))(T2) & ($l2s_s T,K. m(T,K))(T1,($l2s_s. zero)) & ($l2s_s T,K. m(T,K))(T2,($l2s_s. zero)) & T1 ~= T2) )
+
+    conjecture l2s_saved -> (le(X,Y) <-> ($l2s_s K1,K2. le(K1,K2))(X,Y))
+
+
+    # # for testing
+    # # conjecture ($l2s_s X. globally eventually pc1(X))(Y)
 
     # # basic
-    conjecture ($l2s_w. request_flag) <-> ~request_flag
-    conjecture l2s_frozen -> request_flag
-    conjecture l2s_saved -> request_flag
-    conjecture request_flag -> pc2(t0)
-    conjecture l2s_saved -> ($l2s_s X,Y. m(X,Y))(t0,K) <-> m(t0,K)
-    conjecture ($l2s_s X, Y. m(X,Y))(X,Y)
-    conjecture ($l2s_w X, Y. m(X,Y))(X,Y)
-    conjecture l2s_saved -> le( ($ l2s_s . service) , service)
+    conjecture ~(globally (pc2(t0) -> eventually pc3(t0)))
+    # conjecture eventually (pc2(t0) & globally ~pc3(t0)))
 
-    # # more properties of reachable protocol states
-    conjecture pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
-    conjecture forall K:ticket. ~le(next_ticket, K) & le(service, K) ->
-        exists T:thread. m(T,K) & ~pc1(T)
-     conjecture exists M. m(t0, M)
-    # # their saved counterpars are automatically added
+    conjecture ~($l2s_w. ~(pc2(t0) -> (eventually pc3(t0)))) -> ~(pc2(t0) -> (eventually pc3(t0)))
 
-    # conjecture that l2s_d is large enough
-    conjecture l2s_d(t0)
-    conjecture ~pc1(T) -> l2s_d(T)
-    conjecture le(K,next_ticket) -> l2s_d(K)
-    # conjecture that l2s_a is large enough
-    conjecture ~l2s_waiting -> l2s_a(t0)
-    conjecture ~l2s_waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> l2s_a(T)
-    conjecture ~l2s_waiting & m(t0,K0) & le(K,K0) -> l2s_a(K)
+    # conjecture ($l2s_w. (~(pc2(t0) -> (eventually pc3(t0))))) <-> (~(~(pc2(t0) -> (eventually pc3(t0)))))
+    # conjecture eventually (pc2(t0) & (globally  ~pc3(t0)))
+    # conjecture  ($l2s_w T. (pc2(T) & (globally ~pc3(T))))(t0) -> ~(pc2(t0) & (globally ~pc3(t0)))
+    # conjecture ~($l2s_w T. (pc2(T) & (globally ~pc3(T))))(t0) -> (pc2(t0) & (globally ~pc3(t0)))
+    conjecture l2s_frozen -> (~(pc2(t0) -> (eventually pc3(t0))))
+    conjecture l2s_saved  -> (pc2(t0) & (globally ~pc3(t0)))
+    conjecture l2s_saved  -> ($l2s_s T,K. m(T,K))(t0,K) <-> m(t0,K)
+    conjecture l2s_saved  -> le( ($ l2s_s . service) , service)
 
-    # thread that have not been scheduled have not changed
-    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc1(T) <-> pc1(T))
-    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc2(T) <-> pc2(T))
-    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc3(T) <-> pc3(T))
-    # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_m(T,K) <-> m(T,K))
-    # this now will be written as:
-    # conjecture (l2s_saved &
-    #             l2s_s.pc1(T) &
-    #             l2s_wa[step12(T,K1,K2)] problem with K1,K2 not being in d_...
-    # for now, try with last_scheduled
-    conjecture l2s_saved & ($l2s_w T. last_scheduled(T))(T) -> (
-        (($l2s_s T. pc1(T))(T) <-> pc1(T)) &
-        (($l2s_s T. pc2(T))(T) <-> pc2(T)) &
-        (($l2s_s T. pc3(T))(T) <-> pc3(T)) &
-        (($l2s_s T,K. m(T,K))(T,K) <-> m(T,K))
-    )
+    # # # more properties of reachable protocol states
+    # conjecture pc1(T) & m(T,M) & M ~= zero -> ~le(service, M)
+    # conjecture forall K:ticket. ~le(next_ticket, K) & le(service, K) ->
+    #     exists T:thread. m(T,K) & ~pc1(T)
+    #  conjecture exists M. m(t0, M)
+    # # # their saved counterpars are automatically added
 
-    # the thread that must advance - the thread that had the service as its local ticket at the save point
-    conjecture (
-        l2s_saved &
-        ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
-        ~($l2s_w T. last_scheduled(T))(T) &
-        ($l2s_s T. pc2(T))(T) &
-        m(T,K) &
-        m(t0,K0)
-    ) -> (
-        (pc1(T) & K = ($l2s_s. service)) |
-        (pc2(T) & ~le(K,K0)) |
-        (pc3(T) & K = ($l2s_s. service))
-    )
-    conjecture (
-        l2s_saved &
-        ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
-        ~($l2s_w T. last_scheduled(T))(T) &
-        ($l2s_s T. pc3(T))(T) &
-        m(T,K) &
-        m(t0,K0)
-    ) -> (
-        (pc1(T) & K = ($l2s_s. service) & ~le(service, ($l2s_s. service))) |
-        (pc2(T) & ~le(K,K0))
-    )
+    # # conjecture that l2s_d is large enough
+    # conjecture l2s_d(t0)
+    # conjecture ~pc1(T) -> l2s_d(T)
+    # conjecture le(K,next_ticket) -> l2s_d(K)
+    # # conjecture that l2s_a is large enough
+    # conjecture ~l2s_waiting -> l2s_a(t0)
+    # conjecture ~l2s_waiting & m(T,K) & m(t0,K0) & ~le(K0,K) & ~pc1(T) -> l2s_a(T)
+    # conjecture ~l2s_waiting & m(t0,K0) & le(K,K0) -> l2s_a(K)
+
+    # # thread that have not been scheduled have not changed
+    # # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc1(T) <-> pc1(T))
+    # # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc2(T) <-> pc2(T))
+    # # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_pc3(T) <-> pc3(T))
+    # # conjecture l2s_saved & l2s_w_last_scheduled(T) -> (l2s_s_m(T,K) <-> m(T,K))
+    # # this now will be written as:
+    # # conjecture (l2s_saved &
+    # #             l2s_s.pc1(T) &
+    # #             l2s_wa[step12(T,K1,K2)] problem with K1,K2 not being in d_...
+    # # for now, try with last_scheduled
+    # conjecture l2s_saved & ($l2s_w T. last_scheduled(T))(T) -> (
+    #     (($l2s_s T. pc1(T))(T) <-> pc1(T)) &
+    #     (($l2s_s T. pc2(T))(T) <-> pc2(T)) &
+    #     (($l2s_s T. pc3(T))(T) <-> pc3(T)) &
+    #     (($l2s_s T,K. m(T,K))(T,K) <-> m(T,K))
+    # )
+
+    # # the thread that must advance - the thread that had the service as its local ticket at the save point
+    # conjecture (
+    #     l2s_saved &
+    #     ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+    #     ~($l2s_w X. last_scheduled(X))(T) &
+    #     ($l2s_s T. pc2(T))(T) &
+    #     m(T,K) &
+    #     m(t0,K0)
+    # ) -> (
+    #     (pc1(T) & K = ($l2s_s. service)) |
+    #     (pc2(T) & ~le(K,K0)) |
+    #     (pc3(T) & K = ($l2s_s. service))
+    # )
+    # conjecture (
+    #     l2s_saved &
+    #     ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
+    #     ~($l2s_w T. last_scheduled(T))(T) &
+    #     ($l2s_s T. pc3(T))(T) &
+    #     m(T,K) &
+    #     m(t0,K0)
+    # ) -> (
+    #     (pc1(T) & K = ($l2s_s. service) & ~le(service, ($l2s_s. service))) |
+    #     (pc2(T) & ~le(K,K0))
+    # )
 
 }

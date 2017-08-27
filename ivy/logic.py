@@ -389,8 +389,10 @@ class NamedBinder(recstruct('NamedBinder', ['name', 'variables'], ['body'])):
     )
 
 
-true = Const('true', Boolean)
-false = Const('false', Boolean)
+# true = Const('true', Boolean)
+# false = Const('false', Boolean)
+true = And()
+false = Or()
 
 if __name__ == '__main__':
     S = UninterpretedSort('S')

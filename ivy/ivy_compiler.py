@@ -1171,7 +1171,6 @@ def check_properties(mod):
             from ivy_l2s import l2s
             print "=================" + "\n" * 10
             l2s(mod, prop)
-            assert False
         else:
             mod.labeled_props.append(prop)
             if prop.id in nmap:

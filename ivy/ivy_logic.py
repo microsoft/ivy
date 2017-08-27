@@ -585,6 +585,9 @@ def is_binder(term):
 def is_named_binder(term):
     return isinstance(term, lg.NamedBinder)
 
+def is_temporal(term):
+    return isinstance(term, (lg.Globally, lg.Eventually))
+
 def quantifier_vars(term):
     return term.variables
 

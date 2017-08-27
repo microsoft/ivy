@@ -188,6 +188,48 @@ def rename_ast(ast,subs):
     return ast.clone(args)
 
 
+def replace_temporals_by_named_binder_g_ast(ast, g=lambda vs, t: lg.NamedBinder('g', vs, t)):
+    """
+    Replace temporal operators globally and eventually by a named
+    binder g. Note that temporal operators inside formulas bound by
+    named binders are left unaltered.
+    """
+    if type(ast) == lg.Globally:
+        body = replace_temporals_by_named_binder_g_ast(ast.body, g)
+        # normalize variables
+        subs = dict()
+        vs = []
+        nvs = []
+        for v in variables_ast(ast.body):
+            if v not in subs:
+                nv = lg.Var('V{}'.format(len(subs)), v.sort)
+                subs[v.name] = nv
+                vs.append(v)
+                nvs.append(nv)
+        body = substitute_ast(body, subs)
+        return g(nvs,body)(*vs)
+    elif type(ast) == lg.Eventually:
+        return replace_temporals_by_named_binder_g_ast(lg.Not(lg.Globally(lg.Not(ast.body))), g)
+    else:
+        args = [replace_temporals_by_named_binder_g_ast(x, g) for x in ast.args]
+        return ast.clone(args)
+
+
+def replace_named_binders_ast(ast,subs):
+    """
+    Replace named binders that are present in subs.  Here, subs is a
+    dict from logic.NamedBinder objects to (usually) logic.Const
+    objects. Exception is thrown in case of a sort conflict.
+
+    Note: named binders do not get replaced in formulas bound by named binders!
+    """
+    if is_named_binder(ast):
+        return subs.get(ast,ast)
+    args = [replace_named_binders_ast(x, subs) for x in ast.args]
+    if is_app(ast):
+        return subs.get(ast.rep,ast.rep)(*args)
+    return ast.clone(args)
+
 def resort_sort(sort,subs):
     """
     Substitute sorts for sorts in a sort.
@@ -343,6 +385,18 @@ def named_binders_ast(ast):
         for x in named_binders_ast(arg):
             yield x
 
+def temporals_ast(ast):
+    if is_temporal(ast):
+        yield ast
+    elif is_app(ast):
+        if is_named_binder(ast.rep):
+            for x in temporals_ast(ast.rep.body):
+                yield x
+    for arg in ast.args:
+        for x in temporals_ast(arg):
+            yield x
+
+
 # extend to clauses, etc...
 
 
@@ -350,6 +404,8 @@ symbols_asts = symbols_clause = symbols_cube = apply_gen_to_list(symbols_ast)
 symbols_clauses = symbols_cubes = apply_gen_to_clauses(symbols_ast)
 
 named_binders_asts = apply_gen_to_list(named_binders_ast)
+
+temporals_asts = apply_gen_to_list(temporals_ast)
 
 # get set of symbols occurring
 
