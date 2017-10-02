@@ -66,14 +66,17 @@ ivy_logic.AST.compile = ivy_ast.AST.compile = thing
 ivy_logic.AST.cmpl = ivy_ast.AST.cmpl = other_thing
 
 op_pairs = [
-   (ivy_ast.And,ivy_logic.And),
-   (ivy_ast.Or,ivy_logic.Or),
-   (ivy_ast.Not,ivy_logic.Not),
-   (ivy_ast.And,ivy_logic.And),
-   (ivy_ast.Definition,ivy_logic.Definition),
-   (ivy_ast.Implies,ivy_logic.Implies),
-   (ivy_ast.Iff,ivy_logic.Iff),
-   (ivy_ast.Ite,ivy_logic.Ite)]
+    (ivy_ast.And,ivy_logic.And),
+    (ivy_ast.Or,ivy_logic.Or),
+    (ivy_ast.Not,ivy_logic.Not),
+    (ivy_ast.Globally,ivy_logic.Globally),
+    (ivy_ast.Eventually,ivy_logic.Eventually),
+    (ivy_ast.And,ivy_logic.And),
+    (ivy_ast.Definition,ivy_logic.Definition),
+    (ivy_ast.Implies,ivy_logic.Implies),
+    (ivy_ast.Iff,ivy_logic.Iff),
+    (ivy_ast.Ite,ivy_logic.Ite),
+]
 
 for fc,tc in op_pairs:
     fc.cmpl = lambda self,tc=tc: tc(*[a.compile() for a in self.args])
@@ -220,7 +223,7 @@ def compile_app(self):
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
-    sym = ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False)
+    sym = self.rep.cmpl() if isinstance(self.rep,ivy_ast.NamedBinder) else ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False) 
     if sym is not None:
         return (sym)(*args)
     res = compile_field_reference(self.rep,args)
@@ -250,6 +253,12 @@ def cquant(q):
     return ivy_logic.ForAll if isinstance(q,ivy_ast.Forall) else ivy_logic.Exists
 
 ivy_ast.Quantifier.cmpl = lambda self: cquant(self)([v.compile() for v in self.bounds],self.args[0].compile())
+
+ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
+    self.name,
+    [v.compile() for v in self.bounds],
+    self.args[0].compile()
+)
 
 ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,sortify_with_inference(self.formula)])
 
@@ -1158,6 +1167,10 @@ def check_properties(mod):
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
                 mod.subgoals.append((prop,subgoals))
+        # elif prop.temporal:
+        #     from ivy_l2s import l2s
+        #     print "=================" + "\n" * 10
+        #     l2s(mod, prop)
         else:
             mod.labeled_props.append(prop)
             if prop.id in nmap:

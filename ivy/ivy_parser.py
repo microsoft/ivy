@@ -16,6 +16,7 @@ if not (iu.get_numeric_version() <= [1,2]):
 
     precedence = (
         ('left', 'SEMI'),
+        ('left', 'GLOBALLY', 'EVENTUALLY'),
         ('left', 'IF'),
         ('left', 'ELSE'),
         ('left', 'OR'),
@@ -28,6 +29,7 @@ if not (iu.get_numeric_version() <= [1,2]):
         ('left', 'MINUS'),
         ('left', 'TIMES'),
         ('left', 'DIV'),
+        ('left', 'DOLLAR'),
     )
 
 else:
@@ -151,6 +153,15 @@ def do_insts(ivy,insts):
     if others:
         ivy.declare(InstantiateDecl(*others))
 
+def check_non_temporal(x):
+    assert type(x) is not list
+    if type(x) is LabeledFormula:
+        check_non_temporal(x.args[1])
+        return x
+    elif has_temporal(x):
+        report_error(IvyError(x,"non-temporal formula expected"))
+    else:
+        return x
 
 class Ivy(object):
     def __init__(self):
@@ -227,11 +238,23 @@ def p_labeledfmla_label_fmla(p):
     p[0] = LabeledFormula(Atom(p[1][1:-1],[]),p[2])
     p[0].lineno = get_lineno(p,1)
 
+def p_opttemporal(p):
+    'opttemporal : '
+    p[0] = None
+
+def p_opttemporal_symbol(p):
+    'opttemporal : TEMPORAL'
+    p[0] = True
+
+def addtemporal(lf):
+    lf.temporal = True
+    return lf
+
 def p_top_axiom_labeledfmla(p):
-    'top : top AXIOM labeledfmla'
-    p[0] = p[1]
-    d = AxiomDecl(p[3])
-    d.lineno = get_lineno(p,2)
+    'top : top opttemporal AXIOM labeledfmla'
+    p[0] = check_non_temporal(p[1])
+    d = AxiomDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    d.lineno = get_lineno(p,3)
     p[0].declare(d)
 
 def p_optskolem(p):
@@ -244,15 +267,15 @@ def p_optskolem_symbol(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_top_property_labeledfmla(p):
-    'top : top PROPERTY labeledfmla optskolem optproof'
+    'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    d = PropertyDecl(p[3])
-    d.lineno = get_lineno(p,2)
+    d = PropertyDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    d.lineno = get_lineno(p,3)
     p[0].declare(d)
-    if p[4] is not None:
-        p[0].declare(NamedDecl(p[4]))
     if p[5] is not None:
-        p[0].declare(ProofDecl(p[5]))
+        p[0].declare(NamedDecl(p[5]))
+    if p[6] is not None:
+        p[0].declare(ProofDecl(p[6]))
 
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
@@ -331,7 +354,7 @@ def p_top_macro_atom_eq_lcb_action_rcb(p):
 
 def p_schdefnrhs_fmla(p):
     'schdefnrhs : fmla'
-    p[0] = p[1]
+    p[0] = check_non_temporal(p[1])
 
 def p_schdecl_funcdecl(p):
     'schdecl : FUNCTION funs'
@@ -359,7 +382,7 @@ def p_schdecl_typedecl(p):
 
 def p_schdecl_propdecl(p):
     'schdecl : PROPERTY labeledfmla'
-    p[0] = [p[2]]
+    p[0] = [check_non_temporal(p[2])]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -367,7 +390,7 @@ def p_schconc_defdecl(p):
 
 def p_schconc_propdecl(p):
     'schconc : PROPERTY fmla'
-    p[0] = p[2]
+    p[0] = check_non_temporal(p[2])
 
 def p_schdecls(p):
     'schdecls :'
@@ -577,7 +600,7 @@ def p_match_defn(p):
 
 def p_match_var_eq_fmla(p):
     'match : var EQ fmla'
-    p[0] = Definition(p[1],p[3])
+    p[0] = Definition(p[1],check_non_temporal(p[3]))
     p[0].lineno = get_lineno(p,2)
 
 def p_matches(p):
@@ -643,7 +666,7 @@ def p_top_concept_cdefns(p):
 def p_top_init_fmla(p):
     'top : top INIT labeledfmla'
     p[0] = p[1]
-    d = InitDecl(p[3])
+    d = InitDecl(check_non_temporal(p[3]))
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
@@ -826,7 +849,7 @@ def p_requires(p):
 
 def p_requires_requires_fmla(p):
     'requires : REQUIRES fmla'
-    p[0] = p[2]
+    p[0] = check_non_temporal(p[2])
 
 def p_modifies(p):
     'modifies : '
@@ -850,7 +873,7 @@ def p_modifies_modifies_atoms(p):
 
 def p_ensures_ensures_fmla(p):
     'ensures : ENSURES fmla'
-    p[0] = p[2]
+    p[0] = check_non_temporal(p[2])
 
 if iu.get_numeric_version() <= [1,1]:
   def p_top_action_symbol_eq_loc_action_loc(p):
@@ -1087,7 +1110,7 @@ def p_assert_rhs_lcb_requires_modifies_ensures_rcb(p):
 
 def p_assert_rhs_fmla(p):
     'assert_rhs : fmla'
-    p[0] = p[1]
+    p[0] = check_non_temporal(p[1])
 
 def p_top_assert_symbol_arrow_assert_rhs(p):
     'top : top ASSERT SYMBOL ARROW assert_rhs'
@@ -1315,17 +1338,17 @@ def p_action_sequence(p):
 
 def p_action_assume(p):
     'action : ASSUME fmla'
-    p[0] = AssumeAction(p[2])
+    p[0] = AssumeAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
 def p_action_assert(p):
     'action : ASSERT fmla'
-    p[0] = AssertAction(p[2])
+    p[0] = AssertAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
 def p_action_ensures(p):
     'action : ENSURES fmla'
-    p[0] = EnsuresAction(p[2])
+    p[0] = EnsuresAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
 def p_action_set_lit(p):
@@ -1335,7 +1358,7 @@ def p_action_set_lit(p):
 
 def p_action_term_assign_fmla(p):
     'action : term ASSIGN fmla'
-    p[0] = AssignAction(p[1],p[3])
+    p[0] = AssignAction(p[1],check_non_temporal(p[3]))
     p[0].lineno = get_lineno(p,2)
 
 def p_termtuple_lp_term_comma_terms_rp(p):
@@ -1358,12 +1381,12 @@ if iu.get_numeric_version() <= [1,4]:
 
     def p_action_if_fmla_lcb_action_rcb(p):
         'action : IF fmla sequence'
-        p[0] = IfAction(p[2],p[3])
+        p[0] = IfAction(check_non_temporal(p[2]),p[3])
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_fmla_lcb_action_rcb_else_LCB_action_RCB(p):
         'action : IF fmla sequence ELSE action'
-        p[0] = IfAction(p[2],p[3],p[5])
+        p[0] = IfAction(check_non_temporal(p[2]),p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
@@ -1420,11 +1443,13 @@ else:
 
     def p_action_if_somefmla_lcb_action_rcb(p):
         'action : IF somefmla sequence'
+        p[2] = check_non_temporal(p[2])
         p[0] = IfAction(p[2],fix_if_part(p[2],p[3]))
         p[0].lineno = get_lineno(p,1)
 
     def p_action_if_somefmla_lcb_action_rcb_else_LCB_action_RCB(p):
         'action : IF somefmla sequence ELSE action'
+        p[2] = check_non_temporal(p[2])
         p[0] = IfAction(p[2],fix_if_part(p[2],p[3]),p[5])
         p[0].lineno = get_lineno(p,1)
 
@@ -1435,14 +1460,14 @@ else:
     def p_invariant_invariant_fmla(p):
         'invariants : invariants INVARIANT fmla'
         p[0] = p[1]
-        inv = p[3]
+        inv = check_non_temporal(p[3])
         a = AssertAction(inv)
         a.lineno = get_lineno(p,2)
         p[0].append(a)
 
     def p_action_while_fmla_invariants_lcb_action_rcb(p):
         'action : WHILE fmla invariants sequence'
-        p[0] = WhileAction(*([p[2], p[4]] + p[3]))
+        p[0] = WhileAction(*([check_non_temporal(p[2]), p[4]] + p[3]))
         p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,2]:
@@ -1568,7 +1593,7 @@ if not (iu.get_numeric_version() <= [1,5]):
 
     def p_optinit_assign_fmla(p):
         'optinit : ASSIGN fmla'
-        p[0] = p[2]
+        p[0] = check_non_temporal(p[2])
 
     def p_action_var_opttypedsym_assign_fmla(p):
         'action : VAR opttypedsym optinit'
@@ -1671,7 +1696,7 @@ def p_defnlhs_lp_term_infix_term_rp(p):
 
 def p_defn_atom_fmla(p):
     'defn : defnlhs EQ fmla'
-    p[0] = Definition(app_to_atom(p[1]),p[3])
+    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
     p[0].lineno = get_lineno(p,2)
 
 def p_defn_defnlhs_eq_nativequote(p):
@@ -1703,12 +1728,12 @@ def p_somevarfmla_some_simplevar_dot_fmla(p):
 
 def p_defn_atom_somevarfmla(p):
     'defn : defnlhs EQ somevarfmla'
-    p[0] = Definition(app_to_atom(p[1]),p[3])
+    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
     p[0].lineno = get_lineno(p,2)
 
 def p_expr_fmla(p):
     'expr : LCB fmla RCB'
-    p[0] = NamedSpace(Literal(1,p[2]))
+    p[0] = NamedSpace(Literal(1,check_non_temporal(p[2])))
 
 def p_exprterm_aterm(p):
     'exprterm : aterm'

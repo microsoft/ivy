@@ -549,7 +549,7 @@ def undecided_conjectures(state1):
 
 def false_properties():
     axioms = im.background_theory()
-    props = im.module.labeled_props
+    props = [x for x in im.module.labeled_props if not x.temporal]
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
     aas = ([islvr.Assume(axioms)]
            + [(islvr.Assume if prop.id in subgoalmap else islvr.Assert)

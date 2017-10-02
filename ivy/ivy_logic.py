@@ -66,7 +66,7 @@ from ivy_utils import flatten, IvyError
 import ivy_utils as iu
 import logic as lg
 import logic_util as lu
-from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists,Lambda
+from logic import And,Or,Not,Globally,Eventually,Implies,Iff,Ite,ForAll,Exists,Lambda,NamedBinder
 from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
@@ -121,7 +121,7 @@ class alpha_sort_as_default(sort_as_default):
         self.sort = lg.TopSort('alpha')
 
 def is_numeral_name(s):
-    return s[0].isdigit() or s[0] == '"'    
+    return s[0].isdigit() or s[0] == '"'
 
 Symbol = lg.Const
 
@@ -240,9 +240,9 @@ class Definition(AST):
     def sort(self):
         return lg.Boolean
 
-                
 
-lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda]
+
+lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
@@ -251,10 +251,14 @@ for cls in lg_ops:
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.clone = lambda self,args: type(self)(self.variables,*args)
 
+lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args)
+lg.NamedBinder.rep = property(lambda self: self)
+
 lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
 lg.Apply.args = property(lambda self: self.terms)
 lg.Apply.rep = property(lambda self: self.func)
 lg.Apply.relname = property(lambda self: self.func)
+
 
 for cls in [lg.Apply] + lg_ops:
     cls.is_numeral = lambda self: False
@@ -276,7 +280,11 @@ def is_atom(term):
 
 # note: ivy1 treats instances of a constant in a formula as an app
 def is_app(term):
-    return isinstance(term,App) or isinstance(term,lg.Const)
+    return (
+        isinstance(term,App) or
+        isinstance(term,lg.Const) or
+        isinstance(term,lg.NamedBinder) and len(term.variables) == 0
+    )
 
 def is_rel_app(term):
     return isinstance(term,App) and term.rep.is_relation()
@@ -440,7 +448,7 @@ def is_segregated(fmla):
                 reason_text = "{} is not segrated (variable positions differ)".format(name)
                 return False
     return True
-            
+
 def reason():
     global reason_text
     return reason_text
@@ -492,7 +500,7 @@ def symbols_over_universals(fmlas):
             print fmla
             raise foo
     return syms
-    
+
 def universal_variables_rec(fmla,pos,univs):
     if is_quantifier(fmla):
         if pos == isinstance(fmla,lg.ForAll):
@@ -538,7 +546,7 @@ def is_in_logic(term,logic,unstrat = False):
         if unstrat:
             reason_text = "functions are not stratified"
             return False
-            
+
             if not is_segregated(term):
                 reason_text = "formula is unsegregated"
                 return False
@@ -553,7 +561,7 @@ def is_in_logic(term,logic,unstrat = False):
                 reason_text = "'{}' is iterpreted".format(s)
                 return False
         return True
-        
+
 
 
 def Constant(sym):
@@ -572,7 +580,18 @@ def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
 
 def is_binder(term):
-    return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists) or isinstance(term,lg.Lambda) 
+    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder))
+
+for b in [lg.ForAll,lg.Exists,lg.Lambda]:
+    b.clone_binder = lambda self, variables, body: b(variables,body)
+
+lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
+
+def is_named_binder(term):
+    return isinstance(term, lg.NamedBinder)
+
+def is_temporal(term):
+    return isinstance(term, (lg.Globally, lg.Eventually))
 
 def quantifier_vars(term):
     return term.variables
@@ -609,7 +628,7 @@ def extensionality(destrs):
         c.append(eqn)
     res = Implies(And(*c),Equals(x,y))
     return res
-    
+
 # Return a prediciate stating relation "rel" is a partial function
 def partial_function(rel):
     lsort,rsort = rel.sort.dom
@@ -621,10 +640,10 @@ def partial_function(rel):
 # use a function to an enumerated type to express this constraint.
 # We also include here extensionality for variants, that is to values
 # that point to the same value are the equal. A sore point, however, is that
-# null values may not be equal. 
+# null values may not be equal.
 
 def exclusivity(sort,variants):
-    # partial funciton 
+    # partial funciton
     def pto(s):
         return Symbol('*>',RelationSort([sort,s]))
     excs = [partial_function(pto(s)) for s in variants]
@@ -645,7 +664,7 @@ Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,F
 Variable.rename = lambda self,name: Variable(name,self.sort)
 Variable.resort = lambda self,sort : Variable(self.name,sort)
 
-    
+
 class Literal(AST):
     """
     Either a positive or negative atomic formula. Literals are not
@@ -771,7 +790,7 @@ def TopFunctionSort(arity):
         return lg.TopSort('alpha')
     res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
     return res
-    
+
 TopS = lg.TopS
 
 def apply(symbol,args):
@@ -921,9 +940,16 @@ polymorphic_symbols_list = [
     ('bvand' , [alpha,alpha,alpha]),
     ('bvor' , [alpha,alpha,alpha]),
     ('bvnot' , [alpha,alpha]),
+    # for liveness to safety reduction:
+    ('l2s_waiting', [lg.Boolean]),
+    ('l2s_frozen', [lg.Boolean]),
+    ('l2s_saved', [lg.Boolean]),
+    ('l2s_d', [alpha, lg.Boolean]),
+    ('l2s_a', [alpha, lg.Boolean]),
 ]
 
-polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymorphic_symbols_list)
+polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
+                           for x,y in polymorphic_symbols_list)
 
 polymorphic_macros_map = {
     '<=' : '<',
@@ -942,7 +968,7 @@ def is_macro(term):
 
 def expand_macro(term):
     return macros_expansions[term.func.name](term)
-    
+
 def default_sort():
     ds = sig._default_sort
     if ds != None: return ds
@@ -987,7 +1013,7 @@ def is_constant(term):
 
 def is_variable(term):
     return isinstance(term,lg.Var)
-        
+
 
 def all_concretely_sorted(*terms):
     return True
@@ -999,7 +1025,7 @@ def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
                 if no_error:
                     raise lg.SortError
                 raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
-    
+
 
 def sort_infer(term,sort=None,no_error=False):
     res = concretize_sorts(term,sort)
@@ -1090,14 +1116,17 @@ def fmla_to_str_ambiguous(term):
     return res
 
 def app_ugly(self):
-    name = self.func.name
+    if type(self.func) is lg.NamedBinder:
+        name = str(self.func)
+    else:
+        name = self.func.name
     args = [a.ugly() for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)
     if len(args) == 0:  # shouldn't happen
         return name
     return name + '(' + ','.join(args) + ')'
-    
+
 def nary_ugly(op,args,parens = True):
     res = (' ' + op + ' ').join([a.ugly() for a in args])
     return ('(' + res + ')') if len(args) > 1 and parens else res
@@ -1113,6 +1142,8 @@ lg.Or.ugly = lambda self: nary_ugly('|',self.args) if self.args else 'false'
 lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
                                if type(self.body) is lg.Eq
                                else '~{}'.format(self.body.ugly()))
+lg.Globally.ugly = lambda self: ('globally {}'.format(self.body.ugly()))
+lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
 lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
@@ -1120,12 +1151,15 @@ lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() fo
 lg.Apply.ugly = app_ugly
 
 def quant_ugly(self):
-    res = 'forall ' if isinstance(self,lg.ForAll) else 'exists ' if isinstance(self,lg.Exists) else 'lambda '
+    res = ('forall ' if isinstance(self,lg.ForAll) else
+           'exists ' if isinstance(self,lg.Exists) else
+           'lambda ' if isinstance(self,lg.Lambda) else
+           '$' + self.name + ' ')
     res += ','.join(v.ugly() for v in self.variables)
     res += '. ' + self.body.ugly()
     return res
 
-for cls in [lg.ForAll,lg.Exists, lg.Lambda]:
+for cls in [lg.ForAll,lg.Exists, lg.Lambda, lg.NamedBinder]:
     cls.ugly = quant_ugly
 
 # Drop the type annotations of variables and polymorphic
@@ -1190,13 +1224,16 @@ def quant_drop_annotations(self,inferred_sort,annotated_vars):
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.drop_annotations = quant_drop_annotations
 
+lg.NamedBinder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.NamedBinder(
+    self.name,
+    [v.drop_annotations(False,annotated_vars) for v in self.variables],
+    self.body.drop_annotations(True,annotated_vars)
+)
+
 def default_drop_annotations(self,inferred_sort,annotated_vars):
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 
-for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff]:
-    cls.drop_annotations = default_drop_annotations
- 
-for cls in [lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff,]:
+for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff,]: # should binder be here?
     cls.drop_annotations = default_drop_annotations
 
 def pretty_fmla(self):
@@ -1204,7 +1241,7 @@ def pretty_fmla(self):
     return d.ugly()
 
 for cls in [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists,
-            lg.Apply, lg.Var, lg.Const, lg.Lambda]:
+            lg.Apply, lg.Var, lg.Const, lg.Lambda, lg.NamedBinder]:
     cls.__str__ = pretty_fmla
 
 # end string conversion stuff
@@ -1406,7 +1443,10 @@ class VariableUniqifier(object):
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
-            res = type(fmla)(newvars,self.rec(fmla.body,vmap))
+            try:
+                res = fmla.clone_binder(newvars,self.rec(fmla.body,vmap))
+            except TypeError:
+                assert False,fmla
             for v in fmla.variables:
                 del vmap[v]
             vmap.update(obs)
@@ -1417,5 +1457,3 @@ class VariableUniqifier(object):
             return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
-
-
