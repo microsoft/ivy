@@ -678,7 +678,7 @@ def clauses_imply_list(clauses1, clauses2_list):
     """
     s = z3.Solver()
     z1 = clauses_to_z3(clauses1)
-    print "assume {}".format(clauses1)
+#    print "assume {}".format(clauses1)
 #    print "z1 = {}".format(z1)
     s.add(z1)
 
@@ -687,7 +687,7 @@ def clauses_imply_list(clauses1, clauses2_list):
         
     for clauses2 in negs:
         z2 = clauses_to_z3(clauses2)
-        print "check {}".format(clauses2)
+#        print "check {}".format(clauses2)
 #        print "z2 = {}".format(z2)
         s.push()
         s.add(z2)
@@ -714,12 +714,12 @@ def check_sequence(assume_assert_list):
 
     for aa in assume_assert_list:
         if isinstance(aa,Assume):
-            print "assume {}".format(aa.clauses)
+#            print "assume {}".format(aa.clauses)
             z1 = clauses_to_z3(aa.clauses)
             s.add(z1)
             res.append(True)
         else:
-            print "assert {}".format(aa.clauses)
+#            print "assert {}".format(aa.clauses)
             clauses2 = dual_clauses(aa.clauses)
             z2 = clauses_to_z3(clauses2)
             s.push()
