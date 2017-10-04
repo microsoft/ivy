@@ -716,6 +716,13 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.sort_destructors[dom[0].name].append(sym)
     def add_definition(self,ldf):
         defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.definitions
+        lhsvs = list(lu.variables_ast(ldf.formula.args[0]))
+        for idx,v in enumerate(lhsvs):
+            if v in lhsvs[idx+1:]:
+                raise IvyError(ldf,"Variable {} occurs twice on left-hand side of definition".format(v))
+        for v in lu.used_variables_ast(ldf.formula.args[1]):
+            if v not in lhsvs:
+                raise IvyError(ldf,"Variable {} occurs free on right-hand side of definition".format(v))
         defs.append(ldf)
         self.last_fact = ldf
 

@@ -57,6 +57,12 @@ checks = [
       ['udp_test','OK'],
       ]
      ],
+    ['.',
+      [
+          ['fundef1','error: Variable Y:t occurs free on right-hand side of definition'],
+          ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
+      ]
+    ],
 ]
 
 tests = [
