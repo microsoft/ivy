@@ -30,7 +30,7 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 use_z3_enums = False
 
 #z3.set_param('smt.mbqi.trace',True)
-z3.set_param('smt.macro_finder',True)
+#z3.set_param('smt.macro_finder',True)
 
 def set_use_native_enums(t):
     global use_z3_enums
@@ -935,6 +935,10 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 s.pop()
     print "} shrinking model"
     m = get_model(s)
+#    print "model = {}".format(m)
+#    f = open("ivy.smt2","w")
+#    f.write(s.to_smt2())
+#    f.close()
     h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h
 

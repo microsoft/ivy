@@ -72,6 +72,7 @@ module array(domain,range) = {
 	    assert 0 <= x & x < end(a)
 	}	       	 
 	after set {
+            assert end(a) = end(old a);
 	    assert value(a,X) = y if X = x else value(old a,X)
 	}
 	before get {

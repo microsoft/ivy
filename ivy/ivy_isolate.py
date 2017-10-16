@@ -54,6 +54,10 @@ def summarize_action(action):
     res.lineno = action.lineno
     res.formal_params = action.formal_params
     res.formal_returns = action.formal_returns
+    # have to havoc the in/out parameters, other outs are non-deterministic anyway
+    for x in res.formal_returns:
+        if x in res.formal_params:
+            res.args.append(ia.HavocAction(x))
     return res
 
 # Delegation of assertions
