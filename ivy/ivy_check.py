@@ -62,7 +62,31 @@ def check_conjectures(kind,msg,ag,state):
             gui.tk.mainloop()
             exit(1)
         raise iu.IvyError(None,"{} failed.".format(kind))
+
+def has_temporal_stuff(f):
+    return any(True for x in lut.temporals_ast(f)) or any(True for x in lut.named_binders_ast(f))
+
     
+def check_temporals():
+    props = im.module.labeled_props
+    proved = []
+    for prop in props:
+        if prop.temporal:
+            from ivy_l2s import l2s
+            mod = im.module.copy()
+            mod.labeled_axioms.extend(proved)
+            mod.labeled_props = []
+            l2s(mod, prop)
+            mod.concept_spaces = []
+            mod.update_conjs()
+            with mod:
+                check_isolate()
+        proved.append(prop)
+    # filter out any temporal stuff from conjectures and concept spaces
+    im.module.labeled_conjs = [x for x in im.module.labeled_conjs if not has_temporal_stuff(x.formula)]
+    im.module.concept_spaces = [x for x in im.module.concept_spaces if not has_temporal_stuff(x[1])]
+
+
 def usage():
     print "usage: \n  {} file.ivy".format(sys.argv[0])
     sys.exit(1)
@@ -88,6 +112,47 @@ def get_checked_actions():
     if cact and cact not in im.module.public_actions:
         raise iu.IvyError(None,'{} is not an exported action'.format(cact))
     return [cact] if cact else sorted(im.module.public_actions)
+
+def check_isolate():
+    ith.check_theory()
+    with im.module.theory_context():
+        check_properties()
+        some_temporals = any(p.temporal for p in im.module.labeled_props)
+        check_temporals()
+        ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
+        if im.module.initializers:
+            cex = ag.check_bounded_safety(ag.states[0])
+            if cex is not None:
+                display_cex("safety failed in initializer",cex)
+        with ivy_interp.EvalContext(check=False):
+            initiation_checked = False
+            if not some_temporals:
+                check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
+                initiation_checked = True
+            for actname in get_checked_actions():
+                old_checked_assert = act.checked_assert.get()
+                assertions = find_assertions(actname)
+                if assertions and not initiation_checked:
+                    check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
+                    initiation_checked = True
+                print "trying {}...".format(actname)
+                if act.checked_assert.get():
+                    assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
+                tried = set()
+                for asn in assertions:
+                    if asn.lineno not in tried:
+                        tried.add(asn.lineno)
+                        act.checked_assert.value = asn.lineno
+                        print '{}: {}'.format(asn.lineno,asn)
+                        ag.execute_action(actname,prestate=ag.states[0])
+                        cex = ag.check_bounded_safety(ag.states[-1],bound=1)
+                        if cex is not None:
+                            display_cex("safety failed",cex)
+                if initiation_checked:
+                    print "checking consecution..."
+                    ag.execute_action(actname,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
+                    check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
+                act.checked_assert.value = old_checked_assert
 
 def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
@@ -120,38 +185,7 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            ith.check_theory()
-            with im.module.theory_context():
-                check_properties()
-                ag = ivy_art.AnalysisGraph(initializer=ivy_alpha.alpha)
-                if im.module.initializers:
-                    cex = ag.check_bounded_safety(ag.states[0])
-                    if cex is not None:
-                        display_cex("safety failed in initializer",cex)
-                with ivy_interp.EvalContext(check=False):
-                    check_conjectures('Initiation','These conjectures are false initially.',ag,ag.states[0])
-#                    show_assertions()
-                    for actname in get_checked_actions():
-                        old_checked_assert = act.checked_assert.get()
-                        print "trying {}...".format(actname)
-                        assertions = find_assertions(actname)
-                        if act.checked_assert.get():
-                            assertions = [a for a in assertions if a.lineno == act.checked_assert.get()]
-                        tried = set()
-                        for asn in assertions:
-                            if asn.lineno not in tried:
-                                tried.add(asn.lineno)
-                                act.checked_assert.value = asn.lineno
-                                print '{}: {}'.format(asn.lineno,asn)
-                                ag.execute_action(actname,prestate=ag.states[0])
-                                cex = ag.check_bounded_safety(ag.states[-1],bound=1)
-                                if cex is not None:
-                                    display_cex("safety failed",cex)
-                        print "checking consecution..."
-                        ag.execute_action(actname,prestate=ag.states[0],abstractor=ivy_alpha.alpha)
-                        check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
-                        act.checked_assert.value = old_checked_assert
-
+            check_isolate()
 
 
 def main():

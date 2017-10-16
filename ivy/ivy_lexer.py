@@ -34,7 +34,8 @@ tokens = (
    'DOTS',
    'DOTDOTDOT',
    'NATIVEQUOTE',
-    'PTO',
+   'PTO',
+   'DOLLAR',
 )
 
 reserved = all_reserved = {
@@ -121,6 +122,9 @@ reserved = all_reserved = {
    'proof' : 'PROOF',
    'named' : 'NAMED',
    'fresh' : 'FRESH',
+   'temporal' : 'TEMPORAL',
+   'globally' : 'GLOBALLY',
+   'eventually' : 'EVENTUALLY',
 }
 
 tokens += tuple(all_reserved.values())
@@ -153,6 +157,7 @@ t_IFF = r'\<->'
 t_COLON = r':'
 t_DOTS = r'\.\.'
 t_DOTDOTDOT = r'\.\.\.'
+t_DOLLAR = r'\$'
 
 t_ignore  = ' \t\r'
 t_ignore_COMMENT = r'\#.*'
@@ -220,7 +225,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,5]:
-            for s in ['variant','of']:
+            for s in ['variant','of', 'globally', 'eventually', 'temporal']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

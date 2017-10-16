@@ -75,6 +75,30 @@ class Not(Formula):
             return ' ~= '.join(repr(x) for x in self.args[0].args)
         return '~' + repr(self.args[0])
 
+class Globally(Formula):
+    """
+    Temporal globally of a formula.
+    """
+    def __init__(self,*args):
+        assert len(args) == 1
+        self.args = args
+    def __repr__(self):
+        return '(globally ' + repr(self.args[0]) + ')'
+
+class Eventually(Formula):
+    """
+    Temporal eventually of a formula.
+    """
+    def __init__(self,*args):
+        assert len(args) == 1
+        self.args = args
+    def __repr__(self):
+        return '(eventually ' + repr(self.args[0]) + ')'
+
+def has_temporal(f):
+    assert f is not None
+    return (type(f) in [Globally, Eventually]) or any(has_temporal(x) for x in f.args)
+
 class Let(Formula):
     """
     Formula of the form let p(X,...,Z) <-> fmla[X,...,Z], ... in fmla
@@ -158,6 +182,17 @@ class Forall(Quantifier):
 
 class Exists(Quantifier):
     pass
+
+class NamedBinder(Formula):
+    def __init__(self, name, bounds, body):
+        self.name = name
+        self.bounds = bounds
+        self.args = [body]
+    def clone(self,args):
+        res = type(self)(self.name,self.bounds,*args)
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
 class This(AST):
     @property
@@ -487,6 +522,7 @@ class LabeledFormula(AST):
         global lf_counter
         self.args = args
         self.id = lf_counter
+        self.temporal = None
         lf_counter += 1
     @property
     def label(self):
@@ -501,6 +537,7 @@ class LabeledFormula(AST):
         res = AST.clone(self,args)
         lf_counter -= 1
         res.id = self.id
+        res.temporal = self.temporal
         return res
 
 class AxiomDecl(Decl):
@@ -1145,17 +1182,22 @@ def ast_rewrite(x,rewrite):
         return Variable(x.rep,rewrite_sort(rewrite,x.sort))
     if isinstance(x,Atom) or isinstance(x,App):
 #        print "rewrite: x = {!r}, type(x.rep) = {!r}".format(x,type(x.rep))
-        atom = type(x)(rewrite.rewrite_name(x.rep),ast_rewrite(x.args,rewrite))
+        if isinstance(x.rep, NamedBinder):
+            atom = type(x)(ast_rewrite(x.rep,rewrite),ast_rewrite(x.args,rewrite))
+        else:
+            atom = type(x)(rewrite.rewrite_name(x.rep),ast_rewrite(x.args,rewrite))
         copy_attributes_ast(x,atom)
         if hasattr(x,'sort'):
             atom.sort = rewrite_sort(rewrite,x.sort)
-        if base_name_differs(x.rep,atom.rep):
+        if isinstance(x.rep, NamedBinder) or base_name_differs(x.rep,atom.rep):
             return atom
         return rewrite.rewrite_atom(atom)
     if isinstance(x,Literal):
         return Literal(x.polarity,ast_rewrite(x.atom,rewrite))
-    if isinstance(x,Quantifier):
+    if isinstance(x, Quantifier):
         return type(x)(ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
+    if isinstance(x, NamedBinder):
+        return type(x)(x.name,ast_rewrite(x.bounds,rewrite),ast_rewrite(x.args[0],rewrite))
     if hasattr(x,'rewrite'):
         return x.rewrite(rewrite)
     if isinstance(x,LabeledFormula) or isinstance(x,NativeDef):

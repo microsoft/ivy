@@ -76,7 +76,7 @@ class ProgressiveDomain(object):
 
     def test_cube(self,cube):
         canon_cube = canonize_clause(cube)
-        if log or True:
+        if log:
             print "cube: {}".format([str(c) for c in canon_cube])
         my_id = self.cube_id(canon_cube)
         if my_id in self.inhabited_cubes:

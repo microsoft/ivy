@@ -1056,9 +1056,9 @@ def type_check_action(action,domain,pvars = []):
     with TypeCheckConext(domain):
         action.int_update(domain,pvars)
 
-def concat_actions(action1,action2):
-    al1,al2 = ((a.args if isinstance(a,Sequence) else [a]) for a in (action1,action2))
-    return Sequence(*(al1+al2))
+def concat_actions(*actions):
+    als = ((a.args if isinstance(a,Sequence) else [a]) for a in actions)
+    return Sequence(*(a for al in als for a in al))
 
 def apply_mixin(decl,action1,action2):
     assert hasattr(action1,'lineno')
