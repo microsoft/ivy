@@ -273,10 +273,12 @@ def get_assumes_and_asserts(preconds_only):
             assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
-        assumes.append((ldf.formula,ldf))
+        if not ldf.temporal:
+            assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
-        asserts.append((ldf.formula,ldf))
+        if not ldf.temporal:
+            asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
         asserts.append((ldf.formula,ldf))

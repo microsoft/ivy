@@ -2493,6 +2493,8 @@ def get_bound_exprs(v0,variables,body,exists,res):
         return
     if il.is_app(body) and body.rep in is_derived and v0 in body.args:
         ldf = find_definition(body.rep)
+        if ldf is None:  # happens for native definitions
+            return
         if all(il.is_variable(v) for v in ldf.formula.args[0].args):
             subst = dict((v.name,a) for v,a in zip(ldf.formula.args[0].args,body.args))
             thing = ilu.substitute_ast(ldf.formula.args[1],subst)

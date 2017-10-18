@@ -30,7 +30,7 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 use_z3_enums = False
 
 #z3.set_param('smt.mbqi.trace',True)
-z3.set_param('smt.macro_finder',True)
+#z3.set_param('smt.macro_finder',True)
 
 def set_use_native_enums(t):
     global use_z3_enums
@@ -678,7 +678,7 @@ def clauses_imply_list(clauses1, clauses2_list):
     """
     s = z3.Solver()
     z1 = clauses_to_z3(clauses1)
-    print "assume {}".format(clauses1)
+#    print "assume {}".format(clauses1)
 #    print "z1 = {}".format(z1)
     s.add(z1)
 
@@ -687,7 +687,7 @@ def clauses_imply_list(clauses1, clauses2_list):
         
     for clauses2 in negs:
         z2 = clauses_to_z3(clauses2)
-        print "check {}".format(clauses2)
+#        print "check {}".format(clauses2)
 #        print "z2 = {}".format(z2)
         s.push()
         s.add(z2)
@@ -714,12 +714,12 @@ def check_sequence(assume_assert_list):
 
     for aa in assume_assert_list:
         if isinstance(aa,Assume):
-            print "assume {}".format(aa.clauses)
+#            print "assume {}".format(aa.clauses)
             z1 = clauses_to_z3(aa.clauses)
             s.add(z1)
             res.append(True)
         else:
-            print "assert {}".format(aa.clauses)
+#            print "assert {}".format(aa.clauses)
             clauses2 = dual_clauses(aa.clauses)
             z2 = clauses_to_z3(clauses2)
             s.push()
@@ -935,6 +935,10 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 s.pop()
     print "} shrinking model"
     m = get_model(s)
+#    print "model = {}".format(m)
+#    f = open("ivy.smt2","w")
+#    f.write(s.to_smt2())
+#    f.close()
     h = HerbrandModel(s,m,used_symbols_clauses(clauses))
     return h
 

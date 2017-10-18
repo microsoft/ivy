@@ -5,6 +5,7 @@ import ivy_utils as iu
 import ivy_logic as il
 import ivy_logic_utils as lu
 import ivy_solver
+import ivy_concept_space as ics
 
 from collections import defaultdict
 import string
@@ -216,6 +217,20 @@ class Module(object):
             lu.resort_sig(sort_refinement)
 
             
+        # Make concept spaces from the conjecture
+
+    def update_conjs(self):
+        mod = self
+        for i,cax in enumerate(mod.labeled_conjs):
+            fmla = cax.formula
+            csname = 'conjecture:'+ str(i)
+            variables = list(lu.used_variables_ast(fmla))
+            sort = il.RelationSort([v.sort for v in variables])
+            sym = il.Symbol(csname,sort)
+            space = ics.NamedSpace(il.Literal(0,fmla))
+            mod.concept_spaces.append((sym(*variables),space))
+
+
 def resort_ast(ast):
     return lu.resort_ast(ast,sort_refinement)
 

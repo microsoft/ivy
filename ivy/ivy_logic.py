@@ -582,6 +582,11 @@ def is_quantifier(term):
 def is_binder(term):
     return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder))
 
+for b in [lg.ForAll,lg.Exists,lg.Lambda]:
+    b.clone_binder = lambda self, variables, body: b(variables,body)
+
+lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
+
 def is_named_binder(term):
     return isinstance(term, lg.NamedBinder)
 
@@ -1438,7 +1443,10 @@ class VariableUniqifier(object):
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
-            res = type(fmla)(newvars,self.rec(fmla.body,vmap))
+            try:
+                res = fmla.clone_binder(newvars,self.rec(fmla.body,vmap))
+            except TypeError:
+                assert False,fmla
             for v in fmla.variables:
                 del vmap[v]
             vmap.update(obs)

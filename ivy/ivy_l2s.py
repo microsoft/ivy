@@ -52,7 +52,9 @@ from ivy_actions import (AssignAction, Sequence, ChoiceAction,
                          concat_actions)
 import logic as lg
 import ivy_logic_utils as ilu
+import ivy_utils as iu
 
+debug = iu.BooleanParameter("l2s_debug",False)
 
 def forall(vs, body):
     return lg.ForAll(vs, body) if len(vs) > 0 else body
@@ -104,19 +106,21 @@ def l2s(mod, lf):
     replace_temporals_by_l2s_g = lambda ast: ilu.replace_temporals_by_named_binder_g_ast(ast, _l2s_g)
     mod_pass(replace_temporals_by_l2s_g)
     not_lf = replace_temporals_by_l2s_g(lg.Not(lf.formula))
-    print "=" * 80 +"\nafter replace_temporals_by_named_binder_g_ast"+ "\n"*3
-    print "=" * 80 + "\nl2s_gs:"
-    for vs, t in sorted(l2s_gs):
-        print vs, t
-    print "=" * 80 + "\n"*3
-    print_module(mod)
-    print "=" * 80 + "\n"*3
+    if debug.get():
+        print "=" * 80 +"\nafter replace_temporals_by_named_binder_g_ast"+ "\n"*3
+        print "=" * 80 + "\nl2s_gs:"
+        for vs, t in sorted(l2s_gs):
+            print vs, t
+        print "=" * 80 + "\n"*3
+        print_module(mod)
+        print "=" * 80 + "\n"*3
 
     # now we normalize all named binders
     mod_pass(ilu.normalize_named_binders)
-    print "=" * 80 +"\nafter normalize_named_binders"+ "\n"*3
-    print_module(mod)
-    print "=" * 80 + "\n"*3
+    if debug.get():
+        print "=" * 80 +"\nafter normalize_named_binders"+ "\n"*3
+        print_module(mod)
+        print "=" * 80 + "\n"*3
 
     # TODO: what about normalizing lf?
 
@@ -146,12 +150,13 @@ def l2s(mod, lf):
     to_save = [] # list of (variables, term) corresponding to l2s_s in conjectures
     to_save += named_binders_conjs['l2s_s']
 
-    print "=" * 40 + "\nto_wait:\n"
-    for vs, t in to_wait:
-        print vs, t
-        print list(ilu.variables_ast(t)) == list(vs)
-        print
-    print "=" * 40
+    if debug.get():
+        print "=" * 40 + "\nto_wait:\n"
+        for vs, t in to_wait:
+            print vs, t
+            print list(ilu.variables_ast(t)) == list(vs)
+            print
+        print "=" * 40
 
     save_state = [
         AssignAction(l2s_s(vs,t)(*vs), t)
@@ -177,11 +182,12 @@ def l2s(mod, lf):
         )
         for vs, t in to_wait
     ]
-    print "=" * 40 + "\nupdate_w:\n"
-    for x in update_w:
-        print x
-        print
-    print "=" * 40
+    if debug.get():
+        print "=" * 40 + "\nupdate_w:\n"
+        for x in update_w:
+            print x
+            print
+        print "=" * 40
 
     fair_cycle = [l2s_saved]
     fair_cycle += done_waiting
@@ -271,10 +277,11 @@ def l2s(mod, lf):
     to_g = [] # list of (variables, formula)
     to_g += list(l2s_gs)
     to_g = list(set(to_g))
-    print '='*40 + "\nto_g:\n"
-    for vs, t in sorted(to_g):
-        print vs, t, '\n'
-    print '='*40
+    if debug.get():
+        print '='*40 + "\nto_g:\n"
+        for vs, t in sorted(to_g):
+            print vs, t, '\n'
+        print '='*40
 
     assume_g_axioms = [
         AssumeAction(forall(vs, lg.Implies(l2s_g(vs, t)(*vs), t)))
@@ -288,7 +295,9 @@ def l2s(mod, lf):
 
     # now patch the module actions with monitor and tableau
 
-    print "public_actions:", mod.public_actions
+
+    if debug.get():
+        print "public_actions:", mod.public_actions
     # TODO: this includes the succ action (for the ticket example of
     # test/test_liveness.ivy). seems to be a bug, and this causes
     # wrong behavior for the monitor, since a call to succ from within
@@ -326,9 +335,10 @@ def l2s(mod, lf):
     l2s_init += [AssumeAction(not_lf)]
     mod.initializers.append(('l2s_init', Sequence(*l2s_init)))
 
-    print "=" * 80 + "\nafter patching actions" + "\n"*3
-    print_module(mod)
-    print "=" * 80 + "\n"*3
+    if debug.get():
+        print "=" * 80 + "\nafter patching actions" + "\n"*3
+        print_module(mod)
+        print "=" * 80 + "\n"*3
 
     # now replace all named binders by fresh relations
 
@@ -351,12 +361,14 @@ def l2s(mod, lf):
         for k, v in named_binders.iteritems()
         for i, b in enumerate(v)
     )
-    print "=" * 80 + "\nsubs:" + "\n"*3
-    for k, v in subs.items():
-        print k, ' : ', v, '\n'
-    print "=" * 80 + "\n"*3
+    if debug.get():
+        print "=" * 80 + "\nsubs:" + "\n"*3
+        for k, v in subs.items():
+            print k, ' : ', v, '\n'
+        print "=" * 80 + "\n"*3
     mod_pass(lambda ast: ilu.replace_named_binders_ast(ast, subs))
 
-    print "=" * 80 + "\nafter replace_named_binders" + "\n"*3
-    print_module(mod)
-    print "=" * 80 + "\n"*3
+    if debug.get():
+        print "=" * 80 + "\nafter replace_named_binders" + "\n"*3
+        print_module(mod)
+        print "=" * 80 + "\n"*3

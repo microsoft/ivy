@@ -13,7 +13,6 @@ import ivy_actions as ia
 import ivy_alpha
 import ivy_module as im
 import ivy_theory as ith
-import ivy_concept_space as ics
 from ivy_ast import ASTContext
 from collections import defaultdict
 import ivy_printer
@@ -54,6 +53,10 @@ def summarize_action(action):
     res.lineno = action.lineno
     res.formal_params = action.formal_params
     res.formal_returns = action.formal_returns
+    # have to havoc the in/out parameters, other outs are non-deterministic anyway
+    for x in res.formal_returns:
+        if x in res.formal_params:
+            res.args.append(ia.HavocAction(x))
     return res
 
 # Delegation of assertions
@@ -1254,14 +1257,7 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # Make concept spaces from the conjecture
 
-        for i,cax in enumerate(mod.labeled_conjs):
-            fmla = cax.formula
-            csname = 'conjecture:'+ str(i)
-            variables = list(lu.used_variables_ast(fmla))
-            sort = ivy_logic.RelationSort([v.sort for v in variables])
-            sym = ivy_logic.Symbol(csname,sort)
-            space = ics.NamedSpace(ivy_logic.Literal(0,fmla))
-            mod.concept_spaces.append((sym(*variables),space))
+        mod.update_conjs()
 
         # get rid of useless actions
 
