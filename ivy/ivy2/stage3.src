@@ -1,0 +1,50 @@
+type field = struct
+    {
+       name : str,
+       type : Type
+    }
+
+format Ident = ~'[_a-zA-Z0-9]+'
+
+format Field = 
+   struct Field ( < name := Ident > ':' < type := Ident > ) 
+
+format Type = 
+    struct StructType ( 'struct' '{' < fields := [ Field ',' ...] > '}' )
+
+format TypeDecl =
+    struct TypeDecl ( 'type' < name := Ident > '=' < type := Type> )
+
+format Format =
+    {
+        struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
+        struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
+        struct NoWhite ( 'nowhite' < fmt := Format > )
+        struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
+        struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
+        struct Seq ( '(' < elems := [ Format ... ] > ')' )
+        struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
+        struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )
+        struct Alt ( '{' < elems := [ Format ... ] > '}' )
+    }
+
+format Exact = struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
+
+format Grammar =
+    struct Grammar
+	< rules :=
+	    [ struct Rule ( 'format' < lhs := ~'[_a-zA-Z0-9]+' > '=' < rhs := Format > ) ... ] >
+         
+format Top = 
+    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > )
+
+format PyIdent = ~'[_a-zA-Z0-9]+'
+format PyArg = struct PyArg ( < lhs := PyIdent > '=' < rhs := PyExpr > )
+format PyApply = struct PyApply ( < func :=  PyIdent > ( '(' < args := [ PyArg ',' ... ] > ')' ) )
+format PyList = struct PyList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
+format PyStr = struct PyStr nowhite ( '''' < val := ~'([^'']|(\''\''))*' > '''' )
+format PyExpr = { PyApply PyIdent PyList PyStr}
+
+>>>
+
+THis is some python code
