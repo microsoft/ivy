@@ -583,7 +583,7 @@ def is_binder(term):
     return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder))
 
 for b in [lg.ForAll,lg.Exists,lg.Lambda]:
-    b.clone_binder = lambda self, variables, body: b(variables,body)
+    b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
 
 lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
 
