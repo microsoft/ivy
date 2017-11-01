@@ -62,7 +62,7 @@ format Grammar =
 	    [ struct Rule ( 'format' < lhs := ~'[_a-zA-Z0-9]+' > '=' < rhs := Format > ) ... ] >
          
 format Top = 
-    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > '>>>' < code := ~'.*' > )
+    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > )
 
 # The output format
 
@@ -81,15 +81,17 @@ format PyTypeDecl = nowhite (
 
 format PyTop = struct Top ( 
     < typedecls := [ PyTypeDecl ... ] >
-    'with ivywhite: grammar = ' < grammar := PyGrammar >
+    'grammar = ' < grammar := PyGrammar >
     '\n'
     < code := ~'.*' > )
     
 >>>
 
+defwhite = WhiteSpace(RegEx(Unit,'([ \\t\\n]|(#[^\\n]*))*',dflt=' '))
+
 src = "stage4.src"
 obj = "stage4.py"
-with ivywhite:
+with defwhite:
     with grammar:
         with DefaultSemantics(globals()):
             thing = parse_file("Top",src)

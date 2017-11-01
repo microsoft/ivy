@@ -247,9 +247,6 @@ class Assign(Format):
         structure[self.fld] = self.fmt.des(rdr)
     def ser(self,wtr,obj):
         global structure
-        if self.fld == "rhs":
-            print "rhs: {}".format(structure.get(self.fld,None))
-            print "fmt: {}".format(self.fmt.name)
         val = structure.get(self.fld,None)
         if val is not None:
             self.fmt.ser(wtr,val)
@@ -383,7 +380,12 @@ class DefaultSemantics(SemanticsContext):
             cls = module[cls]
         return cls
     def __call__(self,cls,flds):
-        return self.getclass(cls)(**flds)
+        try:
+            return self.getclass(cls)(**flds)
+        except TypeError:
+            print "wrong arguments to {}: {}".format(cls,
+                 ",".join(x+':'+type(y).__name__ for x,y in flds.iteritems()))
+            raise NoParse
     def isinst(self,obj,cls):
         return isinstance(obj,self.getclass(cls))
 
@@ -421,6 +423,60 @@ class Struct(Format):
         else:
 #            print "struct failed"
             raise NoSer
+
+# A meta format converts its argument to a meta value. For example, a
+# meta structure (class MetaStruct) has a field "cls" that indicates
+# its class, and "args" which is an association list given all the
+# field names and values.  Meta formats are useful for converting to
+# and from generic formats like S-expression or XML.
+
+# A name/value pair
+class MetaField(Format):
+    def __init__(self,name,value):
+        self.name,self.value = name,value
+
+# An S-record
+class MetaStruct(Format):
+    def __init__(self,cls,args):
+        self.cls,self.args = cls,args
+    
+# A meta list
+class MetaList(Format):
+    def __init__(self,elems):
+        self.elems = elems
+
+# A meta list
+class MetaString(Format):
+    def __init__(self,val):
+        self.val = val
+
+# A meta format
+class Meta(Format):
+    def __init__(self,fmt):
+        self.fmt = fmt
+    def des(self,rdr):
+        flds = dict()
+        with rdr.chk():
+            with Structure(flds):
+                thing = self.fmt.des(rdr)
+                if isinstance(thing,MetaStr):
+                    return thing.val
+                if isinstance(thing,MetaList):
+                    return thing.elems
+                return semantics(flds['cls'],dict((x.name,x.value) for x in flds['args']))
+    def ser(self,wtr,obj):
+        if isinstance(obj,str):
+            obj = MetaStr(obj)
+        elif isinstance(obj,list):
+            obj = MetaList(obj)
+        else:
+#        print "struct trying: {} {}".format(self.cls,type(obj))
+            obj = MetaStruct(type(obj).__name__,(MetaField(x,y) for x,y in obj.__dict__.iteritems()))
+        with Structure(obj):
+            wtr.nest()
+            self.fmt.ser(wtr,obj)
+            wtr.unnest()
+
 
 # A Rule defines non-terminal "lhs" symbol as a format "rhs".
 
@@ -503,6 +559,9 @@ class StringReader(object):
 #        print "regex: {} '{}' '{}'".format(self.pos,exp.pattern,res)
         self.pos += len(res)
         return res
+    def errloc(self):
+        lines_read = self.string[:self.highest].split('\n')
+        return (len(lines_read),len(lines_read[-1])+1)
 
 # A StringWriter writes tokens to a string
 
@@ -602,25 +661,34 @@ class PrettyWriter(object):
 
 # Parse a given format from a reader
 
-def parse_reader(fmt,rdr):
+def report_syntax_error(rdr,filename):
+    line,char = rdr.errloc()
+    print (filename if filename is not None else '') + '({}): error: char {}: syntax error'.format(line,char)
+
+def parse_reader(fmt,rdr,filename=None):
     if isinstance(fmt,str):
         fmt = grammar[fmt]
-    res = fmt.des(rdr)
-    if rdr.highest < len(rdr.string):
-        print "syntax error at position {}".format(rdr.highest)
+    try:
+        res = fmt.des(rdr)
+        if rdr.pos < len(rdr.string):
+            report_syntax_error(rdr,filename)
+    except NoParse:
+        res = None
+        print "position: {}".format(rdr.highest)
+        report_syntax_error(rdr,filename)
     return res
 
 # Parse a given formt from a string
 
-def parse_string(fmt,string):
-    return parse_reader(fmt,StringReader(string))
+def parse_string(fmt,string,filename=None):
+    return parse_reader(fmt,StringReader(string),filename)
 
 # Parse a given formt from a file
 
 def parse_file(fmt,name):
     with open(name,"r") as f:
         string = f.read()
-    return parse_string(fmt,string)
+    return parse_string(fmt,string,name)
 
 # Unparse a given object to a writer in a given format
 
@@ -651,4 +719,8 @@ def pretty_to_string(fmt,obj):
 def pretty_to_file(fmt,obj,name):
     with open(name,"w") as f:
         f.write(pretty_to_string(fmt,obj))
+
+# Ivy-style whitespace
+
+ivywhite = WhiteSpace(RegEx(Unit,'([ \t\n]|(#[^\n]*))*',dflt=' '))
 

@@ -1,3 +1,5 @@
+# This is the stage 2 compiler
+
 format Ident = ~'[_a-zA-Z0-9]+'
 
 format Field = 
@@ -14,6 +16,7 @@ format Format =
         struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
         struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
         struct NoWhite ( 'nowhite' < fmt := Format > )
+        struct Meta ( 'meta' < fmt := Format > )
         struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )

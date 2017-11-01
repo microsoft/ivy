@@ -13,6 +13,8 @@ class PyArg(p1.Format):
 class PyApply(p1.Format):
     def __init__(self,func,args = []):
         self.func,self.args = func,args
+    def find(self,argname):
+        return next (x.rhs for x in self.args if x.lhs == argname)
 
 class PyList(p1.Format):
     def __init__(self,elems):

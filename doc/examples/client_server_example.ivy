@@ -1,6 +1,6 @@
 #lang ivy1.5
 
-type client
+& type client
 type server
 
 relation link(X:client, Y:server)

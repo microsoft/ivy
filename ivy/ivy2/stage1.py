@@ -5,7 +5,9 @@ from python1 import *
 
 SingleQuoted = RegEx(str,r"([^'']|(\''\''))*")  # Don't ignore whitespace in a quoted string!
 
-with WhiteSpace(RegEx(Unit,'[ \t\n]*',dflt=' ')):
+defwhite = WhiteSpace(RegEx(Unit,'([ \t\n]|(#[^\n]*))*',dflt=' '))
+
+with defwhite:
     ExactElem = Struct("Exact",NoWhite(Seq([Exact(Unit,"''"),Assign('text',SingleQuoted),Exact(Unit,"''")])))
     RegExElem = Struct("RegEx",NoWhite(Seq([Exact(Unit,"~"),Exact(Unit,"''"),Assign('exp',SingleQuoted),Exact(Unit,"''")])))
     NoWhiteElem = Struct("NoWhite",Seq([Exact(Unit,"nowhite"),Assign('fmt',NonTerm('Format'))]))
@@ -61,7 +63,7 @@ if __name__ == "__main__":
 
     src = "stage2.src"
     obj = "stage2.py"
-    with WhiteSpace(RegEx(Unit,'[ \t\n]*',dflt=' ')):
+    with defwhite:
         with FormatGrammar:
             thing = parse_file(GrammarElem,src)
             with PyExprSemantics():
@@ -73,7 +75,9 @@ if __name__ == "__main__":
 from parser1 import *
 from python1 import *
 
-with WhiteSpace(RegEx(Unit,'[ \\t\\n]*',dflt=' ')):
+defwhite = WhiteSpace(RegEx(Unit,'([ \\t\\n]|(#[^\\n]*))*',dflt=' '))
+
+with defwhite:
     grammar = """)
                 f.write(pretty_to_string("PyExpr",thing2))
                 f.write("""
@@ -100,7 +104,7 @@ class Top(Format):
 
 src = "stage3.src"
 obj = "stage3.py"
-with WhiteSpace(RegEx(Unit,'[ \\t\\n]*',dflt=' ')):
+with defwhite:
     with grammar:
         with PyExprSemantics():
             thing = parse_file("Top",src)
@@ -108,15 +112,16 @@ with WhiteSpace(RegEx(Unit,'[ \\t\\n]*',dflt=' ')):
             with open(obj,"w") as f:
                 f.write("from parser1 import *\\n")
                 f.write("from python1 import *\\n")
-                args = dict((x.lhs,x.rhs) for x in thing.args)
-                for t in args['typedecls']:
-                    f.write("class {}(Format):\\n:".format(t.name))
-                    f.write("    def __init__(self,{}):\\n".format(",".join(fl.name for fl in t.type.fields)))
-                    for fl in t.type.fields:
-                        f.write("        self.{} = {}\\n".format(fl.name,fl.name))
+                for t in thing.find('typedecls').elems:
+                    f.write("class {}(Format):\\n".format(t.find('name').val))
+                    flds = t.find('type').find('fields').elems
+                    f.write("    def __init__(self,{}):\\n".format(",".join(fl.find('name').val for fl in flds)))
+                    for fl in flds:
+                        fldnm = fl.find('name').val
+                        f.write("        self.{} = {}\\n".format(fldnm,fldnm))
                 f.write("grammar = ")
-                f.write(pretty_to_string("PyExpr",thing.grammar))
-                f.write("\\n{}".format(thing.code))
+                f.write(pretty_to_string("PyExpr",thing.find('grammar')))
+                f.write("\\n{}".format(thing.find('code').val))
 """)
         
 #     with FormatGrammar:
