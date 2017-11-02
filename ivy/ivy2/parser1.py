@@ -43,7 +43,11 @@ class Number(Class):
 class Format(object):
     def get(self,key,default=None):
         return self.__dict__.get(key,default)
-
+    def fieldnames(self):
+        return list(self.__dict__)
+    def fields(self):
+        return [y for y in ((x,self.__dict__[x]) for x in self.fieldnames()) if y is not None]
+    
 # This context class defines a default whitespace format.  Anything
 # matching this format is ignored between tokens. The whitespace
 # format should always match the empty string, unless you actually
@@ -95,8 +99,9 @@ class Structure(object):
 
 # In the "text" argument, pairs of single quotes are reduced to one
 # single quote. This allows single quotes to be escaped inside quoted
-# strings. Exact could be expanded to handle more escaping
-# conventions.
+# strings. In addition, the sequences '\n' and '\t' are conevrted to
+# newline and tab characters respectively. Exact could be expanded to
+# handle more escaping conventions.
 
 # Notice that Exact is a meta-semantic class. That is, it is a
 # semantic class for the meta-grammar, i.e., the grammar of grammar
@@ -111,22 +116,25 @@ class Structure(object):
 
 
 class Exact(Format):
-    def __init__(self,cls=str,text=None):
+    def __init__(self,cls=None,text=None):
         assert text is not None
         self.cls,self.text = cls,text
         self.whitespace = whitespace
-        self.rtext = text.replace("''","'")
+        self.rtext = text.replace("''","'").replace('\\n','\n').replace('\\t','\t')
+    def fieldnames(self):
+        return ['cls','text']
     def des(self,rdr):
         with rdr.chk():
             if self.whitespace is not None and not no_white:
                 self.whitespace.des(rdr)
             t = rdr.read(len(self.rtext))
             if t == self.rtext:
-                return self.cls(t)
+                return self.cls(t) if self.cls is not None else t
             else:
                 raise NoParse
     def ser(self,wtr,obj):
         if obj is not None and str(obj) != self.rtext:
+            print obj
             raise NoSer
         wtr.write(self.rtext)
         if hasattr(self.whitespace,'dflt') and not no_white:
@@ -137,17 +145,19 @@ class Exact(Format):
 # expression (possibly preceded by whitespace). 
 
 class RegEx(Format):
-    def __init__(self,cls=str,exp=None,dflt=None):
+    def __init__(self,cls=None,exp=None,dflt=None):
         assert exp is not None
         self.cls,self.exp,self.dflt = cls,exp,dflt
         self.whitespace = whitespace
         self.rexp = re.compile(exp.replace("''","'"),re.DOTALL)
+    def fieldnames(self):
+        return ['cls','exp','dflt']
     def des(self,rdr):
         with rdr.chk():
             if self.whitespace is not None and not no_white:
                 self.whitespace.des(rdr)
             t = rdr.read_regex(self.rexp)
-            return self.cls(t)
+            return self.cls(t) if self.cls is not None else t
     def ser(self,wtr,obj):
         if not isinstance(obj,str):
             raise NoSer
@@ -164,6 +174,8 @@ class NoWhite(Format):
     def __init__(self,fmt):
         self.fmt = fmt
         self.whitespace = whitespace
+    def fieldnames(self):
+        return ['fmt']
     def des(self,rdr):
         if self.whitespace is not None:
             self.whitespace.des(rdr)
@@ -197,7 +209,7 @@ class NoWhiteContext(object):
 # reasonable by removed.
 
 class List(Format):
-    def __init__(self,fmt,left=None,delim=None,right=None,min=0,max=None):
+    def __init__(self,fmt,left=None,delim=None,right=None,min=None,max=None):
         self.fmt,self.left,self.delim,self.right,self.min,self.max = fmt,left,delim,right,min,max
     def des(self,rdr):
         res = []
@@ -218,7 +230,7 @@ class List(Format):
                     break
             if self.right is not None:
                 self.right.read(rdr)
-            if len(res) < self.min or self.max is not None and len(res) > self.max:
+            if self.max is not None and len(res) < self.min or self.max is not None and len(res) > self.max:
                 raise NoParse
             return res
     def ser(self,wtr,obj):
@@ -248,6 +260,9 @@ class Assign(Format):
     def ser(self,wtr,obj):
         global structure
         val = structure.get(self.fld,None)
+        if self.fld == 'fields':
+            print "fields: {}".format(val)
+            print structure.__dict__
         if val is not None:
             self.fmt.ser(wtr,val)
 
@@ -466,12 +481,14 @@ class Meta(Format):
                 return semantics(flds['cls'],dict((x.name,x.value) for x in flds['args']))
     def ser(self,wtr,obj):
         if isinstance(obj,str):
-            obj = MetaStr(obj)
+            obj = MetaString(obj)
         elif isinstance(obj,list):
             obj = MetaList(obj)
         else:
 #        print "struct trying: {} {}".format(self.cls,type(obj))
-            obj = MetaStruct(type(obj).__name__,(MetaField(x,y) for x,y in obj.__dict__.iteritems()))
+            if not hasattr(obj,'fields'):
+                print 'structure: {}'.format(structure)
+            obj = MetaStruct(type(obj).__name__,(MetaField(x,y) for x,y in obj.fields()))
         with Structure(obj):
             wtr.nest()
             self.fmt.ser(wtr,obj)
@@ -494,6 +511,8 @@ class Grammar(Format):
     def __init__(self,rules):
         self.rules = rules
         self.fmtdct = dict((r.lhs,r.rhs) for r in rules)
+    def fieldnames(self):
+        return ['rules']
     def __enter__(self):
         global grammar
         self.old_fmtdct = grammar
@@ -596,7 +615,7 @@ class Printer(object):
             del self.stack[-1]
         elif isinstance(token,tuple):
             s,l = token
-            if l <= self.space:
+            if l <= self.space or self.space == self.maxline:
                 self.output.append(s)
                 self.space -= len(s)
             else:
@@ -604,7 +623,12 @@ class Printer(object):
                 self.Indent()
         else:
             self.output.append(token)
-            self.space -= len(token)
+            lines = token.split('\n')
+            if len(lines) > 1:
+                self.space = self.maxline - len(lines[-1])
+                self.output.append('[space={}]'.format(self.space))
+            else:
+                self.space -= len(token)
     def PrintList(self,l):
         for t in l:
             self.Print(t)

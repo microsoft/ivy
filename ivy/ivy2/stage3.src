@@ -45,13 +45,13 @@ format Format =
         struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
         struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
         struct NoWhite ( 'nowhite' < fmt := Format > )
+        struct Meta ( 'meta' < fmt := Format > )
         struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )
         struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
         struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )
         struct Alt ( '{' < elems := [ Format ... ] > '}' )
-        struct Meta ( 'meta' < fmt := Format > )
     }
 
 format Exact = struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
@@ -71,17 +71,17 @@ format PyArg = struct MetaField ( < name := PyIdent > '=' < value := PyExpr > )
 format PyApply = struct MetaStruct ( < cls :=  PyIdent > ( '(' < args := [ PyArg ',' ... ] > ')' ) )
 format PyList = struct MetaList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
 format PyStr = struct MetaString nowhite ( '''' < val := ~'([^'']|(\''\''))*' > '''' )
-format PyExpr = meta { PyApply PyIdent PyList PyStr}
-format PyGrammar = struct Grammar PyExpr
+format PyExpr = meta { PyApply PyList PyStr}
 
-format PyTypeDecl = nowhite (
+format PyTypeDecl = nowhite struct TypeDecl (
      'class ' < name := PyIdent > '(Format):\n    def __init__('   
-         < fields := [ struct Field < name := PyIdent > ',' ... ] > '):\n'
-         < fields := [ struct Field ( '    self.' < name := PyIdent > ' = ' < name := PyIdent > '\n' ) ... ] > )
+         < type := struct StructType (
+             < fields := [ struct Field < name := PyIdent > ',' ... ] > '):\n'
+             < fields := [ struct Field ( '        self.' < name := PyIdent > ' = ' < name := PyIdent > '\n' ) ... ] > ) > )
 
 format PyTop = struct Top ( 
     < typedecls := [ PyTypeDecl ... ] >
-    'with ivywhite: grammar = ' < grammar := PyGrammar >
+    'with ivywhite: grammar = ' < grammar := PyExpr >
     '\n'
     < code := ~'.*' > )
     

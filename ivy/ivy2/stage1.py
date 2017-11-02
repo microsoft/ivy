@@ -119,7 +119,7 @@ with defwhite:
                     for fl in flds:
                         fldnm = fl.find('name').val
                         f.write("        self.{} = {}\\n".format(fldnm,fldnm))
-                f.write("grammar = ")
+                f.write("with ivywhite: grammar = ")
                 f.write(pretty_to_string("PyExpr",thing.find('grammar')))
                 f.write("\\n{}".format(thing.find('code').val))
 """)
