@@ -46,6 +46,9 @@ format Format =
         struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
         struct NoWhite ( 'nowhite' < fmt := Format > )
         struct Meta ( 'meta' < fmt := Format > )
+        struct Line ( 'line' < fmt := Format > )
+        struct Indent ( 'indent' < fmt := Format > )
+        struct Breakable ( 'breakable' < fmt := Format > )
         struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )
@@ -68,20 +71,20 @@ format Top =
 
 format PyIdent = ~'[_a-zA-Z0-9]+'
 format PyArg = struct MetaField ( < name := PyIdent > '=' < value := PyExpr > )
-format PyApply = struct MetaStruct ( < cls :=  PyIdent > ( '(' < args := [ PyArg ',' ... ] > ')' ) )
+format PyApply = struct MetaStruct ( < cls :=  PyIdent > breakable ( '(' < args := [ PyArg ',' ... ] > ')' ) )
 format PyList = struct MetaList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
 format PyStr = struct MetaString nowhite ( '''' < val := ~'([^'']|(\''\''))*' > '''' )
 format PyExpr = meta { PyApply PyList PyStr}
 
 format PyTypeDecl = nowhite struct TypeDecl (
-     'class ' < name := PyIdent > '(Format):\n    def __init__('   
-         < type := struct StructType (
-             < fields := [ struct Field < name := PyIdent > ',' ... ] > '):\n'
-             < fields := [ struct Field ( '        self.' < name := PyIdent > ' = ' < name := PyIdent > '\n' ) ... ] > ) > )
+     line ( 'class ' < name := PyIdent > '(Format):' )
+     < type := struct StructType indent (
+         line ( 'def __init__(' < fields := [ struct Field < name := PyIdent > ',' ... ] > '):' )
+         < fields := [ struct Field indent line ( 'self.' < name := PyIdent > ' = ' < name := PyIdent > ) ... ] > ) > )
 
 format PyTop = struct Top ( 
     < typedecls := [ PyTypeDecl ... ] >
-    'with ivywhite: grammar = ' < grammar := PyExpr >
+    line ( 'with ivywhite: grammar = ' < grammar := PyExpr > )
     '\n'
     < code := ~'.*' > )
     

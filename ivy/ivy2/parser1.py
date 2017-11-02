@@ -200,6 +200,69 @@ class NoWhiteContext(object):
         no_white = self.old_nw
         return False # don't catch the exception
 
+
+# The Breakable format causes whitespace within it to be breakable, meaning
+# newlines can be inserted to break long lines.
+
+class Breakable(Format):
+    def __init__(self,fmt):
+        self.fmt = fmt
+    def des(self,rdr):
+        return self.fmt.des(rdr)
+    def ser(self,wtr,obj):
+        with BreakableContext(True):
+            self.fmt.ser(wtr,obj)
+
+breakable = True
+
+class BreakableContext(object):
+    def __init__(self,bkbl):
+        self.bkbl = bkbl
+    def __enter__(self):
+        global breakable
+        self.old_bkbl = breakable
+        breakable = self.bkbl
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global breakable
+        breakable = self.old_bkbl
+        return False # don't catch the exception
+
+# A Line format matches a single unbreakable text line at the current
+# indentation.
+
+indentation = 0
+
+class Line(Format):
+    def __init__(self,fmt):
+        self.fmt = fmt
+    def fieldnames(self):
+        return ['fmt']
+    def des(self,rdr):
+        assert False,"line deserialize not implemented"
+    def ser(self,wtr,obj):
+        with BreakableContext(False):
+            if indentation > 0:
+                wtr.write(indentation * '    ')
+            self.fmt.ser(wtr,obj)
+            wtr.write('\n')
+
+# An indent format increases the indentation level
+
+class Indent(Format):
+    def __init__(self,fmt):
+        self.fmt = fmt
+    def fieldnames(self):
+        return ['fmt']
+    def des(self,rdr):
+        assert False,"indent deserialize not implemented"
+    def ser(self,wtr,obj):
+        global indentation
+        indentation += 1
+        self.fmt.ser(wtr,obj)
+        indentation -= 1
+        
+        
 # The List format matches a list of items. Three deilimiters can optionally be
 # provided: left, delim and right. The format "left", if given, is required at
 # the beginning of the list. The format "delim", if given, is required between
@@ -626,7 +689,6 @@ class Printer(object):
             lines = token.split('\n')
             if len(lines) > 1:
                 self.space = self.maxline - len(lines[-1])
-                self.output.append('[space={}]'.format(self.space))
             else:
                 self.space -= len(token)
     def PrintList(self,l):
@@ -654,7 +716,7 @@ class PrettyWriter(object):
         self.tokens.append(tok)
         self.total += l
     def write(self,string):
-        if string == self.whitespace:
+        if breakable and string == self.whitespace:
             self.append((string,len(string)),len(string))
         else:
             l = len(string)
