@@ -45,13 +45,17 @@ format Format =
         struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
         struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
         struct NoWhite ( 'nowhite' < fmt := Format > )
+        struct Meta ( 'meta' < fmt := Format > )
+        struct Line ( 'line' < fmt := Format > )
+        struct Indent ( 'indent' < fmt := Format > )
+	struct Escape ( 'escape' nowhite ( '''' < spec := ~'([^'']|(\''\''))*' > '''' ) < fmt := Format > )
+        struct Breakable ( 'breakable' < fmt := Format > )
         struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )
         struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
         struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )
         struct Alt ( '{' < elems := [ Format ... ] > '}' )
-        struct Meta ( 'meta' < fmt := Format > )
     }
 
 format Exact = struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
@@ -62,36 +66,34 @@ format Grammar =
 	    [ struct Rule ( 'format' < lhs := ~'[_a-zA-Z0-9]+' > '=' < rhs := Format > ) ... ] >
          
 format Top = 
-    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > )
+    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > '>>>' < code := ~'.*' > )
 
 # The output format
 
 format PyIdent = ~'[_a-zA-Z0-9]+'
 format PyArg = struct MetaField ( < name := PyIdent > '=' < value := PyExpr > )
-format PyApply = struct MetaStruct ( < cls :=  PyIdent > ( '(' < args := [ PyArg ',' ... ] > ')' ) )
+format PyApply = struct MetaStruct ( < cls :=  PyIdent > breakable ( '(' < args := [ PyArg ',' ... ] > ')' ) )
 format PyList = struct MetaList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
-format PyStr = struct MetaString nowhite ( '''' < val := ~'([^'']|(\''\''))*' > '''' )
-format PyExpr = meta { PyApply PyIdent PyList PyStr}
-format PyGrammar = struct Grammar PyExpr
+format PyStr = struct MetaString nowhite ( '''' < val := escape '\\''' ~'([^'']|(\''\''))*' > '''' )
+format PyExpr = meta { PyApply PyList PyStr}
 
-format PyTypeDecl = nowhite (
-     'class ' < name := PyIdent > '(Format):\n    def __init__('   
-         < fields := [ struct Field < name := PyIdent > ',' ... ] > '):\n'
-         < fields := [ struct Field ( '    self.' < name := PyIdent > ' = ' < name := PyIdent > '\n' ) ... ] > )
+format PyTypeDecl = struct TypeDecl (
+     line ( 'class ' < name := PyIdent > '(Format):' )
+     < type := struct StructType indent (
+         line ( 'def __init__(self,' < fields := [ struct Field < name := PyIdent > ',' ... ] > '):' )
+         < fields := [ struct Field indent line ( 'self.' < name := PyIdent > ' = ' < name := PyIdent > ) ... ] > ) > )
 
 format PyTop = struct Top ( 
+    line 'from parser1 import *'
     < typedecls := [ PyTypeDecl ... ] >
-    'grammar = ' < grammar := PyGrammar >
-    '\n'
+    line ( 'with ivywhite: grammar = ' < grammar := PyExpr > )
     < code := ~'.*' > )
     
 >>>
 
-defwhite = WhiteSpace(RegEx(Unit,'([ \\t\\n]|(#[^\\n]*))*',dflt=' '))
-
-src = "stage4.src"
-obj = "stage4.py"
-with defwhite:
+src = "stage5.src"
+obj = "stage5.py"
+with ivywhite:
     with grammar:
         with DefaultSemantics(globals()):
             thing = parse_file("Top",src)

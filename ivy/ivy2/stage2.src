@@ -19,6 +19,7 @@ format Format =
         struct Meta ( 'meta' < fmt := Format > )
         struct Line ( 'line' < fmt := Format > )
         struct Indent ( 'indent' < fmt := Format > )
+	struct Escape ( 'escape' nowhite ( '''' < spec := ~'([^'']|(\''\''))*' > '''' ) < fmt := Format > )
         struct Breakable ( 'breakable' < fmt := Format > )
 	struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )

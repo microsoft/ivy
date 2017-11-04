@@ -48,6 +48,7 @@ format Format =
         struct Meta ( 'meta' < fmt := Format > )
         struct Line ( 'line' < fmt := Format > )
         struct Indent ( 'indent' < fmt := Format > )
+	struct Escape ( 'escape' nowhite ( '''' < spec := ~'([^'']|(\''\''))*' > '''' ) < fmt := Format > )
         struct Breakable ( 'breakable' < fmt := Format > )
         struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
@@ -73,19 +74,19 @@ format PyIdent = ~'[_a-zA-Z0-9]+'
 format PyArg = struct MetaField ( < name := PyIdent > '=' < value := PyExpr > )
 format PyApply = struct MetaStruct ( < cls :=  PyIdent > breakable ( '(' < args := [ PyArg ',' ... ] > ')' ) )
 format PyList = struct MetaList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
-format PyStr = struct MetaString nowhite ( '''' < val := ~'([^'']|(\''\''))*' > '''' )
+format PyStr = struct MetaString nowhite ( '''' < val := escape '\\''' ~'([^'']|(\''\''))*' > '''' )
 format PyExpr = meta { PyApply PyList PyStr}
 
-format PyTypeDecl = nowhite struct TypeDecl (
+format PyTypeDecl = struct TypeDecl (
      line ( 'class ' < name := PyIdent > '(Format):' )
      < type := struct StructType indent (
-         line ( 'def __init__(' < fields := [ struct Field < name := PyIdent > ',' ... ] > '):' )
+         line ( 'def __init__(self,' < fields := [ struct Field < name := PyIdent > ',' ... ] > '):' )
          < fields := [ struct Field indent line ( 'self.' < name := PyIdent > ' = ' < name := PyIdent > ) ... ] > ) > )
 
 format PyTop = struct Top ( 
+    line 'from parser1 import *'
     < typedecls := [ PyTypeDecl ... ] >
     line ( 'with ivywhite: grammar = ' < grammar := PyExpr > )
-    '\n'
     < code := ~'.*' > )
     
 >>>

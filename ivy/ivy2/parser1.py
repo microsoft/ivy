@@ -157,14 +157,58 @@ class RegEx(Format):
             if self.whitespace is not None and not no_white:
                 self.whitespace.des(rdr)
             t = rdr.read_regex(self.rexp)
+            if escape_spec is not None:
+                esc = escape_spec[0]
+                for c in escape_spec[1:]:
+                    t = t.replace(esc+c,c)
             return self.cls(t) if self.cls is not None else t
     def ser(self,wtr,obj):
         if not isinstance(obj,str):
             raise NoSer
-        wtr.write(str(obj))
+        t = str(obj)
+        if escape_spec is not None:
+            esc = escape_spec[0]
+            for c in escape_spec[1:]:
+                t = t.replace(c,esc+c)
+        wtr.write(t)
         if hasattr(self.whitespace,'dflt') and not no_white:
             wtr.write(self.whitespace.dflt)
             
+# An Escape format modifies the default for escaping characters within
+# strings.  An escape spec is a string whose first character is the
+# escape character, and whose subsequent characters are the characters
+# to be escaped. For example, the spec r"\\'" would represent a
+# convention in which the backslash and signle quote characters are
+# escaped with a preceding backslash character. 
+
+escape_spec = None
+
+class Escape(Format):
+    def __init__(self,spec,fmt):
+        self.spec,self.fmt = spec,fmt
+    def myspec(self):
+        return self.spec.replace("''","'")
+    def des(self,rdr):
+        with EscapeContext(self.myspec()):
+            return self.fmt.des(rdr)
+    def ser(self,wtr,obj):
+        with EscapeContext(self.myspec()):
+            self.fmt.ser(wtr,obj)
+        
+
+class EscapeContext(object):
+    def __init__(self,spec):
+        self.spec = spec
+    def __enter__(self):
+        global escape_spec
+        self.old_spec = escape_spec
+        escape_spec = self.spec
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global escape_spec
+        escape_spec = self.old_spec
+        return False # don't catch the exception
+
 # The format class NoWhite cancels the default whitespace in its argument. This is
 # useful for defining literal formats in which space characters are
 # significant. Operationally, it uses a context class to temporal set the flag "no_white"
@@ -495,9 +539,9 @@ class Struct(Format):
 #        print "struct trying: {} {}".format(self.cls,type(obj))
         if semantics.isinst(obj,self.cls):
             with Structure(obj):
-                wtr.nest()
+                if breakable: wtr.nest()
                 self.fmt.ser(wtr,None)
-                wtr.unnest()
+                if breakable: wtr.unnest()
         else:
 #            print "struct failed"
             raise NoSer
@@ -551,11 +595,11 @@ class Meta(Format):
 #        print "struct trying: {} {}".format(self.cls,type(obj))
             if not hasattr(obj,'fields'):
                 print 'structure: {}'.format(structure)
-            obj = MetaStruct(type(obj).__name__,(MetaField(x,y) for x,y in obj.fields()))
+            obj = MetaStruct(type(obj).__name__,(MetaField(x,y) for x,y in obj.fields() if y is not None))
         with Structure(obj):
-            wtr.nest()
+            if breakable: wtr.nest()
             self.fmt.ser(wtr,obj)
-            wtr.unnest()
+            if breakable: wtr.unnest()
 
 
 # A Rule defines non-terminal "lhs" symbol as a format "rhs".
