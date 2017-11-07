@@ -2037,7 +2037,7 @@ class z3_thunk : public thunk<D,R> {
                 close_scope(impl)
 
 
-        if target.get() in ["repl","test"]:
+        if target.get() in ["repl","test"] and emit_main:
             emit_repl_imports(header,impl,classname)
             emit_repl_boilerplate1(header,impl,classname)
 
@@ -4023,7 +4023,7 @@ public:
 };
 """.replace('classname',classname))
 
-target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
+target = iu.EnumeratedParameter("target",["impl","gen","repl","test","class"],"gen")
 opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
@@ -4033,6 +4033,7 @@ opt_main = iu.Parameter("main","main")
 opt_stdafx = iu.BooleanParameter("stdafx",False)
 opt_outdir = iu.Parameter("outdir","")
 
+emit_main = True
 
 def main():
     ia.set_determinize(True)
@@ -4045,6 +4046,10 @@ def main():
     else:
         iu.set_parameters({'keep_destructors':'true'})
         
+    if target.get() == 'class':
+        target.set('repl')
+        global emit_main
+        emit_main = False
         
 
     with im.Module():
@@ -4123,7 +4128,10 @@ def main():
                         else:
                             _dir = os.path.dirname(os.path.abspath(__file__))
                             paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
-                        cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
+                        if emit_main:
+                            cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
+                        else:
+                            cmd = "g++ {} -c {}.cpp".format(paths,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
                         cmd += ' -pthread'
