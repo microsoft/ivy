@@ -1,6 +1,6 @@
 #include "udp_test.h"
 #include <iostream>
-
+#include <unistd.h>
 /*
 
 To compile:
@@ -27,4 +27,5 @@ class myclass : public udp_test {
 int main(int argc, const char **argv) {
     myclass obj;
     obj.ext__foo__send(0,1,1);
+    sleep(1);
 }
