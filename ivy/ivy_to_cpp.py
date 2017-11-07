@@ -1282,16 +1282,28 @@ def module_to_cpp_class(classname,basename):
                 once_memo.add(code)
                 header.append(code)
 
+    header.append("""
+
+    class reader;
+    class timer;
+
+""")
 
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
 #ifdef _WIN32
     void *mutex;  // forward reference to HANDLE
+#else
+    pthread_mutex_t mutex;
 #endif
     void __lock();
     void __unlock();
 """)
+    header.append('    std::vector<int> thread_ids;\n')
+    header.append('    void install_reader(reader *);\n')
+    header.append('    void install_timer(timer *);\n')
+
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() in ["gen","test"]:
         header.append('    ivy_gen *___ivy_gen;\n')
@@ -1339,13 +1351,144 @@ def module_to_cpp_class(classname,basename):
     impl.append("std::ofstream __ivy_out;\n")
     impl.append("std::ofstream __ivy_modelfile;\n")
     impl.append("void __ivy_exit(int code){exit(code);}\n")
+
+    impl.append("""
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+    virtual ~reader() {}
+};
+
+class timer {
+public:
+    virtual int ms_delay() = 0;
+    virtual void timeout(int) = 0;
+    virtual ~timer() {}
+};
+
+#ifdef _WIN32
+DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
+{
+    reader *cr = (reader *) lpParam;
+    while (true)
+        cr->read();
+    return 0;
+} 
+
+DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
+{
+    timer *cr = (reader *) lpParam;
+    while (true) {
+        int ms = timer->ms_delay();
+        Sleep(ms);
+        timer->timeout(ms);
+    }
+    return 0;
+} 
+#else
+void * _thread_reader(void *rdr_void) {
+    reader *rdr = (reader *) rdr_void;
+    while(true) {
+        rdr->read();
+    }
+    return 0; // just to stop warning
+}
+
+void * _thread_timer( void *tmr_void ) 
+{
+    timer *tmr = (timer *) tmr_void;
+    while (true) {
+        int ms = tmr->ms_delay();
+        struct timespec ts;
+        ts.tv_sec = ms/1000;
+        ts.tv_nsec = (ms % 1000) * 1000000;
+        nanosleep(&ts,NULL);
+        tmr->timeout(ms);
+    }
+    return 0;
+} 
+#endif 
+""")
+
+    if target.get() == "repl":
+        impl.append("""
+void CLASSNAME::install_reader(reader *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            ReaderThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_reader, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+void CLASSNAME::install_timer(timer *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            TimersThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_timer, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+""".replace('CLASSNAME',classname))
+
+    if target.get() == "test":
+        impl.append("""
+std::vector<reader *> readers;
+std::vector<timer *> timers;
+
+void CLASSNAME::install_reader(reader *r) {
+    readers.push_back(r);
+}
+void CLASSNAME::install_timer(timers *r) {
+    timers.push_back(r);
+}
+""".replace('CLASSNAME',classname))
+
     impl.append("""
 #ifdef _WIN32
     void CLASSNAME::__lock() { WaitForSingleObject(mutex,INFINITE); }
     void CLASSNAME::__unlock() { ReleaseMutex(mutex); }
 #else
-    void CLASSNAME::__lock() { }
-    void CLASSNAME::__unlock() { }
+    void CLASSNAME::__lock() { pthread_mutex_lock(&mutex); }
+    void CLASSNAME::__unlock() { pthread_mutex_unlock(&mutex); }
 #endif
 """.replace('CLASSNAME',classname))
     native_exprs = []
@@ -1369,19 +1512,8 @@ def module_to_cpp_class(classname,basename):
     impl.append(hash_cpp)
 
     impl.append("""
-class reader {
-public:
-    virtual int fdes() = 0;
-    virtual void read() = 0;
-    virtual ~reader() {}
-};
-void install_reader(reader *);
-class timer {
-public:
-    virtual int ms_delay() = 0;
-    virtual void timeout(int) = 0;
-};
-void install_timer(timer *);
+
+
 struct ivy_value {
     int pos;
     std::string atom;
@@ -1799,6 +1931,8 @@ class z3_thunk : public thunk<D,R> {
     impl.append('{\n')
     impl.append('#ifdef _WIN32\n');
     impl.append('mutex = CreateMutex(NULL,FALSE,NULL);\n')
+    impl.append('#else\n');
+    impl.append('pthread_mutex_init(&mutex,NULL);\n')
     impl.append('#endif\n');
     enums = set(sym.sort.name for sym in il.sig.constructors)  
 #    for sortname in enums:
@@ -3289,38 +3423,6 @@ def emit_repl_boilerplate2(header,impl,classname):
 };
 
 
-std::vector<reader *> readers;
-
-void install_reader(reader *r){
-    readers.push_back(r);
-}
-
-std::vector<timer *> timers;
-
-void install_timer(timer *r){
-    timers.push_back(r);
-}
-
-#ifdef _WIN32
-DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
-{
-    reader *cr = (reader *) lpParam;
-    while (true)
-        cr->read();
-    return 0;
-} 
-
-DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
-{
-    while (true) {
-        int timer_min = 15; // (ms)
-        Sleep(timer_min);
-        for (unsigned i = 0; i < timers.size(); i++)
-            timers[i]->timeout(timer_min);
-    }
-    return 0;
-} 
-#endif 
 
 """.replace('classname',classname))
 
@@ -3368,153 +3470,13 @@ def emit_repl_boilerplate3(header,impl,classname):
 
 
     cmd_reader *cr = new cmd_reader(ivy);
-    install_reader(cr);
-
-#ifdef _WIN32
-    // Windows can't do asynchronous console I/O. Reeaders other than the console
-    // reader are handled with threads. 
-
-    for (unsigned i = 0; i < readers.size() - 1; i++) {
-        DWORD dummy;
-        HANDLE h = CreateThread( 
-            NULL,                   // default security attributes
-            0,                      // use default stack size  
-            ReaderThreadFunction,   // thread function name
-            readers[i],             // argument to thread function 
-            0,                      // use default creation flags 
-            &dummy);                // returns the thread identifier 
-        if (h == NULL) {
-            std::cerr << "failed to create thread" << std::endl;
-            exit(1);
-        }
-    }
-
-    // Also create a thread to advance timers
-
-    {
-        DWORD dummy;
-        HANDLE h = CreateThread( 
-            NULL,                   // default security attributes
-            0,                      // use default stack size  
-            TimerThreadFunction,    // thread function name
-            0,                      // argument to thread function 
-            0,                      // use default creation flags 
-            &dummy);                // returns the thread identifier 
-        if (h == NULL) {
-            std::cerr << "failed to create thread" << std::endl;
-            exit(1);
-        }
-    }
 
     // The main thread runs the console reader
 
     while (!cr->eof())
         cr->read();
     return 0;
-#endif
 
-    while(true) {
-
-        fd_set rdfds;
-        FD_ZERO(&rdfds);
-        int maxfds = 0;
-
-        if (cr->eof())
-            return 0;
-
-        int foo;
-
-        int timer_min = 1000;
-        for (unsigned i = 0; i < timers.size(); i++){
-            int t = timers[i]->ms_delay();
-            if (t < timer_min) 
-                timer_min = t;
-        }
-
-#if 0
-        {
-            std::vector<WSAEVENT> handles;
-
-            for (unsigned i = 0; i < readers.size(); i++) {
-                reader *r = readers[i];
-                int fds = r->fdes();
-                WSAEVENT ev = WSACreateEvent();
-                if (ev == WSA_INVALID_EVENT)
-                { 
-                    printf("WSACreateEvent() failed with error %d\\n", WSAGetLastError());
-                    return 1;
-                }
-                if (WSAEventSelect(fds, ev, FD_READ) == SOCKET_ERROR)
-                {
-                     printf("WSAEventSelect() failed with error %d\\n", WSAGetLastError());
-                     return 1;
-                }
-                // HANDLE h = (HANDLE)_get_osfhandle(fds);
-                handles.push_back(ev);
-            }
-
-            int timer_min = 1000;
-            for (unsigned i = 0; i < timers.size(); i++){
-                int t = timers[i]->ms_delay();
-                if (t < timer_min) 
-                    timer_min = t;
-            }
-
-            struct timeval timeout;
-            timeout.tv_sec = timer_min/1000;
-            timeout.tv_usec = 1000 * (timer_min % 1000);
-
-            DWORD res = WaitForMultipleObjectsEx(handles.size(),&handles[0],false,timer_min,false);
-
-            if (res == WAIT_FAILED)
-            {
-                printf("select failed with error: %d\\n", GetLastError());
-                __ivy_exit(1);
-            }
-
-            foo = res != WAIT_TIMEOUT;
-    
-            if (foo) {
-                int idx = res - WSA_WAIT_EVENT_0;
-
-            } 
-
-        }
-#else
-        for (unsigned i = 0; i < readers.size(); i++) {
-            reader *r = readers[i];
-            int fds = r->fdes();
-            FD_SET(fds,&rdfds);
-            if (fds > maxfds)
-                maxfds = fds;
-        }
-
-
-        struct timeval timeout;
-        timeout.tv_sec = timer_min/1000;
-        timeout.tv_usec = 1000 * (timer_min % 1000);
-
-        foo = select(maxfds+1,&rdfds,0,0,&timeout);
-
-        if (foo < 0)
-        {
-            perror("select failed"); 
-            __ivy_exit(1);
-        }
-#endif        
-        if (foo == 0){
-            // std::cout << "TIMEOUT\\n";            
-           for (unsigned i = 0; i < timers.size(); i++)
-               timers[i]->timeout(timer_min);
-        }
-        else {
-            for (unsigned i = 0; i < readers.size(); i++) {
-                reader *r = readers[i];
-                if (FD_ISSET(r->fdes(),&rdfds))
-                    r->read();
-            }
-        }            
-    }
 """.replace('classname',classname))
 
 def emit_repl_boilerplate3test(header,impl,classname):
@@ -4164,6 +4126,7 @@ def main():
                         cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
+                        cmd += ' -pthread'
                     print cmd
                     import sys
                     sys.stdout.flush()
