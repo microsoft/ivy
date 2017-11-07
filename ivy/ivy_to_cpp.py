@@ -1300,9 +1300,16 @@ def module_to_cpp_class(classname,basename):
     void __lock();
     void __unlock();
 """)
-    header.append('    std::vector<int> thread_ids;\n')
+    header.append("""
+#ifdef _WIN32
+    std::vector<DWORD> thread_ids;\n
+#else
+    std::vector<pthread_t> thread_ids;\n
+#endif
+""")
     header.append('    void install_reader(reader *);\n')
     header.append('    void install_timer(timer *);\n')
+    header.append('    virtual ~{}();\n'.format(classname))
 
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() in ["gen","test"]:
@@ -1956,6 +1963,14 @@ class z3_thunk : public thunk<D,R> {
             indent_level -= 1
 
     impl.append('}\n')
+
+    impl.append("""CLASSNAME::~CLASSNAME(){
+    for (unsigned i = 0; i < thread_ids.size(); i++){
+        pthread_cancel(thread_ids[i]);
+        pthread_join(thread_ids[i],NULL);
+    }
+}
+""".replace('CLASSNAME',classname))
 
     if target.get() in ["gen","test"]:
         sf = header if target.get() == "gen" else impl
