@@ -1658,6 +1658,13 @@ struct out_of_bounds {
 template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
 
 template <>
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return args[idx].atom == "true";
+}
+
+template <>
 int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
     int res = atoi(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
@@ -2012,7 +2019,7 @@ class z3_thunk : public thunk<D,R> {
                 code_line(impl,'return s')
                 close_scope(impl)
 
-            open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
+            open_scope(header,line='inline bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
             s = il.Symbol('s',sort)
             t = il.Symbol('t',sort)
             code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
@@ -2052,9 +2059,11 @@ class z3_thunk : public thunk<D,R> {
                 close_scope(impl)
 
 
-        if target.get() in ["repl","test"] and emit_main:
-            emit_repl_imports(header,impl,classname)
-            emit_repl_boilerplate1(header,impl,classname)
+        if target.get() in ["repl","test"]:
+
+            if  emit_main:
+                emit_repl_imports(header,impl,classname)
+                emit_repl_boilerplate1(header,impl,classname)
 
             for sort_name in sorted(im.module.sort_destructors):
                 destrs = im.module.sort_destructors[sort_name]
@@ -2198,39 +2207,39 @@ class z3_thunk : public thunk<D,R> {
                     close_scope(impl)
 
 
+            if emit_main:
+                if target.get() in ["gen","test"]:
+                    emit_all_ctuples_to_solver(impl,classname)
 
-            if target.get() in ["gen","test"]:
-                emit_all_ctuples_to_solver(impl,classname)
 
-
-            emit_repl_boilerplate1a(header,impl,classname)
-            for actname in sorted(im.module.public_actions):
-                username = actname[4:] if actname.startswith("ext:") else actname
-                action = im.module.actions[actname]
-                argstrings = ['_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params)]
-                getargs = ','.join(argstrings)
-                thing = "ivy.methodname(getargs)"
-                if action.formal_returns:
-                    thing = '__ivy_out << "= " << ' + thing + " << std::endl"
-                if target.get() == "repl" and opt_trace.get():
-                    if action.formal_params:
-                        trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
-                    else:
-                        trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
-                    thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
-                impl.append("""
+                emit_repl_boilerplate1a(header,impl,classname)
+                for actname in sorted(im.module.public_actions):
+                    username = actname[4:] if actname.startswith("ext:") else actname
+                    action = im.module.actions[actname]
+                    argstrings = ['_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params)]
+                    getargs = ','.join(argstrings)
+                    thing = "ivy.methodname(getargs)"
+                    if action.formal_returns:
+                        thing = '__ivy_out << "= " << ' + thing + " << std::endl"
+                    if target.get() == "repl" and opt_trace.get():
+                        if action.formal_params:
+                            trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                        else:
+                            trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
+                        thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
+                    impl.append("""
                 if (action == "actname") {
                     check_arity(args,numargs,action);
                     thing;
                 }
                 else
     """.replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
-            emit_repl_boilerplate2(header,impl,classname)
+                emit_repl_boilerplate2(header,impl,classname)
 
 
-            impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
-            impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
-            impl.append("""
+                impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
+                impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
+                impl.append("""
     int runs = 1;
     int seed = 1;
     int sleep_ms = 10;
@@ -2286,48 +2295,48 @@ class z3_thunk : public thunk<D,R> {
     argc = pargs.size();
     argv = &pargs[0];
 """)
-            impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
-            impl.append("        argc--;\n")
-            impl.append("        int fd = _open(argv[argc],0);\n")
-            impl.append("        if (fd < 0){\n")
-            impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
-            impl.append('            __ivy_exit(1);\n')
-            impl.append('        }\n')
-            impl.append("        _dup2(fd, 0);\n")
-            impl.append("    }\n")
-            impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
-            impl.append('        std::cerr << "usage: {} {}\\n";\n'
-                        .format(classname,' '.join(map(varname,im.module.params))))
-            impl.append('        __ivy_exit(1);\n    }\n')
-            impl.append('    std::vector<std::string> args;\n')
-            impl.append('    std::vector<ivy_value> arg_values(1);\n')
-            impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
-            for idx,s in enumerate(im.module.params):
-                impl.append('    int p__'+varname(s)+';\n')
-                impl.append('    try {\n')
-                impl.append('        int pos = 0;\n')
-                impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
-                impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
-                            .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
-                impl.append('    }\n    catch(out_of_bounds &) {\n')
-                impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+                impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+                impl.append("        argc--;\n")
+                impl.append("        int fd = _open(argv[argc],0);\n")
+                impl.append("        if (fd < 0){\n")
+                impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
+                impl.append('            __ivy_exit(1);\n')
+                impl.append('        }\n')
+                impl.append("        _dup2(fd, 0);\n")
+                impl.append("    }\n")
+                impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
+                impl.append('        std::cerr << "usage: {} {}\\n";\n'
+                            .format(classname,' '.join(map(varname,im.module.params))))
                 impl.append('        __ivy_exit(1);\n    }\n')
-                impl.append('    catch(syntax_error &) {\n')
-                impl.append('        std::cerr << "syntax error in command argument\\n";\n')
-                impl.append('        __ivy_exit(1);\n    }\n')
-            cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
-            emit_winsock_init(impl)
-            if target.get() == "test":
-                impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
-            impl.append('    {}_repl ivy{};\n'
-                        .format(classname,cp))
-            if target.get() == "test":
-                emit_repl_boilerplate3test(header,impl,classname)
-            else:
-                emit_repl_boilerplate3(header,impl,classname)
-            if target.get() == "test":
-                impl.append('    }\n')
-            impl.append("    return 0;\n}\n")
+                impl.append('    std::vector<std::string> args;\n')
+                impl.append('    std::vector<ivy_value> arg_values(1);\n')
+                impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
+                for idx,s in enumerate(im.module.params):
+                    impl.append('    int p__'+varname(s)+';\n')
+                    impl.append('    try {\n')
+                    impl.append('        int pos = 0;\n')
+                    impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
+                    impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
+                                .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
+                    impl.append('    }\n    catch(out_of_bounds &) {\n')
+                    impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+                    impl.append('        __ivy_exit(1);\n    }\n')
+                    impl.append('    catch(syntax_error &) {\n')
+                    impl.append('        std::cerr << "syntax error in command argument\\n";\n')
+                    impl.append('        __ivy_exit(1);\n    }\n')
+                cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+                emit_winsock_init(impl)
+                if target.get() == "test":
+                    impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
+                impl.append('    {}_repl ivy{};\n'
+                            .format(classname,cp))
+                if target.get() == "test":
+                    emit_repl_boilerplate3test(header,impl,classname)
+                else:
+                    emit_repl_boilerplate3(header,impl,classname)
+                if target.get() == "test":
+                    impl.append('    }\n')
+                impl.append("    return 0;\n}\n")
 
 
         
@@ -3349,13 +3358,6 @@ void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action
         throw bad_arity(action,num);
 }
 
-template <>
-bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
-    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
-        throw out_of_bounds(idx,args[idx].pos);
-    return args[idx].atom == "true";
-}
-
 """.replace('classname',classname))
 
 
@@ -4146,7 +4148,7 @@ def main():
                         if emit_main:
                             cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
                         else:
-                            cmd = "g++ {} -c {}.cpp".format(paths,basename)
+                            cmd = "g++ {} -g -c {}.cpp".format(paths,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
                         cmd += ' -pthread'
