@@ -6,25 +6,36 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 
     <<< header
 	class udp_reader;
+
+        class udp_config {
+	public:
+	    virtual void get(int id, unsigned long &inetaddr, unsigned long &inetport);
+        };
     >>>
     <<< impl
+        void udp_config::get(int id, unsigned long &inetaddr, unsigned long &inetport) {
+#ifdef _WIN32
+	        inetaddr = ntohl(inet_addr("127.0.0.1")); // can't send to INADDR_ANY in windows
+#else
+	        inetaddr = INADDR_ANY;
+#endif
+	        inetport = `port_base`+ id;
+        }
 	class udp_reader : public reader {
 	    int sock;
 	    int my_id;
 	    %`handle_recv` rcb;
 	    ivy_class *ivy;
+	    udp_config *conf;
 	  public:
-	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy)
-	        : my_id(_my_id), rcb(rcb), ivy(ivy) {
+	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy, udp_config *conf)
+	        : my_id(_my_id), rcb(rcb), ivy(ivy), conf(conf) {
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 		if (sock < 0)
 		    { std::cerr << "cannot create socket\n"; exit(1); }
 
 		struct sockaddr_in myaddr;
-		memset((char *)&myaddr, 0, sizeof(myaddr));
-		myaddr.sin_family = AF_INET;
-		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		myaddr.sin_port = htons(`port_base`+my_id);
+		get_addr(my_id,myaddr);
 		if (bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
 		    { std::cerr << "bind failed\n"; exit(1); }
 
@@ -36,6 +47,16 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	        close(sock);
 #endif
 	    }
+	    virtual void get_addr(int my_id, sockaddr_in &myaddr) {
+		memset((char *)&myaddr, 0, sizeof(myaddr));
+		unsigned long inetaddr;
+		unsigned long inetport;
+		conf -> get(my_id,inetaddr,inetport);
+		myaddr.sin_family = AF_INET;
+		myaddr.sin_addr.s_addr = htonl(inetaddr);
+		myaddr.sin_port = htons(inetport);
+	    }
+
 	    virtual int fdes() {
 		return sock;
 	    }
@@ -70,15 +91,7 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	    }
 	    virtual void write(int dst, `pkt` pkt) {
 		struct sockaddr_in dstaddr;
-		memset((char *)&dstaddr, 0, sizeof(dstaddr));
-		dstaddr.sin_family = AF_INET;
-#ifdef _WIN32
-		dstaddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // htonl(INADDR_ANY)
-#else
-		dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-#endif
-		dstaddr.sin_port = htons(`port_base`+dst);
-
+		get_addr(dst,dstaddr);
 		ivy_binary_ser sr;
 	        __ser(sr,pkt);
 		//std::cout << "SENDING\n";
@@ -93,9 +106,14 @@ module udp_wrapper(addr,pkt,me,port_base) = {
     >>>
     <<< member
 	udp_reader *`rdr`;
+
+        virtual udp_config *get_udp_config() {
+	    return new udp_config();
+	}
+
     >>>
     <<< init
-	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this));
+	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this, get_udp_config()));
     >>>
 
     action handle_recv(x:pkt) = {
