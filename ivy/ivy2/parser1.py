@@ -316,8 +316,8 @@ class Indent(Format):
 # reasonable by removed.
 
 class List(Format):
-    def __init__(self,fmt,left=None,delim=None,right=None,min=None,max=None):
-        self.fmt,self.left,self.delim,self.right,self.min,self.max = fmt,left,delim,right,min,max
+    def __init__(self,fmt,left=None,delim=None,right=None,min=None,max=None,plus=None):
+        self.fmt,self.left,self.delim,self.right,self.min,self.max,self.plus = fmt,left,delim,right,min,max,plus
     def des(self,rdr):
         res = []
         with rdr.chk():
@@ -337,7 +337,7 @@ class List(Format):
                     break
             if self.right is not None:
                 self.right.read(rdr)
-            if self.max is not None and len(res) < self.min or self.max is not None and len(res) > self.max:
+            if self.max is not None and len(res) < self.min or self.max is not None and len(res) > self.max or self.plus is not None and len(res) == 0:
                 raise NoParse
             return res
     def ser(self,wtr,obj):
@@ -642,6 +642,73 @@ class NonTerm(Format):
     def ser(self,wtr,obj):
         global grammar
         grammar[self.name].ser(wtr,obj)
+
+# An Apply object is an application of an method to arguments
+
+class Apply(Format):
+    def __init__(self,func,args = None):
+        self.func = func
+        self.args = args
+
+# An expression object is a sequence of applications separated by
+# dots. 
+
+globvars = {}
+
+class Expr(Format):
+    def __init__(self,apps):
+        self.apps = apps
+    def eval(self,obj):
+        obj = apps[0]
+        func = self.obj.func
+        args = self.obj.args
+        if func == 'this':
+            this = obj
+        elif structure is not None and func in structure: 
+            this = structure[func]
+        elif func in globvars:
+            this = globvars[func]
+        elif func in globals():
+            this = globals()[func]
+        if args is not None:
+            this = this(*[a.eval(obj) for a in args])
+        for app in self.apps[1:]:
+            oo = this
+            this = getattr(this,app.func)
+            args = app.args
+            if args is not None:
+                this = this(oo,*[a.eval(obj) for a in args])
+        return this
+
+# An EvalExpr format evaluates an expression in the current context
+# and returns None.
+
+class EvalExpr(Format):
+    def __init__(self,expr):
+        self.expr = expr
+    def des(self,rdr):
+        self.expr.eval(None)
+    def ser(self,wtr,obj):
+        self.expr.eval(obj)
+    
+
+# A Var format introduces a binding of a value to a symbol
+
+class Var(Format):
+    def __init__(self,name,value,fmt):
+        self.name = name
+        self.value = value
+        self.fmt = fmt
+    def ser(self,wtr,obj):
+        global globvars
+        save = globvars.get(self.name,None)
+        globvars[self.name] = self.value.ser(wtr,obj)
+        try:
+            return self.fmt.ser(wtr,obj)
+        finally:
+            if save is not None:
+                globvars[self.name] = save
+                
 
 # A ReaderContext is a context object that sets the current reader.
 

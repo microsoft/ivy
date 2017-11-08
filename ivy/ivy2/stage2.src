@@ -22,7 +22,7 @@ format Format =
 	struct Escape ( 'escape' nowhite ( '''' < spec := ~'([^'']|(\''\''))*' > '''' ) < fmt := Format > )
         struct Breakable ( 'breakable' < fmt := Format > )
 	struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
-        struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
+        struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ? < plus := '+' > ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )
         struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
         struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )

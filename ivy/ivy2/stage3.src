@@ -40,6 +40,10 @@ format Type =
 format TypeDecl =
     struct TypeDecl ( 'type' < name := Ident > '=' < type := Type> )
 
+format Apply = struct Apply ( < func := Ident > ? ( '(' < args := [ Expr ',' ... ] > ')' ) )
+
+format Expr = struct Expr ( < apps := [ Apply '.' ... + ] > )
+
 format Format =
     {
         struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
@@ -54,6 +58,8 @@ format Format =
         struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
         struct Seq ( '(' < elems := [ Format ... ] > ')' )
         struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
+        struct Var ( 'var' < name := Ident > ':=' < value := Expr > 'in' < fmt := Format > )
+        struct EvalExpr ( '$' < expr := Expr > '$' )
         struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )
         struct Alt ( '{' < elems := [ Format ... ] > '}' )
     }
