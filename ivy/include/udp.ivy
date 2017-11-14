@@ -27,18 +27,30 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 	    %`handle_recv` rcb;
 	    ivy_class *ivy;
 	    udp_config *conf;
+	    bool bound;
 	  public:
-	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy, udp_config *conf)
-	        : my_id(_my_id), rcb(rcb), ivy(ivy), conf(conf) {
+	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy)
+	        : my_id(_my_id), rcb(rcb), ivy(ivy), conf(0), bound(false) {
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 		if (sock < 0)
 		    { std::cerr << "cannot create socket\n"; exit(1); }
 
-		struct sockaddr_in myaddr;
-		get_addr(my_id,myaddr);
-		if (bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
-		    { std::cerr << "bind failed\n"; exit(1); }
-
+            }
+            void bind_int() {
+                if (!bound) {
+                    struct sockaddr_in myaddr;
+                    get_addr(my_id,myaddr);
+//                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
+                    if (::bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+                        { std::cerr << "bind failed\n"; exit(1); }
+                }
+                bound = true;
+            }
+                    
+	    virtual void bind() {
+	        ivy -> __lock();  // can be asynchronous, so must lock ivy!
+                bind_int();
+	        ivy -> __unlock();
 	    }
 	    virtual ~udp_reader() {
 #ifdef _WIN32
@@ -51,6 +63,9 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		memset((char *)&myaddr, 0, sizeof(myaddr));
 		unsigned long inetaddr;
 		unsigned long inetport;
+	        if (!conf) {
+	            conf = ivy -> get_udp_config();
+                }
 		conf -> get(my_id,inetaddr,inetport);
 		myaddr.sin_family = AF_INET;
 		myaddr.sin_addr.s_addr = htonl(inetaddr);
@@ -90,6 +105,7 @@ module udp_wrapper(addr,pkt,me,port_base) = {
 		ivy->__unlock();
 	    }
 	    virtual void write(int dst, `pkt` pkt) {
+	        bind_int();
 		struct sockaddr_in dstaddr;
 		get_addr(dst,dstaddr);
 		ivy_binary_ser sr;
@@ -107,13 +123,21 @@ module udp_wrapper(addr,pkt,me,port_base) = {
     <<< member
 	udp_reader *`rdr`;
 
-        virtual udp_config *get_udp_config() {
-	    return new udp_config();
+        udp_config *the_udp_config;        
+
+        udp_config *get_udp_config() {
+	    if (!the_udp_config) 
+	        the_udp_config = new udp_config();
+	    return the_udp_config; 
 	}
 
+        void set_udp_config(udp_config *conf) {
+	    the_udp_config = conf;
+        }
     >>>
     <<< init
-	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this, get_udp_config()));
+        the_udp_config = 0;
+	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this));
     >>>
 
     action handle_recv(x:pkt) = {

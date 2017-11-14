@@ -1364,6 +1364,7 @@ class reader {
 public:
     virtual int fdes() = 0;
     virtual void read() = 0;
+    virtual void bind() {}
     virtual ~reader() {}
 };
 
@@ -1378,6 +1379,7 @@ public:
 DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
 {
     reader *cr = (reader *) lpParam;
+    cr->bind();
     while (true)
         cr->read();
     return 0;
@@ -1396,6 +1398,7 @@ DWORD WINAPI TimerThreadFunction( LPVOID lpParam )
 #else
 void * _thread_reader(void *rdr_void) {
     reader *rdr = (reader *) rdr_void;
+    rdr->bind();
     while(true) {
         rdr->read();
     }
@@ -1948,6 +1951,7 @@ class z3_thunk : public thunk<D,R> {
     impl.append('#else\n');
     impl.append('pthread_mutex_init(&mutex,NULL);\n')
     impl.append('#endif\n');
+    impl.append('__lock();\n');
     enums = set(sym.sort.name for sym in il.sig.constructors)  
 #    for sortname in enums:
 #        for i,n in enumerate(il.sig.sorts[sortname].extension):
@@ -1972,10 +1976,12 @@ class z3_thunk : public thunk<D,R> {
     impl.append('}\n')
 
     impl.append("""CLASSNAME::~CLASSNAME(){
+    __lock(); // otherwise, thread may die holding lock!
     for (unsigned i = 0; i < thread_ids.size(); i++){
         pthread_cancel(thread_ids[i]);
         pthread_join(thread_ids[i],NULL);
     }
+    __unlock();
 }
 """.replace('CLASSNAME',classname))
 
@@ -3485,6 +3491,7 @@ def emit_winsock_init(impl):
 def emit_repl_boilerplate3(header,impl,classname):
     impl.append("""
 
+    ivy.__unlock();
 
     cmd_reader *cr = new cmd_reader(ivy);
 
