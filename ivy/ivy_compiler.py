@@ -362,6 +362,12 @@ def compile_local(self):
 LocalAction.cmpl = compile_local
 
 def compile_assign(self):
+    rhs = self.args[1]
+    if (isinstance(rhs,ivy_ast.App) or isinstance(rhs,ivy_ast.Atom)):
+        if top_context and rhs.rep in top_context.actions:
+            c = CallAction(rhs,self.args[0])
+            c.lineno = self.lineno
+            return c.cmpl()
     code = []
     local_syms = []
     with ExprContext(code,local_syms):

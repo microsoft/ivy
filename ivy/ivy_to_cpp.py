@@ -291,11 +291,12 @@ def ctype_remaining_cases(sort,classname):
 
 global_classname = None
 
-def ctype(sort,classname=None):
+def ctype(sort,classname=None,ref=False,const=False):
     classname = classname or global_classname
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
-            return ((classname+'::') if classname != None else '') + varname(sort.name)
+            return (('const ' if const and not ref else '' ) + ((classname+'::') if classname != None else '') + varname(sort.name)
+                     + ('&' if ref or const else '' ))
     return ctype_remaining_cases(sort,classname)
     
 def ctypefull(sort,classname=None):
@@ -935,9 +936,9 @@ def emit_native(header,impl,native,classname):
     with ivy_ast.ASTContext(native):
         header.append(native_to_str(native))
 
-def emit_param_decls(header,name,params,extra=[],classname=None):
+def emit_param_decls(header,name,params,extra=[],classname=None,inplace=None):
     header.append(varname(name) + '(')
-    header.append(', '.join(extra + [ctype(p.sort,classname=classname) + ' ' + varname(p.name) for p in params]))
+    header.append(', '.join(extra + [ctype(p.sort,classname=classname,ref=(p==inplace),const=True) + ' ' + varname(p.name) for p in params]))
     header.append(')')
 
 def emit_method_decl(header,name,action,body=False,classname=None):
@@ -945,11 +946,16 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         print "bad name: {}".format(name)
         print "bad action: {}".format(action)
     rs = action.formal_returns
+    inplace = None
+    if rs:
+        for p in action.formal_params:
+            if p == rs[0]:
+                inplace = p
     if not body:
         header.append('    ')
     if not body and target.get() != "gen":
         header.append('virtual ')
-    if len(rs) == 0:
+    if len(rs) == 0 or len(rs) == 1 and inplace is not None:
         header.append('void ')
     elif len(rs) == 1:
         header.append(ctype(rs[0].sort,classname=classname) + ' ')
@@ -957,7 +963,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
         header.append(classname + '::')
-    emit_param_decls(header,name,action.formal_params)
+    emit_param_decls(header,name,action.formal_params,inplace=inplace)
     
 def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
@@ -1003,7 +1009,7 @@ def emit_some_action(header,impl,name,action,classname):
     if name in import_callers:
         if opt_trace.get():
             code_line(code,'__ivy_out << "}" << std::endl')
-    if len(action.formal_returns) == 1:
+    if len(action.formal_returns) == 1 and get_inplace(action) is None:
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
     indent_level -= 1
@@ -3023,22 +3029,46 @@ def emit_assume(self,header):
 ia.AssumeAction.emit = emit_assume
 
 
+def get_inplace(action):
+    if action.formal_returns:
+        for idx,p in enumerate(action.formal_params):
+            if p == action.formal_returns[0]:
+                return idx
+    return None
+
 def emit_call(self,header):
     indent(header)
     header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
     code = []
     indent(code)
+    retval = None
+    args = self.args[0].args
     if len(self.args) == 2:
-        self.args[1].emit(header,code)
-        code.append(' = ')
+        action = im.module.actions[self.args[0].rep]
+        pos = get_inplace(action)
+        if pos is not None:
+            iparg = self.args[0].args[pos]
+            if iparg != self.args[1]:
+                retval = new_temp(header,self.args[1].sort)
+                code.append(retval + ' = ')
+                self.args[0].args[pos].emit(header,code)
+                code.append('; ')
+                args = [il.Symbol(retval,self.args[1].sort) if idx == pos else a for idx,a in enumerate(args)]
+        else:
+            self.args[1].emit(header,code)
+            code.append(' = ')
     code.append(varname(str(self.args[0].rep)) + '(')
     first = True
-    for p in self.args[0].args:
+    for p in args:
         if not first:
             code.append(', ')
         p.emit(header,code)
         first = False
     code.append(');\n')    
+    if retval is not None:
+        indent(code) 
+        self.args[1].emit(header,code)
+        code.append(' = ' + retval + ';\n')
     header.extend(code)
     indent(header)
     header.append('___ivy_stack.pop_back();\n')
