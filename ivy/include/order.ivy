@@ -240,7 +240,7 @@ module sequence_iterator(range) = {
 	    }
 	}
 	implement prev {
-	    y := create(range.prev(val(x)))
+	    x := create(range.prev(val(y)))
 	}
     }
 
