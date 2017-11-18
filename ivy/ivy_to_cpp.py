@@ -291,12 +291,30 @@ def ctype_remaining_cases(sort,classname):
 
 global_classname = None
 
-def ctype(sort,classname=None,ref=False,const=False):
+# Parameter passing types
+
+class ValueType(object):  # by value
+    def make(self,t):
+        return t
+class ConstRefType(object):  # by const reference
+    def make(self,t):
+        return 'const ' + t + '&'
+class RefType(object): # by non-const reference
+    def make(self,t):
+        return t + '&'
+
+class ReturnRefType(object): # return by reference in argument position "pos"
+    def __init__(self,pos):
+        self.pos = pos
+    def make(self,t):
+        return 'void'
+
+def ctype(sort,classname=None,ptype=None):
+    ptype = ptype or ValueType()
     classname = classname or global_classname
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
-            return (('const ' if const and not ref else '' ) + ((classname+'::') if classname != None else '') + varname(sort.name)
-                     + ('&' if ref or const else '' ))
+            return ptype.make(((classname+'::') if classname != None else '') + varname(sort.name))
     return ctype_remaining_cases(sort,classname)
     
 def ctypefull(sort,classname=None):
@@ -936,9 +954,54 @@ def emit_native(header,impl,native,classname):
     with ivy_ast.ASTContext(native):
         header.append(native_to_str(native))
 
-def emit_param_decls(header,name,params,extra=[],classname=None,inplace=None):
+
+# This determines the parameter passing type of each input and output
+# of an action (value, const reference, or no-const reference, return
+# by reference). The rules are as follows: 
+#
+# If an output parameter is the same as an input parameter, that
+# parameter is returned by reference, and the input parameter is
+# passed by reference. Other input parameters are passed by const
+# reference, except if the parameter is assigned on the action body,
+# in which case it is passed by value. Other output parameters are
+# returned by value.
+
+def annotate_action(action):
+    def action_assigns(p):
+        return any(p in sub.modifies() for sub in action.iter_subactions())
+    action.param_types = [RefType() if any(p == q for q in action.formal_returns)
+                          else ValueType() if action_assigns(p) else ConstRefType()
+                          for p in action.formal_params]
+    def return_type(p):
+        for idx,q in enumerate(action.formal_params):
+            if p == q:
+                return ReturnRefType(idx)
+        return ValueType()
+    action.return_types = [return_type(p) for p in action.formal_returns]
+
+def get_param_types(action):
+    if not hasattr(action,"param_types"):
+        annotate_action(action)
+    return (action.param_types, action.return_types)
+
+# Estimate if two expressions may alias. We say conservatively that expressions may alias
+# if they have the same root variable.
+
+def is_destructor(symbol):
+    return symbol.name in im.module.destructor_sorts
+
+def may_alias(x,y):
+    def root_var(x):
+        while il.is_app(x) and is_destructor(x.rep):
+            x = x.args[0]
+        return x
+    return root_var(x) == root_var(y)
+
+# emit parameter declarations of the approriate parameter types
+
+def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
     header.append(varname(name) + '(')
-    header.append(', '.join(extra + [ctype(p.sort,classname=classname,ref=(p==inplace),const=True) + ' ' + varname(p.name) for p in params]))
+    header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
 def emit_method_decl(header,name,action,body=False,classname=None):
@@ -946,24 +1009,20 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         print "bad name: {}".format(name)
         print "bad action: {}".format(action)
     rs = action.formal_returns
-    inplace = None
-    if rs:
-        for p in action.formal_params:
-            if p == rs[0]:
-                inplace = p
+    ptypes,rtypes = get_param_types(action)
     if not body:
         header.append('    ')
     if not body and target.get() != "gen":
         header.append('virtual ')
-    if len(rs) == 0 or len(rs) == 1 and inplace is not None:
+    if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
-        header.append(ctype(rs[0].sort,classname=classname) + ' ')
+        header.append(ctype(rs[0].sort,classname=classname,ptype=rtypes[0]) + ' ')
     else:
         raise iu.IvyError(action,'cannot handle multiple output values')
     if body:
         header.append(classname + '::')
-    emit_param_decls(header,name,action.formal_params,inplace=inplace)
+    emit_param_decls(header,name,action.formal_params,ptypes=ptypes)
     
 def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
@@ -1009,7 +1068,8 @@ def emit_some_action(header,impl,name,action,classname):
     if name in import_callers:
         if opt_trace.get():
             code_line(code,'__ivy_out << "}" << std::endl')
-    if len(action.formal_returns) == 1 and get_inplace(action) is None:
+    pt,rt = get_param_types(action)
+    if len(action.formal_returns) == 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
     indent_level -= 1
@@ -3029,13 +3089,6 @@ def emit_assume(self,header):
 ia.AssumeAction.emit = emit_assume
 
 
-def get_inplace(action):
-    if action.formal_returns:
-        for idx,p in enumerate(action.formal_params):
-            if p == action.formal_returns[0]:
-                return idx
-    return None
-
 def emit_call(self,header):
     indent(header)
     header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
@@ -3045,10 +3098,12 @@ def emit_call(self,header):
     args = self.args[0].args
     if len(self.args) == 2:
         action = im.module.actions[self.args[0].rep]
-        pos = get_inplace(action)
+        pt,rt = get_param_types(action)
+        pos = rt[0].pos if isinstance(rt[0],ReturnRefType) else None
         if pos is not None:
             iparg = self.args[0].args[pos]
-            if iparg != self.args[1]:
+            if (iparg != self.args[1] or
+                any(j != pos and may_alias(arg,iparg) for j,arg in enumerate(self.args[0].args))):
                 retval = new_temp(header,self.args[1].sort)
                 code.append(retval + ' = ')
                 self.args[0].args[pos].emit(header,code)
