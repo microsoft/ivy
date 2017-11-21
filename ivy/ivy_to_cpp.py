@@ -3095,6 +3095,17 @@ ia.AssumeAction.emit = emit_assume
 
 
 def emit_call(self,header):
+    # tricky: a call can have variables on the lhs. we lower this to
+    # a call with temporary return actual followed by assignment 
+    if len(self.args) == 2 and list(ilu.variables_ast(self.args[1])):
+        sort = self.args[1].sort
+        sym = il.Symbol(new_temp(header,sort=sort),sort)
+        emit_call(self.clone([self.args[0],sym]),header)
+        ac = ia.AssignAction(self.args[1],sym)
+        if hasattr(self,'lineno'):
+            ac.lineno = self.lineno
+        emit_assign(ac,header)
+        return
     if target.get() in ["gen","test"]:
         indent(header)
         header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
