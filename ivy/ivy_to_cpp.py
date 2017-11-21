@@ -1558,7 +1558,7 @@ std::vector<timer *> timers;
 void CLASSNAME::install_reader(reader *r) {
     readers.push_back(r);
 }
-void CLASSNAME::install_timer(timers *r) {
+void CLASSNAME::install_timer(timer *r) {
     timers.push_back(r);
 }
 """.replace('CLASSNAME',classname))
@@ -3608,6 +3608,7 @@ def emit_repl_boilerplate3(header,impl,classname):
 
 def emit_repl_boilerplate3test(header,impl,classname):
     impl.append("""
+        ivy.__unlock();
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
