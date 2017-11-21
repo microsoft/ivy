@@ -206,8 +206,8 @@ module sequence_iterator(range) = {
 
     instantiate order_iterator(range)
 
-    action next(x:t) returns (y:t)
-    action prev(y:t) returns (x:t)
+    action next(x:t) returns (x:t)
+    action prev(x:t) returns (x:t)
     
     object spec = {
 	...
@@ -215,18 +215,18 @@ module sequence_iterator(range) = {
 	    assert ~is_end(x)
 	}
 	after next {
-	    assert X <= val(x) & is_end(y)
-	           | ~(val(x) < Y & Y < val(y))
-	             & val(x) < val(y) & ~is_end(y)
+	    assert X <= val(old x) & is_end(x)
+	           | ~(val(old x) < Y & Y < val(x))
+	             & val(old x) < val(x) & ~is_end(x)
 	}
 	before prev {
-	    assert is_end(y) | exists X. X < val(y)
+	    assert is_end(x) | exists X. X < val(x)
 	}
 	after prev {
 	    assert ~is_end(x);
-	    assert X <= val(x) & is_end(y)
-	           | ~(val(x) < Y & Y < val(y))
-	             & val(x) < val(y) & ~is_end(y)
+	    assert X <= val(x) & is_end(old x)
+	           | ~(val(x) < Y & Y < val(old x))
+	             & val(x) < val(old x) & ~is_end(old x)
 	}
     }
 
@@ -234,13 +234,13 @@ module sequence_iterator(range) = {
 	...
 	implement next {
 	    if range.is_max(val(x)) {
-		y := end
+		x := end
 	    } else {
-		y := create(range.next(val(x)))
+		x := create(range.next(val(x)))
 	    }
 	}
 	implement prev {
-	    x := create(range.prev(val(y)))
+	    x := create(range.prev(val(x)))
 	}
     }
 

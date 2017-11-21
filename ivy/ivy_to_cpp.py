@@ -969,8 +969,13 @@ def emit_native(header,impl,native,classname):
 def annotate_action(action):
     def action_assigns(p):
         return any(p in sub.modifies() for sub in action.iter_subactions())
+
+    def is_struct(sort):
+       return (il.is_uninterpreted_sort(sort) and
+               (sort.name in im.module.native_types or sort.name in im.module.sort_destructors))
+
     action.param_types = [RefType() if any(p == q for q in action.formal_returns)
-                          else ValueType() if action_assigns(p) else ConstRefType()
+                          else ValueType() if action_assigns(p) or not is_struct(p.sort) else ConstRefType()
                           for p in action.formal_params]
     def return_type(p):
         for idx,q in enumerate(action.formal_params):
@@ -3090,8 +3095,9 @@ ia.AssumeAction.emit = emit_assume
 
 
 def emit_call(self,header):
-    indent(header)
-    header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
+    if target.get() in ["gen","test"]:
+        indent(header)
+        header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
     code = []
     indent(code)
     retval = None
@@ -3125,8 +3131,9 @@ def emit_call(self,header):
         self.args[1].emit(header,code)
         code.append(' = ' + retval + ';\n')
     header.extend(code)
-    indent(header)
-    header.append('___ivy_stack.pop_back();\n')
+    if target.get() in ["gen","test"]:
+        indent(header)
+        header.append('___ivy_stack.pop_back();\n')
 
 ia.CallAction.emit = emit_call
 

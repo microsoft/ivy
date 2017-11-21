@@ -219,7 +219,8 @@ def compile_inline_call(self,args):
     return None
 
 def compile_app(self):
-    args = [a.compile() for a in self.args]
+    with ReturnContext(None):
+        args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
@@ -362,12 +363,12 @@ def compile_local(self):
 LocalAction.cmpl = compile_local
 
 def compile_assign(self):
-    rhs = self.args[1]
-    if (isinstance(rhs,ivy_ast.App) or isinstance(rhs,ivy_ast.Atom)):
-        if top_context and rhs.rep in top_context.actions:
-            c = CallAction(rhs,self.args[0])
-            c.lineno = self.lineno
-            return c.cmpl()
+    # rhs = self.args[1]
+    # if (isinstance(rhs,ivy_ast.App) or isinstance(rhs,ivy_ast.Atom)):
+    #     if top_context and rhs.rep in top_context.actions:
+    #         c = CallAction(rhs,self.args[0])
+    #         c.lineno = self.lineno
+    #         return c.cmpl()
     code = []
     local_syms = []
     with ExprContext(code,local_syms):
@@ -379,17 +380,21 @@ def compile_assign(self):
                 code.append(AssignAction(lhs,rhs))
         else:
             with top_sort_as_default():
-                args = [a.compile() for a in self.args]
+#                args = [a.compile() for a in self.args]
+                args = [self.args[0].compile()]
+                with ReturnContext([args[0]]):
+                    args.append(self.args[1].compile())
             if isinstance(args[1],ivy_ast.Tuple):
                 raise IvyError(self,"wrong number of values in assignment");
-            asorts = [a.sort for a in args]
-            with ASTContext(self):
-                if im.module.is_variant(*asorts):
-                    teq = sort_infer(ivy_logic.pto(*asorts)(*args))
-                else:
-                    teq = sort_infer(Equals(*args))
-            args = list(teq.args)
-            code.append(AssignAction(*args))
+            if args[1] is not None:
+                asorts = [a.sort for a in args]
+                with ASTContext(self):
+                    if im.module.is_variant(*asorts):
+                        teq = sort_infer(ivy_logic.pto(*asorts)(*args))
+                    else:
+                        teq = sort_infer(Equals(*args))
+                args = list(teq.args)
+                code.append(AssignAction(*args))
         for c in code:
             c.lineno = self.lineno
         if len(code) == 1:
