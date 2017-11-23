@@ -6,6 +6,7 @@ import ivy_logic as il
 import ivy_logic_utils as lu
 import ivy_solver
 import ivy_concept_space as ics
+import ivy_ast
 
 from collections import defaultdict
 import string
@@ -324,3 +325,13 @@ def relevant_definitions(symbols):
     rch = set(iu.reachable(symbols,lambda sym: lu.symbols_ast(dfn_map[sym]) if sym in dfn_map else []))
     return [ldf for ldf in module.definitions if ldf.formula.defines() in rch]
     
+def sort_dependencies(mod,sortname):
+    if sortname in mod.sort_destructors:
+        for destr in mod.sort_destructors[sortname]:
+            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
+    if sortname in mod.interps:
+        t = mod.interps[sortname]
+        if isinstance(t,ivy_ast.NativeType):
+            return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
+    return []
+

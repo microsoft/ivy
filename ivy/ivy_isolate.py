@@ -881,16 +881,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     mod.labeled_axioms.extend(not_proved)
     mod.labeled_props = proved
 
-    # filter definitions
-
-    asts = []
-    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
-        asts += [y.formula for y in x]
-    asts += [action for action in new_actions.values()]
-    all_syms = set(lu.used_symbols_asts(asts))
-    follow_definitions(mod.definitions,all_syms)
-    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
-
     # filter natives
 
     mod.natives = [c for c in mod.natives if keep_ax(c.args[0])]
@@ -907,38 +897,37 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     del exported[actname]
                 if extname in exported:
                     del exported[extname]
-    
-    # filter the signature
-    # keep only the symbols referenced in the remaining
-    # formulas
+
+
+    # if we are generating code, we want to remove all the unreferenced actions.
+    # We start with the exported actions and the actions referenced by natives and initializers
+    # as roots. 
+
+    # Get rid of the inaccessible actions
+
+    cone = get_mod_cone(mod,actions=new_actions)        
+    for a in list(new_actions):
+        if a not in cone:
+            del new_actions[a]
+
+    # filter definitions
 
     asts = []
-    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
-        asts.extend(y.formula for y in x)
-    asts.extend(action for action in new_actions.values())
-    for a in new_actions.values():
-        asts.extend(a.formal_params)
-        asts.extend(a.formal_returns)
-    for tmp in mod.natives:
-        asts.extend(tmp.args[2:])
-
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
+        asts += [y.formula for y in x]
+    asts += [action for action in new_actions.values()]
     all_syms = set(lu.used_symbols_asts(asts))
+    follow_definitions(mod.definitions,all_syms)
+    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+    mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
 
-    if opt_keep_destructors.get():
-        for sym in list(all_syms):
-            collect_relevant_destructors(sym,all_syms)
+    print 'ndefs: {}'.format(mod.native_definitions)
+
     
-    if filter_symbols.get() or cone_of_influence.get():
-        old_syms = list(mod.sig.all_symbols())
-        for sym in old_syms:
-            if sym not in all_syms:
-                mod.sig.remove_symbol(sym)
-
-    # check that any dropped axioms do not refer to the isolate's signature
-    # and any properties have dependencies present
-
     def pname(s):
         return s.label if s.label else ""
+
+    # check that any dropped axioms do not refer to the isolate's signature
 
     if enforce_axioms.get():
         determined = set()
@@ -959,17 +948,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                             if (isinstance(called,ia.NativeAction) or 
                                 any(p.sort.name not in mod.ghost_sorts for p in called.formal_returns)):
                                 raise iu.IvyError(None,"No implementation for action {}".format(c))
-        all_syms_norm = map(ivy_logic.normalize_symbol,all_syms)
-        for p,ds in prop_deps:
-            for d in ds:
-                if not startswith_eq_some(d,present,mod):
-                    for x in lu.used_symbols_ast(p.formula):
-                        if ivy_logic.normalize_symbol(x) in all_syms_norm:
-                            raise iu.IvyError(p,"property {} depends on abstracted object {}"
-                                              .format(pname(p),d))
-
-#    for x,y in new_actions.iteritems():
-#        print iu.pretty(ia.action_def_to_str(x,y))
 
     # check for interference
 
@@ -983,6 +961,90 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     mod.public_actions.update(exported)
     mod.actions.clear()
     mod.actions.update(new_actions)
+    
+    # filter the signature
+    # keep only the symbols referenced in the remaining
+    # formulas
+
+    asts = []
+    for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
+        asts.extend(y.formula for y in x)
+    asts.extend(action for action in mod.actions.values())
+    for a in mod.actions.values():
+        asts.extend(a.formal_params)
+        asts.extend(a.formal_returns)
+    print 'asts: {}'.format([str(a) for a in asts])
+    for tmp in mod.natives:
+        asts.extend(tmp.args[2:])
+
+
+    all_syms = set(lu.used_symbols_asts(asts))
+
+    if opt_keep_destructors.get():
+        for sym in list(all_syms):
+            collect_relevant_destructors(sym,all_syms)
+    
+    if filter_symbols.get() or cone_of_influence.get():
+        old_syms = list(mod.sig.all_symbols())
+        for sym in old_syms:
+            if sym not in all_syms:
+                mod.sig.remove_symbol(sym)
+
+
+    # check that any properties have dependencies present
+
+    if enforce_axioms.get():
+        all_syms_norm = map(ivy_logic.normalize_symbol,all_syms)
+        for p,ds in prop_deps:
+            for d in ds:
+                if not startswith_eq_some(d,present,mod):
+                    for x in lu.used_symbols_ast(p.formula):
+                        if ivy_logic.normalize_symbol(x) in all_syms_norm:
+                            raise iu.IvyError(p,"property {} depends on abstracted object {}"
+                                              .format(pname(p),d))
+
+#    for x,y in new_actions.iteritems():
+#        print iu.pretty(ia.action_def_to_str(x,y))
+
+
+    # filter the sorts
+
+    print 'all_syms: {}'.format([s.name+' : '+str(s.sort) for s in all_syms])
+    if filter_symbols.get() or cone_of_influence.get():
+        all_sorts = set()
+        def add_deps(s):
+            if s not in all_sorts:
+                all_sorts.add(s)
+                for x in im.sort_dependencies(mod,s):
+                    add_deps(x)
+        for sym in all_syms:
+            sort = sym.sort
+            if isinstance(sort,ivy_logic.FunctionSort):
+                for s in sort.dom:
+                    add_deps(s.name)
+                add_deps(sort.rng.name)
+            else:
+                add_deps(sort.name)
+        old_sorts = list(mod.sig.sorts.keys())
+        print 'old_sorts: {}'.format(old_sorts)
+        for sort in old_sorts:
+            if sort not in all_sorts and sort != 'bool':
+                del mod.sig.sorts[sort]
+        print 'new_sorts: {}'.format(list(mod.sig.sorts.keys()))
+        mod.sort_order = [s for s in mod.sort_order if s in mod.sig.sorts]
+        old_destrs = list(mod.sort_destructors.keys())
+        print 'old_destrs: {}'.format(old_destrs)
+        for destr in old_destrs:
+            if destr not in all_sorts:
+                del mod.sort_destructors[destr]
+        print 'new_destrs: {}'.format(mod.sort_destructors.keys())
+        old_destrs = list(mod.destructor_sorts.keys())
+        print 'old_destrs: {}'.format(old_destrs)
+        for destr in old_destrs:
+            if mod.destructor_sorts[destr].name not in all_sorts:
+                del mod.destructor_sorts[destr]
+        print 'new_destrs: {}'.format(mod.destructor_sorts.keys())
+
 
     # check that native code does not occur in an untrusted isolate
 
@@ -1071,10 +1133,12 @@ def get_cone(mod,action_name,cone):
         for a in mod.actions[action_name].iter_calls():
             get_cone(mod,a,cone)
 
-def get_mod_cone(mod):
+def get_mod_cone(mod,actions=None,roots=None):
+    actions = actions or mod.actions
+    roots = roots or mod.public_actions
     cone = set()
-    for a in mod.public_actions:
-        get_cone(mod,a,cone)
+    for a in roots:
+        get_cone(actions,a,cone)
     for n in mod.natives:
         for a in n.args[2:]:
             if isinstance(a,ivy_ast.Atom) and a.rep in mod.actions:

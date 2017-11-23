@@ -1101,18 +1101,8 @@ def check_instantiations(mod,decls):
                     raise IvyError(inst,"{} undefined in instantiation".format(inst.relname))
 
 
-def sort_dependencies(mod,sortname):
-    if sortname in mod.sort_destructors:
-        for destr in mod.sort_destructors[sortname]:
-            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
-    if sortname in mod.interps:
-        t = mod.interps[sortname]
-        if isinstance(t,ivy_ast.NativeType):
-            return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
-    return []
-
 def create_sort_order(mod):
-    arcs = [(x,s) for s in mod.sort_order for x in sort_dependencies(mod,s)]
+    arcs = [(x,s) for s in mod.sort_order for x in im.sort_dependencies(mod,s)]
     # do nothing if sccs already sorted
     number = dict((x,i) for i,x in enumerate(mod.sort_order))
     if all(x == 'bool' or number[x] < number[y] for x,y in arcs):
@@ -1122,7 +1112,7 @@ def create_sort_order(mod):
         m[x].add(y)
     sccs = tarjan(m)
     # remove trivial sccs
-    sccs = [scc for scc in sccs if len(scc) > 1 or scc[0] in sort_dependencies(mod,scc[0])]
+    sccs = [scc for scc in sccs if len(scc) > 1 or scc[0] in im.sort_dependencies(mod,scc[0])]
     if len(sccs) > 0:
         raise iu.IvyError(None,'these sorts form a dependency cycle: {}.'.format(','.join(sccs[0])))
     mod.sort_order = iu.topological_sort(mod.sort_order,arcs)
