@@ -502,6 +502,7 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins):
                 pre_refed = set()
                 for m in mod.mixins[called_name]:
                     if isinstance(m,ivy_ast.MixinBeforeDef) and m.mixer() not in summarized_actions:
+                        print 'mixer: {} mixee: {} used: {}'.format(m.mixer(),m.mixee(),lu.used_symbols_ast(mod.actions[m.mixer()]))
                         pre_refed.update(lu.used_symbols_ast(mod.actions[m.mixer()]))
                 all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
                                            + [m.mixer() for m in impl_mixins[called_name]])
