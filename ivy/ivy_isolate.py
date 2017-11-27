@@ -899,33 +899,46 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     del exported[extname]
 
 
-    # if we are generating code, we want to remove all the unreferenced actions.
+    
+    def pname(s):
+        return s.label if s.label else ""
+
+    # check for interference
+
+    if do_check_interference.get():
+        check_interference(mod,new_actions,summarized_actions,impl_mixins)
+
+    # If we are generating code, we want to remove all the unreferenced actions.
     # We start with the exported actions and the actions referenced by natives and initializers
     # as roots. 
 
     # Get rid of the inaccessible actions
 
-    cone = get_mod_cone(mod,actions=new_actions)        
-    for a in list(new_actions):
-        if a not in cone:
-            del new_actions[a]
+    cone = get_mod_cone(mod,actions=new_actions,roots=exported,after_inits=after_inits)        
+    print 'cone: {}'.format(cone)
+    new_actions = dict((x,y) for x,y in new_actions.iteritems() if x in cone)
 
-    # filter definitions
+    # Now that we have the accessible axioms, propteries inits, conjectures and actions,
+    # action, we can find the accessible definitions. 
+
+    # filter definitions and native definitions
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
         asts += [y.formula for y in x]
     asts += [action for action in new_actions.values()]
+    for a in mod.actions.values():
+        asts.extend(a.formal_params)
+        asts.extend(a.formal_returns)
+    for tmp in mod.natives:
+        asts.extend(tmp.args[2:])
+    print 'asts: {}'.format([str(a) for a in asts])
     all_syms = set(lu.used_symbols_asts(asts))
     follow_definitions(mod.definitions,all_syms)
-    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
-    mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+    if opt_keep_destructors.get():
+        for sym in list(all_syms):
+            collect_relevant_destructors(sym,all_syms)
 
-    print 'ndefs: {}'.format(mod.native_definitions)
-
-    
-    def pname(s):
-        return s.label if s.label else ""
 
     # check that any dropped axioms do not refer to the isolate's signature
 
@@ -948,11 +961,17 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                             if (isinstance(called,ia.NativeAction) or 
                                 any(p.sort.name not in mod.ghost_sorts for p in called.formal_returns)):
                                 raise iu.IvyError(None,"No implementation for action {}".format(c))
+        for c in mod.definitions + mod.native_definitions:
+            if not keep_ax(c.label) and c.formula.args[0].rep in all_syms:
+                raise iu.IvyError(c,"Definition of {} is referenced, but not present in extract") 
 
-    # check for interference
 
-    if do_check_interference.get():
-        check_interference(mod,new_actions,summarized_actions,impl_mixins)
+    mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+    mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
+
+    print 'defs: {}'.format(mod.definitions)
+    print 'ndefs: {}'.format(mod.native_definitions)
+
 
 
     # After checking, we can put in place the new action definitions
@@ -1127,15 +1146,22 @@ def hide_action_params(action):
     res = ia.LocalAction(*(params + [action]))
     return res
 
-def get_cone(mod,action_name,cone):
+def get_cone(actions,action_name,cone):
     if action_name not in cone:
+        print '({} '.format(action_name)
         cone.add(action_name)
-        for a in mod.actions[action_name].iter_calls():
-            get_cone(mod,a,cone)
+        for a in actions[action_name].iter_calls():
+            get_cone(actions,a,cone)
+        print ')'
+            
+# Get the names of the actions that accessible from a given set of
+# roots (normally the exported actions). An action is accessible if
+# if is a root, or is referenced from native code, or is called in
+# an intializer. 
 
-def get_mod_cone(mod,actions=None,roots=None):
-    actions = actions or mod.actions
-    roots = roots or mod.public_actions
+def get_mod_cone(mod,actions=None,roots=None,after_inits=[]):
+    actions = actions if actions is not None else mod.actions
+    roots = roots if roots is not None else mod.public_actions
     cone = set()
     for a in roots:
         get_cone(actions,a,cone)
@@ -1143,6 +1169,8 @@ def get_mod_cone(mod,actions=None,roots=None):
         for a in n.args[2:]:
             if isinstance(a,ivy_ast.Atom) and a.rep in mod.actions:
                 get_cone(mod,a.rep,cone)
+    for ai in after_inits:
+        get_cone(actions,ai.mixer(),cone)
     return cone
 
 def loop_action(action,mod):
