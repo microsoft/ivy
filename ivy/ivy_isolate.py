@@ -502,7 +502,6 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins):
                 pre_refed = set()
                 for m in mod.mixins[called_name]:
                     if isinstance(m,ivy_ast.MixinBeforeDef) and m.mixer() not in summarized_actions:
-                        print 'mixer: {} mixee: {} used: {}'.format(m.mixer(),m.mixee(),lu.used_symbols_ast(mod.actions[m.mixer()]))
                         pre_refed.update(lu.used_symbols_ast(mod.actions[m.mixer()]))
                 all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
                                            + [m.mixer() for m in impl_mixins[called_name]])
@@ -811,7 +810,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     action1 = ext_mod_mixin(all_mixins)(mixin,action1)
                     act = ia.apply_mixin(mixin,action1,act)
             mod.before_export['ext:' + actname] = act
-#            print "before_export: {} = {}".format('ext:' + actname,mod.before_export['ext:' + actname])
 
     for e in mod.exports:
         if not e.scope() and startswith_eq_some(e.exported(),present,mod): # global scope
@@ -899,15 +897,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 if extname in exported:
                     del exported[extname]
 
-
+    after_inits = [a for a in after_inits if startswith_eq_some(a,present,mod)]
     
     def pname(s):
         return s.label if s.label else ""
 
     # check for interference
-
-    if do_check_interference.get():
-        check_interference(mod,new_actions,summarized_actions,impl_mixins)
 
     # If we are generating code, we want to remove all the unreferenced actions.
     # We start with the exported actions and the actions referenced by natives and initializers
@@ -916,7 +911,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     # Get rid of the inaccessible actions
 
     cone = get_mod_cone(mod,actions=new_actions,roots=exported,after_inits=after_inits)        
-    print 'cone: {}'.format(cone)
     new_actions = dict((x,y) for x,y in new_actions.iteritems() if x in cone)
 
     # Now that we have the accessible axioms, propteries inits, conjectures and actions,
@@ -933,7 +927,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         asts.extend(a.formal_returns)
     for tmp in mod.natives:
         asts.extend(tmp.args[2:])
-    print 'asts: {}'.format([str(a) for a in asts])
     all_syms = set(lu.used_symbols_asts(asts))
     follow_definitions(mod.definitions,all_syms)
     if opt_keep_destructors.get():
@@ -970,13 +963,13 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
     mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
 
-    print 'defs: {}'.format(mod.definitions)
-    print 'ndefs: {}'.format(mod.native_definitions)
 
 
 
     # After checking, we can put in place the new action definitions
 
+    old_actions = dict()
+    old_actions.update(mod.actions)
     mod.public_actions.clear()
     mod.public_actions.update(exported)
     mod.actions.clear()
@@ -993,7 +986,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     for a in mod.actions.values():
         asts.extend(a.formal_params)
         asts.extend(a.formal_returns)
-    print 'asts: {}'.format([str(a) for a in asts])
     for tmp in mod.natives:
         asts.extend(tmp.args[2:])
 
@@ -1029,7 +1021,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # filter the sorts
 
-    print 'all_syms: {}'.format([s.name+' : '+str(s.sort) for s in all_syms])
     if filter_symbols.get() or cone_of_influence.get():
         all_sorts = set()
         def add_deps(s):
@@ -1046,25 +1037,27 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             else:
                 add_deps(sort.name)
         old_sorts = list(mod.sig.sorts.keys())
-        print 'old_sorts: {}'.format(old_sorts)
         for sort in old_sorts:
             if sort not in all_sorts and sort != 'bool':
                 del mod.sig.sorts[sort]
-        print 'new_sorts: {}'.format(list(mod.sig.sorts.keys()))
         mod.sort_order = [s for s in mod.sort_order if s in mod.sig.sorts]
         old_destrs = list(mod.sort_destructors.keys())
-        print 'old_destrs: {}'.format(old_destrs)
         for destr in old_destrs:
             if destr not in all_sorts:
                 del mod.sort_destructors[destr]
-        print 'new_destrs: {}'.format(mod.sort_destructors.keys())
         old_destrs = list(mod.destructor_sorts.keys())
-        print 'old_destrs: {}'.format(old_destrs)
         for destr in old_destrs:
             if mod.destructor_sorts[destr].name not in all_sorts:
                 del mod.destructor_sorts[destr]
-        print 'new_destrs: {}'.format(mod.destructor_sorts.keys())
 
+
+    #check non-interference (temporarily put back in old_actions)
+
+    if do_check_interference.get():
+        save_new_actions = mod.actions
+        mod.actions = old_actions
+        check_interference(mod,new_actions,summarized_actions,impl_mixins)
+        mod.actions = save_new_actions
 
     # check that native code does not occur in an untrusted isolate
 
@@ -1149,11 +1142,11 @@ def hide_action_params(action):
 
 def get_cone(actions,action_name,cone):
     if action_name not in cone:
-        print '({} '.format(action_name)
+#        print '({} '.format(action_name)
         cone.add(action_name)
         for a in actions[action_name].iter_calls():
             get_cone(actions,a,cone)
-        print ')'
+#        print ')'
             
 # Get the names of the actions that accessible from a given set of
 # roots (normally the exported actions). An action is accessible if
@@ -1169,9 +1162,9 @@ def get_mod_cone(mod,actions=None,roots=None,after_inits=[]):
     for n in mod.natives:
         for a in n.args[2:]:
             if isinstance(a,ivy_ast.Atom) and a.rep in mod.actions:
-                get_cone(mod,a.rep,cone)
+                get_cone(actions,a.rep,cone)
     for ai in after_inits:
-        get_cone(actions,ai.mixer(),cone)
+        get_cone(actions,ai,cone)
     return cone
 
 def loop_action(action,mod):
