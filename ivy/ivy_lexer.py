@@ -125,6 +125,7 @@ reserved = all_reserved = {
    'temporal' : 'TEMPORAL',
    'globally' : 'GLOBALLY',
    'eventually' : 'EVENTUALLY',
+   'decreases' : 'DECREASES',
 }
 
 tokens += tuple(all_reserved.values())
@@ -226,6 +227,11 @@ class LexerVersion(object):
                     del reserved[s]
         if self.version <= [1,5]:
             for s in ['variant','of', 'globally', 'eventually', 'temporal']:
+#                print "deleting {}".format(s)
+                if s in reserved:
+                    del reserved[s]
+        if self.version <= [1,6]:
+            for s in ['decreases']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]

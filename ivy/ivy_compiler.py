@@ -1265,16 +1265,17 @@ def read_module(f,nested=False):
     header = string.strip(header)
     if header.startswith('#lang ivy'):
         version = header[len('#lang ivy'):]
-        old_version = iu.get_string_version()
-        iu.set_string_version(version)
-        if version != old_version:
-            if nested:
-                raise IvyError(None,'#lang ivy{} expected'.format(old_version)) 
-#            print "version: {}, old_version: {}".format(version,old_version)
-            clear_rules('ivy_logic_parser')
-            clear_rules('ivy_parser')
-            reload(ivy_logic_parser)
-            reload(ivy_parser)
+        if version.strip() != '':
+            old_version = iu.get_string_version()
+            iu.set_string_version(version)
+            if version != old_version:
+                if nested:
+                    raise IvyError(None,'#lang ivy{} expected in included file'.format(old_version)) 
+    #            print "version: {}, old_version: {}".format(version,old_version)
+                clear_rules('ivy_logic_parser')
+                clear_rules('ivy_parser')
+                reload(ivy_logic_parser)
+                reload(ivy_parser)
         ivy_parser.importer = import_module
         decls = parse(s,nested)
     elif header == '//lang dafny1':
@@ -1292,7 +1293,7 @@ def import_module(name):
     try: 
         f = open(fname,'rU')
     except Exception:
-        fname = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include',fname)
+        fname = os.path.join(iu.get_std_include_dir(),fname)
         try:
             f = open(fname,'rU')
         except Exception:

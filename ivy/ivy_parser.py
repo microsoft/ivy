@@ -663,12 +663,15 @@ def p_top_concept_cdefns(p):
     p[0] = p[1]
     p[0].declare(ConceptDecl(*p[3]))
 
-def p_top_init_fmla(p):
-    'top : top INIT labeledfmla'
-    p[0] = p[1]
-    d = InitDecl(check_non_temporal(p[3]))
-    d.lineno = get_lineno(p,2)
-    p[0].declare(d)
+# init statement is banned as of version 1.7
+if iu.get_numeric_version() <= [1,6]:
+    def p_top_init_fmla(p):
+        'top : top INIT labeledfmla'
+        p[0] = p[1]
+        d = InitDecl(check_non_temporal(p[3]))
+        d.lineno = get_lineno(p,2)
+        p[0].declare(d)
+
 
 def p_top_update_terms_from_terms_upaxes(p):
     'top : top UPDATE apps FROM apps upaxes'
@@ -1465,9 +1468,19 @@ else:
         a.lineno = get_lineno(p,2)
         p[0].append(a)
 
-    def p_action_while_fmla_invariants_lcb_action_rcb(p):
-        'action : WHILE fmla invariants sequence'
-        p[0] = WhileAction(*([check_non_temporal(p[2]), p[4]] + p[3]))
+    def p_decreases_decreases_fmla(p):
+        'decreases : DECREASES fmla'
+        rank = Ranking(check_non_temporal(p[2]))
+        rank.lineno = get_lineno(1)
+        p[0] = [rank]
+
+    def p_decreases(p):
+        'decreases : '
+        p[0] = []
+
+    def p_action_while_fmla_invariants_decreases_lcb_action_rcb(p):
+        'action : WHILE fmla invariants decreases sequence'
+        p[0] = WhileAction(*([check_non_temporal(p[2]), p[5]] + p[3] + p[4]))
         p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,2]:

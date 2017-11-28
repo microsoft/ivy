@@ -1340,3 +1340,6 @@ class ASTContext(object):
 #                print "lineno: {}".format(self.ast.lineno)
                 exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
+
+class Ranking(AST):
+    pass
