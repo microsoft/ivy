@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -1471,7 +1471,7 @@ else:
     def p_decreases_decreases_fmla(p):
         'decreases : DECREASES fmla'
         rank = Ranking(check_non_temporal(p[2]))
-        rank.lineno = get_lineno(1)
+        rank.lineno = get_lineno(p,1)
         p[0] = [rank]
 
     def p_decreases(p):

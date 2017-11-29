@@ -97,7 +97,7 @@ def find_assertions(action_name=None):
     for actname in actions:
         action = im.module.actions[actname]
         for a in action.iter_subactions():
-            if isinstance(a,act.AssertAction):
+            if isinstance(a,act.AssertAction) or isinstance(a,act.Ranking):
                 res.append(a)
     return res
 

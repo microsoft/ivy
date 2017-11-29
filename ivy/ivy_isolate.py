@@ -387,6 +387,8 @@ def has_side_effect_rec(mod,new_actions,actname,memo):
                 return True
         if isinstance(sub,ia.AssertAction):
             return True
+        if isinstance(sub,ia.Ranking):
+            return True
         if isinstance(sub,ia.CallAction):
             if has_side_effect_rec(mod,new_actions,sub.args[0].rep,memo):
                 return True
@@ -396,16 +398,18 @@ def has_side_effect(mod,new_actions,actname):
     return has_side_effect_rec(mod,new_actions,actname,set())
 
 
-def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
+def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops):
     if actname in calls or actname not in summarized_actions:
         return
     action = mod.actions[actname]
     acalls = set()
     amods = set()
     amixins = set()
+    aloops = set()
     calls[actname] = acalls
     mods[actname] = amods
     mixins[actname] = amixins
+    loops[actname] = aloops
     for sub in action.iter_subactions():
         for sym in sub.modifies():
             if sym.name in mod.sig.symbols:
@@ -414,20 +418,24 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins):
             calledname = sub.args[0].rep
             if calledname not in summarized_actions:
                 acalls.add(calledname)
-            get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins)
+            get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops)
             if calledname in calls:
                 acalls.update(calls[calledname])
                 acalls.update(mixins[calledname]) # tricky -- mixins of callees count as callees
                 amods.update(mods[calledname])
+                aloops.update(loops[calledname])
+        if isinstance(sub,ia.WhileAction) and not isinstance(sub.args[-1],ia.Ranking):
+            aloops.add(sub)
     for mixin in mod.mixins[actname]:
         calledname = mixin.args[0].relname
         if calledname not in summarized_actions:
             amixins.add(calledname)
-        get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins)
+        get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops)
         if calledname in calls:
             acalls.update(calls[calledname])
             amixins.update(mixins[calledname]) # mixins of mixins count as mixins
             amods.update(mods[calledname])
+            aloops.update(loops[calledname])
         
 
 def has_unsummarized_mixins(mod,actname,summarized_actions,kind):
@@ -484,13 +492,14 @@ def find_references(mod,syms,new_actions):
     return refs
     
 
-def check_interference(mod,new_actions,summarized_actions,impl_mixins):
+def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term):
     calls = dict()
     mods = dict()
     mixins = dict()
     locmods = dict()
+    loops = dict()
     for actname in summarized_actions:
-        get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins)
+        get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops)
         locmods[actname] = get_loc_mods(mod,actname)
     callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
     for actname in new_actions:
@@ -516,6 +525,11 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins):
                             refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
                             raise iu.IvyError(action,"Call out to {} may have visible effect on {}{}"
                                               .format(called,things,refs))
+                        cloops = loops[called]
+                        if check_term and cloops:
+                            refs = ''.join('\n' + str(lp.lineno) + 'loop here' for lp in cloops)
+                            raise iu.IvyError(action,"Call out to {} may not terminate (needs a decreases clause){}"
+                                              .format(called,refs))
             if actname in callouts:
                 for midcall in sorted(callouts[actname][0]):
                     if midcall in calls:
@@ -836,6 +850,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                             exported.add('ext:' + c)
                             make_before_export(c)
 
+
     for actname in export_preconds:
         pcs = export_preconds[actname]
         mod.ext_preconds[actname] = pcs[0] if len(pcs) == 1 else ivy_logic.Or(*pcs)
@@ -1056,7 +1071,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     if do_check_interference.get():
         save_new_actions = mod.actions
         mod.actions = old_actions
-        check_interference(mod,new_actions,summarized_actions,impl_mixins)
+        check_term = enforce_axioms.get() and iu.version_le("1.7",iu.get_string_version())
+        check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term)
         mod.actions = save_new_actions
 
     # check that native code does not occur in an untrusted isolate

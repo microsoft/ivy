@@ -785,6 +785,10 @@ class IfAction(Action):
         else:
             return self.args[0]
 
+class Ranking(Action):
+    def name(self):
+        return 'decreases'
+
 class WhileAction(Action):
     def name(self):
         return 'while'
@@ -796,16 +800,35 @@ class WhileAction(Action):
         return res
     def expand(self,domain,pvars):
         modset,pre,post = self.args[1].int_update(domain,pvars)  # TODO:cheaper way to get modset
-        asserts = self.args[2:]
+        if isinstance(self.args[-1],Ranking):
+            asserts = self.args[2:-1]
+            decreases = self.args[-1]
+        else:
+            asserts = self.args[2:]
+            decreases = None
         assumes = [a.assert_to_assume() for a in asserts]
+        entry_asserts = []
+        exit_asserts = []
+        if decreases is not None:
+            rank = decreases.args[0]
+            aux = Symbol('$rank',rank.sort)
+            assumes.append(AssumeAction(Equals(aux,rank)))
+            assumes[-1].lineno = decreases.lineno
+            ltsym = Symbol('<',RelationSort([rank.sort,rank.sort]))
+            exit_asserts.append(AssertAction(ltsym(rank,aux)))
+            exit_asserts[-1].lineno = decreases.lineno
+            entry_asserts.append(AssertAction(Not(ltsym(rank,Symbol('0',rank.sort)))))
+            entry_asserts[-1].lineno = decreases.lineno
         havocs = [HavocAction(sym) for sym in modset]
         res =  Sequence(*(
                 asserts +
                 havocs +
                 assumes +
-                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0]),
-                                                     self.args[1]]+asserts+[AssumeAction(And())]))),
+                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
+                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(And())]))),
                 AssumeAction(Not(self.args[0]))]))
+        if decreases is not None:
+            res = LocalAction(aux,res)
         return res
             
     def int_update(self,domain,pvars):

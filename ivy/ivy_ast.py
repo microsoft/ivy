@@ -1341,5 +1341,3 @@ class ASTContext(object):
                 exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
 
-class Ranking(AST):
-    pass

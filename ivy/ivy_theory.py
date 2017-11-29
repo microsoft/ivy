@@ -352,7 +352,7 @@ def check_theory(preconds_only=False):
     raise iu.ErrorList(errs)
     
 theories = {
-'int' : """#lang ivy1.6
+'int' : """#lang ivy
     schema rec[t] = {
 	type q
 	function base(X:t) : q
@@ -380,9 +380,11 @@ theories = {
 }
 
 def get_theory(name):
-    if name.startswith('bv['):
-        return theories['int']
-    return theories.get(name,None)
+    if iu.version_le("1.6",iu.get_string_version()):
+        if name.startswith('bv['):
+            return theories['int']
+        return theories.get(name,None)
+    return None
 
 
     

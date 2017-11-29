@@ -1127,7 +1127,38 @@ def tarjan_arcs(arcs,notriv=True):
     return sccs
         
 
+def get_symbol_dependencies(mp,res,t):
+    for s in lu.used_symbols_ast(t):
+        if s not in res:
+            res.add(s)
+            if s in mp:
+                get_symbol_dependencies(mp,res,mp[s])
+
 def check_definitions(mod):
+
+    # check that no actions interfere with axioms or definitions
+    
+    if iu.version_le("1.7",iu.get_string_version()):
+        side_effects = dict()
+        for action in mod.actions.values():
+            for sub in action.iter_subactions():
+                for s in sub.modifies():
+                    if s not in side_effects:
+                        side_effects[s] = sub
+
+        mp = dict((lf.formula.defines(),lf.formula.rhs()) for lf in mod.definitions)
+        for lf in mod.labeled_axioms:
+            deps = set()
+            get_symbol_dependencies(mp,deps,lf.formula)
+            for s in deps:
+                if s in side_effects:
+                    raise IvyError(side_effects[s],'immutable symbol assigned. \n{} info: symbol is used in axiom here'.format(lf.lineno))
+
+        for lf in mod.definitions:
+            s = lf.formula.lhs()
+            if s in side_effects:
+                raise IvyError(side_effects[s],'immutable symbol assigned. \n{} Symbol is defined here'.format(lf.lineno))
+                
     arcs = [(d.formula.defines(),x)
             for d in mod.definitions
             for x in lu.symbols_ast(d.formula.args[1])]
@@ -1144,6 +1175,9 @@ def check_definitions(mod):
             raise iu.IvyError(d,'definition of {} requires a recursion schema'.format(d.formula.defines()))
         prover.admit_definition(d,pmap[d.id])
         
+
+
+
 def check_properties(mod):
     props = mod.labeled_props
     mod.labeled_props = []
