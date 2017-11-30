@@ -26,9 +26,9 @@ module table_shard(key,data) = {
 
     function key_at(S,I) = p_key(arr.value(pairs(S),I))
     function value_at(S,I) = p_value(arr.value(pairs(S),I))
-    function at(S,X,I) = (0 <= I & I < arr.end(pairs(S)) & key_at(S,I) = X)
+    function at(S,X,I) = (0 <= I & I < arr.end(pairs(S)) & key_at(S,I) = X & value_at(S,I) ~= 0)
 
-    function value(S:t,x:key.t) = some Y. at(S,x,Y) in value_at(S,Y) else 0
+    function value(S:t,X:key.t) = some Y. at(S,X,Y) in value_at(S,Y) else 0
     function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
 
 }

@@ -21,7 +21,9 @@ parameter of the same type. Here is an example of an object parameterized on typ
     object foo = {
 
         function bit(S:t) : bool
-        init ~bit(S)
+        after init {
+            bit(S) := false
+        }
 
         action set_bit(self:t) = {
             bit(self) := true
@@ -44,7 +46,9 @@ write the object `foo` as follows:
     object foo(self:t) = {
 
         individual bit : bool
-        init ~bit
+        after init {
+            bit := false
+        }
 
         action set_bit = {
             bit := true
@@ -243,7 +247,9 @@ layer. It's quite simple:
     object trans = {
 
         relation sent(V:id.t, N:node.t)
-        init ~sent(V, N)
+        after init {
+            sent(V, N) := false
+        }
 
         action send(dst:node.t, v:id.t)
         action recv(dst:node.t, v:id.t)

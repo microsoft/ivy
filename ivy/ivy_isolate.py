@@ -680,9 +680,9 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
 
 
 def follow_definitions_rec(sym,dmap,all_syms,memo):
+    all_syms.add(sym)
     if sym in dmap and sym not in memo:
         memo.add(sym)
-        all_syms.add(sym)
         for s in lu.used_symbols_ast(dmap[sym]):
             follow_definitions_rec(s,dmap,all_syms,memo)
 
@@ -973,6 +973,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         for c in mod.definitions + mod.native_definitions:
             if not keep_ax(c.label) and c.formula.args[0].rep in all_syms:
                 raise iu.IvyError(c,"Definition of {} is referenced, but not present in extract") 
+
 
 
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]

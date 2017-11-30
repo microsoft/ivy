@@ -205,6 +205,11 @@ class Some(AST):
         return self.args[2] if len(self.args) == 4 else None
     def else_value(self):
         return self.args[3] if len(self.args) == 4 else None
+    @property
+    def variables(self):
+        return [self.args[0]]
+    def clone_binder(self,vs,body):
+        return Some(*(vs+self.args[1:]))
 
 
 class Definition(AST):
@@ -580,7 +585,7 @@ def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
 
 def is_binder(term):
-    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder))
+    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder, Some))
 
 for b in [lg.ForAll,lg.Exists,lg.Lambda]:
     b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
@@ -596,8 +601,16 @@ def is_temporal(term):
 def quantifier_vars(term):
     return term.variables
 
+def binder_vars(term):
+    return term.variables
+
 def quantifier_body(term):
     return term.body
+
+def binder_args(term):
+    if isinstance(term,Some):
+        return term.args[1:]
+    return [term.body]
 
 def is_epr_rec(term,uvars):
     if is_forall(term):

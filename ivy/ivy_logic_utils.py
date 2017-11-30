@@ -337,10 +337,11 @@ def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
     elif is_binder(ast):
-        bounds = set(quantifier_vars(ast))
-        for x in variables_ast(quantifier_body(ast)):
-            if x not in bounds:
-                yield x
+        bounds = set(binder_vars(ast))
+        for a in binder_args(ast):
+            for x in variables_ast(a):
+                if x not in bounds:
+                    yield x
     else:
         for arg in ast.args:
             for x in variables_ast(arg):

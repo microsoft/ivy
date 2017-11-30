@@ -21,7 +21,9 @@ is the interface of `hash_table`:
         function hash(X:key.t) : value
 
         object spec = {
-            init hash(X) = 0
+            after init {
+                hash(X) := 0
+            }
 
             before set {
                 hash(k) := v

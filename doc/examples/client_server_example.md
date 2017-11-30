@@ -40,7 +40,10 @@ connected to the server.
     relation link(X:client, Y:server)
     relation semaphore(X:server)
 
-    init semaphore(W) & ~link(X,Y)
+    after init {
+        semaphore(W) := true;
+        link(X,Y) := false
+    }
 
     action connect(x:client,y:server) = {
       assume semaphore(y);

@@ -25,7 +25,9 @@ a module called `udp`. Here is the interface specification:
 
         object spec = {
             relation sent(V:pkt, N:addr)
-            init ~sent(V, N)
+            after init {
+                sent(V, N) := false
+            }
 
             before send {
                 sent(v,dst) := true
@@ -57,7 +59,7 @@ later.
 
 Let's begin by writing a simple test program that uses `udp_simple`:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type a  # network addresses
     type p  # packets
@@ -304,7 +306,7 @@ per second.
 To test, this interface, let's write a simple program that just imports
 `timeout` from the REPL:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     include timeout
 
@@ -395,7 +397,7 @@ side-effect that is visible to another process.
 
 As an example of interference, consider the following program:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type t
 
@@ -427,7 +429,7 @@ them sequentially in either order. Thus, the actions are serializable.
 We could fix the above program by creating one copy of the bit for each 
 process:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type t
 
@@ -447,7 +449,7 @@ This program compiles successfully. But what would happen if
 one process tried to access the variable of another process.
 Consider this program:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type t
 
@@ -507,13 +509,15 @@ Currently, IVy has some limitations in its ability to generate the
 immutable objects and also to generate initial states for parametrized
 processes. Consider, for example, this program:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type t
 
     object foo(me:t) = {
         individual bit:bool
-        init ~bit
+        after init {
+            bit := false
+        }
 
         action get_bit returns (x:bool) = {
             x := bit
@@ -531,40 +535,15 @@ IVy can compile this program and run it:
     0
     > 
 
-But suppose we change the initial condition so it depends on the stripped parameter:
+Note that it is allowed for the initial condition to depend on the
+parameter `me`. For example, we could write:
 
-    init bit <-> me = 0
-
-That is, we want `bit` to be true initially only for process 0. Here's what happens when we try to compile:
-
-    ivy_to_cpp target=repl isolate=iso_foo paraminit2.ivy 
-    paraminit2.ivy: line 7: error: initial condition depends on stripped parameter
-
-IVy isn't smart enough to compile an initial condition that is a
-function of the stripped parameter. We can work around this by
-providing this function explicitly, using an initializer:
-
-    #lang ivy1.6
-
-    type t
-
-    object foo(me:t) = {
-        function bit:bool
-
-        after init {
-            bit := (me = 0)
-        }
-
-        action get_bit returns (x:bool) = {
-            x := bit
-        }
+    after init {
+        bit := me = 0
     }
 
-    export foo.get_bit
-
-    extract iso_foo(me:t) = foo(me)
-
-This version can be stripped and gives the expected result:
+That is, we want `bit` to be true initially only for process 0. 
+This version can also be stripped and gives the expected result:
 
     $ ivy_to_cpp target=repl isolate=iso_foo paraminit3.ivy 
     $ g++ -o paraminit3 paraminit3.cpp

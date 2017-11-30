@@ -40,7 +40,9 @@ which represents the set of all messages currently in the queue:
 Here is the specification of the interface:
 
 	object spec = {
-	    init ~contents(M)
+	    after init {
+                contents(M) := false
+            }
 
 	    before enqueue {
 		assert contents(X) -> net_msg.num(X) ~= net_msg.num(msg)

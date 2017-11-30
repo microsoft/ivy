@@ -73,7 +73,9 @@ library:
 
         object spec = {
             relation sent(V:pkt, N:addr)
-            init ~sent(V, N)
+            after init {
+                sent(V, N) := false
+            }
 
             before send {
                 sent(v,dst) := true

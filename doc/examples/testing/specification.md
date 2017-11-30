@@ -232,7 +232,9 @@ one-place buffer:
     object protocol = {
         individual full : bool
         individual contents : packet
-        init ~full
+        after init {
+            full := false
+        }
 
         implement intf.send {
             full := true;
@@ -344,7 +346,9 @@ Here is the interface specification:
 
     object spec = {
         individual side : side_t
-        init side = left
+        after init {
+            side := left
+        }
 
         before intf.ping {
             assert side = left;
@@ -369,7 +373,9 @@ Now let's implement the left-hand player:
 
     object left_player = {
         individual ball : bool
-        init ball
+        after init {
+            ball := true
+        }
 
         action hit = {
             if ball {
@@ -394,7 +400,9 @@ The right-hand player is similar:
 
     object right_player = {
         individual ball : bool
-        init ~ball
+        after init {
+            ball := false
+        }
 
         action hit = {
             if ball {
