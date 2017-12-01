@@ -1193,3 +1193,111 @@ module ordered_map_impl(key,value) = {
 
     instantiate map_wrapper(key,value)
 }
+
+################################################################################
+#
+# Key/value arrays
+#
+# This modules implements arrays of key/value pairs. The keys are specified
+# relationally so that one can write properties such as "for every key satisfying
+# predicate p, there exists an element having that key". On the other hand, the
+# values are specified funcitonally, so one can easily retreive the value associated
+# to a particular key.
+#
+# The parameters of this module are:
+#
+# index : the index structure, as in "array"
+# key : the key type
+# data : the value type
+#
+# The available methods are:
+#
+# empty : returns an empty array
+# end : returns the index one after the last element
+# get_key : gets the key at an index
+# get_value : gets the value at and index
+# append_pair : appends a key/value pair
+#
+# Typical code to look up the value of a key k in array a would be:
+#
+# if some (i : index.t) a.key_at(i,k) {
+#     var v := a.value_at(i);
+#     ... use value v ...
+# } else {
+#     ... k is not present ...
+# }
+
+module keyval(index,key,data) = {
+
+    type t 
+
+    function end(A:t) : index.t
+    relation key_at(A:t, I:index.t, X:key)
+    function value_at(A:t, I:index.t) : data
+    
+    action empty returns (s:t)
+    action get_key(s:t, i:index.t) returns (k:key)
+    action get_value(s:t, i:index.t) returns (d:data)
+    action append_pair(s:t, k:key, d:data) returns (s:t)
+
+    object spec = {
+
+        property key_at(A,I,X) -> 0 <= I & I < end(A)
+        property key_at(A,I,X) & key_at(A,I,Y) -> X = Y
+        property 0 <= end(A) 
+
+        after empty {
+            assert s.end = 0 & ~key_at(s,I,X)
+        }
+        before get_key {
+            assert 0 <= i & i < s.end
+        }
+        after get_key {
+            assert key_at(s,i,k)
+        }
+        before get_value {
+            assert 0 <= i & i < s.end
+        }
+        after get_value {
+            assert value_at(s,i) = d
+        }
+        after append_pair {
+            assert key_at(s,I,X) <-> key_at(old s,I,X) | I = end(old s) & X = k;
+            assert key_at(old s,I,X) -> value_at(s,I) = value_at(old s,I);
+            assert value_at(s,end(old s)) = d
+        }
+    }
+
+    object impl = {
+
+        type pair = struct {
+            p_key : key,
+            p_value : data
+        }
+
+        instance arr : array(index.t,pair)
+
+        destructor repr(X:t) : arr.t
+
+        definition end(A:t) = repr(A).end
+        definition value_at(A,I) = repr(A).value(I).p_value
+        definition key_at(A,I,X) = (0 <= I & I < end(A) & repr(A).value(I).p_key = X)
+        
+        implement empty {
+            repr(s) := arr.empty
+        }
+        implement get_key {
+            k := repr(s).get(i).p_key
+        }
+        implement get_value {
+            d := repr(s).get(i).p_value
+        }
+        implement append_pair {
+            var p : pair;
+            p.p_key := k;
+            p.p_value := d;
+            repr(s) := repr(s).append(p)
+        }
+    }
+    isolate iso = this with index
+}

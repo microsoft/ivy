@@ -14,8 +14,8 @@ object impl = {
     interpret key.t -> bv[4]
 }
 
-#export tab.set
-#export tab.get
+export tab.set
+export tab.get
 export tab.extract_
 export tab.incorporate
 

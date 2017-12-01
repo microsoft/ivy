@@ -67,43 +67,39 @@ module hash_table(key,value,shard) = {
 
 	implement extract_ {
 	    res.kv := shard.kvt.empty;
-	    local idx : key.iter.t, pos : shard.index {
-		idx := tab.lub(lo);
-		while idx < hi
-		    invariant lo <= idx & (idx < hi -> tab.contains(idx.val))
-                    invariant key.iter.between(lo,X,idx) & tab.contains(X) -> 
-                                   exists I. (shard.at(res,X,I) & tab.maps(X,shard.value_at(res,I)))
-                    invariant shard.at(res,X,I) -> key.iter.between(lo,X,idx) & tab.contains(X)
-		    invariant shard.valid(res)
-		{
-		    local k:key.t {
-			k := key.iter.val(idx);
-			res.kv := res.kv.append_pair(k,tab.get(k,0));
-			idx := tab.next(idx)
-		    }
-		};		
-		shard.lo(res) := lo;
-		shard.hi(res) := hi
-	    }
+            var idx := tab.lub(lo);
+            while idx < hi
+                invariant lo <= idx & (idx < hi -> tab.contains(idx.val))
+                invariant lo.between(X,idx) & tab.contains(X) -> 
+                               exists I. (res.key_at(I,X) & tab.maps(X,res.value_at(I)))
+                invariant res.key_at(I,X) -> lo.between(X,idx) & tab.contains(X)
+                invariant shard.valid(res)
+            {
+                var k := idx.val;
+                res.kv := res.kv.append_pair(k,tab.get(k,0));
+                idx := tab.next(idx)
+            };		
+            res.lo := lo;
+            res.hi := hi
 	}
 
 	implement incorporate(s:shard.t) {
-            var lo := shard.lo(s);
-            var hi := shard.hi(s);
+            var lo := s.lo;
+            var hi := s.hi;
             call tab.erase(lo,hi);
-            var pos:shard.index  := 0;
+            var pos:shard.index.t  := 0;
             while pos < s.kv.end
                 invariant 0 <= pos & pos <= s.kv.end
-                invariant key.iter.between(lo,X,hi) & shard.value(s,X) = 0 -> ~tab.contains(X)
-                invariant key.iter.between(lo,X,hi) & 0 <= Y & Y < pos & shard.at(s,X,Y) & shard.value(s,X) ~= 0
-                                 -> tab.contains(X) & tab.maps(X,shard.value(s,X))
-                invariant ~key.iter.between(lo,X,hi) -> spec.tab_invar(X,Y)
+                invariant lo.between(X,hi) & s.value(X) = 0 -> ~tab.contains(X)
+                invariant lo.between(X,hi) & 0 <= Y & Y < pos & s.key_at(Y,X) & s.value(X) ~= 0
+                                 -> tab.contains(X) & tab.maps(X,s.value(X))
+                invariant ~lo.between(X,hi) -> spec.tab_invar(X,Y)
                 # following are object invariants of tab and shouldn't be needed here
                 invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z & tab.contains(X)
             {
                 var k := s.kv.get_key(pos);
                 var d := s.kv.get_value(pos);
-                if key.iter.between(lo,k,hi) & d ~= 0{
+                if lo.between(k,hi) & d ~= 0{
                     call tab.set(k,d)
                 };			
                 pos := pos.next

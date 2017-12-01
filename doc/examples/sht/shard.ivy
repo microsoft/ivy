@@ -3,91 +3,16 @@
 ########################################
 # A shard contains an interval of keys [lo,hi) from a hash table
 #
+# It is represented as a struct containing the fields lo and hi, and a
+# key/value array kv that maps keys to their value in the table.
 
 include order
 include collections
 
-module keyval(key,data) = {
-
-    instance index : unbounded_sequence
-
-    type t 
-
-    function end(A:t) : index.t
-    relation key_at(A:t, X:key.t, I:index.t)
-    function value_at(A:t, I:index.t) : data
-    
-    action empty returns (s:t)
-    action get_key(s:t, i:index.t) returns (k:key.t)
-    action get_value(s:t, i:index.t) returns (d:data)
-    action append_pair(s:t, k:key.t, d:data) returns (s:t)
-
-    object spec = {
-
-        property key_at(A,X,I) -> 0 <= I & I < end(A)
-        property key_at(A,X,I) & key_at(A,Y,I) -> X = Y
-        property 0 <= end(A) 
-
-        after empty {
-            assert s.end = 0 & ~key_at(s,X,I)
-        }
-        before get_key {
-            assert 0 <= i & i < s.end
-        }
-        after get_key {
-            assert key_at(s,k,i)
-        }
-        before get_value {
-            assert 0 <= i & i < s.end
-        }
-        after get_value {
-            assert value_at(s,i) = d
-        }
-        after append_pair {
-            assert key_at(s,X,I) <-> key_at(old s,X,I) | I = end(old s) & X = k;
-            assert key_at(old s,X,I) -> value_at(s,I) = value_at(old s,I);
-            assert value_at(s,end(old s)) = d
-        }
-    }
-
-    object impl = {
-
-        type pair = struct {
-            p_key : key.t,
-            p_value : data
-        }
-
-        instance arr : array(index.t,pair)
-
-        destructor repr(X:t) : arr.t
-
-        definition end(A:t) = repr(A).end
-        definition value_at(A,I) = repr(A).value(I).p_value
-        definition key_at(A,X,I) = (0 <= I & I < end(A) & repr(A).value(I).p_key = X)
-        
-        implement empty {
-            repr(s) := arr.empty
-        }
-        implement get_key {
-            k := repr(s).get(i).p_key
-        }
-        implement get_value {
-            d := repr(s).get(i).p_value
-        }
-        implement append_pair {
-            var p : pair;
-            p.p_key := k;
-            p.p_value := d;
-            repr(s) := repr(s).append(p)
-        }
-    }
-    isolate iso = this with key
-}
-
 module table_shard(key,data) = {
 
-    instance kvt : keyval(key,data)
-    alias index = kvt.index.t
+    instance index : unbounded_sequence
+    instance kvt : keyval(index,key.t,data)
 
     type t = struct {
 	lo : key.iter.t,
@@ -95,10 +20,10 @@ module table_shard(key,data) = {
 	kv : kvt.t
     }
 
-    relation at(S:t,X:key.t,I:index) = kvt.key_at(kv(S),X,I)
-    function value_at(S:t,I:index) = kvt.value_at(kv(S),I)
+    relation key_at(S:t,I:index.t,X:key.t) = kv(S).key_at(I,X)
+    function value_at(S:t,I:index.t) = kv(S).value_at(I)
 
-    function value(S:t,X:key.t) = some Y. at(S,X,Y) in value_at(S,Y) else 0
-    function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
+    function value(S:t,X:key.t) = some Y. key_at(S,Y,X) in value_at(S,Y) else 0
+    function valid(S:t) = forall X,Y,Z. key_at(S,Y,X) & key_at(S,Z,X) -> Y = Z
 
 }

@@ -117,7 +117,7 @@ def get_sort_arcs(assumes,asserts,strat_map):
     #             if il.is_uninterpreted_sort(ds):
     #                 yield (ds,rng,sym)
 
-    show_strat_map(strat_map)
+#    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
         if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
             yield (find(node),find(strat_map[func[0]]),func[0])
@@ -177,7 +177,6 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
-    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)
@@ -200,8 +199,8 @@ def get_unstratified_funs(assumes,asserts,macros):
     macros = map(vupair,macros)
     strat_map = create_strat_map(assumes,asserts,macros)
     
-    for f,g in macros:
-        print 'macro: {}'.format(f)
+#    for f,g in macros:
+#        print 'macro: {}'.format(f)
 
 
     arcs = list(get_sort_arcs(assumes+macros,asserts,strat_map))
