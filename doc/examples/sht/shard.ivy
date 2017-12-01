@@ -24,11 +24,62 @@ module table_shard(key,data) = {
 	pairs : arr.t
     }
 
-    function key_at(S,I) = p_key(arr.value(pairs(S),I))
-    function value_at(S,I) = p_value(arr.value(pairs(S),I))
-    function at(S,X,I) = (0 <= I & I < arr.end(pairs(S)) & key_at(S,I) = X & value_at(S,I) ~= 0)
+    relation key_at(A:arr.t, X:key.t,I:index.t)
+    relation at(S:t,X:key.t,I:index.t) = key_at(pairs(S),X,I)
+    function value_at(S:t,I:index.t) : data
+
+    action empty returns (s:t)
+    action get_key(s:t, i:index.t) returns (k:key.t)
+    action get_value(s:t, i:index.t) returns (d:data)
+    action append_pair(s:t, k:key.t, d:data) returns (s:t)
+
+    object spec = {
+        after empty {
+            assert s.pairs.end = 0 & ~at(s,X,I)
+        }
+        before get_key {
+            assert 0 <= i & i < s.pairs.end
+        }
+        after get_key {
+            assert at(s,k,i)
+        }
+        before get_value {
+            assert 0 <= i & i < s.pairs.end
+        }
+        after get_value {
+            assert value_at(s,i) = d
+        }
+        after append_pair {
+            assert at(s,X,I) <-> at(old s,X,I) | I = pairs(old s).end & X = k;
+            assert at(old s,X,I) -> value_at(s,I) = value_at(old s,I);
+            assert value_at(s,pairs(old s).end) = d
+        }
+        
+    }
+
+    object impl = {
+        definition value_at(S,I) = p_value(arr.value(pairs(S),I))
+        definition key_at(A,X,I) = (0 <= I & I < arr.end(A) & arr.value(A,I).p_key = X)
+        
+        implement empty {
+            s.pairs := arr.empty
+        }
+        implement get_key {
+            k := pairs(s).get(i).p_key
+        }
+        implement get_value {
+            d := pairs(s).get(i).p_value
+        }
+        implement append_pair {
+            var p : pair;
+            p.p_key := k;
+            p.p_value := d;
+            s.pairs := s.pairs.append(p)
+        }
+    }
 
     function value(S:t,X:key.t) = some Y. at(S,X,Y) in value_at(S,Y) else 0
     function valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
 
+    isolate iso = this with key
 }

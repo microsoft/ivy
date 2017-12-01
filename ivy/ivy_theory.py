@@ -96,6 +96,16 @@ def get_qa_arcs(fmla,ast,pol,univs,strat_map):
     for arg in fmla.args:
         for a in get_qa_arcs(arg,ast,pol,univs,strat_map):
             yield a
+    if isinstance(fmla,il.Ite):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+    if isinstance(fmla,il.Iff) or (il.is_eq(fmla) and il.is_boolean(fmla.args[0])):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+        for a in get_qa_arcs(fmla.args[1],ast,not pol,univs,strat_map):
+            yield a
+
+
 
 def get_sort_arcs(assumes,asserts,strat_map):
     # for sym in il.all_symbols():
@@ -107,7 +117,7 @@ def get_sort_arcs(assumes,asserts,strat_map):
     #             if il.is_uninterpreted_sort(ds):
     #                 yield (ds,rng,sym)
 
-#    show_strat_map(strat_map)
+    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
         if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
             yield (find(node),find(strat_map[func[0]]),func[0])
@@ -151,7 +161,7 @@ def map_fmla(fmla,strat_map):
         return nodes[1]
     if il.is_app(fmla):
         func = fmla.rep
-        if func in symbols_over_universals:
+        if func in symbols_over_universals or True:
             for idx,node in enumerate(nodes):
                 if node is not None:
                     unify(strat_map[(func,idx)],node)
@@ -167,7 +177,7 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
-#    iu.dbg('[str(x) for x in symbols_over_universals]')
+    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)
@@ -190,6 +200,9 @@ def get_unstratified_funs(assumes,asserts,macros):
     macros = map(vupair,macros)
     strat_map = create_strat_map(assumes,asserts,macros)
     
+    for f,g in macros:
+        print 'macro: {}'.format(f)
+
 
     arcs = list(get_sort_arcs(assumes+macros,asserts,strat_map))
 
