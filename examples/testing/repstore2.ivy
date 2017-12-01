@@ -43,6 +43,12 @@
 # assume.guarantee specifications, we can conclude that the together
 # provide a correct service according to our reference object,
 
+# We include the `tcp` module here, since we will need it for
+# the ordered channels between the servers.
+
+include tcp
+include udp
+
 # Basic data types
 # ----------------
 
@@ -178,6 +184,11 @@ object ser = {
 	serialized(X) := false;
     }
 
+    # The serializer also keeps track of the order serialization in a
+    # queue
+
+    instance queue : unbounded_queue(txid)
+
     # To serialzie a write, we must guarantee that transaction exists,
     # and that it has not already been serialized. Further, we can
     # only serialize write transactions.
@@ -187,14 +198,17 @@ object ser = {
 	assert ~serialized(tx);
 	assert ref.txs(tx).knd = write;
 	serialized(tx) := true;
+	call queue.push(tx);
     }
     delegate serialize
 
-    # Further,we specify that a write transaction cannot be committed
-    # until it is serialized.
+    # Further,we specify that a write transactions must be committed
+    # in the order in which they are serialized.
 
     before ref.commit(tx : txid,dst:dest.t) {
-	assert ref.txs(tx).knd = write -> serialized(tx);
+	if ref.txs(tx).knd = write {
+	    assert tx = queue.pop
+	}
     }
 }
 
@@ -204,11 +218,6 @@ object ser = {
 # Now we are ready to define our system implemention, consisting of
 # client endpoints, the primary server and the secondary server.
 
-# Notice we include the `tcp` module here, since we will need it for
-# the ordered channels between the servers.
-
-include tcp
-include udp
 
 # Again, we have an uninterpreted type of client ids, and a request
 # message structure that encapsulates the request with its client id
@@ -235,15 +244,14 @@ module client(cid,prim_chan,sec_chan,cl_chans) = {
     # parameter `the_dst`.
 
     implement client_request {
-	local m : req_msg {
-	    m.cid := cid;
-	    m.req.tx := ref.create(req,the_dst);
-	    m.req.bd := req;
-	    if the_dst = dest.prim {
-	        call prim_chan.send(m);
-	    } else {
-	        call sec_chan.send(m);
-	    }
+	var m : req_msg;
+	m.cid := cid;
+	m.req.tx := ref.create(req,the_dst);
+	m.req.bd := req;
+	if the_dst = dest.prim {
+	    call prim_chan.send(m);
+	} else {
+	    call sec_chan.send(m);
 	}
     }
 
@@ -336,6 +344,7 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	    var res : response.t;
 	    res.tx := inp.req.tx;
 	    res.bd := rep.exec(rr);
+    	    call ref.commit(inp.req.tx,dest.sec);
 	    call cl_chans(inp.cid).send(res);
 	} 	    
 	# ignore writes!
@@ -350,6 +359,7 @@ module secondary_node(port, fwd_chan, rev_chan, cl_chans) = {
 	var res : response.t;
 	res.tx := inp.req.tx;
 	res.bd := rep.exec(inp.req.bd);
+    	call ref.commit(inp.req.tx,dest.sec);
 	call cl_chans(inp.cid).send(res);
 	call rev_chan.send(inp);
     }
@@ -424,18 +434,11 @@ object mid_spec = {
     # channel, its contents must be correct for the given transaction
     # id.  Moreover, the transaction id must be the next on in the
     # FIFO queue (in other words, the writes must arrive in
-    # serialization order).  To make things a little easier, we commit
-    # the message when it is received.  This gurantees that commits
-    # from the secondary always occur in order, without our having to
-    # explicitly specify that. Because the commit operation is
-    # "ghost", it doesn't matter whether we execute in implementation
-    # or specification code.  We can put it wherever it is most
-    # convenient.
+    # serialization order).  
 
     before fwd_chan.rcvr.recv(inp : req_msg) {
 	assert inp.req.bd = ref.txs(inp.req.tx);
 	assert inp.req.tx = queue.pop;
-	call ref.commit(inp.req.tx,dest.sec);
     }
 
     # This tells IVy that the above specification is a guarantee for
@@ -474,7 +477,7 @@ object mid_spec = {
     # this way we can determine which server is allowed to commit the
     # request. This is a very common situation in specifications of
     # distributed services.  Much of the interface state tends to be
-    # related to the question of who is allowed to commit shich
+    # related to the question of who is allowed to commit which
     # transations.
 
     function req_dest(X:txid) : dest.t
@@ -492,13 +495,6 @@ object mid_spec = {
 	assert ref.txs(tx).knd = write -> dst = dest.sec
     }
 
-    # Commit immediately all read requests from client to secondary
-
-    before sec.req_chan.recv(inp : req_msg) {
-	if inp.req.bd.knd = read {
-    	    call ref.commit(inp.req.tx,dest.sec)
-	}
-    }
 }
 
 # We export/import our API.

@@ -120,6 +120,7 @@ like this:
     $ sudo apt-get install python-ply python-pygraphviz
     $ pip install tarjan
 
+Make sure you get version 3.4 of python-ply as some later versions are broken.
 As an alternative, pip can install all the packages, but you need to make sure
 the dependencies on system packages are met:
 

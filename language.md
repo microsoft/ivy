@@ -56,13 +56,18 @@ We will now consider the basic elements of an IVy program.
 
 Every IVy file begins with a line like the following:
 
-    #lang ivy1.5
+    #lang ivy1.7
 
-This tells IVy what version of the language we are using.
+This tells IVy what version of the language we are using. This is
+important because in successive version of the language, certain
+features may be changed or deprecated. Providing the language version
+allows old programs to keep working. They current version of the IVy
+language is 1.7. Changes between versions of the language are listed
+at the end of this document.
 
 ## State and actions
 
-An IVy program describes *objects* that have state variables and
+An IVy program describes *objects* that have state and
 provide *actions* that operate on state. State variables may hold
 either plain old data or mathematical relations and functions (much as
 in the [Alloy][al] language, but with important differences that we
@@ -129,8 +134,9 @@ individuals `red`, `green` and `blue` as its elements.
 
 ### Actions
 
-An *action* in IVy mutates the values of state variables. For example,
-here is a declaration of an action that adds a link between two nodes:
+An *action* is IVy's notion of a procedure that mutates the values of
+state variables. For example, here is a declaration of an action that
+adds a link between two nodes:
 
     action connect(x:node, y:node) = {
         link(x,y) := true
@@ -141,7 +147,7 @@ actions: an assignment. An assignment modifies the value of a
 variable.  In this case, the single pair (*x*,*y*) is added to the
 relation `link` (or put another way, the value of the expression
 `link(x,y)` is set to true, without otherwise modifying
-`link`). Because there is no aliasing in IVy.  the values of all other
+`link`). Because there is no aliasing in IVy,  the values of all other
 variables remain unchanged by the assignment.
 
 We can use place-holders to make larger modifications to a relation. For
@@ -206,7 +212,7 @@ We could also have written `connect_unique` by *calling* `clear` and `connect`:
         call connect(a,b)
     }
     
-Since there are no references in IVy, so in effect, IVy uses the
+IVy uses the
 [call-by-value][cbv] convention. That is, when we call `clear(a)` a
 local variable *x* is created during the execution of `clear` and
 assigned the value *a*. This means that, as in the [C programming
@@ -230,7 +236,7 @@ is equivalent to
     call temp := sqrt(z)
     x := y + temp
 
-If there is more than call within an expression, the calls are
+If there is more than one call within an expression, the calls are
 executed in left-to-right order.
 
 Parentheses are not used when calling an action with no parameters. 
@@ -272,8 +278,8 @@ clause, for example:
         link(y,z) := true
     }
 
-As in the C programming language, the "else" is associated to the
-nearest "if". 
+Because brackets are required, there is no ambiguity as to which 'if'
+an 'else' belongs to.
 
 The following syntax can be used to find a element of a type that
 satisfies some condition:
@@ -323,7 +329,7 @@ For example, instead of something like this:
         link(x,y) := false
     }
 
-we can instead write this:
+we can write this:
 
     link(x,Y) := false
 
@@ -334,7 +340,7 @@ When a loop is needed, it can be written like this:
     while i > 0
     {
         sum := sum + f(i);
-	i := i - 1
+        i := i - 1
     }
 
 This loop computes the sum of `f(i)` for `i` in the range `(0,x]`.
@@ -344,12 +350,27 @@ A loop can be decorated with a invariants, like this:
     invariant sum >= 0
     {
         sum := sum + f(i);
-	i := i - 1
+        i := i - 1
     }
 
 The invariant `sum >= 0` is a special assertion that is applied
 on each loop iteration, before the evaluation of the condition.
 Invariants are helpful in proving properties of programs with loops.
+
+In some situations we need to guarantee that a loop always terminates. We can do this
+with ranking function that is supplied by the keyword `decreases`, like this:
+
+    while i > 0
+    invariant sum >= 0
+    decreases i
+    {
+        sum := sum + f(i);
+        i := i - 1
+    }
+
+The argument of `decreases` is an expression whose value must decrease
+with every loop iteration and such that the loop is never entered when
+the expression is less than `0`.
 
 
 ## Non-deterministic choice
@@ -426,9 +447,9 @@ must prove that the *y* argument is not in the failed set.
 
 On the other hand, the `assume` action does not allow control to pass
 through if the associated condition is false. A typical application of
-`assume` in modeling a protocol is to implement a guarded command. For
-example, this action non-deterministically chooses a non-failed node
-and connects *x* to it:
+`assume` is to make a temporary modeling assumption that we wish later
+to remove. For example, this action non-deterministically chooses a
+non-failed node and connects *x* to it:
 
     action connect_non_failed(x:node) = {
         y := *;
@@ -452,32 +473,40 @@ assumption above to
 
 Normally, we expect a system to start in some well-defined state, or
 at least for some specified conditions to hold initially. In IVy, we use an
-`init` declaration for this purpose. For example:
+`after init` declaration for this purpose. For example:
 
-    init ~link(X,Y)
+    after init {
+        link(X,Y) := false
+    }
 
-This says that initially, no two nodes are linked. As in `assume` and
-`assert`, unbound variables are universal.
+This provides an action that executes at initialization, before the
+environment calls any other actions. Multiple `after init` actions are
+executed in the order in which they are declared in the program.
 
 
 ## Local variables
 
 The above example of a guarded command action assumes that *y* is a
-declared component of type `node`. We can also declare *y* locally,
-however, like this:
+declared program variable of type `node`. We can also declare *y* locally
+within the action, like this:
 
     action connect_non_failed(x:node) = {
-        local y:node {
-            y := *;
-            assume ~failed(y);
-            link(x,y) := true
-        }
+        var y:node;
+        assume ~failed(y);
+        link(x,y) := true
     }
 
-This creates a fresh *y* that is in scope only within the 'local'
-declaration. In fact, we don't need the non-deterministic assignment
-to *y* since the value of *y* is already non-deterministic at the
-beginning of the `local` action.
+This creates a fresh *y* that is in scope only within the action (or generally to the
+end of the most tightly enclosing pair of brackets). We don't need a non-deterministic assignment
+to *y* since the value of *y* is already non-deterministic at the point where it is declared.
+We can create a local variable and assign it in the same statement, like this:
+
+    var y:node := x
+
+or, if the type of `y` can be inferred, just this:
+
+    var y := x
+
 
 ## Modelling interleaving concurrency in IVy
 
@@ -522,7 +551,10 @@ connected to the server.
     relation link(X:client, Y:server)
     relation semaphore(X:server)
 
-    init semaphore(W) & ~link(X,Y)
+    after init {
+        semaphore(W) := true;
+        link(X,Y) := false
+    }
 
     action connect(x:client,y:server) = {
       assume semaphore(y);
@@ -587,23 +619,30 @@ each of our three actions preserves them. Moreover, they are
 sufficient to guarantee that our test assertion is true. Thus, IVy can
 use these conjectures to prove safety of the program.
 
-While we can give IVy conjectured invariants, there is no way outside
-of an action to *assert* that a proposition is invariant. This is to
-avoid ambiguity as to exactly *when* an invariant should be
-established. In IVy we can only state that a formula is true at a
-specific point in the execution of an action.
+We can also specify an invariant of the program that *must* hold, like
+this:
+
+    invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
+
+This invariant is asserted to hold at all times after initialization
+when an exported action is *not* executing. In particular, the
+invariant is not guaranteed to hold when the program calls back to the
+environment (see `import` below) or when it calls one of its own
+actions.
+
 
 ## Axioms and background theories
 
 The built-in types and operators provided by IVy are fairly
-impoverished. We have only uninterpreted types, enumerated types and
-the basic operators of first-order logic. This is by design. By
-introducing richer data types, or *theories*, we would quickly make
-our verification problems undecidable, meaning we would sacrifice
-reliability of automated verification. In practice, before
-introducing, say, the integers into a model, we should make sure that
-the power of the integers is really needed. It may be, for example,
-that all we require is a totally ordered set.
+impoverished. We have only uninterpreted types, the Boolean type
+`bool`, enumerated types and the basic operators of first-order
+logic. This is by design. By introducing richer data types, or
+*theories*, we would quickly make our verification problems
+undecidable, meaning we would sacrifice reliability of automated
+verification. In practice, before introducing, say, the integers into
+a model, we should make sure that the power of the integers is really
+needed. It may be, for example, that all we require is a totally
+ordered set.
 
 IVy allows us to introduce background theories in the form of logical
 axioms. This in turn allows us to avoid using unnecessarily powerful
@@ -647,10 +686,10 @@ such polymorphic operators to avoid, for example, having to invent a
 new "less than" symbol for every ordered type, or adding type
 annotations to operators. 
 
-IVy provides for this in a limited way. Certain symbols, such as `<`
-and `+` are always polymorphic. This allows us to declare relations
-with the same symbol over different sorts and to disambiguate them
-based on type inference.
+IVy provides for this in a limited way. Certain symbols, such as `<`,
+`+` and `0` are always polymorphic. This allows use the same symbol
+with different type signatures disambiguate these uses based on type
+inference.
 
 To make type inference stronger, the polymorphic operators also come
 with type constraints. In functional language terms, `<` has type
@@ -677,7 +716,7 @@ specific meanings.
 
 ### Quoted symbols
 
-A quoted symbols a possibly-empty sequence of characters enclosed in
+A quoted symbol is a possibly-empty sequence of characters enclosed in
 double quote characters (and not containing a double quote character).
 An example would be `"ab$c"`. Quoted symbols are similar to numerals:
 their type is inferred from context. 
@@ -695,7 +734,9 @@ with a test for zero:
     module counter(t) = {
 
         individual val : t
-        init val = 0
+        after init {
+            val := 0
+        }
 
         action up = {
             val := val + 1
@@ -769,7 +810,9 @@ We can create a module with just one instance like this:
 
     object foo = {
         relation bit
-        init ~bit
+        after init {
+            bit := false
+        }
         action flip = {
             bit := ~bit
         }
@@ -912,7 +955,9 @@ the `is_zero` action cannot return true:
     module counter_prop(c) = {
 
         relation was_up
-        init ~was_up 
+        after init {
+            was_up := false
+        }
 
         after c.up {
             was_up := true
@@ -956,7 +1001,9 @@ For example, suppose we have the following program with two objects:
 
     object evens = {
         individual number : nat
-        init nat = 0
+        after init {
+            nat := 0
+        }
 
         action step = {
             call odds.put(number + 1)
@@ -969,7 +1016,9 @@ For example, suppose we have the following program with two objects:
 
     object odds = {
         individual number : nat
-        init nat = 1
+        after init {
+            nat := 1
+        }
 
         action step = {
             call evens.put(number + 1)
@@ -1034,7 +1083,9 @@ The result is as if we had actually entered the following program:
 
     object evens = {
         individual number : nat
-        init nat = 0
+        after init {
+            nat := 0
+        }
 
         action step = {
             call odds.put(number + 1)
@@ -1085,7 +1136,9 @@ The other isolate, `iso_odd` looks like this:
 
     object odds = {
         individual number : nat
-        init nat = 1
+        after init {
+            nat = 1
+        }
 
         action step = {
             call evens.put(number + 1)
@@ -1160,7 +1213,9 @@ The `even` object would then be:
 
     object evens = {
         individual number : nat
-        init nat = 0
+        after init {
+            nat := 0
+        } 
 
         action step = {
             call intf.put_odd(number + 1)
@@ -1177,10 +1232,8 @@ component.
 
 ## Initializers
 
-In some cases it is awkward to give the initial condition as a
-formula. An alternative is to use an initializer. This is a special
-action that is executed once initially, before any exported actions
-are called. For example:
+As noted above, an initializer is a special action that is executed
+once initially, before any exported actions are called. For example:
 
     individual bit : bool
 
@@ -1189,10 +1242,7 @@ are called. For example:
     }
 
 This behaves like a monitor after a special internal action called
-`init`. As the `after` implies, the initial condition prescribed by
-the `init` declarations is assumed to be established before any
-initializers are called. Initializers are executed in the order they
-are declared.
+`init`. Initializers are executed once in the order they are declared.
 
 Initializers may call other actions. For example, suppose we have a
 module `collection` representing a set of objects that is initially
@@ -1406,3 +1456,33 @@ For example:
 
 Here `bfe[3][0]` is the bit field extraction operator the takes the
 low order 4 bits of a bit vector.
+
+## Changes between IVy language versions
+
+### New in version 1.2
+
+- Keywords: returns, mixin, before, after, isolate, with, export, import, delegate, include
+
+### Deprecated in version 1.2
+
+- Keywords: state, set, null, match
+
+### New in version 1.5
+
+- Keywords: function, class, object, method, execute, destructor, 
+  some, maximizing, maximizing, private, implement, using, property, while, invariant,
+  struct, definition, ghost, alias, trusted, this, var, attribute, scenario, proof, named, fresh
+
+### New in version 1.6
+
+- Keywords: variant, of, globally, eventually, temporal
+
+### New in version 1.7
+
+- Keywords: decreases
+
+### Deprecated in version 1.7
+
+- The init declation (only 'after init' is now supported for initialization)
+
+

@@ -1,0 +1,35 @@
+#lang ivy1.7
+
+module indexset(index) = {
+
+    # index is the type of elements
+
+    type set # the type of sets of elements
+    
+    individual n : index             # the number of elements
+    relation member(E:index,S:set)   # E is a member of set S
+    relation maj(S:set)              # set S is a majority
+
+    object spec = {
+	property maj(X) & maj(Y) -> exists E. (member(E,X) & member(E,Y))
+    }
+    
+    object impl = {
+	
+	relation disjoint(X:set,Y:set)
+	function card(S:set) : index
+
+	axiom disjoint(X,Y) -> card(X) + card(Y) <= n
+
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+
+	definition maj(X) = 2*card(X) > n
+	
+    }
+}
+
+	
+    
+type t
+instance s : indexset(t)
+interpret t -> int

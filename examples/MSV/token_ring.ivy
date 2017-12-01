@@ -1,0 +1,112 @@
+#lang ivy1.6
+
+object packet = {
+    type t
+
+    interpret t -> bv[1]
+}
+
+################################################################################
+#
+# Concrete type of node addresses.
+#
+################################################################################
+
+
+object node = {
+    type t
+
+    interpret t -> bv[1]
+
+    action next(x:t) returns (y:t) = {
+        y := x + 1
+    }
+}
+
+
+
+################################################################################
+#
+# The transport service specification
+#
+################################################################################
+
+include trans
+instance trans : transport(net,packet.t,node.t)
+
+################################################################################
+#
+# The network service specification
+#
+################################################################################
+
+include udp
+instance net : udp_simple(node.t,trans.net_msg.t)
+
+
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    action grant(v:node.t)                 # grant lock to client
+    action release(v:node.t)               # client releases lock
+
+    object spec = {
+        relation lock(X:node.t)
+        init lock(X) <-> X = 0
+        
+        before grant {
+            assert ~lock(X);
+            lock(v) := true
+        }
+        
+        before release {
+            assert lock(v);
+            lock(v) := false
+        }
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+object proto(me:node.t) = {
+
+    relation token
+    after init {
+        token := me = 0
+    }
+
+    implement serv.release {
+        if token {
+            token := false;
+            var pkt : packet.t;
+            call trans.send(me,node.next(me),pkt)
+        }
+    }
+
+    implement trans.recv(pkt:packet.t) {
+        token := true;
+        call serv.grant(me)
+    }
+}
+
+export serv.release
+import serv.grant
+
+trusted isolate iso_p = proto with serv,node,trans
+trusted isolate iso_t = trans with net,node
+trusted isolate iso_n = net with node
+
+trusted isolate iso_pt = proto with serv,trans.impl,trans.seq_num,net.impl,node
+
+extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num

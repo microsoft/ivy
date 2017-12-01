@@ -97,7 +97,9 @@ temporal behavior at the interface:
 
     object spec = {
         relation sent(X:packet)
-        init ~sent(X)
+        after init {
+            sent(X) := false
+        }
 
         before intf.send {
             sent(x) := true
@@ -164,7 +166,9 @@ the monitor actions and interface implementations:
     type packet
     relation spec.sent(V0:packet)
 
-    init [spec] ~spec.sent(X)
+    after init {
+        spec.sent(X) := false
+    }
 
     action intf.send(x:packet) = {
         spec.sent(x) := true; # inserted by spec
@@ -185,7 +189,9 @@ one-place buffer:
     object protocol = {
         individual full : bool
         individual contents : packet
-        init ~full
+        after init {
+            full := false
+        }
 
         implement intf.send {
             full := true;
@@ -250,7 +256,9 @@ Here is the interface specification:
 
     object spec = {
         individual side : side_t
-        init side = left
+        after init {
+            side := left
+        }
 
         before intf.ping {
             assert side = left;
@@ -275,7 +283,9 @@ Now let's implement the left-hand player:
 
     object left_player = {
         individual ball : bool
-        init ball
+        after init {
+            ball := true
+        }
 
         action hit = {
             if ball {
@@ -302,7 +312,9 @@ The right-hand player is similar:
 
     object right_player = {
         individual ball : bool
-        init ~ball
+        after init {
+            ball := false
+        }
 
         action hit = {
             if ball {
@@ -343,8 +355,12 @@ follows:
     individual spec.side : side_t
     relation left_player.ball
 
-    init [spec] spec.side = left
-    init [left_player] left_player.ball
+    after init {
+        spec.side := left
+    }
+    after init {
+        left_player.ball := true
+    }
 
     conjecture [left_player] left_player.ball -> spec.side = left
 
@@ -398,8 +414,12 @@ Now let's look at the other isolate:
     individual spec.side : side_t
     relation right_player.ball
 
-    init [spec] spec.side = left
-    init [right_player] ~right_player.ball
+    after init {
+        spec.side = left
+    }
+    after init {
+        right_player.ball := false
+    }
 
     conjecture [right_player] right_player.ball -> spec.side = right
 

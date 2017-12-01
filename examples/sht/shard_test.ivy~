@@ -1,0 +1,13 @@
+#lang ivy1.6
+
+include shard
+
+type key
+type data
+
+instance shrd table_shard(key,data)
+
+export shrd.get_key
+export shrd.get_value
+export shrd.append_pair
+

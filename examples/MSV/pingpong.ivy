@@ -1,0 +1,128 @@
+#lang ivy1.5
+
+# Now we'll consider specifying an interface for an extremely simple
+# protocol: `pingpong`. This protocol represents a simple game that is
+# played across in interface with two actions" `ping` and `pong`. 
+
+object intf = {
+    action ping
+    action pong
+}
+
+# Each player implements an action `hit` which, when called, causes it
+# to hit the ball into the other court. The left player does this by
+# calling `ping`, while the right player calls `pong`.
+#
+
+# We begin by specifying the interface actions. The enumerated type
+# `side` tells us in which court the ball is.
+
+type side_t = {left,right}
+
+# Our interface specification has a variable indicating which court
+# the ball is in, initially the left.
+
+object spec = {
+    var side : side_t
+
+    after init {
+        side := left
+    }
+
+    # When `ping` occurs, the ball must be on the left. It moves to the right.
+
+    before intf.ping {
+        assert side = left;
+        side := right
+    }
+
+    # When `pong` occurs, the ball must be on the rightr. It moves to the left.
+
+    before intf.pong {
+        assert side = right;
+        side := left
+    }
+}
+
+# Now, we define two playes using this intertface. Here is the left
+# player.  It has a Boolean state variable `ball` indicating that it
+# has the ball. On `hit`, if the player has the ball, it calls `ping`
+# to move the ball to the other court and sets `ball` to false. On
+# `pong`, it records the fact that it now has the ball again.
+
+object left_player = {
+    var ball : bool
+    init ball
+
+    action hit = {
+        if ball {
+            call intf.ping;
+            ball := false
+        }
+    }
+    
+    implement intf.pong {
+        ball := true
+    }
+
+}
+
+# The right player is similar, but reverses the rols of `ping` and
+# `pong`.
+
+object right_player = {
+    var ball : bool
+    init ~ball
+
+    action hit = {
+        if ball {
+            call intf.pong;
+            ball := false
+        }
+    }
+    
+    implement intf.ping {
+        ball := true
+    }
+
+}
+
+# Each player exports its `hit` action to the environment (otherwise
+# the program wouldn't do anythihng!).
+
+export left_player.hit
+export right_player.hit
+
+# Here's what's new: we're going to verify each player *in isolation*
+# against its assme/guarantee specification. For the left player, the
+# predondition of `ping` is a guarantee, while the precondition of `pong` is
+# an assumption. The situation is reversed for the right player. When testing
+# the left player, the right player is abstracted away, and its role is played
+# by the tester. Notice that in both isolate declarations, we say `with spec`.
+# Without this declaration, the `spec` object would also be abstracted away and
+# no assertions would be checked. 
+
+trusted isolate iso_l = left_player with spec
+trusted isolate iso_r = right_player with spec
+
+# The idea here is that, by checking each assertion in one isolate, we
+# guarantee that no assertion is the first to fail.
+#
+# We can compile and test the two isolates with these commands:
+#
+#     $ ivy_to_cpp target=test isolate=iso_l build=true pingpong.ivy
+#     $ ./pingpong
+#     $ ivy_to_cpp target=test isolate=iso_r build=true pingpong.ivy
+#     $ ./pingpong
+#
+# Of course, we have to check that we acutally have verified all the assertions.
+# This can be done with the following command:
+#
+#     $ ivy_check pingpong.ivy
+#
+# Note: to run ivy on the command line in Windows, you need to first do this:
+#
+#     > c:\ivy\scripts\activate.bat
+#
+
+

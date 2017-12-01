@@ -55,7 +55,9 @@ of messages. Here is the specification for request messages:
 
         object spec = {
 
-            init ~requested(D,R)
+            after init {
+                requested(D,R) := false
+            }
 
             before send_request {
                 assert ~requested(dst,rq)

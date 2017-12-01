@@ -21,7 +21,7 @@ clock values in a protocol. The protocol doesn't care about the
 quantitative values of the clocks. It only needs to be able to compare
 the values. Here is a possible specification of this type in IVy:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     object clock = {
         type t
@@ -84,7 +84,10 @@ must always increase:
     object spec = {
         individual side : side_t
         individual time : clock.t
-        init side = left & time = 0
+        after init {
+            side := left;
+            time = 0
+        }
 
         before intf.ping {
             assert side = left & time < x;
@@ -104,7 +107,10 @@ Now, using our abstract datatype `clock`, we can implement the left player like 
     object left_player = {
         individual ball : bool
         individual time : clock.t
-        init ball & time = 0
+        after init {
+            ball := true;
+            time := 0
+        }
 
         action hit = {
             if ball {
@@ -127,7 +133,9 @@ clock value using our `incr` operation. The right player is similar:
     object right_player = {
         individual ball : bool
         individual time : clock.t
-        init ~ball
+        after init {
+            ball := false
+        }
 
         action hit = {
             if ball {

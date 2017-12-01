@@ -1,0 +1,82 @@
+#lang ivy1.6
+
+# This is a simple "hello world" program in IVy.
+#
+# IVy is a *synchronous* programming language. One thing this means is
+# that everything an IVy program does is a response to some action by
+# its environment (there are other implications that we'll see later). 
+#
+# To make a "hello world" program, we'll define an action called
+# `hello` that the environment can call. Our program response by
+# calling back with the action `world`.
+#
+# To make things a little more interesting, we'll give each action a
+# parameter of type `t`.
+
+# This is a declaration of type `t`. Notice we haven't said anything
+# yet about `t`, just that it is a type.
+
+type t
+
+# Now we declare two actions with parameters of type `t`.
+
+action hello(val:t)
+action world(val:t)
+
+# The action `hello` is called by the environment, so we say it is
+# "exported" by the program.
+
+export hello
+
+# The action `world` is provided by the environment, so we say it is
+# "imported":
+
+import world
+
+# Since our program exports `hello`, we need to give it an *implementation*.
+# When the environment calls `hello` with value `val`, our program responds
+# by calling `world` with value `val+1`.
+
+implement hello {
+    call world(val+1)
+}
+
+# But wait! We haven't said what type `t` is. How do we know what it
+# means to add one to `val` if `val` has an unknown type? Of course,
+# we don't, and neither does IVy. To run this program, we need to
+# *interpret* `t` as some concrete type. The following statement tells
+# IVy that `t` should be interpreted as the type of (unsigned) binary numbers
+# of four bits:
+
+interpret t -> bv[4]
+
+# Ivy does things this way because in verification, we often want to
+# interpret the types differently for different purposes.
+
+# One way to run this program is to generate a read-eval-print loop (a
+# REPL). In this case, the user at a terminal plays the role of the
+# environment. We build a REPL with a command line this:
+#
+#     $ ivy_to_cpp target=repl build=true hello1.ivy
+#
+# This tells IVy to create a REPL from our program in C++ and then
+# build it into an executable file called "hello1.exe". If
+# you're looking at this file in Visual Studio, you can just say
+# "Build" and "Run".
+#
+# The REPL will print a prompt and wait for the environment (you) to
+# call `hello`. Here's a sample run:
+#
+#     > hello(7)
+#     < world(8)
+#     > hello(3)
+#     < world(4)
+#     ...
+#
+# Now have a look at `hello2.ivy`.
+
+
+
+
+
+

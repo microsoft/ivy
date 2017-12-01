@@ -82,7 +82,7 @@ index type is interpreted as `int`.
 Here is an example of a simple program that tabulates the function
 `f(X) = X * X` from `0` to `max-1`:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     include collections
 
