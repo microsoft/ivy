@@ -24,9 +24,10 @@ module table_shard(key,data) = {
 	pairs : arr.t
     }
 
-    relation key_at(A:arr.t, X:key.t,I:index.t)
-    relation at(S:t,X:key.t,I:index.t) = key_at(pairs(S),X,I)
-    function value_at(S:t,I:index.t) : data
+    relation pairs_key_at(A:arr.t, X:key.t, I:index.t)
+    relation at(S:t,X:key.t,I:index.t) = pairs_key_at(pairs(S),X,I)
+    function pairs_value_at(A:arr.t,I:index.t) : data
+    function value_at(S:t,I:index.t) = pairs_value_at(pairs(S),I)
 
     action empty returns (s:t)
     action get_key(s:t, i:index.t) returns (k:key.t)
@@ -34,6 +35,9 @@ module table_shard(key,data) = {
     action append_pair(s:t, k:key.t, d:data) returns (s:t)
 
     object spec = {
+
+        property at(S,X,I) -> 0 <= I & I < pairs(S).end
+
         after empty {
             assert s.pairs.end = 0 & ~at(s,X,I)
         }
@@ -41,7 +45,7 @@ module table_shard(key,data) = {
             assert 0 <= i & i < s.pairs.end
         }
         after get_key {
-            assert at(s,k,i)
+            assert at(s,k,i) & (at(s,K,i) -> K = k)
         }
         before get_value {
             assert 0 <= i & i < s.pairs.end
@@ -58,8 +62,8 @@ module table_shard(key,data) = {
     }
 
     object impl = {
-        definition value_at(S,I) = p_value(arr.value(pairs(S),I))
-        definition key_at(A,X,I) = (0 <= I & I < arr.end(A) & arr.value(A,I).p_key = X)
+        definition pairs_value_at(A,I) = p_value(arr.value(A,I))
+        definition pairs_key_at(A,X,I) = (0 <= I & I < arr.end(A) & arr.value(A,I).p_key = X)
         
         implement empty {
             s.pairs := arr.empty

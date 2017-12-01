@@ -95,7 +95,7 @@ module hash_table(key,value,shard) = {
             while pos < s.pairs.end
                 invariant 0 <= pos & pos <= s.pairs.end
                 invariant key.iter.between(lo,X,hi) & shard.value(s,X) = 0 -> ~tab.contains(X)
-                invariant key.iter.between(lo,X,hi) & Y < pos & shard.at(s,X,Y) & shard.value(s,X) ~= 0
+                invariant key.iter.between(lo,X,hi) & 0 <= Y & Y < pos & shard.at(s,X,Y) & shard.value(s,X) ~= 0
                                  -> tab.contains(X) & tab.maps(X,shard.value(s,X))
                 invariant ~key.iter.between(lo,X,hi) -> spec.tab_invar(X,Y)
                 # following are object invariants of tab and shouldn't be needed here

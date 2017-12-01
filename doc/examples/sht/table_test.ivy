@@ -17,7 +17,7 @@ object impl = {
 #export tab.set
 #export tab.get
 export tab.extract_
-#export tab.incorporate
+export tab.incorporate
 
 isolate iso_tab = tab with tab,shard,key
 isolate iso_key = key
