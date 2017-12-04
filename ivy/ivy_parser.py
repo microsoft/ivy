@@ -7,6 +7,7 @@ from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, As
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
+from collections import defaultdict
 
 
 import ply.yacc as yacc
@@ -166,7 +167,7 @@ def check_non_temporal(x):
 class Ivy(object):
     def __init__(self):
         self.decls = []
-        self.defined = dict()
+        self.defined = defaultdict(list)
         self.static = set()
         self.modules = dict()
         self.macros = dict()
@@ -190,8 +191,21 @@ class Ivy(object):
                 self.actions[d.defines()] = d
 
     def define(self,df):
+        if len(df) == 3:
+            name,lineno,cls = df
+        else:
+            name,lineno = df
+            cls = None
+        for olineno,ocls in self.defined[name]:
+            conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 
+                        else (ocls is not TypeDecl) if cls is ObjectDecl else True)
+            if conflict:
+                report_error(Redefining(name,lineno,olineno))
+        self.defined[name].append((lineno,cls))
+
+    def define_type(self,df):
         name,lineno = df
-        if name in self.defined:
+        if name in self.defined_types:
             report_error(Redefining(name,lineno,self.defined[name]))
         self.defined[name] = lineno
 
@@ -690,17 +704,26 @@ def p_optghost_ghost(p):
     'optghost : GHOST'
     p[0] = True
 
+def p_typesymbol_symbol(p):
+    'typesymbol : SYMBOL'
+    p[0] = p[1]
+
+def p_typesymbol_this(p):
+    'typesymbol : THIS'
+    p[0] = This()
+    p[0].lineno = get_lineno(p,1)
+
 def p_top_type_symbol(p):
-    'top : top optghost TYPE SYMBOL'
+    'top : top optghost TYPE typesymbol'
     p[0] = p[1]
     scnst = Atom(p[4])
     scnst.lineno = get_lineno(p,4)
     tdfn = (GhostTypeDef if p[2] else TypeDef)(scnst,UninterpretedSort())
-    tdfn.lineno = get_lineno(p,4)
+    tdfn.lineno = get_lineno(p,3)
     p[0].declare(TypeDecl(tdfn))
 
 def p_top_type_symbol_eq_sort(p):
-    'top : top optghost TYPE SYMBOL EQ sort'
+    'top : top optghost TYPE typesymbol EQ sort'
     p[0] = p[1]
     scnst = Atom(p[4])
     scnst.lineno = get_lineno(p,4)

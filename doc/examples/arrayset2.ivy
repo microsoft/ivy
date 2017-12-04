@@ -1,16 +1,16 @@
-#lang ivy1.6
+#lang ivy1.7
 
 include collections
 
-module set(index,elem) = {
+include order
 
-    instance arr:array(index.t,elem)
+module set(elem) = {
 
-    alias t = arr.t
+    type this
+    alias t = this
 
-    function valid(X:t) = forall Y,Z. (0 <= Y & Y < arr.end(X) & 0 <= Z & Z < arr.end(X) & arr.value(X,Y) = arr.value(X,Z) -> Y = Z)
-    function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
-
+    relation contains(X:t,Y:elem)
+    relation valid(X:t)
     action emptyset returns(s:t)
     action add(s:t,e:elem) returns (s:t)
     action remove(s:t,e:elem) returns (s:t)
@@ -36,40 +36,46 @@ module set(index,elem) = {
     }
 
     object impl = {
+
+        instance index : unbounded_sequence
+        instance arr : array(index.t,elem)
+        destructor repr(X:t) : arr
+        
+        definition contains(X:t,y:elem) =
+            exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+
+        definition valid(X:t) =
+            forall Y,Z. (0 <= Y & Y < repr(X).end & 0 <= Z & Z < repr(X).end
+                          & repr(X).value(Y) = repr(X).value(Z) -> Y = Z)
+
 	implement emptyset {
-	    s := arr.create(0,0)
+	    repr(s) := arr.create(0,0)
 	}
 	
 	implement add {
 	    if ~contains(s,e) {
-		assert ~contains(s,e);
-                s := arr.resize(s,index.next(arr.end(s)),e)
+                repr(s) := arr.resize(repr(s),index.next(arr.end(repr(s))),e)
 	    }
         }
+
 	implement remove {
-	    if some (i:index.t) 0 <= i & i < arr.end(s) & arr.value(s,i) = e {
-		local last:index.t {
-		    last  := index.prev(arr.end(s));
-		    s := arr.set(s,i,arr.get(s,last));
-                    s := arr.resize(s,last,0)
-		}
+	    if some (i:index.t) 0 <= i & i < repr(s).end & repr(s).value(i) = e {
+		var last := repr(s).end.prev;
+		repr(s) := repr(s).set(i,repr(s).get(last));
+                repr(s) := repr(s).resize(last,0)
 	    }
         }
+
+
     }
+    isolate iso = this
 }
 
-include order
-
-instance index : unbounded_sequence
 type elem
 
-instance s : set(index,elem)
+instance s : set(elem)
 
 export s.emptyset
 export s.add
-export s.remove
 
-
-isolate iso_s = s with index
-isolate iso_index = index
-extract iso_impl = s,index
+extract iso_impl = s

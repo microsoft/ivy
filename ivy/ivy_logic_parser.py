@@ -43,7 +43,14 @@ def p_atype_symbol(p):
 if not (iu.get_numeric_version() <= [1,4]):
     def p_atype_atype_dot_symbol(p):
         'atype : atype DOT SYMBOL'
-        p[0] = p[1] + '.' + p[3]
+        if isinstance(p[1],This):
+            p[0] = p[3]
+        else:
+            p[0] = p[1] + '.' + p[3]
+    def p_atype_this(p):
+        'atype : THIS'
+        p[0] = This()
+        p[0].lineno = get_lineno(p,1)
 
 def p_var_variable(p):
     'var : VARIABLE'

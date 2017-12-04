@@ -512,7 +512,7 @@ class ObjectDecl(Decl):
     def name(self):
         return 'object'
     def defines(self):
-        return [(c.relname,lineno(c)) for c in self.args]
+        return [(c.relname,lineno(c),ObjectDecl) for c in self.args]
 #        return []
 
 lf_counter = 0
@@ -679,7 +679,7 @@ class TypeDecl(Decl):
     def name(self):
         return 'type'
     def defines(self):
-        return self.args[0].defines()
+        return [(n,l,TypeDecl) for n,l in self.args[0].defines()]
     def static(self):
         res = [a for a,b in self.args[0].defines()]
         return res
@@ -1282,11 +1282,11 @@ def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
     elif ast != None and not isinstance(ast,str):
-        if not hasattr(ast,'args'):
-            print ast
-            print type(ast)
-        if any(isinstance(c,list) for c in ast.args):
-            print "foo: " + repr(ast)
+#        if not hasattr(ast,'args'):
+#            print ast
+#            print type(ast)
+#        if any(isinstance(c,list) for c in ast.args):
+#            print "foo: " + repr(ast)
         for arg in ast.args:
             for x in variables_ast(arg):
                 yield x

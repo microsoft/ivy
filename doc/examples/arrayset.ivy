@@ -1,15 +1,14 @@
-#lang ivy1.6
+#lang ivy1.7
 
 include collections
+include order
 
-module set(index,elem) = {
+module set(elem) = {
 
-    instance arr:array(index.t,elem)
+    type this
+    alias t = this
 
-    alias t = arr.t
-
-    function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
-
+    relation contains(X:t,Y:elem)
     action emptyset returns(s:t)
     action add(s:t,e:elem) returns (s:t)
     
@@ -23,29 +22,31 @@ module set(index,elem) = {
     }
 
     object impl = {
+
+        instance index : unbounded_sequence
+        instance arr : array(index.t,elem)
+        destructor repr(X:t) : arr
+        
+        definition contains(X:t,y:elem) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+        
 	implement emptyset {
-	    s := arr.create(0,0)
+	    repr(s) := arr.create(0,0)
 	}
 	
 	implement add {
 	    if ~contains(s,e) {
-                s := arr.resize(s,index.next(arr.end(s)),e)
+                repr(s) := arr.resize(repr(s),index.next(arr.end(repr(s))),e)
 	    }
         }
     }
+    isolate iso = this
 }
 
-include order
-
-instance index : unbounded_sequence
 type elem
 
-instance s : set(index,elem)
+instance s : set(elem)
 
 export s.emptyset
 export s.add
 
-
-isolate iso_s = s with index
-isolate iso_index = index,index.impl
-extract iso_impl = s,index
+extract iso_impl = s

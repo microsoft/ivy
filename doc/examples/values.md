@@ -205,38 +205,35 @@ interfaces.
 As an example, consider using an array as a representation of a
 set. Here is the start of a module that accomplishes that:
 
-    include collections
+    #lang ivy1.7
+    module set(elem) = {
 
-    module set(index,elem) = {
+        type this
+        alias t = this
 
-        instance arr:array(index.t,elem)
-
-        alias t = arr.t
-
-        function contains(X:t,y:elem) = exists Z. 0 <= Z & Z < arr.end(X) & arr.value(X,Z) = y
-        
-        ...
-    }
-
-Our set representation gives us a type `t` representing a set of
-values of the given type `elem`.  The type `t` is just an alias for
-an array type, which we create by instantiating the module `array`.
-
-Our set type also defines a *representation function*.  This tells us
-what abstract set a given value of type `set.t` represents. In
-particular, `contains(x,y)` is `true` if a given `elem` *y* can be
-found somewhere in the array representing set `x`. The representation
-function allows us write specifications using the abstract value that
-is represented. This means we can can pass around values of type
-`set.t` as if they were actually abstract sets instead of arrays.
-
-Let's start to build some operations on concrete sets:
-
-    module set(index,elem) = {
-        ...
-
+        relation contains(X:t,Y:elem)
         action emptyset returns(s:t)
         action add(s:t,e:elem) returns (s:t)
+        ...    
+
+Notice something new here: `type this`.  This declares a type with the
+same name as the object we are declaring (which won't be known until
+we instantiate this module). For convenience, we create an alias `t`
+for this type. This interface of our abstact set type contains a
+relation and two actions.
+
+The relation `contains` acts as a *representation function*.  This
+tells us what abstract set a given value of type `set` represents.
+The representation function allows us write specifications using the
+abstract value that is represented. This means we can can pass around
+values of type `set` as if they were actually abstract sets instead of
+arrays.
+
+Now let's specify the semantics of our two set operations in terms of
+the `contains` relation.
+
+    module set(elem) = {
+        ...
 
         object spec = {
             after emptyset {
@@ -246,37 +243,72 @@ Let's start to build some operations on concrete sets:
                 assert contains(s,X) <-> (contains(old s,X) | X = e)
             }
         }
-    }
 
-Here we've specified two operations on sets, using the representation
-function `contains`. The action `emptyset` returns a representation of
-the empty set, while `add` returns set `s` with element `e`
-added. Notice that the set parameter of `add` is both input and
-output. This indiciates to the compiler that we wish to avoid copying
-if possible.
+The action `emptyset` returns a representation of the empty set, while
+`add` returns set `s` with element `e` added. Notice that the set
+parameter of `add` is both input and output. This indiciates to the
+compiler that we wish to avoid copying if possible. In most cases,
+this will allowed the compiled code of `add` to modify the set in
+place.
 
-Let's have a hack at implementing these operations:
+Let's have a hack at implementing these operations. The implementation
+usually provides a concrete data representation, a definition for each
+function or relation in the interface, and code for each
+action. Typically it instantiates some modules to provide the concrete
+representation. Here's one way we could implement `set`:
+
+    include collections
+    include order
 
     module set(index,elem) = {
         ...
 
-        object impl = {
-            implement emptyset {
-                s := arr.create(0,0)
-            }
-
-            implement add {
-                if ~contains(s,e) {
-                    s := arr.resize(s,index.next(arr.end(s)),e)
-                }
-            }
+        instance index : unbounded_sequence
+        instance arr : array(index.t,elem)
+        destructor repr(X:t) : arr
+        
+        definition contains(X:t,y:elem) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+        
+	implement emptyset {
+	    repr(s) := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                repr(s) := arr.resize(repr(s),index.next(arr.end(repr(s))),e)
+	    }
         }
+
+    isolate iso = this
     }
+
+This implementation uses an unbounded array as a representation.
+The concrete type is usually provide by giving the abstract type a
+*private destructor*, in this case the function `repr` from type `t` to
+the array type. Giving the destructor in this way is equivalent to
+writing:
+
+    type t = struct {
+        repr : arr
+    }
+
+except the that field `repr`, being a component of the implementation,
+is not visible to users of `set` (it's similar to a private member in
+C++). We use the function `repr` to access the internal representation
+of a set.
+
+Next, we give the definition of `contains` in terms of `repr`. This
+definition is also private. We say that `contains(x,y)` is `true`
+if a given `elem` *y* can be found somewhere in the array representing
+set `x`. 
 
 The implementation of `emptyset` returns an empty array. To add an
 element to a set, we test whether the element is already present.  If
 not, we resize the array to make it one value larger, where the added
-value is `e`. 
+value is `e`, the new element.
+
+Finally, we create an isolate containing our object so it will be
+verified separately.
 
 Notice that in the implementation of `add`, we evaluate the predicate
 `contains`.  IVy recognizes that `contains` is executable because the
@@ -303,38 +335,24 @@ place. On the other hand, evaluating `contains` will still be linear
 time in the array size, since it loops over the array. This approach
 is only practical for small sets.
 
-To try out our sets, we'll need an actual index type for the arrays.
-Let's grab a specification of a suitable abstract type from the
-standard library:
+To try out our sets, we instantiate a set type:
 
-    include order
-    
-    instance range : unbounded_sequence
-
-This gives us a discrete totally ordered set with `next` and `prev`.
-
-We create a set type:
-
-    instance s : set(index,elem)
+    type elem
+    instance s : set(elem)
 
 We export our two actions:
 
     export s.emptyset
     export s.add
 
-We isolate our two objects like this:
-
-    isolate iso_index = index
-    isolate iso_s = s with index
-
 Then we verify:
 
     $ivy_check arrayset.ivy
     ivy_check arrayset.ivy 
-    Checking isolate iso_index...
-    trying ext:index.next...
+    Checking isolate s.impl.index.iso...
+    trying ext:s.impl.index.next...
     checking consecution...
-    Checking isolate iso_s...
+    Checking isolate s.iso...
     trying ext:s.add...
     checking consecution...
     trying ext:s.emptyset...
@@ -342,8 +360,9 @@ Then we verify:
     OK
 
 Notice that even though the object `index` was instantiated from the
-standard library, we still have to verify it. Generally speaking, even
-trusted modules have properties that need to be verified when instantiated in a particular environment.
+standard library, IVy still verified it. Generally speaking, even
+trusted modules have properties that need to be verified when
+instantiated in a particular environment.
 
 # Representation invariants
 
@@ -363,12 +382,10 @@ Now let's try adding an action to our `set` module that removes an element:
         object impl = {
             ...
             implement remove {
-                if some (i:index.t) 0 <= i & i < arr.end(s) & arr.value(s,i) = e {
-                    local last:index.t {
-                        last  := index.prev(arr.end(s));
-                        s := arr.set(s,i,arr.get(s,last));
-                        s := arr.resize(s,last,0)
-                    }
+                if some (i:index.t) 0 <= i & i < repr(s).end & repr(s).value(i) = e {
+                    var last := repr(s).end.prev;
+                    repr(s) := repr(s).set(i,repr(s).get(last));
+                    repr(s) := repr(s).resize(last,0)
                 }
             }
         }
@@ -379,18 +396,20 @@ If such an `i` exists, the value `e` is removed by replacing it with the last va
 in the array and then resizing the array to make it one element smaller. 
 
 Unfortunately, this implementation doesn't work: if the input array
-contains two copies of the element `e`, one copy will remain. On
+contains two copies of the element `e`, one copy will remain. One
 solution to this problem is to use a *representation invariant*. This
 is a predicate a predicate that must be true of a value for it to be a
 valid representation. The representation invariant is assumed to be
 true of input values and must hold of output values.
 
 In the case of our sets, the representation invariant is that no value
-occurs twice in the array:
+occurs twice in the array. It is part of the interface, and like `contains`, its definition
+is private:
 
-    function valid(X:t) = forall Y,Z. (0 <= Y & Y < arr.end(X) & 0 <= Z & Z < arr.end(X) & arr.value(X,Y) = arr.value(X,Z) -> Y = Z)
+        relation valid(X:t)
 
-Now we have to specify our interface to make the appropriate assumptions and guarantees:
+
+We have to specify our interface to make the appropriate assumptions and guarantees:
 
     object spec = {
         after emptyset {
@@ -410,6 +429,15 @@ Now we have to specify our interface to make the appropriate assumptions and gua
             assert contains(s,X) <-> (contains(old s,X) & X ~= e);
             assert valid(s)
         }
+    }
+
+We give the definition of `valid` in the implementation:
+
+    object impl = {
+        ...
+        definition valid(X:t) =
+            forall Y,Z. (0 <= Y & Y < repr(X).end & 0 <= Z & Z < repr(X).end
+                          & repr(X).value(Y) = repr(X).value(Z) -> Y = Z)
     }
 
 Now we can verify that our implementation of `remove` works (try

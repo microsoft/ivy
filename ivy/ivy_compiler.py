@@ -151,8 +151,12 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         except cfrfail as err:
             raise cfrfail(symbol_name if err.symbol_name in im.module.hierarchy else err.symbol_name)
         sort = base.sort
-        sort_parent,sort_child = iu.parent_child_name(sort.name)
-        destr_name = iu.compose_names(sort_parent,child_name)
+        # trucky: we first look for the method as a child of the sort.
+        # if not found, we look for a sibling of the sort
+        destr_name = iu.compose_names(sort.name,child_name)
+        if top_context and destr_name not in ivy_logic.sig.symbols and destr_name not in top_context.actions:
+            sort_parent,sort_child = iu.parent_child_name(sort.name)
+            destr_name = iu.compose_names(sort_parent,child_name)
         if top_context and destr_name in top_context.actions:
             if not expr_context:
                 raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
@@ -798,6 +802,8 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.updates.append(upd.compile())
     def type(self,typedef):
 #        print "typedef {!r}".format(typedef)
+        if isinstance(typedef.name,ivy_ast.This):
+            raise IvyError(typedef,"'type this' is only allowed in an object")
         self.domain.sort_order.append(typedef.name)
         if isinstance(typedef,ivy_ast.GhostTypeDef):
             self.domain.ghost_sorts.add(typedef.name)
