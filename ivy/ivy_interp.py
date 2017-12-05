@@ -547,14 +547,14 @@ def undecided_conjectures(state1):
     return [c for c,t in zip(state1.conjs,truths) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 
-def false_properties():
+def false_properties(reporter= None):
     axioms = im.background_theory()
     props = [x for x in im.module.labeled_props if not x.temporal]
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
     aas = ([islvr.Assume(axioms)]
            + [(islvr.Assume if prop.id in subgoalmap else islvr.Assert)
-              (formula_to_clauses(prop.formula)) for prop in props])
-    truths = islvr.check_sequence(aas)
+              (formula_to_clauses(prop.formula),prop) for prop in props])
+    truths = islvr.check_sequence(aas,reporter)
     return [c for c,t in zip(props,truths[1:]) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 

@@ -1211,10 +1211,12 @@ def check_properties(mod):
                 mod.labeled_axioms.append(prop)
             else:
                 for g in subgoals:
+                    if prop.label is None:
+                        raise IvyError(prop,'Properties with subgoals must be labeled')
                     label = ia.compose_atoms(prop.label,g.label)
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
-                mod.subgoals.append((prop,subgoals))
+            mod.subgoals.append((prop,subgoals))
         # elif prop.temporal:
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10

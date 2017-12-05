@@ -8,6 +8,7 @@ import functools
 import collections
 import re
 import os
+import platform
 
 # some useful combinators
 
@@ -218,10 +219,17 @@ class LocationTuple(tuple):
     def line(self):
         return self[1]
     def __str__(self):
-        res =  (((str(self.filename)) if self.filename else '')
-                + ('(' + str(self.line) + ')') if self.line else '')
-        if res:
-            res += ': '
+        if platform.system() == 'Windows':
+            res =  (((str(self.filename)) if self.filename else '')
+                    + ('(' + str(self.line) + ')') if self.line else '')
+            if res:
+                res += ': '
+        else:
+            res = ''
+            if self.filename:
+                res += str(self.filename) + ': '
+            if self.line:
+                res += 'line ' + str(self.line) + ': '
         return res
 
 def lineno_str(ast):

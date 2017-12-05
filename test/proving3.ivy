@@ -20,7 +20,7 @@
         property mortal(X)
     }
 
-    property mortal(socrates)
+    property [mortsoc] mortal(socrates)
     proof mortality_of_man
 
 

@@ -696,8 +696,9 @@ def clauses_imply_list(clauses1, clauses2_list):
     return res
 
 class AssumeAssert(object):
-    def __init__(self,clauses):
+    def __init__(self,clauses,doc=None):
         self.clauses = clauses
+        self.doc = doc
 
 class Assume(AssumeAssert):
     pass
@@ -705,7 +706,7 @@ class Assume(AssumeAssert):
 class Assert(AssumeAssert):
     pass
 
-def check_sequence(assume_assert_list):
+def check_sequence(assume_assert_list,reporter):
     """True if clauses1 imply clauses2.
     """
     s = z3.Solver()
@@ -715,16 +716,23 @@ def check_sequence(assume_assert_list):
     for aa in assume_assert_list:
         if isinstance(aa,Assume):
 #            print "assume {}".format(aa.clauses)
+            if reporter is not None:
+                reporter.start(False,aa.doc)
             z1 = clauses_to_z3(aa.clauses)
             s.add(z1)
             res.append(True)
         else:
 #            print "assert {}".format(aa.clauses)
+            if reporter is not None:
+                reporter.start(True,aa.doc)
             clauses2 = dual_clauses(aa.clauses)
             z2 = clauses_to_z3(clauses2)
             s.push()
             s.add(z2)
             res.append(s.check() == z3.unsat)
+            if reporter is not None:
+                if not reporter.end(s.check() == z3.unsat,aa.doc):
+                    return res
             s.pop()
     return res
 
@@ -908,6 +916,15 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
 
     Second, minimize the number of positive entries in the relations
     according to the order of relations_to_minimize.
+
+    The parameter final_cond can be a list of objects have the following interface:
+
+        cond():  returns a final condition as a clauses object
+        start(): called before starting
+        sat(): called if sat
+        unsat() : called if unsat
+        assume() : if returns true, assume rather than check
+
     """
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
@@ -917,8 +934,27 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
     #     return None
 
     if final_cond is not None:
-        s.add(clauses_to_z3(final_cond))
-    res = decide(s)
+        if isinstance(final_cond,list):
+            res = z3.unsat
+            for fc in final_cond:
+                fc.start()
+                if fc.assume():
+                    s.add(clauses_to_z3(fc.cond()))
+                else:
+                    s.push()
+                    s.add(clauses_to_z3(fc.cond()))
+                    res = decide(s)
+                    if res != z3.unsat:
+                        fc.sat()
+                        break
+                    else:
+                        fc.unsat()
+                    s.pop()
+        else:
+            s.add(clauses_to_z3(final_cond))
+            res = decide(s)
+    else:
+        res = decide(s)
     if res == z3.unsat:
         return None
 
