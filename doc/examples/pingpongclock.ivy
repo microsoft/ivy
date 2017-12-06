@@ -14,6 +14,14 @@ object clock = {
 	    assert inp < out
 	}
     }
+
+    object impl = {
+        interpret clock.t -> int
+
+        implement incr {
+	    out := inp + 1
+        }
+    }
 }
 
 object intf = {
@@ -82,14 +90,6 @@ object right_player = {
     conjecture ball -> (spec.side = right & spec.time <= time)
 }
 
-object clock_impl = {
-    interpret clock.t -> int
-
-    implement clock.incr {
-	out := inp + 1
-    }
-}
-
 
 
 export left_player.hit
@@ -97,4 +97,4 @@ export right_player.hit
 
 isolate iso_l = left_player with spec, clock
 isolate iso_r = right_player with spec, clock
-isolate iso_ci = clock, clock_impl
+isolate iso_ci = clock
