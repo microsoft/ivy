@@ -18,7 +18,7 @@ import ivy_utils as iu
 
 def p_c_a(s):
     a = s.split(':')
-    return (a[0]+'.ivy',int(a[1]))
+    return iu.Location(a[0]+'.ivy',int(a[1]))
 
 checked_assert = iu.Parameter("assert","",check=lambda s: len(s.split(':'))==2,
                               process=p_c_a)

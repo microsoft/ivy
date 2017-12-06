@@ -185,11 +185,17 @@ class ConjAssumer(Checker):
     def assume(self):
         return True
 
+def filter_fcs(fcs):
+    global check_lineno
+    if check_lineno is None:
+        return fcs
+    return [fc for fc in fcs if (not isinstance(fc,ConjChecker) or fc.lf.lineno == check_lineno)]
+
 def check_fcs_in_state(mod,ag,post,fcs):
     history = ag.get_history(post)
     gmc = lambda cls, final_cond: itr.small_model_clauses(cls,final_cond,shrink=diagnose.get())
     axioms = im.module.background_theory()
-    res = history.satisfy(axioms,gmc,fcs)
+    res = history.satisfy(axioms,gmc,filter_fcs(fcs))
     if res is not None and diagnose.get():
         show_counterexample(ag,post,res)
     return res is None
@@ -200,8 +206,16 @@ def check_conjs_in_state(mod,ag,post,indent=8):
 def check_safety_in_state(mod,ag,post,report_pass=True):
     return check_fcs_in_state(mod,ag,post,[Checker(lg.Or(),report_pass=report_pass)])
 
-def summarize_isolate(mod,check=True):
+opt_summary = iu.BooleanParameter("summary",False)
 
+def summarize_isolate(mod):
+
+    global check_lineno
+    check_lineno = act.checked_assert.get()
+    if check_lineno == "":
+        check_lineno = None
+#    print 'check_lineno: {}'.format(check_lineno)
+    check = not opt_summary.get()
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
     axioms = [m for m in mod.labeled_axioms if m.id not in subgoalmap]
     schema_instances = [m for m in mod.labeled_axioms if m.id in subgoalmap]
@@ -241,13 +255,13 @@ def summarize_isolate(mod,check=True):
     if mod.labeled_conjs:
         print "\n    The inductive invariant consists of the following conjectures:"
         for lf in mod.labeled_conjs:
-            print "        {}{}".format(lf.lineno,"(no name)" if lf.label is None else lf.label)
+            print pretty_lf(lf)
 
 
     if mod.actions:
         print "\n    The following actions are present:"
         for actname,action in sorted(mod.actions.iteritems()):
-            print "        {}{}".format(action.lineno,actname)
+            print "        {}{}".format(pretty_lineno(action),actname)
 
     if mod.initializers:
         print "\n    The following initializers are present:"
@@ -277,7 +291,7 @@ def summarize_isolate(mod,check=True):
         print "\n    The following set of external actions must preserve the invariant:"
         for actname in sorted(checked_actions):
             action = mod.actions[actname]
-            print "        {}{}".format(action.lineno,actname)
+            print "        {}{}".format(pretty_lineno(action),actname)
             if check:
                 ag = ivy_art.AnalysisGraph()
                 pre = itp.State()
@@ -317,6 +331,8 @@ def summarize_isolate(mod,check=True):
     for actname,action in mod.actions.iteritems():
         guarantees = [sub for sub in action.iter_subactions()
                           if isinstance(sub,(act.AssertAction,act.Ranking))]
+        if check_lineno is not None:
+            guarantees = [sub for sub in guarantees if sub.lineno == check_lineno]
         if guarantees:
             if not some_guarants:
                 print "\n    The following program assertions are treated as guarantees:"
@@ -329,10 +345,11 @@ def summarize_isolate(mod,check=True):
             print "        in action {} when called from {}:".format(prettyname,','.join(prettycallers))
             roots = set(iu.reachable([actname],lambda x: callgraph[x]))
             for sub in guarantees:
-                print "            {}guarantee".format(sub.lineno),
+                print "            {}guarantee".format(pretty_lineno(sub)),
                 if check and sub.lineno not in tried:
                     print_dots()
                     tried.add(sub.lineno)
+                    old_checked_assert = act.checked_assert.get()
                     act.checked_assert.value = sub.lineno
                     some_failed = False
                     for root in checked_actions:
@@ -348,6 +365,7 @@ def summarize_isolate(mod,check=True):
                                break
                     if not some_failed:
                         print 'PASS'
+                    act.checked_assert.value = old_checked_assert
                 else:
                     print ""
 
