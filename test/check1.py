@@ -41,7 +41,7 @@ with im.Module():
         assert False,"property should have been false"
     except iu.IvyError as e:
         print str(e)
-        assert str(e) == 'error: Consecution failed.'
+        assert str(e) == 'error: failed checks: 1'
 
 
 #     main_ui.answer("OK")

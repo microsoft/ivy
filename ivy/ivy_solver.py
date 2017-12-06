@@ -22,6 +22,8 @@ import ivy_utils as iu
 import ivy_unitres as ur
 import logic as lg
 
+import sys
+
 # Following accounts for Z3 API symbols that are hidden as of Z3-4.5.0
 
 z3_to_ast_array = z3._to_ast_array if '_to_ast_array' in z3.__dict__ else z3.z3._to_ast_array
@@ -902,7 +904,7 @@ def decide(s,atoms=None):
 #    print "}"
     return res
 
-def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None):
+def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_cond=None, shrink=True):
     """
     Return a HerbrandModel with a "small" model of clauses.
 
@@ -921,7 +923,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
 
         cond():  returns a final condition as a clauses object
         start(): called before starting
-        sat(): called if sat
+        sat(): called if sat, return True if should ignore result
         unsat() : called if unsat
         assume() : if returns true, assume rather than check
 
@@ -945,8 +947,10 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                     s.add(clauses_to_z3(fc.cond()))
                     res = decide(s)
                     if res != z3.unsat:
-                        fc.sat()
-                        break
+                        if fc.sat():
+                            res = z3.unsat
+                        else:
+                            break
                     else:
                         fc.unsat()
                     s.pop()
@@ -958,18 +962,20 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
     if res == z3.unsat:
         return None
 
-    print "shrinking model {"
-    for x in chain(sorts_to_minimize, relations_to_minimize):
-        for n in itertools.count(1):
-            s.push()
-            sc = size_constraint(x, n)
-            s.add(formula_to_z3(sc))
-            res = decide(s)
-            if res == z3.sat:
-                break
-            else:
-                s.pop()
-    print "} shrinking model"
+    if shrink:
+        print "searching for a small model...",
+        sys.stdout.flush()
+        for x in chain(sorts_to_minimize, relations_to_minimize):
+            for n in itertools.count(1):
+                s.push()
+                sc = size_constraint(x, n)
+                s.add(formula_to_z3(sc))
+                res = decide(s)
+                if res == z3.sat:
+                    break
+                else:
+                    s.pop()
+        print "done"
     m = get_model(s)
 #    print "model = {}".format(m)
 #    f = open("ivy.smt2","w")

@@ -385,6 +385,9 @@ def pairs_to_dict(pairs,key=lambda x:x):
         d[key(x)].append(y)
     return d
 
+def dict_to_pairs(d):
+    return [(x,y) for x,l in d.iteritems() for y in l]
+
 def topological_sort(items,order,key=lambda x:x):
     """ items is a list, key maps list elements to hashable keys,
     order is a set of pairs of items representing a pre-order.  Returns a

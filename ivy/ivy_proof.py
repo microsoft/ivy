@@ -131,6 +131,7 @@ class ProofChecker(object):
                     fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
                     fmla = apply_match(remove_vars_match(res,fmla),fmla)
                     g = ia.LabeledFormula(x.label,fmla)
+                    g.lineno = x.lineno
                     subgoals.append(g)
             return subgoals
         return None

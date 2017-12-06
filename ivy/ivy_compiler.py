@@ -1204,7 +1204,7 @@ def check_properties(mod):
     prover = ivy_proof.ProofChecker([],[],mod.schemata)
     for prop in props:
         if prop.id in pmap:
-            print 'checking {}...'.format(prop.label)
+#            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
             if len(subgoals) == 0:
