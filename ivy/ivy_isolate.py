@@ -739,6 +739,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
     
+    mod.isolate_info = im.IsolateInfo()
+
     impl_mixins = defaultdict(list)
     # delegate all the stub actions to their implementations
     for actname,ms in mod.mixins.iteritems():
@@ -757,6 +759,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                     raise iu.IvyError(m,'multiple implementations of action {}'.format(m.mixee()))
                 action = ia.apply_mixin(m,mod.actions[m.mixer()],action)
                 mod.actions[m.mixee()] = action
+                mod.isolate_info.implementations.append((m.mixer(),m.mixee(),action))
             implementation_map[m.mixee()] = m.mixer()
 
     new_actions = {}
@@ -795,6 +798,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             new_actions['ext:'+actname] = new_action
             # TODO: external version is public if action public *or* called from opaque
             # public_actions.add('ext:'+actname)
+
+            # record info on usage of implementations and monitors for user
+            if actname not in implementation_map:
+                mod.isolate_info.implementations.append((actname,actname,action))
         else:
             # TODO: here must check that summarized action does not
             # have a call dependency on the isolated module
@@ -802,6 +809,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             action = summarize_action(action)
             new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,ext_mod_mixin(after_mixins))
             new_actions['ext:'+actname] = add_mixins(mod,actname,action,ext_assumes_no_ver,use_mixin,ext_mod_mixin(all_mixins))
+
+        for mixin in mod.mixins[actname]:
+            if use_mixin(mixin.mixer()):
+                mod.isolate_info.monitors.append((mixin.mixer(),mixin.mixee(),mod.actions[mixin.mixer()]))
+            
+
 
     # figure out what is exported:
     exported = set()
@@ -927,6 +940,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     cone = get_mod_cone(mod,actions=new_actions,roots=exported,after_inits=after_inits)        
     new_actions = dict((x,y) for x,y in new_actions.iteritems() if x in cone)
+    mod.isolate_info.implementations = [(impl,actname,action) for impl,actname,action in mod.isolate_info.implementations
+                                       if actname in new_actions or 'ext:'+actname in new_actions]
+    mod.isolate_info.monitors = [(mixer,mixee,action) for mixer,mixee,action in mod.isolate_info.monitors
+                                if mixee in new_actions or 'ext:'+mixee in new_actions]
 
     # Now that we have the accessible axioms, propteries inits, conjectures and actions,
     # action, we can find the accessible definitions. 
@@ -1324,6 +1341,8 @@ def create_isolate(iso,mod = None,**kwargs):
             if mod.isolates and cone_of_influence.get():
                 raise iu.IvyError(None,'no isolate specified on command line')
             # apply all the mixins in no particular order
+            mod.isolate_info = im.IsolateInfo()
+            implemented = set()
             for name,mixins in mod.mixins.iteritems():
                 for mixin in mixins:
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
@@ -1332,6 +1351,16 @@ def create_isolate(iso,mod = None,**kwargs):
                         action1 = action1.assert_to_assume()
                     mixed = ia.apply_mixin(mixin,action1,action2)
                     mod.actions[mixed_name] = mixed
+                    triple = (mixin.mixer(),mixin.mixee(),mod.actions[mixin.mixer()])
+                    if isinstance(mixin,ivy_ast.MixinImplementDef):
+                        mod.isolate_info.implementations.append(triple)
+                        implemented.add(mixin.mixee())
+                    else:
+                        mod.isolate_info.monitors.append(triple)
+                    implemented.add(mixin.mixer())
+            for actname,action in mod.actions.iteritems():
+                if actname not in implemented:
+                    mod.isolate_info.implementations.append((actname,actname,action))
             # find the globally exported actions (all if none specified, for compat)
             if mod.exports:
                 mod.public_actions.clear()

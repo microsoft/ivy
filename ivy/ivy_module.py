@@ -74,6 +74,7 @@ class Module(object):
         self.proofs = [] # list of pair (labeled formula, proof)
         self.named = [] # list of pair (labeled formula, atom)
         self.subgoals = [] # (labeled formula * labeled formula list) list
+        self.isolate_info = None # IsolateInfo or None
         
         self.sig = il.sig.copy() # capture the current signature
 
@@ -335,3 +336,11 @@ def sort_dependencies(mod,sortname):
             return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
     return []
 
+# Holds info about isolate for user consumption
+#
+# -- implementations is a list of pairs (mixer,mixee,action) for present action implementaitons
+# -- monitors is a list of triples (mixer,mixee,action) for present monitors
+
+class IsolateInfo(object):
+    def __init__(self):
+        self.implementations,self.monitors = [],[]

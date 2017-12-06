@@ -257,11 +257,20 @@ def summarize_isolate(mod):
         for lf in mod.labeled_conjs:
             print pretty_lf(lf)
 
+    if mod.isolate_info.implementations:
+        print "\n    The following action implementations are present:"
+        for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
+            print "        {}implementation of {}".format(pretty_lineno(action),mixee)
 
-    if mod.actions:
-        print "\n    The following actions are present:"
-        for actname,action in sorted(mod.actions.iteritems()):
-            print "        {}{}".format(pretty_lineno(action),actname)
+    if mod.isolate_info.monitors:
+        print "\n    The following action monitors are present:"
+        for mixer,mixee,action in sorted(mod.isolate_info.monitors,key=lambda x: x[0]):
+            print "        {}monitor of {}".format(pretty_lineno(action),mixee)
+
+    # if mod.actions:
+    #     print "\n    The following actions are present:"
+    #     for actname,action in sorted(mod.actions.iteritems()):
+    #         print "        {}{}".format(pretty_lineno(action),actname)
 
     if mod.initializers:
         print "\n    The following initializers are present:"
