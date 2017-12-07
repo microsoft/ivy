@@ -931,7 +931,12 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # filter the conjectures
 
-    new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
+    else:
+        new_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,verified,mod)]
+        assumed_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,present,mod) and not startswith_eq_some(c.label.rep,verified,mod)]
+        
     del mod.labeled_conjs[:]
     if not create_imports.get(): # no conjectures if compiling
         mod.labeled_conjs.extend(new_conjs)
@@ -1605,3 +1610,38 @@ def check_isolate_completeness(mod = None):
                 done.add(label)
         
     return missing
+
+# Get the set of actions present in an isolate. 
+
+def get_isolate_actions(mod,iso):
+    actions = set()
+    def recur(name):
+        if name in mod.actions:
+            actions.add(name)
+        for child in mod.hierarchy[name]:
+            cname = iu.compose_names(name,child)
+            if not(child == "impl"
+                   or iu.compose_names(name,'impl') in mod.attributes
+                   or iu.compose_names(name,'private') in mod.attributes):
+                recur(cname)
+        
+    for ver in iso.verified():
+        name = ver.rep
+        if name in mod.actions:
+            actions.add(name)
+        for child in mod.hierarchy[name]:
+            cname = iu.compose_names(name,child)
+            recur(cname)
+
+    for pres in iso.present():
+        name = res.rep
+        recur(name)
+
+    return actions
+
+def get_isolate_exports(mod,cg,iso):
+    actions = get_isolate_actions(mod,iso)
+    mod_exports = set(exp.exported() for exp in mod.exported)
+    exports = set(act for act in actions if act in mod_exports
+                  or any((x not in actions) for x in cg[act]))
+    return exports

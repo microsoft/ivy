@@ -127,6 +127,14 @@ def partition(things,key):
         res[key(t)].append(t)
     return res
 
+# split a l list into a pair of lists (lp,1n) such that lp has the
+# elements of l satisfying predicate p and ln has the rest.
+
+def split_list(l,p):
+    pl = [p[x] for x in l]
+    return ([x for x,c in zip(l,pl) if c],
+            [x for x,c in zip(l,pl) if not c])
+
 # unique name generation
 
 def constant_name_generator():

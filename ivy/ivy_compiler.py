@@ -1252,6 +1252,37 @@ def compile_theories(mod,**kwargs):
             theory = th.get_theory(value)
             ivy_compile_theory_from_string(mod,theory,name,**kwargs)
 
+# Here, we infer for each conjecture the set of actions that must
+# preserve it. A conjecture must be preserved by any action that is
+# exported by its most nearly containing isolate. This is only needed
+# from version 1.7, where we introduce the concept of object
+# invariant.
+
+def create_conj_actions(mod):
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        return
+    # for each isolate, find the exported actions
+    exports = dict
+    objects = defaultdict(list)
+    cg = mod.call_graph()
+    for isol in mod.isolates:
+        exports[isol.name] = iso.get_isolate_exports(mod,cg,isol)
+        for x in isol.verified():
+            objects[x.rep].append(isol)
+    for conj in mod.labeled_conjs:
+        lbl = conj.label.rep
+        while lbl != 'this' and lbl not in objects:
+            lbl,_ = iu.parent_child_name(lbl)
+        if label == 'this':
+            actions = [exp.exported() for exp in mod.exports]
+        else:
+            actions = []
+            for isol in objects[lbl]:
+                actions.append(exports[isol.name])
+    mod.conj_actions[conj.label.rep] = actions
+    
+    
+
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
@@ -1288,6 +1319,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         create_sort_order(mod)
         check_definitions(mod)
         check_properties(mod)
+        create_conj_actions(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)
