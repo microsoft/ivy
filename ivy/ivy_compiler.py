@@ -1258,6 +1258,12 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         check_instantiations(mod,decls)
         for name in decls.defined:
             mod.add_to_hierarchy(name)
+        for decl in decls.decls:
+            for attribute in decl.attributes:
+                for dfs in decl.defines():
+                    name = dfs[0]
+                    print "adding attribute: {}.{}".format(name,attribute)
+                    mod.attributes[iu.compose_names(name,attribute)] = "yes"
 #        infer_parameters(decls.decls)
         with TopContext(collect_actions(decls.decls)):
             IvyDomainSetup(mod)(decls)

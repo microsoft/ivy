@@ -103,6 +103,8 @@ def stack_action_lookup(name,params=0):
     return None,0
 
 def inst_mod(ivy,module,pref,subst,vsubst):
+    save = ivy.attributes
+    ivy.attributes = ()
     for decl in module.decls:
         if isinstance(decl,AttributeDecl):
             if vsubst:
@@ -125,7 +127,9 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             for foo in idecl.args:
                 if not hasattr(foo.args[1],'lineno'):
                     print 'no lineno: {}'.format(foo)
+        idecl.attributes = decl.attributes
         ivy.declare(idecl)
+    ivy.atributes = save
 
 def do_insts(ivy,insts):
     others = []
@@ -164,6 +168,8 @@ def check_non_temporal(x):
     else:
         return x
 
+special_attribute = None
+
 class Ivy(object):
     def __init__(self):
         self.decls = []
@@ -175,13 +181,20 @@ class Ivy(object):
         self.included = set()
         self.is_module = False
         self.params = []
+        global special_attribute
+        print 'new top: {}'.format(special_attribute)
+        self.attributes = (special_attribute,) if special_attribute is not None else ()
+        special_attribute = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
+        print 'declaring: {} {}'.format(type(decl),decl.attributes)
         for df in decl.defines():
             self.define(df)
         for df in decl.static():
             self.static.add(df)
+        decl.attributes = self.attributes + decl.attributes
+        print 'new attributes: {}'.format(decl.attributes)
         self.decls.append(decl)
         if isinstance(decl,MacroDecl):
             for d in decl.args:
@@ -264,10 +277,27 @@ def addtemporal(lf):
     lf.temporal = True
     return lf
 
+label_counter = 0
+
+def newlabel(pref):
+    global label_counter
+    label_counter += 1
+    return Atom(pref+str(label_counter))
+
+def mk_label(s,pref):
+    return s if s is not None else newlabel(pref)
+        
+def addlabel(lf,pref):
+    if lf.label is not None or iu.get_numeric_version() <= [1,6]:
+        return lf
+    res = LabeledFormula(newlabel(pref),lf.formula)
+    res.lineno = lf.lineno
+    return res
+
 def p_top_axiom_labeledfmla(p):
     'top : top opttemporal AXIOM labeledfmla'
     p[0] = check_non_temporal(p[1])
-    d = AxiomDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    d = AxiomDecl(addtemporal(addlabel(p[4],'axiom')) if p[2] else check_non_temporal(p[4]))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
 
@@ -283,7 +313,7 @@ def p_optskolem_symbol(p):
 def p_top_property_labeledfmla(p):
     'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    d = PropertyDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    d = PropertyDecl(addtemporal(addlabel(p[4],'prop')) if p[2] else check_non_temporal(p[4]))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
     if p[5] is not None:
@@ -294,7 +324,7 @@ def p_top_property_labeledfmla(p):
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
     p[0] = p[1]
-    d = ConjectureDecl(p[3])
+    d = ConjectureDecl(addlabel(p[3],'conj'))
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
@@ -396,7 +426,7 @@ def p_schdecl_typedecl(p):
 
 def p_schdecl_propdecl(p):
     'schdecl : PROPERTY labeledfmla'
-    p[0] = [check_non_temporal(p[2])]
+    p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -526,7 +556,7 @@ def p_rel_defnlhs(p):
 
 def p_rel_defn(p):
     'rel : defn'
-    p[0] = DerivedDecl(mk_lf(p[1]))
+    p[0] = DerivedDecl(addlabel(mk_lf(p[1]),'def'))
 
 def p_rels_rel(p):
     'rels : rel'
@@ -574,7 +604,7 @@ def p_fun_defnlhs_colon_atype(p):
 
 def p_fun_defn(p):
     'fun : defn'
-    p[0] = DerivedDecl(mk_lf(p[1]))
+    p[0] = DerivedDecl(addlabel(mk_lf(p[1]),'def'))
 
 def p_funs_fun(p):
     'funs : fun'
@@ -599,7 +629,7 @@ def mk_lf(x):
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
     p[0] = p[1]
-    p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
+    p[0].declare(DerivedDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
 
 def p_proofstep_symbol(p):
     'proofstep : SYMBOL'
@@ -648,7 +678,7 @@ def p_optproof_symbol(p):
 def p_top_definition_defns(p):
     'top : top DEFINITION defns optproof'
     p[0] = p[1]
-    p[0].declare(DefinitionDecl(*[mk_lf(x) for x in p[3]]))
+    p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
     if p[4] is not None:
         p[0].declare(ProofDecl(p[4]))
 
@@ -1089,12 +1119,13 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.args[0].lineno = d.lineno
         p[0] = p[1]
         p[0].declare(d)
-    def p_top_private_callatom(p):
-        'top : top PRIVATE callatom'
-        d = PrivateDecl(PrivateDef(p[3]))
-        d.lineno = get_lineno(p,2)
-        p[0] = p[1]
-        p[0].declare(d)
+    if iu.get_numeric_version() <= [1,6]:
+        def p_top_private_callatom(p):
+            'top : top PRIVATE callatom'
+            d = PrivateDecl(PrivateDef(p[3]))
+            d.lineno = get_lineno(p,2)
+            p[0] = p[1]
+            p[0].declare(d)
     def p_optdelegee(p):
         'optdelegee :'
         p[0] = None
@@ -1110,6 +1141,33 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+
+if not (iu.get_numeric_version() <= [1,6]):
+
+    def p_specimpl_specification(p):
+        'specimpl : SPECIFICATION'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute = "spec"
+
+    def p_specimpl_implementation(p):
+        'specimpl : IMPLEMENTATION'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute =  "impl"
+
+    def p_specimpl_private(p):
+        'specimpl : PRIVATE'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute =  "private"
+
+    def p_top_specification_lcb_top_rcb(p):
+        'top : top specimpl LCB top RCB'
+        p[0] = p[1]
+        stack.pop()
+        for decl in p[4].decls:
+            p[0].declare(decl)
 
     # def p_top_delegate_callatom(p):
     #     'top : top DELEGATE callatoms ARROW callatom'
@@ -1168,7 +1226,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
     p[0] = p[1]
     impl = Implies(p[3],p[5])
     impl.lineno = get_lineno(p,4)
-    thing = InterpretDecl(mk_lf(impl))
+    thing = InterpretDecl(addlabel(mk_lf(impl),'interp'))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
@@ -1177,7 +1235,7 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     p[0] = p[1]
     imp = Implies(p[3],Range(p[6],p[8]))
     imp.lineno = get_lineno(p,4)
-    thing = InterpretDecl(mk_lf(imp))
+    thing = InterpretDecl(addlabel(mk_lf(imp),'interp'))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 
@@ -1202,7 +1260,7 @@ def p_top_nativequote(p):
     'top : top NATIVEQUOTE'
     p[0] = p[1]
     text,bqs = parse_nativequote(p,2)
-    defn = NativeDef(*([None] + [text] + bqs))
+    defn = NativeDef(*([mk_label(None)] + [text] + bqs))
     defn.lineno = get_lineno(p,2)
     thing = NativeDecl(defn)
     thing.lineno = get_lineno(p,2)

@@ -483,6 +483,7 @@ def lineno(c):
 class Decl(AST):
     def __init__(self,*args):
         self.args = args
+        self.attributes = ()
     def __repr__(self):
         res = self.name() + ' ' + ','.join([repr(a) for a in self.args])
         return res
@@ -540,7 +541,14 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         return res
 
-class AxiomDecl(Decl):
+class LabeledDecl(Decl):
+    def defines(self):
+        if iu.get_numeric_version() <= [1,6]:
+            return []
+        return [(c.label.relname,lineno(c),type(self)) for c in self.args]
+    
+
+class AxiomDecl(LabeledDecl):
     def name(self):
         return 'axiom'
 
@@ -548,7 +556,7 @@ class PropertyDecl(AxiomDecl):
     def name(self):
         return 'property'
 
-class ConjectureDecl(Decl):
+class ConjectureDecl(LabeledDecl):
     def name(self):
         return 'conjecture'
 
@@ -627,11 +635,9 @@ class DerivedDecl(Decl):
     def defines(self):
         return [(c.formula.defines(),lineno(c.formula)) for c in self.args]
 
-class DefinitionDecl(Decl):
+class DefinitionDecl(LabeledDecl):
     def name(self):
         return 'definition'
-    def defines(self):
-        return []
 
 class ProgressDecl(Decl):
     def name(self):
@@ -696,11 +702,9 @@ class AssertDecl(Decl):
     def defines(self):
         return []
 
-class InterpretDecl(Decl):
+class InterpretDecl(LabeledDecl):
     def name(self):
         return 'interpret'
-    def defines(self):
-        return []
 
 class MixinDecl(Decl):    
     def name(self):

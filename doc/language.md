@@ -1479,7 +1479,7 @@ low order 4 bits of a bit vector.
 
 ### New in version 1.7
 
-- Keywords: decreases
+- Keywords: decreases, specification, implementation
 
 ### Deprecated in version 1.7
 

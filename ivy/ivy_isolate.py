@@ -625,6 +625,11 @@ def set_privates(mod,isolate,suff=None):
         nsuff = get_private_from_attributes(mod,n,suff)
         if nsuff in l:
             mod.privates.add(iu.compose_names(n,nsuff))
+    for name in mod.attributes:
+        p,c = iu.parent_child_name(name)
+        if c == suff or c == "private":
+            print 'private: {}'.format(p)
+            mod.privates.add(p)
 
 def get_props_proved_in_isolate_orig(mod,isolate):
     save_privates = mod.privates
@@ -673,6 +678,16 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
             raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
 
     xtra = set(iu.compose_names(a.relname,kind) for a in isolate.verified())
+    for name in mod.attributes:
+        p,c = iu.parent_child_name(name)
+        if c == kind or c == "private":
+            print 'p:{}'.format(p)
+            p1,c1 = iu.parent_child_name(p)
+            print 'p1:{}'.format(p1)
+            if p1 in verified:
+                print 'xtra: {}'.format(p)
+                xtra.add(p)
+    
 
     verified.update(xtra)
     present.update(xtra)
@@ -1208,6 +1223,7 @@ def loop_action(action,mod):
     return action
 
 def fix_initializers(mod,after_inits):
+        things = set()
         for m in after_inits:
             name = m.mixer()
             extname = 'ext:'+name
@@ -1223,8 +1239,12 @@ def fix_initializers(mod,after_inits):
                 del mod.actions[extname]
             if extname in mod.public_actions:
                 mod.public_actions.remove(extname)
+            things.add(name)
+            things.add(extname)
         ais = set(m.mixer() for m in after_inits)
         mod.exports = [e for e in mod.exports if e.exported() not in ais]
+        mod.isolate_info.implementations = [(impl,actname,action) for impl,actname,action in mod.isolate_info.implementations
+                                            if actname not in things]
 
 def set_up_implementation_map(mod):
     global implementation_map
