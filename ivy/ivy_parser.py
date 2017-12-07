@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -1428,10 +1428,21 @@ def p_action_assert(p):
     p[0] = AssertAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
-def p_action_ensures(p):
-    'action : ENSURES fmla'
-    p[0] = EnsuresAction(check_non_temporal(p[2]))
-    p[0].lineno = get_lineno(p,1)
+if iu.get_numeric_version() <= [1,6]:
+    def p_action_ensures(p):
+        'action : ENSURES fmla'
+        p[0] = EnsuresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+else:
+    def p_action_ensure(p):
+        'action : ENSURE fmla'
+        p[0] = EnsuresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+    def p_action_require(p):
+        'action : REQUIRE fmla'
+        p[0] = RequiresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+    
 
 def p_action_set_lit(p):
     'action : SET lit'

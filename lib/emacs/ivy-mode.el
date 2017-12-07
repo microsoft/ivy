@@ -83,6 +83,8 @@
    "specification"
    "implementation"
    "decreases"
+   "require"
+   "ensure"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

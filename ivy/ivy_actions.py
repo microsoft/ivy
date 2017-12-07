@@ -192,8 +192,8 @@ class Action(AST):
         if to_hide:
              update = hide(to_hide,update)
         return update
-    def assert_to_assume(self):
-        args = [a.assert_to_assume() if isinstance(a,Action) else a for a in self.args]
+    def assert_to_assume(self,kinds):
+        args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
@@ -271,7 +271,9 @@ class AssertAction(Action):
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         return ([],true_clauses(),cl)
-    def assert_to_assume(self):
+    def assert_to_assume(self,kinds):
+        if type(self) not in kinds:
+            return Action.assert_to_assume(self,kinds)
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
         if hasattr(self,'formal_params'):
@@ -280,12 +282,17 @@ class AssertAction(Action):
             res.formal_returns = self.formal_returns
         return res
     
-# Ensures is same as Assert except it never gets converted to Assume
+# Prior to version 1.7, Ensures is always verified
 
 class EnsuresAction(AssertAction):
-    def assert_to_assume(self):
-        return Action.assert_to_assume(self)
-    
+    def assert_to_assume(self,kinds):
+        if (iu.get_numeric_version() <= [1,6]):
+            return Action.assert_to_assume(self,kinds)
+        return AssertAction.assert_to_assume(self,kinds)
+
+class RequiresAction(AssertAction):
+    pass
+
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
         return eq_atom(ast1,ast2)
@@ -806,7 +813,7 @@ class WhileAction(Action):
         else:
             asserts = self.args[2:]
             decreases = None
-        assumes = [a.assert_to_assume() for a in asserts]
+        assumes = [a.assert_to_assume([AssertAction]) for a in asserts]
         entry_asserts = []
         exit_asserts = []
         if decreases is not None:
@@ -838,8 +845,8 @@ class WhileAction(Action):
         return self.expand(domain,pvars).int_update(domain,pvars)
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
-    def assert_to_assume(self):
-        res = self.clone([self.args[0],self.args[1].assert_to_assume()])
+    def assert_to_assume(self,kinds):
+        res = self.clone([self.args[0],self.args[1].assert_to_assume(kinds)])
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):

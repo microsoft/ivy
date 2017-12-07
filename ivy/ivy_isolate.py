@@ -33,7 +33,7 @@ def lookup_action(ast,mod,name):
         raise iu.IvyError(ast,"action {} undefined".format(name))
     return mod.actions[name]
 
-def add_mixins(mod,actname,action2,assert_to_assume=lambda m:False,use_mixin=lambda:True,mod_mixin=lambda name,m:m):
+def add_mixins(mod,actname,action2,assert_to_assume=lambda m:[],use_mixin=lambda:True,mod_mixin=lambda name,m:m):
     # TODO: mixins need to be in a fixed order
     res = action2
     if create_imports.get():
@@ -42,8 +42,9 @@ def add_mixins(mod,actname,action2,assert_to_assume=lambda m:False,use_mixin=lam
         mixin_name = mixin.mixer()
         action1 = lookup_action(mixin,mod,mixin_name)
         if use_mixin(mixin_name):
-            if assert_to_assume(mixin):
-                action1 = action1.assert_to_assume()
+            ata = assert_to_assume(mixin)
+            if ata:
+                action1 = action1.assert_to_assume(ata)
             action1 = mod_mixin(mixin,action1)
             res = ia.apply_mixin(mixin,action1,res)
     return res
@@ -783,22 +784,55 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
     delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified,mod)
-    ext_assumes = lambda m: before_mixins(m) and not delegated_to_verified(m.mixer())
-    int_assumes = lambda m: after_mixins(m) and not delegated_to_verified(m.mixer())
-    ext_assumes_no_ver = lambda m: not delegated_to_verified(m.mixer())
+
+    # for verified external actions, we assume the asserts in before mixins
+    # Require behaves like assert in before mixin
+
+    ext_assumes = lambda m: ([ia.RequiresAction] + 
+                             ([ia.AssertAction]
+                              if before_mixins(m) and not delegated_to_verified(m.mixer())
+                              else []))
+
+    # for unverified internal actions, we assume the asserts in after mixins
+    # Ensure behaves like assert in after mixins
+
+    int_assumes = lambda m: ([ia.EnsuresAction] + 
+                             ([ia.AssertAction]
+                              if after_mixins(m) and not delegated_to_verified(m.mixer())
+                              else []))
+
+    # for unverified external, everything is assumed
+
+    ext_assumes_no_ver = lambda m: ([ia.EnsuresAction,ia.RequiresAction] +
+                                    ([ia.AssertAction]
+                                     if not delegated_to_verified(m.mixer())
+                                     else []))
+
+    # for an internal summarized action, we assume the asserts in after mixins
+    # Ensure behaves like assert in after mixins
+
+    int_sum_assumes = lambda m: ([ia.EnsuresAction] + 
+                                 ([ia.AssertAction]
+                                  if after_mixins(m)
+                                  else []))
+
     summarized_actions = set()
     for actname,action in mod.actions.iteritems():
         ver = startswith_eq_some(actname,verified,mod)
         pre = startswith_eq_some(actname,present,mod)
         if pre: 
             if not ver or actname in delegates:
-                ext_action = action.assert_to_assume().prefix_calls('ext:')
+                ext_kinds = [ia.AssertAction,ia.EnsuresAction,ia.RequiresAction] 
+                ext_action = action.assert_to_assume(ext_kinds).prefix_calls('ext:')
                 if actname in delegates:
                     int_action = action.prefix_calls('ext:')
                 else:
-                    int_action = ext_action
+                    int_kinds = [ia.AssertAction,ia.EnsuresAction] 
+                    int_action = action.assert_to_assume(int_kinds).prefix_calls('ext:')
             else:
-                int_action = ext_action = action
+                ext_kinds = [ia.RequiresAction] 
+                ext_action = action.assert_to_assume(ext_kinds)
+                int_action = action
             # internal version of the action has mixins checked
             ea = no_mixins if ver else int_assumes
             new_actions[actname] = add_mixins(mod,actname,int_action,ea,use_mixin,lambda mixin,m:m)
@@ -818,7 +852,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             # have a call dependency on the isolated module
             summarized_actions.add(actname)
             action = summarize_action(action)
-            new_actions[actname] = add_mixins(mod,actname,action,after_mixins,use_mixin,ext_mod_mixin(after_mixins))
+            new_actions[actname] = add_mixins(mod,actname,action,int_sum_assumes,use_mixin,ext_mod_mixin(after_mixins))
             new_actions['ext:'+actname] = add_mixins(mod,actname,action,ext_assumes_no_ver,use_mixin,ext_mod_mixin(all_mixins))
 
         for mixin in mod.mixins[actname]:
@@ -844,7 +878,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 mixin_name = mixin.args[0].relname
                 action1 = lookup_action(mixin,mod,mixin_name)
                 if use_mixin(mixin_name) and before_mixins(mixin):
-                    action1 = action1.assert_to_assume()
+                    action1 = action1.assert_to_assume([ia.AssertAction,ia.RequiresAction])
                     action1 = ext_mod_mixin(all_mixins)(mixin,action1)
                     act = ia.apply_mixin(mixin,action1,act)
             mod.before_export['ext:' + actname] = act
@@ -1445,9 +1479,13 @@ def has_assertions(mod,callee):
     assert callee in mod.actions, callee
     return any(isinstance(action,ia.AssertAction) for action in mod.actions[callee].iter_subactions())
 
-def find_some_assertion(mod,actname):
+def has_requires(mod,callee):
+    assert callee in mod.actions, callee
+    return any(isinstance(action,ia.RequiresAction) for action in mod.actions[callee].iter_subactions())
+
+def find_some_assertion(mod,actname,kind=None):
     for action in mod.actions[actname].iter_subactions():
-        if isinstance(action,ia.AssertAction):
+        if isinstance(action, kind if kind is not None else ia.AssertAction):
             return action
     return None
 
@@ -1517,8 +1555,14 @@ def check_isolate_completeness(mod = None):
             if not (callee in checked or not has_assertions(mod,callee)
                     or callee in delegates and actname in checked_context[callee]):
                 missing.append((actname,callee,None))
+            if has_requires(mod,callee) and not actname in checked_context[callee]:
+                missing.append((actname,callee,ia.RequiresAction))
             for mixin in mod.mixins[callee]:
                 mixed = mixin.args[0].relname
+                if has_requires(mod,mixed):
+                    verifier = implementation_map.get(actname,actname)
+                    if verifier not in checked_context[mixed]:
+                        missing.append((actname,mixin,ia.RequiresAction))
                 if not has_assertions(mod,mixed) or isinstance(mixin,ivy_ast.MixinImplementDef):
                     continue
                 if not isinstance(mixin,ivy_ast.MixinBeforeDef) and startswith_eq_some(callee,trusted,mod):
@@ -1543,7 +1587,7 @@ def check_isolate_completeness(mod = None):
         for x,y,z in missing:
             mixer = y.mixer() if isinstance(y,ivy_ast.MixinDef) else y
             mixee = y.mixee() if isinstance(y,ivy_ast.MixinDef) else y
-            print iu.IvyError(find_some_assertion(mod,mixer),"assertion is not checked")
+            print iu.IvyError(find_some_assertion(mod,mixer,kind=z),"assertion is not checked")
             if mixee != mixer:
                 print iu.IvyError(mod.actions[mixee],"...in action {}".format(mixee))
             if x == "external":
