@@ -1262,7 +1262,6 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
             for attribute in decl.attributes:
                 for dfs in decl.defines():
                     name = dfs[0]
-                    print "adding attribute: {}.{}".format(name,attribute)
                     mod.attributes[iu.compose_names(name,attribute)] = "yes"
 #        infer_parameters(decls.decls)
         with TopContext(collect_actions(decls.decls)):

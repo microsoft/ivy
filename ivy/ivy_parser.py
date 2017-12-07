@@ -182,19 +182,16 @@ class Ivy(object):
         self.is_module = False
         self.params = []
         global special_attribute
-        print 'new top: {}'.format(special_attribute)
         self.attributes = (special_attribute,) if special_attribute is not None else ()
         special_attribute = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
-        print 'declaring: {} {}'.format(type(decl),decl.attributes)
         for df in decl.defines():
             self.define(df)
         for df in decl.static():
             self.static.add(df)
         decl.attributes = self.attributes + decl.attributes
-        print 'new attributes: {}'.format(decl.attributes)
         self.decls.append(decl)
         if isinstance(decl,MacroDecl):
             for d in decl.args:
@@ -297,7 +294,8 @@ def addlabel(lf,pref):
 def p_top_axiom_labeledfmla(p):
     'top : top opttemporal AXIOM labeledfmla'
     p[0] = check_non_temporal(p[1])
-    d = AxiomDecl(addtemporal(addlabel(p[4],'axiom')) if p[2] else check_non_temporal(p[4]))
+    lf = addlabel(p[4],'axiom')
+    d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
 

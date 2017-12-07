@@ -628,7 +628,6 @@ def set_privates(mod,isolate,suff=None):
     for name in mod.attributes:
         p,c = iu.parent_child_name(name)
         if c == suff or c == "private":
-            print 'private: {}'.format(p)
             mod.privates.add(p)
 
 def get_props_proved_in_isolate_orig(mod,isolate):
@@ -681,11 +680,8 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
     for name in mod.attributes:
         p,c = iu.parent_child_name(name)
         if c == kind or c == "private":
-            print 'p:{}'.format(p)
             p1,c1 = iu.parent_child_name(p)
-            print 'p1:{}'.format(p1)
             if p1 in verified:
-                print 'xtra: {}'.format(p)
                 xtra.add(p)
     
 
