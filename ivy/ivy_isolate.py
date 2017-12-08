@@ -871,7 +871,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
             ver = startswith_eq_some(actname,verified,mod)
             action = mod.actions[actname]
             if not ver or actname in delegates:
-                act = action.assert_to_assume().prefix_calls('ext:')
+                act = action.assert_to_assume([ia.AssertAction,ia.RequiresAction]).prefix_calls('ext:')
             else:
                 act = empty_clone(action)
             for mixin in mod.mixins[actname]:
@@ -1613,11 +1613,10 @@ def check_isolate_completeness(mod = None):
 
 # Get the set of actions present in an isolate. 
 
-def get_isolate_actions(mod,iso):
-    actions = set()
+
+def iter_isolate(mod,iso,fun):
     def recur(name):
-        if name in mod.actions:
-            actions.add(name)
+        fun(name)
         for child in mod.hierarchy[name]:
             cname = iu.compose_names(name,child)
             if not(child == "impl"
@@ -1627,21 +1626,44 @@ def get_isolate_actions(mod,iso):
         
     for ver in iso.verified():
         name = ver.rep
-        if name in mod.actions:
-            actions.add(name)
+        fun(name)
         for child in mod.hierarchy[name]:
             cname = iu.compose_names(name,child)
             recur(cname)
 
     for pres in iso.present():
-        name = res.rep
+        name = pres.rep
         recur(name)
+    
 
+def get_isolate_actions(mod,iso):
+    actions = set()
+    def fun(name):
+        if name in mod.actions:
+            actions.add(name)
+    iter_isolate(mod,iso,fun)
     return actions
+
+def get_isolate_lfs(mod,iso,lfs):
+    lf_map = dict((lf.label.rep,lf) for lf in lfs)
+    memo = set()
+    lfs = []
+    def fun(name):
+        if name in lf_map:
+            if name not in memo:
+                lfs.append(lf_map[name])
+            memo.add(name)
+    iter_isolate(mod,iso,fun)
+    return lfs
+
+
+def get_isolate_conjs(mod,iso):
+    return get_isolate_lfs(mod,iso,mod.labeled_conjs)
+
 
 def get_isolate_exports(mod,cg,iso):
     actions = get_isolate_actions(mod,iso)
-    mod_exports = set(exp.exported() for exp in mod.exported)
+    mod_exports = set(exp.exported() for exp in mod.exports)
     exports = set(act for act in actions if act in mod_exports
                   or any((x not in actions) for x in cg[act]))
     return exports
