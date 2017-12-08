@@ -326,6 +326,15 @@ def p_top_conjecture_labeledfmla(p):
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
 
+# from version 1.7, "invariant" replaces "conjecture"
+if not iu.get_numeric_version() <= [1,6]:
+    def p_top_invariant_labeledfmla(p):
+        'top : top INVARIANT labeledfmla'
+        p[0] = p[1]
+        d = ConjectureDecl(addlabel(p[3],'invar'))
+        d.lineno = get_lineno(p,2)
+        p[0].declare(d)
+
 def p_modulestart(p):
     'modulestart :'
     stack[-1].is_module=True

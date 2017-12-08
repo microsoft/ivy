@@ -5,7 +5,7 @@ isolate foo = {
     action a
 
     action c = {
-	call bar.b
+#	call bar.b
     }
     conjecture true
 

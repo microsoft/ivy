@@ -1335,6 +1335,12 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
     
+        # from version 1.7, there is always one global "isolate"
+        if not iu.version_le(iu.get_string_version(),"1.6"):
+            if 'this' not in mod.isolates:
+                isol = ivy_ast.IsolateDef(ivy_ast.Atom('this'),ivy_ast.Atom('this'))
+                isol.with_args = 0
+                mod.isolates['this'] = isol
             # print "actions:"
             # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))

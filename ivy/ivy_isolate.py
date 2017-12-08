@@ -606,7 +606,7 @@ def set_privates_prefer(mod,isolate,preferred):
                 mod.privates.add(iu.compose_names(n,suff))
 
 def get_private_from_attributes(mod,name,suff):
-    attrname = name + iu.ivy_compose_character + isolate_mode.get()
+    attrname = iu.compose_names(name,isolate_mode.get())
     if attrname in mod.attributes:
         aval = mod.attributes[attrname].rep
         if aval not in ['spec','impl']:
@@ -922,8 +922,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     # symbols and axioms (in particular, axioms in global scope have
     # label None). Maybe this needs to be cleaned up.
 
-    keep_sym = lambda name: (iu.ivy_compose_character not in name
-                            or startswith_eq_some(name,present))
     
     keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present,mod))
 
@@ -1290,9 +1288,48 @@ def set_up_implementation_map(mod):
             implementation_map[m.mixee()] = m.mixer()
 
 
+def conj_to_assume(c):
+    res = ia.AssumeAction(c.formula)
+    res.lineno = c.lineno
+    return res
+
+def bracket_action(mod,actname,before,after):
+    action = mod.actions[actname]
+    thing = empty_clone(action)
+    thing.args.extend(before+[action]+after)
+    mod.actions[actname] = thing
+
+def apply_present_conjectures(isol,mod):
+    conjs = get_isolate_conjs(mod,isol,verified=False)
+    cg = mod.call_graph()  # TODO: cg should be cached
+    myexports = get_isolate_exports(mod,cg,isol)
+    for actname in myexports:
+        assumes = map(conj_to_assume,conjs)
+        bracket_action(mod,actname,assumes,[])
+    posts = defaultdict(list)
+    for conj in conjs:
+        for actname in mod.conj_actions[conj.label.rep]:
+            if actname not in myexports:
+                posts[actname].append(conj_to_assume(conj))
+    for actname,assumes in posts.iteritems():
+        bracket_action(mod,actname,[],assumes)
+
+
 def create_isolate(iso,mod = None,**kwargs):
 
+        # from version 1.7, if no isolate specified on command line and
+        # there is only one, use it.
+        if iso is None and iu.version_le("1.7",iu.get_string_version()):
+            isos = list(mod.isolates)
+            if len(isos) == 1:
+                iso = isos[0]
+            
+
         mod = mod or im.module
+
+        # Apply the present conjectures
+        if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
+            apply_present_conjectures(mod.isolates[iso],mod)
 
         # treat initializers as exports
         after_inits = mod.mixins["init"]
@@ -1614,7 +1651,7 @@ def check_isolate_completeness(mod = None):
 # Get the set of actions present in an isolate. 
 
 
-def iter_isolate(mod,iso,fun):
+def iter_isolate(mod,iso,fun,verified=True,present=True):
     def recur(name):
         fun(name)
         for child in mod.hierarchy[name]:
@@ -1624,16 +1661,18 @@ def iter_isolate(mod,iso,fun):
                    or iu.compose_names(name,'private') in mod.attributes):
                 recur(cname)
         
-    for ver in iso.verified():
-        name = ver.rep
-        fun(name)
-        for child in mod.hierarchy[name]:
-            cname = iu.compose_names(name,child)
-            recur(cname)
+    if verified:
+        for ver in iso.verified():
+            name = ver.rep
+            fun(name)
+            for child in mod.hierarchy[name]:
+                cname = iu.compose_names(name,child)
+                recur(cname)
 
-    for pres in iso.present():
-        name = pres.rep
-        recur(name)
+    if present:
+        for pres in iso.present():
+            name = pres.rep
+            recur(name)
     
 
 def get_isolate_actions(mod,iso):
@@ -1644,7 +1683,7 @@ def get_isolate_actions(mod,iso):
     iter_isolate(mod,iso,fun)
     return actions
 
-def get_isolate_lfs(mod,iso,lfs):
+def get_isolate_lfs(mod,iso,lfs,verified=True,present=True):
     lf_map = dict((lf.label.rep,lf) for lf in lfs)
     memo = set()
     lfs = []
@@ -1653,12 +1692,12 @@ def get_isolate_lfs(mod,iso,lfs):
             if name not in memo:
                 lfs.append(lf_map[name])
             memo.add(name)
-    iter_isolate(mod,iso,fun)
+    iter_isolate(mod,iso,fun,verified,present)
     return lfs
 
 
-def get_isolate_conjs(mod,iso):
-    return get_isolate_lfs(mod,iso,mod.labeled_conjs)
+def get_isolate_conjs(mod,iso,verified=True,present=True):
+    return get_isolate_lfs(mod,iso,mod.labeled_conjs,verified,present)
 
 
 def get_isolate_exports(mod,cg,iso):
