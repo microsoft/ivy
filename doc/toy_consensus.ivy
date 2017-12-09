@@ -1,0 +1,56 @@
+#lang ivy1.7
+
+type node
+
+isolate nset = {
+
+    type this
+    alias t = this
+    type index
+
+    relation member(N:node, S:t)
+    relation majority(S:t)
+
+    specification {
+        property [majorities_intersect]
+            majority(S) & (majority(T) -> exists N. member(N,S) & member(N,T))
+    }
+}
+
+isolate toy_protocol = {
+
+    relation voted(N:node,M:node)
+    relation isleader(N:node)
+    var quorum : nset
+
+    after init {
+        voted(N,M) := false;
+        isleader(N) := false;
+    }
+
+    invariant [one_leader]
+        isleader(N) & isleader(M) -> N = M
+
+    invariant [one_vote_per_node] 
+        voted(L, N ) & voted(L, M ) -> N = M
+
+    invariant [leader_has_majority] 
+        isleader(N) ->
+            nset.majority(quorum) &
+            forall M. nset.member(M , quorum) -> voted(M,N)
+
+    action vote(v : node, n : node) = {
+        require ~voted(v,N);
+        voted(v, n) := true
+    }
+
+    action become_leader(n : node, s : nset) = {
+        require nset.majority(s) & nset.member(N,s) -> voted(N, n);
+        isleader(n) := true;
+        quorum := s
+    }
+}
+with nset
+
+export toy_protocol.vote
+export toy_protocol.become_leader

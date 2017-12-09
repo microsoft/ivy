@@ -15,23 +15,43 @@ import string
 
 if not (iu.get_numeric_version() <= [1,2]):
 
-    precedence = (
-        ('left', 'SEMI'),
-        ('left', 'GLOBALLY', 'EVENTUALLY'),
-        ('left', 'IF'),
-        ('left', 'ELSE'),
-        ('left', 'OR'),
-        ('left', 'AND'),
-        ('left', 'TILDA'),
-        ('left', 'EQ','LE','LT','GE','GT','PTO'),
-        ('left', 'TILDAEQ'),
-        ('left', 'COLON'),
-        ('left', 'PLUS'),
-        ('left', 'MINUS'),
-        ('left', 'TIMES'),
-        ('left', 'DIV'),
-        ('left', 'DOLLAR'),
-    )
+    if not (iu.get_numeric_version() <= [1,2]):
+        precedence = (
+            ('left', 'SEMI'),
+            ('left', 'GLOBALLY', 'EVENTUALLY'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
+            ('left', 'OR'),
+            ('left', 'AND'),
+            ('left', 'TILDA'),
+            ('left', 'EQ','LE','LT','GE','GT','PTO'),
+            ('left', 'TILDAEQ'),
+            ('left', 'COLON'),
+            ('left', 'PLUS'),
+            ('left', 'MINUS'),
+            ('left', 'TIMES'),
+            ('left', 'DIV'),
+            ('left', 'DOLLAR'),
+        )
+
+    else:
+        precedence = (
+            ('left', 'SEMI'),
+            ('left', 'GLOBALLY', 'EVENTUALLY'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
+            ('left', 'OR'),
+            ('left', 'AND'),
+            ('left', 'TILDA'),
+            ('left', 'EQ','LE','LT','GE','GT','PTO'),
+            ('left', 'TILDAEQ'),
+            ('left', 'COLON'),
+            ('left', 'PLUS'),
+            ('left', 'MINUS'),
+            ('left', 'TIMES'),
+            ('left', 'DIV'),
+            ('left', 'DOLLAR'),
+        )
 
 else:
 
@@ -1045,6 +1065,26 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,2)
         handle_before_after("after",atom,p[6],p[0],p[4],p[5])
+
+    if not (iu.get_numeric_version() <= [1,6]):
+        def stmt_to_seq(stmts,p,n):
+            stmts = lower_var_stmts(stmts)
+            if len(stmts) == 1:
+                return stmts[0]
+            else:
+                res = Sequence(*stmts)
+                res.lineno = get_lineno(p,n)
+                return res
+        def p_top_around_callatom_lcb_action_rcb(p):
+            'top : top AROUND atype optargs optreturns LCB actseq optsemi DOTDOTDOT actseq optsemi RCB'
+            before = stmt_to_seq(p[7],p,7)
+            after = stmt_to_seq(p[10],p,10)
+            p[0] = p[1]
+            atom = Atom(p[3])
+            atom.lineno = get_lineno(p,2)
+            handle_before_after("before",atom,before,p[0],p[4],p[5])
+            handle_before_after("after",atom,after,p[0],p[4],p[5])
+
     def p_top_after_init_optargs_lcb_action_rcb(p):
         'top : top AFTER INIT optargs topseq'
         p[0] = p[1]

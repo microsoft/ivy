@@ -1293,27 +1293,33 @@ def conj_to_assume(c):
     res.lineno = c.lineno
     return res
 
+def bracket_action_int(mod,actname,before,after):
+    if actname in mod.actions:
+        action = mod.actions[actname]
+        thing = empty_clone(action)
+        thing.args.extend(before+[action]+after)
+        mod.actions[actname] = thing
+
 def bracket_action(mod,actname,before,after):
-    action = mod.actions[actname]
-    thing = empty_clone(action)
-    thing.args.extend(before+[action]+after)
-    mod.actions[actname] = thing
+    bracket_action_int(mod,actname,before,after)
+    bracket_action_int(mod,'ext'+actname,before,after)
 
 def apply_present_conjectures(isol,mod):
+    brackets = []
     conjs = get_isolate_conjs(mod,isol,verified=False)
     cg = mod.call_graph()  # TODO: cg should be cached
     myexports = get_isolate_exports(mod,cg,isol)
     for actname in myexports:
         assumes = map(conj_to_assume,conjs)
-        bracket_action(mod,actname,assumes,[])
+        brackets.append((actname,assumes,[]))
     posts = defaultdict(list)
     for conj in conjs:
         for actname in mod.conj_actions[conj.label.rep]:
             if actname not in myexports:
                 posts[actname].append(conj_to_assume(conj))
     for actname,assumes in posts.iteritems():
-        bracket_action(mod,actname,[],assumes)
-
+        brackets.append((actname,[],assumes))
+    return brackets
 
 def create_isolate(iso,mod = None,**kwargs):
 
@@ -1329,7 +1335,7 @@ def create_isolate(iso,mod = None,**kwargs):
 
         # Apply the present conjectures
         if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
-            apply_present_conjectures(mod.isolates[iso],mod)
+            brackets = apply_present_conjectures(mod.isolates[iso],mod)
 
         # treat initializers as exports
         after_inits = mod.mixins["init"]
@@ -1509,6 +1515,11 @@ def create_isolate(iso,mod = None,**kwargs):
         fix_initializers(mod,after_inits)
 
         mod.canonize_types()
+
+        # Apply the present conjectures
+        if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
+            for actname,before,after in brackets:
+                bracket_action(mod,actname,before,after)
 
         # show the compiled code if requested
 
