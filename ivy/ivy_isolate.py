@@ -177,6 +177,24 @@ def startswith_eq_some(s,prefixes,mod):
     s = implementation_map.get(s,s)
     return startswith_eq_some_rec(s,prefixes,mod)
 
+def vstartswith_some_rec(s,prefixes,mod):
+    if s in mod.privates or s in vprivates:
+        return False
+    parts = s.rsplit(iu.ivy_compose_character,1)
+    return vstartswith_eq_some_rec(parts[0],prefixes,mod) if len(parts)==2 else 'this' in prefixes
+
+def vstartswith_eq_some_rec(s,prefixes,mod):
+    if s in prefixes:
+        return True
+    return vstartswith_some_rec(s,prefixes,mod)
+
+def vstartswith_eq_some(s,prefixes,mod):
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        return startswith_eq_some(s,prefixes,mod)
+    s = implementation_map.get(s,s)
+    res = vstartswith_eq_some_rec(s,prefixes,mod)
+    return res
+
 def strip_map_lookup(name,strip_map,with_dot=False):
     name = canon_act(name)
     for prefix in strip_map:
@@ -630,13 +648,18 @@ def set_privates(mod,isolate,suff=None):
         p,c = iu.parent_child_name(name)
         if c == suff or c == "private":
             mod.privates.add(p)
-
+    global vprivates
+    vprivates = set()
+    for isol in mod.isolates.values():
+        for v in isol.verified():
+            vprivates.add(v.rep)
+            
 def get_props_proved_in_isolate_orig(mod,isolate):
     save_privates = mod.privates
     mod.privates = set()
     set_privates(mod,isolate,'spec')
     verified,present = get_isolate_info(mod,isolate,'spec')
-    check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
+    check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
     not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
     proved = [a for a in mod.labeled_props if check_pr(a.label)]
     mod.privates = save_privates
@@ -653,7 +676,7 @@ def get_props_proved_in_isolate(mod,isolate):
                 ovn = other_verified.relname
                 if startswith_some(ovn,verified,mod):
                     mod.privates.add(ovn)
-    check_pr = lambda name: (name is None or startswith_eq_some(name.rep,verified,mod))
+    check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
     not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
     proved = [a for a in mod.labeled_props if check_pr(a.label)]
     mod.privates = save_privates
@@ -783,7 +806,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     no_mixins = lambda m: False
     after_mixins = lambda m: isinstance(m,ivy_ast.MixinAfterDef)
     before_mixins = lambda m: isinstance(m,ivy_ast.MixinBeforeDef)
-    delegated_to_verified = lambda n: n in delegated_to and startswith_eq_some(delegated_to[n],verified,mod)
+    delegated_to_verified = lambda n: n in delegated_to and vstartswith_eq_some(delegated_to[n],verified,mod)
 
     # for verified external actions, we assume the asserts in before mixins
     # Require behaves like assert in before mixin
@@ -818,7 +841,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     summarized_actions = set()
     for actname,action in mod.actions.iteritems():
-        ver = startswith_eq_some(actname,verified,mod)
+        ver = vstartswith_eq_some(actname,verified,mod)
         pre = startswith_eq_some(actname,present,mod)
         if pre: 
             if not ver or actname in delegates:
@@ -868,7 +891,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 #    implementation_map = {}
 
     def make_before_export(actname):
-            ver = startswith_eq_some(actname,verified,mod)
+            ver = vstartswith_eq_some(actname,verified,mod)
             action = mod.actions[actname]
             if not ver or actname in delegates:
                 act = action.assert_to_assume([ia.AssertAction,ia.RequiresAction]).prefix_calls('ext:')
@@ -932,8 +955,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     if iu.version_le(iu.get_string_version(),"1.6"):
         new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
     else:
-        new_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,verified,mod)]
-        assumed_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,present,mod) and not startswith_eq_some(c.label.rep,verified,mod)]
+        new_conjs = [c for c in mod.labeled_conjs if vstartswith_eq_some(c.label.rep,verified,mod)]
+        assumed_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,present,mod) and not vstartswith_eq_some(c.label.rep,verified,mod)]
         
     del mod.labeled_conjs[:]
     if not create_imports.get(): # no conjectures if compiling
@@ -1390,7 +1413,7 @@ def create_isolate(iso,mod = None,**kwargs):
                 verified,present = get_isolate_info(mod,isolate,'impl')
                 save_privates = mod.privates
                 set_privates(mod,isolate)
-                verified_actions = set(a for a in mod.actions if startswith_eq_some(a,verified,mod))
+                verified_actions = set(a for a in mod.actions if vstartswith_eq_some(a,verified,mod))
                 present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
                 present_actions.update(verified_actions)
                 mod.privates = save_privates
@@ -1574,7 +1597,7 @@ def check_isolate_completeness(mod = None):
         verified,present = get_isolate_info(mod,isolate,'impl')
         save_privates = mod.privates
         set_privates(mod,isolate)
-        verified_actions = set(a for a in mod.actions if startswith_eq_some(a,verified,mod))
+        verified_actions = set(a for a in mod.actions if vstartswith_eq_some(a,verified,mod))
         present_actions = set(a for a in mod.actions if startswith_eq_some(a,present,mod))
         mod.privates = save_privates
 

@@ -1,5 +1,7 @@
 #lang ivy1.7
 
+include collections
+
 type node
 
 isolate nset = {
@@ -12,8 +14,31 @@ isolate nset = {
     relation majority(S:t)
 
     specification {
-        property [majorities_intersect]
-            majority(S) & (majority(T) -> exists N. member(N,S) & member(N,T))
+        invariant [majorities_intersect]
+            (majority(S) & majority(T)) -> exists N. member(N,S) & member(N,T)
+    }
+
+    implementation {
+	interpret index -> int
+	function card(S:nset) : index
+	instance arr : array(index,nset)
+	destructor repr(N:nset) : arr
+	individual all : arr
+	
+	axiom [all_ax] member(N,all)
+	definition member(N,S) = exists i.0 <= i < array.len(s) & array.value(s, i, n)
+	definition majority(S) = card(s) + card(s) > card(all)
+
+	after init() {
+	    card(S) := 0;
+	    var i : index := 0;
+	    while i < all.end
+	        invariant (forall N.~(member(N,S) & member(N,T))) →
+	                      card(S) + card(T) <= card(all)
+	    {
+		card(S) := card(S) + 1 if member(all.get(i), S) else card(S)
+	    }
+	}
     }
 }
 

@@ -15,12 +15,13 @@ import string
 
 if not (iu.get_numeric_version() <= [1,2]):
 
-    if not (iu.get_numeric_version() <= [1,2]):
+    if not (iu.get_numeric_version() <= [1,6]):
         precedence = (
             ('left', 'SEMI'),
             ('left', 'GLOBALLY', 'EVENTUALLY'),
             ('left', 'IF'),
             ('left', 'ELSE'),
+            ('left', 'ARROW', 'IFF'),
             ('left', 'OR'),
             ('left', 'AND'),
             ('left', 'TILDA'),
