@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(name='ms_ivy',
       version='0.1',
       description='IVy verification tool',
-      url='http://github.com/microsoft/ivy',
+      url='https://github.com/microsoft/ivy',
       author='IVy team',
       author_email='nomail@example.com',
       license='MIT',
