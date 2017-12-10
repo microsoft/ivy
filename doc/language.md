@@ -32,10 +32,10 @@ as arguments. That is, data and functions are "first class" values. On
 the other hand, procedures cannot be stored in variables or passed as
 arguments.
 
-A particularly unusual aspect of the IVy langauge is that there are
+A particularly unusual aspect of the IVy language is that there are
 *no references*. Two distinct variables are never "aliases" for the
 same underlying "object". Modifying variable `a` never has an effect
-on the value of variable `b`. IVy's philosphy is that references are a
+on the value of variable `b`. IVy's philosophy is that references are a
 low-level optimization that should be used by compilers to avoid
 copying, but should never appear in high-level programs. The absense
 of aliases enormously simplifies the analysis, testing and
@@ -73,7 +73,7 @@ either plain old data or mathematical relations and functions (much as
 in the [Alloy][al] language, but with important differences that we
 will discuss later).
 
-[al]: http://alloy.mit.edu
+[al]: http://alloy.mit.edu/alloy/
 
 ### Types and declarations <a name="declarations"></a>
 
