@@ -33,6 +33,7 @@ if not (iu.get_numeric_version() <= [1,2]):
             ('left', 'TIMES'),
             ('left', 'DIV'),
             ('left', 'DOLLAR'),
+            ('left', 'DOT')
         )
 
     else:

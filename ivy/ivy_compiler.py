@@ -234,6 +234,29 @@ def compile_app(self):
     res = compile_field_reference(self.rep,args)
     return res
     
+def compile_method_call(self):
+    with ReturnContext(None):
+        obj = self.args[0].compile()
+        child_name = self.args[1].relname
+        args = [a.compile() for a in self.args[1].args]
+    sort = base.sort
+    # trucky: we first look for the method as a child of the sort.
+    # if not found, we look for a sibling of the sort
+    destr_name = iu.compose_names(sort.name,child_name)
+    if top_context and destr_name not in ivy_logic.sig.symbols and destr_name not in top_context.actions:
+        sort_parent,sort_child = iu.parent_child_name(sort.name)
+        destr_name = iu.compose_names(sort_parent,child_name)
+    if top_context and destr_name in top_context.actions:
+        if not expr_context:
+            raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
+        args.insert(0,base)
+        return field_reference_action(destr_name,args,True) # True means use all args
+    sym = ivy_logic.find_polymorphic_symbol(destr_name)
+    args.insert(0,base)
+    return sym(*args)
+
+
+
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))
 

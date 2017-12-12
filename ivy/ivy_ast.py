@@ -324,6 +324,10 @@ class Variable(Term):
         return res
 
 
+class MethodCall(Term):
+    def __str__(self):
+        return str(args[0]) + '.' + str(args[1])
+
 class Literal(AST):
     """
     Either a positive or negative atomic formula. Literals are not
