@@ -2,6 +2,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 import ply.lex as lex
+import ivy_utils as iu
 
 tokens = (
    'COMMA',
@@ -193,11 +194,13 @@ def t_NATIVEQUOTE(t):
     t.type = reserved.get(t.value,'NATIVEQUOTE')
     return t
 
+class TokenErrorNode(object):
+    def __init__(self,token):
+        self.lineno = iu.Location(iu.filename,token.lineno)
+
 def t_error(t):
+    raise iu.IvyError(TokenErrorNode(t),"illegal character '{}'".format(t.value[0]))
     print "Illegal character '%s'" % t.value[0]
-    import sys
-    sys.exit(1)
-    t.lexer.skip(1)
 
 lexer = lex.lex(errorlog=lex.NullLogger())
 

@@ -1325,7 +1325,7 @@ def bracket_action_int(mod,actname,before,after):
 
 def bracket_action(mod,actname,before,after):
     bracket_action_int(mod,actname,before,after)
-    bracket_action_int(mod,'ext'+actname,before,after)
+    bracket_action_int(mod,'ext:'+actname,before,after)
 
 def apply_present_conjectures(isol,mod):
     brackets = []
@@ -1342,6 +1342,7 @@ def apply_present_conjectures(isol,mod):
                 posts[actname].append(conj_to_assume(conj))
     for actname,assumes in posts.iteritems():
         brackets.append((actname,[],assumes))
+    iu.dbg('brackets')
     return brackets
 
 def create_isolate(iso,mod = None,**kwargs):

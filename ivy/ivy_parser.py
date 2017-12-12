@@ -332,7 +332,8 @@ def p_optskolem_symbol(p):
 def p_top_property_labeledfmla(p):
     'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    d = PropertyDecl(addtemporal(addlabel(p[4],'prop')) if p[2] else check_non_temporal(p[4]))
+    lf = addlabel(p[4],'prop')
+    d = PropertyDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
     if p[5] is not None:
@@ -1308,7 +1309,7 @@ def p_top_nativequote(p):
     'top : top NATIVEQUOTE'
     p[0] = p[1]
     text,bqs = parse_nativequote(p,2)
-    defn = NativeDef(*([mk_label(None)] + [text] + bqs))
+    defn = NativeDef(*([mk_label(None,'native')] + [text] + bqs))
     defn.lineno = get_lineno(p,2)
     thing = NativeDecl(defn)
     thing.lineno = get_lineno(p,2)
