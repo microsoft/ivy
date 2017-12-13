@@ -326,7 +326,7 @@ class Variable(Term):
 
 class MethodCall(Term):
     def __str__(self):
-        return str(args[0]) + '.' + str(args[1])
+        return str(self.args[0]) + '.' + str(self.args[1])
 
 class Literal(AST):
     """

@@ -121,9 +121,21 @@ class TopContext(Context):
         self.actions = actions
         self.name = 'top_context'
 
+class EmptyVariableContext(object):
+    def __init__(self):
+        self.map = dict()
+
+class VariableContext(Context):
+    def __init__(self,vs):
+        self.map = dict(variable_context.map.iteritems())
+        for v in vs:
+            self.map[v.name] = v.sort
+        self.name = 'variable_context'
+
 return_context = None
 expr_context = None
 top_context = None
+variable_context = EmptyVariableContext()
 
 def pull_args(args,num,sym,top):
     if len(args) < num:
@@ -236,10 +248,13 @@ def compile_app(self):
     
 def compile_method_call(self):
     with ReturnContext(None):
-        obj = self.args[0].compile()
-        child_name = self.args[1].relname
+        base = self.args[0].compile()
+        child_name = self.args[1].rep
         args = [a.compile() for a in self.args[1].args]
     sort = base.sort
+    if ivy_logic.is_topsort(sort):
+        raise IvyError(self,'cannot apply method notation to {} because its type is not inferred'.format(base))
+        
     # trucky: we first look for the method as a child of the sort.
     # if not found, we look for a sibling of the sort
     destr_name = iu.compose_names(sort.name,child_name)
@@ -255,7 +270,7 @@ def compile_method_call(self):
     args.insert(0,base)
     return sym(*args)
 
-
+ivy_ast.MethodCall.cmpl = compile_method_call
 
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))
@@ -269,7 +284,16 @@ ivy_ast.NativeExpr.cmpl = cmpl_native_expr
 
 ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
-ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort)
+def variable_sort(self):
+    return cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort
+
+def compile_variable(self):
+    sort = variable_sort(self)
+    if ivy_logic.is_topsort(sort):
+        sort = variable_context.map.get(self.rep,sort)
+    return ivy_logic.Variable(self.rep,sort)
+
+ivy_ast.Variable.cmpl = compile_variable
 
 ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name)
 
@@ -280,7 +304,12 @@ SymbolList.cmpl = lambda self: self.clone([find_symbol(s) for s in self.symbols]
 def cquant(q):
     return ivy_logic.ForAll if isinstance(q,ivy_ast.Forall) else ivy_logic.Exists
 
-ivy_ast.Quantifier.cmpl = lambda self: cquant(self)([v.compile() for v in self.bounds],self.args[0].compile())
+def compile_quantifier(self):
+    bounds = [ivy_logic.Variable(v.rep,variable_sort(v)) for v in self.bounds]
+    with VariableContext(bounds):
+        return cquant(self)(bounds,self.args[0].compile())
+
+ivy_ast.Quantifier.cmpl = compile_quantifier
 
 ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
@@ -523,7 +552,11 @@ def compile_native_arg(arg):
     if arg.rep in ivy_logic.sig.symbols:
         return sortify_with_inference(arg)
     res = arg.clone(map(sortify_with_inference,arg.args)) # handles action names
-    return res.rename(resolve_alias(res.rep))
+    iu.dbg('res')
+    res1 = res.rename(resolve_alias(res.rep))
+    iu.dbg('res1')
+    return res1
+
 
 def compile_native_symbol(arg):
     name = arg.rep
@@ -552,7 +585,9 @@ def compile_native_name(atom):
 def compile_native_def(self):
     fields = self.args[1].code.split('`')
     args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
-    return self.clone(args)
+    cres = self.clone(args)
+    iu.dbg('cres')
+    return cres
 
 def compile_action_def(a,sig):
     sig = sig.copy()
@@ -874,13 +909,14 @@ class IvyDomainSetup(IvyDeclInterp):
     def interpret(self,thing):
         sig = self.domain.sig
         interp = sig.interp
+        lhs = resolve_alias(thing.formula.args[0].rep)
+        iu.dbg('lhs')
         if isinstance(thing.formula.args[1],ivy_ast.NativeType):
-            lhs = thing.formula.args[0].rep
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
             return
-        lhs,rhs = (a.rep for a in thing.formula.args)
+        rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)
         if lhs in self.domain.native_types :
             raise IvyError(thing,"{} is already interpreted".format(lhs))

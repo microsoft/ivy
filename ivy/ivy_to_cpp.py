@@ -2511,7 +2511,14 @@ def emit_one_initial_state(header):
     check_init_cond("initial condition",im.module.labeled_inits)
     check_init_cond("axiom",im.module.labeled_axioms)
         
-    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
+    constraints = [ilu.clauses_to_formula(im.module.init_cond)]
+    for a in im.module.axioms:
+        constraints.append(a)
+    for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
+        constraints.append(fix_definition(ldf.formula).to_constraint())
+    clauses = ilu.formula_to_clauses(il.And(*constraints))
+#    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
+    iu.dbg('clauses')
     m = slv.get_model_clauses(clauses)
     if m == None:
         print clauses
@@ -2780,6 +2787,8 @@ def get_all_bounds(header,variables,body,exists,varnames):
 
 
 def emit_quant(variables,body,header,code,exists=False):
+    iu.dbg('variables')
+    iu.dbg('body')
     global indent_level
     if len(variables) == 0:
         body.emit(header,code)

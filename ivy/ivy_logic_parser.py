@@ -355,12 +355,12 @@ def p_fmla_fmla_iff_fmla(p):
     p[0].lineno = get_lineno(p,2)
 
 def p_fmla_forall_vars_dot_fmla(p):
-    'fmla : FORALL simplevars DOT fmla'
+    'fmla : FORALL simplevars DOT fmla %prec SEMI'
     p[0] = Forall(p[2],p[4])
     p[0].lineno = get_lineno(p,1)
 
 def p_fmla_exists_vars_dot_fmla(p):
-    'fmla : EXISTS simplevars DOT fmla'
+    'fmla : EXISTS simplevars DOT fmla %prec SEMI'
     p[0] = Exists(p[2],p[4])
     p[0].lineno = get_lineno(p,1)
 
@@ -382,7 +382,7 @@ def p_term_namedbinder_vars_dot_fmla(p):
     p[0].lineno = get_lineno(p,2)
 
 def p_term_namedbinder_dot_fmla(p):
-    'term : DOLLAR SYMBOL DOT fmla'
+    'term : DOLLAR SYMBOL DOT fmla %prec SEMI'
     p[0] = NamedBinder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)
 

@@ -220,26 +220,27 @@ def strip_sort(sort,strip_params):
         return ivy_logic.FunctionSort(*(dom+[sort.rng]))
     return sort.rng
 
-def strip_action(ast,strip_map,strip_binding):
+def strip_action(ast,strip_map,strip_binding,is_init=False):
     if isinstance(ast,ia.CallAction):
         name = canon_act(ast.args[0].rep)
-        args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args[0].args]
+        args = [strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args[0].args]
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
-        return ast.clone([call]+[strip_action(arg,strip_map,strip_binding) for arg in ast.args[1:]])
+        return ast.clone([call]+[strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args[1:]])
     if isinstance(ast,ia.Action):
         for sym in ast.modifies():
             if sym.name in ivy_logic.sig.symbols:
                 lhs_params = strip_map_lookup(sym.name,strip_map)
                 if len(lhs_params) != num_isolate_params:
-                    raise iu.IvyError(ast,"assignment may be interfering")
+                    if not (len(lhs_params) == 0 and len(strip_binding) == 0 and is_init):
+                        raise iu.IvyError(ast,"assignment may be interfering")
     if (ivy_logic.is_constant(ast) or ivy_logic.is_variable(ast)) and ast in strip_binding:
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
             ivy_logic.add_symbol(sname,ast.sort)
             strip_added_symbols.append(ivy_logic.Symbol(sname,ast.sort))
         return ivy_logic.Symbol(sname,ast.sort)
-    args = [strip_action(arg,strip_map,strip_binding) for arg in ast.args]
+    args = [strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args]
     if ivy_logic.is_app(ast):
         name = ast.rep.name
         strip_params = get_strip_params(name,ast.args,strip_map,strip_binding,ast)
@@ -348,7 +349,7 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         strip_binding = dict(zip(action.formal_params,strip_params))
 #        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
 #            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
-        new_action = strip_action(action,strip_map,strip_binding)
+        new_action = strip_action(action,strip_map,strip_binding,is_init=name.endswith('init[after]'))
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
         new_actions[name] = new_action
@@ -1687,13 +1688,14 @@ def check_isolate_completeness(mod = None):
 
 
 def iter_isolate(mod,iso,fun,verified=True,present=True):
+    suff = "spec" if isinstance(iso,ivy_ast.ExtractDef) else "impl"
     def recur(name):
         fun(name)
         for child in mod.hierarchy[name]:
             cname = iu.compose_names(name,child)
-            if not(child == "impl"
-                   or iu.compose_names(name,'impl') in mod.attributes
-                   or iu.compose_names(name,'private') in mod.attributes):
+            if not(child == suff
+                   or iu.compose_names(cname,suff) in mod.attributes
+                   or iu.compose_names(cname,'private') in mod.attributes):
                 recur(cname)
         
     if verified:

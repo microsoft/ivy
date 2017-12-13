@@ -7,6 +7,7 @@ import ply.yacc as yacc
 # Parser for formulas
 
 precedence = (
+    ('left', 'SEMI'),
     ('left', 'GLOBALLY', 'EVENTUALLY'),
     ('left', 'IF'),
     ('left', 'ELSE'),
