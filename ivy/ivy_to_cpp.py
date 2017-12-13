@@ -362,7 +362,18 @@ def expr_to_z3(expr):
 
 
 
+def gather_referenced_symbols(expr,res,ignore=[]):
+    for sym in ilu.used_symbols_ast(expr):
+        if (not sym.is_numeral() and not slv.solver_name(sym) == None
+            and sym.name not in im.module.destructor_sorts and sym not in res and sym not in ignore):
+            res.add(sym)
+            if sym in is_derived:
+                ldf = is_derived[sym]
+                gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
+                
+
 def make_thunk(impl,vs,expr):
+    print 'im.module.destructor_sorts.keys(): {}'.format(im.module.destructor_sorts.keys())
     global the_classname
     dom = [v.sort for v in vs]
     D = ctuple(dom,classname=the_classname)
@@ -372,9 +383,16 @@ def make_thunk(impl,vs,expr):
     thunk_counter += 1
     thunk_class = 'z3_thunk' if target.get() in ["gen","test"] else 'thunk'
     open_scope(impl,line='struct {} : {}<{},{}>'.format(name,thunk_class,D,R))
-    env = [sym for sym in ilu.used_symbols_ast(expr) if not sym.is_numeral()]
+    syms = set()
+    gather_referenced_symbols(expr,syms)
+    env = [sym for sym in syms if sym not in is_derived]
+    funs = [sym for sym in syms if sym in is_derived]
     for sym in env:
         declare_symbol(impl,sym,classname=the_classname)
+    for fun in funs:
+        ldf = is_derived[fun]
+        with ivy_ast.ASTContext(ldf):
+            emit_derived(None,impl,ldf.formula,the_classname,inline=True)
     envnames = [varname(sym) for sym in env]
     open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
@@ -863,7 +881,7 @@ def emit_action_gen(header,impl,name,action,classname):
     global_classname = None
 
 
-def emit_derived(header,impl,df,classname):
+def emit_derived(header,impl,df,classname,inline=False):
     name = df.defines().name
     sort = df.defines().sort.rng
     retval = il.Symbol("ret:val",sort)
@@ -874,7 +892,7 @@ def emit_derived(header,impl,df,classname):
     action = ia.AssignAction(retval,rhs)
     action.formal_params = ps
     action.formal_returns = [retval]
-    emit_some_action(header,impl,name,action,classname)
+    emit_some_action(header,impl,name,action,classname,inline)
 
 
 def native_split(string):
@@ -1009,7 +1027,7 @@ def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
     header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
-def emit_method_decl(header,name,action,body=False,classname=None):
+def emit_method_decl(header,name,action,body=False,classname=None,inline=False):
     if not hasattr(action,"formal_returns"):
         print "bad name: {}".format(name)
         print "bad action: {}".format(action)
@@ -1017,7 +1035,7 @@ def emit_method_decl(header,name,action,body=False,classname=None):
     ptypes,rtypes = get_param_types(action)
     if not body:
         header.append('    ')
-    if not body and target.get() != "gen":
+    if not body and target.get() != "gen" and not inline:
         header.append('virtual ')
     if len(rs) == 0:
         header.append('void ')
@@ -1025,9 +1043,9 @@ def emit_method_decl(header,name,action,body=False,classname=None):
         header.append(ctype(rs[0].sort,classname=classname,ptype=rtypes[0]) + ' ')
     else:
         raise iu.IvyError(action,'cannot handle multiple output values')
-    if body:
+    if body and not inline:
         header.append(classname + '::')
-    emit_param_decls(header,name,action.formal_params,ptypes=ptypes)
+    emit_param_decls(header,name,action.formal_params,ptypes=ptypes,classname=classname if inline else None)
     
 def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
@@ -1047,15 +1065,16 @@ def trace_action(impl,name,action):
         impl.append(' << ")"')
     impl.append(' << std::endl;\n')
 
-def emit_some_action(header,impl,name,action,classname):
+def emit_some_action(header,impl,name,action,classname,inline=False):
     global indent_level
     global import_callers
-    emit_method_decl(header,name,action)
-    header.append(';\n')
+    if not inline:
+        emit_method_decl(header,name,action)
+        header.append(';\n')
     global thunks
     thunks = impl
     code = []
-    emit_method_decl(code,name,action,body=True,classname=classname)
+    emit_method_decl(code,name,action,body=True,classname=classname,inline=inline)
     code.append('{\n')
     indent_level += 1
     if name in import_callers:
@@ -1306,9 +1325,9 @@ def module_to_cpp_class(classname,basename):
     encoded_sorts = set()
     check_member_names(classname)
     global is_derived
-    is_derived = set()
+    is_derived = dict()
     for ldf in im.module.definitions + im.module.native_definitions:
-        is_derived.add(ldf.formula.defines())
+        is_derived[ldf.formula.defines()] = ldf
     global cpptypes
     cpptypes = []
     global sort_to_cpptype
@@ -2524,7 +2543,10 @@ def emit_one_initial_state(header):
         print clauses
         raise IvyError(None,'Initial condition is inconsistent')
     used = ilu.used_symbols_clauses(clauses)
+    iu.dbg('used')
     for sym in all_state_symbols():
+        if sym.name in im.module.destructor_sorts:
+            continue
         if sym in im.module.params:
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
@@ -2532,6 +2554,7 @@ def emit_one_initial_state(header):
             if sym in used:
                 assign_symbol_from_model(header,sym,m)
             else:
+                iu.dbg('sym')
                 mk_nondet_sym(header,sym,'init',0)
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)

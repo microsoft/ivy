@@ -1348,6 +1348,8 @@ def apply_present_conjectures(isol,mod):
 
 def create_isolate(iso,mod = None,**kwargs):
 
+        mod = mod or im.module
+
         # from version 1.7, if no isolate specified on command line and
         # there is only one, use it.
         if iso is None and iu.version_le("1.7",iu.get_string_version()):
@@ -1356,7 +1358,6 @@ def create_isolate(iso,mod = None,**kwargs):
                 iso = isos[0]
             
 
-        mod = mod or im.module
 
         # Apply the present conjectures
         if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
