@@ -789,6 +789,11 @@ class IvyDomainSetup(IvyDeclInterp):
 #        print "sym: {!r}".format(sym)
         self.domain.functions[sym] = len(v.args)
         return sym
+    def parameter(self,v):
+        sym = self.individual(v)
+        iu.dbg('v')
+        self.domain.params.append(sym)
+        return sym
     def destructor(self,v):
         sym = self.individual(v)
         dom = sym.sort.dom
@@ -989,7 +994,8 @@ class IvyARGSetup(IvyDeclInterp):
         with ASTContext(a):
             self.mod.assertions.append(type(a)(a.args[0],sortify_with_inference(a.args[1])))
     def isolate(self,iso):
-        self.mod.isolates[iso.name()] = iso
+        args = [a.rename('this') if isinstance(a.rep,ivy_ast.This) else a for a in iso.args]
+        self.mod.isolates[iso.name()] = iso.clone(args)
     def export(self,exp):
         check_is_action(self.mod,exp,exp.exported())
         self.mod.exports.append(exp)

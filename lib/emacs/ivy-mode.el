@@ -85,6 +85,8 @@
    "decreases"
    "require"
    "ensure"
+   "around"
+   "parameter"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

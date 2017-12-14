@@ -579,6 +579,10 @@ def p_constantdecl_var_tterms(p):
     'constantdecl : VAR tterms'
     p[0] = ConstantDecl(*p[2])
 
+def p_constantdecl_parameter_tterms(p):
+    'constantdecl : PARAMETER tterms'
+    p[0] = ParameterDecl(*p[2])
+
 def p_rel_defnlhs(p):
     'rel : defnlhs'
     p[1].sort = 'bool'
@@ -1840,12 +1844,12 @@ def p_defarg_var(p):
     p[0] = p[1]
 
 def p_defnlhs_lp_term_relop_term_rp(p):
-    'defnlhs : LPAREN term relop term RPAREN'
+    'defnlhs : LPAREN defarg relop defarg RPAREN'
     p[0] = Atom(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
 
 def p_defnlhs_lp_term_infix_term_rp(p):
-    'defnlhs : LPAREN term infix term RPAREN'
+    'defnlhs : LPAREN defarg infix defarg RPAREN'
     p[0] = App(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
 

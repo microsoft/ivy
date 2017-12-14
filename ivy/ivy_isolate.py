@@ -376,7 +376,9 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
 
-    del mod.params[:]
+    iu.dbg('mod.params')
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        del mod.params[:]
     add_map = dict((s.name,s) for s in strip_added_symbols)
     used = set()
     for s in isolate.params():
@@ -642,6 +644,7 @@ def set_privates(mod,isolate,suff=None):
     if suff in mod.hierarchy:
         mod.privates.add(suff)
     for n,l in mod.hierarchy.iteritems():
+        print n
         nsuff = get_private_from_attributes(mod,n,suff)
         if nsuff in l:
             mod.privates.add(iu.compose_names(n,nsuff))
@@ -1350,6 +1353,8 @@ def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
 
+        iu.dbg('mod.params')
+
         # from version 1.7, if no isolate specified on command line and
         # there is only one, use it.
         if iso is None and iu.version_le("1.7",iu.get_string_version()):
@@ -1692,6 +1697,7 @@ def iter_isolate(mod,iso,fun,verified=True,present=True):
     suff = "spec" if isinstance(iso,ivy_ast.ExtractDef) else "impl"
     def recur(name):
         fun(name)
+        assert not isinstance(name,ivy_ast.This)
         for child in mod.hierarchy[name]:
             cname = iu.compose_names(name,child)
             if not(child == suff
@@ -1703,6 +1709,7 @@ def iter_isolate(mod,iso,fun,verified=True,present=True):
         for ver in iso.verified():
             name = ver.rep
             fun(name)
+            assert not isinstance(name,ivy_ast.This)
             for child in mod.hierarchy[name]:
                 cname = iu.compose_names(name,child)
                 recur(cname)

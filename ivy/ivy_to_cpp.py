@@ -441,11 +441,13 @@ def emit_struct_hash(header,the_type,field_names,field_sorts):
 def emit_cpp_sorts(header):
     for name in im.module.sort_order:
         if name in im.module.native_types:
-            nt = native_type_full(im.module.native_types[name])
-#            header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
-            header.append("    class " + varname(name) + ' : public ' + nt +  "{\n")
-            header.append("        public: size_t __hash() const { return hash_space::hash<"+nt+" >()(*this);};\n")
-            header.append("    };\n");
+            nt = native_type_full(im.module.native_types[name]).strip()
+            if nt in ['int','bool']:
+                header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
+            else:
+                header.append("    class " + varname(name) + ' : public ' + nt +  "{\n")
+                header.append("        public: size_t __hash() const { return hash_space::hash<"+nt+" >()(*this);};\n")
+                header.append("    };\n");
         elif name in im.module.sort_destructors:
             header.append("    struct " + varname(name) + " {\n");
             destrs = im.module.sort_destructors[name]

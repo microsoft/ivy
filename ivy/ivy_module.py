@@ -113,6 +113,7 @@ class Module(object):
             self.hierarchy[pref].add(suff)
 
     def add_object(self,name):
+        assert not isinstance(name,ivy_ast.This)
         self.hierarchy[name]
 
     @property

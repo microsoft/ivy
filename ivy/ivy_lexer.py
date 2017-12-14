@@ -132,6 +132,7 @@ reserved = all_reserved = {
    'ensure' : 'ENSURE',
    'require' : 'REQUIRE',
    'around' : 'AROUND',
+   'parameter' : 'PARAMETER',
 }
 
 tokens += tuple(all_reserved.values())
@@ -239,7 +240,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,6]:
-            for s in ['decreases','specification','implementation','require','ensure','around']:
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter']:
                 if s in reserved:
                     del reserved[s]
         else:
