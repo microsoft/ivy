@@ -40,7 +40,7 @@ def p_atype_symbol(p):
     'atype : SYMBOL'
     p[0] = p[1]
 
-if not (iu.get_numeric_version() <= [1,4]):
+if not (iu.get_numeric_version() <= [1,2]):
     def p_atype_atype_dot_symbol(p):
         'atype : atype DOT SYMBOL'
         if isinstance(p[1],This):
