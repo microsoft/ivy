@@ -9,7 +9,9 @@ object intf = {
 
 object spec = {
     relation sent(X:packet)
-    init ~sent(X)
+    after init {
+        sent(X) := false
+    }
 
     before intf.send {
 	sent(x) := true
