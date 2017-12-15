@@ -23,7 +23,7 @@ process observed at different interfaces. That is, TCP is sandwiched
 between a higher-level application (say, a web browser and web server)
 and the lower-level datagram protocol (typically the IP protocol) as shown below:
 
-![Network Stack](../images/network_stack1.png)
+<p><img src="../images/network_stack1.png" alt="Network Stack" /></p>
 
 The TCP service specification describes the events we observe at the
 interface between the application layer and the transport layer.  The

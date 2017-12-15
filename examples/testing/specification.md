@@ -28,7 +28,7 @@ process observed at different interfaces. That is, TCP is sandwiched
 between a higher-level application (say, a web browser and web server)
 and the lower-level datagram protocol (typically the IP protocol) as shown below:
 
-![Network Stack](../../images/network_stack1.png)
+<p><img src="../../images/network_stack1.png" alt="Network Stack" /></p>
 
 The TCP service specification describes the events we observe at the
 interface between the application layer and the transport layer.  The
@@ -425,7 +425,7 @@ will do something:
 
 Here is the call graph of the system we have defined:
 
-![Ping Pong Call Graph](pingpong_fig1-crop-1.png)
+<p><img src="pingpong_fig1-crop-1.png" alt="Ping Pong Call Graph" /></p>
 
 Now what we want to do is to generate testers for the left and right
 players in isolation. That is, we want the tester for the left player
@@ -445,7 +445,7 @@ separate verification problems called "isolates".
 
 Here's the call graph for the left player isolate `iso_l`:
 
-![Ping Pong Call Graph 2](pingpong_fig2-crop-1.png)
+<p><img src="pingpong_fig2-crop-1.png" alt="Ping Pong Call Graph 2" /></p>
 
 We can see what the first isolate looks like textually as follows (leaving a few
 things out):
