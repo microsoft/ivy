@@ -104,7 +104,7 @@ the above IVy text (both parts) into a file
 
 This produces the following rather uninformative display:
 
-![IVy screenshot](images/client_server1.png)
+<p><img src="images/client_server1.png" alt="IVy screenshot" /></p>
 
 Let's ask IVy to check our invariant. We select the `Check induction`
 operation, like this:
