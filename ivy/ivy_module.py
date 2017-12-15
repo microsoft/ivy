@@ -75,6 +75,8 @@ class Module(object):
         self.named = [] # list of pair (labeled formula, atom)
         self.subgoals = [] # (labeled formula * labeled formula list) list
         self.isolate_info = None # IsolateInfo or None
+        self.conj_actions = dict() # map from conj names to action name list
+
         
         self.sig = il.sig.copy() # capture the current signature
 
@@ -111,6 +113,7 @@ class Module(object):
             self.hierarchy[pref].add(suff)
 
     def add_object(self,name):
+        assert not isinstance(name,ivy_ast.This)
         self.hierarchy[name]
 
     @property
@@ -232,6 +235,12 @@ class Module(object):
             space = ics.NamedSpace(il.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
 
+    def call_graph(self):
+        callgraph = defaultdict(list)
+        for actname,action in self.actions.iteritems():
+            for called_name in action.iter_calls():
+                callgraph[called_name].append(actname)
+        return callgraph
 
 def resort_ast(ast):
     return lu.resort_ast(ast,sort_refinement)

@@ -2,6 +2,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 import ply.lex as lex
+import ivy_utils as iu
 
 tokens = (
    'COMMA',
@@ -126,6 +127,12 @@ reserved = all_reserved = {
    'globally' : 'GLOBALLY',
    'eventually' : 'EVENTUALLY',
    'decreases' : 'DECREASES',
+   'specification' : 'SPECIFICATION',
+   'implementation' : 'IMPLEMENTATION',
+   'ensure' : 'ENSURE',
+   'require' : 'REQUIRE',
+   'around' : 'AROUND',
+   'parameter' : 'PARAMETER',
 }
 
 tokens += tuple(all_reserved.values())
@@ -188,11 +195,13 @@ def t_NATIVEQUOTE(t):
     t.type = reserved.get(t.value,'NATIVEQUOTE')
     return t
 
+class TokenErrorNode(object):
+    def __init__(self,token):
+        self.lineno = iu.Location(iu.filename,token.lineno)
+
 def t_error(t):
+    raise iu.IvyError(TokenErrorNode(t),"illegal character '{}'".format(t.value[0]))
     print "Illegal character '%s'" % t.value[0]
-    import sys
-    sys.exit(1)
-    t.lexer.skip(1)
 
 lexer = lex.lex(errorlog=lex.NullLogger())
 
@@ -231,10 +240,14 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,6]:
-            for s in ['decreases']:
-#                print "deleting {}".format(s)
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter']:
                 if s in reserved:
                     del reserved[s]
+        else:
+            for s in ['requires','ensures']:
+                if s in reserved:
+                    del reserved[s]
+
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global reserved

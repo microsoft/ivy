@@ -6,7 +6,7 @@ isolate clock = {
     relation (X:clock < Y:clock)
     action incr(inp:clock) returns (out:clock)
 
-    object spec = {
+    specification {
         property [transitivity] X:clock < Y & Y < Z -> X < Z
         property [antisymmetry] ~(X:clock < Y & Y < X)
 
@@ -15,7 +15,7 @@ isolate clock = {
 	}
     }
 
-    object impl = {
+    implementation {
         interpret clock -> int
 
         implement incr {
@@ -29,7 +29,7 @@ isolate intf = {
     action ping(x:clock)
     action pong(x:clock)
 
-    object spec = {
+    specification {
 
         type side_t = {left,right}
         individual side : side_t
@@ -76,7 +76,7 @@ isolate left_player = {
 	time := x
     }
 
-    conjecture ball -> (intf.spec.side = intf.spec.left & intf.spec.time <= time)
+    conjecture ball -> (intf.side = intf.left & intf.time <= time)
 }
 with intf, clock
 
@@ -101,7 +101,7 @@ isolate right_player = {
 	time := x
     }
 
-    conjecture ball -> (intf.spec.side = intf.spec.right & intf.spec.time <= time)
+    conjecture ball -> (intf.side = intf.right & intf.time <= time)
 }
 with intf, clock
 

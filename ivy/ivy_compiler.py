@@ -121,9 +121,21 @@ class TopContext(Context):
         self.actions = actions
         self.name = 'top_context'
 
+class EmptyVariableContext(object):
+    def __init__(self):
+        self.map = dict()
+
+class VariableContext(Context):
+    def __init__(self,vs):
+        self.map = dict(variable_context.map.iteritems())
+        for v in vs:
+            self.map[v.name] = v.sort
+        self.name = 'variable_context'
+
 return_context = None
 expr_context = None
 top_context = None
+variable_context = EmptyVariableContext()
 
 def pull_args(args,num,sym,top):
     if len(args) < num:
@@ -229,11 +241,41 @@ def compile_app(self):
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
     sym = self.rep.cmpl() if isinstance(self.rep,ivy_ast.NamedBinder) else ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False) 
+    if sym is not ivy_logic.Equals:
+        if ivy_logic.is_numeral(sym):
+            if hasattr(self,'sort') and self.sort != 'S':
+                sym = ivy_logic.Symbol(sym.name,variable_sort(self))
     if sym is not None:
         return (sym)(*args)
     res = compile_field_reference(self.rep,args)
     return res
     
+def compile_method_call(self):
+    with ReturnContext(None):
+        base = self.args[0].compile()
+        child_name = self.args[1].rep
+        args = [a.compile() for a in self.args[1].args]
+    sort = base.sort
+    if ivy_logic.is_topsort(sort):
+        raise IvyError(self,'cannot apply method notation to {} because its type is not inferred'.format(base))
+        
+    # trucky: we first look for the method as a child of the sort.
+    # if not found, we look for a sibling of the sort
+    destr_name = iu.compose_names(sort.name,child_name)
+    if top_context and destr_name not in ivy_logic.sig.symbols and destr_name not in top_context.actions:
+        sort_parent,sort_child = iu.parent_child_name(sort.name)
+        destr_name = iu.compose_names(sort_parent,child_name)
+    if top_context and destr_name in top_context.actions:
+        if not expr_context:
+            raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
+        args.insert(0,base)
+        return field_reference_action(destr_name,args,True) # True means use all args
+    sym = ivy_logic.find_polymorphic_symbol(destr_name)
+    args.insert(0,base)
+    return sym(*args)
+
+ivy_ast.MethodCall.cmpl = compile_method_call
+
 def cmpl_sort(sortname):
     return ivy_logic.find_sort(resolve_alias(sortname))
 
@@ -246,7 +288,17 @@ ivy_ast.NativeExpr.cmpl = cmpl_native_expr
 
 ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
-ivy_ast.Variable.cmpl = lambda self: ivy_logic.Variable(self.rep,cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort)
+def variable_sort(self):
+    return cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort
+
+def compile_variable(self):
+    with ASTContext(self):
+        sort = variable_sort(self)
+    if ivy_logic.is_topsort(sort):
+        sort = variable_context.map.get(self.rep,sort)
+    return ivy_logic.Variable(self.rep,sort)
+
+ivy_ast.Variable.cmpl = compile_variable
 
 ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name)
 
@@ -257,7 +309,12 @@ SymbolList.cmpl = lambda self: self.clone([find_symbol(s) for s in self.symbols]
 def cquant(q):
     return ivy_logic.ForAll if isinstance(q,ivy_ast.Forall) else ivy_logic.Exists
 
-ivy_ast.Quantifier.cmpl = lambda self: cquant(self)([v.compile() for v in self.bounds],self.args[0].compile())
+def compile_quantifier(self):
+    bounds = [ivy_logic.Variable(v.rep,variable_sort(v)) for v in self.bounds]
+    with VariableContext(bounds):
+        return cquant(self)(bounds,self.args[0].compile())
+
+ivy_ast.Quantifier.cmpl = compile_quantifier
 
 ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
@@ -502,6 +559,7 @@ def compile_native_arg(arg):
     res = arg.clone(map(sortify_with_inference,arg.args)) # handles action names
     return res.rename(resolve_alias(res.rep))
 
+
 def compile_native_symbol(arg):
     name = arg.rep
     if name in ivy_logic.sig.symbols:
@@ -586,9 +644,13 @@ def compile_defn(df):
                     args.append(fmla.body.args[1].args[2])
                 df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
             else:
-                eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
-                eqn = sortify_with_inference(eqn)
-                df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+                if False and isinstance(df.args[1],ivy_ast.NativeExpr):
+                    df = ivy_logic.Definition(sortify_with_inference(df.args[0]),df.args[1])
+                    df.args[1].sort = df.args[0].sort
+                else:
+                    eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
+                    eqn = sortify_with_inference(eqn)
+                    df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
             return df
     
 def compile_schema_prem(self,sig):
@@ -731,6 +793,10 @@ class IvyDomainSetup(IvyDeclInterp):
 #        print "sym: {!r}".format(sym)
         self.domain.functions[sym] = len(v.args)
         return sym
+    def parameter(self,v):
+        sym = self.individual(v)
+        self.domain.params.append(sym)
+        return sym
     def destructor(self,v):
         sym = self.individual(v)
         dom = sym.sort.dom
@@ -851,13 +917,13 @@ class IvyDomainSetup(IvyDeclInterp):
     def interpret(self,thing):
         sig = self.domain.sig
         interp = sig.interp
+        lhs = resolve_alias(thing.formula.args[0].rep)
         if isinstance(thing.formula.args[1],ivy_ast.NativeType):
-            lhs = thing.formula.args[0].rep
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
             return
-        lhs,rhs = (a.rep for a in thing.formula.args)
+        rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)
         if lhs in self.domain.native_types :
             raise IvyError(thing,"{} is already interpreted".format(lhs))
@@ -930,7 +996,8 @@ class IvyARGSetup(IvyDeclInterp):
         with ASTContext(a):
             self.mod.assertions.append(type(a)(a.args[0],sortify_with_inference(a.args[1])))
     def isolate(self,iso):
-        self.mod.isolates[iso.name()] = iso
+        args = [a.rename('this') if isinstance(a.rep,ivy_ast.This) else a for a in iso.args]
+        self.mod.isolates[iso.name()] = iso.clone(args)
     def export(self,exp):
         check_is_action(self.mod,exp,exp.exported())
         self.mod.exports.append(exp)
@@ -1252,12 +1319,71 @@ def compile_theories(mod,**kwargs):
             theory = th.get_theory(value)
             ivy_compile_theory_from_string(mod,theory,name,**kwargs)
 
+# Here, we infer for each conjecture the set of actions that must
+# preserve it. A conjecture must be preserved by any action that is
+# exported by its most nearly containing isolate. This is only needed
+# from version 1.7, where we introduce the concept of object
+# invariant.
+
+def create_conj_actions(mod):
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        return
+    # for each isolate, find the exported actions
+    myexports = dict()
+    objects = defaultdict(list)
+    cg = mod.call_graph()
+    for ison,isol in mod.isolates.iteritems():
+        myexports[isol.name()] = iso.get_isolate_exports(mod,cg,isol)
+        for x in isol.verified():
+            objects[x.rep].append(isol)
+    for conj in mod.labeled_conjs:
+        lbl = conj.label.rep
+        while lbl != 'this' and lbl not in objects:
+            lbl,_ = iu.parent_child_name(lbl)
+        if lbl == 'this':
+            actions = set([exp.exported() for exp in mod.exports])
+        else:
+            actions = set()
+            for isol in objects[lbl]:
+                actions.update(myexports[isol.name()])
+        mod.conj_actions[conj.label.rep] = actions
+    action_isos = defaultdict(set)
+
+    # check that object invariants are used correctly
+    
+    for ison,actions in myexports.iteritems():
+        for action in actions:
+            action_isos[action].add(ison)
+    for ison,isol in mod.isolates.iteritems():
+        memo = set()
+        conjs = iso.get_isolate_conjs(mod,isol)
+        exports = myexports[ison]
+        roots = set(iu.reachable(exports,lambda x: cg[x]))
+        for conj in conjs:
+            actions = mod.conj_actions[conj.label.rep]
+            for action in actions:
+                for ison1 in action_isos[action]:
+                    if ison1 != ison and action not in memo:
+                        memo.add(action)
+                        if action in roots:
+                            for victim in exports:
+                                if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
+                                    raise IvyError(isol, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
+                
+    
+    
+
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:
         check_instantiations(mod,decls)
         for name in decls.defined:
             mod.add_to_hierarchy(name)
+        for decl in decls.decls:
+            for attribute in decl.attributes:
+                for dfs in decl.defines():
+                    name = dfs[0]
+                    mod.attributes[iu.compose_names(name,attribute)] = "yes"
 #        infer_parameters(decls.decls)
         with TopContext(collect_actions(decls.decls)):
             IvyDomainSetup(mod)(decls)
@@ -1276,6 +1402,12 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
                 print "no lineno: {}".format(name)
             assert hasattr(action,'formal_params'), action
     
+        # from version 1.7, there is always one global "isolate"
+        if not iu.version_le(iu.get_string_version(),"1.6"):
+            if 'this' not in mod.isolates:
+                isol = ivy_ast.IsolateDef(ivy_ast.Atom('this'),ivy_ast.Atom('this'))
+                isol.with_args = 0
+                mod.isolates['this'] = isol
             # print "actions:"
             # for x,y in mod.actions.iteritems():
             #     print iu.pretty("action {} = {}".format(x,y))
@@ -1283,6 +1415,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         create_sort_order(mod)
         check_definitions(mod)
         check_properties(mod)
+        create_conj_actions(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)

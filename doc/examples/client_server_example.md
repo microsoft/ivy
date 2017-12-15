@@ -32,7 +32,7 @@ connections between clients and servers. Each server has a semaphore
 that is used to guarantee that at any time at most one client can be
 connected to the server.
 
-    #lang ivy1.5
+    #lang ivy1.7
 
     type client
     type server
@@ -46,13 +46,13 @@ connected to the server.
     }
 
     action connect(x:client,y:server) = {
-      assume semaphore(y);
+      require semaphore(y);
       link(x,y) := true;
       semaphore(y) := false
     }
 
     action disconnect(x:client,y:server) = {
-      assume link(x,y);
+      require link(x,y);
       link(x,y) := false;
       semaphore(y) := true
     }
@@ -68,37 +68,37 @@ tells us which clients are connected to which servers, while
 The program exports two actions to the environment: `connect` and
 `disconnect`. The `connect` actions creates a link from client `x` to
 server `y`, putting the server's semaphore down. Notice that `connect`
-assumes the server's semaphore is initially up. The `disconnect`
-action removes a link and puts the semaphore up. The two `export`
+requries that the server's semaphore be initially up. The `disconnect`
+action removes a link and puts the semaphore up. It requires that the
+link be initially established. The two `export`
 declarations at the end tell us that the environment may call
 `connect` and `disconnect` in arbitrary sequence, though it must obey
-the stated assumptions.
+the stated requirements.
 
 ## Safety and invariant conjectures
 
 A program is *safe* if the environment cannot call it in any way that
 causes an assertion to be false. There are various way to use
 assertions to specify desired safety properties of a program. A simple
-one is to add a test action that asserts some property of the program
-state. In the client/server example above, we might specify that no
+one is to add an *invariant*. This is a formula that must hold true between calls
+to the program's actions.  In the client/server example above, we might specify that no
 two distinct clients can be connected to a single server using the
-following test action:
+following assertion:
 
-    action test = {
-      assert ~(X ~= Z & link(X,Y) & link(Z,Y))
-    }
+    invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
 
-    export test
-
-The assertion is implicitly universally quantified over (distinct)
-clients `X` and `Z` and server `Y`. 
+The invariant assertion is implicitly universally quantified over
+(distinct) clients `X` and `Z` and server `Y`.
 
 # Discovering a safety invariant
 
-To try to construct a safety invariant for this program, we run IVy in
-its CTI mode. Download the file [client_server_example.ivy](client_server_example.ivy) or just
-copy the above IVy text (both parts) into a file `client_server_example.ivy`. Then use this
-command to start IVy:
+The invariant we sepficied above is true, but, as we will see, it
+isn't a safety invariant because it doesn't satisfy the consecution
+property.  To try to construct a safety invariant for this program, we
+run IVy in its CTI mode. Download the file
+[client_server_example.ivy](client_server_example.ivy) or just copy
+the above IVy text (both parts) into a file
+`client_server_example.ivy`. Then use this command to start IVy:
 
     $ ivy ui=cti client_server_example.ivy
 
@@ -106,92 +106,42 @@ This produces the following rather uninformative display:
 
 ![IVy screenshot](images/client_server1.png)
 
-Since we didn't specify any conjectured invariant formulas in the
-input file, IVy starts with the empty set of conjectures. This
-trivially satisfies the initiation and consecution conditions, but
-probably won't satisfy the safety condition. We'll try anyway and see
-what goes wrong. We select the `Check induction` operation, like this:
+Let's ask IVy to check our invariant. We select the `Check induction`
+operation, like this:
 
 ![IVy screenshot](images/client_server2.png)
 
 Here's what IVy says:
 
-![IVy screenshot](images/client_server3.png)
-
-When we click OK, we see the following display:
-
-![IVy screenshot](images/client_server4.png)
-
-On the left-hand side of the display, we see a transition of the
-program from a state labeled `0` to a state labeled `1`. The action
-labeling the transition arrow can tell us something about how we get
-from state `0` to state `1` (an in particular, how the assertion in
-our program fails). For the moment, though, let's concentrate on the
-right-hand side. Here, we see a representation of state `0`, the one just
-before the assertion failure. It shows one server (arbitrarily numbered `0`)
-and two clients (numbered `0` and `1`). The check-boxes on the right allow us to
-display further information about the state. For example, let's check the box
-next to `link(X,Y)` under the label `+`. Here's what we get:
-
-![IVy screenshot](images/client_server5.png)
-
-The red arrows show the link relationships between the clients and the
-server (notice that on the right, the relation `link(X,Y)` is in red).
-This is condition that causes our assertion to fail when the `test`
-action is executed. 
-
-This situation is unrealistic. That is, a cluster of two clients and a
-server as shown should never occur. We will conjecture that in fact
-this 'bad pattern' never occurs. To do this we select the `Gather` option
-from the `Conjecture` menu. When then see the following:
-
-![IVy screenshot](images/client_server6.png)
-
-IVy has collect three facts about the displayed state, shown under the
-heading 'Constraints'. These facts are a logical representation of the
-bad pattern we observed graphically. Two of them are obvious: the facts
-`link(0,0)` and `link(1,0)` say that both clients are linked to the server.
-Implicit in the graphic, though, is a third fact: `0:client ~= 1:client`. 
-This says that `0` and `1` name distinct clients. 
-
-Also notice that the nodes and the arcs in the graph have been highlighted
-to indicate that they are all used in the listed facts.
-
-Since think that this particular pattern should never occur, we will generalize
-it to produce a *conjecture* about the program state. Choosing the `Strengthen` option
-from the `Conjecture` menu, we see:
-
-![IVy screenshot](images/client_server7.png)
-
-IVy is suggesting to add this fact to the list of conjectured invariants:
-
-    ForAll CL0:client, CL1:client, SE0:server. ~(link(CL0,SE0) & link(CL1,SE0) & CL0 ~= CL1
-
-This says that there is are no clients `CL0` and `CL1` and server
-`SE0` matching our bad pattern.  In other words, the bad pattern
-occurs nowhere in our program state, no matter how many clients and
-servers there are. This is a simple generalization from our
-counterexample.
-
-We click OK, adding this formula to our (thus far empty) list of
-conjectures.  Of course this conjecture is a trivial one. It just says
-that the formula in our assertion is always true.
-
-We can now try checking inductiveness again with our new conjecture.
-Here is what IVy says:
-
 ![IVy screenshot](images/client_server8.png)
 
-It is telling us that our new conjecture fails the consecution test.
+It is telling us that our conjectured invariant fails the consecution test.
 When we click OK, we see the counter-example to induction:
 
 ![IVy screenshot](images/client_server9.png)
 
-IVy has already displayed the `link` relation, since it occurs in the
-conjecture. What we can see so far, however, is not a bad pattern. It
-has just one client connected to the server, which is what we expect
+On the left-hand side of the display, we see a transition of the
+program from a state labeled `0` to a state labeled `1`. The action
+labeling the transition arrow can tell us something about how we get
+from state `0` to state `1` (and in particular, how our invariant
+fails). For the moment, though, let's concentrate on the
+right-hand side. Here, we see a representation of state `0`, the one just
+before the invariant is violated. It shows one server (arbitrarily numbered `0`)
+and two clients (numbered `0` and `1`).  
+
+IVy has already displayed the `link` relation, since it occurs in our conjectured
+invariant. The red arrows show the link relationships between the clients and the
+server (notice that on the right, the relation `link(X,Y)` is in red). If you click on the
+bubble numbered `1` on the left, you'll see the next state, occurring after a connect. 
+In this state, both clients are connected to the server, which violates our invariant.
+
+In state zero, however, what we can see is not unexpected. There is
+just one client connected to the server, which is what we expect
 from the protocol. To find out what's wrong with this state, we need
-to reveal more information.  Checking the box to view the `semaphore`
+to reveal more information. 
+The check-boxes on the right allow us to
+display further information about the state.
+Checking the box to view the `semaphore`
 relation, we observe the following:
 
 ![IVy screenshot](images/client_server10.png)
@@ -199,19 +149,37 @@ relation, we observe the following:
 Notice that the `server` node is now labeled with `semaphore`, meaning
 that `semaphore` is true for this node (if it were false, the label would
 be `~semaphore`. This is clearly the problem. When a client is connected,
-the semaphore should be down. We do `Gather` again to collect the visible facts,
-which gives us the following:
+the semaphore should be down. We will conjecture that in fact
+this 'bad pattern' never occurs. To do this we select the `Gather` option
+from the `Conjecture` menu. When then see the following:
 
 ![IVy screenshot](images/client_server11.png)
 
-These facts describe the bad pattern: there are two distinct nodes,
+IVy has collect three facts about the displayed state, shown under the
+heading 'Constraints'. These facts are a logical representation of the
+bad pattern we observed graphically: there are two distinct nodes,
 one of which is connected to the server and the server's semaphore is up.
-We again do `Strengthen` to turn this pattern into a conjecture:
+
+Also notice that the nodes and the arcs in the graph have been highlighted
+to indicate that they are all used in the listed facts.
+
+Since we think that this particular pattern should never occur, we will
+generalize it to produce new conjectured invariant about the program
+state. Choosing the `Strengthen` option from the `Conjecture` menu, we
+see:
 
 ![IVy screenshot](images/client_server12.png)
 
-Again, we have a universally quantified formula that rules out the given pattern.
-With our new conjecture, we try `Check induction` again, and see the following:
+IVy is suggesting to add this fact to the list of conjectured invariants:
+
+    ~(C:client ~= D & link(C,S) & semaphore(S))
+
+This says that we cannot have two distinct clients, where one of them
+is linked to the server and the semaphore is up. We click OK, adding this formula to our list of
+conjectured invariants. 
+
+We can now try checking inductiveness again with our new conjecture.
+We see the following:
 
 ![IVy screenshot](images/client_server13.png)
 
@@ -225,8 +193,7 @@ Here is the content of the file:
 
     # new conjectures
 
-    conjecture ~(link(CL0,SE0) & link(CL1,SE0) & CL0:client ~= CL1:client)
-    conjecture ~(link(CL0,SE0) & semaphore(SE0) & CL0:client ~= CL1:client)
+    conjecture ~(C:client ~= D & link(C,S) & semaphore(S))
 
 If we add this text to the input file and run IVy again, IVy will use
 these conjectures and immediately observe that they are inductive.

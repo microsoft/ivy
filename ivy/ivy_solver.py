@@ -535,8 +535,10 @@ def collect_numerals(z3term):
     if z3.is_int_value(z3term) or z3.is_bv_value(z3term):
         yield z3term
     elif z3.is_app_of(z3term,z3.Z3_OP_ITE):
-        yield collect_numerals(z3term.arg(1))
-        yield collect_numerals(z3term.arg(2))
+        for z in collect_numerals(z3term.arg(1)):
+            yield z
+        for z in collect_numerals(z3term.arg(2)):
+            yield z
 
 def from_z3_numeral(z3term,sort):
     name = str(z3term)

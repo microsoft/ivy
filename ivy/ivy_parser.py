@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -15,23 +15,45 @@ import string
 
 if not (iu.get_numeric_version() <= [1,2]):
 
-    precedence = (
-        ('left', 'SEMI'),
-        ('left', 'GLOBALLY', 'EVENTUALLY'),
-        ('left', 'IF'),
-        ('left', 'ELSE'),
-        ('left', 'OR'),
-        ('left', 'AND'),
-        ('left', 'TILDA'),
-        ('left', 'EQ','LE','LT','GE','GT','PTO'),
-        ('left', 'TILDAEQ'),
-        ('left', 'COLON'),
-        ('left', 'PLUS'),
-        ('left', 'MINUS'),
-        ('left', 'TIMES'),
-        ('left', 'DIV'),
-        ('left', 'DOLLAR'),
-    )
+    if not (iu.get_numeric_version() <= [1,6]):
+        precedence = (
+            ('left', 'SEMI'),
+            ('left', 'GLOBALLY', 'EVENTUALLY'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
+            ('left', 'ARROW', 'IFF'),
+            ('left', 'OR'),
+            ('left', 'AND'),
+            ('left', 'TILDA'),
+            ('left', 'EQ','LE','LT','GE','GT','PTO'),
+            ('left', 'TILDAEQ'),
+            ('left', 'COLON'),
+            ('left', 'PLUS'),
+            ('left', 'MINUS'),
+            ('left', 'TIMES'),
+            ('left', 'DIV'),
+            ('left', 'DOLLAR'),
+            ('left', 'DOT')
+        )
+
+    else:
+        precedence = (
+            ('left', 'SEMI'),
+            ('left', 'GLOBALLY', 'EVENTUALLY'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
+            ('left', 'OR'),
+            ('left', 'AND'),
+            ('left', 'TILDA'),
+            ('left', 'EQ','LE','LT','GE','GT','PTO'),
+            ('left', 'TILDAEQ'),
+            ('left', 'COLON'),
+            ('left', 'PLUS'),
+            ('left', 'MINUS'),
+            ('left', 'TIMES'),
+            ('left', 'DIV'),
+            ('left', 'DOLLAR'),
+        )
 
 else:
 
@@ -103,6 +125,8 @@ def stack_action_lookup(name,params=0):
     return None,0
 
 def inst_mod(ivy,module,pref,subst,vsubst):
+    save = ivy.attributes
+    ivy.attributes = ()
     for decl in module.decls:
         if isinstance(decl,AttributeDecl):
             if vsubst:
@@ -125,7 +149,9 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             for foo in idecl.args:
                 if not hasattr(foo.args[1],'lineno'):
                     print 'no lineno: {}'.format(foo)
+        idecl.attributes = decl.attributes
         ivy.declare(idecl)
+    ivy.atributes = save
 
 def do_insts(ivy,insts):
     others = []
@@ -164,6 +190,8 @@ def check_non_temporal(x):
     else:
         return x
 
+special_attribute = None
+
 class Ivy(object):
     def __init__(self):
         self.decls = []
@@ -175,6 +203,9 @@ class Ivy(object):
         self.included = set()
         self.is_module = False
         self.params = []
+        global special_attribute
+        self.attributes = (special_attribute,) if special_attribute is not None else ()
+        special_attribute = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
@@ -182,6 +213,7 @@ class Ivy(object):
             self.define(df)
         for df in decl.static():
             self.static.add(df)
+        decl.attributes = self.attributes + decl.attributes
         self.decls.append(decl)
         if isinstance(decl,MacroDecl):
             for d in decl.args:
@@ -264,10 +296,28 @@ def addtemporal(lf):
     lf.temporal = True
     return lf
 
+label_counter = 0
+
+def newlabel(pref):
+    global label_counter
+    label_counter += 1
+    return Atom(pref+str(label_counter))
+
+def mk_label(s,pref):
+    return s if s is not None else newlabel(pref)
+        
+def addlabel(lf,pref):
+    if lf.label is not None or iu.get_numeric_version() <= [1,6]:
+        return lf
+    res = LabeledFormula(newlabel(pref),lf.formula)
+    res.lineno = lf.lineno
+    return res
+
 def p_top_axiom_labeledfmla(p):
     'top : top opttemporal AXIOM labeledfmla'
     p[0] = check_non_temporal(p[1])
-    d = AxiomDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    lf = addlabel(p[4],'axiom')
+    d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
 
@@ -283,7 +333,8 @@ def p_optskolem_symbol(p):
 def p_top_property_labeledfmla(p):
     'top : top opttemporal PROPERTY labeledfmla optskolem optproof'
     p[0] = p[1]
-    d = PropertyDecl(addtemporal(p[4]) if p[2] else check_non_temporal(p[4]))
+    lf = addlabel(p[4],'prop')
+    d = PropertyDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
     d.lineno = get_lineno(p,3)
     p[0].declare(d)
     if p[5] is not None:
@@ -294,9 +345,18 @@ def p_top_property_labeledfmla(p):
 def p_top_conjecture_labeledfmla(p):
     'top : top CONJECTURE labeledfmla'
     p[0] = p[1]
-    d = ConjectureDecl(p[3])
+    d = ConjectureDecl(addlabel(p[3],'conj'))
     d.lineno = get_lineno(p,2)
     p[0].declare(d)
+
+# from version 1.7, "invariant" replaces "conjecture"
+if not iu.get_numeric_version() <= [1,6]:
+    def p_top_invariant_labeledfmla(p):
+        'top : top INVARIANT labeledfmla'
+        p[0] = p[1]
+        d = ConjectureDecl(addlabel(p[3],'invar'))
+        d.lineno = get_lineno(p,2)
+        p[0].declare(d)
 
 def p_modulestart(p):
     'modulestart :'
@@ -396,7 +456,7 @@ def p_schdecl_typedecl(p):
 
 def p_schdecl_propdecl(p):
     'schdecl : PROPERTY labeledfmla'
-    p[0] = [check_non_temporal(p[2])]
+    p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
@@ -519,6 +579,10 @@ def p_constantdecl_var_tterms(p):
     'constantdecl : VAR tterms'
     p[0] = ConstantDecl(*p[2])
 
+def p_constantdecl_parameter_tterms(p):
+    'constantdecl : PARAMETER tterms'
+    p[0] = ParameterDecl(*p[2])
+
 def p_rel_defnlhs(p):
     'rel : defnlhs'
     p[1].sort = 'bool'
@@ -526,7 +590,7 @@ def p_rel_defnlhs(p):
 
 def p_rel_defn(p):
     'rel : defn'
-    p[0] = DerivedDecl(mk_lf(p[1]))
+    p[0] = DerivedDecl(addlabel(mk_lf(p[1]),'def'))
 
 def p_rels_rel(p):
     'rels : rel'
@@ -568,13 +632,15 @@ def p_tatom_lp_symbol_relop_symbol_rp(p):
     p[0].lineno = get_lineno(p,3)
 
 def p_fun_defnlhs_colon_atype(p):
-    'fun : defnlhs COLON atype'
-    p[1].sort = p[3]
+    'fun : typeddefn'
+#    p[1].sort = p[3]
     p[0] = ConstantDecl(p[1])
 
 def p_fun_defn(p):
-    'fun : defn'
-    p[0] = DerivedDecl(mk_lf(p[1]))
+    'fun : typeddefn EQ defnrhs'
+    df = Definition(app_to_atom(p[1]),p[3])
+    df.lineno = get_lineno(p,2)
+    p[0] = DerivedDecl(addlabel(mk_lf(df),'def'))
 
 def p_funs_fun(p):
     'funs : fun'
@@ -599,7 +665,7 @@ def mk_lf(x):
 def p_top_derived_defns(p):
     'top : top DERIVED defns'
     p[0] = p[1]
-    p[0].declare(DerivedDecl(*[mk_lf(x) for x in p[3]]))
+    p[0].declare(DerivedDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
 
 def p_proofstep_symbol(p):
     'proofstep : SYMBOL'
@@ -648,7 +714,7 @@ def p_optproof_symbol(p):
 def p_top_definition_defns(p):
     'top : top DEFINITION defns optproof'
     p[0] = p[1]
-    p[0].declare(DefinitionDecl(*[mk_lf(x) for x in p[3]]))
+    p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
     if p[4] is not None:
         p[0].declare(ProofDecl(p[4]))
 
@@ -1008,6 +1074,26 @@ if not (iu.get_numeric_version() <= [1,1]):
         atom = Atom(p[3])
         atom.lineno = get_lineno(p,2)
         handle_before_after("after",atom,p[6],p[0],p[4],p[5])
+
+    if not (iu.get_numeric_version() <= [1,6]):
+        def stmt_to_seq(stmts,p,n):
+            stmts = lower_var_stmts(stmts)
+            if len(stmts) == 1:
+                return stmts[0]
+            else:
+                res = Sequence(*stmts)
+                res.lineno = get_lineno(p,n)
+                return res
+        def p_top_around_callatom_lcb_action_rcb(p):
+            'top : top AROUND atype optargs optreturns LCB actseq optsemi DOTDOTDOT actseq optsemi RCB'
+            before = stmt_to_seq(p[7],p,7)
+            after = stmt_to_seq(p[10],p,10)
+            p[0] = p[1]
+            atom = Atom(p[3])
+            atom.lineno = get_lineno(p,2)
+            handle_before_after("before",atom,before,p[0],p[4],p[5])
+            handle_before_after("after",atom,after,p[0],p[4],p[5])
+
     def p_top_after_init_optargs_lcb_action_rcb(p):
         'top : top AFTER INIT optargs topseq'
         p[0] = p[1]
@@ -1089,12 +1175,13 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.args[0].lineno = d.lineno
         p[0] = p[1]
         p[0].declare(d)
-    def p_top_private_callatom(p):
-        'top : top PRIVATE callatom'
-        d = PrivateDecl(PrivateDef(p[3]))
-        d.lineno = get_lineno(p,2)
-        p[0] = p[1]
-        p[0].declare(d)
+    if iu.get_numeric_version() <= [1,6]:
+        def p_top_private_callatom(p):
+            'top : top PRIVATE callatom'
+            d = PrivateDecl(PrivateDef(p[3]))
+            d.lineno = get_lineno(p,2)
+            p[0] = p[1]
+            p[0].declare(d)
     def p_optdelegee(p):
         'optdelegee :'
         p[0] = None
@@ -1110,6 +1197,33 @@ if not (iu.get_numeric_version() <= [1,1]):
         d.lineno = get_lineno(p,2)
         p[0] = p[1]
         p[0].declare(d)
+
+if not (iu.get_numeric_version() <= [1,6]):
+
+    def p_specimpl_specification(p):
+        'specimpl : SPECIFICATION'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute = "spec"
+
+    def p_specimpl_implementation(p):
+        'specimpl : IMPLEMENTATION'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute =  "impl"
+
+    def p_specimpl_private(p):
+        'specimpl : PRIVATE'
+        p[0] = p[1]
+        global special_attribute
+        special_attribute =  "private"
+
+    def p_top_specification_lcb_top_rcb(p):
+        'top : top specimpl LCB top RCB'
+        p[0] = p[1]
+        stack.pop()
+        for decl in p[4].decls:
+            p[0].declare(decl)
 
     # def p_top_delegate_callatom(p):
     #     'top : top DELEGATE callatoms ARROW callatom'
@@ -1168,7 +1282,7 @@ def p_top_interpret_symbol_arrow_symbol(p):
     p[0] = p[1]
     impl = Implies(p[3],p[5])
     impl.lineno = get_lineno(p,4)
-    thing = InterpretDecl(mk_lf(impl))
+    thing = InterpretDecl(addlabel(mk_lf(impl),'interp'))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
     
@@ -1177,7 +1291,7 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     p[0] = p[1]
     imp = Implies(p[3],Range(p[6],p[8]))
     imp.lineno = get_lineno(p,4)
-    thing = InterpretDecl(mk_lf(imp))
+    thing = InterpretDecl(addlabel(mk_lf(imp),'interp'))
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 
@@ -1202,7 +1316,7 @@ def p_top_nativequote(p):
     'top : top NATIVEQUOTE'
     p[0] = p[1]
     text,bqs = parse_nativequote(p,2)
-    defn = NativeDef(*([None] + [text] + bqs))
+    defn = NativeDef(*([mk_label(None,'native')] + [text] + bqs))
     defn.lineno = get_lineno(p,2)
     thing = NativeDecl(defn)
     thing.lineno = get_lineno(p,2)
@@ -1372,10 +1486,21 @@ def p_action_assert(p):
     p[0] = AssertAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
-def p_action_ensures(p):
-    'action : ENSURES fmla'
-    p[0] = EnsuresAction(check_non_temporal(p[2]))
-    p[0].lineno = get_lineno(p,1)
+if iu.get_numeric_version() <= [1,6]:
+    def p_action_ensures(p):
+        'action : ENSURES fmla'
+        p[0] = EnsuresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+else:
+    def p_action_ensure(p):
+        'action : ENSURE fmla'
+        p[0] = EnsuresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+    def p_action_require(p):
+        'action : REQUIRE fmla'
+        p[0] = RequiresAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+    
 
 def p_action_set_lit(p):
     'action : SET lit'
@@ -1721,25 +1846,48 @@ def p_defarg_var(p):
     p[0] = p[1]
 
 def p_defnlhs_lp_term_relop_term_rp(p):
-    'defnlhs : LPAREN term relop term RPAREN'
+    'defnlhs : LPAREN defarg relop defarg RPAREN'
     p[0] = Atom(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
 
 def p_defnlhs_lp_term_infix_term_rp(p):
-    'defnlhs : LPAREN term infix term RPAREN'
+    'defnlhs : LPAREN defarg infix defarg RPAREN'
     p[0] = App(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
 
+def p_typeddefn_defnlhs(p):
+    'typeddefn : defnlhs'
+    p[0] = p[1]
+
+def p_typeddefn_defnlhs_colon_atype(p):
+    'typeddefn : defnlhs COLON atype'
+    p[0] = p[1]
+    p[0].sort = p[3]
+
+def p_defnrhs_fmla(p):
+    'defnrhs : fmla'
+    p[0] = check_non_temporal(p[1])
+
+def p_defnrhs_somevarfmla(p):
+    'defnrhs : somevarfmla'
+    p[0] = check_non_temporal(p[1])
+
+def p_defnrhs_nativequote(p):
+    'defnrhs :  NATIVEQUOTE'
+    text,bqs = parse_nativequote(p,1)
+    p[0] = NativeExpr(*([text] + bqs))
+    p[0].lineno = get_lineno(p,1)
+
 def p_defn_atom_fmla(p):
-    'defn : defnlhs EQ fmla'
-    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
+    'defn : typeddefn EQ defnrhs'
+    p[0] = Definition(app_to_atom(p[1]),p[3])
     p[0].lineno = get_lineno(p,2)
 
-def p_defn_defnlhs_eq_nativequote(p):
-    'defn : defnlhs EQ NATIVEQUOTE'
-    text,bqs = parse_nativequote(p,3)
-    p[0] = Definition(app_to_atom(p[1]),NativeExpr(*([text] + bqs)))
-    p[0].lineno = get_lineno(p,2)
+# def p_defn_defnlhs_eq_(p):
+#     'defn : typeddefn EQ NATIVEQUOTE'
+#     text,bqs = parse_nativequote(p,3)
+#     p[0] = Definition(app_to_atom(p[1]),NativeExpr(*([text] + bqs)))
+#     p[0].lineno = get_lineno(p,2)
 
 def p_optin(p):
     'optin : '
@@ -1761,11 +1909,6 @@ def p_somevarfmla_some_simplevar_dot_fmla(p):
     'somevarfmla : SOME simplevar DOT fmla optin optelse'
     p[0] = SomeExpr(*([p[2],p[4]]+p[5]+p[6]))
     p[0].lineno = get_lineno(p,1)
-
-def p_defn_atom_somevarfmla(p):
-    'defn : defnlhs EQ somevarfmla'
-    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
-    p[0].lineno = get_lineno(p,2)
 
 def p_expr_fmla(p):
     'expr : LCB fmla RCB'

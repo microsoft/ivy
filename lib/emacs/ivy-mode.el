@@ -80,6 +80,13 @@
    "variant"
    "of"
    "proof"
+   "specification"
+   "implementation"
+   "decreases"
+   "require"
+   "ensure"
+   "around"
+   "parameter"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

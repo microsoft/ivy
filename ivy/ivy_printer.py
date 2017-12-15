@@ -18,7 +18,8 @@ def print_module(mod):
                     ('property',mod.labeled_props),
                     ('init',mod.labeled_inits),
                     ('conjecture',mod.labeled_conjs),
-                    ('definition',mod.definitions),]:
+                    ('definition',mod.definitions),
+                    ('definition',mod.native_definitions),]:
         
         thing += labeled_fmlas_to_str(kwd,lst)
 

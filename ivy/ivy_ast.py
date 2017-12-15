@@ -322,7 +322,16 @@ class Variable(Term):
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
+    def resort(self,sort):
+        res = Variable(self.rep,sort)
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
+
+class MethodCall(Term):
+    def __str__(self):
+        return str(self.args[0]) + '.' + str(self.args[1])
 
 class Literal(AST):
     """
@@ -483,6 +492,7 @@ def lineno(c):
 class Decl(AST):
     def __init__(self,*args):
         self.args = args
+        self.attributes = ()
     def __repr__(self):
         res = self.name() + ' ' + ','.join([repr(a) for a in self.args])
         return res
@@ -540,7 +550,14 @@ class LabeledFormula(AST):
         res.temporal = self.temporal
         return res
 
-class AxiomDecl(Decl):
+class LabeledDecl(Decl):
+    def defines(self):
+        if iu.get_numeric_version() <= [1,6]:
+            return []
+        return [(c.label.relname,lineno(c),type(self)) for c in self.args]
+    
+
+class AxiomDecl(LabeledDecl):
     def name(self):
         return 'axiom'
 
@@ -548,7 +565,7 @@ class PropertyDecl(AxiomDecl):
     def name(self):
         return 'property'
 
-class ConjectureDecl(Decl):
+class ConjectureDecl(LabeledDecl):
     def name(self):
         return 'conjecture'
 
@@ -614,6 +631,10 @@ class ConstantDecl(Decl):
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
 
+class ParameterDecl(ConstantDecl):
+    def name(self):
+        return 'parameter'
+
 class FreshConstantDecl(ConstantDecl):
     pass
 
@@ -627,11 +648,9 @@ class DerivedDecl(Decl):
     def defines(self):
         return [(c.formula.defines(),lineno(c.formula)) for c in self.args]
 
-class DefinitionDecl(Decl):
+class DefinitionDecl(LabeledDecl):
     def name(self):
         return 'definition'
-    def defines(self):
-        return []
 
 class ProgressDecl(Decl):
     def name(self):
@@ -696,11 +715,9 @@ class AssertDecl(Decl):
     def defines(self):
         return []
 
-class InterpretDecl(Decl):
+class InterpretDecl(LabeledDecl):
     def name(self):
         return 'interpret'
-    def defines(self):
-        return []
 
 class MixinDecl(Decl):    
     def name(self):
@@ -1179,7 +1196,7 @@ def ast_rewrite(x,rewrite):
     if isinstance(x,tuple):
         return tuple(ast_rewrite(e,rewrite) for e in x)
     if isinstance(x,Variable):
-        return Variable(x.rep,rewrite_sort(rewrite,x.sort))
+        return x.resort(rewrite_sort(rewrite,x.sort))
     if isinstance(x,Atom) or isinstance(x,App):
 #        print "rewrite: x = {!r}, type(x.rep) = {!r}".format(x,type(x.rep))
         if isinstance(x.rep, NamedBinder):

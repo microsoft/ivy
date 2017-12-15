@@ -31,10 +31,11 @@ if iu.get_numeric_version() <= [1,2]:
 
 else:
 
-    def p_term_term_dot_term(p):
-        'aterm : aterm DOT SYMBOL'
-        p[0] = compose_atoms(p[1],App(p[3]))
-        p[0].lineno = get_lineno(p,2)
+    if iu.get_numeric_version() <= [1,6]:
+        def p_term_term_dot_term(p):
+            'aterm : aterm DOT SYMBOL'
+            p[0] = compose_atoms(p[1],App(p[3]))
+            p[0].lineno = get_lineno(p,2)
 
 def p_atype_symbol(p):
     'atype : SYMBOL'
@@ -76,6 +77,15 @@ def p_term_aterm(p):
     'term : aterm'
     p[0] = p[1]
 
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_term_term_dot_aterm(p):
+        'aterm : term DOT aterm'
+        if isinstance(p[1],(Atom,App)):
+            p[0] = compose_atoms(p[1],p[3])
+        else:
+            p[0] = MethodCall(p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+            
 def p_aterm_old_symbol(p):
     'term : OLD aterm'
     p[0] = Old(p[2])
@@ -344,15 +354,29 @@ def p_fmla_fmla_iff_fmla(p):
     p[0] = Iff(p[1],p[3])
     p[0].lineno = get_lineno(p,2)
 
-def p_fmla_forall_vars_dot_fmla(p):
-    'fmla : FORALL simplevars DOT fmla'
-    p[0] = Forall(p[2],p[4])
-    p[0].lineno = get_lineno(p,1)
+if (iu.get_numeric_version() <= [1,6]):
 
-def p_fmla_exists_vars_dot_fmla(p):
-    'fmla : EXISTS simplevars DOT fmla'
-    p[0] = Exists(p[2],p[4])
-    p[0].lineno = get_lineno(p,1)
+    def p_fmla_forall_vars_dot_fmla(p):
+        'fmla : FORALL simplevars DOT fmla'
+        p[0] = Forall(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_exists_vars_dot_fmla(p):
+        'fmla : EXISTS simplevars DOT fmla'
+        p[0] = Exists(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+else:
+
+    def p_fmla_forall_vars_dot_fmla(p):
+        'fmla : FORALL simplevars DOT fmla %prec SEMI'
+        p[0] = Forall(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_exists_vars_dot_fmla(p):
+        'fmla : EXISTS simplevars DOT fmla %prec SEMI'
+        p[0] = Exists(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
 
 def p_fmla_globally_fmla(p):
     'fmla : GLOBALLY fmla'
@@ -372,7 +396,7 @@ def p_term_namedbinder_vars_dot_fmla(p):
     p[0].lineno = get_lineno(p,2)
 
 def p_term_namedbinder_dot_fmla(p):
-    'term : DOLLAR SYMBOL DOT fmla'
+    'term : DOLLAR SYMBOL DOT fmla %prec SEMI'
     p[0] = NamedBinder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)
 
