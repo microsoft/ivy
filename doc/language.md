@@ -967,6 +967,29 @@ For example:
 This is a useful shorthand when the declaration of `c.post` is nearby,
 but should probably be avoided otherwise.
 
+We can write this:
+
+    around foo {
+        stmts1
+        ...
+        stmts2
+    }
+
+as a shorthand for this:
+
+    before foo {
+        stmts1
+    }
+
+    after foo {
+        stmts2
+    }
+
+At present, local variables declared in `stmts1` cannot be referenced
+in `stmts2`, but the intention os to make this possible, to reduce the
+need to use `old` in after monitors.
+
+
 ### Monitor state
 
 Usually, monitors contain state components that allow them to remember
@@ -1486,6 +1509,24 @@ For example:
 Here `bfe[3][0]` is the bit field extraction operator the takes the
 low order 4 bits of a bit vector.
 
+## Parameters
+
+A *parameter* is a value supplied by the environment before
+initialization. A parameter is declared like this:
+
+    parameter p : t
+
+where *p* is the parameter name and *t* is the type. Parameters may be
+declared anywhere in the object hierarchy. Except for the fact that it
+is initialized by the environment, a parameter is identical to an
+individual. The manner in which parameters are supplied is dependent
+on the compiler. For example, if a program is compiled to an
+executable file, the parameter values are supplied on the command
+line. If it is compiled to a class in C++, parameters are supplied as
+arguments to the constructor. In either case, the order of parameters
+is the same as their order of declaration in the program.
+
+
 ## Changes between IVy language versions
 
 ### New in version 1.2
@@ -1508,7 +1549,9 @@ low order 4 bits of a bit vector.
 
 ### New in version 1.7
 
-- Keywords: decreases, specification, implementation
+- Keywords: decreases, specification, implementation, require, ensure, around, parameter
+- The `iterable` module is added the standard library file `order`. This makes it possible
+to declare a type that is finite and iterable, and whose size is a parameter.
 
 ### Deprecated in version 1.7
 
