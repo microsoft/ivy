@@ -376,7 +376,6 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
 
-    iu.dbg('mod.params')
     if iu.version_le(iu.get_string_version(),"1.6"):
         del mod.params[:]
     add_map = dict((s.name,s) for s in strip_added_symbols)
@@ -644,7 +643,6 @@ def set_privates(mod,isolate,suff=None):
     if suff in mod.hierarchy:
         mod.privates.add(suff)
     for n,l in mod.hierarchy.iteritems():
-        print n
         nsuff = get_private_from_attributes(mod,n,suff)
         if nsuff in l:
             mod.privates.add(iu.compose_names(n,nsuff))
@@ -1346,14 +1344,11 @@ def apply_present_conjectures(isol,mod):
                 posts[actname].append(conj_to_assume(conj))
     for actname,assumes in posts.iteritems():
         brackets.append((actname,[],assumes))
-    iu.dbg('brackets')
     return brackets
 
 def create_isolate(iso,mod = None,**kwargs):
 
         mod = mod or im.module
-
-        iu.dbg('mod.params')
 
         # from version 1.7, if no isolate specified on command line and
         # there is only one, use it.
@@ -1477,7 +1472,7 @@ def create_isolate(iso,mod = None,**kwargs):
                     action1,action2 = (lookup_action(mixin,mod,a.relname) for a in mixin.args)
                     mixed_name = mixin.args[1].relname
                     if mixed_name in orig_exports and isinstance(mixin,ivy_ast.MixinBeforeDef):
-                        action1 = action1.assert_to_assume()
+                        action1 = action1.assert_to_assume([ia.AssertAction])
                     mixed = ia.apply_mixin(mixin,action1,action2)
                     mod.actions[mixed_name] = mixed
                     triple = (mixin.mixer(),mixin.mixee(),mod.actions[mixin.mixer()])

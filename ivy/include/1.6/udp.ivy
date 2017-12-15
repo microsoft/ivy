@@ -172,6 +172,7 @@ module udp_simple(addr,pkt) = {
     }
 
     instance impl(X:addr) : udp_wrapper(addr,pkt,X,4990)
+    trusted isolate iso = this
 }
 
 module nondup_endpoint(port,pkt) = {

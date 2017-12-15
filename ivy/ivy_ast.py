@@ -322,6 +322,11 @@ class Variable(Term):
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
+    def resort(self,sort):
+        res = Variable(self.rep,sort)
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
 
 class MethodCall(Term):
@@ -1191,7 +1196,7 @@ def ast_rewrite(x,rewrite):
     if isinstance(x,tuple):
         return tuple(ast_rewrite(e,rewrite) for e in x)
     if isinstance(x,Variable):
-        return Variable(x.rep,rewrite_sort(rewrite,x.sort))
+        return x.resort(rewrite_sort(rewrite,x.sort))
     if isinstance(x,Atom) or isinstance(x,App):
 #        print "rewrite: x = {!r}, type(x.rep) = {!r}".format(x,type(x.rep))
         if isinstance(x.rep, NamedBinder):

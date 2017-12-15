@@ -241,6 +241,10 @@ def compile_app(self):
     if expr_context and top_context and self.rep in top_context.actions:
         return compile_inline_call(self,args)
     sym = self.rep.cmpl() if isinstance(self.rep,ivy_ast.NamedBinder) else ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False) 
+    if sym is not ivy_logic.Equals:
+        if ivy_logic.is_numeral(sym):
+            if hasattr(self,'sort') and self.sort != 'S':
+                sym = ivy_logic.Symbol(sym.name,variable_sort(self))
     if sym is not None:
         return (sym)(*args)
     res = compile_field_reference(self.rep,args)
@@ -288,7 +292,8 @@ def variable_sort(self):
     return cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort
 
 def compile_variable(self):
-    sort = variable_sort(self)
+    with ASTContext(self):
+        sort = variable_sort(self)
     if ivy_logic.is_topsort(sort):
         sort = variable_context.map.get(self.rep,sort)
     return ivy_logic.Variable(self.rep,sort)
@@ -552,10 +557,7 @@ def compile_native_arg(arg):
     if arg.rep in ivy_logic.sig.symbols:
         return sortify_with_inference(arg)
     res = arg.clone(map(sortify_with_inference,arg.args)) # handles action names
-    iu.dbg('res')
-    res1 = res.rename(resolve_alias(res.rep))
-    iu.dbg('res1')
-    return res1
+    return res.rename(resolve_alias(res.rep))
 
 
 def compile_native_symbol(arg):
@@ -585,9 +587,7 @@ def compile_native_name(atom):
 def compile_native_def(self):
     fields = self.args[1].code.split('`')
     args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
-    cres = self.clone(args)
-    iu.dbg('cres')
-    return cres
+    return self.clone(args)
 
 def compile_action_def(a,sig):
     sig = sig.copy()
@@ -644,9 +644,13 @@ def compile_defn(df):
                     args.append(fmla.body.args[1].args[2])
                 df = ivy_logic.Definition(fmla.body.args[0],ivy_logic.Some(*args))
             else:
-                eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
-                eqn = sortify_with_inference(eqn)
-                df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+                if False and isinstance(df.args[1],ivy_ast.NativeExpr):
+                    df = ivy_logic.Definition(sortify_with_inference(df.args[0]),df.args[1])
+                    df.args[1].sort = df.args[0].sort
+                else:
+                    eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
+                    eqn = sortify_with_inference(eqn)
+                    df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
             return df
     
 def compile_schema_prem(self,sig):
@@ -791,7 +795,6 @@ class IvyDomainSetup(IvyDeclInterp):
         return sym
     def parameter(self,v):
         sym = self.individual(v)
-        iu.dbg('v')
         self.domain.params.append(sym)
         return sym
     def destructor(self,v):
@@ -915,7 +918,6 @@ class IvyDomainSetup(IvyDeclInterp):
         sig = self.domain.sig
         interp = sig.interp
         lhs = resolve_alias(thing.formula.args[0].rep)
-        iu.dbg('lhs')
         if isinstance(thing.formula.args[1],ivy_ast.NativeType):
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))

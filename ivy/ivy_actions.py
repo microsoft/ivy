@@ -846,7 +846,6 @@ class WhileAction(Action):
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self,kinds):
-        iu.dbg('kinds')
         res = self.clone([self.args[0]]+[x.assert_to_assume(kinds) for x in self.args[1:]])
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params

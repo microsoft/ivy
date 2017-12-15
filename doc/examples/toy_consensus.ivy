@@ -265,4 +265,7 @@ isolate toy_system = {
 
 export toy_system.request_vote
 
+import shim.debug_sending
+import shim.debug_recving
+
 extract iso_impl(self:node) = toy_system(self),shim(self),net(self),nset,node

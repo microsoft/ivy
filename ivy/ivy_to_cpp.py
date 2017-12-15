@@ -108,6 +108,18 @@ def varname(name):
     name = re.sub(puncs,'__',name)
     return name.split(':')[-1]
 
+def funname(name):
+    if not isinstance(name,str):
+        name = name.name
+    if name[0].isdigit():
+        return '__num' + name
+    if name[0] == '-':
+        return '__negnum'+name
+    if name[0] == '"':
+        raise IvyError(None,"cannot compile a function whose name is a quoted string")
+    return varname(name)
+        
+
 def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
@@ -373,7 +385,6 @@ def gather_referenced_symbols(expr,res,ignore=[]):
                 
 
 def make_thunk(impl,vs,expr):
-    print 'im.module.destructor_sorts.keys(): {}'.format(im.module.destructor_sorts.keys())
     global the_classname
     dom = [v.sort for v in vs]
     D = ctuple(dom,classname=the_classname)
@@ -1025,7 +1036,7 @@ def may_alias(x,y):
 # emit parameter declarations of the approriate parameter types
 
 def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
-    header.append(varname(name) + '(')
+    header.append(funname(name) + '(')
     header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
@@ -2407,7 +2418,7 @@ class z3_thunk : public thunk<D,R> {
                             .format(classname,' '.join(map(varname,im.module.params))))
                 impl.append('        __ivy_exit(1);\n    }\n')
                 impl.append('    std::vector<std::string> args;\n')
-                impl.append('    std::vector<ivy_value> arg_values(1);\n')
+                impl.append('    std::vector<ivy_value> arg_values({});\n'.format(len(im.module.params)))
                 impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
                 for idx,s in enumerate(im.module.params):
                     impl.append('    int p__'+varname(s)+';\n')
@@ -2539,13 +2550,11 @@ def emit_one_initial_state(header):
         constraints.append(fix_definition(ldf.formula).to_constraint())
     clauses = ilu.formula_to_clauses(il.And(*constraints))
 #    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
-    iu.dbg('clauses')
     m = slv.get_model_clauses(clauses)
     if m == None:
         print clauses
         raise IvyError(None,'Initial condition is inconsistent')
     used = ilu.used_symbols_clauses(clauses)
-    iu.dbg('used')
     for sym in all_state_symbols():
         if sym.name in im.module.destructor_sorts:
             continue
@@ -2556,7 +2565,6 @@ def emit_one_initial_state(header):
             if sym in used:
                 assign_symbol_from_model(header,sym,m)
             else:
-                iu.dbg('sym')
                 mk_nondet_sym(header,sym,'init',0)
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)
@@ -2564,6 +2572,9 @@ def emit_one_initial_state(header):
 
 
 def emit_constant(self,header,code):
+    if self in is_derived:
+        code.append(funname(self.name)+'()')
+        return
     if isinstance(self,il.Symbol) and self.is_numeral():
         if is_native_sym(self) or self.sort.name in im.module.sort_destructors:
             raise iu.IvyError(None,"cannot compile symbol {} of sort {}".format(self.name,self.sort))
@@ -2575,7 +2586,6 @@ def emit_constant(self,header,code):
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
     code.append(varname(self.name))
-    global is_derived
     if self in is_derived:
         code.append('()')
 
@@ -2679,7 +2689,7 @@ def emit_app(self,header,code,capture_args=None):
         skip_params = 1
     # handle uninterpreted ops
     else:
-        code.append(varname(self.func.name))
+        code.append(funname(self.func.name))
     global is_derived
     if self.func in is_derived:
         code.append('(')
@@ -2812,8 +2822,6 @@ def get_all_bounds(header,variables,body,exists,varnames):
 
 
 def emit_quant(variables,body,header,code,exists=False):
-    iu.dbg('variables')
-    iu.dbg('body')
     global indent_level
     if len(variables) == 0:
         body.emit(header,code)

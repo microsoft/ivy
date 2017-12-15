@@ -632,13 +632,15 @@ def p_tatom_lp_symbol_relop_symbol_rp(p):
     p[0].lineno = get_lineno(p,3)
 
 def p_fun_defnlhs_colon_atype(p):
-    'fun : defnlhs COLON atype'
-    p[1].sort = p[3]
+    'fun : typeddefn'
+#    p[1].sort = p[3]
     p[0] = ConstantDecl(p[1])
 
 def p_fun_defn(p):
-    'fun : defn'
-    p[0] = DerivedDecl(addlabel(mk_lf(p[1]),'def'))
+    'fun : typeddefn EQ defnrhs'
+    df = Definition(app_to_atom(p[1]),p[3])
+    df.lineno = get_lineno(p,2)
+    p[0] = DerivedDecl(addlabel(mk_lf(df),'def'))
 
 def p_funs_fun(p):
     'funs : fun'
@@ -1853,16 +1855,39 @@ def p_defnlhs_lp_term_infix_term_rp(p):
     p[0] = App(p[3],[p[2],p[4]])
     p[0].lineno = get_lineno(p,3)
 
+def p_typeddefn_defnlhs(p):
+    'typeddefn : defnlhs'
+    p[0] = p[1]
+
+def p_typeddefn_defnlhs_colon_atype(p):
+    'typeddefn : defnlhs COLON atype'
+    p[0] = p[1]
+    p[0].sort = p[3]
+
+def p_defnrhs_fmla(p):
+    'defnrhs : fmla'
+    p[0] = check_non_temporal(p[1])
+
+def p_defnrhs_somevarfmla(p):
+    'defnrhs : somevarfmla'
+    p[0] = check_non_temporal(p[1])
+
+def p_defnrhs_nativequote(p):
+    'defnrhs :  NATIVEQUOTE'
+    text,bqs = parse_nativequote(p,1)
+    p[0] = NativeExpr(*([text] + bqs))
+    p[0].lineno = get_lineno(p,1)
+
 def p_defn_atom_fmla(p):
-    'defn : defnlhs EQ fmla'
-    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
+    'defn : typeddefn EQ defnrhs'
+    p[0] = Definition(app_to_atom(p[1]),p[3])
     p[0].lineno = get_lineno(p,2)
 
-def p_defn_defnlhs_eq_nativequote(p):
-    'defn : defnlhs EQ NATIVEQUOTE'
-    text,bqs = parse_nativequote(p,3)
-    p[0] = Definition(app_to_atom(p[1]),NativeExpr(*([text] + bqs)))
-    p[0].lineno = get_lineno(p,2)
+# def p_defn_defnlhs_eq_(p):
+#     'defn : typeddefn EQ NATIVEQUOTE'
+#     text,bqs = parse_nativequote(p,3)
+#     p[0] = Definition(app_to_atom(p[1]),NativeExpr(*([text] + bqs)))
+#     p[0].lineno = get_lineno(p,2)
 
 def p_optin(p):
     'optin : '
@@ -1884,11 +1909,6 @@ def p_somevarfmla_some_simplevar_dot_fmla(p):
     'somevarfmla : SOME simplevar DOT fmla optin optelse'
     p[0] = SomeExpr(*([p[2],p[4]]+p[5]+p[6]))
     p[0].lineno = get_lineno(p,1)
-
-def p_defn_atom_somevarfmla(p):
-    'defn : defnlhs EQ somevarfmla'
-    p[0] = Definition(app_to_atom(p[1]),check_non_temporal(p[3]))
-    p[0].lineno = get_lineno(p,2)
 
 def p_expr_fmla(p):
     'expr : LCB fmla RCB'

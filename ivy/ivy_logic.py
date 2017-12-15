@@ -1037,7 +1037,7 @@ def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
             if x.name not in unsorted_var_names:
                 if no_error:
                     raise lg.SortError
-                raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
+                raise IvyError(None,"cannot infer sort of {} in {}".format(x,repr(term)))
 
 
 def sort_infer(term,sort=None,no_error=False):
