@@ -9,7 +9,7 @@ after init {
 }
 
 action a  = {
-  x := x
+  x := ~x
 }
 
 export a
