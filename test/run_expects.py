@@ -63,6 +63,7 @@ checks = [
           ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
           ['strat1','error: The verification condition is not in logic epr'],
           ['skolem1','error: failed checks: 1'],
+          ['ifstar1','OK'],
       ]
     ],
 ]

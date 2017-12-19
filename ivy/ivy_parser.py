@@ -1540,11 +1540,6 @@ if iu.get_numeric_version() <= [1,4]:
         p[0] = IfAction(check_non_temporal(p[2]),p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
-    def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
-        'action : IF TIMES sequence ELSE action'
-        p[0] = ChoiceAction(p[3],p[5])
-        p[0].lineno = get_lineno(p,1)
-
 else:
 
     def p_somefmla_fmla(p):
@@ -1630,6 +1625,12 @@ else:
         'action : WHILE fmla invariants decreases sequence'
         p[0] = WhileAction(*([check_non_temporal(p[2]), p[5]] + p[3] + p[4]))
         p[0].lineno = get_lineno(p,1)
+
+def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
+    'action : IF TIMES sequence ELSE action'
+    p[0] = ChoiceAction(p[3],p[5])
+    p[0].lineno = get_lineno(p,1)
+
 
 if iu.get_numeric_version() <= [1,2]:
     def p_action_field_assign_term(p):
