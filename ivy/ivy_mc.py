@@ -11,11 +11,25 @@ import tempfile
 import subprocess
 
 
+def get_truth(digits,idx,syms):
+    if (len(digits) != len(syms)):
+        badwit()
+    digit = digits[idx]
+    if digit == '0':
+        return il.Or()
+    elif digit == '1':
+        return il.And()
+    elif digit != 'x':
+        badwit()
+    return None
+
+
 class Aiger(object):
     def __init__(self,inputs,latches,outputs):
         iu.dbg('inputs')
         iu.dbg('latches')
         iu.dbg('outputs')
+        inputs = inputs + [il.Symbol('%%bogus%%',il.find_sort('bool'))] # work around abc bug
         self.inputs = inputs
         self.latches = latches
         self.outputs = outputs
@@ -56,6 +70,12 @@ class Aiger(object):
     def orl(self,*args):
         return self.notl(self.andl(*map(self.notl,args)))
 
+    def ite(self,x,y,z):
+        return self.orl(self.andl(x,y),self.andl(self.notl(x),z))
+
+    def iff(self,x,y):
+        return self.orl(self.andl(x,y),self.andl(self.notl(x),self.notl(y)))
+
     def eval(self,expr,getdef=None):
         def recur(expr):
             if il.is_app(expr):
@@ -94,22 +114,10 @@ class Aiger(object):
     def set(self,sym,val):
         self.values[sym] = val
 
-    def get_truth(digits,idx,syms):
-        if (len(digits) != len(syms)):
-            badwit()
-        digit = digits[i]
-        if digit == '0':
-            return il.Or()
-        elif digit == '1':
-            return il.And()
-        elif digit != 'x':
-            badwit()
-        return None
-
-    def get_state(post):
+    def get_state(self,post):
         res = dict()
         for i,v in enumerate(self.latches):
-            res[v] = self.get_truth(post,i,self.latches)
+            res[v] = get_truth(post,i,self.latches)
         return res
 
     def __str__(self):
@@ -141,10 +149,10 @@ def encode_vars(syms,encoding):
     res = []
     for sym in syms:
         if il.is_enumerated(sym):
-            n = ceillog2(sym.sort.defines())
+            n = ceillog2(len(sym.sort.defines()))
         else:
             n = 1
-        vs = [sym.suffix('__{}'.format(i)) for i in range(n)]
+        vs = [sym.suffix('[{}]'.format(i)) for i in range(n)]
         encoding[sym] = vs
         res.extend(vs)
     return res
@@ -179,9 +187,13 @@ class Encoder(object):
             self.sub.define(s,v )
         
     def andl(self,*args):
+        if len(args) == 0:
+            return self.true()
         return [self.sub.andl(*v) for v in zip(*args)]
 
     def orl(self,*args):
+        if len(args) == 0:
+            return self.false()
         return [self.sub.orl(*v) for v in zip(*args)]
 
     def notl(self,arg):
@@ -191,34 +203,40 @@ class Encoder(object):
     def eval(self,expr,getdef=None):
         def recur(expr):
             if isinstance(expr,il.Ite):
-                cond = self.eval(expr.args[0])
-                thenterm = self.eval(expr.args[1],n,sort)
-                elseterm = self.eval(expr.args[2],n,sort)
-                return [self.sub.ite(cond,x,y) for x,y in zip(thenterm,elseterm)]
-            if il.is_app(expr):
+                cond = recur(expr.args[0])
+                thenterm = recur(expr.args[1])
+                elseterm = recur(expr.args[2])
+                res = [self.sub.ite(cond[0],x,y) for x,y in zip(thenterm,elseterm)]
+            elif il.is_app(expr):
                 sym = expr.rep 
                 if sym in il.sig.constructors:
-                    m = sort.defines().index(sym.name)
-                    return self.binenc(m,ceillog2(len(sort.defines())))
-                assert len(expr.args) == 0
-                try:
-                    return self.lit(sym)
-                except KeyError:
-                    assert getdef is not None, "no definition for {} in aiger output".format(sym)
-                    return getdef(sym)
+                    m = sym.sort.defines().index(sym.name)
+                    res = self.binenc(m,ceillog2(len(sym.sort.defines())))
+                else:
+                    assert len(expr.args) == 0
+                    try:
+                        res = self.lit(sym)
+                    except KeyError:
+                        assert getdef is not None, "no definition for {} in aiger output".format(sym)
+                        res = getdef(sym)
             else:
                 args = map(recur,expr.args)
                 if isinstance(expr,il.And):
-                    return self.andl(*args)
-                if isinstance(expr,il.Or):
-                    return self.orl(*args)
-                if isinstance(expr,il.Not):
-                    return self.notl(*args)
-                if is_eq(expr):
-                    return self.encode_equality(*args)
-                assert False,"unimplemented op in aiger output: {}".format(type(expr))
-        return recur(expr)
-
+                    res = self.andl(*args)
+                elif isinstance(expr,il.Or):
+                    res = self.orl(*args)
+                elif isinstance(expr,il.Not):
+                    res = self.notl(*args)
+                elif il.is_eq(expr):
+                    res = self.encode_equality(expr.args[0].sort,*args)
+                else:
+                    assert False,"unimplemented op in aiger output: {}".format(type(expr))
+            iu.dbg('expr')
+            iu.dbg('res')
+            return res
+        res = recur(expr)
+        assert len(res) > 0
+        return res
 
     def deflist(self,defs):
         dmap = dict((df.defines(),df.args[1]) for df in defs)
@@ -230,48 +248,52 @@ class Encoder(object):
             return val
         for df in defs:
             sym = df.defines()
-            assert il.is_boolean_sort(sym.sort),"non-boolean sym in aiger output: {}".format(sym)
             self.define(sym,self.eval(df.args[1],getdef))
     
     def set(self,sym,val):
+        iu.dbg('sym')
+        iu.dbg('val')
+        assert len(val) > 0
         for x,y in zip(self.encoding[sym],val):
+            iu.dbg('x')
+            iu.dbg('y')
             self.sub.set(x,y)
 
     def __str__(self):
         return str(self.sub)
 
-    def gebin(bits,n):
+    def gebin(self,bits,n):
         if n == 0:
-            return self.true()
+            return self.sub.true()
         if n >= 2**len(bits):
-            return self.false()
+            return self.sub.false()
         hval = 2**(len(bits)-1)
         if hval <= n:
-            return self.andl(bits[0],self.gebin(bits[1:],n-hval))
-        return self.orl(bits[0],self.gebin(bits[1:],n))
+            return self.sub.andl(bits[0],self.gebin(bits[1:],n-hval))
+        return self.sub.orl(bits[0],self.gebin(bits[1:],n))
 
-    def binenc(m,n):
-        return [(self.true() if m & (1 << (n-1-i)) else self.false())
+    def binenc(self,m,n):
+        return [(self.sub.true() if m & (1 << (n-1-i)) else self.sub.false())
                 for i in range(n)]
         
-    def bindec(bits):
+    def bindec(self,bits):
         res = 0
         n = len(bits)
         for i,v in enumerate(bits):
-            if isinstance(v,il.And()):
+            if isinstance(v,il.And):
                 res += 1 << (n - 1 - i)
-
-    def encode_equality(*terms):
-        sort = terms[0].sort
-        n = len(sort.defines())
-        bits = ceillog2(n)
-        eterms = [self.encode_term(t,bits,sort) for t in terms]
-        eqs = self.andl(*[self.iff(x,y) for x,y in zip(*eterms)])
-        alt = self.andl(*[self.gebin(e,n-1) for e in eterms])
-        res =  self.orl(eqs,alt)
         return res
 
-    def get_state(post):
+    def encode_equality(self,sort,*eterms):
+        n = len(sort.defines())
+        bits = ceillog2(n)
+        iu.dbg('eterms')
+        eqs = self.sub.andl(*[self.sub.iff(x,y) for x,y in zip(*eterms)])
+        alt = self.sub.andl(*[self.gebin(e,n-1) for e in eterms])
+        res =  [self.sub.orl(eqs,alt)]
+        return res
+
+    def get_state(self,post):
         subres = self.sub.get_state(post)
         res = dict()
         for v in self.latches:
@@ -280,6 +302,7 @@ class Encoder(object):
                 num = self.bindec(bits)
                 vals = v.sort.defines()
                 val = vals[num] if num < len(vals) else vals[-1]
+                val = il.Symbol(val,v.sort)
             else:
                 val = bits[0]
             res[v] = val
@@ -350,11 +373,13 @@ def badwit():
 
 class IvyMCTrace(art.AnalysisGraph):
     def __init__(self,stvals):
+        iu.dbg('stvals')
         def abstractor(state):
             state.clauses = ilu.Clauses(stvals)
             state.universes = dict() # indicates this is a singleton state
         art.AnalysisGraph.__init__(self,initializer=abstractor)
     def add_state(self,stvals,action):
+        iu.dbg('stvals')
         self.add(itp.State(value=ilu.Clauses(stvals),expr=itp.action_app(action,self.states[-1]),label='ext'))
 
 def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
@@ -374,6 +399,7 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
             pre,inp,out,post = cols
             stvals = []
             stmap = aiger.get_state(post)                     
+            iu.dbg('stmap')
             for v in aiger.latches[:-2]: # last two are used for encoding
                 val = stmap[v]
                 if val is not None:
