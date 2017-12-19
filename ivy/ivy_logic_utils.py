@@ -1336,7 +1336,7 @@ def dual_formula(fmla, skolemizer=None):
 
 def skolemize_formula(fmla, skolemizer=None):
     if skolemizer == None:
-        skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
+        skolemizer = lambda v: var_to_skolem('__sk__',Variable(v.rep,v.sort))
     vs = []
     while is_exists(fmla):
         vs.extend(fmla.variables)
