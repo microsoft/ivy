@@ -649,6 +649,7 @@ class Sequence(Action):
     def int_update(self,domain,pvars):
         update = ([],true_clauses(),false_clauses())
         axioms = domain.background_theory(pvars)
+        iu.dbg('axioms')
         for op in self.args:
             thing = op.int_update(domain,pvars);
 #            print "op: {}, thing: {}".format(op,thing)

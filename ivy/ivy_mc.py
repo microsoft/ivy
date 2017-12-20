@@ -6,6 +6,7 @@ import ivy_logic_utils as ilu
 import ivy_utils as iu
 import ivy_art as art
 import ivy_interp as itp
+import ivy_theory as thy
 
 import tempfile
 import subprocess
@@ -76,6 +77,9 @@ class Aiger(object):
     def iff(self,x,y):
         return self.orl(self.andl(x,y),self.andl(self.notl(x),self.notl(y)))
 
+    def xor(self,x,y):
+        return self.notl(self.iff(x,y))
+
     def eval(self,expr,getdef=None):
         def recur(expr):
             if il.is_app(expr):
@@ -144,14 +148,27 @@ def ceillog2(n):
         vals *= 2
     return bits
 
+def get_encoding_bits(sort):
+    iu.dbg('sort')
+    interp = thy.get_sort_theory(sort)
+    if il.is_enumerated_sort(interp):
+        n = ceillog2(len(interp.defines()))
+    elif isinstance(interp,thy.BitVectorTheory):
+        n = interp.bits
+    elif il.is_boolean_sort(interp):
+        n = 1
+    else:
+        msg = 'model checking cannot handle sort {}'.format(sort)
+        if interp is not sort:
+            msg += '(interpreted as {})'.format(interp)
+        raise iu.IvyError(None,msg)
+    return n
+                                  
 
 def encode_vars(syms,encoding):
     res = []
     for sym in syms:
-        if il.is_enumerated(sym):
-            n = ceillog2(len(sym.sort.defines()))
-        else:
-            n = 1
+        n = get_encoding_bits(sym.sort)
         vs = [sym.suffix('[{}]'.format(i)) for i in range(n)]
         encoding[sym] = vs
         res.extend(vs)
@@ -171,6 +188,14 @@ class Encoder(object):
         sublatches = encode_vars(latches,self.encoding)
         suboutputs = encode_vars(outputs,self.encoding)
         self.sub = Aiger(subinputs,sublatches,suboutputs)
+        self.ops = {
+            '+' : self.encode_plus,
+            '-' : self.encode_minus,
+            '*' : self.encode_times,
+            '/' : self.encode_div,
+            '%' : self.encode_mod,
+            '<' : self.encode_le,
+            }
         
     def true(self):
         return [self.sub.true()]
@@ -212,6 +237,12 @@ class Encoder(object):
                 if sym in il.sig.constructors:
                     m = sym.sort.defines().index(sym.name)
                     res = self.binenc(m,ceillog2(len(sym.sort.defines())))
+                elif sym.is_numeral() and il.is_interpreted_sort(sym.sort):
+                    n = get_encoding_bits(sym.sort)
+                    res = self.binenc(int(sym.name),n)
+                elif sym.name in self.ops and il.is_interpreted_sort(sym.sort.dom[0]):
+                    args = map(recur,expr.args)
+                    res = self.ops[sym.name](expr.args[0].sort,*args)
                 else:
                     assert len(expr.args) == 0
                     try:
@@ -263,6 +294,8 @@ class Encoder(object):
         return str(self.sub)
 
     def gebin(self,bits,n):
+        iu.dbg('bits')
+        iu.dbg('n')
         if n == 0:
             return self.sub.true()
         if n >= 2**len(bits):
@@ -285,7 +318,7 @@ class Encoder(object):
         return res
 
     def encode_equality(self,sort,*eterms):
-        n = len(sort.defines())
+        n = len(sort.defines()) if il.is_enumerated_sort(sort) else 2**len(eterms[0])
         bits = ceillog2(n)
         iu.dbg('eterms')
         eqs = self.sub.andl(*[self.sub.iff(x,y) for x,y in zip(*eterms)])
@@ -293,21 +326,91 @@ class Encoder(object):
         res =  [self.sub.orl(eqs,alt)]
         return res
 
+    def encode_plus(self,sort,x,y,cy=None):
+        res = []
+        if cy is None:
+            cy = self.sub.false()
+        for i in range(len(x)-1,-1,-1):
+            res.append(self.sub.xor(self.sub.xor(x[i],y[i]),cy))
+            cy = self.sub.orl(self.sub.andl(x[i],y[i]),self.sub.andl(x[i],cy),self.sub.andl(y[i],cy))
+        res.reverse()
+        return res
+
+    def encode_minus(self,sort,x,y):
+        ycom = self.notl(y)
+        return self.encode_plus(sort,x,ycom,self.sub.true())
+
+    def encode_times(self,sort,x,y):
+        res = [self.sub.false() for _ in x]
+        for i in range(0,len(x)):
+            res = res[1:] + [self.sub.false()]
+            res = self.encode_ite(sort,x[i],self.encode_plus(sort,res,y),res)
+        return res
+
+    def encode_lt(self,sort,x,y,cy=None):
+        if cy is None:
+            cy = self.sub.false()
+        for i in range(len(x)-1,-1,-1):
+            cy = self.sub.orl(self.sub.andl(x[i],y[i]),self.sub.andl(self.sub.iff(x[i],y[i]),cy))
+        return cy
+            
+    def encode_le(self,sort,x,y):
+        return encode_lt(self,sort,x,y,cy=self.sub.true())
+
+    def encode_div(self,sort,x,y):
+        thing = [self.sub.false() for _ in x]
+        res = []
+        for i in range(0,len(x)):
+            thing = thing[1:] + [x[i]]
+            le = encode_le(y,thing)
+            thing = self.encode_ite(sort,ls,self.encode_minus(sort,thing,y),thing)
+            res.append(le)
+        return res
+
+    def encode_mod(self,sort,x,y):
+        return self.encode_sub(x,self.encode_div(x,y))
+
     def get_state(self,post):
         subres = self.sub.get_state(post)
         res = dict()
         for v in self.latches:
             bits = [subres[s] for s in self.encoding[v]]
-            if il.is_enumerated(v):
+            interp = thy.get_sort_theory(v.sort)
+            if il.is_enumerated_sort(interp):
                 num = self.bindec(bits)
                 vals = v.sort.defines()
                 val = vals[num] if num < len(vals) else vals[-1]
                 val = il.Symbol(val,v.sort)
-            else:
+            elif isinstance(interp,thy.BitVectorTheory):
+                num = self.bindec(bits)
+                val = il.Symbol(str(num),v.sort)
+            elif il.is_boolean_sort(interp):
                 val = bits[0]
+            else:
+                assert False,'variable has unexpected sort: {} {}'.format(v,s.sort)
             res[v] = val
         return res
 
+def is_finite_sort(sort):
+    interp = thy.get_sort_theory(sort)
+    return (il.is_enumerated_sort(interp) or 
+            isinstance(interp,thy.BitVectorTheory) or
+            il.is_boolean_sort(interp))
+
+# Tricky: if an atomic proposition has a next variable in it, but no curremnt versions of state
+# variables, it is a candidate to become an abstract state variable. THis function computes the
+# current state version of such an express from its next state version, or returns None if the expression
+# does not qualify.
+# 
+
+def prev_expr(stvarset,expr):
+    if any(sym in stvarset for sym in ilu.symbols_ast(expr)):
+        return None
+    news = [sym for sym in ilu.used_symbols_ast(expr) if tr.is_new(sym)]
+    if news:
+        rn = dict((sym,tr.new_of(sym)) for sym in news)
+        return ilu.rename_ast(expr,rn)
+    return None        
 
 def to_aiger(mod,ext_act):
 
@@ -327,6 +430,56 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
+    # get the background theory
+
+    axioms = mod.background_theory()
+#    iu.dbg('axioms')
+
+    # Propositionally abstract
+
+    stvarset = set(stvars)
+    prop_abs = dict()
+    global prop_abs_ctr  # sigh -- python lameness
+    prop_abs_ctr = 0
+    new_stvars = []
+    def new_prop(expr):
+        res = prop_abs.get(expr,None)
+        if res is None:
+            prev = prev_expr(stvarset,expr)
+            if prev is not None:
+                pva = new_prop(prev)
+                res = tr.new(pva)
+                new_stvars.append(pva)
+            else:
+                global prop_abs_ctr
+                res = il.Symbol('__abs[{}]'.format(prop_abs_ctr),expr.sort)
+                prop_abs[expr] = res
+                prop_abs_ctr += 1
+        return res
+    def mk_prop_abs(expr):
+        if (il.is_quantifier(expr) or 
+            len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args)):
+            return new_prop(expr)
+        return expr.clone(map(mk_prop_abs,expr.args))
+    new_defs = []
+    for df in trans.defs:
+        if len(df.args[0].args) == 0 and is_finite_sort(df.args[0].sort):
+            new_defs.append(df)
+        else:
+            prop_abs[df.to_constraint()] = il.And()
+    new_defs = map(mk_prop_abs,new_defs)
+    new_fmlas = [mk_prop_abs(il.close_formula(fmla)) for fmla in trans.fmlas]
+    trans = ilu.Clauses(new_fmlas,new_defs)
+    invariant = mk_prop_abs(invariant)
+    rn = dict((sym,tr.new(sym)) for sym in stvars)
+    mk_prop_abs(ilu.rename_ast(invariant,rn))  # this is to pick up state variables from invariant
+    stvars = [sym for sym in stvars if is_finite_sort(sym.sort)] + new_stvars
+
+    iu.dbg('trans')
+    iu.dbg('stvars')
+    iu.dbg('invariant')
+    exit(0)
+
     # For each state var, create a variable that corresponds to the input of its latch
 
     def fix(v):
@@ -350,7 +503,8 @@ def to_aiger(mod,ext_act):
     def_set = set(df.defines() for df in trans.defs)
     def_set.update(stvars)
     iu.dbg('def_set')
-    inputs = [sym for sym in ilu.used_symbols_clauses(trans) if sym not in def_set]
+    inputs = [sym for sym in ilu.used_symbols_clauses(trans) if
+              sym not in def_set and not il.is_interpreted_symbol(sym)]
     fail = il.Symbol('__fail',il.find_sort('bool'))
     outputs = [fail]
     
@@ -417,7 +571,7 @@ class ModelChecker(object):
 
 class ABCModelChecker(ModelChecker):
     def cmd(self,aigfilename,outfilename):
-        return ['abc','-c','read_aiger {}; dprove; write_aiger_cex  {}'.format(aigfilename,outfilename)]
+        return ['abc','-c','read_aiger {}; pdr; write_aiger_cex  {}'.format(aigfilename,outfilename)]
     def scrape(self,alltext):
         return 'Property proved' in alltext
 

@@ -1,0 +1,22 @@
+#lang ivy1.7
+
+type t
+
+var x : t
+var y : t
+
+
+axiom x = 0 & y = 0 -> x = y
+invariant x = y
+
+after init {
+    x := 0;
+    y := 0
+}
+
+action a  = {
+  x := 0
+}
+
+
+export a

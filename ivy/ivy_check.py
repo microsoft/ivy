@@ -467,7 +467,8 @@ def check_module():
                 continue
             if opt_mc.get():
                 import ivy_mc
-                ivy_mc.check_isolate()
+                with im.module.theory_context():
+                    ivy_mc.check_isolate()
             else:
                 check_isolate()
     print ''
