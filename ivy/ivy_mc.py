@@ -77,6 +77,9 @@ class Aiger(object):
     def iff(self,x,y):
         return self.orl(self.andl(x,y),self.andl(self.notl(x),self.notl(y)))
 
+    def implies(self,x,y):
+        return self.orl(self.notl(x),y)
+
     def xor(self,x,y):
         return self.notl(self.iff(x,y))
 
@@ -139,6 +142,37 @@ class Aiger(object):
             strings.append(str('{} {} {}'.format(x,y,z)))
         return '\n'.join(strings)+'\n'
                                           
+    def sym_vals(self,syms):
+        return ''.join(self.state[self.map[x]] for x in syms)
+
+    def latch_vals(self):
+        return self.sym_vals(self.latches)
+
+    def show_state(self):
+        print 'state: {}'.format(self.latch_vals())
+        
+    def reset(self):
+        self.state = dict((self.map[x],'0') for x in self.latches)
+        self.show_state()
+
+    def step(self,inp):
+        assert len(inp) == len(self.inputs)
+        for x,y in zip(self.inputs,inp):
+            self.state[self.map[x]] = y
+        print 'input: {}'.format(self.sym_vals(self.inputs))
+        def getin(gi):
+            v = self.state[gi & ~1]
+            return ('0' if v == '1' else '1') if (gi & 1) else v
+        for out,in0,in1 in self.gates:
+            res = '1' if (getin(in0) == '1' and getin(in1) == '1') else '0'
+            self.state[out] = res
+            print 'gate {}: {}'.format(out,res)
+        print 'outputs: {}'.format(''.join(getin(self.values[x]) for x in self.outputs))
+        for lt in self.latches:
+            self.state[self.map[lt]] = getin(self.values[lt])
+        self.show_state()
+            
+            
 # functions for binary encoding of finite sorts
 
 def ceillog2(n):
@@ -224,6 +258,11 @@ class Encoder(object):
     def notl(self,arg):
         return map(self.sub.notl,arg)
     
+    def implies(self,x,y):
+        return [self.sub.implies(a,b) for a,b in zip(x,y)]
+
+    def iff(self,x,y):
+        return [self.sub.iff(a,b) for a,b in zip(x,y)]
 
     def eval(self,expr,getdef=None):
         def recur(expr):
@@ -258,6 +297,10 @@ class Encoder(object):
                     res = self.orl(*args)
                 elif isinstance(expr,il.Not):
                     res = self.notl(*args)
+                elif isinstance(expr,il.Implies):
+                    res = self.implies(*args)
+                elif isinstance(expr,il.Iff):
+                    res = self.iff(*args)
                 elif il.is_eq(expr):
                     res = self.encode_equality(expr.args[0].sort,*args)
                 else:
@@ -397,6 +440,100 @@ def is_finite_sort(sort):
             isinstance(interp,thy.BitVectorTheory) or
             il.is_boolean_sort(interp))
 
+
+# This is where we do pattern-based eager instantiation of the axioms
+
+def instantiate_axioms(mod,stvars,trans,invariant):
+
+    # Get all the triggers. For now only automatic triggers
+
+    def get_trigger(expr,vs):
+        if il.is_quantifier(expr) or il.is_variable(expr):
+            return None
+        for a in expr.args:
+            r = get_trigger(a,vs)
+            if r is not None:
+                return r
+        if il.is_app(expr) or il.is_eq(expr):
+            evs = ilu.used_variables_ast(expr)
+            if all(v in evs for v in vs):
+                return expr
+
+    triggers = []
+    for ax in mod.labeled_axioms:
+        fmla = ax.formula
+        vs = list(ilu.used_variables_ast(fmla))
+        if vs:
+            trig = get_trigger(fmla,vs)
+            if trig is not None:
+                iu.dbg('trig')
+                iu.dbg('ax')
+                triggers.append((trig,ax))
+
+    insts = set()
+    global inst_list # python lamemess -- should be local but inner function cannot access
+    inst_list = []
+
+    def match(pat,expr,mp):
+        if il.is_variable(pat):
+            if pat in mp:
+                return expr == mp[pat]
+            mp[pat] = expr
+            return True
+        if il.is_app(pat):
+            return (is_app(expr) and pat.rep == expr.rep
+                    and all(match(x,y,mp) for x,y in zip(pat.args,expr.args)))
+        if il.is_quantifier(pat):
+            return False
+        return type(pat) is type(expr) and all(match(x,y,mp) for x,y in zip(pat.args,expr.args))
+                                                                
+    # TODO: make sure matches are ground
+    def recur(expr):
+        for e in expr.args:
+            recur(e)
+        for trig,ax in triggers:
+            mp = dict()
+            if match(trig,expr,mp):
+                fmla = il.substitute(ax.formula,mp)
+                if fmla not in insts:
+                    insts.add(fmla)
+                    inst_list.append(fmla)
+
+    # match triggers against the defs and fmlas and invariant
+    for f in trans.defs + trans.fmlas + [invariant]:
+        recur(f)
+                    
+    iu.dbg('[str(f) for f in inst_list]')
+    return inst_list
+
+
+# This eliminates ite's over non-finite sorts by translating (x if c
+# else y) to a fresh variable v with an added constraint (v = x if c
+# else v = y). As an optimization, (z = x if c else y) is converted to
+# (z = x if c else z = y) to avoid introducing a constraint.
+#
+# This lowering is useful, since we avoid having to introduce axioms
+# for ite.
+
+ite_ctr = 0
+def elim_ite(expr,cnsts):
+    if isinstance(expr,il.Ite):
+        global ite_ctr
+        c,x,y = expr.args
+        if not is_finite_sort(x.sort):
+            v = il.Symbol('__ite[{}]'.format(ite_ctr),x.sort)
+            ite_ctr += 1
+            cnsts.append(il.Ite(elim_ite(c,cnsts),elim_ite(il.Equals(v,x),cnsts),elim_ite(il.Equals(v,y),cnsts)))
+            return v
+    if il.is_eq(expr):
+        v,e = expr.args
+        if isinstance(e,il.Ite):
+            c,x,y = e.args
+            if not is_finite_sort(x.sort):
+                return il.Ite(elim_ite(c,cnsts),elim_ite(il.Equals(v,x),cnsts),elim_ite(il.Equals(v,y),cnsts))
+    return expr.clone([elim_ite(e,cnsts) for e in expr.args])
+
+
 # Tricky: if an atomic proposition has a next variable in it, but no curremnt versions of state
 # variables, it is a candidate to become an abstract state variable. THis function computes the
 # current state version of such an express from its next state version, or returns None if the expression
@@ -422,26 +559,72 @@ def to_aiger(mod,ext_act):
     init = ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())]))
     action = ia.IfAction(init_var,ext_act,init)
 
-    # get the invariant to be proved:
+    # get the invariant to be proved, replacing free variables with
+    # skolems:
 
     invariant = il.And(*[lf.formula for lf in mod.labeled_conjs])
+    skolemizer = lambda v: ilu.var_to_skolem('__',Variable(v.rep,v.sort))
+    vs = ilu.used_variables_in_order_ast(invariant)
+    sksubs = dict((v.rep,skolemizer(v)) for v in vs)
+    invariant = ilu.substitute_ast(invariant,sksubs)
 
     # compute the transition relation
 
     stvars,trans,error = action.update(mod,None)
     
-    # get the background theory
+    # TODO: get the axioms (or maybe only the ground ones?)
 
-    axioms = mod.background_theory()
-#    iu.dbg('axioms')
+    # axioms = mod.background_theory()
+
+    # rn = dict((sym,tr.new(sym)) for sym in stvars)
+    # next_axioms = ilu.rename_clauses(axioms,rn)
+    # return ilu.and_clauses(axioms,next_axioms)
 
     # Propositionally abstract
 
+    # step 1: get rid of definitions of non-finite symbols by turning
+    # them into constraints
+
+    new_defs = []
+    new_fmlas = []
+    for df in trans.defs:
+        if len(df.args[0].args) == 0 and is_finite_sort(df.args[0].sort):
+            new_defs.append(df)
+        else:
+            fmla = df.to_constraint()
+            new_fmlas.append(fmla)
+    trans = ilu.Clauses(new_fmlas+trans.fmlas,new_defs)
+
+    # step 2: get rid of ite's over non-finite sorts, by introducing constraints
+
+    cnsts = []
+    new_defs = [elim_ite(df,cnsts) for df in trans.defs]
+    new_fmlas = [elim_ite(fmla,cnsts) for fmla in trans.fmlas]
+    trans = ilu.Clauses(new_fmlas+cnsts,new_defs)
+    
+    # step 3: instantiate the axioms using patterns
+
+    # We have to condition both the transition relation and the
+    # invariant on the axioms, so we define a boolean symbol '__axioms'
+    # to represent the axioms.
+
+    axs = instantiate_axioms(mod,stvars,trans,invariant)
+    ax_conj = il.And(*axs)
+    ax_var = il.Symbol('__axioms',ax_conj.sort)
+    ax_def = il.Definition(ax_var,ax_conj)
+    invariant = il.Implies(ax_var,invariant)
+    trans = ilu.Clauses(trans.fmlas+[ax_var],trans.defs+[ax_def])
+    
+    # step 4: eliminate all non-propositional atoms by replacing with fresh booleans
+    # An atom with next-state symbols is converted to a next-state symbol if possible
+
     stvarset = set(stvars)
-    prop_abs = dict()
+    prop_abs = dict()  # map from atoms to proposition variables
     global prop_abs_ctr  # sigh -- python lameness
-    prop_abs_ctr = 0
-    new_stvars = []
+    prop_abs_ctr = 0   # counter for fresh symbols
+    new_stvars = []    # list of fresh symbols
+
+    # get the propositional abstraction of an atom
     def new_prop(expr):
         res = prop_abs.get(expr,None)
         if res is None:
@@ -450,35 +633,42 @@ def to_aiger(mod,ext_act):
                 pva = new_prop(prev)
                 res = tr.new(pva)
                 new_stvars.append(pva)
+                prop_abs[expr] = res  # prevent adding this again to new_stvars
             else:
                 global prop_abs_ctr
                 res = il.Symbol('__abs[{}]'.format(prop_abs_ctr),expr.sort)
+                print '{} = {}'.format(res,expr)
                 prop_abs[expr] = res
                 prop_abs_ctr += 1
         return res
+
+    # propositionally abstract an expression
     def mk_prop_abs(expr):
         if (il.is_quantifier(expr) or 
             len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args)):
             return new_prop(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
-    new_defs = []
-    for df in trans.defs:
-        if len(df.args[0].args) == 0 and is_finite_sort(df.args[0].sort):
-            new_defs.append(df)
-        else:
-            prop_abs[df.to_constraint()] = il.And()
-    new_defs = map(mk_prop_abs,new_defs)
+
+    
+    # apply propositional abstraction to the transition relation
+    new_defs = map(mk_prop_abs,trans.defs)
     new_fmlas = [mk_prop_abs(il.close_formula(fmla)) for fmla in trans.fmlas]
     trans = ilu.Clauses(new_fmlas,new_defs)
+
+    # apply propositional abstraction to the invariant
     invariant = mk_prop_abs(invariant)
+
+    # create next-state symbols for atoms in the invariant (is this needed?)
     rn = dict((sym,tr.new(sym)) for sym in stvars)
     mk_prop_abs(ilu.rename_ast(invariant,rn))  # this is to pick up state variables from invariant
+
+    # update the state variables by removing the non-finite ones and adding the fresh state booleans
     stvars = [sym for sym in stvars if is_finite_sort(sym.sort)] + new_stvars
 
     iu.dbg('trans')
     iu.dbg('stvars')
     iu.dbg('invariant')
-    exit(0)
+#    exit(0)
 
     # For each state var, create a variable that corresponds to the input of its latch
 
@@ -493,7 +683,7 @@ def to_aiger(mod,ext_act):
     # Turn the transition constraint into a definition
     
     cnst_var = il.Symbol('__cnst',il.find_sort('bool'))
-    new_defs = trans.defs + [il.Definition(tr.new(cnst_var),il.Not(il.And(*trans.fmlas)))]
+    new_defs = trans.defs + [il.Definition(tr.new(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas))))]
     stvars.append(cnst_var)
     trans = ilu.Clauses([],new_defs)
     
@@ -543,6 +733,7 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
         if res != '1':
             badwit()
         tr = None
+        aiger.sub.reset()
         for line in f:
             if line.endswith('\n'):
                 line = line[:-1]
@@ -551,6 +742,8 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
             if len(cols) != 4:
                 badwit()
             pre,inp,out,post = cols
+            aiger.sub.step(inp)
+            post = aiger.sub.latch_vals()  # use this, since file can be wrong!
             stvals = []
             stmap = aiger.get_state(post)                     
             iu.dbg('stmap')

@@ -6,7 +6,9 @@ var x : t
 var y : t
 
 
-axiom x = 0 & y = 0 -> x = y
+axiom X:t = 0 & Y = 0 -> X = Y
+axiom X:t = Y & Y = 0 -> X = 0
+
 invariant x = y
 
 after init {
