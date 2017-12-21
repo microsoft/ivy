@@ -163,6 +163,10 @@ class Aiger(object):
             self.state[self.map[x]] = y
         print 'input: {}'.format(self.sym_vals(self.inputs))
         def getin(gi):
+            if gi == 0:
+                return '0'
+            if gi == 1:
+                return '1'
             v = self.state[gi & ~1]
             return ('0' if v == '1' else '1') if (gi & 1) else v
         for out,in0,in1 in self.gates:
@@ -485,7 +489,7 @@ def instantiate_axioms(mod,stvars,trans,invariant):
             mp[pat] = expr
             return True
         if il.is_app(pat):
-            return (is_app(expr) and pat.rep == expr.rep
+            return (il.is_app(expr) and pat.rep == expr.rep
                     and all(match(x,y,mp) for x,y in zip(pat.args,expr.args)))
         if il.is_quantifier(pat):
             return False
@@ -564,6 +568,51 @@ def prev_expr(stvarset,expr):
         return ilu.rename_ast(expr,rn)
     return None        
 
+# Class for eliminating quantifiers by finite instantiate. Here,
+# sort_constants is a map from each sort to a list of the grounds
+# terms used to instantiate it.  For each quantified subformula, we
+# generate a collection of constraints that are instances of the
+# quantifier instantion axiom. As a side effect, we replace each
+# quantified subformula by a definition, to avoid many copies of the
+# subformula.
+
+class Qelim(object):
+    def __init__(self,sort_constants):
+        self.syms = dict()     # map from quantified formulas to proposition variables
+        self.syms_ctr = 0      # counter for fresh symbols
+        self.fmlas = []        # constraints added
+    def fresh(self,expr):
+        res = il.Symbol('__qe[{}]'.format(qelim_syms_ctr),expr.sort)
+        qelim_syms[expr] = res
+        qelim_syms_ctr += 1
+    def qe(expr):
+        if il.is_quantifier(expr):
+            old = qelim_syms.get(expr,None)
+            if old is not None:
+                return old
+            res = self.fresh(expr)
+            consts = [sort_constants[x.sort] for x in expr.variables]
+            values = itertools.product(*consts)
+            maps = [dict(zip(expr.variables,v)) for v in values]
+            insts = [il.substitute(expr.body,m) for m in maps]
+            for i in insts:
+                print 'inst: {}'.format(i)
+            for inst in insts:
+                c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
+                self.fmlas.append(c)
+            return res
+        return expr.clone(map(qe,expr.args))
+    def __call__(self,trans,invariant):
+        # apply to the transition relation
+        new_defs = map(self.qe,trans.defs)
+        new_fmlas = [self.qe(il.close_formula(fmla)) for fmla in trans.fmlas]
+        trans = ilu.Clauses(new_fmlas+fmlas,new_defs)
+
+    # apply propositional abstraction to the invariant
+    invariant = mk_prop_abs(invariant)
+        ne
+        
+
 def to_aiger(mod,ext_act):
 
     # we use a special state variable __init to indicate the initial state
@@ -617,6 +666,10 @@ def to_aiger(mod,ext_act):
     new_fmlas = [elim_ite(fmla,cnsts) for fmla in trans.fmlas]
     trans = ilu.Clauses(new_fmlas+cnsts,new_defs)
     
+    # step 3: eliminate quantfiers using finite instantiations
+
+        sort_constants = mine_constants(mod,trans,invariant)
+
     # step 3: instantiate the axioms using patterns
 
     # We have to condition both the transition relation and the
@@ -656,8 +709,6 @@ def to_aiger(mod,ext_act):
                 prop_abs[expr] = res
                 prop_abs_ctr += 1
         return res
-
-    sort_constants = mine_constants(mod,trans,invariant)
 
     # propositionally abstract an expression
     global mk_prop_fmlas
