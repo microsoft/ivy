@@ -792,6 +792,9 @@ def is_boolean(term):
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
 
+def is_function_sort(s):
+    return isinstance(s,FunctionSort)
+
 def FuncConstSort(*sorts):
     return FunctionSort(*sorts) if len(sorts) > 1 else sorts[0]
 

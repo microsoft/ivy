@@ -10,6 +10,8 @@ import ivy_theory as thy
 
 import tempfile
 import subprocess
+from collections import defaultdict
+import itertools
 
 
 def get_truth(digits,idx,syms):
@@ -435,6 +437,8 @@ class Encoder(object):
         return res
 
 def is_finite_sort(sort):
+    if il.is_function_sort(sort):
+        return False
     interp = thy.get_sort_theory(sort)
     return (il.is_enumerated_sort(interp) or 
             isinstance(interp,thy.BitVectorTheory) or
@@ -534,6 +538,17 @@ def elim_ite(expr,cnsts):
     return expr.clone([elim_ite(e,cnsts) for e in expr.args])
 
 
+# Here we get the constants over which to instantiate universal quantifiers. For now,
+# we are just using the ones that occur in the invariant
+
+def mine_constants(mod,trans,invariant):
+    res = defaultdict(list)
+    for c in ilu.used_symbols_ast(invariant):
+        if not il.is_function_sort(c.sort):
+            res[c.sort].append(c)
+    iu.dbg('res')
+    return res
+
 # Tricky: if an atomic proposition has a next variable in it, but no curremnt versions of state
 # variables, it is a candidate to become an abstract state variable. THis function computes the
 # current state version of such an express from its next state version, or returns None if the expression
@@ -563,7 +578,7 @@ def to_aiger(mod,ext_act):
     # skolems:
 
     invariant = il.And(*[lf.formula for lf in mod.labeled_conjs])
-    skolemizer = lambda v: ilu.var_to_skolem('__',Variable(v.rep,v.sort))
+    skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     invariant = ilu.substitute_ast(invariant,sksubs)
@@ -642,10 +657,27 @@ def to_aiger(mod,ext_act):
                 prop_abs_ctr += 1
         return res
 
+    sort_constants = mine_constants(mod,trans,invariant)
+
     # propositionally abstract an expression
+    global mk_prop_fmlas
+    mk_prop_fmlas = []
     def mk_prop_abs(expr):
-        if (il.is_quantifier(expr) or 
-            len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args)):
+        if il.is_quantifier(expr):
+            consts = [sort_constants[x.sort] for x in expr.variables]
+            values = itertools.product(*consts)
+            maps = [dict(zip(expr.variables,v)) for v in values]
+            insts = [il.substitute(expr.body,m) for m in maps]
+            for i in insts:
+                print 'inst: {}'.format(i)
+            pas = [mk_prop_abs(e) for e in insts]
+            abs_pred = new_prop(expr)
+            for pa in pas:
+                c = il.Implies(abs_pred,pa) if il.is_forall(expr) else il.Implies(pa,abs_pred)
+                global mk_prop_fmlas
+                mk_prop_fmlas.append(c)
+            return abs_pred
+        if len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args):
             return new_prop(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
 
@@ -653,7 +685,7 @@ def to_aiger(mod,ext_act):
     # apply propositional abstraction to the transition relation
     new_defs = map(mk_prop_abs,trans.defs)
     new_fmlas = [mk_prop_abs(il.close_formula(fmla)) for fmla in trans.fmlas]
-    trans = ilu.Clauses(new_fmlas,new_defs)
+    trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
 
     # apply propositional abstraction to the invariant
     invariant = mk_prop_abs(invariant)
@@ -693,7 +725,9 @@ def to_aiger(mod,ext_act):
     def_set = set(df.defines() for df in trans.defs)
     def_set.update(stvars)
     iu.dbg('def_set')
-    inputs = [sym for sym in ilu.used_symbols_clauses(trans) if
+    used = ilu.used_symbols_clauses(trans)
+    used.update(ilu.symbols_ast(invariant))
+    inputs = [sym for sym in used if
               sym not in def_set and not il.is_interpreted_symbol(sym)]
     fail = il.Symbol('__fail',il.find_sort('bool'))
     outputs = [fail]
