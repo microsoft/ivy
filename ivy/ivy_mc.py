@@ -493,7 +493,18 @@ def instantiate_axioms(mod,stvars,trans,invariant):
                     and all(match(x,y,mp) for x,y in zip(pat.args,expr.args)))
         if il.is_quantifier(pat):
             return False
-        return type(pat) is type(expr) and all(match(x,y,mp) for x,y in zip(pat.args,expr.args))
+        if type(pat) is not type(expr):
+            return False
+        if il.is_eq(expr):
+            px,py = pat.args
+            ex,ey = expr.args
+            save = mp.copy()
+            if match(px,ex,mp) and match(py,ey,mp):
+                return True
+            mp.clear()
+            mp.update(save)
+            return match(px,ey,mp) and match(py,ex,mp)
+        return all(match(x,y,mp) for x,y in zip(pat.args,expr.args))
                                                                 
     # TODO: make sure matches are ground
     def recur(expr):
@@ -502,7 +513,7 @@ def instantiate_axioms(mod,stvars,trans,invariant):
         for trig,ax in triggers:
             mp = dict()
             if match(trig,expr,mp):
-                fmla = il.substitute(ax.formula,mp)
+                fmla = normalize(il.substitute(ax.formula,mp))
                 if fmla not in insts:
                     insts.add(fmla)
                     inst_list.append(fmla)
@@ -568,6 +579,49 @@ def prev_expr(stvarset,expr):
         return ilu.rename_ast(expr,rn)
     return None        
 
+# Here we deal with normalizing of terms. In particular, we order the
+# equalities and convert x = x to true. This means we don't have to
+# axiomatize symmetry and reflexivity. We assume terms we normalize
+# are ground.
+
+def term_ord(x,y):
+    t1,t2 = str(type(x)),str(type(y))
+    if t1 < t2:
+        return -1
+    if t1 > t2:
+        return 1
+    if il.is_app(x):
+        if x.rep.name < y.rep.name:
+            return -1
+        if x.rep.name > y.rep.name:
+            return 1
+    l1,l2 = len(x.args),len(y.args)
+    if l1 < l2:
+        return -1
+    if l1 > l2:
+        return 1
+    for x1,y1 in zip(x.args,y.args):
+        res = term_ord(x1,y1)
+        if res != 0:
+            return res
+    return 0
+
+def clone_normal(expr,args):
+    if il.is_eq(expr):
+        x,y = args
+        if x == y:
+            return il.And()
+        to = term_ord(x,y)
+        print 'term_ord({},{}) = {}'.format(x,y,to)
+        if to == 1:
+            x,y = y,x
+        return expr.clone([x,y])
+    return expr.clone(args)
+
+def normalize(expr):
+    return clone_normal(expr,map(normalize,expr.args))
+    
+
 # Class for eliminating quantifiers by finite instantiate. Here,
 # sort_constants is a map from each sort to a list of the grounds
 # terms used to instantiate it.  For each quantified subformula, we
@@ -581,37 +635,40 @@ class Qelim(object):
         self.syms = dict()     # map from quantified formulas to proposition variables
         self.syms_ctr = 0      # counter for fresh symbols
         self.fmlas = []        # constraints added
+        self.sort_constants = sort_constants
     def fresh(self,expr):
-        res = il.Symbol('__qe[{}]'.format(qelim_syms_ctr),expr.sort)
-        qelim_syms[expr] = res
-        qelim_syms_ctr += 1
-    def qe(expr):
+        res = il.Symbol('__qe[{}]'.format(self.syms_ctr),expr.sort)
+        self.syms[expr] = res
+        self.syms_ctr += 1
+        return res
+    def qe(self,expr):
         if il.is_quantifier(expr):
-            old = qelim_syms.get(expr,None)
+            old = self.syms.get(expr,None)
             if old is not None:
                 return old
             res = self.fresh(expr)
-            consts = [sort_constants[x.sort] for x in expr.variables]
+            consts = [self.sort_constants[x.sort] for x in expr.variables]
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
-            insts = [il.substitute(expr.body,m) for m in maps]
+            insts = [normalize(il.substitute(expr.body,m)) for m in maps]
             for i in insts:
                 print 'inst: {}'.format(i)
             for inst in insts:
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
             return res
-        return expr.clone(map(qe,expr.args))
+        return clone_normal(expr,map(self.qe,expr.args))
     def __call__(self,trans,invariant):
         # apply to the transition relation
         new_defs = map(self.qe,trans.defs)
         new_fmlas = [self.qe(il.close_formula(fmla)) for fmla in trans.fmlas]
-        trans = ilu.Clauses(new_fmlas+fmlas,new_defs)
-
-    # apply propositional abstraction to the invariant
-    invariant = mk_prop_abs(invariant)
-        ne
+        # apply to the invariant
+        invariant = self.qe(invariant)
+        # add the transition constraints to the new trans
+        trans = ilu.Clauses(new_fmlas+self.fmlas,new_defs)
+        return trans,invariant
         
+
 
 def to_aiger(mod,ext_act):
 
@@ -668,9 +725,14 @@ def to_aiger(mod,ext_act):
     
     # step 3: eliminate quantfiers using finite instantiations
 
-        sort_constants = mine_constants(mod,trans,invariant)
+    sort_constants = mine_constants(mod,trans,invariant)
+    trans,invariant = Qelim(sort_constants)(trans,invariant)
 
-    # step 3: instantiate the axioms using patterns
+    print 'after qe:'
+    print 'trans: {}'.format(trans)
+    print 'invariant: {}'.format(invariant)
+
+    # step 4: instantiate the axioms using patterns
 
     # We have to condition both the transition relation and the
     # invariant on the axioms, so we define a boolean symbol '__axioms'
@@ -683,7 +745,7 @@ def to_aiger(mod,ext_act):
     invariant = il.Implies(ax_var,invariant)
     trans = ilu.Clauses(trans.fmlas+[ax_var],trans.defs+[ax_def])
     
-    # step 4: eliminate all non-propositional atoms by replacing with fresh booleans
+    # step 5: eliminate all non-propositional atoms by replacing with fresh booleans
     # An atom with next-state symbols is converted to a next-state symbol if possible
 
     stvarset = set(stvars)
@@ -714,21 +776,7 @@ def to_aiger(mod,ext_act):
     global mk_prop_fmlas
     mk_prop_fmlas = []
     def mk_prop_abs(expr):
-        if il.is_quantifier(expr):
-            consts = [sort_constants[x.sort] for x in expr.variables]
-            values = itertools.product(*consts)
-            maps = [dict(zip(expr.variables,v)) for v in values]
-            insts = [il.substitute(expr.body,m) for m in maps]
-            for i in insts:
-                print 'inst: {}'.format(i)
-            pas = [mk_prop_abs(e) for e in insts]
-            abs_pred = new_prop(expr)
-            for pa in pas:
-                c = il.Implies(abs_pred,pa) if il.is_forall(expr) else il.Implies(pa,abs_pred)
-                global mk_prop_fmlas
-                mk_prop_fmlas.append(c)
-            return abs_pred
-        if len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args):
+        if il.is_quantifier(expr) or len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args):
             return new_prop(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
 
@@ -736,6 +784,16 @@ def to_aiger(mod,ext_act):
     # apply propositional abstraction to the transition relation
     new_defs = map(mk_prop_abs,trans.defs)
     new_fmlas = [mk_prop_abs(il.close_formula(fmla)) for fmla in trans.fmlas]
+
+    # find any immutable abstract variables, and give them a next definition
+
+    def is_immutable_expr(expr):
+        return not any(tr.is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
+    for expr,v in prop_abs.iteritems():
+        if is_immutable_expr(expr):
+            new_stvars.append(v)
+            new_defs.append(il.Definition(tr.new(v),v))
+
     trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
 
     # apply propositional abstraction to the invariant
