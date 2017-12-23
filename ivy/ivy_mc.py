@@ -851,7 +851,14 @@ def to_aiger(mod,ext_act):
             aiger.set(tr.new_of(df.defines()),aiger.eval(df.args[1]))
     aiger.set(fail,aiger.eval(il.And(init_var,il.Not(cnst_var),il.Not(invariant))))
 
-    return aiger
+    # make a decoder for the abstract propositions
+
+    decoder = dict((y,x) for x,y in prop_abs.iteritems())
+    for sym in aiger.inputs + aiger.latches:
+        if sym not in decoder:
+            decoder[sym] = sym
+
+    return aiger,decoder
 
 def badwit():
     raise iu.IvyError(None,'model checker returned mis-formated witness')
@@ -869,7 +876,7 @@ class IvyMCTrace(art.AnalysisGraph):
         iu.dbg('stvals')
         self.add(itp.State(value=ilu.Clauses(stvals),expr=itp.action_app(action,self.states[-1]),label='ext'))
 
-def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
+def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act,decoder):
     with open(witnessfilename,'r') as f:
         res = f.readline().strip()
         iu.dbg('res')
@@ -890,10 +897,14 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act):
             stvals = []
             stmap = aiger.get_state(post)                     
             iu.dbg('stmap')
-            for v in aiger.latches[:-2]: # last two are used for encoding
-                val = stmap[v]
-                if val is not None:
-                    stvals.append(il.Equals(v,val))
+            for v in aiger.latches: # last two are used for encoding
+                if v in decoder:
+                    val = stmap[v]
+                    if val is not None:
+                        stvals.append(il.Equals(decoder[v],val))
+            print 'state:'
+            for stval in stvals:
+                print stval
             if not tr:
                 tr = IvyMCTrace(stvals) # first transition is initialization
             else:
@@ -923,7 +934,7 @@ def check_isolate():
     
     # convert to aiger
 
-    aiger = to_aiger(mod,ext_act)
+    aiger,decoder = to_aiger(mod,ext_act)
     print aiger
 
     # output aiger to temp file
@@ -977,7 +988,7 @@ def check_isolate():
         print 'PASS'
     else:
         print 'FAIL'
-        tr = aiger_witness_to_ivy_trace(aiger,outfilename,ext_act)        
+        tr = aiger_witness_to_ivy_trace(aiger,outfilename,ext_act,decoder)        
         import tk_ui as ui
         iu.set_parameters({'mode':'induction'})
         gui = ui.new_ui()
