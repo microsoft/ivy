@@ -1152,3 +1152,47 @@ def call_set(action_name,env):
     call_set_rec(action_name,env,res)
     return sorted(res)
     
+# Annotations let us reconstruct an execution trace from a satisfying assignment.
+# They contain two kinds of information:
+
+# 1) for each symbol in the update formula corresponding to a program
+# variable, original program symbol it corresponds to, and the
+# execution point at which it was introduced.
+
+# 2) for each symbol corresponding to a branch decision, the program
+# execution point of the branch.
+
+# A primitive execution point is a sequence of numbers. Each number corresponds
+# to the child action of an IfAction, ChoiceAction or Sequence (or any future control
+# construct that has multiple children). A compound execution point is an if-then-else
+# with a condition, and true branch and a false branch.
+
+# There are four basic operations on annotations:
+
+# 1) conjunction -- this just merges the annotations and requires that their domains
+# be disjoint
+
+# 2) rename -- takes a map on symbols and simply renames the symbols in the domain
+
+# 3) if-then-else -- takes a condition variable c and two annotations
+# x and y, one for the true and one for the false case. It forms v ->
+# ite(c,x(v),y(v)) for each domain element common to x and y, and adds
+# the branch entry c -> []
+
+# 4) prefix -- adds a numer to the beginning of every execution point
+
+class Annotation(object):
+    def __init__(self,the_map=None):
+        self.map = dict() if the_map is None else the_map
+    def conj(self,other):
+        res = Annotation(self.map.copy()):
+        res.map.update(other.map)
+        return res
+    def rename(self.subst):
+        return Annotation(dict((subst.get(x,x),y) for x,y in self.map.iteritems()))
+    def ite(self,c,other):
+        res = Annotation(self.map.copy())
+        for x,y in other.map.iter_items():
+            res.map[x] = (x,res[x],y) if x in res else y
+        
+
