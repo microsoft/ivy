@@ -680,6 +680,68 @@ class Qelim(object):
         return trans,invariant
         
 
+def uncompose_annot(annot):
+    if not isinstance(annot,ia.ComposeAnnotation):
+        return []
+    res = uncompose_annot(annot.args[0])
+    res.append(annot.args[1])
+    return res
+    
+def unite_annot(annot):
+    if not isinstance(annot,ia.IteAnnotation):
+        return []
+    res = unite_annot(annot.elseb)
+    res.append((annot.cond,annot.thenb))
+    return res
+
+class MatchHandler(object):
+    def eval(self,cond):
+        print 'assuming: {}'.format(cond)
+        return True
+    def handle(self,action,env):
+        print '{}{}'.format(action.lineno,action)
+        print 'env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
+        
+    
+def match_annotation(action,annot,handler):
+    def recur(action,annot,env):
+        if isinstance(annot,ia.RenameAnnotation):
+            save = dict()
+            for x,y in annot.map.iteritems():
+                if x in env:
+                    save[x] = env[x]
+                env[x] = env.get(y,y)
+            recur(action,annot.arg,env)
+            env.update(save)
+            return
+        if isinstance(action,ia.Sequence):
+            annots = uncompose_annot(annot)
+            assert len(annots) == len(action.args)
+            for act,ann in zip(action.args,annots):
+                recur(act,ann,env)
+            return
+        if isinstance(action,ia.IfAction):
+            assert isinstance(annot,ia.IteAnnotation)
+            if handler.eval(env.get(annot.cond,annot.cond)):
+                recur(action.args[1],annot.thenb,env)
+            else:
+                recur(action.args[2],annot.elseb,env)
+            return
+        if isinstance(action,ia.ChoiceAction):
+            assert isinstance(annot,ia.IteAnnotation)
+            annots = unite_annot(annot)
+            assert len(annots) == len(action.args)
+            for act,(cond,ann) in reversed(zip(action.args,annots)):
+                if handler.eval(cond):
+                    recur(act,ann,env)
+                    return
+            assert False,'problem in match_annotation'
+        if isinstance(action,ia.CallAction):
+            recur(im.module.actions[action.args[0].rep],annot,env)
+            return
+        handler.handle(action,env)
+    recur(action,annot,dict())
+    
 
 def to_aiger(mod,ext_act):
 
@@ -703,6 +765,10 @@ def to_aiger(mod,ext_act):
     # compute the transition relation
 
     stvars,trans,error = action.update(mod,None)
+    
+    print 'action : {}'.format(action)
+    print 'annotation: {}'.format(trans.annot)
+    match_annotation(action,trans.annot,MatchHandler())
     
     # save the original symbols for trace
     orig_syms = ilu.used_symbols_clauses(trans)
