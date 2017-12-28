@@ -42,6 +42,7 @@ class Aiger(object):
         self.values = dict()
         for x in inputs + latches:
             self.map[x] = self.next_id * 2
+#            print 'var: {} = {}'.format(x,self.next_id * 2)
             self.next_id += 1
         
     def true(self):
@@ -54,6 +55,7 @@ class Aiger(object):
         return self.map[sym]
 
     def define(self,sym,val):
+#        print 'define: {} = {}'.format(sym,val)
         self.map[sym] = val
         
     def andl(self,*args):
@@ -147,6 +149,9 @@ class Aiger(object):
     def sym_vals(self,syms):
         return ''.join(self.state[self.map[x]] for x in syms)
 
+    def sym_next_vals(self,syms):
+        return ''.join(self.getin(self.values[x]) for x in syms)
+
     def latch_vals(self):
         return self.sym_vals(self.latches)
 
@@ -158,27 +163,29 @@ class Aiger(object):
         
     def reset(self):
         self.state = dict((self.map[x],'0') for x in self.latches)
-#        self.show_state()
+
+    def getin(self,gi):
+        if gi == 0:
+            return '0'
+        if gi == 1:
+            return '1'
+        v = self.state[gi & ~1]
+        return ('0' if v == '1' else '1') if (gi & 1) else v
 
     def step(self,inp):
         assert len(inp) == len(self.inputs)
         for x,y in zip(self.inputs,inp):
             self.state[self.map[x]] = y
 #        print 'input: {}'.format(self.sym_vals(self.inputs))
-        def getin(gi):
-            if gi == 0:
-                return '0'
-            if gi == 1:
-                return '1'
-            v = self.state[gi & ~1]
-            return ('0' if v == '1' else '1') if (gi & 1) else v
         for out,in0,in1 in self.gates:
-            res = '1' if (getin(in0) == '1' and getin(in1) == '1') else '0'
+            res = '1' if (self.getin(in0) == '1' and self.getin(in1) == '1') else '0'
             self.state[out] = res
 #            print 'gate {}: {}'.format(out,res)
-#        print 'outputs: {}'.format(''.join(getin(self.values[x]) for x in self.outputs))
+#        print 'outputs: {}'.format(''.join(self.getin(self.values[x]) for x in self.outputs))
+
+    def next(self):
         for lt in self.latches:
-            self.state[self.map[lt]] = getin(self.values[lt])
+            self.state[self.map[lt]] = self.getin(self.values[lt])
 #        self.show_state()
             
             
@@ -449,6 +456,11 @@ class Encoder(object):
         bits = [il.And() if b == '1' else il.Or() for b in abits]
         return self.decode_val(bits,v)
         
+    def get_next_sym(self,v):
+        enc = self.encoding[v]
+        abits = self.sub.sym_next_vals(enc)
+        bits = [il.And() if b == '1' else il.Or() for b in abits]
+        return self.decode_val(bits,v)
 
 def is_finite_sort(sort):
     if il.is_function_sort(sort):
@@ -696,6 +708,10 @@ def unite_annot(annot):
 
 class MatchHandler(object):
     def eval(self,cond):
+        if il.is_false(cond):
+            return False
+        if il.is_true(cond):
+            return True
         print 'assuming: {}'.format(cond)
         return True
     def handle(self,action,env):
@@ -766,9 +782,10 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
-    print 'action : {}'.format(action)
-    print 'annotation: {}'.format(trans.annot)
-    match_annotation(action,trans.annot,MatchHandler())
+#    print 'action : {}'.format(action)
+#    print 'annotation: {}'.format(trans.annot)
+    annot = trans.annot
+#    match_annotation(action,annot,MatchHandler())
     
     # save the original symbols for trace
     orig_syms = ilu.used_symbols_clauses(trans)
@@ -807,7 +824,7 @@ def to_aiger(mod,ext_act):
     # step 3: eliminate quantfiers using finite instantiations
 
     sort_constants = mine_constants(mod,trans,invariant)
-    print 'instantiations:'
+    print '\ninstantiations:'
     trans,invariant = Qelim(sort_constants)(trans,invariant)
 
 #    print 'after qe:'
@@ -940,7 +957,8 @@ def to_aiger(mod,ext_act):
         if sym not in decoder and sym in orig_syms:
             decoder[sym] = sym
 
-    return aiger,decoder
+    cnsts = set(sym for syms in sort_constants.values() for sym in syms)
+    return aiger,decoder,annot,cnsts,action,stvarset
 
 def badwit():
     raise iu.IvyError(None,'model checker returned mis-formated witness')
@@ -958,35 +976,91 @@ class IvyMCTrace(art.AnalysisGraph):
 #        iu.dbg('stvals')
         self.add(itp.State(value=ilu.Clauses(stvals),expr=itp.action_app(action,self.states[-1]),label='ext'))
 
-def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act,decoder):
+class AigerMatchHandler(object):
+    def __init__(self,aiger,decoder,cnsts,stvarset,current):
+        self.aiger,self.decoder,self.cnsts,self.stvarset = aiger,decoder,cnsts,stvarset
+        self.current = current
+    def eval(self,cond):
+        if il.is_false(cond):
+            res = False
+        elif il.is_true(cond):
+            res =  True
+        else:
+            res = il.is_true(self.aiger.get_sym(cond))
+#        print 'eval: {} = {}'.format(cond,res)
+        return res
+        
+    def handle(self,action,env):
+
+        def my_is_skolem(x):
+            return tr.is_skolem(x) and x not in self.cnsts
+
+        def show_sym(v,decd,val):
+            if all(x in inv_env or not my_is_skolem(x) and
+                   not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
+                expr = ilu.rename_ast(decd,inv_env)
+                if not (expr in self.current and self.current[expr] == val):
+                    print '        {} = {}'.format(expr,val)
+                    self.current[expr] = val
+
+        if hasattr(action,'lineno'):
+#            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
+            inv_env = dict((y,x) for x,y in env.iteritems())
+            for v in self.aiger.inputs:
+                if v in self.decoder:
+                    show_sym(v,self.decoder[v],self.aiger.get_sym(v))
+            rn = dict((x,tr.new(x)) for x in self.stvarset)
+            for v in self.aiger.latches:
+                if v in self.decoder:
+                    decd = self.decoder[v]
+                    show_sym(v,ilu.rename_ast(decd,rn),self.aiger.get_next_sym(v))
+
+            print '    {}{}'.format(action.lineno,action)
+        
+
+
+def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,annot,consts,decoder):
     with open(witnessfilename,'r') as f:
         res = f.readline().strip()
         if res != '1':
             badwit()
         tr = None
         aiger.sub.reset()
+        lines = []
         for line in f:
             if line.endswith('\n'):
                 line = line[:-1]
+            lines.append(line)
+        print '\nCounterexample follows:'
+        print 80*'-'
+        current = dict()
+        for line in lines[:-1]:
+            if tr:
+                print ''
             cols = line.split(' ')
 #            iu.dbg('cols')
             if len(cols) != 4:
                 badwit()
             pre,inp,out,post = cols
             aiger.sub.step(inp)
-            print 'inputs:'
-            for v in aiger.inputs:
-                if v in decoder:
-                    print '    {} = {}'.format(decoder[v],aiger.get_sym(v))
+            # print 'inputs:'
+            # for v in aiger.inputs:
+            #     if v in decoder:
+            #         print '    {} = {}'.format(decoder[v],aiger.get_sym(v))
+            print 'path:'
+            match_annotation(action,annot,AigerMatchHandler(aiger,decoder,consts,stvarset,current))
+            aiger.sub.next()
             post = aiger.sub.latch_vals()  # use this, since file can be wrong!
             stvals = []
             stmap = aiger.get_state(post)                     
 #            iu.dbg('stmap')
+            current = dict()
             for v in aiger.latches: # last two are used for encoding
-                if v in decoder:
+                if v in decoder and v.name != '__init':
                     val = stmap[v]
                     if val is not None:
                         stvals.append(il.Equals(decoder[v],val))
+                        current[decoder[v]] = val
             print 'state:'
             for stval in stvals:
                 print '    {}'.format(stval)
@@ -994,6 +1068,7 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,ext_act,decoder):
                 tr = IvyMCTrace(stvals) # first transition is initialization
             else:
                 tr.add_state(stvals,ext_act) # remainder are exported actions
+        print 80*'-'
         if tr is None:
             badwit()
         return tr
@@ -1019,14 +1094,14 @@ def check_isolate():
     
     # convert to aiger
 
-    aiger,decoder = to_aiger(mod,ext_act)
+    aiger,decoder,annot,cnsts,action,stvarset = to_aiger(mod,ext_act)
 #    print aiger
 
     # output aiger to temp file
 
     with tempfile.NamedTemporaryFile(suffix='.aag',delete=False) as f:
         name = f.name
-        print 'file name: {}'.format(name)
+#        print 'file name: {}'.format(name)
         f.write(str(aiger))
     
     # convert aag to aig format
@@ -1044,7 +1119,7 @@ def check_isolate():
     outfilename = name.replace('.aag','.out')
     mc = ABCModelChecker() # TODO: make a command-line option
     cmd = mc.cmd(aigfilename,outfilename)
-    print cmd
+#    print cmd
     try:
         p = subprocess.Popen(cmd,stdout=subprocess.PIPE)
     except:
@@ -1052,6 +1127,8 @@ def check_isolate():
 
     # pass through the stdout and collect it in texts
 
+    print '\nModel checker output:'
+    print 80*'-'
     texts = []
     while True:
         text = p.stdout.read(256)
@@ -1060,6 +1137,7 @@ def check_isolate():
         if len(text) < 256:
             break
     alltext = ''.join(texts)
+    print 80*'-'
     
     # get the model checker status
 
@@ -1070,17 +1148,17 @@ def check_isolate():
     # scrape the output to get the answer
 
     if mc.scrape(alltext):
-        print 'PASS'
+        print '\nPASS'
     else:
-        print 'FAIL'
-        tr = aiger_witness_to_ivy_trace(aiger,outfilename,ext_act,decoder)        
-        import tk_ui as ui
-        iu.set_parameters({'mode':'induction'})
-        gui = ui.new_ui()
-        agui = gui.add(tr)
-        gui.tk.update_idletasks() # so that dialog is on top of main window
-        gui.tk.mainloop()
-        exit(1)
+        print '\nFAIL'
+        tr = aiger_witness_to_ivy_trace(aiger,outfilename,action,stvarset,ext_act,annot,cnsts,decoder)        
+        # import tk_ui as ui
+        # iu.set_parameters({'mode':'induction'})
+        # gui = ui.new_ui()
+        # agui = gui.add(tr)
+        # gui.tk.update_idletasks() # so that dialog is on top of main window
+        # gui.tk.mainloop()
+        # exit(1)
 
         
     exit(0)

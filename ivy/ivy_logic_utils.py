@@ -1105,18 +1105,40 @@ def or_clauses2(clauses1,clauses2):
 def coerce_args_to_clauses(args):
     return [(a if isinstance(a,Clauses) else formula_to_clauses(a)) for a in args]
 
+def fix_or_annot(res,vs,args):
+    if len(args) == 0:
+        return res
+    annots = [a.annot for a in args]
+    annot = annots[0]
+    for a,v in zip(annots[1:],vs[1:]):
+        annot = None if annot is None or a is None else a.ite(v,annot)
+    return Clauses(res.fmlas,res.defs,annot)
+
 def or_clauses(*args):
     if not any(isinstance(a,Clauses) for a in args):
         return Or(*args)
     args = coerce_args_to_clauses(args)
-    args = [a for a in args if not a.is_false() or a.annot is not None]
+    orig_args = list(args)
+#    args = [a for a in args if not a.is_false() or a.annot is not None]
+    args = [a for a in args if not a.is_false()]
     if len(args) == 0:
-        return false_clauses()
-    if len(args) == 1:
-        return args[0]
-    used = set(chain(*[arg.symbols() for arg in args]))
-    rn = UniqueRenamer('__ts0',used)
-    return or_clauses_int(rn,args)
+        res,vs = false_clauses(),[]
+    elif len(args) == 1:
+        res,vs = args[0],[And()]
+    else:
+        used = set(chain(*[arg.symbols() for arg in args]))
+        rn = UniqueRenamer('__ts0',used)
+        res,vs = or_clauses_int(rn,args)
+    fixed_vs = []
+    idx = 0
+    for a in orig_args:
+        if a.is_false():
+            fixed_vs.append(Or())
+        else:
+            fixed_vs.append(vs[idx])
+            idx += 1
+    return fix_or_annot(res,fixed_vs,orig_args)
+
 
 def ite_clauses(cond,args):
     assert len(args) == 2
@@ -1157,7 +1179,6 @@ def elim_dead_definitions(rn,args):
 
 def or_clauses_int(rn,args):
 #    print "or_clauses_int: args = {}".format(args)
-    annots = [a.annot for a in args]
     args = elim_dead_definitions(rn,args)
 #    print "or_clauses_int: args = {}".format(args)
     vs = [bool_const(rn()) for a in args]
@@ -1172,12 +1193,9 @@ def or_clauses_int(rn,args):
             else:
                 defidx[s] = Definition(d.args[0],Ite(v,d.args[1],defidx[s].args[1]))
     defs = [d for n,d in defidx.iteritems()] # TODO: hash traversal dependency
-    annot = annots[0]
-    for a,v in zip(annots[1:],vs[:-1]):
-        annot = None if annot is None or a is None else a.ite(v,annot)
-    res = Clauses(fmlas,defs,annot)
+    res = Clauses(fmlas,defs)
     #    print "or_clauses_int res = {}".format(res)
-    return res
+    return res,vs
 
 def ite_clauses_int(rn,cond,args):
     assert len(args) == 2
@@ -1213,7 +1231,8 @@ def tagged_or_clauses(prefix,*args):
     predicate symbols begin with "prefix". See find_true_disjunct.
     """
     args = coerce_args_to_clauses(args)
-    return or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    res,vs = or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    return fix_or_annot(res,vs,args)
 
 def find_true_disjunct(clauses,eval_fun):
     """See tagged_or_clauses. If a tagged disjunction is satisfiable,

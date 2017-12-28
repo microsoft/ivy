@@ -706,7 +706,6 @@ class EnvAction(ChoiceAction):
     # of the child actions are hidden.
 
     def int_update(self,domain,pvars):
-        print 'got here'
         if determinize and len(self.args) == 2:
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(cond,self.args[0],self.args[1])
