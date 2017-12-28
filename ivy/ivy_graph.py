@@ -104,7 +104,7 @@ def concepts_from_sig(symbols,concepts):
                     # Hack: we treat enumerated constants as labels on the bogus sort "unit"
                     vs,xvs = [],[Variable('X',create_unit_sort(concepts))]
                 else:
-                    vs,vxs = [Variable(n,s) for n,s in zip(['X','Y'],dom)],None
+                    vs,xvs = [Variable(n,s) for n,s in zip(['X','Y'],dom)],None
                 ec = concept_from_formula(c(*vs),vs=xvs)
                 concepts['enum'].append(ec.name)
                 concepts[ec.name] = enum_concepts(ec.name,vs,c(*vs))
