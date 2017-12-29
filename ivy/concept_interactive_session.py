@@ -14,7 +14,7 @@ from logic_util import (free_variables, used_constants,
 from z3_utils import z3_implies
 from concept import Concept
 
-from ivy_utils import constant_name_generator
+from ivy_utils import constant_name_generator, dbg
 
 
 def _normalize_facts(facts):
@@ -144,6 +144,9 @@ class ConceptInteractiveSession(object):
         sort = concept.variables[0].sort
         assert sort != TopSort()
 
+        if sort.name == 'unit':
+            return [Const('0',sort)]
+
         constants = used_constants(concept.formula)
         x = Const(self._fresh_const_name(constants), sort)
         f = concept(x)
@@ -218,6 +221,9 @@ class ConceptInteractiveSession(object):
                         facts.append(self.domain.concepts[nl](c))
                     elif a.get(('node_label', 'node_necessarily_not', node, nl)):
                         facts.append(Not(self.domain.concepts[nl](c)))
+                for nl in self.domain.concepts['enum_case']:
+                    if a.get(('node_label', 'node_necessarily', node, nl)):
+                        facts.append(self.domain.concepts[nl](c))
         return _normalize_facts(facts)
 
     def _get_edge_fact(self,edge,source,target,polarity):

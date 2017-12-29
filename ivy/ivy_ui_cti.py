@@ -198,10 +198,11 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         rels = self.current_concept_graph.g.relations
         used = set(il.normalize_symbol(s) for s in lu.used_constants(clauses.to_formula()))
         for rel in rels:
+            fmla = rel.formula
             if any(c in used and not c.name.startswith('@')
-                   for c in lu.used_constants(rel.formula)):
+                   for c in lu.used_constants(fmla)):
                 self.current_concept_graph.show_relation(rel,'+',update=False)
-                if both:
+                if both and not il.is_enumerated(fmla):
                     self.current_concept_graph.show_relation(rel,'-',update=False)
         need_update_relations = False
         for app in ilu.apps_clauses(clauses):

@@ -1018,7 +1018,7 @@ def is_ite(ast):
     return isinstance(ast,lg.Ite)
 
 def is_enumerated(term):
-    return isinstance(term.get_sort(),EnumeratedSort)
+    return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
     return term.sort != lg.Boolean

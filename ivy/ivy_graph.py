@@ -80,11 +80,13 @@ class enum_concepts(co.ConceptSet,list):
 # This creates concepts and concept sets from the signature. 
 
 def create_unit_sort(concepts):
+    sort = il.UninterpretedSort('unit')
     if 'unit' not in il.sig.sorts:
-        sort = il.UninterpretedSort('unit')
         il.sig.sorts['unit'] = sort
+    if 'has_unit' not in concepts:  # HACK: will this damage anything?
         X = Variable('X', sort)
         add_domain_concept_fmla(concepts,Equals(X,X),kind='nodes')
+        concepts['has_unit'] = []
 
     return il.sig.sorts['unit']
 
@@ -97,6 +99,8 @@ def concepts_from_sig(symbols,concepts):
         if il.is_enumerated_sort(rng):
             if len(dom) in [0,1,2]:
                 if len(dom) == 0:
+                    if c in il.sig.constructors:
+                        continue
                     # Hack: we treat enumerated constants as labels on the bogus sort "unit"
                     vs,xvs = [],[Variable('X',create_unit_sort(concepts))]
                 else:
@@ -112,6 +116,8 @@ def concepts_from_sig(symbols,concepts):
             # TODO: we have no way to display boolean constants
             if len(dom) in [0,1,2,3]:
                 if len(dom) == 0:
+                    if c in il.sig.constructors:
+                        continue
                     # Hack: we treat boolean constants as labels on the bogus sort "unit"
                     vs,xvs = [],[Variable('X',create_unit_sort(concepts))]
                 else:
@@ -564,6 +570,7 @@ class Graph(object):
             add_domain_concept(self.concept_domain.concepts,concept)
         if recomp:
             self.recompute()
+            
 
     def set_state(self,clauses,recomp=True,clear_constraints=False,reset=False):
         self.state = clauses        
@@ -597,7 +604,7 @@ class Graph(object):
         if isinstance(concept,co.ConceptSet):
             for sobj in concept:
                 self.set_checkbox(sobj,idx,val)
-            return
+#            return
 
         # HACK: can't tell if it's edge or node_label so set both
         val = Option(val)
@@ -632,9 +639,8 @@ class Graph(object):
         return [] # TODO: implement
         
     def projection(self,concept_name,concept_class,concept_combiner=None):
-#        if concept_combiner is not None:
-#            print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
-        if concept_class in ('node_labels','edges'):
+#        print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
+        if concept_class in ('node_labels','edges','enum'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
             if concept_combiner is None:
