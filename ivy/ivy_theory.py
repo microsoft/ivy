@@ -391,12 +391,65 @@ theories = {
 """
 }
 
-def get_theory(name):
+class Theory(object):
+    def __init__(self,name,*args):
+        self.args = args
+        self.name = name
+    def __str__(self):
+        return self.name
+
+class IntegerTheory(Theory):
+    num_params = 0
+    @property
+    def schemata():
+        return theories['int']
+    
+class BitVectorTheory(Theory):
+    num_params = 1
+    @property
+    def bits(self):
+        return self.args[0]
+    @property
+    def schemata():
+        return theories['int']
+    
+
+theory_classes = {
+    'int' : IntegerTheory,
+    'bv' : BitVectorTheory,
+}
+
+def parse_theory(name):
+    things = name.split('[')
+    thy = things[0]
+    things = things[1:]
+    if not all(t.endswith(']') for t in things):
+        raise iu.IvyError(None,'bad theory syntax: {}'.format(name))
+    prms = [int(t[:-1]) for t in things]
+    if thy not in theory_classes:
+        raise iu.IvyError(None,'unknown theory: {}'.format(name))
+    thyc = theory_classes[thy]
+    na = thyc.num_params
+    if len(prms) != na:
+        raise iu.IvyError(None,'wrong number of theory parameters: {}',format(name))
+    return thyc(name,*prms)
+
+def get_theory_schemata(name):
     if iu.version_le("1.6",iu.get_string_version()):
         if name.startswith('bv['):
             return theories['int']
         return theories.get(name,None)
     return None
 
+# This returns the theory associated with a first-order sort, or if the sort
+# is uninterpreted, the sort itself.
 
-    
+def get_sort_theory(sort):
+    name = sort.name
+    if name in il.sig.interp:
+        interp = il.sig.interp[name]
+        if isinstance(interp,str):
+            interp = parse_theory(interp)
+    else:
+        interp = sort
+    return interp

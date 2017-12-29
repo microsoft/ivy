@@ -20,8 +20,9 @@ from copy import deepcopy
 # variables in alphabetical order.  A canonical concept name is
 # generated from the formula.
 
-def concept_from_formula(fmla):
-    vs = sorted(list(ilu.used_variables_ast(fmla)),key=str)
+def concept_from_formula(fmla,vs = None):
+    if vs is None:
+        vs = sorted(list(ilu.used_variables_ast(fmla)),key=str)
     name = (','.join(str(v) + ':' + str(v.sort) for v in vs)
             + '.' + str(fmla))
     return co.Concept(name,vs,fmla)
@@ -34,8 +35,8 @@ def add_domain_concept(concepts,con,kind=None):
         kind = kind or ('node_labels' if arity==1 else 'edges')
         concepts[kind].append(name)
  
-def add_domain_concept_fmla(concepts,fmla,kind=None):
-    con = concept_from_formula(fmla)
+def add_domain_concept_fmla(concepts,fmla,kind=None,vs=None):
+    con = concept_from_formula(fmla,vs)
     add_domain_concept(concepts,con,kind)
     return con
 
@@ -78,6 +79,17 @@ class enum_concepts(co.ConceptSet,list):
 
 # This creates concepts and concept sets from the signature. 
 
+def create_unit_sort(concepts):
+    sort = il.UninterpretedSort('unit')
+    if 'unit' not in il.sig.sorts:
+        il.sig.sorts['unit'] = sort
+    if 'has_unit' not in concepts:  # HACK: will this damage anything?
+        X = Variable('X', sort)
+        add_domain_concept_fmla(concepts,Equals(X,X),kind='nodes')
+        concepts['has_unit'] = []
+
+    return il.sig.sorts['unit']
+
 def concepts_from_sig(symbols,concepts):
 
     for c in sorted(symbols,key=str):
@@ -85,21 +97,32 @@ def concepts_from_sig(symbols,concepts):
         dom,rng = c.sort.dom,c.sort.rng
 
         if il.is_enumerated_sort(rng):
-            # TODO: we have no way to display enumerated constants
-            if len(dom) in [1,2]:
-                vs = [Variable(n,s) for n,s in zip(['X','Y'],dom)]
-                ec = concept_from_formula(c(*vs))
+            if len(dom) in [0,1,2]:
+                if len(dom) == 0:
+                    if c in il.sig.constructors:
+                        continue
+                    # Hack: we treat enumerated constants as labels on the bogus sort "unit"
+                    vs,xvs = [],[Variable('X',create_unit_sort(concepts))]
+                else:
+                    vs,xvs = [Variable(n,s) for n,s in zip(['X','Y'],dom)],None
+                ec = concept_from_formula(c(*vs),vs=xvs)
                 concepts['enum'].append(ec.name)
                 concepts[ec.name] = enum_concepts(ec.name,vs,c(*vs))
                 for cons in rng.constructors:
-                    c1 = add_domain_concept_fmla(concepts,Equals(c(*vs),cons),kind='enum_case')
-                    concepts[ec.name].append(c1.name)
+                    c1 = add_domain_concept_fmla(concepts,Equals(c(*vs),cons),kind='enum_case',vs=xvs)
+                    concepts[ec.name].append(c1.name)                
 
         elif il.is_boolean_sort(rng):
             # TODO: we have no way to display boolean constants
-            if len(dom) in [1,2,3]:
-                vs = [Variable(n,s) for n,s in zip(['X','Y','Z'],dom)]
-                add_domain_concept_fmla(concepts,c(*vs))
+            if len(dom) in [0,1,2,3]:
+                if len(dom) == 0:
+                    if c in il.sig.constructors:
+                        continue
+                    # Hack: we treat boolean constants as labels on the bogus sort "unit"
+                    vs,xvs = [],[Variable('X',create_unit_sort(concepts))]
+                else:
+                    vs,xvs = [Variable(n,s) for n,s in zip(['X','Y','Z'],dom)],None
+                add_domain_concept_fmla(concepts,c(*vs),vs=xvs)
 
         elif il.is_first_order_sort(rng):
             if len(dom) == 0:
@@ -547,6 +570,7 @@ class Graph(object):
             add_domain_concept(self.concept_domain.concepts,concept)
         if recomp:
             self.recompute()
+            
 
     def set_state(self,clauses,recomp=True,clear_constraints=False,reset=False):
         self.state = clauses        
@@ -580,7 +604,7 @@ class Graph(object):
         if isinstance(concept,co.ConceptSet):
             for sobj in concept:
                 self.set_checkbox(sobj,idx,val)
-            return
+#            return
 
         # HACK: can't tell if it's edge or node_label so set both
         val = Option(val)
@@ -615,9 +639,8 @@ class Graph(object):
         return [] # TODO: implement
         
     def projection(self,concept_name,concept_class,concept_combiner=None):
-#        if concept_combiner is not None:
-#            print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
-        if concept_class in ('node_labels','edges'):
+#        print "projection: {} {} {}".format(concept_name,concept_class,concept_combiner)
+        if concept_class in ('node_labels','edges','enum'):
             cb = self.edge_display_checkboxes if concept_class == 'edges' else self.node_label_display_checkboxes
             boxes = cb[concept_name]
             if concept_combiner is None:

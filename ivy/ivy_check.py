@@ -25,6 +25,7 @@ diagnose = iu.BooleanParameter("diagnose",False)
 coverage = iu.BooleanParameter("coverage",True)
 checked_action = iu.Parameter("action","")
 opt_trusted = iu.BooleanParameter("trusted",False)
+opt_mc = iu.BooleanParameter("mc",False)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -464,7 +465,12 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            check_isolate()
+            if opt_mc.get():
+                import ivy_mc
+                with im.module.theory_context():
+                    ivy_mc.check_isolate()
+            else:
+                check_isolate()
     print ''
     if failures > 0:
         raise iu.IvyError(None,"failed checks: {}".format(failures))

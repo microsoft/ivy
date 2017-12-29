@@ -26,6 +26,8 @@ import ivy_proof as ip
 from collections import defaultdict
 from tarjan import tarjan
 
+opt_mutax = iu.BooleanParameter("mutax",False)
+
 class IvyDeclInterp(object):
     def __call__(self,ivy):
         for decl in ivy.decls:
@@ -1220,12 +1222,13 @@ def check_definitions(mod):
                         side_effects[s] = sub
 
         mp = dict((lf.formula.defines(),lf.formula.rhs()) for lf in mod.definitions)
-        for lf in mod.labeled_axioms:
-            deps = set()
-            get_symbol_dependencies(mp,deps,lf.formula)
-            for s in deps:
-                if s in side_effects:
-                    raise IvyError(side_effects[s],'immutable symbol assigned. \n{} info: symbol is used in axiom here'.format(lf.lineno))
+        if not opt_mutax.get():
+            for lf in mod.labeled_axioms:
+                deps = set()
+                get_symbol_dependencies(mp,deps,lf.formula)
+                for s in deps:
+                    if s in side_effects:
+                        raise IvyError(side_effects[s],'immutable symbol assigned. \n{} info: symbol is used in axiom here'.format(lf.lineno))
 
         for lf in mod.definitions:
             s = lf.formula.lhs()
@@ -1309,14 +1312,14 @@ def ivy_compile_theory_from_string(mod,theory,sortname,**kwargs):
     ivy_compile_theory(mod,ivy,**kwargs)
 
 def compile_theory(mod,sortname,theoryname,**kwargs):
-    theory = ith.get_theory(theoryname)
+    theory = ith.get_theory_schemata(theoryname)
     if theory is not None:
         ivy_compile_theory_from_string(mod,theory,sortname,**kwargs)
     
 def compile_theories(mod,**kwargs):
     for name,value in mod.sig.interp.iteritems():
         if name in mod.sig.sorts and isinstance(value,str):
-            theory = th.get_theory(value)
+            theory = th.get_theory_schemata(value)
             ivy_compile_theory_from_string(mod,theory,name,**kwargs)
 
 # Here, we infer for each conjecture the set of actions that must

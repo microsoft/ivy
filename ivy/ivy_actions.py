@@ -252,6 +252,7 @@ class AssumeAction(Action):
         type_check(domain,self.args[0])
         clauses = formula_to_clauses_tseitin(skolemize_formula(self.args[0]))
         clauses = unfold_definitions_clauses(clauses)
+        clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
         return ([],clauses,false_clauses())
 
 class AssertAction(Action):
@@ -270,6 +271,7 @@ class AssertAction(Action):
                 return ([],formula_to_clauses(self.args[0]),false_clauses())
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
+        cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
         return ([],true_clauses(),cl)
     def assert_to_assume(self,kinds):
         if type(self) not in kinds:
@@ -470,7 +472,7 @@ def mk_assign_clauses(lhs,rhs):
     drhs = substitute_ast(rhs,rn)
     if eqs:
         drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
-    new_clauses = Clauses([],[Definition(dlhs,drhs)])
+    new_clauses = Clauses([],[Definition(dlhs,drhs)],EmptyAnnotation())
     return new_clauses
 
 
@@ -647,7 +649,7 @@ class Sequence(Action):
     def __str__(self):
         return '{' + '; '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
-        update = ([],true_clauses(),false_clauses())
+        update = ([],true_clauses(EmptyAnnotation()),false_clauses(EmptyAnnotation()))
         axioms = domain.background_theory(pvars)
         for op in self.args:
             thing = op.int_update(domain,pvars);
@@ -708,7 +710,7 @@ class EnvAction(ChoiceAction):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
-        result = [], false_clauses(), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
         for a in self.args:
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -981,6 +983,7 @@ class CallAction(Action):
             else:
                 v = state_to_action(v.value)
 ##                print "called state: {}".format(v)
+
         return v
     def apply_actuals(self,domain,pvars,v):
         assert hasattr(v,'formal_params'), v
@@ -1152,3 +1155,83 @@ def call_set(action_name,env):
     call_set_rec(action_name,env,res)
     return sorted(res)
     
+# Annotations let us reconstruct an execution trace from a satisfying assignment.
+# They contain two kinds of information:
+
+# 1) for each symbol in the update formula corresponding to a program
+# variable, original program symbol it corresponds to, and the
+# execution point at which it was introduced.
+
+# 2) for each symbol corresponding to a branch decision, the program
+# execution point of the branch.
+
+# A primitive execution point is a sequence of numbers. Each number corresponds
+# to the child action of an IfAction, ChoiceAction or Sequence (or any future control
+# construct that has multiple children). A compound execution point is an if-then-else
+# with a condition, and true branch and a false branch.
+
+# There are four basic operations on annotations:
+
+# 1) conjunction -- this just merges the annotations and requires that their domains
+# be disjoint
+
+# 2) rename -- takes a map on symbols and simply renames the symbols in the domain
+
+# 3) if-then-else -- takes a condition variable c and two annotations
+# x and y, one for the true and one for the false case. It forms v ->
+# ite(c,x(v),y(v)) for each domain element common to x and y, and adds
+# the branch entry c -> []
+
+# 4) prefix -- adds a numer to the beginning of every execution point
+
+class Annotation(object):
+    pass
+
+class EmptyAnnotation(Annotation):
+    def __str__(self):
+        return '()'
+
+class ConjAnnotation(Annotation):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'And(' + ','.join(str(a) for a in self.args) + ')'
+        
+class ComposeAnnotation(Annotation):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'Compose(' + ','.join(str(a) for a in self.args) + ')'
+
+class RenameAnnotation(Annotation):
+    def __init__(self,arg,map):
+        self.map = map.copy()
+        self.arg = arg
+    def __str__(self):
+        return 'Rename({},'.format(str(self.arg)) + '{' + ','.join('{}:{}'.format(x,y) for x,y in self.map.iteritems()) + '})'
+
+class IteAnnotation(Annotation):
+    def __init__(self,cond,thenb,elseb):
+        self.cond = cond
+        self.thenb = thenb
+        self.elseb = elseb
+    def __str__(self):
+        return 'Ite({},{},{})'.format(self.cond,self.thenb,self.elseb)
+
+def conj_annot(self,other):
+    return ConjAnnotation(self,other)
+Annotation.conj = conj_annot
+
+def compose_annot(self,other):
+    return ComposeAnnotation(self,other)
+Annotation.compose = compose_annot
+
+def rename_annot(self,map):
+    return RenameAnnotation(self,map) if map else self
+Annotation.rename = rename_annot
+
+def ite_annot(self,cond,other):
+    return IteAnnotation(cond,self,other)
+Annotation.ite = ite_annot
+
+

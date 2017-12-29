@@ -310,7 +310,8 @@ def compose_updates(update1,axioms,update2):
         map1[new(mv)] = mvf
         map2[mv] = mvf
     clauses1 = rename_clauses(clauses1,map1)
-    new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2))
+    annot_op = lambda x,y: x.compose(y) if x is not None and y is not None else None
+    new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2),annot_op=annot_op)
     new_updated = list(us1.union(us2))
 #    print "pre1 before = {}".format(pre1)
     pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure

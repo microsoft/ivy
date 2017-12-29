@@ -792,6 +792,9 @@ def is_boolean(term):
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
 
+def is_function_sort(s):
+    return isinstance(s,FunctionSort)
+
 def FuncConstSort(*sorts):
     return FunctionSort(*sorts) if len(sorts) > 1 else sorts[0]
 
@@ -1015,7 +1018,7 @@ def is_ite(ast):
     return isinstance(ast,lg.Ite)
 
 def is_enumerated(term):
-    return isinstance(term.get_sort(),EnumeratedSort)
+    return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
     return term.sort != lg.Boolean
