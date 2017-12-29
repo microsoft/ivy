@@ -1,0 +1,23 @@
+#lang ivy1.6
+
+type t
+
+relation foo(V1: t, V2: t)
+relation bar(V3: t)
+
+init ~foo(V4, V5)
+init ~bar(V6)
+
+action receive(c1: t, c2: t) = {
+    assume exists X. foo(c2, X);
+    assume c1 ~= c2;
+    bar(c1) := true;
+}
+
+export receive
+
+# bug does not manifest without the following conjecture
+conjecture foo(V7, V8) -> V7 = V8
+
+# bug manifrsts when using X below, and not another variable name below
+conjecture bar(X) -> foo(X, V9)
