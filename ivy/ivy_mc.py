@@ -520,6 +520,8 @@ def instantiate_axioms(mod,stvars,trans,invariant):
         if il.is_eq(expr):
             px,py = pat.args
             ex,ey = expr.args
+            if px.sort != ex.sort:
+                return False
             save = mp.copy()
             if match(px,ex,mp) and match(py,ey,mp):
                 return True
@@ -582,6 +584,17 @@ def elim_ite(expr,cnsts):
 def mine_constants(mod,trans,invariant):
     res = defaultdict(list)
     for c in ilu.used_symbols_ast(invariant):
+        if not il.is_function_sort(c.sort):
+            res[c.sort].append(c)
+#    iu.dbg('res')
+    return res
+
+def mine_constants2(mod,trans,invariant):
+    defnd = set(dfn.defines() for dfn in trans.defs)
+    res = defaultdict(list)
+    syms = ilu.used_symbols_ast(invariant)
+    syms.update(ilu.used_symbols_clauses(trans))
+    for c in syms:
         if not il.is_function_sort(c.sort):
             res[c.sort].append(c)
 #    iu.dbg('res')
@@ -654,23 +667,24 @@ def normalize(expr):
 # subformula.
 
 class Qelim(object):
-    def __init__(self,sort_constants):
+    def __init__(self,sort_constants,sort_constants2):
         self.syms = dict()     # map from quantified formulas to proposition variables
         self.syms_ctr = 0      # counter for fresh symbols
         self.fmlas = []        # constraints added
         self.sort_constants = sort_constants
+        self.sort_constants2 = sort_constants2
     def fresh(self,expr):
         res = il.Symbol('__qe[{}]'.format(self.syms_ctr),expr.sort)
         self.syms[expr] = res
         self.syms_ctr += 1
         return res
-    def qe(self,expr):
+    def qe(self,expr,sort_constants):
         if il.is_quantifier(expr):
             old = self.syms.get(expr,None)
             if old is not None:
                 return old
             res = self.fresh(expr)
-            consts = [self.sort_constants[x.sort] for x in expr.variables]
+            consts = [sort_constants[x.sort] for x in expr.variables]
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
             insts = [normalize(il.substitute(expr.body,m)) for m in maps]
@@ -680,15 +694,17 @@ class Qelim(object):
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
             return res
-        return clone_normal(expr,map(self.qe,expr.args))
-    def __call__(self,trans,invariant):
+        return clone_normal(expr,[self.qe(e,sort_constants) for e in expr.args])
+    def __call__(self,trans,invariant,indhyps):
         # apply to the transition relation
-        new_defs = map(self.qe,trans.defs)
-        new_fmlas = [self.qe(il.close_formula(fmla)) for fmla in trans.fmlas]
+        new_defs = map(self.qe,trans.defs,self.sort_constants)
+        new_fmlas = [self.qe(il.close_formula(fmla),self.sort_constants) for fmla in trans.fmlas]
         # apply to the invariant
-        invariant = self.qe(invariant)
+        invariant = self.qe(invariant,self.sort_constants)
+        # apply to inductive hyps
+        indhyps = [self.qe(fmla,self.sort_constants2) for fmla in indhyps]
         # add the transition constraints to the new trans
-        trans = ilu.Clauses(new_fmlas+self.fmlas,new_defs)
+        trans = ilu.Clauses(new_fmlas+indhyps+self.fmlas,new_defs)
         return trans,invariant
         
 
@@ -777,7 +793,8 @@ def to_aiger(mod,ext_act):
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     invariant = ilu.substitute_ast(invariant,sksubs)
-
+    invar_syms = ilu.used_symbols_ast(invariant)
+    
     # compute the transition relation
 
     stvars,trans,error = action.update(mod,None)
@@ -787,6 +804,9 @@ def to_aiger(mod,ext_act):
     annot = trans.annot
 #    match_annotation(action,annot,MatchHandler())
     
+    indhyps = [il.close_formula(lf.formula) for lf in mod.labeled_conjs]
+#    trans = ilu.and_clauses(trans,indhyps)
+
     # save the original symbols for trace
     orig_syms = ilu.used_symbols_clauses(trans)
     orig_syms.update(ilu.used_symbols_ast(invariant))
@@ -824,9 +844,10 @@ def to_aiger(mod,ext_act):
     # step 3: eliminate quantfiers using finite instantiations
 
     sort_constants = mine_constants(mod,trans,invariant)
+    sort_constants2 = mine_constants2(mod,trans,invariant)
     print '\ninstantiations:'
-    trans,invariant = Qelim(sort_constants)(trans,invariant)
-
+    trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
+    
 #    print 'after qe:'
 #    print 'trans: {}'.format(trans)
 #    print 'invariant: {}'.format(invariant)
@@ -886,8 +907,12 @@ def to_aiger(mod,ext_act):
 
     # find any immutable abstract variables, and give them a next definition
 
+    def my_is_skolem(x):
+        res = tr.is_skolem(x) and x not in invar_syms
+        return res    
     def is_immutable_expr(expr):
-        return not any(tr.is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
+        res = not any(my_is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
+        return res
     for expr,v in prop_abs.iteritems():
         if is_immutable_expr(expr):
             new_stvars.append(v)
