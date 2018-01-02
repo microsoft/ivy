@@ -7,6 +7,7 @@ import ivy_utils as iu
 import ivy_art as art
 import ivy_interp as itp
 import ivy_theory as thy
+import ivy_ast
 
 import tempfile
 import subprocess
@@ -470,10 +471,98 @@ def is_finite_sort(sort):
             isinstance(interp,thy.BitVectorTheory) or
             il.is_boolean_sort(interp))
 
+# Expand the axiom schemata into axioms, for a given collection of
+# function and constant symbols.
 
+class Match(object):
+    def __init__(self):
+        self.stack = [[]]
+        self.map = dict()
+    def add(self,x,y):
+        self.map[x] = y
+        self.stack[-1].append(x)
+    def push(self):
+        self.stack.append([])
+    def pop(self):
+        for x in self.stack.pop():
+            del self.map[x]
+    def unify(self,x,y):
+        if x not in self.map:
+            self.add(x,y)
+            return True
+        return self.map[x] == y
+    def unify_lists(self,xl,yl):
+        if len(xl) != len(yl):
+            return False
+        for x,y in zip(xl,yl):
+            if not self.match(x,y):
+                return False
+        return True
+    
+
+def match_schema_prems(prems,sort_constants,funs,match):
+    iu.dbg('prems')
+    iu.dbg('match')
+    if len(prems) == 0:
+        yield match
+    else:
+        prem = prems.pop()
+        if isinstance(prem,ivy_ast.ConstantDecl):
+            sym = prem.args[0]
+            if il.is_function_sort(sym.sort):
+                sorts = sym.sort.dom + [sym.sort.rng]
+                for f in funs:
+                    fsorts = sym.sort.dom + [sym.sort.rng]
+                    match.push()
+                    if match.unify_lists(sorts,fsorts):
+                        match.add(sym,f)
+                        for m in match_schema_prems(prems,sort_constants,funs,match):
+                            yield m
+                    match.pop()
+            else:
+                if sym.sort in match.map:
+                    cands = sort_constants[match.map[sym.sort]]
+                else:
+                    cands = [sort_constants[s] for v in sort_constants.values() for s in v]
+                for cand in cands:
+                    match.push()
+                    if match.unify(sym.sort,cand.sort):
+                        match.add(sym,cand)
+                        for m in match_schema_prems(prems,sort_constants,funs,match):
+                            yield m
+                    match.pop()
+        elif isinstance(prem,ivy_ast.TypeDef):
+            for m in match_schema_prems(prems,sort_constants,funs,match):
+                yield m
+            
+def expand_schemata(mod,sort_constants,funs):
+    match = Match()
+    res = []
+    for s in mod.sig.sorts.values():
+        if not il.is_function_sort(s):
+            match.add(s,s)
+    for name,schema in mod.schemata.iteritems():
+        conc = schema.args[-1]
+        iu.dbg('name')
+        iu.dbg('type(conc)')
+        if isinstance(conc,ivy_ast.LabeledFormula):
+            iu.dbg('name')
+            for m in match_schema_prems(list(schema.args[:-1])):
+                inst = ilu.rename_ast(conc.formula,match)
+                iu.dbg(inst)
+                res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
+    return res
+                
 # This is where we do pattern-based eager instantiation of the axioms
 
-def instantiate_axioms(mod,stvars,trans,invariant):
+def instantiate_axioms(mod,stvars,trans,invariant,sort_constants):
+
+    # Expand the axioms schemata into axioms
+
+    funs = ilu.used_symbols_clauses(trans)
+    funs.update(ilu.used_symbols_ast(invariant))
+    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
+    axioms = mod.labeled_axioms + expand_schemata(mod,funs,sort_constants)
 
     # Get all the triggers. For now only automatic triggers
 
@@ -583,7 +672,9 @@ def elim_ite(expr,cnsts):
 
 def mine_constants(mod,trans,invariant):
     res = defaultdict(list)
+    iu.dbg('invariant')
     for c in ilu.used_symbols_ast(invariant):
+        iu.dbg('c')
         if not il.is_function_sort(c.sort):
             res[c.sort].append(c)
 #    iu.dbg('res')
@@ -668,6 +759,7 @@ def normalize(expr):
 
 class Qelim(object):
     def __init__(self,sort_constants,sort_constants2):
+        iu.dbg('sort_constants')
         self.syms = dict()     # map from quantified formulas to proposition variables
         self.syms_ctr = 0      # counter for fresh symbols
         self.fmlas = []        # constraints added
@@ -697,7 +789,7 @@ class Qelim(object):
         return clone_normal(expr,[self.qe(e,sort_constants) for e in expr.args])
     def __call__(self,trans,invariant,indhyps):
         # apply to the transition relation
-        new_defs = map(self.qe,trans.defs,self.sort_constants)
+        new_defs = [self.qe(defn,self.sort_constants) for defn in trans.defs]
         new_fmlas = [self.qe(il.close_formula(fmla),self.sort_constants) for fmla in trans.fmlas]
         # apply to the invariant
         invariant = self.qe(invariant,self.sort_constants)
@@ -788,7 +880,7 @@ def to_aiger(mod,ext_act):
     # get the invariant to be proved, replacing free variables with
     # skolems:
 
-    invariant = il.And(*[lf.formula for lf in mod.labeled_conjs])
+    invariant = il.And(*[il.drop_universals(lf.formula) for lf in mod.labeled_conjs])
     skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
@@ -858,7 +950,7 @@ def to_aiger(mod,ext_act):
     # invariant on the axioms, so we define a boolean symbol '__axioms'
     # to represent the axioms.
 
-    axs = instantiate_axioms(mod,stvars,trans,invariant)
+    axs = instantiate_axioms(mod,stvars,trans,invariant,sort_constants)
     ax_conj = il.And(*axs)
     ax_var = il.Symbol('__axioms',ax_conj.sort)
     ax_def = il.Definition(ax_var,ax_conj)
