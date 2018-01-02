@@ -495,24 +495,25 @@ class Match(object):
         if len(xl) != len(yl):
             return False
         for x,y in zip(xl,yl):
-            if not self.match(x,y):
+            if not self.unify(x,y):
                 return False
         return True
     
 
+def str_map(map):
+    return '{' + ','.join('{}:{}'.format(x,y) for x,y in map.iteritems()) + '}'
+
 def match_schema_prems(prems,sort_constants,funs,match):
-    iu.dbg('prems')
-    iu.dbg('match')
     if len(prems) == 0:
-        yield match
+        yield match.map.copy()
     else:
         prem = prems.pop()
         if isinstance(prem,ivy_ast.ConstantDecl):
             sym = prem.args[0]
             if il.is_function_sort(sym.sort):
-                sorts = sym.sort.dom + [sym.sort.rng]
+                sorts = sym.sort.dom + (sym.sort.rng,)
                 for f in funs:
-                    fsorts = sym.sort.dom + [sym.sort.rng]
+                    fsorts = f.sort.dom + (f.sort.rng,)
                     match.push()
                     if match.unify_lists(sorts,fsorts):
                         match.add(sym,f)
@@ -523,7 +524,7 @@ def match_schema_prems(prems,sort_constants,funs,match):
                 if sym.sort in match.map:
                     cands = sort_constants[match.map[sym.sort]]
                 else:
-                    cands = [sort_constants[s] for v in sort_constants.values() for s in v]
+                    cands = [s for v in sort_constants.values() for s in v]
                 for cand in cands:
                     match.push()
                     if match.unify(sym.sort,cand.sort):
@@ -531,10 +532,30 @@ def match_schema_prems(prems,sort_constants,funs,match):
                         for m in match_schema_prems(prems,sort_constants,funs,match):
                             yield m
                     match.pop()
-        elif isinstance(prem,ivy_ast.TypeDef):
+        elif isinstance(prem,il.UninterpretedSort):
             for m in match_schema_prems(prems,sort_constants,funs,match):
                 yield m
+        prems.append(prem)
             
+def apply_match(match,fmla):
+    """ apply a match to a formula. 
+
+    In effect, substitute all symbols in the match with the
+    corresponding lambda terms and apply beta reduction
+    """
+
+    args = [apply_match(match,f) for f in fmla.args]
+    if il.is_app(fmla):
+        if fmla.rep in match:
+            func = match[fmla.rep]
+            return func(*args)
+    elif il.is_binder(fmla):
+        vs = [apply_match(match,v) for v in fmla.variables]
+        return fmla.clone_binder(vs,apply_match(match,fmla.body))
+    elif il.is_variable(fmla):
+        return il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
+    return fmla.clone(args)
+
 def expand_schemata(mod,sort_constants,funs):
     match = Match()
     res = []
@@ -543,14 +564,9 @@ def expand_schemata(mod,sort_constants,funs):
             match.add(s,s)
     for name,schema in mod.schemata.iteritems():
         conc = schema.args[-1]
-        iu.dbg('name')
-        iu.dbg('type(conc)')
-        if isinstance(conc,ivy_ast.LabeledFormula):
-            iu.dbg('name')
-            for m in match_schema_prems(list(schema.args[:-1])):
-                inst = ilu.rename_ast(conc.formula,match)
-                iu.dbg(inst)
-                res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
+        for m in match_schema_prems(list(schema.args[:-1]),sort_constants,funs,match):
+            inst = apply_match(m,conc)
+            res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
     return res
                 
 # This is where we do pattern-based eager instantiation of the axioms
@@ -562,7 +578,9 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants):
     funs = ilu.used_symbols_clauses(trans)
     funs.update(ilu.used_symbols_ast(invariant))
     funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
-    axioms = mod.labeled_axioms + expand_schemata(mod,funs,sort_constants)
+    axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
+    for a in axioms:
+        print 'axiom {}'.format(a)
 
     # Get all the triggers. For now only automatic triggers
 
@@ -579,7 +597,7 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants):
                 return expr
 
     triggers = []
-    for ax in mod.labeled_axioms:
+    for ax in axioms:
         fmla = ax.formula
         vs = list(ilu.used_variables_ast(fmla))
         if vs:
@@ -672,9 +690,7 @@ def elim_ite(expr,cnsts):
 
 def mine_constants(mod,trans,invariant):
     res = defaultdict(list)
-    iu.dbg('invariant')
     for c in ilu.used_symbols_ast(invariant):
-        iu.dbg('c')
         if not il.is_function_sort(c.sort):
             res[c.sort].append(c)
 #    iu.dbg('res')
@@ -759,7 +775,6 @@ def normalize(expr):
 
 class Qelim(object):
     def __init__(self,sort_constants,sort_constants2):
-        iu.dbg('sort_constants')
         self.syms = dict()     # map from quantified formulas to proposition variables
         self.syms_ctr = 0      # counter for fresh symbols
         self.fmlas = []        # constraints added
