@@ -1,0 +1,60 @@
+#lang ivy1.7
+
+type client
+type server
+
+relation link(X:client, Y:server)
+relation semaphore(X:server)
+
+after init {
+    semaphore(W) := true;
+    link(X,Y) := false
+}
+
+action connect(x:client,y:server) = {
+  assume semaphore(y);
+  link(x,y) := true;
+  semaphore(y) := false
+}
+
+action disconnect(x:client,y:server) = {
+  assume link(x,y);
+  link(x,y) := false;
+  semaphore(y) := true;
+}
+
+var __X:client
+var __Y:server
+var __Z:client
+
+invariant [safety] ~(X ~= Z & link(X,Y) & link(Z,Y))
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema cong1 = {
+    type t
+    type u
+    function x : t
+    function f(X:t) : u
+    property x = X -> f(x) = f(X)
+}
+
+schema cong2 = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function f(X1:t1,X2:t2) : u
+    property x1 = X1 & x2 = X2 -> f(x1,x2) = f(X1,X2)
+}
+
+
+
+export connect
+export disconnect
