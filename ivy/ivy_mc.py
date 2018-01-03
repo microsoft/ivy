@@ -577,7 +577,7 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants):
 
     funs = ilu.used_symbols_clauses(trans)
     funs.update(ilu.used_symbols_ast(invariant))
-    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
+    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort) and not tr.is_new(sym))
     axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
     for a in axioms:
         print 'axiom {}'.format(a)
@@ -713,8 +713,9 @@ def mine_constants2(mod,trans,invariant):
 # does not qualify.
 # 
 
-def prev_expr(stvarset,expr):
-    if any(sym in stvarset for sym in ilu.symbols_ast(expr)):
+def prev_expr(stvarset,expr,sort_constants):
+    if any(sym in stvarset or tr.is_skolem(sym) and not sym in sort_constants[sym.sort]
+           for sym in ilu.symbols_ast(expr)):
         return None
     news = [sym for sym in ilu.used_symbols_ast(expr) if tr.is_new(sym)]
     if news:
@@ -985,8 +986,9 @@ def to_aiger(mod,ext_act):
     def new_prop(expr):
         res = prop_abs.get(expr,None)
         if res is None:
-            prev = prev_expr(stvarset,expr)
+            prev = prev_expr(stvarset,expr,sort_constants)
             if prev is not None:
+                print 'stvar: old: {} new: {}'.format(prev,expr)
                 pva = new_prop(prev)
                 res = tr.new(pva)
                 new_stvars.append(pva)
@@ -1023,6 +1025,7 @@ def to_aiger(mod,ext_act):
     for expr,v in prop_abs.iteritems():
         if is_immutable_expr(expr):
             new_stvars.append(v)
+            print 'new state: {}'.format(expr)
             new_defs.append(il.Definition(tr.new(v),v))
 
     trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
