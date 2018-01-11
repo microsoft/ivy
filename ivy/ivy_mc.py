@@ -563,8 +563,12 @@ def expand_schemata(mod,sort_constants,funs):
         if not il.is_function_sort(s):
             match.add(s,s)
     for name,schema in mod.schemata.iteritems():
+        if any(name.startswith(pref) for pref in ['rec[','lep[','ind[']):
+            continue
         conc = schema.args[-1]
         for m in match_schema_prems(list(schema.args[:-1]),sort_constants,funs,match):
+            iu.dbg('str_map(m)')
+            iu.dbg('conc')
             inst = apply_match(m,conc)
             res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
     return res
@@ -861,7 +865,7 @@ def match_annotation(action,annot,handler):
                 recur(act,ann,env)
             return
         if isinstance(action,ia.IfAction):
-            assert isinstance(annot,ia.IteAnnotation)
+            assert isinstance(annot,ia.IteAnnotation),annot
             if handler.eval(env.get(annot.cond,annot.cond)):
                 recur(action.args[1],annot.thenb,env)
             else:
@@ -894,9 +898,19 @@ def to_aiger(mod,ext_act):
     action = ia.IfAction(init_var,ext_act,init)
 
     # get the invariant to be proved, replacing free variables with
-    # skolems:
+    # skolems. First, we apply any proof tactics.
 
-    invariant = il.And(*[il.drop_universals(lf.formula) for lf in mod.labeled_conjs])
+    pc = ivy_proof.ProofChecker(mod.axioms,mod.definitions,mod.schemata)
+    conjs = []
+    for lf in mod.labeled_conjs:
+        if lf.id in mod.proofs:
+            proof = mod.proofs[lf.id]
+            subgoals = pc.admit_proposition(lf,proof)
+            conjs.extend(subgoals)
+        else:
+            conjs.append(lf)
+
+    invariant = il.And(*[il.drop_universals(lf.formula) for lf in conjs])
     skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)

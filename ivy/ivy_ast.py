@@ -604,6 +604,13 @@ class SchemaInstantiation(AST):
     def __str__(self):
         return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
 
+class LetTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'let' ','.join(str(x) for x in self.args)
+    
+
 class ComposeTactics(AST):
     def __str__(self):
         return '; '.join(map(str,self.args))

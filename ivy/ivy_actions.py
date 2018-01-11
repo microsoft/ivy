@@ -272,7 +272,7 @@ class AssertAction(Action):
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
-        return ([],true_clauses(),cl)
+        return ([],true_clauses(annot = EmptyAnnotation()),cl)
     def assert_to_assume(self,kinds):
         if type(self) not in kinds:
             return Action.assert_to_assume(self,kinds)
@@ -550,6 +550,7 @@ class HavocAction(Action):
         else: # TODO: ???
             clauses = And()
         clauses = formula_to_clauses(clauses)
+        clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
         return ([n], clauses, false_clauses())
 
 
@@ -685,7 +686,7 @@ class ChoiceAction(Action):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(Not(cond),self.args[0],self.args[1])
             return ite.int_update(domain,pvars)
-        result = [], false_clauses(), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
         for a in self.args:
             foo = a.int_update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -952,6 +953,8 @@ call_action_ctr = 0
 class BindOldsAction(Action):
     def int_update(self,domain,pvars):
         return bind_olds_action(self.args[0].int_update(domain,pvars))
+    def __str__(self):
+        return 'bindolds {' + str(self.args[0]) + '}'
 
 class CallAction(Action):
     """ Inlines a named state or action """
