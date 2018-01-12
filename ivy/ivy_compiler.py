@@ -722,7 +722,7 @@ last_fmla = None
 ivy_ast.SchemaInstantiation.compile = lambda self: compile_schema_instantiation(self,last_fmla)
 
 def compile_let_tactic(self):
-    fmla = ivy_ast.And(*[ivy_ast.Equals(x.args[0],x.args[1]) for x in self.args])
+    fmla = ivy_ast.And(*[ivy_ast.Atom('=',x.args[0],x.args[1]) for x in self.args])
     thing = sortify_with_inference(fmla)
     return self.clone(thing.args)
     

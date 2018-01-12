@@ -719,7 +719,7 @@ else:
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):
-        'match : var EQ fmla'
+        'pflet : var EQ fmla'
         p[0] = Definition(p[1],check_non_temporal(p[3]))
         p[0].lineno = get_lineno(p,2)
 

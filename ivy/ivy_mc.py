@@ -8,6 +8,7 @@ import ivy_art as art
 import ivy_interp as itp
 import ivy_theory as thy
 import ivy_ast
+import ivy_proof
 
 import tempfile
 import subprocess
@@ -901,16 +902,18 @@ def to_aiger(mod,ext_act):
     # skolems. First, we apply any proof tactics.
 
     pc = ivy_proof.ProofChecker(mod.axioms,mod.definitions,mod.schemata)
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
-        if lf.id in mod.proofs:
-            proof = mod.proofs[lf.id]
+        if lf.id in pmap:
+            proof = pmap[lf.id]
             subgoals = pc.admit_proposition(lf,proof)
             conjs.extend(subgoals)
         else:
             conjs.append(lf)
 
     invariant = il.And(*[il.drop_universals(lf.formula) for lf in conjs])
+#    iu.dbg('invariant')
     skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)

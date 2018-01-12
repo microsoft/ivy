@@ -102,8 +102,9 @@ class ProofChecker(object):
         return decls
 
     def let_tactic(self,decls,proof):
+        cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
         return [ia.LabeledFormula(decls[0].label,
-                                  il.Implies(il.And(proof.args),decls[0]))] + decls[1:]
+                                  il.Implies(cond,decls[0].formula))] + decls[1:]
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
