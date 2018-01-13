@@ -149,7 +149,9 @@ class Aiger(object):
         return '\n'.join(strings)+'\n'
                                           
     def sym_vals(self,syms):
-        return ''.join(self.state[self.map[x]] for x in syms)
+        for sym in syms:
+            assert sym in self.map, sym
+        return ''.join(self.getin(self.map[x]) for x in syms)
 
     def sym_next_vals(self,syms):
         return ''.join(self.getin(self.values[x]) for x in syms)
@@ -189,7 +191,22 @@ class Aiger(object):
         for lt in self.latches:
             self.state[self.map[lt]] = self.getin(self.values[lt])
 #        self.show_state()
-            
+
+
+    def debug(self):
+        print 'inputs: {}'.format([str(x) for x in self.inputs])
+        print 'latches: {}'.format([str(x) for x in self.latches])
+        print 'outputs: {}'.format([str(x) for x in self.outputs])
+        print 'map:'
+        for x,y in self.map.iteritems():
+            print '{} = {}'.format(x,y)
+        print 'values:'
+        for x,y in self.values.iteritems():
+            print '{} = {}'.format(x,y)
+        print 'self:'
+        print self
+
+        
             
 # functions for binary encoding of finite sorts
 
@@ -259,6 +276,7 @@ class Encoder(object):
         return map(self.sub.lit,self.encoding[sym])
 
     def define(self,sym,val):
+        iu.dbg('sym')
         vs = encode_vars([sym],self.encoding)
         for s,v in zip(vs,val):
             self.sub.define(s,v )
@@ -849,28 +867,45 @@ class MatchHandler(object):
         
     
 def match_annotation(action,annot,handler):
-    def recur(action,annot,env):
+    def recur(action,annot,env,pos=None):
         if isinstance(annot,ia.RenameAnnotation):
             save = dict()
             for x,y in annot.map.iteritems():
                 if x in env:
                     save[x] = env[x]
                 env[x] = env.get(y,y)
-            recur(action,annot.arg,env)
+            recur(action,annot.arg,env,pos)
             env.update(save)
             return
         if isinstance(action,ia.Sequence):
-            annots = uncompose_annot(annot)
-            assert len(annots) == len(action.args)
-            for act,ann in zip(action.args,annots):
-                recur(act,ann,env)
+            if pos is None:
+                pos = len(action.args)
+            if pos == 0:
+                assert isinstance(annot,ia.EmptyAnnotation),annot
+                return
+            if not isinstance(annot,ia.ComposeAnnotation):
+                iu.dbg('len(action.args)')
+                iu.dbg('pos')
+                iu.dbg('annot')
+            assert isinstance(annot,ia.ComposeAnnotation)
+            recur(action,annot.args[0],env,pos-1)
+            recur(action.args[pos-1],annot.args[1],env)
             return
         if isinstance(action,ia.IfAction):
             assert isinstance(annot,ia.IteAnnotation),annot
-            if handler.eval(env.get(annot.cond,annot.cond)):
+            rncond = env.get(annot.cond,annot.cond)
+            try:
+                cond = handler.eval(rncond)
+            except KeyError:
+                print '{}skipping conditional'.format(action.lineno)
+                iu.dbg('str_map(env)')
+                iu.dbg('env.get(annot.cond,annot.cond)')
+                return
+            if cond:
                 recur(action.args[1],annot.thenb,env)
             else:
-                recur(action.args[2],annot.elseb,env)
+                if len(action.args) > 2:
+                    recur(action.args[2],annot.elseb,env)
             return
         if isinstance(action,ia.ChoiceAction):
             assert isinstance(annot,ia.IteAnnotation)
@@ -882,7 +917,14 @@ def match_annotation(action,annot,handler):
                     return
             assert False,'problem in match_annotation'
         if isinstance(action,ia.CallAction):
-            recur(im.module.actions[action.args[0].rep],annot,env)
+            callee = im.module.actions[action.args[0].rep]
+            seq = ia.Sequence(*([ia.Sequence() for x in callee.formal_params]
+                             + [callee] 
+                             + [ia.Sequence() for x in callee.formal_returns]))
+            recur(seq,annot,env)
+            return
+        if isinstance(action,ia.LocalAction):
+            recur(action.args[-1],annot,env)
             return
         handler.handle(action,env)
     recur(action,annot,dict())
@@ -894,9 +936,11 @@ def to_aiger(mod,ext_act):
 
     ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
     ext_act = ia.EnvAction(*ext_acts)
+
     init_var = il.Symbol('__init',il.find_sort('bool')) 
     init = ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())]))
     action = ia.IfAction(init_var,ext_act,init)
+
 
     # get the invariant to be proved, replacing free variables with
     # skolems. First, we apply any proof tactics.
@@ -924,12 +968,14 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
+    iu.dbg('trans')
+
 #    print 'action : {}'.format(action)
 #    print 'annotation: {}'.format(trans.annot)
     annot = trans.annot
 #    match_annotation(action,annot,MatchHandler())
     
-    indhyps = [il.close_formula(lf.formula) for lf in mod.labeled_conjs]
+    indhyps = [il.close_formula(il.Implies(init_var,lf.formula)) for lf in mod.labeled_conjs]
 #    trans = ilu.and_clauses(trans,indhyps)
 
     # save the original symbols for trace
@@ -1092,6 +1138,9 @@ def to_aiger(mod,ext_act):
     fail = il.Symbol('__fail',il.find_sort('bool'))
     outputs = [fail]
     
+
+#    iu.dbg('trans')
+    
     # make an aiger
 
     aiger = Encoder(inputs,stvars,outputs)
@@ -1100,7 +1149,10 @@ def to_aiger(mod,ext_act):
     for df in trans.defs:
         if tr.is_new(df.defines()):
             aiger.set(tr.new_of(df.defines()),aiger.eval(df.args[1]))
-    aiger.set(fail,aiger.eval(il.And(init_var,il.Not(cnst_var),il.Not(invariant))))
+    miter = il.And(init_var,il.Not(cnst_var),il.Not(invariant))
+    aiger.set(fail,aiger.eval(miter))
+
+#    aiger.sub.debug()
 
     # make a decoder for the abstract propositions
 
@@ -1138,6 +1190,11 @@ class AigerMatchHandler(object):
         elif il.is_true(cond):
             res =  True
         else:
+            if cond not in self.aiger.encoding:
+                iu.dbg('cond')
+                iu.dbg('str_map(self.aiger.encoding)')
+            else:
+                iu.dbg('self.aiger.encoding[cond]')
             res = il.is_true(self.aiger.get_sym(cond))
 #        print 'eval: {} = {}'.format(cond,res)
         return res

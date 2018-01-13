@@ -779,7 +779,8 @@ class IfAction(Action):
                 raise IvyError(self,'condition must be boolean') 
             branches = [self.args[1],self.args[2] if len(self.args) >= 3 else Sequence()]
             upds = [a.int_update(domain,pvars) for a in branches]
-            return ite_action(self.args[0],upds[0],upds[1],domain.relations)
+            res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
+            return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):

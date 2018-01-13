@@ -728,9 +728,9 @@ else:
         p[0] = [p[1]]
 
     def p_pflets_pflets_pflet(p):
-        'pflets : pflets pflet'
+        'pflets : pflets COMMA pflet'
         p[0] = p[1]
-        p[0].append(p[2])
+        p[0].append(p[3])
         
     def p_proofstep_let_pflets(p):
         'proofstep : LET pflets'

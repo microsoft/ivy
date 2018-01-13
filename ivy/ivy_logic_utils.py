@@ -1157,7 +1157,7 @@ def elim_definitions(clauses,dead):
 #    print "elim_definitions fmlas = {}".format(["%s" % f for f in fmlas])
     deadset = set(dead)
     defs = [d for d in clauses.defs if d.defines() not in deadset]
-    return Clauses(fmlas,defs)
+    return Clauses(fmlas,defs,clauses.annot)
 
 def rename_symbols(rn,clauses1,to_rename):
     map1 = dict((s,s.rename(rn)) for s in to_rename)
@@ -1199,9 +1199,9 @@ def or_clauses_int(rn,args):
 
 def ite_clauses_int(rn,cond,args):
     assert len(args) == 2
-    a0,a1 = args[0].annot,args[1].annot
 #    print "or_clauses_int: args = {}".format(args)
     args = elim_dead_definitions(rn,args)
+    a0,a1 = args[0].annot,args[1].annot
 #    print "or_clauses_int: args = {}".format(args)
     v = bool_const(rn())
     argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
