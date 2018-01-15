@@ -157,25 +157,26 @@ object toma = {
         assume pout.tag = I & pout.valid -> pout.val = aux(I).res;
         assume pout.valid -> complete_eu = aux(pout.tag).eu;
 
-        # use pout to retire an instruction
-
-        if(pout.valid){
-            ir(R).resvd := ir(R).tag ~= pout.tag & ir(R).resvd;
-            ir(R).val := (pout.val) if (ir(R).resvd & ir(R).tag = pout.tag) else (ir(R).val);
-
-            st(T).opra.valid := st(T).opra.tag = pout.tag | st(T).opra.valid;
-            st(T).opra.val := (pout.val) if ~st(T).opra.valid & st(T).opra.tag = pout.tag else st(T).opra.val;
-            
-            st(T).oprb.valid := st(T).oprb.tag = pout.tag | st(T).oprb.valid;
-            st(T).oprb.val := (pout.val) if ~st(T).oprb.valid & st(T).oprb.tag = pout.tag else st(T).oprb.val;
-            
-            st(T).valid := st(T).issued & pout.tag ~= T & st(T).valid;
-        };
-
         # stall if station is busy or read of reserved register
 
         stallout := opin = op_alu & st(st_choice).valid 
                     | opin = op_rd & ir(srca).resvd;
+
+        # use pout to retire an instruction
+
+        if(pout.valid){
+            ir(R).val := (pout.val) if (ir(R).resvd & ir(R).tag = pout.tag) else (ir(R).val);
+            ir(R).resvd := ir(R).tag ~= pout.tag & ir(R).resvd;
+
+            st(T).opra.val := (pout.val) if ~st(T).opra.valid & st(T).opra.tag = pout.tag else st(T).opra.val;
+            st(T).opra.valid := st(T).opra.tag = pout.tag | st(T).opra.valid;
+            
+            st(T).oprb.val := (pout.val) if ~st(T).oprb.valid & st(T).oprb.tag = pout.tag else st(T).oprb.val;
+            st(T).oprb.valid := st(T).oprb.tag = pout.tag | st(T).oprb.valid;
+            
+            st(T).valid := ~(st(T).issued & pout.tag = T) & st(T).valid;
+        };
+
 
         # perform the incoming op
 
@@ -184,8 +185,6 @@ object toma = {
 	        
 	        # store the instruction in an RS
 	  
-	        ir(dst).resvd := true;
-	        ir(dst).tag := st_choice;
 	        st(st_choice).valid := true;
 	        st(st_choice).issued := false;
 	  
@@ -211,7 +210,13 @@ object toma = {
 	            st(st_choice).oprb.valid := ~ir(srcb).resvd;
 	            st(st_choice).oprb.tag := ir(srcb).tag;
 	            st(st_choice).oprb.val := ir(srcb).val;
-	        }
+	        };
+
+                # mark the dst register as reserved
+
+                ir(dst).resvd := true;
+	        ir(dst).tag := st_choice;
+
 	    }
             else if opin = op_rd {
                 dout := ir(srca).val;
@@ -293,12 +298,35 @@ schema trans2 = {
     property Y = X  -> (x = X <-> x = Y)
 }
 
+schema contra = {
+    type t
+    function x : t
+    property Y ~= X -> ~(x = X & x = Y)
+}
+
+# schema cong1 = {
+#     type t
+#     type u
+#     function x : t
+#     function f1(X:t) : u
+#     property x = X -> f1(x) = f1(X)
+# }
+
 schema cong1 = {
     type t
     type u
     function x : t
+    function y : u
     function f1(X:t) : u
-    property x = X -> f1(x) = f1(X)
+    property (f1(X) = y <-> f1(x) = y) | x ~= X 
+}
+
+schema cong1b = {
+    type t
+    type u
+    function x : t
+    function f2(X:t) : bool
+    property (f2(X) <-> f2(x)) | x ~= X 
 }
 
 schema cong2 = {
