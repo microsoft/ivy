@@ -276,7 +276,6 @@ class Encoder(object):
         return map(self.sub.lit,self.encoding[sym])
 
     def define(self,sym,val):
-        iu.dbg('sym')
         vs = encode_vars([sym],self.encoding)
         for s,v in zip(vs,val):
             self.sub.define(s,v )
@@ -586,8 +585,8 @@ def expand_schemata(mod,sort_constants,funs):
             continue
         conc = schema.args[-1]
         for m in match_schema_prems(list(schema.args[:-1]),sort_constants,funs,match):
-            iu.dbg('str_map(m)')
-            iu.dbg('conc')
+#            iu.dbg('str_map(m)')
+#            iu.dbg('conc')
             inst = apply_match(m,conc)
             res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
     return res
@@ -930,7 +929,38 @@ def match_annotation(action,annot,handler):
     recur(action,annot,dict())
     
 
+def add_err_flag(action,erf,errconds):
+    if isinstance(action,ia.AssertAction):
+        errcond = ilu.dual_formula(action.args[0])
+        res = ia.AssignAction(erf,il.Or(erf,errcond))
+        errconds.append(errcond)
+        res.lineno = action.lineno
+        return res
+    if isinstance(action,ia.AssumeAction):
+        res = ia.AssumeAction(il.Or(erf,action.args[0])) 
+        res.lineno = action.lineno
+        return res
+    if isinstance(action,(ia.Sequence,ia.ChoiceAction,ia.EnvAction,ia.BindOldsAction)):
+        return action.clone([add_err_flag(a,erf,errconds) for a in action.args])
+    if isinstance(action,ia.IfAction):
+        return action.clone([action.args[0]] + [add_err_flag(a,erf,errconds) for a in action.args[1:]])
+    if isinstance(action,ia.LocalAction):
+        return action.clone(action.args[:-1] + [add_err_flag(action.args[-1],erf,errconds)])
+    return action
+
+def add_err_flag_mod(mod,erf,errconds):
+    for actname in list(mod.actions):
+        action = mod.actions[actname]
+        new_action = add_err_flag(action,erf,errconds)
+        new_action.formal_params = action.formal_params
+        new_action.formal_returns = action.formal_returns
+        mod.actions[actname] = new_action
+       
 def to_aiger(mod,ext_act):
+
+    erf = il.Symbol('err_flag',il.find_sort('bool'))
+    errconds = []
+    add_err_flag_mod(mod,erf,errconds)
 
     # we use a special state variable __init to indicate the initial state
 
@@ -938,10 +968,9 @@ def to_aiger(mod,ext_act):
     ext_act = ia.EnvAction(*ext_acts)
 
     init_var = il.Symbol('__init',il.find_sort('bool')) 
-    init = ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())]))
-    action = ia.IfAction(init_var,ext_act,init)
-
-
+    init = add_err_flag(ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())])),erf,errconds)
+    action = ia.Sequence(ia.AssignAction(erf,il.Or()),ia.IfAction(init_var,ext_act,init))
+    
     # get the invariant to be proved, replacing free variables with
     # skolems. First, we apply any proof tactics.
 
@@ -968,7 +997,7 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
-    iu.dbg('trans')
+#    iu.dbg('trans')
 
 #    print 'action : {}'.format(action)
 #    print 'annotation: {}'.format(trans.annot)
@@ -1014,7 +1043,10 @@ def to_aiger(mod,ext_act):
     
     # step 3: eliminate quantfiers using finite instantiations
 
-    sort_constants = mine_constants(mod,trans,invariant)
+    from_asserts = il.And(*[il.Equals(x,x) for x in ilu.used_symbols_ast(il.And(*errconds)) if
+                            tr.is_skolem(x) and not il.is_function_sort(x.sort)])
+    iu.dbg('from_asserts')
+    sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
     sort_constants2 = mine_constants2(mod,trans,invariant)
     print '\ninstantiations:'
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
@@ -1051,7 +1083,7 @@ def to_aiger(mod,ext_act):
         if res is None:
             prev = prev_expr(stvarset,expr,sort_constants)
             if prev is not None:
-                print 'stvar: old: {} new: {}'.format(prev,expr)
+#                print 'stvar: old: {} new: {}'.format(prev,expr)
                 pva = new_prop(prev)
                 res = tr.new(pva)
                 new_stvars.append(pva)
@@ -1145,11 +1177,15 @@ def to_aiger(mod,ext_act):
 
     aiger = Encoder(inputs,stvars,outputs)
     comb_defs = [df for df in trans.defs if not tr.is_new(df.defines())]
+
+    invar_fail = il.Symbol('invar__fail',il.find_sort('bool'))  # make a name for invariant fail cond
+    comb_defs.append(il.Definition(invar_fail,il.Not(invariant)))
+
     aiger.deflist(comb_defs)
     for df in trans.defs:
         if tr.is_new(df.defines()):
             aiger.set(tr.new_of(df.defines()),aiger.eval(df.args[1]))
-    miter = il.And(init_var,il.Not(cnst_var),il.Not(invariant))
+    miter = il.And(init_var,il.Not(cnst_var),il.Or(invar_fail,fix(erf)))
     aiger.set(fail,aiger.eval(miter))
 
 #    aiger.sub.debug()
@@ -1190,11 +1226,6 @@ class AigerMatchHandler(object):
         elif il.is_true(cond):
             res =  True
         else:
-            if cond not in self.aiger.encoding:
-                iu.dbg('cond')
-                iu.dbg('str_map(self.aiger.encoding)')
-            else:
-                iu.dbg('self.aiger.encoding[cond]')
             res = il.is_true(self.aiger.get_sym(cond))
 #        print 'eval: {} = {}'.format(cond,res)
         return res
@@ -1243,7 +1274,8 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
         print '\nCounterexample follows:'
         print 80*'-'
         current = dict()
-        for line in lines[:-1]:
+        count = 0
+        for line in lines:
             if tr:
                 print ''
             cols = line.split(' ')
@@ -1252,6 +1284,11 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
                 badwit()
             pre,inp,out,post = cols
             aiger.sub.step(inp)
+            count += 1
+            if count == len(lines):
+                invar_fail = il.Symbol('invar__fail',il.find_sort('bool'))
+                if il.is_true(aiger.get_sym(invar_fail)):
+                    break
             # print 'inputs:'
             # for v in aiger.inputs:
             #     if v in decoder:

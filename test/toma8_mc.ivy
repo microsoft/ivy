@@ -154,8 +154,9 @@ object toma = {
 
         # TODO: these need to be proved
 
-        assume pout.tag = I & pout.valid -> pout.val = aux(I).res;
         assume pout.valid -> complete_eu = aux(pout.tag).eu;
+        assert complete_eu = E & pout.tag = I & pout.valid -> pout.val = aux(I).res;
+        assume pout.tag = I & pout.valid -> pout.val = aux(I).res;
 
         # stall if station is busy or read of reserved register
 
