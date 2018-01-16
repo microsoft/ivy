@@ -154,8 +154,9 @@ object toma = {
 
         # TODO: these need to be proved
 
+        assert complete_eu = E & pout.tag = I &  pout.valid -> complete_eu = aux(pout.tag).eu;
         assume pout.valid -> complete_eu = aux(pout.tag).eu;
-        assert complete_eu = E & pout.tag = I & pout.valid -> pout.val = aux(I).res;
+        assert complete_eu = E & aux(I).opra = A & aux(I).oprb = B & f(A,B) = C & pout.tag = I & pout.valid -> pout.val = aux(I).res;
         assume pout.tag = I & pout.valid -> pout.val = aux(I).res;
 
         # stall if station is busy or read of reserved register
@@ -336,6 +337,7 @@ schema cong2 = {
     type u
     function x1 : t1
     function x2 : t2
+    function y : u
     function f1(X1:t1,X2:t2) : u
-    property x1 = X1 & x2 = X2 -> f1(x1,x2) = f1(X1,X2)
+    property (f1(X1,X2) = y <-> f1(x1,x2) = y) | x1 ~= X1 | x2 ~= X2
 }

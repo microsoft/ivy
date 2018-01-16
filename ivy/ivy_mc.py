@@ -1046,6 +1046,7 @@ def to_aiger(mod,ext_act):
     from_asserts = il.And(*[il.Equals(x,x) for x in ilu.used_symbols_ast(il.And(*errconds)) if
                             tr.is_skolem(x) and not il.is_function_sort(x.sort)])
     iu.dbg('from_asserts')
+    invar_syms.update(ilu.used_symbols_ast(from_asserts))
     sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
     sort_constants2 = mine_constants2(mod,trans,invariant)
     print '\ninstantiations:'
@@ -1153,7 +1154,9 @@ def to_aiger(mod,ext_act):
     # Turn the transition constraint into a definition
     
     cnst_var = il.Symbol('__cnst',il.find_sort('bool'))
-    new_defs = trans.defs + [il.Definition(tr.new(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas))))]
+    new_defs = list(trans.defs)
+    new_defs.append(il.Definition(tr.new(cnst_var),fix(cnst_var)))
+    new_defs.append(il.Definition(fix(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas)))))
     stvars.append(cnst_var)
     trans = ilu.Clauses([],new_defs)
     
@@ -1185,7 +1188,7 @@ def to_aiger(mod,ext_act):
     for df in trans.defs:
         if tr.is_new(df.defines()):
             aiger.set(tr.new_of(df.defines()),aiger.eval(df.args[1]))
-    miter = il.And(init_var,il.Not(cnst_var),il.Or(invar_fail,fix(erf)))
+    miter = il.And(init_var,il.Not(cnst_var),il.Or(invar_fail,il.And(fix(erf),il.Not(fix(cnst_var)))))
     aiger.set(fail,aiger.eval(miter))
 
 #    aiger.sub.debug()
