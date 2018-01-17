@@ -125,17 +125,16 @@ action pi_Remote_Get = {
     src := *
 }
 
-# action ni_Local_Get_nak = {
-#     assume net.get(src,home);
-#     assume home ~= src;
-#     assume ~rp_net(src);
-#     assume dir.pending | (dir.dirty & dir.local_ & cache(home).state~=exclusive) | (dir.dirty & ~dir.local_ & src = dir.hptr);
-#     net.get(src,home) := false;
-#     net.nak(home,src) := true
-# }
+action ni_Local_Get_nak = {
+    assume net(src).mtype = uGet & net(src).proc = home;
+    assume home ~= src;
+    assume ~rp_net(src);
+    assume dir.pending | (dir.dirty & dir.local_ & cache(home).state~=exclusive) | (dir.dirty & ~dir.local_ & src = dir.hptr);
+    net(src).mtype := uNAK;
+}
 
-# action ni_Local_Get = {
-#     assume net.get(src,home);
+# action ni_Local_Get_fwd = {
+#     assume net(src).mtype = uGet & net(src).proc = home;
 #     assume home ~= src;
 #     assume ~dir.pending & ~dir.dirty & ~ rp_net(src) & ~cache(src).invmarked;
 #     net.get(src,home) := false;
@@ -291,7 +290,7 @@ action ni_localGetX_inv = {
 }
 
 action ni_Remote_PutX = {
-    assume net(dst).mtype = uGetX & net(dst).proc = src;
+    assume net(dst).mtype = uPutX & net(dst).proc = src;
     assume dst~=home & cache(dst).wait = getX;
     net(dst).mtype := nouni;
     cache(dst).wait :=none;
@@ -440,7 +439,7 @@ export pi_Local_Get_dirty
 export pi_Local_Get
 export pi_Local_Get_im
 export pi_Remote_Get
-#export  ni_Local_Get_nak
+export ni_Local_Get_nak
 #export  ni_Local_Get
 export ni_Local_Get
 export ni_Local_Get_fwd
@@ -469,6 +468,10 @@ export ni_NAK_Clear
 invariant [coherent]
   cache(X).state = exclusive -> X = real_owner
 proof let H = home, Y = excl_src
+
+invariant [nodups]
+  cache(X).state = exclusive -> dir.dirty & ~wbnet.wb & shwbnet.mtype ~= shwb
+proof let H = home
 
 # invariant [nonint1]
 #   net.shwb(X,home) -> dir.pending & dir.dirty & X = dir.hptr
