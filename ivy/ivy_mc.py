@@ -713,7 +713,7 @@ def elim_ite(expr,cnsts):
 def mine_constants(mod,trans,invariant):
     res = defaultdict(list)
     for c in ilu.used_symbols_ast(invariant):
-        if not il.is_function_sort(c.sort):
+        if not il.is_function_sort(c.sort) and tr.is_skolem(c):
             res[c.sort].append(c)
 #    iu.dbg('res')
     return res
@@ -818,8 +818,8 @@ class Qelim(object):
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
             insts = [normalize(il.substitute(expr.body,m)) for m in maps]
-            for i in insts:
-                print '    {}'.format(i)
+#            for i in insts:
+#                print '    {}'.format(i)
             for inst in insts:
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
@@ -1142,13 +1142,21 @@ def to_aiger(mod,ext_act):
 #    exit(0)
 
     # For each state var, create a variable that corresponds to the input of its latch
+    # Also, havoc all the state bits except the init flag at the initial time. This
+    # is needed because in aiger, all latches start at 0!
 
     def fix(v):
         return v.prefix('nondet')
+    def curval(v):
+        return v.prefix('curval')
+    def initchoice(v):
+        return v.prefix('initchoice')
     stvars_fix_map = dict((tr.new(v),fix(v)) for v in stvars)
+    stvars_fix_map.update((v,curval(v)) for v in stvars if v != init_var)
     trans = ilu.rename_clauses(trans,stvars_fix_map)
 #    iu.dbg('trans')
     new_defs = trans.defs + [il.Definition(ilu.sym_inst(tr.new(v)),ilu.sym_inst(fix(v))) for v in stvars]
+    new_defs.extend(il.Definition(curval(v),il.Ite(init_var,v,initchoice(v))) for v in stvars if  v != init_var)
     trans = ilu.Clauses(trans.fmlas,new_defs)
     
     # Turn the transition constraint into a definition
