@@ -1,0 +1,172 @@
+#lang ivy1.7
+
+include order
+
+type node
+
+instance epochobj : unbounded_sequence
+alias epoch = epochobj.t
+
+instance stakeord : unbounded_sequence
+alias stake = stakeord.t
+
+axiom 0 <= X:epoch
+axiom X:stake >= 0
+
+instance inst_object : unbounded_sequence
+alias inst = inst_object.t
+
+
+type config
+relation val_at(C:config, I:inst, V:bool)
+
+object nodeset = {
+    type set
+    relation member(N:node,S:set)
+    relation majority(S:set)
+    function common(S:set,T:set) : node
+    axiom majority(S) & majority(T) -> member(common(S,T),S) & member(common(S,T),T)
+}
+
+function leader_of(E:epoch) : node
+
+relation wedge_msg(E:epoch, S:stake)
+relation wedge_ack_msg(E:epoch, N:node, S1:stake, S2:stake, C:config)
+relation accept_msg(E:epoch, S:stake, C:config)
+relation accepted_msg(E:epoch, N:node, S:stake, C:config)
+relation wedged(E:epoch, N:node)
+relation started(E:epoch, N:node) # TODO: add nodes and nodesets
+relation config_decided(E:epoch,C:config) # ghost relation
+
+# derived relations:
+relation left_stake(E:epoch, N:node, S:stake)
+relation joined_stake(E:epoch, N:node, S:stake)
+
+relation proposal(E:epoch, I:inst, V:bool)
+relation vote(E:epoch, N:node, I:inst, V:bool)
+relation decision(E:epoch, N:node, I:inst, V:bool)
+relation transferral(E:epoch, N:node, I:inst, V:bool)
+
+# records past decisions of any epoch or node
+
+relation any_decision(I:inst, V:bool)
+
+after init {
+    wedge_msg(E,S) := false;
+    wedge_ack_msg(E,N,S1,S2,C2) := false;
+    accept_msg(E,S,C2) := false;
+    accepted_msg(E,N,S,C) := false;
+    proposal(E,I,V) := false;
+    vote(E,N,I,V) := false;
+    decision(E,N,I,V) := false;
+    any_decision(I,V) := false;
+    transferral(E,N,I,V) := false;
+    left_stake(E,N,S) := false;
+    joined_stake(E,N, S) := false;
+    wedged(E,N) := false;
+    started(E,N) := E = 0;
+    config_decided(E,C) := false;
+}
+
+# a client sends a wedge message:
+action send_wedge (e:epoch,s:stake) = { # TODO add nodeset.sets and membershipt
+    require s ~= 0;
+    wedge_msg(e,s) := true
+}
+
+action join_stake (e:epoch, n:node, s:stake) = {
+    require s ~= 0;
+    require started(e,n);
+    require wedge_msg(e,s);
+    require ~left_stake(e,n,s);
+    wedged(e,n) := true;
+    left_stake(e,n,S) := left_stake(e,n,S) | ~(s <= S);
+    joined_stake(e,n,s) := true
+}
+
+action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, n: node, c : config) = {
+
+    require s ~= 0;
+    assume ~accept_msg(e,s,C);
+    require forall N. nodeset.member(N,nset) -> joined_stake(e,N,s);
+    require nodeset.majority(nset);
+
+    if maxs = 0 {
+	# if no stake, n must have the exact configuration and it must be maximal
+	require nodeset.member(n,nset) & forall I,V . val_at(c,I,V) <-> (vote(e,n,I,V) | transferral(e,n,I,V));
+	require nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+	require 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C)
+    } else {
+	# if stake, n must have accepted at the stake and stake must be maximal
+	require s > maxs & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
+	require (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
+    };
+
+    accept_msg(e, s, c) := true;
+}
+
+action send_accepted_msg(e:epoch, n:node, s:stake, c:config) = {
+    require s ~= 0;
+    require started(e,n);
+    require ~left_stake(e,n,s);
+    require accept_msg(e,s,c);
+    accepted_msg(e, n, s, c) := true
+}
+
+
+action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config) = {
+    require s ~= 0;
+    require ~started(e,n);
+    require nodeset.majority(nset);
+    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
+    require nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
+
+    config_decided(e_prev, c) := true;
+    transferral(e,n,I,V) := val_at(c,I,V);
+    decision(e,n,I,V) := val_at(c,I,V);
+    started(e,n) := true
+}
+
+# the leader proposes a value to vote for at instance i.
+action propose(e:epoch, i:inst, v:bool) = {
+    require started(e,leader_of(e));
+    require i <= BIG_I -> ~transferral(e,leader_of(e),BIG_I,V);
+    require i <= BIG_I -> ~proposal(e,BIG_I,V);
+
+    proposal(e,i,v) := true
+}
+
+
+action do_vote(e:epoch, n:node, i:inst, v:bool) = {
+    require started(e, n);
+    require ~wedged(e,n);
+    require proposal(e,i,v);
+    # assume ~(i <= I) -> exists V . vote(c,n,I,V);
+
+    vote(e, n, i, v) := true
+}
+
+
+action decide(e:epoch, n:node, v:bool, nset:nodeset.set, i:inst) = {
+    require started(e, n);
+    require nodeset.majority(nset);
+    require nodeset.member(N, nset) -> vote(e, N, i, v);
+
+    decision(e, n, i, v) := true;
+    any_decision(i,v) := true
+}
+
+invariant any_decision(I,V1) & any_decision(I,V2) -> V1 = V2
+
+export send_wedge
+export join_stake
+export receive_wedge_ack_msgs
+export send_accepted_msg
+export start
+export propose
+export do_vote
+export decide
+
+
+
+
