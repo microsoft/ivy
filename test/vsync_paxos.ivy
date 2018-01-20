@@ -16,16 +16,19 @@ axiom X:stake >= 0
 instance inst_object : unbounded_sequence
 alias inst = inst_object.t
 
+axiom ~(T:epoch < T)
+
+type value
 
 type config
-relation val_at(C:config, I:inst, V:bool)
+relation val_at(C:config, I:inst, V:value)
 
 object nodeset = {
     type set
     relation member(N:node,S:set)
     relation majority(S:set)
     function common(S:set,T:set) : node
-    axiom majority(S) & majority(T) -> member(common(S,T),S) & member(common(S,T),T)
+    axiom majority(S) & majority(T) & N = common(S,T) -> member(N,S) & member(N,T)
 }
 
 function leader_of(E:epoch) : node
@@ -42,14 +45,17 @@ relation config_decided(E:epoch,C:config) # ghost relation
 relation left_stake(E:epoch, N:node, S:stake)
 relation joined_stake(E:epoch, N:node, S:stake)
 
-relation proposal(E:epoch, I:inst, V:bool)
-relation vote(E:epoch, N:node, I:inst, V:bool)
-relation decision(E:epoch, N:node, I:inst, V:bool)
-relation transferral(E:epoch, N:node, I:inst, V:bool)
+relation proposal(E:epoch, I:inst, V:value)
+relation vote(E:epoch, N:node, I:inst, V:value)
+relation decision(E:epoch, N:node, I:inst, V:value)
+relation transferral(E:epoch, N:node, I:inst, V:value)
 
 # records past decisions of any epoch or node
 
-relation any_decision(I:inst, V:bool)
+relation any_decision(I:inst, V:value)
+function dec_maj(I:inst, V:value) : nodeset.set # records majority for decision
+function dec_epoch(I:inst, V:value) : epoch
+function epoch_maj(E:epoch) : nodeset.set  # The majority that finished epoch E
 
 after init {
     wedge_msg(E,S) := false;
@@ -87,19 +93,19 @@ action join_stake (e:epoch, n:node, s:stake) = {
 action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, n: node, c : config) = {
 
     require s ~= 0;
-    assume ~accept_msg(e,s,C);
+    assume forall C. ~accept_msg(e,s,C);
     require forall N. nodeset.member(N,nset) -> joined_stake(e,N,s);
     require nodeset.majority(nset);
 
     if maxs = 0 {
 	# if no stake, n must have the exact configuration and it must be maximal
 	require nodeset.member(n,nset) & forall I,V . val_at(c,I,V) <-> (vote(e,n,I,V) | transferral(e,n,I,V));
-	require nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
-	require 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C)
+	require forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+	require forall N,S,C. 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C)
     } else {
 	# if stake, n must have accepted at the stake and stake must be maximal
 	require s > maxs & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
-	require (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
+	require forall N,MAXS,C. (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
     };
 
     accept_msg(e, s, c) := true;
@@ -118,26 +124,28 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
     require s ~= 0;
     require ~started(e,n);
     require nodeset.majority(nset);
-    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
-    require nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
+    require e_prev < e & forall E. ~(e_prev < E & E < e);
+#    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
+    require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
 
     config_decided(e_prev, c) := true;
     transferral(e,n,I,V) := val_at(c,I,V);
     decision(e,n,I,V) := val_at(c,I,V);
-    started(e,n) := true
+    started(e,n) := true;
+    epoch_maj(e_prev) := nset;
 }
 
 # the leader proposes a value to vote for at instance i.
-action propose(e:epoch, i:inst, v:bool) = {
+action propose(e:epoch, i:inst, v:value) = {
     require started(e,leader_of(e));
-    require i <= BIG_I -> ~transferral(e,leader_of(e),BIG_I,V);
-    require i <= BIG_I -> ~proposal(e,BIG_I,V);
+    require forall BIG_I,V. i <= BIG_I -> ~transferral(e,leader_of(e),BIG_I,V);
+    require forall BIG_I,V. i <= BIG_I -> ~proposal(e,BIG_I,V);
 
     proposal(e,i,v) := true
 }
 
 
-action do_vote(e:epoch, n:node, i:inst, v:bool) = {
+action do_vote(e:epoch, n:node, i:inst, v:value) = {
     require started(e, n);
     require ~wedged(e,n);
     require proposal(e,i,v);
@@ -147,16 +155,24 @@ action do_vote(e:epoch, n:node, i:inst, v:bool) = {
 }
 
 
-action decide(e:epoch, n:node, v:bool, nset:nodeset.set, i:inst) = {
+action decide(e:epoch, n:node, v:value, nset:nodeset.set, i:inst) = {
     require started(e, n);
     require nodeset.majority(nset);
-    require nodeset.member(N, nset) -> vote(e, N, i, v);
+    require forall N. nodeset.member(N, nset) -> vote(e, N, i, v);
 
     decision(e, n, i, v) := true;
-    any_decision(i,v) := true
+    any_decision(i,v) := true;
+    dec_maj(i,v) := nset;
+    dec_epoch(i,v) := e;
 }
 
-invariant any_decision(I,V1) & any_decision(I,V2) -> V1 = V2
+invariant ~(any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2)
+proof let S1 = dec_maj(I,V1), S2 = dec_maj(I,V2), N = nodeset.common(S1,S2), E1 = dec_epoch(I,V1), E2 = dec_epoch(I,V2)
+
+invariant any_decision(I,V1) & dec_epoch(I,V1) < E1 & started(E1,N) -> transferral(E1,N,I,V1)
+proof let E2 = dec_epoch(I,V1), S1 = dec_maj(I,V1), S2 = epoch_maj(E1)
+
+invariant E2 < E1 & nodeset.member(N,epoch_maj(E2)) & vote(E2,N,I,V1) & started(E1,N) -> transferral(E1,N,I,V1)
 
 export send_wedge
 export join_stake
@@ -169,4 +185,122 @@ export decide
 
 
 
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema trans2 = {
+    type t
+    function x : t
+    property Y = X  -> (x = X <-> x = Y)
+}
+
+schema contra = {
+    type t
+    function x : t
+    property Y ~= X -> ~(x = X & x = Y)
+}
+
+# schema cong1 = {
+#     type t
+#     type u
+#     function x : t
+#     function f1(X:t) : u
+#     property x = X -> f1(x) = f1(X)
+# }
+
+schema cong1 = {
+    type t
+    type u
+    function x : t
+    function y : u
+    function f1(X:t) : u
+    property (f1(X) = y <-> f1(x) = y) | x ~= X 
+}
+
+schema cong1b = {
+    type t
+    function x : t
+    function f2(X:t) : bool
+    property (f2(X) = f2(x)) | x ~= X 
+}
+
+schema cong2 = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function y : u
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = y <-> f1(x1,x2) = y) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong2b = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong3 = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = y <-> f1(x1,x2,x3) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong3b = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = f1(x1,x2,x3)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong4 = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = y <-> f1(x1,x2,x3,x4) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
+
+schema cong4b = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = f1(x1,x2,x3,x4)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
 

@@ -785,6 +785,8 @@ def clone_normal(expr,args):
     return expr.clone(args)
 
 def normalize(expr):
+    if il.is_macro(expr):
+        return normalize(il.expand_macro(expr))
     return clone_normal(expr,map(normalize,expr.args))
     
 
@@ -997,8 +999,6 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
-#    iu.dbg('trans')
-
 #    print 'action : {}'.format(action)
 #    print 'annotation: {}'.format(trans.annot)
     annot = trans.annot
@@ -1052,6 +1052,7 @@ def to_aiger(mod,ext_act):
     print '\ninstantiations:'
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
     
+
 #    print 'after qe:'
 #    print 'trans: {}'.format(trans)
 #    print 'invariant: {}'.format(invariant)
