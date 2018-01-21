@@ -1052,7 +1052,8 @@ def to_aiger(mod,ext_act):
     print '\ninstantiations:'
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
     
-
+    iu.dbg('trans')
+    
 #    print 'after qe:'
 #    print 'trans: {}'.format(trans)
 #    print 'invariant: {}'.format(invariant)

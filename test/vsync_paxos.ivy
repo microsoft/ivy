@@ -17,6 +17,7 @@ instance inst_object : unbounded_sequence
 alias inst = inst_object.t
 
 axiom ~(T:epoch < T)
+axiom X:epoch < Y -> Y ~= 0
 
 type value
 
@@ -39,7 +40,7 @@ relation accept_msg(E:epoch, S:stake, C:config)
 relation accepted_msg(E:epoch, N:node, S:stake, C:config)
 relation wedged(E:epoch, N:node)
 relation started(E:epoch, N:node) # TODO: add nodes and nodesets
-relation config_decided(E:epoch,C:config) # ghost relation
+function config_decided(E:epoch) : config # ghost relation
 
 # derived relations:
 relation left_stake(E:epoch, N:node, S:stake)
@@ -56,6 +57,7 @@ relation any_decision(I:inst, V:value)
 function dec_maj(I:inst, V:value) : nodeset.set # records majority for decision
 function dec_epoch(I:inst, V:value) : epoch
 function epoch_maj(E:epoch) : nodeset.set  # The majority that finished epoch E
+relation epoch_ended(E:epoch)
 
 after init {
     wedge_msg(E,S) := false;
@@ -71,7 +73,7 @@ after init {
     joined_stake(E,N, S) := false;
     wedged(E,N) := false;
     started(E,N) := E = 0;
-    config_decided(E,C) := false;
+    epoch_ended(E) := false;
 }
 
 # a client sends a wedge message:
@@ -128,11 +130,15 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
 #    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
     require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
 
-    config_decided(e_prev, c) := true;
+    assert C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
+    assume E2 < e_prev -> epoch_ended(E2);
+
+    config_decided(e_prev) := c;
     transferral(e,n,I,V) := val_at(c,I,V);
     decision(e,n,I,V) := val_at(c,I,V);
     started(e,n) := true;
     epoch_maj(e_prev) := nset;
+    epoch_ended(e_prev) := true;
 }
 
 # the leader proposes a value to vote for at instance i.
@@ -166,13 +172,14 @@ action decide(e:epoch, n:node, v:value, nset:nodeset.set, i:inst) = {
     dec_epoch(i,v) := e;
 }
 
-invariant ~(any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2)
-proof let S1 = dec_maj(I,V1), S2 = dec_maj(I,V2), N = nodeset.common(S1,S2), E1 = dec_epoch(I,V1), E2 = dec_epoch(I,V2)
+# invariant ~(any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2)
+# proof let S1 = dec_maj(I,V1), S2 = dec_maj(I,V2), N = nodeset.common(S1,S2), E1 = dec_epoch(I,V1), E2 = dec_epoch(I,V2)
 
-invariant any_decision(I,V1) & dec_epoch(I,V1) < E1 & started(E1,N) -> transferral(E1,N,I,V1)
-proof let E2 = dec_epoch(I,V1), S1 = dec_maj(I,V1), S2 = epoch_maj(E1)
+# invariant any_decision(I,V1) & dec_epoch(I,V1) < E1 & started(E1,N1) -> transferral(E1,N1,I,V1)
+# proof let E2 = dec_epoch(I,V1), S1 = dec_maj(I,V1), S2 = epoch_maj(E2), N = nodeset.common(S1,S2) 
 
-invariant E2 < E1 & nodeset.member(N,epoch_maj(E2)) & vote(E2,N,I,V1) & started(E1,N) -> transferral(E1,N,I,V1)
+# invariant E2 < E1 & nodeset.member(N,epoch_maj(E2)) & vote(E2,N,I,V1) & started(E1,N1) -> transferral(E1,N1,I,V1)
+
 
 export send_wedge
 export join_stake
