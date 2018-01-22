@@ -75,6 +75,16 @@ def is_skolem(sym):
     """
     return sym.contains('__')
 
+def is_global_skolem(sym):
+    """
+    Global skolems are essentially prophesy variables. That is, they represent existential
+    quantifiers outside the scope of the temporal "globally" and hence are constants over time.
+    That means they don't get renamed when composing transition relations sequentially.
+
+    Global skolems have names of the form '__X...' where X is a capitol letter.
+    """
+    return sym.startswith('__') and len(sym.name) > 2 and sym.name[2].isupper()
+
 def null_update():
     return ([],true_clauses(),false_clauses())
 
@@ -283,7 +293,7 @@ def rename_distinct(clauses1,clauses2):
     rn = UniqueRenamer('',used2)
     map1 = dict()
     for s in used1:
-        if is_skolem(s):
+        if is_skolem(s) and not is_global_skolem(s):
             map1[s] = rename(s,rn)
     return rename_clauses(clauses1,map1)
 

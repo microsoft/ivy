@@ -18,6 +18,7 @@ alias inst = inst_object.t
 
 axiom ~(T:epoch < T)
 axiom X:epoch < Y -> Y ~= 0
+axiom X:epoch = Y -> (X = 0 <-> Y = 0)
 
 type value
 
@@ -56,8 +57,10 @@ relation transferral(E:epoch, N:node, I:inst, V:value)
 relation any_decision(I:inst, V:value)
 function dec_maj(I:inst, V:value) : nodeset.set # records majority for decision
 function dec_epoch(I:inst, V:value) : epoch
+function accept_maj(E:epoch,K:stake) : nodeset.set
 function epoch_maj(E:epoch) : nodeset.set  # The majority that finished epoch E
 relation epoch_ended(E:epoch)
+function epoch_stake(E:epoch) : stake
 
 after init {
     wedge_msg(E,S) := false;
@@ -110,7 +113,10 @@ action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, 
 	require forall N,MAXS,C. (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
     };
 
+    assume forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+
     accept_msg(e, s, c) := true;
+    accept_maj(e,s) := nset;
 }
 
 action send_accepted_msg(e:epoch, n:node, s:stake, c:config) = {
@@ -130,15 +136,23 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
 #    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
     require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
 
-    assert C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
-    assume E2 < e_prev -> epoch_ended(E2);
+    assume epoch_ended(e_prev) -> s = epoch_stake(e_prev) & c = config_decided(e_prev);
+    assume accept_msg(e_prev,s,c);
+    
+    assert forall C,K,E1,N,E2. C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
+    assume forall E2. (E2 < e_prev -> epoch_ended(E2));
+
+    assert forall C,K,E1,N,E2,N1,I,V1,S2,K2,C2. C = c & K = s & E1 = e_prev & S1 = accept_maj(E1,s) & N = nodeset.common(S1,S1) & S2 = epoch_maj(E2) & K2 = epoch_stake(E2) & C2 = config_decided(E2)
+        & E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
+    assume forall E2,N1,I,V1. E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
 
     config_decided(e_prev) := c;
     transferral(e,n,I,V) := val_at(c,I,V);
     decision(e,n,I,V) := val_at(c,I,V);
     started(e,n) := true;
-    epoch_maj(e_prev) := nset;
     epoch_ended(e_prev) := true;
+    epoch_maj(e_prev) := accept_maj(e_prev,s);
+    epoch_stake(e_prev) := s;
 }
 
 # the leader proposes a value to vote for at instance i.

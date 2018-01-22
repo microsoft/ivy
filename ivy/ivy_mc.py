@@ -933,7 +933,7 @@ def match_annotation(action,annot,handler):
 
 def add_err_flag(action,erf,errconds):
     if isinstance(action,ia.AssertAction):
-        errcond = ilu.dual_formula(action.args[0])
+        errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
         res = ia.AssignAction(erf,il.Or(erf,errcond))
         errconds.append(errcond)
         res.lineno = action.lineno
@@ -999,6 +999,7 @@ def to_aiger(mod,ext_act):
 
     stvars,trans,error = action.update(mod,None)
     
+
 #    print 'action : {}'.format(action)
 #    print 'annotation: {}'.format(trans.annot)
     annot = trans.annot
@@ -1052,7 +1053,6 @@ def to_aiger(mod,ext_act):
     print '\ninstantiations:'
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
     
-    iu.dbg('trans')
     
 #    print 'after qe:'
 #    print 'trans: {}'.format(trans)
