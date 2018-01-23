@@ -121,9 +121,9 @@ action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, 
     left_maj(e,K) := nset if maxs < K & K < s else left_maj(e,K);
 
     assert N1 = n & K2 = maxs & E1 = e & C1 = c & S1 = left_maj(E1,K) &
-       0 < K & K < s  -> (C = c | (nodeset.member(N,S1) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C)));
+       0 < K & K < s  -> (accept_msg(e,K,c) | (nodeset.majority(S1) & (nodeset.member(N,S1) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C))));
     assume forall K,C,N. 
-       0 < K & K < s  -> (C = c | (nodeset.member(N,left_maj(e,K)) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C)));
+       0 < K & K < s  -> (accept_msg(e,K,c) | (nodeset.majority(left_maj(e,K)) & (nodeset.member(N,left_maj(e,K)) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C))));
 
 
 #    assume forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
