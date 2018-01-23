@@ -593,13 +593,10 @@ def expand_schemata(mod,sort_constants,funs):
                 
 # This is where we do pattern-based eager instantiation of the axioms
 
-def instantiate_axioms(mod,stvars,trans,invariant,sort_constants):
+def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
 
     # Expand the axioms schemata into axioms
 
-    funs = ilu.used_symbols_clauses(trans)
-    funs.update(ilu.used_symbols_ast(invariant))
-    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort) and not tr.is_new(sym))
     axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
     for a in axioms:
         print 'axiom {}'.format(a)
@@ -1020,6 +1017,16 @@ def to_aiger(mod,ext_act):
     # next_axioms = ilu.rename_clauses(axioms,rn)
     # return ilu.and_clauses(axioms,next_axioms)
 
+    funs = set()
+    for df in trans.defs:
+        funs.update(ilu.used_symbols_ast(df.args[1]))
+    for fmla in trans.fmlas:
+        funs.update(ilu.used_symbols_ast(fmla))
+#   funs = ilu.used_symbols_clauses(trans)
+    funs.update(ilu.used_symbols_ast(invariant))
+    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
+    iu.dbg('[str(fun) for fun in funs]')
+
     # Propositionally abstract
 
     # step 1: get rid of definitions of non-finite symbols by turning
@@ -1064,7 +1071,7 @@ def to_aiger(mod,ext_act):
     # invariant on the axioms, so we define a boolean symbol '__axioms'
     # to represent the axioms.
 
-    axs = instantiate_axioms(mod,stvars,trans,invariant,sort_constants)
+    axs = instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs)
     ax_conj = il.And(*axs)
     ax_var = il.Symbol('__axioms',ax_conj.sort)
     ax_def = il.Definition(ax_var,ax_conj)

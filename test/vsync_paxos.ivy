@@ -12,6 +12,9 @@ alias stake = stakeord.t
 
 axiom 0 <= X:epoch
 axiom X:stake >= 0
+axiom ~(X:stake < 0)
+axiom X:stake < Y -> Y ~= 0
+axiom X:stake = Y -> (X = 0 <-> Y = 0)
 
 instance inst_object : unbounded_sequence
 alias inst = inst_object.t
@@ -44,8 +47,7 @@ relation started(E:epoch, N:node) # TODO: add nodes and nodesets
 function config_decided(E:epoch) : config # ghost relation
 
 # derived relations:
-relation left_stake(E:epoch, N:node, S:stake)
-relation joined_stake(E:epoch, N:node, S:stake)
+function node_stake(E:epoch, N:node) : stake
 
 relation proposal(E:epoch, I:inst, V:value)
 relation vote(E:epoch, N:node, I:inst, V:value)
@@ -61,6 +63,7 @@ function accept_maj(E:epoch,K:stake) : nodeset.set
 function epoch_maj(E:epoch) : nodeset.set  # The majority that finished epoch E
 relation epoch_ended(E:epoch)
 function epoch_stake(E:epoch) : stake
+function left_maj(E:epoch,K:stake) : nodeset.set
 
 after init {
     wedge_msg(E,S) := false;
@@ -72,8 +75,7 @@ after init {
     decision(E,N,I,V) := false;
     any_decision(I,V) := false;
     transferral(E,N,I,V) := false;
-    left_stake(E,N,S) := false;
-    joined_stake(E,N, S) := false;
+    node_stake(E,N) := 0;
     wedged(E,N) := false;
     started(E,N) := E = 0;
     epoch_ended(E) := false;
@@ -89,17 +91,16 @@ action join_stake (e:epoch, n:node, s:stake) = {
     require s ~= 0;
     require started(e,n);
     require wedge_msg(e,s);
-    require ~left_stake(e,n,s);
+    require node_stake(e,n) < s;
     wedged(e,n) := true;
-    left_stake(e,n,S) := left_stake(e,n,S) | ~(s <= S);
-    joined_stake(e,n,s) := true
+    node_stake(e,n) := s;
 }
 
 action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, n: node, c : config) = {
 
     require s ~= 0;
     assume forall C. ~accept_msg(e,s,C);
-    require forall N. nodeset.member(N,nset) -> joined_stake(e,N,s);
+    require forall N. nodeset.member(N,nset) -> ~(node_stake(e,N) < s);
     require nodeset.majority(nset);
 
     if maxs = 0 {
@@ -109,11 +110,23 @@ action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, 
 	require forall N,S,C. 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C)
     } else {
 	# if stake, n must have accepted at the stake and stake must be maximal
-	require s > maxs & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
-	require forall N,MAXS,C. (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
+	require maxs < s & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
+	require forall N,MAXS,C. (MAXS < s & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
     };
 
-    assume forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+    # Key invariant for stakes: when we create a new stake, all lesser stakes with different configs are
+    # dead. A stake is dead if there is a majority that has left it and not accepted it. The function
+    # left_maj records the majority that witnesses the death of a stake.
+
+    left_maj(e,K) := nset if maxs < K & K < s else left_maj(e,K);
+
+    assert N1 = n & K2 = maxs & E1 = e & C1 = c & S1 = left_maj(E1,K) &
+       0 < K & K < s  -> (C = c | (nodeset.member(N,S1) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C)));
+    assume forall K,C,N. 
+       0 < K & K < s  -> (C = c | (nodeset.member(N,left_maj(e,K)) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C)));
+
+
+#    assume forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
 
     accept_msg(e, s, c) := true;
     accept_maj(e,s) := nset;
@@ -122,7 +135,7 @@ action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, 
 action send_accepted_msg(e:epoch, n:node, s:stake, c:config) = {
     require s ~= 0;
     require started(e,n);
-    require ~left_stake(e,n,s);
+    require ~(s < node_stake(e,n));
     require accept_msg(e,s,c);
     accepted_msg(e, n, s, c) := true
 }
@@ -139,12 +152,12 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
     assume epoch_ended(e_prev) -> s = epoch_stake(e_prev) & c = config_decided(e_prev);
     assume accept_msg(e_prev,s,c);
     
-    assert forall C,K,E1,N,E2. C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
-    assume forall E2. (E2 < e_prev -> epoch_ended(E2));
+    # assert forall C,K,E1,N,E2. C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
+    # assume forall E2. (E2 < e_prev -> epoch_ended(E2));
 
-    assert forall C,K,E1,N,E2,N1,I,V1,S2,K2,C2. C = c & K = s & E1 = e_prev & S1 = accept_maj(E1,s) & N = nodeset.common(S1,S1) & S2 = epoch_maj(E2) & K2 = epoch_stake(E2) & C2 = config_decided(E2)
-        & E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
-    assume forall E2,N1,I,V1. E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
+    # assert forall C,K,E1,N,E2,N1,I,V1,S2,K2,C2. C = c & K = s & E1 = e_prev & S1 = accept_maj(E1,s) & N = nodeset.common(S1,S1) & S2 = epoch_maj(E2) & K2 = epoch_stake(E2) & C2 = config_decided(E2)
+    #     & E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
+    # assume forall E2,N1,I,V1. E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
 
     config_decided(e_prev) := c;
     transferral(e,n,I,V) := val_at(c,I,V);
@@ -325,3 +338,32 @@ schema cong4b = {
     property (f1(X1,X2,X3,X4) = f1(x1,x2,x3,x4)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
 }
 
+schema lt1 = {
+    function x1 : stake
+    property ~(X < Y & Y < x1 & x1 < X)
+}
+
+schema lt2 = {
+    function x1 : stake
+    property ~(~(X < Y) & ~(x1 < X) & x1 < Y)
+}
+
+schema lt3 = {
+    function x1 : stake
+    property Y = X  -> (x1 < X <-> x1 < Y)
+}
+
+schema lt4 = {
+    type t1
+    type t2
+    function x1 : t1
+    function x2 : t2
+    function x : stake
+    function f1(X1:t1,X2:t2) : stake
+    property (x < f1(X1,X2) <-> x < f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+}
+
+schema lt5 = {
+    function x1 : stake
+    property X = x1 -> ~(X < x1) & ~(x1 < X)
+}
