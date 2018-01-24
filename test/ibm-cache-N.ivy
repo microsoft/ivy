@@ -120,16 +120,15 @@ invariant (s.cache(C) = exclusive | s.channel2_4(C) = grantexclusive) -> s.homeS
 
 invariant s.homeexclusiveGranted & s.homeSharerList(C) -> C = owner
 
-invariant s.homeinvalidateList(C) -> (s.homeCurrentCommand = reqexclusive
-       | s.homeCurrentCommand = reqshared) & s.homeSharerList(C)
-
 invariant s.channel2_4(C) = invalidate ->  (s.homeCurrentCommand = reqexclusive
        | (s.homeCurrentCommand = reqshared & s.homeexclusiveGranted)) & s.homeSharerList(C) & ~s.homeinvalidateList(C)
 
 invariant s.channel3(C) = invalidateAck -> s.cache(C) = invalid & (s.homeCurrentCommand = reqexclusive
        | (s.homeCurrentCommand = reqshared & s.homeexclusiveGranted)) & s.homeSharerList(C) & ~s.homeinvalidateList(C)
 
+invariant s.channel2_4(C) ~= empty2_4 -> s.channel3(C) ~= invalidateAck
 
+invariant  s.homeinvalidateList(C) -> s.homeSharerList(C)
 
 
 export reqsharedRule
