@@ -1,0 +1,301 @@
+#lang ivy1.7
+
+type word_t
+type reg_t 
+type tag_t
+type eu_t
+type opcode = {op_alu,op_rd,op_wr,op_nop}
+
+module st_opr = {
+  var valid : bool
+  var tag : tag_t
+  var val : word_t
+}
+
+module st_opr_r = {
+  var valid : bool
+  relation tag(T:tag_t)
+  var val : word_t
+}
+
+
+# an uninterpreted function to model the ALU
+
+relation f(X:word_t,Y:word_t,Z:word_t)
+axiom f(X,Y,Z1) & f(X,Y,Z2) -> Z1 = Z2
+
+object ref = {
+
+    action step(opin : opcode,                           # opcode input
+                srca:reg_t, srcb:reg_t, dst:reg_t,       # source and dest indices input
+                din: word_t,                             # data input
+                st_choice : tag_t,
+                issue_choice : tag_t
+                )
+
+    returns (
+      dout : word_t
+    )
+
+    var r(R:reg_t) : word_t        # the register file
+
+    implement step {
+        var opra : word_t;
+        var oprb : word_t;
+        var res : word_t;
+
+        if opin = op_alu {
+	    opra := r(srca);
+	    oprb := r(srcb);
+            res := *;
+	    assume f(opra,oprb,res);
+	    r(dst) := res;
+	}
+	else if opin = op_rd {
+	    dout := r(srca);
+	}
+	else if opin = op_wr {
+	    r(dst) := din;
+	};
+
+       # following doesn't belong here...
+
+        # update the aux state (this is ghost, should not be here)
+
+        if(opin = op_alu){
+            toma.aux(st_choice).opra := opra;
+            toma.aux(st_choice).oprb := oprb;
+            toma.aux(st_choice).res  := res;
+            toma.aux(st_choice).srca := srca;
+            toma.aux(st_choice).srcb := srcb;
+        }; 
+        
+
+    }
+}
+  
+object toma = {
+
+   object ir(self:reg_t) = {
+        var resvd : bool
+        relation tag(T:tag_t)
+        var val : word_t
+    }
+  
+    object st(self:tag_t) = {
+        var valid : bool
+        instance opra : st_opr_r
+        instance oprb : st_opr_r
+        var dst : reg_t
+        var issued : bool
+    }
+
+    object eu(self:eu_t) = {
+        var valid : bool
+        var ready : bool
+        var res : word_t
+        relation tag(T:tag_t)
+    }
+
+
+    # the auxiliary state 
+
+    object aux(self:tag_t) = {
+        var opra : word_t
+        var oprb : word_t
+        var res : word_t
+        var srca : reg_t
+        var srcb : reg_t
+        var eu : eu_t
+    }
+
+    instance pout : st_opr
+
+    after init {
+        st(T).valid := false;
+        ir(R).resvd := false;
+        eu(E).valid := false;
+
+        # initialize abstract model to match the implementation
+
+        ref.r(R) := ir(R).val;
+    }
+    
+
+    action step (
+      opin : opcode,                           # opcode input
+      srca:reg_t, srcb:reg_t, dst:reg_t,       # source and dest indices input
+      din: word_t,
+      st_choice : tag_t,
+      issue_choice : tag_t,
+      issue_eu : eu_t,
+      complete_eu : eu_t
+    )
+    returns (
+      stallout : bool,
+      dout : word_t
+    )
+    =
+    {
+
+        var exe_rdy : bool;
+        var exe_valid : bool;
+        var exe_tag : tag_t;
+        var exe_opra : word_t;
+        var exe_oprb : word_t;
+
+        # completion of operation in execution unit, result on pout
+
+        pout.valid := eu(complete_eu).valid & eu(complete_eu).ready;
+        pout.val := eu(complete_eu).res;
+        pout.tag := *;
+        assume eu(complete_eu).tag(pout.tag);
+        if pout.valid {
+            eu(complete_eu).valid := false
+        };
+
+
+        # stall if station is busy or read of reserved register
+
+        stallout := opin = op_alu & st(st_choice).valid 
+                    | opin = op_rd & ir(srca).resvd;
+
+        # use pout to retire an instruction
+
+        if(pout.valid){
+            ir(R).val := (pout.val) if (ir(R).resvd & ir(R).tag(pout.tag)) else (ir(R).val);
+            ir(R).resvd := ~ir(R).tag(pout.tag) & ir(R).resvd;
+
+            st(T).opra.val := (pout.val) if ~st(T).opra.valid & st(T).opra.tag(pout.tag) else st(T).opra.val;
+            st(T).opra.valid := st(T).opra.tag(pout.tag) | st(T).opra.valid;
+            
+            st(T).oprb.val := (pout.val) if ~st(T).oprb.valid & st(T).oprb.tag(pout.tag) else st(T).oprb.val;
+            st(T).oprb.valid := st(T).oprb.tag(pout.tag) | st(T).oprb.valid;
+            
+            st(T).valid := ~(st(T).issued & pout.tag = T) & st(T).valid;
+        };
+
+
+        # perform the incoming op
+
+        if(~stallout) {
+            if opin = op_alu {
+	        
+	        # store the instruction in an RS
+	  
+	        st(st_choice).valid := true;
+	        st(st_choice).issued := false;
+	  
+	        # fetch the a operand (with bypass)
+	  
+	        if(pout.valid & ir(srca).resvd & ir(srca).tag(pout.tag) ) {
+	            st(st_choice).opra.valid := true;
+	            st(st_choice).opra.tag(X) := ir(srca).tag(X);
+	            st(st_choice).opra.val := pout.val;
+	        } else {
+	            st(st_choice).opra.valid := ~ir(srca).resvd;
+	            st(st_choice).opra.tag(X) := ir(srca).tag(X);
+	            st(st_choice).opra.val := ir(srca).val;
+	        };
+	  
+	        # fetch the b operand (with bypass) */
+	  
+	        if(pout.valid & ir(srcb).resvd & ir(srcb).tag(pout.tag)){
+	            st(st_choice).oprb.valid := true;
+	            st(st_choice).oprb.tag(X) := ir(srcb).tag(X);
+	            st(st_choice).oprb.val := pout.val;
+	        } else {
+	            st(st_choice).oprb.valid := ~ir(srcb).resvd;
+	            st(st_choice).oprb.tag(X) := ir(srcb).tag(X);
+	            st(st_choice).oprb.val := ir(srcb).val;
+	        };
+
+                # mark the dst register as reserved
+
+                ir(dst).resvd := true;
+	        ir(dst).tag(X) := st_choice = X;
+
+                st(st_choice).dst := dst  # this is aux
+	    }
+            else if opin = op_rd {
+                dout := ir(srca).val;
+            }
+            else if opin = op_wr {
+	        ir(dst).val := din;
+	        ir(dst).resvd := false;
+	    }
+        };
+    
+        # instruction issue from station to eu
+
+        exe_rdy := ~eu(issue_eu).valid;
+
+        if(st(issue_choice).valid
+        & st(issue_choice).opra.valid
+        & st(issue_choice).oprb.valid
+        & ~st(issue_choice).issued
+        & exe_rdy)
+        {
+	    exe_valid := true;
+	    st(issue_choice).issued := true;
+        }
+        else exe_valid := false;
+        
+        exe_tag  := issue_choice;
+        exe_opra :=  st(issue_choice).opra.val;
+        exe_oprb :=  st(issue_choice).oprb.val;
+    
+        # perform op in execution unit, store result
+
+        if(~eu(issue_eu).valid){
+            eu(issue_eu).valid := exe_valid;
+            var foo : word_t;
+            eu(issue_eu).res := foo;
+            assume  f(exe_opra,exe_oprb,eu(issue_eu).res);
+            eu(issue_eu).tag(X) := exe_tag = X;
+        };
+        
+        # commit the abstract operation here
+        
+        if ~stallout {
+            var dout := ref.step(opin,srca,srcb,dst,din,st_choice,issue_choice) # ghost
+        };
+
+        if (exe_valid) {
+            aux(issue_choice).eu := issue_eu;
+        };
+
+    }
+   
+
+    # the refinement maps 
+    
+    invariant st(K).valid & st(K).opra.valid -> st(K).opra.val = aux(K).opra
+
+    invariant st(K).valid & st(K).oprb.valid -> st(K).oprb.val = aux(K).oprb
+
+    invariant eu(E).valid & eu(E).tag(T) -> st(T).valid & eu(E).res = aux(T).res & aux(T).eu = E & st(T).issued
+
+    invariant ~ir(R).resvd -> ir(R).val = ref.r(R)
+
+    invariant ir(R).resvd & ir(R).tag(K) -> st(K).valid & aux(K).res = ref.r(R) & st(K).dst = R
+    
+    invariant st(K).valid & ~st(K).opra.valid & st(K).opra.tag(T) -> st(T).valid & aux(T).res = aux(K).opra
+
+    invariant st(K).valid & ~st(K).oprb.valid & st(K).oprb.tag(T) -> st(T).valid & aux(T).res = aux(K).oprb
+
+    invariant st(T).valid -> f(aux(T).opra,aux(T).oprb,aux(T).res)
+
+    # invariant pout.tag = I & pout.valid -> pout.val = aux(I).res;
+    # proof let A = aux(i).opra, B = aux(i).oprb, C = f(a,b), J = complete_eu
+   
+    # # noninterference lemma
+
+    # invariant pout.valid -> complete_eu = aux(pout.tag).eu;
+    # proof I = pout.tag, J = complete_eu
+
+
+}
+
+export toma.step
+
