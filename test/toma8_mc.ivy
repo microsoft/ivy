@@ -152,12 +152,11 @@ object toma = {
         };
 
 
-        # TODO: these need to be proved
+        assert pout.valid -> complete_eu = aux(pout.tag).eu
+        proof let E=complete_eu, I = pout.tag;
 
-        assert complete_eu = E & pout.tag = I &  pout.valid -> complete_eu = aux(pout.tag).eu;
-        assume pout.valid -> complete_eu = aux(pout.tag).eu;
-        assert complete_eu = E & aux(I).opra = A & aux(I).oprb = B & f(A,B) = C & pout.tag = I & pout.valid -> pout.val = aux(I).res;
-        assume pout.tag = I & pout.valid -> pout.val = aux(I).res;
+        assert pout.tag = I & pout.valid -> pout.val = aux(I).res
+        proof let E = complete_eu, A = aux(I).opra, B = aux(I).oprb, C = f(A,B);
 
         # stall if station is busy or read of reserved register
 

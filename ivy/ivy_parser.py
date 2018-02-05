@@ -1290,12 +1290,13 @@ def p_assert_rhs_fmla(p):
     'assert_rhs : fmla'
     p[0] = check_non_temporal(p[1])
 
-def p_top_assert_symbol_arrow_assert_rhs(p):
-    'top : top ASSERT SYMBOL ARROW assert_rhs'
-    p[0] = p[1]
-    thing = Implies(Atom(p[3],[]),p[5])
-    thing.lineno = get_lineno(p,4)
-    p[0].declare(AssertDecl(thing))
+if iu.get_numeric_version() <= [1,6]: 
+    def p_top_assert_symbol_arrow_assert_rhs(p):
+        'top : top ASSERT SYMBOL ARROW assert_rhs'
+        p[0] = p[1]
+        thing = Implies(Atom(p[3],[]),p[5])
+        thing.lineno = get_lineno(p,4)
+        p[0].declare(AssertDecl(thing))
 
 def p_oper_symbol(p):
     'oper : atype'
@@ -1519,25 +1520,57 @@ def p_action_assume(p):
     p[0] = AssumeAction(check_non_temporal(p[2]))
     p[0].lineno = get_lineno(p,1)
 
-def p_action_assert(p):
-    'action : ASSERT fmla'
-    p[0] = AssertAction(check_non_temporal(p[2]))
-    p[0].lineno = get_lineno(p,1)
 
 if iu.get_numeric_version() <= [1,6]:
+    def p_action_assert(p):
+        'action : ASSERT fmla'
+        p[0] = AssertAction(check_non_temporal(p[2]))
+        p[0].lineno = get_lineno(p,1)
+
     def p_action_ensures(p):
         'action : ENSURES fmla'
         p[0] = EnsuresAction(check_non_temporal(p[2]))
         p[0].lineno = get_lineno(p,1)
 else:
+    def p_action_assert(p):
+         'action : ASSERT fmla'
+         p[0] = AssertAction(check_non_temporal(p[2]))
+         p[0].lineno = get_lineno(p,1)
+
+    def p_action_assert_proof_proofstep(p):
+         'action : ASSERT fmla PROOF proofstep'
+         p[0] = AssertAction(check_non_temporal(p[2]),p[4])
+         p[0].lineno = get_lineno(p,1)
+
     def p_action_ensure(p):
-        'action : ENSURE fmla'
-        p[0] = EnsuresAction(check_non_temporal(p[2]))
-        p[0].lineno = get_lineno(p,1)
+         'action : ENSURE fmla'
+         p[0] = EnsuresAction(check_non_temporal(p[2]))
+         p[0].lineno = get_lineno(p,1)
+
+    def p_action_ensure_proof_proofstep(p):
+         'action : ENSURE fmla PROOF proofstep'
+         p[0] = EnsuresAction(check_non_temporal(p[2]),p[4])
+         p[0].lineno = get_lineno(p,1)
+
     def p_action_require(p):
-        'action : REQUIRE fmla'
-        p[0] = RequiresAction(check_non_temporal(p[2]))
-        p[0].lineno = get_lineno(p,1)
+         'action : REQUIRE fmla'
+         p[0] = RequiresAction(check_non_temporal(p[2]))
+         p[0].lineno = get_lineno(p,1)
+
+    def p_action_require_proof_proofstep(p):
+         'action : REQUIRE fmla PROOF proofstep'
+         p[0] = RequiresAction(check_non_temporal(p[2]),p[4])
+         p[0].lineno = get_lineno(p,1)
+
+    # def p_action_ensure_optproof(p):
+    #     'action : ENSURE fmla optproof'
+    #     p[0] = EnsuresAction(*([check_non_temporal(p[2])] + ([p[3]] if p[3] is not None else [])))
+    #     p[0].lineno = get_lineno(p,1)
+
+    # def p_action_require_optproof(p):
+    #     'action : REQUIRE fmla optproof'
+    #     p[0] = RequiresAction(*([check_non_temporal(p[2])] + ([p[3]] if p[3] is not None else [])))
+    #     p[0].lineno = get_lineno(p,1)
     
 
 def p_action_set_lit(p):

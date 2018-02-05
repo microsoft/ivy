@@ -546,7 +546,16 @@ def compile_assert_action(self):
     ctx = ExprContext(lineno = self.lineno)
     with ctx:
         cond = sortify_with_inference(self.args[0])
-    ctx.code.append(self.clone([cond]))
+    if len(self.args) > 1:
+        prover = ip.ProofChecker([],[],im.module.schemata)
+        pf = self.args[1].compile()
+        subgoals = prover.admit_proposition(ivy_ast.LabeledFormula(None,cond),pf)
+        assm = AssumeAction(ivy_logic.close_formula(cond))
+        assm.lineno = self.lineno
+        asrt = Sequence(*([self.clone([sg.formula]) for sg in subgoals] + [assm]))
+    else:
+        asrt = self.clone([cond])
+    ctx.code.append(asrt)
     res = ctx.extract()
     return res
 

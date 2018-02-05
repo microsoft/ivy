@@ -257,7 +257,7 @@ class AssumeAction(Action):
 
 class AssertAction(Action):
     def __init__(self,*args):
-        assert len(args) == 1
+        assert len(args) <= 2
         self.args = args
     sort_infer_root = True
     def name(self):
