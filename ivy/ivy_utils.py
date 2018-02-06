@@ -324,6 +324,7 @@ class Parameter(object):
         self.check = check
         self.process = process
         self.key = key
+        self.callback = lambda x:None
         assert key not in registry
         registry[key] = self
 
@@ -334,9 +335,13 @@ class Parameter(object):
         if not self.check(new_val):
             raise IvyError(None,"bad parameter value: {}={}".format(self.key,new_val))
         self.value = self.process(new_val)
+        self.callback(self.value)
 
     def __nonzero__(self):
         return True if self.value else False
+
+    def set_callback(self,callback):
+        self.callback = callback
 
 class BooleanParameter(Parameter):
     """ Parameter that takes "true" for True and "false" for False """

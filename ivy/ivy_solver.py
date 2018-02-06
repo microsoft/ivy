@@ -31,8 +31,13 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 
 use_z3_enums = False
 
+def set_macro_finder(truth):
+    z3.set_param('smt.macro_finder',truth)
+    
 #z3.set_param('smt.mbqi.trace',True)
-z3.set_param('smt.macro_finder',True)
+opt_macro_finder = iu.BooleanParameter("macro_finder",True)
+set_macro_finder(True)
+opt_macro_finder.set_callback(set_macro_finder)
 
 def set_use_native_enums(t):
     global use_z3_enums
@@ -899,6 +904,9 @@ def model_if_none(clauses1,implied,model):
 
 def decide(s,atoms=None):
 #    print "solving{"
+    # f = open("ivy.smt2","w")
+    # f.write(s.to_smt2())
+    # f.close()
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
