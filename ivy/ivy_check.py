@@ -202,7 +202,14 @@ def check_fcs_in_state(mod,ag,post,fcs):
     return res is None
 
 def check_conjs_in_state(mod,ag,post,indent=8):
-    return check_fcs_in_state(mod,ag,post,[ConjChecker(c,indent) for c in mod.labeled_conjs])
+    check_lineno = act.checked_assert.get()
+    if check_lineno == "":
+        check_lineno = None
+    if check_lineno is not None:
+        lcs = [sub for sub in mod.labeled_conjs if sub.lineno == check_lineno]
+    else:
+        lcs = mod.labeled_conjs
+    return check_fcs_in_state(mod,ag,post,[ConjChecker(c,indent) for c in lcs])
 
 def check_safety_in_state(mod,ag,post,report_pass=True):
     return check_fcs_in_state(mod,ag,post,[Checker(lg.Or(),report_pass=report_pass)])
