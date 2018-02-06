@@ -3129,7 +3129,8 @@ def emit_assume(self,header):
     code = []
     indent(code)
     code.append('ivy_assume(')
-    il.close_formula(self.args[0]).emit(header,code)
+    with ivy_ast.ASTContext(self):
+        il.close_formula(self.args[0]).emit(header,code)
     code.append(', "{}");\n'.format(iu.lineno_str(self).replace('\\','\\\\')))
     header.extend(code)
 
@@ -4210,7 +4211,7 @@ def main():
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
     ivy_init.read_params()
-    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test'})
+    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test','assume_invariants':'false'})
     if target.get() == "gen":
         iu.set_parameters({'filter_symbols':'false'})
     else:

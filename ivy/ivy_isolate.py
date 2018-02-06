@@ -28,6 +28,9 @@ opt_prefer_impls = iu.BooleanParameter("prefer_impls",False)
 opt_keep_destructors = iu.BooleanParameter("keep_destructors",False)
 isolate_mode = iu.Parameter("isolate_mode","check")
 
+# Used by extractor to switch off assumption of present invariants
+assume_invariants = iu.BooleanParameter("assume_invariants",True)
+
 def lookup_action(ast,mod,name):
     if name not in mod.actions:
         raise iu.IvyError(ast,"action {} undefined".format(name))
@@ -1330,6 +1333,8 @@ def bracket_action(mod,actname,before,after):
     bracket_action_int(mod,'ext:'+actname,before,after)
 
 def apply_present_conjectures(isol,mod):
+    if not assume_invariants.get():
+        return []
     brackets = []
     conjs = get_isolate_conjs(mod,isol,verified=False)
     cg = mod.call_graph()  # TODO: cg should be cached
