@@ -356,14 +356,14 @@ def summarize_isolate(mod):
             roots = set(iu.reachable([actname],lambda x: callgraph[x]))
             for sub in guarantees:
                 print "            {}guarantee".format(pretty_lineno(sub)),
-                if check and sub.lineno not in tried:
+                if check and any(r in roots and (r,sub.lineno) not in tried for r in checked_actions):
                     print_dots()
-                    tried.add(sub.lineno)
                     old_checked_assert = act.checked_assert.get()
                     act.checked_assert.value = sub.lineno
                     some_failed = False
                     for root in checked_actions:
                         if root in roots:
+                           tried.add((root,sub.lineno))
                            ag = ivy_art.AnalysisGraph()
                            pre = itp.State()
                            pre.clauses = lut.and_clauses(*mod.conjs)
