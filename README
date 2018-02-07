@@ -1,5 +1,5 @@
-This direcory can be builds into a web site using Jekyll
-(jekyllrb.com).
+This directory can be builds into a web site using Jekyll
+(https://jekyllrb.com/).
 
 Viewing the site locally:
 
@@ -7,7 +7,7 @@ $ jekyll serve --port 8989 --watch
 
 (open http://localhost:8989)
 
-Deploying the site to github pages:
+Deploying the site to Github pages:
 
 The script "deploy" will do the following:
 
@@ -16,10 +16,10 @@ gh-pages branch.
 
 2) Remove all the files from git and copy this directory into the project.
 
-3) Add all the files to git, commit the changes and push to github.
+3) Add all the files to git, commit the changes and push to Github.
 
 This has the odd effect that all the files are freshly created in git
-each time you deploy, but it works around the problem that github
+each time you deploy, but it works around the problem that Github
 project web sites use a separate branch for the site content instead
 of a directory.
 
