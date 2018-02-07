@@ -143,6 +143,7 @@ class Checker(object):
     def __init__(self,conj,report_pass=True):
         self.fc = lut.dual_clauses(lut.formula_to_clauses(conj))
         self.report_pass = report_pass
+        self.failed = False
     def cond(self):
         return self.fc
     def start(self):
@@ -152,6 +153,7 @@ class Checker(object):
         print('FAIL')
         global failures
         failures += 1
+        self.failed = True
         return not diagnose.get() # ignore failures if not diagnosing
     def unsat(self):
         if self.report_pass:
@@ -199,7 +201,7 @@ def check_fcs_in_state(mod,ag,post,fcs):
     res = history.satisfy(axioms,gmc,filter_fcs(fcs))
     if res is not None and diagnose.get():
         show_counterexample(ag,post,res)
-    return res is None
+    return not any(fc.failed for fc in fcs)
 
 def check_conjs_in_state(mod,ag,post,indent=8):
     check_lineno = act.checked_assert.get()
