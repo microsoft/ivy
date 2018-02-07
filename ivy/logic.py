@@ -277,7 +277,8 @@ class Or(recstruct('Or', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'Or({})'.format(
             ', '.join(str(t) for t in self)

@@ -950,7 +950,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     # symbols and axioms (in particular, axioms in global scope have
     # label None). Maybe this needs to be cleaned up.
 
-    
+        
     keep_ax = lambda name: (name is None or startswith_eq_some(name.rep,present,mod))
 
     prop_deps = get_prop_dependencies(mod)

@@ -721,6 +721,13 @@ last_fmla = None
 
 ivy_ast.SchemaInstantiation.compile = lambda self: compile_schema_instantiation(self,last_fmla)
 
+def compile_let_tactic(self):
+    fmla = ivy_ast.And(*[ivy_ast.Atom('=',x.args[0],x.args[1]) for x in self.args])
+    thing = sortify_with_inference(fmla)
+    return self.clone(thing.args)
+    
+ivy_ast.LetTactic.compile = compile_let_tactic
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
@@ -744,6 +751,8 @@ class IvyDomainSetup(IvyDeclInterp):
         lf = ax.compile()
         self.domain.labeled_props.append(lf)
         self.last_fact = lf
+    def conjecture(self,c):
+        self.last_fact = None
     def named(self,lhs):
         cond = ivy_logic.drop_universals(self.last_fact.formula)
         if not ivy_logic.is_exists(cond) or len(cond.variables) != 1:
@@ -845,6 +854,8 @@ class IvyDomainSetup(IvyDeclInterp):
             add_symbol(df.args[0].rep.name,df.args[0].rep.sort)
             
     def proof(self,pf):
+        if self.last_fact is None:
+            return # this is a conjecture
         global last_fmla
         last_fmla = self.last_fact.formula
         self.domain.proofs.append((self.last_fact,pf.compile()))
@@ -961,9 +972,21 @@ class IvyDomainSetup(IvyDeclInterp):
 class IvyConjectureSetup(IvyDeclInterp):
     def __init__(self,domain):
         self.domain = domain
+        self.last_fact = None
     def conjecture(self,ax):
         cax = ax.compile()
         self.domain.labeled_conjs.append(cax)
+        self.last_fact = cax
+    def property(self,p):
+        self.last_fact = None
+    def definition(self,p):
+        self.last_fact = None
+    def proof(self,pf):
+        if self.last_fact is None:
+            return # this is a not a conjecture
+        global last_fmla
+        last_fmla = self.last_fact.formula
+        self.domain.proofs.append((self.last_fact,pf.compile()))
 
 def check_is_action(mod,ast,name):
     if name not in mod.actions:

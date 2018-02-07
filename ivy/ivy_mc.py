@@ -7,6 +7,8 @@ import ivy_utils as iu
 import ivy_art as art
 import ivy_interp as itp
 import ivy_theory as thy
+import ivy_ast
+import ivy_proof
 
 import tempfile
 import subprocess
@@ -147,7 +149,9 @@ class Aiger(object):
         return '\n'.join(strings)+'\n'
                                           
     def sym_vals(self,syms):
-        return ''.join(self.state[self.map[x]] for x in syms)
+        for sym in syms:
+            assert sym in self.map, sym
+        return ''.join(self.getin(self.map[x]) for x in syms)
 
     def sym_next_vals(self,syms):
         return ''.join(self.getin(self.values[x]) for x in syms)
@@ -187,7 +191,22 @@ class Aiger(object):
         for lt in self.latches:
             self.state[self.map[lt]] = self.getin(self.values[lt])
 #        self.show_state()
-            
+
+
+    def debug(self):
+        print 'inputs: {}'.format([str(x) for x in self.inputs])
+        print 'latches: {}'.format([str(x) for x in self.latches])
+        print 'outputs: {}'.format([str(x) for x in self.outputs])
+        print 'map:'
+        for x,y in self.map.iteritems():
+            print '{} = {}'.format(x,y)
+        print 'values:'
+        for x,y in self.values.iteritems():
+            print '{} = {}'.format(x,y)
+        print 'self:'
+        print self
+
+        
             
 # functions for binary encoding of finite sorts
 
@@ -470,10 +489,117 @@ def is_finite_sort(sort):
             isinstance(interp,thy.BitVectorTheory) or
             il.is_boolean_sort(interp))
 
+# Expand the axiom schemata into axioms, for a given collection of
+# function and constant symbols.
 
+class Match(object):
+    def __init__(self):
+        self.stack = [[]]
+        self.map = dict()
+    def add(self,x,y):
+        self.map[x] = y
+        self.stack[-1].append(x)
+    def push(self):
+        self.stack.append([])
+    def pop(self):
+        for x in self.stack.pop():
+            del self.map[x]
+    def unify(self,x,y):
+        if x not in self.map:
+            self.add(x,y)
+            return True
+        return self.map[x] == y
+    def unify_lists(self,xl,yl):
+        if len(xl) != len(yl):
+            return False
+        for x,y in zip(xl,yl):
+            if not self.unify(x,y):
+                return False
+        return True
+    
+
+def str_map(map):
+    return '{' + ','.join('{}:{}'.format(x,y) for x,y in map.iteritems()) + '}'
+
+def match_schema_prems(prems,sort_constants,funs,match):
+    if len(prems) == 0:
+        yield match.map.copy()
+    else:
+        prem = prems.pop()
+        if isinstance(prem,ivy_ast.ConstantDecl):
+            sym = prem.args[0]
+            if il.is_function_sort(sym.sort):
+                sorts = sym.sort.dom + (sym.sort.rng,)
+                for f in funs:
+                    fsorts = f.sort.dom + (f.sort.rng,)
+                    match.push()
+                    if match.unify_lists(sorts,fsorts):
+                        match.add(sym,f)
+                        for m in match_schema_prems(prems,sort_constants,funs,match):
+                            yield m
+                    match.pop()
+            else:
+                if sym.sort in match.map:
+                    cands = sort_constants[match.map[sym.sort]]
+                else:
+                    cands = [s for v in sort_constants.values() for s in v]
+                for cand in cands:
+                    match.push()
+                    if match.unify(sym.sort,cand.sort):
+                        match.add(sym,cand)
+                        for m in match_schema_prems(prems,sort_constants,funs,match):
+                            yield m
+                    match.pop()
+        elif isinstance(prem,il.UninterpretedSort):
+            for m in match_schema_prems(prems,sort_constants,funs,match):
+                yield m
+        prems.append(prem)
+            
+def apply_match(match,fmla):
+    """ apply a match to a formula. 
+
+    In effect, substitute all symbols in the match with the
+    corresponding lambda terms and apply beta reduction
+    """
+
+    args = [apply_match(match,f) for f in fmla.args]
+    if il.is_app(fmla):
+        if fmla.rep in match:
+            func = match[fmla.rep]
+            return func(*args)
+    elif il.is_binder(fmla):
+        vs = [apply_match(match,v) for v in fmla.variables]
+        return fmla.clone_binder(vs,apply_match(match,fmla.body))
+    elif il.is_variable(fmla):
+        return il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
+    return fmla.clone(args)
+
+def expand_schemata(mod,sort_constants,funs):
+    match = Match()
+    res = []
+    for s in mod.sig.sorts.values():
+        if not il.is_function_sort(s):
+            match.add(s,s)
+    for name,schema in mod.schemata.iteritems():
+        if any(name.startswith(pref) for pref in ['rec[','lep[','ind[']):
+            continue
+        conc = schema.args[-1]
+        for m in match_schema_prems(list(schema.args[:-1]),sort_constants,funs,match):
+#            iu.dbg('str_map(m)')
+#            iu.dbg('conc')
+            inst = apply_match(m,conc)
+            res.append(ivy_ast.LabeledFormula(ivy_ast.Atom(name),inst))
+    return res
+                
 # This is where we do pattern-based eager instantiation of the axioms
 
-def instantiate_axioms(mod,stvars,trans,invariant):
+def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
+
+    # Expand the axioms schemata into axioms
+
+    axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
+    for a in axioms:
+        print 'axiom {}'.format(a)
 
     # Get all the triggers. For now only automatic triggers
 
@@ -490,7 +616,7 @@ def instantiate_axioms(mod,stvars,trans,invariant):
                 return expr
 
     triggers = []
-    for ax in mod.labeled_axioms:
+    for ax in axioms:
         fmla = ax.formula
         vs = list(ilu.used_variables_ast(fmla))
         if vs:
@@ -520,6 +646,8 @@ def instantiate_axioms(mod,stvars,trans,invariant):
         if il.is_eq(expr):
             px,py = pat.args
             ex,ey = expr.args
+            if px.sort != ex.sort:
+                return False
             save = mp.copy()
             if match(px,ex,mp) and match(py,ey,mp):
                 return True
@@ -582,6 +710,17 @@ def elim_ite(expr,cnsts):
 def mine_constants(mod,trans,invariant):
     res = defaultdict(list)
     for c in ilu.used_symbols_ast(invariant):
+        if not il.is_function_sort(c.sort) and tr.is_skolem(c):
+            res[c.sort].append(c)
+#    iu.dbg('res')
+    return res
+
+def mine_constants2(mod,trans,invariant):
+    defnd = set(dfn.defines() for dfn in trans.defs)
+    res = defaultdict(list)
+    syms = ilu.used_symbols_ast(invariant)
+    syms.update(ilu.used_symbols_clauses(trans))
+    for c in syms:
         if not il.is_function_sort(c.sort):
             res[c.sort].append(c)
 #    iu.dbg('res')
@@ -593,8 +732,9 @@ def mine_constants(mod,trans,invariant):
 # does not qualify.
 # 
 
-def prev_expr(stvarset,expr):
-    if any(sym in stvarset for sym in ilu.symbols_ast(expr)):
+def prev_expr(stvarset,expr,sort_constants):
+    if any(sym in stvarset or tr.is_skolem(sym) and not sym in sort_constants[sym.sort]
+           for sym in ilu.symbols_ast(expr)):
         return None
     news = [sym for sym in ilu.used_symbols_ast(expr) if tr.is_new(sym)]
     if news:
@@ -642,6 +782,8 @@ def clone_normal(expr,args):
     return expr.clone(args)
 
 def normalize(expr):
+    if il.is_macro(expr):
+        return normalize(il.expand_macro(expr))
     return clone_normal(expr,map(normalize,expr.args))
     
 
@@ -654,41 +796,44 @@ def normalize(expr):
 # subformula.
 
 class Qelim(object):
-    def __init__(self,sort_constants):
+    def __init__(self,sort_constants,sort_constants2):
         self.syms = dict()     # map from quantified formulas to proposition variables
         self.syms_ctr = 0      # counter for fresh symbols
         self.fmlas = []        # constraints added
         self.sort_constants = sort_constants
+        self.sort_constants2 = sort_constants2
     def fresh(self,expr):
         res = il.Symbol('__qe[{}]'.format(self.syms_ctr),expr.sort)
         self.syms[expr] = res
         self.syms_ctr += 1
         return res
-    def qe(self,expr):
+    def qe(self,expr,sort_constants):
         if il.is_quantifier(expr):
             old = self.syms.get(expr,None)
             if old is not None:
                 return old
             res = self.fresh(expr)
-            consts = [self.sort_constants[x.sort] for x in expr.variables]
+            consts = [sort_constants[x.sort] for x in expr.variables]
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
             insts = [normalize(il.substitute(expr.body,m)) for m in maps]
-            for i in insts:
-                print '    {}'.format(i)
+#            for i in insts:
+#                print '    {}'.format(i)
             for inst in insts:
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
             return res
-        return clone_normal(expr,map(self.qe,expr.args))
-    def __call__(self,trans,invariant):
+        return clone_normal(expr,[self.qe(e,sort_constants) for e in expr.args])
+    def __call__(self,trans,invariant,indhyps):
         # apply to the transition relation
-        new_defs = map(self.qe,trans.defs)
-        new_fmlas = [self.qe(il.close_formula(fmla)) for fmla in trans.fmlas]
+        new_defs = [self.qe(defn,self.sort_constants) for defn in trans.defs]
+        new_fmlas = [self.qe(il.close_formula(fmla),self.sort_constants) for fmla in trans.fmlas]
         # apply to the invariant
-        invariant = self.qe(invariant)
+        invariant = self.qe(invariant,self.sort_constants)
+        # apply to inductive hyps
+        indhyps = [self.qe(fmla,self.sort_constants2) for fmla in indhyps]
         # add the transition constraints to the new trans
-        trans = ilu.Clauses(new_fmlas+self.fmlas,new_defs)
+        trans = ilu.Clauses(new_fmlas+indhyps+self.fmlas,new_defs)
         return trans,invariant
         
 
@@ -720,28 +865,45 @@ class MatchHandler(object):
         
     
 def match_annotation(action,annot,handler):
-    def recur(action,annot,env):
+    def recur(action,annot,env,pos=None):
         if isinstance(annot,ia.RenameAnnotation):
             save = dict()
             for x,y in annot.map.iteritems():
                 if x in env:
                     save[x] = env[x]
                 env[x] = env.get(y,y)
-            recur(action,annot.arg,env)
+            recur(action,annot.arg,env,pos)
             env.update(save)
             return
         if isinstance(action,ia.Sequence):
-            annots = uncompose_annot(annot)
-            assert len(annots) == len(action.args)
-            for act,ann in zip(action.args,annots):
-                recur(act,ann,env)
+            if pos is None:
+                pos = len(action.args)
+            if pos == 0:
+                assert isinstance(annot,ia.EmptyAnnotation),annot
+                return
+            if not isinstance(annot,ia.ComposeAnnotation):
+                iu.dbg('len(action.args)')
+                iu.dbg('pos')
+                iu.dbg('annot')
+            assert isinstance(annot,ia.ComposeAnnotation)
+            recur(action,annot.args[0],env,pos-1)
+            recur(action.args[pos-1],annot.args[1],env)
             return
         if isinstance(action,ia.IfAction):
-            assert isinstance(annot,ia.IteAnnotation)
-            if handler.eval(env.get(annot.cond,annot.cond)):
+            assert isinstance(annot,ia.IteAnnotation),annot
+            rncond = env.get(annot.cond,annot.cond)
+            try:
+                cond = handler.eval(rncond)
+            except KeyError:
+                print '{}skipping conditional'.format(action.lineno)
+                iu.dbg('str_map(env)')
+                iu.dbg('env.get(annot.cond,annot.cond)')
+                return
+            if cond:
                 recur(action.args[1],annot.thenb,env)
             else:
-                recur(action.args[2],annot.elseb,env)
+                if len(action.args) > 2:
+                    recur(action.args[2],annot.elseb,env)
             return
         if isinstance(action,ia.ChoiceAction):
             assert isinstance(annot,ia.IteAnnotation)
@@ -753,40 +915,96 @@ def match_annotation(action,annot,handler):
                     return
             assert False,'problem in match_annotation'
         if isinstance(action,ia.CallAction):
-            recur(im.module.actions[action.args[0].rep],annot,env)
+            callee = im.module.actions[action.args[0].rep]
+            seq = ia.Sequence(*([ia.Sequence() for x in callee.formal_params]
+                             + [callee] 
+                             + [ia.Sequence() for x in callee.formal_returns]))
+            recur(seq,annot,env)
+            return
+        if isinstance(action,ia.LocalAction):
+            recur(action.args[-1],annot,env)
             return
         handler.handle(action,env)
     recur(action,annot,dict())
     
 
+def add_err_flag(action,erf,errconds):
+    if isinstance(action,ia.AssertAction):
+        errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
+        res = ia.AssignAction(erf,il.Or(erf,errcond))
+        errconds.append(errcond)
+        res.lineno = action.lineno
+        return res
+    if isinstance(action,ia.AssumeAction):
+        res = ia.AssumeAction(il.Or(erf,action.args[0])) 
+        res.lineno = action.lineno
+        return res
+    if isinstance(action,(ia.Sequence,ia.ChoiceAction,ia.EnvAction,ia.BindOldsAction)):
+        return action.clone([add_err_flag(a,erf,errconds) for a in action.args])
+    if isinstance(action,ia.IfAction):
+        return action.clone([action.args[0]] + [add_err_flag(a,erf,errconds) for a in action.args[1:]])
+    if isinstance(action,ia.LocalAction):
+        return action.clone(action.args[:-1] + [add_err_flag(action.args[-1],erf,errconds)])
+    return action
+
+def add_err_flag_mod(mod,erf,errconds):
+    for actname in list(mod.actions):
+        action = mod.actions[actname]
+        new_action = add_err_flag(action,erf,errconds)
+        new_action.formal_params = action.formal_params
+        new_action.formal_returns = action.formal_returns
+        mod.actions[actname] = new_action
+       
 def to_aiger(mod,ext_act):
+
+    erf = il.Symbol('err_flag',il.find_sort('bool'))
+    errconds = []
+    add_err_flag_mod(mod,erf,errconds)
 
     # we use a special state variable __init to indicate the initial state
 
     ext_acts = [mod.actions[x] for x in sorted(mod.public_actions)]
     ext_act = ia.EnvAction(*ext_acts)
+
     init_var = il.Symbol('__init',il.find_sort('bool')) 
-    init = ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())]))
-    action = ia.IfAction(init_var,ext_act,init)
-
+    init = add_err_flag(ia.Sequence(*([a for n,a in mod.initializers]+[ia.AssignAction(init_var,il.And())])),erf,errconds)
+    action = ia.Sequence(ia.AssignAction(erf,il.Or()),ia.IfAction(init_var,ext_act,init))
+    
     # get the invariant to be proved, replacing free variables with
-    # skolems:
+    # skolems. First, we apply any proof tactics.
 
-    invariant = il.And(*[lf.formula for lf in mod.labeled_conjs])
+    pc = ivy_proof.ProofChecker(mod.axioms,mod.definitions,mod.schemata)
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
+    conjs = []
+    for lf in mod.labeled_conjs:
+        if lf.id in pmap:
+            proof = pmap[lf.id]
+            subgoals = pc.admit_proposition(lf,proof)
+            conjs.extend(subgoals)
+        else:
+            conjs.append(lf)
+
+    invariant = il.And(*[il.drop_universals(lf.formula) for lf in conjs])
+#    iu.dbg('invariant')
     skolemizer = lambda v: ilu.var_to_skolem('__',il.Variable(v.rep,v.sort))
     vs = ilu.used_variables_in_order_ast(invariant)
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     invariant = ilu.substitute_ast(invariant,sksubs)
-
+    invar_syms = ilu.used_symbols_ast(invariant)
+    
     # compute the transition relation
 
     stvars,trans,error = action.update(mod,None)
     
+
 #    print 'action : {}'.format(action)
 #    print 'annotation: {}'.format(trans.annot)
     annot = trans.annot
 #    match_annotation(action,annot,MatchHandler())
     
+    indhyps = [il.close_formula(il.Implies(init_var,lf.formula)) for lf in mod.labeled_conjs]
+#    trans = ilu.and_clauses(trans,indhyps)
+
     # save the original symbols for trace
     orig_syms = ilu.used_symbols_clauses(trans)
     orig_syms.update(ilu.used_symbols_ast(invariant))
@@ -798,6 +1016,16 @@ def to_aiger(mod,ext_act):
     # rn = dict((sym,tr.new(sym)) for sym in stvars)
     # next_axioms = ilu.rename_clauses(axioms,rn)
     # return ilu.and_clauses(axioms,next_axioms)
+
+    funs = set()
+    for df in trans.defs:
+        funs.update(ilu.used_symbols_ast(df.args[1]))
+    for fmla in trans.fmlas:
+        funs.update(ilu.used_symbols_ast(fmla))
+#   funs = ilu.used_symbols_clauses(trans)
+    funs.update(ilu.used_symbols_ast(invariant))
+    funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
+    iu.dbg('[str(fun) for fun in funs]')
 
     # Propositionally abstract
 
@@ -823,10 +1051,16 @@ def to_aiger(mod,ext_act):
     
     # step 3: eliminate quantfiers using finite instantiations
 
-    sort_constants = mine_constants(mod,trans,invariant)
+    from_asserts = il.And(*[il.Equals(x,x) for x in ilu.used_symbols_ast(il.And(*errconds)) if
+                            tr.is_skolem(x) and not il.is_function_sort(x.sort)])
+    iu.dbg('from_asserts')
+    invar_syms.update(ilu.used_symbols_ast(from_asserts))
+    sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
+    sort_constants2 = mine_constants2(mod,trans,invariant)
     print '\ninstantiations:'
-    trans,invariant = Qelim(sort_constants)(trans,invariant)
-
+    trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
+    
+    
 #    print 'after qe:'
 #    print 'trans: {}'.format(trans)
 #    print 'invariant: {}'.format(invariant)
@@ -837,7 +1071,7 @@ def to_aiger(mod,ext_act):
     # invariant on the axioms, so we define a boolean symbol '__axioms'
     # to represent the axioms.
 
-    axs = instantiate_axioms(mod,stvars,trans,invariant)
+    axs = instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs)
     ax_conj = il.And(*axs)
     ax_var = il.Symbol('__axioms',ax_conj.sort)
     ax_def = il.Definition(ax_var,ax_conj)
@@ -857,8 +1091,9 @@ def to_aiger(mod,ext_act):
     def new_prop(expr):
         res = prop_abs.get(expr,None)
         if res is None:
-            prev = prev_expr(stvarset,expr)
+            prev = prev_expr(stvarset,expr,sort_constants)
             if prev is not None:
+#                print 'stvar: old: {} new: {}'.format(prev,expr)
                 pva = new_prop(prev)
                 res = tr.new(pva)
                 new_stvars.append(pva)
@@ -886,11 +1121,16 @@ def to_aiger(mod,ext_act):
 
     # find any immutable abstract variables, and give them a next definition
 
+    def my_is_skolem(x):
+        res = tr.is_skolem(x) and x not in invar_syms
+        return res    
     def is_immutable_expr(expr):
-        return not any(tr.is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
+        res = not any(my_is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
+        return res
     for expr,v in prop_abs.iteritems():
         if is_immutable_expr(expr):
             new_stvars.append(v)
+            print 'new state: {}'.format(expr)
             new_defs.append(il.Definition(tr.new(v),v))
 
     trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
@@ -911,19 +1151,29 @@ def to_aiger(mod,ext_act):
 #    exit(0)
 
     # For each state var, create a variable that corresponds to the input of its latch
+    # Also, havoc all the state bits except the init flag at the initial time. This
+    # is needed because in aiger, all latches start at 0!
 
     def fix(v):
         return v.prefix('nondet')
+    def curval(v):
+        return v.prefix('curval')
+    def initchoice(v):
+        return v.prefix('initchoice')
     stvars_fix_map = dict((tr.new(v),fix(v)) for v in stvars)
+    stvars_fix_map.update((v,curval(v)) for v in stvars if v != init_var)
     trans = ilu.rename_clauses(trans,stvars_fix_map)
 #    iu.dbg('trans')
     new_defs = trans.defs + [il.Definition(ilu.sym_inst(tr.new(v)),ilu.sym_inst(fix(v))) for v in stvars]
+    new_defs.extend(il.Definition(curval(v),il.Ite(init_var,v,initchoice(v))) for v in stvars if  v != init_var)
     trans = ilu.Clauses(trans.fmlas,new_defs)
     
     # Turn the transition constraint into a definition
     
     cnst_var = il.Symbol('__cnst',il.find_sort('bool'))
-    new_defs = trans.defs + [il.Definition(tr.new(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas))))]
+    new_defs = list(trans.defs)
+    new_defs.append(il.Definition(tr.new(cnst_var),fix(cnst_var)))
+    new_defs.append(il.Definition(fix(cnst_var),il.Or(cnst_var,il.Not(il.And(*trans.fmlas)))))
     stvars.append(cnst_var)
     trans = ilu.Clauses([],new_defs)
     
@@ -940,15 +1190,25 @@ def to_aiger(mod,ext_act):
     fail = il.Symbol('__fail',il.find_sort('bool'))
     outputs = [fail]
     
+
+#    iu.dbg('trans')
+    
     # make an aiger
 
     aiger = Encoder(inputs,stvars,outputs)
     comb_defs = [df for df in trans.defs if not tr.is_new(df.defines())]
+
+    invar_fail = il.Symbol('invar__fail',il.find_sort('bool'))  # make a name for invariant fail cond
+    comb_defs.append(il.Definition(invar_fail,il.Not(invariant)))
+
     aiger.deflist(comb_defs)
     for df in trans.defs:
         if tr.is_new(df.defines()):
             aiger.set(tr.new_of(df.defines()),aiger.eval(df.args[1]))
-    aiger.set(fail,aiger.eval(il.And(init_var,il.Not(cnst_var),il.Not(invariant))))
+    miter = il.And(init_var,il.Not(cnst_var),il.Or(invar_fail,il.And(fix(erf),il.Not(fix(cnst_var)))))
+    aiger.set(fail,aiger.eval(miter))
+
+#    aiger.sub.debug()
 
     # make a decoder for the abstract propositions
 
@@ -1034,7 +1294,8 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
         print '\nCounterexample follows:'
         print 80*'-'
         current = dict()
-        for line in lines[:-1]:
+        count = 0
+        for line in lines:
             if tr:
                 print ''
             cols = line.split(' ')
@@ -1043,6 +1304,11 @@ def aiger_witness_to_ivy_trace(aiger,witnessfilename,action,stvarset,ext_act,ann
                 badwit()
             pre,inp,out,post = cols
             aiger.sub.step(inp)
+            count += 1
+            if count == len(lines):
+                invar_fail = il.Symbol('invar__fail',il.find_sort('bool'))
+                if il.is_true(aiger.get_sym(invar_fail)):
+                    break
             # print 'inputs:'
             # for v in aiger.inputs:
             #     if v in decoder:

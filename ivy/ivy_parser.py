@@ -151,7 +151,7 @@ def inst_mod(ivy,module,pref,subst,vsubst):
                     print 'no lineno: {}'.format(foo)
         idecl.attributes = decl.attributes
         ivy.declare(idecl)
-    ivy.atributes = save
+    ivy.attributes = save
 
 def do_insts(ivy,insts):
     others = []
@@ -352,11 +352,13 @@ def p_top_conjecture_labeledfmla(p):
 # from version 1.7, "invariant" replaces "conjecture"
 if not iu.get_numeric_version() <= [1,6]:
     def p_top_invariant_labeledfmla(p):
-        'top : top INVARIANT labeledfmla'
+        'top : top INVARIANT labeledfmla optproof'
         p[0] = p[1]
         d = ConjectureDecl(addlabel(p[3],'invar'))
         d.lineno = get_lineno(p,2)
         p[0].declare(d)
+        if p[4] is not None:
+            p[0].declare(ProofDecl(p[4]))
 
 def p_modulestart(p):
     'modulestart :'
@@ -667,12 +669,21 @@ def p_top_derived_defns(p):
     p[0] = p[1]
     p[0].declare(DerivedDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
 
-def p_proofstep_symbol(p):
-    'proofstep : SYMBOL'
-    a = Atom(p[1])
-    a.lineno = get_lineno(p,1)
-    p[0] = SchemaInstantiation(a)
-    p[0].lineno = get_lineno(p,1)
+if iu.get_numeric_version() <= [1,6]:
+    def p_proofstep_symbol(p):
+        'proofstep : SYMBOL'
+        a = Atom(p[1])
+        a.lineno = get_lineno(p,1)
+        p[0] = SchemaInstantiation(a)
+        p[0].lineno = get_lineno(p,1)
+else:
+    def p_proofstep_symbol(p):
+        'proofstep : APPLY SYMBOL'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = SchemaInstantiation(a)
+        p[0].lineno = get_lineno(p,1)
+
     
 def p_match_defn(p):
     'match : defn'
@@ -692,12 +703,39 @@ def p_matches_matches_comma_match(p):
     p[0] = p[1]
     p[0].append(p[3])
 
-def p_proofstep_symbol_with_defns(p):
-    'proofstep : SYMBOL WITH matches'
-    a = Atom(p[1])
-    a.lineno = get_lineno(p,1)
-    p[0] = SchemaInstantiation(*([a]+p[3]))
-    p[0].lineno = get_lineno(p,1)
+if iu.get_numeric_version() <= [1,6]:
+    def p_proofstep_symbol_with_defns(p):
+        'proofstep : SYMBOL WITH matches'
+        a = Atom(p[1])
+        a.lineno = get_lineno(p,1)
+        p[0] = SchemaInstantiation(*([a]+p[3]))
+        p[0].lineno = get_lineno(p,1)
+else:
+    def p_proofstep_symbol_with_defns(p):
+        'proofstep : APPLY SYMBOL WITH matches'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = SchemaInstantiation(*([a]+p[4]))
+        p[0].lineno = get_lineno(p,1)
+
+    def p_pflet_var_eq_fmla(p):
+        'pflet : var EQ fmla'
+        p[0] = Definition(p[1],check_non_temporal(p[3]))
+        p[0].lineno = get_lineno(p,2)
+
+    def p_pflets_pflet(p):
+        'pflets : pflet'
+        p[0] = [p[1]]
+
+    def p_pflets_pflets_pflet(p):
+        'pflets : pflets COMMA pflet'
+        p[0] = p[1]
+        p[0].append(p[3])
+        
+    def p_proofstep_let_pflets(p):
+        'proofstep : LET pflets'
+        p[0] = LetTactic(*p[2])
+        p[0].lineno = get_lineno(p,1)
 
 def p_proofstep_proofstep_semi_proofstep(p):
     'proofstep : proofstep SEMI proofstep'
