@@ -1,4 +1,4 @@
-#lang ivy1.6
+#lang ivy1.7
 
 module timeout_wrapper = {
 
