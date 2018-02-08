@@ -604,6 +604,12 @@ class SchemaInstantiation(AST):
     def __str__(self):
         return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
 
+class NullTactic(AST):
+    def __init__(self,*args):
+        self.args = []
+    def __str__(self):
+        return '{}'
+    
 class LetTactic(AST):
     def __init__(self,*args):
         self.args = args

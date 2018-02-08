@@ -737,9 +737,23 @@ else:
         p[0] = LetTactic(*p[2])
         p[0].lineno = get_lineno(p,1)
 
-def p_proofstep_proofstep_semi_proofstep(p):
-    'proofstep : proofstep SEMI proofstep'
+def p_proofseq_proofstep(p):
+    'proofseq : proofstep'
+    p[0] = p[1]
+
+def p_proofseq_proofseq_semi_proofstep(p):
+    'proofseq : proofseq SEMI proofstep'
     p[0] = ComposeTactics(p[1],p[3])
+    p[0].lineno = get_lineno(p,2)
+
+def p_proofstep_lcb_proofseq_rcb(p):
+    'proofstep : LCB proofseq RCB'
+    p[0] =p[1]
+
+def p_proofstep_lcb_rcb(p):
+    'proofstep : LCB RCB'
+    p[0] = NullTactic()
+    p[0].lineno = get_lineno(p,1)
 
 def p_optproof(p):
     'optproof :'

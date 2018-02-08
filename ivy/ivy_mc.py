@@ -1025,7 +1025,6 @@ def to_aiger(mod,ext_act):
 #   funs = ilu.used_symbols_clauses(trans)
     funs.update(ilu.used_symbols_ast(invariant))
     funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
-    iu.dbg('[str(fun) for fun in funs]')
 
     # Propositionally abstract
 
