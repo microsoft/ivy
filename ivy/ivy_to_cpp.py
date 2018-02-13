@@ -2553,7 +2553,10 @@ def emit_one_initial_state(header):
     m = slv.get_model_clauses(clauses)
     if m == None:
         print clauses
-        raise IvyError(None,'Initial condition is inconsistent')
+        if iu.version_le(iu.get_string_version(),"1.6"):
+            raise iu.IvyError(None,'Initial condition and/or axioms are inconsistent')
+        else:
+            raise iu.IvyError(None,'Axioms are inconsistent')
     used = ilu.used_symbols_clauses(clauses)
     for sym in all_state_symbols():
         if sym.name in im.module.destructor_sorts:
