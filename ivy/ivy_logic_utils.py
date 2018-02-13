@@ -1197,15 +1197,27 @@ def or_clauses_int(rn,args):
     #    print "or_clauses_int res = {}".format(res)
     return res,vs
 
+def debug_clauses_list(cl):
+    for clauses in cl:
+        print "definitions:"
+        for df in clauses.defs:
+            print df
+        print "fmlas:"
+        for fmla in clauses.fmlas:
+            print ivy_logic.close_formula(fmla)
+
 def ite_clauses_int(rn,cond,args):
     assert len(args) == 2
-#    print "or_clauses_int: args = {}".format(args)
+    # print "ite_clauses_int args:"
+    # debug_clauses_list(args)
     args = elim_dead_definitions(rn,args)
     a0,a1 = args[0].annot,args[1].annot
 #    print "or_clauses_int: args = {}".format(args)
     v = bool_const(rn())
-    argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
-    fmlas = [simp_ite(v,argfmlas[0],argfmlas[1])]
+#    argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
+#    fmlas = [simp_ite(v,argfmlas[0],argfmlas[1])]
+    fmlas = ([Or(Not(v),f) for f in args[0].fmlas]
+             + [Or(v,f) for f in args[1].fmlas])
     defidx = dict()
     for d in args[0].defs:
         s = d.defines()
@@ -1219,7 +1231,8 @@ def ite_clauses_int(rn,cond,args):
     defs = [d for n,d in defidx.iteritems()] + [Definition(v,cond)] # TODO: hash traversal dependency
     annot = None if a0 is None or a1 is None else a0.ite(v,a1)
     res = Clauses(fmlas,defs,annot)
-#    print "or_clauses_int res = {}".format(res)
+    # print "ite_clauses_int res:"
+    # debug_clauses_list([res])
     return res
 
 def bool_const(name):

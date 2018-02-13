@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
