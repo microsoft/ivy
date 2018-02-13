@@ -774,7 +774,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     if not interpret_all_sorts:
         for type_name in list(ivy_logic.sig.interp):
-            if not (type_name in present or any(startswith_eq_some(itp.label.rep,present,mod) for itp in mod.interps[type_name] if itp.label)):
+            if not (type_name in present and type_name not in mod.hierarchy or any(startswith_eq_some(itp.label.rep,present,mod) for itp in mod.interps[type_name] if itp.label)):
                 del ivy_logic.sig.interp[type_name]
     delegates = set(s.delegated() for s in mod.delegates if not s.delegee())
     delegated_to = dict((s.delegated(),s.delegee()) for s in mod.delegates if s.delegee())
