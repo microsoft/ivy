@@ -31,9 +31,18 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 
 use_z3_enums = False
 
+def set_seed(seed):
+    print 'setting seed to {}'.format(seed)
+    z3.set_param('smt.random_seed',seed)
+
+opt_seed = iu.Parameter("seed",0,process=int)
+opt_seed.set_callback(set_seed)
+
 def set_macro_finder(truth):
     z3.set_param('smt.macro_finder',truth)
     
+opt_incremental = iu.BooleanParameter("incremental",True)
+
 #z3.set_param('smt.mbqi.trace',True)
 opt_macro_finder = iu.BooleanParameter("macro_finder",True)
 set_macro_finder(True)
@@ -955,15 +964,23 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
     # if res == z3.unsat:
     #     return None
 
+    assumes = []
     if final_cond is not None:
         if isinstance(final_cond,list):
             res = z3.unsat
             for fc in final_cond:
+                if not opt_incremental.get():
+                    s = z3.Solver()
+                    s.add(clauses_to_z3(clauses))
+                    for fmla in assumes:
+                        s.add(clauses_to_z3(fmla))
                 fc.start()
                 if fc.assume():
                     s.add(clauses_to_z3(fc.cond()))
+                    assumes.append(fc.cond())
                 else:
-                    s.push()
+                    if opt_incremental.get():
+                        s.push()
                     s.add(clauses_to_z3(fc.cond()))
                     res = decide(s)
                     if res != z3.unsat:
@@ -973,7 +990,8 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                             break
                     else:
                         fc.unsat()
-                    s.pop()
+                    if opt_incremental.get():
+                        s.pop()
         else:
             s.add(clauses_to_z3(final_cond))
             res = decide(s)

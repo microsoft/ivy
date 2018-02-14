@@ -102,6 +102,14 @@ quantified formulas that behave as macros, and eliminates them by
 substitution. This option is usually helpful, but occasionally causes
 Z3 to be very slow. The default is true.
 
+`incremental=boolean`
+
+If true, Z3 is used incrementally when checking invariants. Default is true.
+
+`seed=integer`
+
+Sets the random seed for the SMT solver. 
+
 ivy_show
 --------
 
