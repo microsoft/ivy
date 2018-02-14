@@ -1394,7 +1394,7 @@ def create_conj_actions(mod):
                         if action in roots:
                             for victim in exports:
                                 if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
-                                    raise IvyError(isol, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
+                                    raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
     
     
