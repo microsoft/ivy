@@ -108,6 +108,8 @@ def varname(name):
     name = re.sub(puncs,'__',name)
     return name.split(':')[-1]
 
+other_varname = varname
+
 def funname(name):
     if not isinstance(name,str):
         name = name.name
@@ -1136,6 +1138,10 @@ def is_finite_iterable_sort(sort):
 
 def check_iterable_sort(sort):
     if ctype(sort) not in ["bool","int"]:
+        if il.is_uninterpreted_sort(sort) and sort.name in im.module.native_types:
+            nt = native_type_full(im.module.native_types[sort.name]).strip()
+            if nt in ['int','bool']:
+                return
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
 
@@ -2678,8 +2684,9 @@ def emit_app(self,header,code,capture_args=None):
         self.args[1].emit(header,code)
         code.append(')')
         return 
-    # no way to deal with polymorphic ops, give up here
-    if il.symbol_is_polymorphic(self.func):
+    global is_derived
+    # no way to deal with polymorphic ops if not derived, give up here
+    if il.symbol_is_polymorphic(self.func) and self.func not in is_derived:
         raise iu.IvyError(None,"symbol has no interpretation: {}".format(il.typed_symbol(self.func)))
     # handle destructors
     skip_params = 0
@@ -2693,7 +2700,6 @@ def emit_app(self,header,code,capture_args=None):
     # handle uninterpreted ops
     else:
         code.append(funname(self.func.name))
-    global is_derived
     if self.func in is_derived:
         code.append('(')
         first = True
@@ -2810,7 +2816,10 @@ def get_bounds(header,v0,variables,body,exists,varname=None):
     if not los:
         raise iu.IvyError(None,'cannot find a lower bound for {}'.format(varname))
     if not his:
-        raise iu.IvyError(None,'cannot find an upper bound for {}'.format(varname))
+        if il.is_uninterpreted_sort(v0.sort) and iu.compose_names(v0.sort.name,'cardinality') in im.module.attributes:
+            his.append(other_varname(iu.compose_names(v0.sort.name,im.module.attributes[iu.compose_names(v0.sort.name,'cardinality')].rep)))
+        else:
+            raise iu.IvyError(None,'cannot find an upper bound for {}'.format(varname))
     return los[0],his[0]
 
 def get_all_bounds(header,variables,body,exists,varnames):
@@ -2831,14 +2840,34 @@ def emit_quant(variables,body,header,code,exists=False):
         return
     v0 = variables[0]
     variables = variables[1:]
-    check_iterable_sort(v0.sort)
+    has_iter = il.is_uninterpreted_sort(v0.sort) and iu.compose_names(v0.sort.name,'iterable') in im.module.attributes
+    if has_iter:
+        iter = iu.compose_names(v0.sort.name,'iter')
+    else:
+        check_iterable_sort(v0.sort)
     res = new_temp(header)
     idx = v0.name
     indent(header)
     header.append(res + ' = ' + str(0 if exists else 1) + ';\n')
     indent(header)
-    lo,hi = get_bounds(header,v0,variables,body,exists)
-    header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
+    if has_iter:
+        iter_sort_name = iter
+        if iter_sort_name not in il.sig.sorts:
+            iter_sort_name = iu.compose_names(iter,'t')
+        if iter_sort_name not in il.sig.sorts:
+            print iter_sort_name
+            raise iu.IvyError(None,'sort {} has iterable attribute but no iterator'.format(v0.sort))
+        iter_sort = il.sig.sorts[iter_sort_name]
+        zero = []
+        emit_constant(il.Symbol('0',v0.sort),header,zero)
+        header.append('for (' + ctypefull(iter_sort) + ' ' + idx + ' = '
+                          + varname(iu.compose_names(iter,'create') + '('))
+        header.extend(zero)
+        header.append('); !' + varname(iu.compose_names(iter,'is_end')) + '(' + idx + ');' 
+                       + idx + '=' + varname(iu.compose_names(iter,'next')) + '(' + idx + ')) {\n')
+    else:
+        lo,hi = get_bounds(header,v0,variables,body,exists)
+        header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
     indent_level += 1
     subcode = []
     emit_quant(variables,body,header,subcode,exists)

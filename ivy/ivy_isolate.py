@@ -1035,7 +1035,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         asts.extend(a.formal_returns)
     for tmp in mod.natives:
         asts.extend(tmp.args[2:])
-    all_syms = set(lu.used_symbols_asts(asts))
+#    all_syms = set(lu.used_symbols_asts(asts))
+    all_syms = set(map(ivy_logic.normalize_symbol,lu.used_symbols_asts(asts)))
     follow_definitions(mod.definitions,all_syms)
     if opt_keep_destructors.get():
         for sym in list(all_syms):
@@ -1092,6 +1093,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
         asts.extend(y.formula for y in x)
     asts.extend(action for action in mod.actions.values())
+    if opt_keep_destructors.get():
+        asts.extend(mod.params) # if compiling, keep all of the parameters
     for a in mod.actions.values():
         asts.extend(a.formal_params)
         asts.extend(a.formal_returns)

@@ -308,11 +308,18 @@ module iterable = {
     instance iter : sequence_iterator(this)
     isolate iso_iter = iter with this
 
+    individual max : t
+
+    specification {
+        property 0 <= X:t & X <= max
+    }
+
     implementation {
         parameter size : t
         interpret t -> <<< int >>>
         definition (x:t < y:t) = <<< x < y >>>
         definition 0:t = <<< 0 >>>
+        definition max = <<< `size` - 1 >>>
         
         implement next(x:t) returns (y:t) {
             <<< y = x + 1; >>>
@@ -326,6 +333,6 @@ module iterable = {
     }
     
     trusted isolate iso = this
-    attribute test = impl
+    attribute cardinality = size
 
 }
