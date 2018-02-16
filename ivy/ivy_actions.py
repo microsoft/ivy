@@ -153,7 +153,9 @@ class DerivedUpdate(object):
         defines = self.defn.args[0].rep
         if defines not in updated and any(x in self.dependencies for x in updated):
             updated.append(defines)
-        return (updated,true_clauses(),false_clauses())
+        return (updated,None,None)
+    def __str__(self):
+        return str(self.defn)
 
 class Action(AST):
     def __init__(self,*args):
@@ -170,14 +172,17 @@ class Action(AST):
     def int_update(self,domain,in_scope):
         (updated,clauses,pre) = self.action_update(domain,in_scope)
         # instantiate the update axioms
+#        iu.dbg('[str(x) for x in domain.updates]')
         for u in domain.updates:
             updated,transrel,precond = u.get_update_axioms(updated,self)
-            # TODO: do something with the precondition
+           # TODO: do something with the precondition
 #            if transrel:
 ##                print "updated: {}".format(updated)
 ##                print "update from axiom: %s" % transrel
-            clauses = and_clauses(clauses,transrel)
-            pre = or_clauses(pre,precond)
+            if transrel is not None:
+                clauses = and_clauses(clauses,transrel)
+            if precond is not None:
+                pre = or_clauses(pre,precond)
 ##        print "update clauses: %s" % clauses
         res = (updated,clauses,pre)
         return res
@@ -253,7 +258,7 @@ class AssumeAction(Action):
         clauses = formula_to_clauses_tseitin(skolemize_formula(self.args[0]))
         clauses = unfold_definitions_clauses(clauses)
         clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
-        return ([],clauses,false_clauses())
+        return ([],clauses,false_clauses(annot = EmptyAnnotation()))
 
 class AssertAction(Action):
     def __init__(self,*args):
@@ -268,7 +273,7 @@ class AssertAction(Action):
         ca = checked_assert.get()
         if ca:
             if ca != self.lineno:
-                return ([],formula_to_clauses(self.args[0]),false_clauses())
+                return ([],formula_to_clauses(self.args[0],annot = EmptyAnnotation()),false_clauses(annot = EmptyAnnotation()))
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
@@ -421,7 +426,7 @@ class AssignAction(Action):
             nondet_lhs,new_clauses,mut_n = destr_asgn_val(lhs,fmlas)
             fmlas.append(equiv_ast(nondet_lhs,rhs))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses())
+            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
             # This is the old version that doesn't work for nested destructors
 
@@ -446,7 +451,7 @@ class AssignAction(Action):
                     a2 = [mut] + phs[1:]
                     fmlas.append(eq_atom(destr(*a1),destr(*a2)))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses())
+            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
         # For a variant assignment, we have to choose a new value that points to
         # the rhs, and to nothing else.
@@ -456,7 +461,7 @@ class AssignAction(Action):
         else:
             new_clauses = mk_assign_clauses(lhs,rhs)
 #        print "assign new_clauses = {}".format(new_clauses)
-        return ([n], new_clauses, false_clauses())
+        return ([n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
 class VarAction(AST):
     pass
@@ -551,7 +556,7 @@ class HavocAction(Action):
             clauses = And()
         clauses = formula_to_clauses(clauses)
         clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
-        return ([n], clauses, false_clauses())
+        return ([n], clauses, false_clauses(annot=EmptyAnnotation()))
 
 
 def make_field_update(self,l,f,r,domain,pvars):
@@ -654,7 +659,7 @@ class Sequence(Action):
         axioms = domain.background_theory(pvars)
         for op in self.args:
             thing = op.int_update(domain,pvars);
-#            print "op: {}, thing: {}".format(op,thing)
+#            print "op: {}, thing[2].annot: {}".format(op,thing[2].annot)
             update = compose_updates(update,axioms,thing)
         return update
     def __call__(self,interpreter):
@@ -686,7 +691,7 @@ class ChoiceAction(Action):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(Not(cond),self.args[0],self.args[1])
             return ite.int_update(domain,pvars)
-        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
         for a in self.args:
             foo = a.int_update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -831,6 +836,8 @@ class WhileAction(Action):
             entry_asserts.append(AssertAction(Not(ltsym(rank,Symbol('0',rank.sort)))))
             entry_asserts[-1].lineno = decreases.lineno
         havocs = [HavocAction(sym) for sym in modset]
+        for h in havocs:
+            h.lineno = self.lineno
         res =  Sequence(*(
                 asserts +
                 havocs +
@@ -846,7 +853,9 @@ class WhileAction(Action):
         global context
         if isinstance(context,UnrollContext):
             return self.unroll(context.card).int_update(domain,pvars)
-        return self.expand(domain,pvars).int_update(domain,pvars)
+        exp = self.expand(domain,pvars)
+        res = exp.int_update(domain,pvars)
+        return res
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self,kinds):
@@ -968,7 +977,7 @@ class CallAction(Action):
         return 'call'
     def __str__(self):
         actual_returns = self.args[1:]
-        return 'call ' + (','.join(str(a) for a in actual_returns) + ':= ' if actual_returns else '') + str(self.args[0])
+        return 'call ' + (','.join(str(a) for a in actual_returns) + ' := ' if actual_returns else '') + str(self.args[0])
     def get_callee(self):
         global context
         name = self.args[0].rep
@@ -1238,4 +1247,92 @@ def ite_annot(self,cond,other):
     return IteAnnotation(cond,self,other)
 Annotation.ite = ite_annot
 
+def unite_annot(annot):
+    if not isinstance(annot,IteAnnotation):
+        return []
+    res = unite_annot(annot.elseb)
+    res.append((annot.cond,annot.thenb))
+    return res
 
+
+def match_annotation(action,annot,handler):
+    def recur(action,annot,env,pos=None):
+        if isinstance(annot,RenameAnnotation):
+            save = dict()
+            for x,y in annot.map.iteritems():
+                if x in env:
+                    save[x] = env[x]
+                env[x] = env.get(y,y)
+            recur(action,annot.arg,env,pos)
+            env.update(save)
+            return
+        if isinstance(action,Sequence):
+            if pos is None:
+                pos = len(action.args)
+            if pos == 0:
+                assert isinstance(annot,EmptyAnnotation),annot
+                return
+            if isinstance(annot,IteAnnotation):
+                # This means a failure may occur here
+                rncond = env.get(annot.cond,annot.cond)
+                cond = handler.eval(rncond)
+                if cond:
+                    annot = annot.thenb
+                else:
+                    recur(action,annot.elseb,env,pos=pos-1)
+                    return
+            if not isinstance(annot,ComposeAnnotation):
+                    iu.dbg('len(action.args)')
+                    iu.dbg('pos')
+                    iu.dbg('annot')
+            assert isinstance(annot,ComposeAnnotation)
+            recur(action,annot.args[0],env,pos-1)
+            recur(action.args[pos-1],annot.args[1],env)
+            return
+        if isinstance(action,IfAction):
+            assert isinstance(annot,IteAnnotation),annot
+            rncond = env.get(annot.cond,annot.cond)
+            try:
+                cond = handler.eval(rncond)
+            except KeyError:
+                print '{}skipping conditional'.format(action.lineno)
+                iu.dbg('str_map(env)')
+                iu.dbg('env.get(annot.cond,annot.cond)')
+                return
+            if cond:
+                recur(action.args[1],annot.thenb,env)
+            else:
+                if len(action.args) > 2:
+                    recur(action.args[2],annot.elseb,env)
+            return
+        if isinstance(action,ChoiceAction):
+            assert isinstance(annot,IteAnnotation)
+            annots = unite_annot(annot)
+            assert len(annots) == len(action.args)
+            for act,(cond,ann) in reversed(zip(action.args,annots)):
+                if handler.eval(cond):
+                    recur(act,ann,env)
+                    return
+            assert False,'problem in match_annotation'
+        if isinstance(action,CallAction):
+            handler.handle(action,env)
+            callee = ivy_module.module.actions[action.args[0].rep]
+            seq = Sequence(*([Sequence() for x in callee.formal_params]
+                             + [callee] 
+                             + [Sequence() for x in callee.formal_returns]))
+            recur(seq,annot,env)
+            return
+        if isinstance(action,LocalAction):
+            recur(action.args[-1],annot,env)
+            return
+        if isinstance(action,WhileAction):
+            recur(action.expand(ivy_module.module,[]),annot,env)
+            return
+        if hasattr(action,'failed_action'):
+#            iu.dbg('annot')
+#            iu.dbg('action.failed_action()')
+            recur(action.failed_action(),annot,env)
+            return
+        handler.handle(action,env)
+    recur(action,annot,dict())
+    

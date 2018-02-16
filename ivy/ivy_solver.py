@@ -650,6 +650,9 @@ class HerbrandModel(object):
 
     def eval_to_constant(self,t):
         return constant_from_z3(t.sort,self.model.eval(term_to_z3(t),model_completion=True))
+
+    def __str__(self):
+        return self.model.sexpr()
     
 # TODO: need to map Z3 sorts back to ivy sorts
 def sort_from_z3(s):

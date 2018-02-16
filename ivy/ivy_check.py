@@ -17,6 +17,7 @@ import ivy_isolate
 import ivy_ast
 import ivy_theory as ith
 import ivy_transrel as itr
+import ivy_solver as islv
 
 import sys
 from collections import defaultdict
@@ -26,6 +27,7 @@ coverage = iu.BooleanParameter("coverage",True)
 checked_action = iu.Parameter("action","")
 opt_trusted = iu.BooleanParameter("trusted",False)
 opt_mc = iu.BooleanParameter("mc",False)
+opt_trace = iu.BooleanParameter("trace",False)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -154,7 +156,7 @@ class Checker(object):
         global failures
         failures += 1
         self.failed = True
-        return not diagnose.get() # ignore failures if not diagnosing
+        return not (diagnose.get() or opt_trace.get()) # ignore failures if not diagnosing
     def unsat(self):
         if self.report_pass:
             print('PASS')
@@ -188,6 +190,83 @@ class ConjAssumer(Checker):
     def assume(self):
         return True
 
+class MatchHandler(object):
+    def __init__(self,clauses,model,vocab):
+#        iu.dbg('clauses')
+        self.clauses = clauses
+        self.model = model
+        self.vocab = vocab
+        self.current = dict()
+        mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True)
+#        iu.dbg('mod_clauses')
+        self.eqs = defaultdict(list)
+        for fmla in mod_clauses.fmlas:
+            if lg.is_eq(fmla):
+                lhs,rhs = fmla.args
+                if lg.is_app(lhs):
+                    self.eqs[lhs.rep].append(fmla)
+            elif isinstance(fmla,lg.Not):
+                app = fmla.args[0]
+                if lg.is_app(app):
+                    self.eqs[app.rep].append(lg.Equals(app,lg.Or()))
+            else:
+                if lg.is_app(fmla):
+                    self.eqs[fmla.rep].append(lg.Equals(fmla,lg.And()))
+        # for sym in vocab:
+        #     if not itr.is_new(sym) and not itr.is_skolem(sym):
+        #         self.show_sym(sym,sym)
+        self.started = False
+        self.renaming = dict()
+        print
+        print 'Trace follows...'
+        print 80 * '*'
+
+    def show_sym(self,sym,renamed_sym):
+        if sym in self.renaming and self.renaming[sym] == renamed_sym:
+            return
+        self.renaming[sym] = renamed_sym
+        rmap = {renamed_sym:sym}
+        # TODO: what if the renamed symbol is not in the model?
+        for fmla in self.eqs[renamed_sym]:
+            rfmla = lut.rename_ast(fmla,rmap)
+            lhs,rhs = rfmla.args
+            if lhs in self.current and self.current[lhs] == rhs:
+                continue
+            self.current[lhs] = rhs
+            print '    {}'.format(rfmla)
+        
+    def eval(self,cond):
+        truth = self.model.eval_to_constant(cond)
+        if lg.is_false(truth):
+            return False
+        elif lg.is_true(truth):
+            return True
+        assert False,truth
+        
+    def handle(self,action,env):
+        
+#        iu.dbg('env')
+        if hasattr(action,'lineno'):
+#            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
+#            inv_env = dict((y,x) for x,y in env.iteritems())
+            if not self.started:
+                for sym in self.vocab:
+                    if sym not in env and not itr.is_new(sym) and not itr.is_skolem(sym):
+                        self.show_sym(sym,sym)
+                self.started = True
+            for sym,renamed_sym in env.iteritems():
+                if not itr.is_new(sym) and not itr.is_skolem(sym):
+                    self.show_sym(sym,renamed_sym)
+
+            print '{}{}'.format(action.lineno,action)
+
+    def end(self):
+        for sym in self.vocab:
+            if not itr.is_new(sym) and not itr.is_skolem(sym):
+                self.show_sym(sym,sym)
+            
+
+
 def filter_fcs(fcs):
     global check_lineno
     if check_lineno is None:
@@ -195,12 +274,31 @@ def filter_fcs(fcs):
     return [fc for fc in fcs if (not isinstance(fc,ConjChecker) or fc.lf.lineno == check_lineno)]
 
 def check_fcs_in_state(mod,ag,post,fcs):
+#    iu.dbg('"foo"')
     history = ag.get_history(post)
+#    iu.dbg('history.actions')
     gmc = lambda cls, final_cond: itr.small_model_clauses(cls,final_cond,shrink=diagnose.get())
     axioms = im.module.background_theory()
-    res = history.satisfy(axioms,gmc,filter_fcs(fcs))
-    if res is not None and diagnose.get():
-        show_counterexample(ag,post,res)
+    if opt_trace.get():
+        clauses = history.post
+        clauses = lut.and_clauses(clauses,axioms)
+        model = itr.small_model_clauses(clauses,filter_fcs(fcs),shrink=True)
+        if model is not None:
+#            iu.dbg('history.actions')
+            vocab = lut.used_symbols_clauses(clauses) # TODO: include property symbols
+            handler = MatchHandler(clauses,model,vocab)
+            assert all(x is not None for x in history.actions)
+            # work around a bug in ivy_interp
+            actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
+#            iu.dbg('actions')
+            action = act.Sequence(*actions)
+            act.match_annotation(action,clauses.annot,handler)
+            handler.end()
+            exit(0)
+    else:
+        res = history.satisfy(axioms,gmc,filter_fcs(fcs))
+        if res is not None and diagnose.get():
+            show_counterexample(ag,post,res)
     return not any(fc.failed for fc in fcs)
 
 def check_conjs_in_state(mod,ag,post,indent=8):
@@ -217,6 +315,13 @@ def check_safety_in_state(mod,ag,post,report_pass=True):
     return check_fcs_in_state(mod,ag,post,[Checker(lg.Or(),report_pass=report_pass)])
 
 opt_summary = iu.BooleanParameter("summary",False)
+
+# This gets the pre-state for inductive checks
+
+def get_conjs(mod):
+    fmlas = [lf.formula for lf in mod.labeled_conjs]
+    return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
+
 
 def summarize_isolate(mod):
 
@@ -245,7 +350,8 @@ def summarize_isolate(mod):
             for lf in schema_instances:
                 print pretty_lf(lf) + " [proved by axiom schema]"
             ag = ivy_art.AnalysisGraph()
-            pre = itp.State()
+            clauses1 = lut.true_clauses(annot=act.EmptyAnnotation())
+            pre = itp.State(value = clauses1)
             props = [x for x in im.module.labeled_props if not x.temporal]
             fcs = ([(ConjAssumer if prop.id in subgoalmap else ConjChecker)(prop) for prop in props])
             check_fcs_in_state(mod,ag,pre,fcs)
@@ -314,7 +420,7 @@ def summarize_isolate(mod):
             if check:
                 ag = ivy_art.AnalysisGraph()
                 pre = itp.State()
-                pre.clauses = lut.and_clauses(*mod.conjs)
+                pre.clauses = get_conjs(mod)
                 with itp.EvalContext(check=False): # don't check safety
                     post = ag.execute(action, pre, None, actname)
                 check_conjs_in_state(mod,ag,post,indent=12)
@@ -375,7 +481,7 @@ def summarize_isolate(mod):
                            tried.add((root,sub.lineno))
                            ag = ivy_art.AnalysisGraph()
                            pre = itp.State()
-                           pre.clauses = lut.and_clauses(*mod.conjs)
+                           pre.clauses = get_conjs(mod)
                            with itp.EvalContext(check=False):
                                post = ag.execute_action(root,prestate=pre)
                            fail = itp.State(expr = itp.fail_expr(post.expr))

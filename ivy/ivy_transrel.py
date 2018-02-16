@@ -319,15 +319,24 @@ def compose_updates(update1,axioms,update2):
         mvf = rename(mv,rn)
         map1[new(mv)] = mvf
         map2[mv] = mvf
+#    iu.dbg('clauses1')
+#    iu.dbg('clauses1.annot')
     clauses1 = rename_clauses(clauses1,map1)
     annot_op = lambda x,y: x.compose(y) if x is not None and y is not None else None
     new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2),annot_op=annot_op)
     new_updated = list(us1.union(us2))
 #    print "pre1 before = {}".format(pre1)
+#    iu.dbg('pre1.annot')
+#    iu.dbg('pre1')
     pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
 #    print "pre1 = {}".format(pre1)
-    new_pre = or_clauses(pre1,and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2)))
+    temp = and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=my_annot_op)
+#    iu.dbg('temp.annot')
+    new_pre = or_clauses(pre1,temp)
+#    iu.dbg('new_pre.annot')
 #    print "new_pre = {}".format(new_pre)
+#    iu.dbg('new_clauses')
+#    iu.dbg('new_clauses.annot')
     return (new_updated,new_clauses,new_pre)
 
 def exist_quant_map(syms,clauses):
@@ -342,9 +351,9 @@ def exist_quant(syms,clauses):
     map1,res = exist_quant_map(syms,clauses)
     return res
 
-def conjoin(clauses1,clauses2):
+def conjoin(clauses1,clauses2,annot_op=None):
     """ Conjoin clause sets, taking into account skolems """
-    return and_clauses(clauses1,rename_distinct(clauses2,clauses1))
+    return and_clauses(clauses1,rename_distinct(clauses2,clauses1),annot_op=annot_op)
 
 def constrain_state(upd,fmla):
     return (upd[0],and_clauses(upd[1],formula_to_clauses(fmla)),upd[2])
@@ -389,12 +398,18 @@ def subst_action(update,subst):
     new_pre = rename_clauses(update[2],syms)
     return (new_updated,new_tr,new_pre)
 
+def  my_annot_op(x,y):
+#    iu.dbg('x')
+#    iu.dbg('y')
+    return x.compose(y) if x is not None and y is not None else None
+
+
 def forward_image_map(pre_state,axioms,update):
     updated, clauses, _precond = update
 #    print "transition_relation: {}".format(clauses)
     pre_ax = clauses_using_symbols(updated,axioms)
     pre = conjoin(pre_state,pre_ax)
-    map1,res = exist_quant_map(updated,conjoin(pre,clauses))
+    map1,res = exist_quant_map(updated,conjoin(pre,clauses,annot_op=my_annot_op))
     res = rename_clauses(res, dict((new(x),x) for x in updated))
 ##    print "before simp: %s" % res
     # res = simplify_clauses(res)
@@ -541,24 +556,27 @@ def small_model_clauses(cls,final_cond=None,shrink=True):
 
 class History(object):
     """ A history is a symbolically represented sequence of states. """
-    def __init__(self,state,maps = []):
+    def __init__(self,state,maps = [],actions=[]):
         """ state is the initial state of the history """
 #        print "init: {}".format(state)
         update,clauses,pre = state
         assert update == None and pre.is_false()
         self.maps = maps     # sequence of symbol renamings resulting from forward images
         self.post = clauses  # characteristic formula of the history
+        self.actions = actions
 
 
-    def forward_step(self,axioms,update):
+    def forward_step(self,axioms,update,action=None):
         """ This is like forward_image on states, but records the
         symbol renaming used in the forward image. The list of
         renamings is used to reconstruct the state symbols at previous
         times in the history. A new history after forward step is
         returned. """
 #        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
+#        iu.dbg('update')
         map1,res = forward_image_map(self.post,axioms,update)
-        return History(pure_state(res),self.maps + [map1])
+#        iu.dbg('res.annot')
+        return History(pure_state(res),self.maps + [map1],self.actions+[action])
 
     def assume(self,clauses):
         """ Returns a new history in which the final state is constrainted to
@@ -569,7 +587,7 @@ class History(object):
             assert is_pure_state(clauses)
             clauses = clauses[1]
         clauses = rename_distinct(clauses,self.post) # TODO: shouldn't be needed
-        return History(pure_state(and_clauses(self.post,clauses)),self.maps)
+        return History(pure_state(and_clauses(self.post,clauses)),self.maps,self.actions)
 
     def ignore(self,s,img,renaming):
         res = not(s in img or not s.is_skolem() and s not in renaming)

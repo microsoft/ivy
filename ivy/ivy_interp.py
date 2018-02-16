@@ -53,6 +53,8 @@ def module_type_check_concepts(self):
     self.relations = relations
 
 def module_new_state(self, clauses):
+    if isinstance(clauses,Clauses) and clauses.annot is None:
+        clauses = Clauses(clauses.fmlas,clauses.defs,ivy_actions.EmptyAnnotation())
     return State(self, clauses)
 
 def module_new_state_with_value(self, value):
@@ -392,7 +394,8 @@ class fail_action(Action):
                 pref[-1] = fail_action(pref[-1])
                 res.append((pre,pref,post))
         return res
-
+    def failed_action(self):
+        return self.action
 
 def fail_expr(expr):
     return action_app(fail_action(expr.rep),expr.args[0])
@@ -583,7 +586,8 @@ def new_history(state):
     return History(state.value)
 
 def history_forward_step(history,state):
-    return history.forward_step(state.pred.domain.background_theory(state.pred.in_scope),state.update)
+    action = state.expr.rep if state.expr != None and is_action_app(state.expr) else None
+    return history.forward_step(state.pred.domain.background_theory(state.pred.in_scope),state.update,action)
 
 def history_satisfy(history,state,_get_model_clauses=None,final_cond=None):
     return history.satisfy(
