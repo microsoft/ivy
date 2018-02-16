@@ -61,6 +61,17 @@ that fails. A counterexample for this guarantee is constructed and the
 graphical counterexample viewer is launched to display the
 counterexample. The default value is false.
 
+`trace=boolean`
+
+If true, this options causes the check to stop at the first guarantee
+that fails. A counterexample for this guarantee is constructed and a
+corresponding execution trace is printed on standard out. The trace is
+formatted so that in an emacs compilation buffer, references to source
+lines are active links. The printed trace can be more convenient than the
+graphical counterexample viewer, especially if the state contains functions
+or relations of arity greater than two. 
+The default value is false.
+
 `summary=boolean`
 
 If true, this causes the summary to be printed, but no actual checking
