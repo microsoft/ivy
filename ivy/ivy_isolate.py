@@ -305,7 +305,7 @@ def strip_natives(natives,strip_map):
 def canon_act(name):
     return name[4:] if name.startswith('ext:') else name
 
-def strip_isolate(mod,isolate,impl_mixins,extra_strip):
+def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
     global strip_added_symbols
     global num_isolate_params
     ipl = isolate.params()
@@ -352,7 +352,7 @@ def strip_isolate(mod,isolate,impl_mixins,extra_strip):
         strip_binding = dict(zip(action.formal_params,strip_params))
 #        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
 #            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
-        new_action = strip_action(action,strip_map,strip_binding,is_init=name.endswith('init[after]'))
+        new_action = strip_action(action,strip_map,strip_binding,is_init=(name in all_after_inits))
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
         new_actions[name] = new_action
@@ -1001,6 +1001,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 if extname in exported:
                     del exported[extname]
 
+    all_after_inits = set(after_inits)
     after_inits = [a for a in after_inits if startswith_eq_some(a,present,mod)]
     
     def pname(s):
@@ -1193,7 +1194,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # strip the isolate parameters
 
-    strip_isolate(mod,isolate,impl_mixins,extra_strip)
+    strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip)
 
     # collect the initial condition
 

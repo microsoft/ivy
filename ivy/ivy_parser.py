@@ -1084,7 +1084,7 @@ def handle_before_after(kind,atom,action,ivy,optargs=[],optreturns=[]):
     if atom.args:  # no args -- we get them from the matching action
         report_error(IvyError(atom,"syntax error"))
     else:
-        mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'['+kind+']')
+        mixer = make_mixin_name(atom,kind)
         optargs,optreturns = infer_action_params(atom.rep,optargs,optreturns)
         df = ActionDef(mixer,action,formals=optargs,returns=optreturns)
         df.lineno = atom.lineno
@@ -1407,11 +1407,18 @@ def p_sceninit_arrow_places(p):
     p[0] = PlaceList(*p[2])
     p[0].lineno = get_lineno(p,1)
 
+def make_mixin_name(atom,suffix):
+    if iu.get_numeric_version() <= [1,6]:
+        return atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[' + suffix + ']')
+    global label_counter
+    label_counter += 1
+    return atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[' + suffix + str(label_counter) + ']')
+
 def p_scenariomixin_before_callatom_lcb_action_rcb(p):
     'scenariomixin : BEFORE atype optargs optreturns sequence'
     atom = Atom(p[2])
     atom.lineno = get_lineno(p,2)
-    mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[before]')
+    mixer = make_mixin_name(atom,'before')
     optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
     df = ActionDef(atom,p[5],formals=optargs,returns=optreturns)
     p[0] = ScenarioBeforeMixin(mixer,df)
@@ -1421,7 +1428,7 @@ def p_scenariomixin_after_callatom_lcb_action_rcb(p):
     'scenariomixin : AFTER atype optargs optreturns sequence'
     atom = Atom(p[2])
     atom.lineno = get_lineno(p,2)
-    mixer = atom.rename(atom.rep.replace(iu.ivy_compose_character,'_')+'[after]')
+    mixer = make_mixin_name(atom,'after')
     optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
     optargs,optreturns = infer_action_params(atom.rep,p[3],p[4])
     df = ActionDef(atom,p[5],formals=optargs,returns=optreturns)
