@@ -1701,21 +1701,23 @@ def iter_isolate(mod,iso,fun,verified=True,present=True):
     def recur(name):
         fun(name)
         assert not isinstance(name,ivy_ast.This)
-        for child in mod.hierarchy[name]:
-            cname = iu.compose_names(name,child)
-            if not(child == suff
-                   or iu.compose_names(cname,suff) in mod.attributes
-                   or iu.compose_names(cname,'private') in mod.attributes):
-                recur(cname)
+        if name in mod.hierarchy:
+            for child in mod.hierarchy[name]:
+                cname = iu.compose_names(name,child)
+                if not(child == suff
+                       or iu.compose_names(cname,suff) in mod.attributes
+                       or iu.compose_names(cname,'private') in mod.attributes):
+                    recur(cname)
         
     if verified:
         for ver in iso.verified():
             name = ver.rep
             fun(name)
             assert not isinstance(name,ivy_ast.This)
-            for child in mod.hierarchy[name]:
-                cname = iu.compose_names(name,child)
-                recur(cname)
+            if name in mod.hierarchy[name]:
+                for child in mod.hierarchy[name]:
+                    cname = iu.compose_names(name,child)
+                    recur(cname)
 
     if present:
         for pres in iso.present():
