@@ -1721,10 +1721,13 @@ struct ivy_binary_deser : public ivy_deser {
     }
     void get(std::string &res) {
         while (pos < inp.size() && inp[pos]) {
-            if (inp[pos] == '\"')
-                throw deser_err();
+//            if (inp[pos] == '\"')
+//                throw deser_err();
+            res.push_back(inp[pos++]);
         }
-        res.push_back(inp[pos++]);
+        if(!(pos < inp.size() && inp[pos] == 0))
+            throw deser_err();
+        pos++;
     }
     void open_list() {
         long long len;
