@@ -22,6 +22,12 @@ class MatchProblem(object):
     def __str__(self):
         return '{{pat:{},inst:{},freesyms:{}}}'.format(self.pat,self.inst,map(str,self.freesyms))
 
+def attrib_goals(proof,goals):
+    if hasattr(proof,'lineno'):
+        for g in goals:
+            g.lineno = proof.lineno
+    return goals
+
 class ProofChecker(object):
     """ This is IVY's built-in proof checker """
 
@@ -90,6 +96,10 @@ class ProofChecker(object):
             return self.match_schema(decls[0].formula,proof) + decls[1:]
         elif isinstance(proof,ia.LetTactic):
             return self.let_tactic(decls,proof)
+        elif isinstance(proof,ia.IfTactic):
+            return self.if_tactic(decls,proof)
+        elif isinstance(proof,ia.NullTactic):
+            return decls
         elif isinstance(proof,ia.ComposeTactics):
             return self.compose_proofs(decls,proof.args)
         assert False,"unknown proof type {}".format(type(proof))
@@ -103,8 +113,16 @@ class ProofChecker(object):
 
     def let_tactic(self,decls,proof):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
-        return [ia.LabeledFormula(decls[0].label,
-                                  il.Implies(cond,decls[0].formula))] + decls[1:]
+        return attrib_goals(proof,[ia.LabeledFormula(decls[0].label,
+                                  il.Implies(cond,decls[0].formula))]) + decls[1:]
+
+    def if_tactic(self,decls,proof):
+        cond = proof.args[0]
+        true_goal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
+        false_goal = ia.LabeledFormula(decls[0].label,il.Implies(il.Not(cond),decls[0].formula))
+        return (attrib_goals(proof.args[1],self.apply_proof([true_goal],proof.args[1])) +
+                attrib_goals(proof.args[2],self.apply_proof([false_goal],proof.args[2])) +
+                decls[1:])
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema

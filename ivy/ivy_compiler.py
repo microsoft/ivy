@@ -553,6 +553,9 @@ def compile_assert_action(self):
         assm = AssumeAction(ivy_logic.close_formula(cond))
         assm.lineno = self.lineno
         asrt = Sequence(*([self.clone([sg.formula]) for sg in subgoals] + [assm]))
+        for x,y in zip(asrt.args,subgoals):
+            if hasattr(y,'lineno'):
+                x.lineno = y.lineno
     else:
         asrt = self.clone([cond])
     ctx.code.append(asrt)
@@ -736,6 +739,12 @@ def compile_let_tactic(self):
     return self.clone(thing.args)
     
 ivy_ast.LetTactic.compile = compile_let_tactic
+
+def compile_if_tactic(self):
+    cond = sortify_with_inference(self.args[0])
+    return self.clone([cond,self.args[1].compile(),self.args[2].compile()])
+    
+ivy_ast.IfTactic.compile = compile_if_tactic
 
 def resolve_alias(name): 
     if name in im.module.aliases:

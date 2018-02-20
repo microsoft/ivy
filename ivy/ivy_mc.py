@@ -1052,7 +1052,7 @@ def to_aiger(mod,ext_act):
 
     from_asserts = il.And(*[il.Equals(x,x) for x in ilu.used_symbols_ast(il.And(*errconds)) if
                             tr.is_skolem(x) and not il.is_function_sort(x.sort)])
-    iu.dbg('from_asserts')
+#    iu.dbg('from_asserts')
     invar_syms.update(ilu.used_symbols_ast(from_asserts))
     sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
     sort_constants2 = mine_constants2(mod,trans,invariant)

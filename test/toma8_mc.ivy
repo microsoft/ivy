@@ -64,11 +64,6 @@ object ref = {
             toma.aux(st_choice).srcb := srcb;
         }; 
         
-        if (exe_valid) {
-            toma.aux(issue_choice).eu := issue_eu;
-        };
-
-
     }
 }
   
@@ -259,8 +254,11 @@ object toma = {
         
         if ~stallout {
             var dout := ref.step(opin,srca,srcb,dst,din,st_choice,issue_choice,issue_eu,exe_valid) # ghost
-        }
+        };
 
+        if (exe_valid) {
+            toma.aux(issue_choice).eu := issue_eu;
+        };
     }
    
 

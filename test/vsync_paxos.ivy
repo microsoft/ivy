@@ -155,24 +155,40 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
 #    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
     require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
 
-#    assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) &
-#              S1 = left_maj(E1,K2) & S2 = accepted_maj(E1) & N = nodeset.common(S1,S2) & N1 = nodeset.common(nset,nset) &
-#        K2 < s -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
-#    assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1 = nodeset.common(nset,nset) &
-#              S1 = left_maj(E1,K) & S2 = nset & N = nodeset.common(S1,S2) &
-#        (s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
-    assume epoch_ended(e_prev) -> c = config_decided(e_prev);
+    assert epoch_ended(e_prev) -> c = config_decided(e_prev)
+    proof {
+        let E1 = e_prev, C1 = c, C2 = config_decided(e_prev), K = s, K2 = epoch_stake(E1), N1 = nodeset.common(nset,nset);
+        if s < K2 {
+            let S1 = left_maj(E1,K), S2 = nset, N = nodeset.common(S1,S2)
+        } else {
+            let S1 = left_maj(E1,K2), S2 = accepted_maj(E1), N = nodeset.common(S1,S2)
+        }
+    };
+
+#     {
+#     assert (S1:nodeset.set = left_maj(E1,K) & S2:nodeset.set = nset & N:node = nodeset.common(S1,S2)) -> (s < K2 -> ((E1 = e_prev & C1:config = c & C2:config = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1:node = nodeset.common(nset,nset)) -> (epoch_ended(e_prev) -> c = config_decided(e_prev))));
+#     assert (S1:nodeset.set = left_maj(E1,K2) & S2:nodeset.set = accepted_maj(E1) & N:node = nodeset.common(S1,S2)) -> (~s < K2 -> ((E1 = e_prev & C1:config = c & C2:config = config_decided(e_prev) & K:stakeord = s & K2 = epoch_stake(E1) & N1:node = nodeset.common(nset,nset)) -> (epoch_ended(e_prev) -> c = config_decided(e_prev))));
+#     assume epoch_ended(e_prev) -> c = config_decided(e_prev);
+# };
+
+    # assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) &
+    #           S1 = left_maj(E1,K2) & S2 = accepted_maj(E1) & N = nodeset.common(S1,S2) & N1 = nodeset.common(nset,nset) &
+    #     ~(s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
+    # assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1 = nodeset.common(nset,nset) &
+    #           S1 = left_maj(E1,K) & S2 = nset & N = nodeset.common(S1,S2) &
+    #     (s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
+    # assume epoch_ended(e_prev) -> c = config_decided(e_prev);
 
 # true but not needed...
 
 #    assume epoch_ended(e_prev) -> s = epoch_stake(e_prev) & c = config_decided(e_prev);
 #    assert E1 = e_prev & K = s & C = c & N = nodeset.common(nset,nset) -> accept_msg(e_prev,s,c);
-#    assume accept_msg(e_prev,s,c);
+    assume accept_msg(e_prev,s,c);
     
 # true but not needed...
 
 #    assert forall C,K,E1,N,E2. C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
-#    assume forall E2. (E2 < e_prev -> epoch_ended(E2));
+    assume forall E2. (E2 < e_prev -> epoch_ended(E2));
 
 #    assert forall C,K,E1,N,E2,N1,I,V1,S2,K2,C2. C = c & K = s & E1 = e_prev & S1 = accept_maj(E1,s) & N = nodeset.common(S1,S1) & S2 = epoch_maj(E2) & K2 = epoch_stake(E2) & C2 = config_decided(E2)
 #         & E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
