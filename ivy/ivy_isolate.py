@@ -688,13 +688,17 @@ def get_props_proved_in_isolate(mod,isolate):
     return proved,not_proved
     
 
-def get_isolate_info(mod,isolate,kind,extra_with=[]):
-    verified = set(a.relname for a in (isolate.verified()+tuple(extra_with)))
+def check_with_parameters(mod,isolate_name):
+    if isolate_name not in mod.isolates:
+        raise iu.IvyError(None,"undefined isolate: {}".format(isolate_name))
+    isolate = mod.isolates[isolate_name]
+
+    verified = set(a.relname for a in isolate.verified())
     present = set(a.relname for a in isolate.present())
     present.update(verified)
 
     derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
-    propnames = set(x.label.rep for x in (mod.labeled_props+mod.labeled_axioms) if x.label is not None)
+    propnames = set(x.label.rep for x in (mod.labeled_props+mod.labeled_axioms+mod.labeled_conjs) if x.label is not None)
     for name in present:
         if (name != 'this' and name not in mod.hierarchy
             and name not in ivy_logic.sig.sorts
@@ -703,7 +707,14 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
             and name not in mod.actions
             and name not in ivy_logic.sig.symbols
             and name not in propnames):
-            raise iu.IvyError(None,"{} is not an object, action, sort, definition, or interpreted function".format(name))
+            raise iu.IvyError(None,"{} is not an object, action, sort, definition, interpreted function or property".format(name))
+
+
+def get_isolate_info(mod,isolate,kind,extra_with=[]):
+    verified = set(a.relname for a in (isolate.verified()+tuple(extra_with)))
+    present = set(a.relname for a in isolate.present())
+    present.update(verified)
+
 
     xtra = set(iu.compose_names(a.relname,kind) for a in isolate.verified())
     for name in mod.attributes:
@@ -1366,7 +1377,7 @@ def create_isolate(iso,mod = None,**kwargs):
             if len(isos) == 1:
                 iso = isos[0]
             
-
+        check_with_parameters(mod,iso)
 
         # Apply the present conjectures
         if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
@@ -1715,7 +1726,7 @@ def iter_isolate(mod,iso,fun,verified=True,present=True):
             name = ver.rep
             fun(name)
             assert not isinstance(name,ivy_ast.This)
-            if name in mod.hierarchy[name]:
+            if name in mod.hierarchy:
                 for child in mod.hierarchy[name]:
                     cname = iu.compose_names(name,child)
                     recur(cname)

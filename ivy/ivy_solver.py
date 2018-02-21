@@ -86,6 +86,8 @@ def sorts(name):
         return z3.BitVecSort(width)
     if name == 'int':
         return z3.IntSort()
+    if name == 'nat':
+        return z3.IntSort()
     if name == 'strlit':
         return z3.StringSort()
     return None
@@ -103,7 +105,7 @@ def parse_int_params(name):
     
 
 def is_solver_sort(name):
-    return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'strlit' or name.startswith('strbv[')
+    return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'nat' or name == 'strlit' or name.startswith('strbv[')
 
 relations_dict = {'<':(lambda x,y: z3.ULT(x, y) if z3.is_bv(x) else x < y),
              '<=':(lambda x,y: z3.ULE(x, y) if z3.is_bv(x) else x <= y),
@@ -188,6 +190,8 @@ def lookup_native(thing,table,kind):
         if thing.name in iu.polymorphic_symbols:
             sort = thing.sort.domain[0].name
             if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
+                if thing.name == '-' and ivy_logic.sig.interp[sort] == 'nat':
+                    return lambda x,y: z3.If(x < y,z3.IntVal(0),x-y)
                 z3val = table(thing.name)
                 if z3val == None:
                     raise iu.IvyError(None,'{} is not a supported Z3 {}'.format(name,kind))
@@ -370,6 +374,28 @@ def literal_to_z3(lit):
     else:
         return z3_atom
 
+def quant_constraints(vs):
+    natvars = [v for v in vs if ivy_logic.sig.interp.get(v.sort.name,None) == 'nat']
+    if len(natvars) == 0:
+        return []
+    return [ivy_logic.Not(ivy_logic.Symbol('<',ivy_logic.RelationSort([v.sort,v.sort]))(v,ivy_logic.Symbol('0',v.sort)))
+            for v in natvars]
+
+
+# this adds bounds for nat
+
+def forall(vs,z3_vs,z3_body):
+    cnstrs = [z3.IntVal(0) <= z3_v for (v,z3_v) in zip(vs,z3_vs) if ivy_logic.sig.interp.get(v.sort.name,None) == 'nat']
+    if len(cnstrs) > 0:
+        z3_body = z3.Implies(z3.And(*cnstrs),z3_body)
+    return z3.ForAll(z3_vs, z3_body)
+
+def exists(vs,z3_vs,z3_body):
+    cnstrs = [z3.IntVal(0) <= z3_v for (v,z3_v) in zip(vs,z3_vs) if ivy_logic.sig.interp.get(v.sort.name,None) == 'nat']
+    if len(cnstrs) > 0:
+        z3_body = z3.And(*(cnstrs + [z3_body]))
+    return z3.Exists(z3_vs, z3_body)
+
 def clause_to_z3(clause):
     z3_literals = [literal_to_z3(lit) for lit in clause]
     z3_formula = z3.Or(z3_literals)
@@ -378,17 +404,34 @@ def clause_to_z3(clause):
         return z3_formula
     else:
         z3_variables = [term_to_z3(v) for v in variables]
-        return z3.ForAll(z3_variables, z3_formula)
+        return forall(variables, z3_variables, z3_formula)
 
 def conj_to_z3(cl):
     if isinstance(cl,ivy_logic.And):
         return z3.And(*[conj_to_z3(t) for t in cl.args])
-    return formula_to_z3(cl)
+    return formula_to_z3_closed(cl)
+
+def type_constraints(syms):
+    natsyms = [s for s in syms
+               if ivy_logic.sig.interp.get(s.sort.rng.name,None) == 'nat'
+                  and not ivy_logic.is_interpreted_symbol(s)]
+    res = []
+    for sym in natsyms:
+        t = (sym if not ivy_logic.is_function_sort(sym.sort) else
+             sym(*[ivy_logic.Variable('X'+str(n),s) for n,s in enumerate(sym.sort.dom)]))
+        sort = t.sort
+        fmla = ivy_logic.Not(ivy_logic.Symbol('<',ivy_logic.RelationSort([t.sort,t.sort]))(t,ivy_logic.Symbol('0',t.sort)))
+        z3_fmla = formula_to_z3_closed(fmla)
+        res.append(z3_fmla)
+    return res
+                             
 
 def clauses_to_z3(clauses):
     z3_clauses = [conj_to_z3(cl) for cl in clauses.fmlas]
-    z3_clauses += [formula_to_z3(dfn) for dfn in clauses.defs]
-    return z3.And(z3_clauses)
+    z3_clauses.extend([formula_to_z3(dfn) for dfn in clauses.defs])
+    z3_clauses.extend(type_constraints(used_symbols_clauses(clauses)))
+    res = z3.And(z3_clauses)
+    return res
 
 def formula_to_z3_int(fmla):
 #    print "formula_to_z3_int: {} : {}".format(fmla,type(fmla))
@@ -413,8 +456,8 @@ def formula_to_z3_int(fmla):
         return z3.If(args[0],args[1],args[2])
     if ivy_logic.is_quantifier(fmla):
         variables = ivy_logic.quantifier_vars(fmla)
-        q = z3.ForAll if ivy_logic.is_forall(fmla) else z3.Exists
-        res =  q([term_to_z3(v) for v in variables], args[0])
+        q = forall if ivy_logic.is_forall(fmla) else exists
+        res =  q(variables, [term_to_z3(v) for v in variables], args[0])
 #        print "res = {}".format(res)
         return res
     if ivy_logic.is_individual(fmla):
@@ -422,14 +465,22 @@ def formula_to_z3_int(fmla):
     print "bad fmla: {!r}".format(fmla)
     assert False
 
-def formula_to_z3(fmla):
+def formula_to_z3_closed(fmla):
     z3_formula = formula_to_z3_int(fmla)
     variables = sorted(used_variables_ast(fmla))
     if len(variables) == 0:
         return z3_formula
     else:
         z3_variables = [term_to_z3(v) for v in variables]
-        return z3.ForAll(z3_variables, z3_formula)
+        return forall(variables, z3_variables, z3_formula)
+
+def formula_to_z3(fmla):
+    z3_fmla = formula_to_z3_closed(fmla)
+    tcs = type_constraints(used_symbols_ast(fmla))
+    if len(tcs) > 0:
+        z3_fmla = z3.And(*([z3_fmla] + tcs))
+    return z3_fmla
+                           
 
 
 def unsat_core(clauses1, clauses2, implies = None, unlikely=lambda x:False):
@@ -1286,7 +1337,7 @@ def clauses_imply_formula(clauses1, fmla2):
     """
     s = z3.Solver()
     s.add(clauses_to_z3(clauses1))
-    s.add(z3.Not(formula_to_z3(fmla2)))
+    s.add(formula_to_z3(ivy_logic.Not(fmla2)))
 #    print s.to_smt2()
     return s.check() == z3.unsat
 

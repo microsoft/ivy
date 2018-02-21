@@ -478,7 +478,7 @@ def emit_cpp_sorts(header):
             sort_to_cpptype[il.sig.sorts[name]] = cpptype
         elif name in il.sig.interp:
             itp = il.sig.interp[name]
-            if not (isinstance(itp,il.EnumeratedSort) or itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
+            if not (isinstance(itp,il.EnumeratedSort) or itp.startswith('{') or itp.startswith('bv[') or itp in ['int','nat','strlit']):
                 cpptype = ivy_cpp_types.get_cpptype_constructor(itp)(varname(name))
                 cpptypes.append(cpptype)
                 sort_to_cpptype[il.sig.sorts[name]] = cpptype
@@ -502,7 +502,7 @@ def emit_sorts(header):
                     indent(header)
                     header.append('mk_bv("{}",{});\n'.format(name,width))
                     continue
-                if sortname == 'int':
+                if sortname in ['int','nat']:
                     indent(header)
                     header.append('mk_int("{}");\n'.format(name))
                     continue
@@ -2676,6 +2676,13 @@ def emit_app(self,header,code,capture_args=None):
             return
         if is_bv_term(self):
             emit_bv_op(self,header,code)
+            return
+        if self.func.name == '-' and il.sig.interp.get(self.func.sort.rng.name,None) == 'nat':
+            x = new_temp(header)
+            code_line(header,x + ' = ' + code_eval(header,self.args[0]))
+            y = new_temp(header)
+            code_line(header,y + ' = ' + code_eval(header,self.args[1]))
+            code.append('( {} < {} ? 0 : {} - {})'.format(x,y,x,y))
             return
         assert len(self.args) == 2 # handle only binary ops for now
         code.append('(')

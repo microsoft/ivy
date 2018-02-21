@@ -29,7 +29,7 @@ module unbounded_sequence = {
 
 	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
-	instantiate totally_ordered(t)
+	instantiate totally_ordered_with_zero(t)
 
 	after next {
 	    assert x < y & (x < Y -> y <= Y);
@@ -46,7 +46,7 @@ module unbounded_sequence = {
 
     object impl = {
 
-	interpret t -> int
+	interpret t -> nat
 
 	definition succ(X,Y) = (Y = X + 1)
 
