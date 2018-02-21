@@ -1378,7 +1378,8 @@ def create_isolate(iso,mod = None,**kwargs):
             if len(isos) == 1:
                 iso = isos[0]
             
-        check_with_parameters(mod,iso)
+        if iso is not None:
+            check_with_parameters(mod,iso)
 
         # Apply the present conjectures
         if iso and iso in mod.isolates and iu.version_le("1.7",iu.get_string_version()):
