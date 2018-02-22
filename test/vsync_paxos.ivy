@@ -59,6 +59,7 @@ relation transferral(E:epoch, N:node, I:inst, V:value)
 # records past decisions of any epoch or node
 
 relation any_decision(I:inst, V:value)
+#relation any_epoch_decision(E:epoch, I:inst, V:value)
 function dec_maj(I:inst, V:value) : nodeset.set # records majority for decision
 function dec_epoch(I:inst, V:value) : epoch
 function accept_maj(E:epoch,K:stake) : nodeset.set
@@ -77,6 +78,7 @@ after init {
     vote(E,N,I,V) := false;
     decision(E,N,I,V) := false;
     any_decision(I,V) := false;
+#    any_epoch_decision(E,I,V) := false;
     transferral(E,N,I,V) := false;
     node_stake(E,N) := 0;
     wedged(E,N) := false;
@@ -155,29 +157,18 @@ action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config
 #    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
     require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
 
-    assert epoch_ended(e_prev) -> c = config_decided(e_prev)
-    proof {
-        let E1 = e_prev, C1 = c, C2 = config_decided(e_prev), K = s, K2 = epoch_stake(E1), N1 = nodeset.common(nset,nset);
-        if s < K2 {
-            let S1 = left_maj(E1,K), S2 = nset, N = nodeset.common(S1,S2)
-        } else {
-            let S1 = left_maj(E1,K2), S2 = accepted_maj(E1), N = nodeset.common(S1,S2)
-        }
-    };
+    assume epoch_ended(e_prev) -> c = config_decided(e_prev);
 
-#     {
-#     assert (S1:nodeset.set = left_maj(E1,K) & S2:nodeset.set = nset & N:node = nodeset.common(S1,S2)) -> (s < K2 -> ((E1 = e_prev & C1:config = c & C2:config = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1:node = nodeset.common(nset,nset)) -> (epoch_ended(e_prev) -> c = config_decided(e_prev))));
-#     assert (S1:nodeset.set = left_maj(E1,K2) & S2:nodeset.set = accepted_maj(E1) & N:node = nodeset.common(S1,S2)) -> (~s < K2 -> ((E1 = e_prev & C1:config = c & C2:config = config_decided(e_prev) & K:stakeord = s & K2 = epoch_stake(E1) & N1:node = nodeset.common(nset,nset)) -> (epoch_ended(e_prev) -> c = config_decided(e_prev))));
-#     assume epoch_ended(e_prev) -> c = config_decided(e_prev);
-# };
+    # assert epoch_ended(e_prev) -> c = config_decided(e_prev)
+    # proof {
+    #     let E1 = e_prev, C1 = c, C2 = config_decided(e_prev), K = s, K2 = epoch_stake(E1), N1 = nodeset.common(nset,nset);
+    #     if s < K2 {
+    #         let S1 = left_maj(E1,K), S2 = nset, N = nodeset.common(S1,S2)
+    #     } else {
+    #         let S1 = left_maj(E1,K2), S2 = accepted_maj(E1), N = nodeset.common(S1,S2)
+    #     }
+    # };
 
-    # assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) &
-    #           S1 = left_maj(E1,K2) & S2 = accepted_maj(E1) & N = nodeset.common(S1,S2) & N1 = nodeset.common(nset,nset) &
-    #     ~(s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
-    # assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1 = nodeset.common(nset,nset) &
-    #           S1 = left_maj(E1,K) & S2 = nset & N = nodeset.common(S1,S2) &
-    #     (s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
-    # assume epoch_ended(e_prev) -> c = config_decided(e_prev);
 
 # true but not needed...
 
@@ -231,25 +222,25 @@ action decide(e:epoch, n:node, v:value, nset:nodeset.set, i:inst) = {
     require nodeset.majority(nset);
     require forall N. nodeset.member(N, nset) -> vote(e, N, i, v);
 
-
-#    assert I = i & V1 = v & S1 = epoch_maj(E2) & S2 = dec_maj(I,V2) & N = nodeset.common(S1,S2) & E1 = e & E2 = dec_epoch(I,V2) & K = epoch_stake(E2) & C = config_decided(E2)
-#      & E2 < E1 & N1 = leader_of(E1) & N2 = nodeset.common(nset,nset) ->  (any_decision(i,V2) -> v = V2);
-#    assert I = i & V1 = v & S1 = epoch_maj(E1) & S2 = nset & N = nodeset.common(S1,S2) & E1 = e & E2 = dec_epoch(I,V2) & K = epoch_stake(E1) & C = config_decided(E1)
-#      & E1 < E2 & N1 = leader_of(E2) & S3 = dec_maj(I,V2) & N2 = nodeset.common(S3,S3) ->  (any_decision(i,V2) -> v = V2);
-    assume forall V2. any_decision(i,V2) -> v = V2;
     decision(e, n, i, v) := true;
     any_decision(i,v) := true;
+#    any_epoch_decision(e,i,v) := true;
     dec_maj(i,v) := nset;
     dec_epoch(i,v) := e;
+
+    assert
+      ~(~(E1 < E2) & any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2 & dec_epoch(I,V1) = E1 & dec_epoch(I,V2) = E2) 
+    proof let
+        S3 = dec_maj(I,V1),
+        S2 = dec_maj(I,V2),
+        S1 = (S2 if E2 = E1 else epoch_maj(E2)), 
+        N = nodeset.common(S1,S2),
+        K = epoch_stake(E2),
+        C = config_decided(E2),
+        N1 = leader_of(E1),
+        N2 = nodeset.common(S3,S3);
+
 }
-
-# invariant ~(any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2)
-# proof let S1 = dec_maj(I,V1), S2 = dec_maj(I,V2), N = nodeset.common(S1,S2), E1 = dec_epoch(I,V1), E2 = dec_epoch(I,V2)
-
-# invariant any_decision(I,V1) & dec_epoch(I,V1) < E1 & started(E1,N1) -> transferral(E1,N1,I,V1)
-# proof let E2 = dec_epoch(I,V1), S1 = dec_maj(I,V1), S2 = epoch_maj(E2), N = nodeset.common(S1,S2) 
-
-# invariant E2 < E1 & nodeset.member(N,epoch_maj(E2)) & vote(E2,N,I,V1) & started(E1,N1) -> transferral(E1,N1,I,V1)
 
 
 export send_wedge
