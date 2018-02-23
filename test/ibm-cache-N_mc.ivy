@@ -114,36 +114,7 @@ invariant forall C1, C2. C1 ~= C2 & s.cache(C1) = exclusive -> s.cache(C2) = inv
 
 invariant s.homeexclusiveGranted & s.homeCurrentCommand ~= empty1 & s.channel3(C1) = invalidateAck -> C1 = owner
 
-schema trans1 = {
-    type t
-    function x : t
-    function z : t
-    property x = X & z = X -> x = z
-}
-
-schema trans2 = {
-    type t
-    function x : t
-    property x = X & Y = X -> x = Y
-}
-
-schema cong1 = {
-    type t
-    type u
-    function x : t
-    function f(X:t) : u
-    property x = X -> f(x) = f(X)
-}
-
-schema cong2 = {
-    type t1
-    type t2
-    type u
-    function x1 : t1
-    function x2 : t2
-    function f(X1:t1,X2:t2) : u
-    property x1 = X1 & x2 = X2 -> f(x1,x2) = f(X1,X2)
-}
+include mc_schemata
 
 
 export reqsharedRule

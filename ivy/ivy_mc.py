@@ -507,6 +507,8 @@ class Match(object):
             del self.map[x]
     def unify(self,x,y):
         if x not in self.map:
+            if x.name.endswith('_finite') and not is_finite_sort(y):
+                return False  # 
             self.add(x,y)
             return True
         return self.map[x] == y
