@@ -26,6 +26,7 @@ coverage = iu.BooleanParameter("coverage",True)
 checked_action = iu.Parameter("action","")
 opt_trusted = iu.BooleanParameter("trusted",False)
 opt_mc = iu.BooleanParameter("mc",False)
+opt_separate = iu.BooleanParameter("separate",False)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -433,6 +434,41 @@ def check_isolate():
                 act.checked_assert.value = old_checked_assert
 
 
+def all_assert_linenos():
+    mod = im.module
+    all = []
+    for actname,action in mod.actions.iteritems():
+        guarantees = [sub.lineno for sub in action.iter_subactions()
+                      if isinstance(sub,(act.AssertAction,act.Ranking))]
+        all.extend(guarantees)
+    all.extend(lf.lineno for lf in mod.labeled_conjs)
+    seen = set()
+    res = []
+    for lineno in all:
+        if not lineno in seen:
+            res.append(lineno)
+            seen.add(lineno)
+    check_lineno = act.checked_assert.get()
+    if check_lineno:
+        if check_lineno in seen:
+            return [check_lineno]
+        raise iu.IvyError(None,'There is no assertion at the specified line')
+    return res
+
+def mc_isolate():
+    import ivy_mc
+    if not opt_separate.get():
+        with im.module.theory_context():
+            ivy_mc.check_isolate()
+        return
+    for lineno in all_assert_linenos():
+        with im.module.copy():
+            old_checked_assert = act.checked_assert.get()
+            act.checked_assert.value = lineno
+            with im.module.theory_context():
+                ivy_mc.check_isolate()
+            act.checked_assert.value = old_checked_assert
+    
 
 def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
@@ -466,9 +502,7 @@ def check_module():
             if opt_trusted.get():
                 continue
             if opt_mc.get():
-                import ivy_mc
-                with im.module.theory_context():
-                    ivy_mc.check_isolate()
+                mc_isolate()
             else:
                 check_isolate()
     print ''

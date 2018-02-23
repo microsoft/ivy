@@ -295,6 +295,9 @@ class EnsuresAction(AssertAction):
 class RequiresAction(AssertAction):
     pass
 
+class SubgoalAction(AssertAction):
+    pass
+
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
         return eq_atom(ast1,ast2)

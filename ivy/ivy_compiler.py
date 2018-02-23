@@ -552,7 +552,7 @@ def compile_assert_action(self):
         subgoals = prover.admit_proposition(ivy_ast.LabeledFormula(None,cond),pf)
         assm = AssumeAction(ivy_logic.close_formula(cond))
         assm.lineno = self.lineno
-        asrt = Sequence(*([self.clone([sg.formula]) for sg in subgoals] + [assm]))
+        asrt = Sequence(*([ia.SubgoalAction(sg.formula) for sg in subgoals] + [assm]))
         for x,y in zip(asrt.args,subgoals):
             if hasattr(y,'lineno'):
                 x.lineno = y.lineno

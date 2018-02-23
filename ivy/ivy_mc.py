@@ -15,6 +15,7 @@ import subprocess
 from collections import defaultdict
 import itertools
 
+logfile = None
 
 def get_truth(digits,idx,syms):
     if (len(digits) != len(syms)):
@@ -597,9 +598,12 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
 
     # Expand the axioms schemata into axioms
 
+    print 'Expanding schemata...'
     axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
     for a in axioms:
-        print 'axiom {}'.format(a)
+        logfile.write('axiom {}\n'.format(a))
+
+    print 'Instantiating axioms...'
 
     # Get all the triggers. For now only automatic triggers
 
@@ -673,7 +677,7 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
         recur(f)
                     
     for f in inst_list:
-        print '    {}'.format(f)
+        logfile.write('    {}\n'.format(f))
     return inst_list
 
 
@@ -927,15 +931,24 @@ def match_annotation(action,annot,handler):
         handler.handle(action,env)
     recur(action,annot,dict())
     
+def checked(thing):
+    return ia.checked_assert.value in ["",thing.lineno]
 
 def add_err_flag(action,erf,errconds):
     if isinstance(action,ia.AssertAction):
-        errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
-        res = ia.AssignAction(erf,il.Or(erf,errcond))
-        errconds.append(errcond)
-        res.lineno = action.lineno
-        return res
-    if isinstance(action,ia.AssumeAction):
+        if checked(action):
+            print "{}Model checking guarantee".format(action.lineno)
+            errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
+            res = ia.AssignAction(erf,il.Or(erf,errcond))
+            errconds.append(errcond)
+            res.lineno = action.lineno
+            return res
+        if isinstance(action,ia.SubgoalAction):
+#            print "skipping subgoal at line {}".format(action.lineno)
+            return ia.Sequence()
+    if isinstance(action,ia.AssumeAction) or isinstance(action,ia.AssertAction):
+        if isinstance(action,ia.AssertAction):
+            print "assuming assertion at line {}".format(action.lineno)
         res = ia.AssumeAction(il.Or(erf,action.args[0])) 
         res.lineno = action.lineno
         return res
@@ -977,6 +990,10 @@ def to_aiger(mod,ext_act):
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
+        if not checked(lf):
+#            print 'skipping {}'.format(lf)
+            continue
+        print "{}Model checking invariant".format(lf.lineno)
         if lf.id in pmap:
             proof = pmap[lf.id]
             subgoals = pc.admit_proposition(lf,proof)
@@ -1056,7 +1073,8 @@ def to_aiger(mod,ext_act):
     invar_syms.update(ilu.used_symbols_ast(from_asserts))
     sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
     sort_constants2 = mine_constants2(mod,trans,invariant)
-    print '\ninstantiations:'
+    print '\nInstantiating quantifiers (see {} for instantiations)...'.format(logfile_name)
+    logfile.write('\ninstantiations:\n')
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
     
     
@@ -1129,7 +1147,7 @@ def to_aiger(mod,ext_act):
     for expr,v in prop_abs.iteritems():
         if is_immutable_expr(expr):
             new_stvars.append(v)
-            print 'new state: {}'.format(expr)
+            logfile.write('new state: {}\n'.format(expr))
             new_defs.append(il.Definition(tr.new(v),v))
 
     trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
@@ -1350,6 +1368,15 @@ class ABCModelChecker(ModelChecker):
 
 def check_isolate():
     
+    print
+    print 80*'*'
+    print
+
+    global logfile,logfile_name
+    if logfile is None:
+        logfile_name = 'ivy_mc.log'
+        logfile = open(logfile_name,'w')
+
     mod = im.module
 
     # build up a single action that does both initialization and all external actions
@@ -1416,17 +1443,15 @@ def check_isolate():
         print '\nPASS'
     else:
         print '\nFAIL'
+        print
+        print 'Counterexample trace follows...'
+        print 80*'*'
         tr = aiger_witness_to_ivy_trace(aiger,outfilename,action,stvarset,ext_act,annot,cnsts,decoder)        
-        # import tk_ui as ui
-        # iu.set_parameters({'mode':'induction'})
-        # gui = ui.new_ui()
-        # agui = gui.add(tr)
-        # gui.tk.update_idletasks() # so that dialog is on top of main window
-        # gui.tk.mainloop()
-        # exit(1)
-
+        print
+        print 80*'*'
+        exit(0)
         
-    exit(0)
+    
 
 
     
