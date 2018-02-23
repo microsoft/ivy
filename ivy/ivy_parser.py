@@ -1385,8 +1385,22 @@ def p_top_nativequote(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
-def p_top_attribute_callatom_eq_callatom(p):
-    'top : top ATTRIBUTE callatom EQ callatom'
+def p_top_attributeval_callatom(p):
+    'attributeval : callatom'
+    p[0] = p[1]
+
+def p_top_attributeval_true(p):
+    'attributeval : TRUE'
+    p[0] = Atom('true')
+    p[0].lineno = get_lineno(p,1)
+
+def p_top_attributeval_false(p):
+    'attributeval : FALSE'
+    p[0] = Atom('false')
+    p[0].lineno = get_lineno(p,1)
+
+def p_top_attribute_callatom_eq_attributeval(p):
+    'top : top ATTRIBUTE callatom EQ attributeval'
     p[0] = p[1]
     defn = AttributeDef(p[3],p[5])
     defn.lineno = get_lineno(p,2)

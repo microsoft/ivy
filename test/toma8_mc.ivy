@@ -286,3 +286,4 @@ export toma.step
 
 include mc_schemata
 
+attribute method = mc

@@ -278,3 +278,6 @@ export decide
 
 include mc_schemata
 instantiate total_order_schemata(stake)
+
+attribute method = mc
+attribute separate = true

@@ -26,7 +26,7 @@ coverage = iu.BooleanParameter("coverage",True)
 checked_action = iu.Parameter("action","")
 opt_trusted = iu.BooleanParameter("trusted",False)
 opt_mc = iu.BooleanParameter("mc",False)
-opt_separate = iu.BooleanParameter("separate",False)
+opt_separate = iu.BooleanParameter("separate",None)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -455,9 +455,22 @@ def all_assert_linenos():
         raise iu.IvyError(None,'There is no assertion at the specified line')
     return res
 
-def mc_isolate():
+def get_isolate_attr(isolate,attr,default=None):
+    attr = iu.compose_names(isolate,attr)
+    if attr not in im.module.attributes:
+        return default
+    return im.module.attributes[attr].rep
+
+def check_separately(isolate):
+    if opt_separate.get() is not None:
+        return opt_separate.get()
+    return get_isolate_attr(isolate,'separate','false') == 'true'
+
+def mc_isolate(isolate):
+    if im.module.labeled_props:
+        raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
     import ivy_mc
-    if not opt_separate.get():
+    if not check_separately(isolate):
         with im.module.theory_context():
             ivy_mc.check_isolate()
         return
@@ -469,6 +482,11 @@ def mc_isolate():
                 ivy_mc.check_isolate()
             act.checked_assert.value = old_checked_assert
     
+def get_isolate_method(isolate):
+    if opt_mc.get():
+        return 'mc'
+    return get_isolate_attr(isolate,'method','ic')
+
 
 def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
@@ -501,8 +519,8 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            if opt_mc.get():
-                mc_isolate()
+            if get_isolate_method(isolate) == 'mc':
+                mc_isolate(isolate)
             else:
                 check_isolate()
     print ''

@@ -14,6 +14,7 @@ import tempfile
 import subprocess
 from collections import defaultdict
 import itertools
+import sys
 
 logfile = None
 
@@ -1426,7 +1427,7 @@ def check_isolate():
     texts = []
     while True:
         text = p.stdout.read(256)
-        print text,
+        sys.stdout.write(text)
         texts.append(text)
         if len(text) < 256:
             break

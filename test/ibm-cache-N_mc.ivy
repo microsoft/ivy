@@ -127,3 +127,5 @@ export receiveinvalidateAckRule
 export grantexclusiveRule
 export receivesharedGrantRule
 export grantsharedRule
+
+attribute method = mc
