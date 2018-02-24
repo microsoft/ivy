@@ -1281,13 +1281,15 @@ class AigerMatchHandler(object):
             if all(x in inv_env or not my_is_skolem(x) and
                    not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
                 expr = ilu.rename_ast(decd,inv_env)
+                if il.is_constant(expr) and expr in il.sig.constructors:
+                    return
                 if not (expr in self.current and self.current[expr] == val):
                     print '        {} = {}'.format(expr,val)
                     self.current[expr] = val
 
         if hasattr(action,'lineno'):
 #            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
-            inv_env = dict((y,x) for x,y in env.iteritems())
+            inv_env = dict((y,x) for x,y in env.iteritems() if not my_is_skolem(x))
             for v in self.aiger.inputs:
                 if v in self.decoder:
                     show_sym(v,self.decoder[v],self.aiger.get_sym(v))
