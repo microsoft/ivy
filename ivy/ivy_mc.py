@@ -830,6 +830,8 @@ class Qelim(object):
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
             return res
+        if il.is_macro(expr):
+            return self.qe(il.expand_macro(expr),sort_constants)
         return clone_normal(expr,[self.qe(e,sort_constants) for e in expr.args])
     def __call__(self,trans,invariant,indhyps):
         # apply to the transition relation
