@@ -963,7 +963,8 @@ class IvyDomainSetup(IvyDeclInterp):
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             return
         if isinstance(rhs,ivy_ast.Range):
-            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+#            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}".format(i) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.is_solver_sort,slv.is_solver_op],

@@ -220,7 +220,6 @@ def ceillog2(n):
     return bits
 
 def get_encoding_bits(sort):
-#    iu.dbg('sort')
     interp = thy.get_sort_theory(sort)
     if il.is_enumerated_sort(interp):
         n = ceillog2(len(interp.defines()))
@@ -247,7 +246,7 @@ def encode_vars(syms,encoding):
 
 class Encoder(object):
     def __init__(self,inputs,latches,outputs):
-#        iu.dbg('inputs')
+#        iu.dbg('[(str(inp),str(inp.sort)) for inp in inputs]')
 #        iu.dbg('latches')
 #        iu.dbg('outputs')
         self.inputs = inputs
@@ -394,7 +393,8 @@ class Encoder(object):
         return res
 
     def encode_equality(self,sort,*eterms):
-        n = len(sort.defines()) if il.is_enumerated_sort(sort) else 2**len(eterms[0])
+        interp = thy.get_sort_theory(sort)
+        n = len(interp.defines()) if il.is_enumerated_sort(interp) else 2**len(eterms[0])
         bits = ceillog2(n)
         eqs = self.sub.andl(*[self.sub.iff(x,y) for x,y in zip(*eterms)])
         alt = self.sub.andl(*[self.gebin(e,n-1) for e in eterms])
@@ -449,7 +449,7 @@ class Encoder(object):
         interp = thy.get_sort_theory(v.sort)
         if il.is_enumerated_sort(interp):
             num = self.bindec(bits)
-            vals = v.sort.defines()
+            vals = interp.defines()
             val = vals[num] if num < len(vals) else vals[-1]
             val = il.Symbol(val,v.sort)
         elif isinstance(interp,thy.BitVectorTheory):
@@ -490,6 +490,19 @@ def is_finite_sort(sort):
     return (il.is_enumerated_sort(interp) or 
             isinstance(interp,thy.BitVectorTheory) or
             il.is_boolean_sort(interp))
+
+def sort_values(sort):
+    interp = thy.get_sort_theory(sort)
+    if il.is_enumerated_sort(interp):
+        return [il.Symbol(s,sort) for s in interp.extension]
+    if isinstance(interp,thy.BitVectorTheory):
+        if interp.bits > 8:
+            raise iu.IvyError(None,'Cowardly refusing to enumerate the type bv[{}]'.format(interp.bits))
+        return [il.Symbol(str(i),sort) for i in range(2**interp.bits)]  
+    if il.is_boolean_sort(interp):
+        return [il.Or(),il.And()]
+    assert False,sort
+    
 
 # Expand the axiom schemata into axioms, for a given collection of
 # function and constant symbols.
@@ -814,13 +827,17 @@ class Qelim(object):
         self.syms[expr] = res
         self.syms_ctr += 1
         return res
+    def get_consts(self,sort,sort_constants):
+        if is_finite_sort(sort):   # enumerate quantifiers over finite sorts
+            return sort_values(sort)
+        return sort_constants[sort]
     def qe(self,expr,sort_constants):
         if il.is_quantifier(expr):
             old = self.syms.get(expr,None)
             if old is not None:
                 return old
             res = self.fresh(expr)
-            consts = [sort_constants[x.sort] for x in expr.variables]
+            consts = [self.get_consts(x.sort,sort_constants) for x in expr.variables]
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
             insts = [normalize(il.substitute(expr.body,m)) for m in maps]
@@ -973,6 +990,67 @@ def add_err_flag_mod(mod,erf,errconds):
         new_action.formal_returns = action.formal_returns
         mod.actions[actname] = new_action
        
+# This translates finite function applications to table lookups.  This
+# is preferable to using axioms if the argument types are large, since
+# it prevents copying the argument expressions. Also, the result is a
+# circuit (as opposed to a set of constraints) which might be helpful
+# to ABC.
+
+
+def to_table_lookup(trans,invariant):
+    new_defs = []
+    global to_table_lookup_counter
+    to_table_lookup_counter = 0
+    
+    def arg_sym(sort):
+        global to_table_lookup_counter
+        res = il.Symbol('__arg[{}]'.format(to_table_lookup_counter),sort)
+        to_table_lookup_counter += 1
+        return res
+
+    def recur(expr):
+        if (il.is_app(expr) and len(expr.args) > 0 and
+            not il.is_interpreted_symbol(expr.func) and
+            all(is_finite_sort(a.sort) for a in expr.args)):
+            
+            argsyms = []
+            consts = []
+            for x in expr.args:
+                cs = sort_values(x.sort)
+                if x in cs:
+                    argsyms.append(x)
+                    consts.append([x])
+                else:
+                    consts.append(cs)
+                    if il.is_constant(x):
+                        argsyms.append(x)
+                    else:
+                        sym = arg_sym(x.sort)
+                        argsyms.append(sym)
+                        new_defs.append(il.Definition(sym,recur(x)))
+            values = list(itertools.product(*consts))
+            res = (expr.rep)(*values[0])
+            for v in values[1:]:
+                res = il.Ite(il.And(*[il.Equals(x,y) for x,y in zip(argsyms,v)]),(expr.rep)(*v),res)
+            return res
+        return expr.clone(map(recur,expr.args))
+
+
+    # skip this step if there aren't any finite-domain functions
+    if not any(il.is_function_sort(func.sort) and len(func.sort.dom) > 0 and not il.is_interpreted_symbol(func) and
+               all(is_finite_sort(sort) for sort in func.sort.dom) for func in il.all_symbols()):
+        return trans,invariant
+
+    defs = [recur(df) for df in trans.defs]
+    fmlas = [recur(fmla) for fmla in trans.fmlas]
+    trans = ilu.Clauses(fmlas,defs + new_defs)
+    new_defs = []
+    invariant = recur(invariant)
+    if new_defs:
+        invariant = il.Implies(il.And(*[df.to_constraint() for df in new_defs]),invariant)
+    return trans,invariant
+
+
 def to_aiger(mod,ext_act):
 
     erf = il.Symbol('err_flag',il.find_sort('bool'))
@@ -1099,6 +1177,10 @@ def to_aiger(mod,ext_act):
     ax_def = il.Definition(ax_var,ax_conj)
     invariant = il.Implies(ax_var,invariant)
     trans = ilu.Clauses(trans.fmlas+[ax_var],trans.defs+[ax_def])
+
+    # step 4b: handle the finite-domain functions specially
+
+    trans,invariant= to_table_lookup(trans,invariant)
     
     # step 5: eliminate all non-propositional atoms by replacing with fresh booleans
     # An atom with next-state symbols is converted to a next-state symbol if possible
@@ -1108,6 +1190,8 @@ def to_aiger(mod,ext_act):
     global prop_abs_ctr  # sigh -- python lameness
     prop_abs_ctr = 0   # counter for fresh symbols
     new_stvars = []    # list of fresh symbols
+    finite_syms = []   # list of symbols not abstracted
+    finite_syms_set = set()
 
     # get the propositional abstraction of an atom
     def new_prop(expr):
@@ -1132,10 +1216,16 @@ def to_aiger(mod,ext_act):
     global mk_prop_fmlas
     mk_prop_fmlas = []
     def mk_prop_abs(expr):
-        if il.is_quantifier(expr) or len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args):
+        if (il.is_quantifier(expr) or
+            len(expr.args) > 0 and (
+                any(not is_finite_sort(a.sort) for a in expr.args)
+                or il.is_app(expr) and not il.is_interpreted_symbol(expr.func))):
             return new_prop(expr)
+        if (il.is_constant(expr) and not il.is_numeral(expr)
+            and expr not in il.sig.constructors and expr not in finite_syms_set):
+            finite_syms_set.add(expr)
+            finite_syms.append(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
-
     
     # apply propositional abstraction to the transition relation
     new_defs = map(mk_prop_abs,trans.defs)
@@ -1149,7 +1239,7 @@ def to_aiger(mod,ext_act):
     def is_immutable_expr(expr):
         res = not any(my_is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
         return res
-    for expr,v in prop_abs.iteritems():
+    for expr,v in itertools.chain(prop_abs.iteritems(),((x,x) for x in finite_syms)):
         if is_immutable_expr(expr):
             new_stvars.append(v)
             logfile.write('new state: {}\n'.format(expr))
