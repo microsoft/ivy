@@ -1079,7 +1079,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                                 raise iu.IvyError(None,"No implementation for action {}".format(c))
         for c in mod.definitions + mod.native_definitions:
             if not keep_ax(c.label) and c.formula.args[0].rep in all_syms:
-                raise iu.IvyError(c,"Definition of {} is referenced, but not present in extract") 
+                raise iu.IvyError(c,"Definition of {} is referenced, but not present in extract".format(c.formula.args[0].rep)) 
 
 
 
