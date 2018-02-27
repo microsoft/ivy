@@ -456,6 +456,8 @@ def all_assert_linenos():
     return res
 
 def get_isolate_attr(isolate,attr,default=None):
+    if isolate is None:
+        return default
     attr = iu.compose_names(isolate,attr)
     if attr not in im.module.attributes:
         return default
