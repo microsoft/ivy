@@ -1222,7 +1222,7 @@ def to_aiger(mod,ext_act):
                 or il.is_app(expr) and not il.is_interpreted_symbol(expr.func))):
             return new_prop(expr)
         if (il.is_constant(expr) and not il.is_numeral(expr)
-            and expr not in il.sig.constructors and expr not in finite_syms_set):
+            and expr not in il.sig.constructors and expr not in finite_syms_set and not tr.is_skolem(expr)):
             finite_syms_set.add(expr)
             finite_syms.append(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
