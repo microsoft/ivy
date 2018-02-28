@@ -31,4 +31,4 @@ with im.Module():
         assert False,"safety should have failed"
     except iu.IvyError as e:
         print e
-        assert str(e) == "error: safety failed in initializer"
+        assert str(e) == "error: failed checks: 1"

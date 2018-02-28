@@ -6,6 +6,7 @@ import ivy_logic as il
 import ivy_logic_utils as lu
 import ivy_solver
 import ivy_concept_space as ics
+import ivy_ast
 
 from collections import defaultdict
 import string
@@ -73,6 +74,9 @@ class Module(object):
         self.proofs = [] # list of pair (labeled formula, proof)
         self.named = [] # list of pair (labeled formula, atom)
         self.subgoals = [] # (labeled formula * labeled formula list) list
+        self.isolate_info = None # IsolateInfo or None
+        self.conj_actions = dict() # map from conj names to action name list
+
         
         self.sig = il.sig.copy() # capture the current signature
 
@@ -109,6 +113,7 @@ class Module(object):
             self.hierarchy[pref].add(suff)
 
     def add_object(self,name):
+        assert not isinstance(name,ivy_ast.This)
         self.hierarchy[name]
 
     @property
@@ -230,6 +235,12 @@ class Module(object):
             space = ics.NamedSpace(il.Literal(0,fmla))
             mod.concept_spaces.append((sym(*variables),space))
 
+    def call_graph(self):
+        callgraph = defaultdict(list)
+        for actname,action in self.actions.iteritems():
+            for called_name in action.iter_calls():
+                callgraph[called_name].append(actname)
+        return callgraph
 
 def resort_ast(ast):
     return lu.resort_ast(ast,sort_refinement)
@@ -324,3 +335,21 @@ def relevant_definitions(symbols):
     rch = set(iu.reachable(symbols,lambda sym: lu.symbols_ast(dfn_map[sym]) if sym in dfn_map else []))
     return [ldf for ldf in module.definitions if ldf.formula.defines() in rch]
     
+def sort_dependencies(mod,sortname):
+    if sortname in mod.sort_destructors:
+        for destr in mod.sort_destructors[sortname]:
+            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
+    if sortname in mod.interps:
+        t = mod.interps[sortname]
+        if isinstance(t,ivy_ast.NativeType):
+            return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
+    return []
+
+# Holds info about isolate for user consumption
+#
+# -- implementations is a list of pairs (mixer,mixee,action) for present action implementaitons
+# -- monitors is a list of triples (mixer,mixee,action) for present monitors
+
+class IsolateInfo(object):
+    def __init__(self):
+        self.implementations,self.monitors = [],[]

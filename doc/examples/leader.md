@@ -21,7 +21,9 @@ parameter of the same type. Here is an example of an object parameterized on typ
     object foo = {
 
         function bit(S:t) : bool
-        init ~bit(S)
+        after init {
+            bit(S) := false
+        }
 
         action set_bit(self:t) = {
             bit(self) := true
@@ -44,7 +46,9 @@ write the object `foo` as follows:
     object foo(self:t) = {
 
         individual bit : bool
-        init ~bit
+        after init {
+            bit := false
+        }
 
         action set_bit = {
             bit := true
@@ -243,7 +247,9 @@ layer. It's quite simple:
     object trans = {
 
         relation sent(V:id.t, N:node.t)
-        init ~sent(V, N)
+        after init {
+            sent(V, N) := false
+        }
 
         action send(dst:node.t, v:id.t)
         action recv(dst:node.t, v:id.t)
@@ -335,11 +341,11 @@ method](client_server_example.html).  We start IVy using this command:
 We start, as usual, with `Invariant|Check induction`. Ivy tells us the
 the safety check failed, meaning that an assert fails in some action:
 
-![IVy screenshot](images/leader1.png)
+<p><img src="images/leader1.png" alt="Testing IVy screenshot" /></p>
 
 When we click OK, this is what we see:
 
-![IVy screenshot](images/leader2.png)
+<p><img src="images/leader2.png" alt="Testing IVy screenshot" /></p>
 
 On the left, we see a failing transition starting in state `0`, using
 one of our two exported actions, `app.async` and `trans.recv`. To
@@ -358,7 +364,7 @@ could start selecting relations to see more information, but let's
 instead choose the command `Invariant|Diagram` to see what information
 IVy thinks might be relevant to the failure. Here's what we see:
 
-![IVy screenshot](images/leader3.png)
+<p><img src="images/leader3.png" alt="Testing IVy screenshot" /></p>
 
 The arrow from id 0 to id 1 is depicting the relation `X:id.t < Y`.
 Because the arrow goes from `X` to `Y`, we interpret the arrow to mean
@@ -373,18 +379,18 @@ to become leader, but it does not have highest id. This situation
 clearly has to be ruled out. We do this by selecting the
 `Conjecture|Strengthen` command. Here is what IVy says:
 
-![IVy screenshot](images/leader4.png)
+<p><img src="images/leader4.png" alt="Testing IVy screenshot" /></p>
 
 In other words, we conjecture that it never happens that a node N has
 id less than a node P, and node N is receiving its own id. Now we choose
 `Invariant|Check induction` again, to see if our conjecture is inductive. 
 Of course, it isn't. Here's what Ivy says:
 
-![IVy screenshot](images/leader5.png)
+<p><img src="images/leader5.png" alt="Testing IVy screenshot" /></p>
 
 And here is the counterexample to induction:
 
-![IVy screenshot](images/leader6.png)
+<p><img src="images/leader6.png" alt="Testing IVy screenshot" /></p>
 
 Here, some externally called action transitions from state `0`
 satisfying our conjecture to state `1` *not* satisfying the
@@ -392,7 +398,7 @@ conjecture. IVy is depicting state `0`, with all the relations that
 appear in the conjecture. It's not immediately clear what's wrong here,
 so let's try `Invariant|Diagram` again to see what IVy thinks:
 
-![IVy screenshot](images/leader7.png)
+<p><img src="images/leader7.png" alt="Testing IVy screenshot" /></p>
 
 Now we can see the problem: node 1's id is arriving at node 0, but it
 should never have passed node 2, because node 2 has a higher
@@ -404,14 +410,14 @@ trick up our sleeve. We can use bounded checking to see if some arrows
 can be removed. We choose `Conjecture|Minimize` and (somewhat
 arbitrarily) select a bound of 4 steps. Here is what IVy says:
 
-![IVy screenshot](images/leader8.png)
+<p><img src="images/leader8.png" alt="Testing IVy screenshot" /></p>
 
 This conjecture says that we never have nodes in the order `N < P < Q`
 such that `P` has a smaller id than `Q` and the id of `P` is arriving
 at `N`. In the graph, we see that the highlights have been removed
 from the two irrelevant arrows:
 
-![IVy screenshot](images/leader9.png)
+<p><img src="images/leader9.png" alt="Testing IVy screenshot" /></p>
 
 IVy discovered that, within 4 steps, we
 can rule out the highlighted facts. By ruling out a more general
@@ -423,7 +429,7 @@ Now let's try `Invariant|Check induction` again. IVy is still unhappy
 and says that our first conjecture is still not relatively inductive. We
 try `Invariant|Diagram` again and here is what we see:
 
-![IVy screenshot](images/leader10.png)
+<p><img src="images/leader10.png" alt="Testing IVy screenshot" /></p>
 
 This looks very similar to the diagram that led to our previous
 conjecture. Here, however, it's the id of node 0 that is arriving at
@@ -435,7 +441,7 @@ we'll see a way to avoid this symmetry breaking. For now, though,
 we'll just slog through the cases.  As before, we minimize this
 diagram by bounded checking. Here is the result:
 
-![IVy screenshot](images/leader11.png)
+<p><img src="images/leader11.png" alt="Testing IVy screenshot" /></p>
 
 IVy conjectures that we do not have nodes `N < P < Q` such that `N`
 has a lower id than `P` and the id of `N` is arriving at `Q`. This is
@@ -447,17 +453,17 @@ Now we try `Invariant|Check induction` (the reader may be able to
 guess what happens next). Again, IVy says that our first conjecture is
 not relatively inductive. After `Invariant|Diagram`, we see this:
 
-![IVy screenshot](images/leader12.png)
+<p><img src="images/leader12.png" alt="Testing IVy screenshot" /></p>
 
 This describes the same situation, where the id of node 2 is arriving at node 1.
 Once again, we generalize using `Conjecture|Minimize`, giving this conjecture:
 
-![IVy screenshot](images/leader13.png)
+<p><img src="images/leader13.png" alt="Testing IVy screenshot" /></p>
 
 We add this conjecture using `Conjecture|Strengthen`. Now when we
 use `Invariant|Check induction`, we get the following:
 
-![IVy screenshot](images/leader14.png)
+<p><img src="images/leader14.png" alt="Testing IVy screenshot" /></p>
 
 That is, we have found a proof for the isolate. We can save this invariant to
 a file using the `File|Save invariant` command. We edit these conjectures
@@ -542,7 +548,7 @@ Now, let's try to verify the isolate `iso_app` with this new version of `ring_to
 
 As before, after `Invariant|Check induction` and `Invariant|Diagram`, this is what we see:
 
-![IVy screenshot](images/leader15.png)
+<p><img src="images/leader15.png" alt="Testing IVy screenshot" /></p>
 
 That is, we have a node `1` that is receiving its own id while node
 `0` has a greater id.  Notice, though, that on the right the relation
@@ -555,7 +561,7 @@ Now, as before, let's add this as a conjecture using
 that this conjecture is not relatively inductive. Applying `Invariant|Diagram`,
 this is what we see:
 
-![IVy screenshot](images/leader16.png)
+<p><img src="images/leader16.png" alt="Testing IVy screenshot" /></p>
 
 This is similar to what we saw before, but notice the blue arrow from
 node `0` to node `1`.  This corresponds to a new relation that has
@@ -571,14 +577,14 @@ in this case, there is no effect. No matter -- since this looks like a
 reasonable conjecture, we use `Conjecture|Strengthen` to add it to our
 invariant. Here is the result:
 
-![IVy screenshot](images/leader17.png)
+<p><img src="images/leader17.png" alt="Testing IVy screenshot" /></p>
 
 This says it is not possible to have nodes `Q,N,P` in ascending order of id,
 such that `N` is on the way from `Q` to `P` and the id of `N` is arriving at `Q`.
 
 Now let's try `Invariant|Check induction`:
 
-![IVy screenshot](images/leader18.png)
+<p><img src="images/leader18.png" alt="Testing IVy screenshot" /></p>
 
 Because we haven't broken the rotational symmetry of the ring, there
 is just one case needed when we state the key invariant that an id

@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -18,7 +18,7 @@ import ivy_utils as iu
 
 def p_c_a(s):
     a = s.split(':')
-    return (a[0]+'.ivy',int(a[1]))
+    return iu.Location(a[0]+'.ivy',int(a[1]))
 
 checked_assert = iu.Parameter("assert","",check=lambda s: len(s.split(':'))==2,
                               process=p_c_a)
@@ -153,7 +153,9 @@ class DerivedUpdate(object):
         defines = self.defn.args[0].rep
         if defines not in updated and any(x in self.dependencies for x in updated):
             updated.append(defines)
-        return (updated,true_clauses(),false_clauses())
+        return (updated,None,None)
+    def __str__(self):
+        return str(self.defn)
 
 class Action(AST):
     def __init__(self,*args):
@@ -170,14 +172,17 @@ class Action(AST):
     def int_update(self,domain,in_scope):
         (updated,clauses,pre) = self.action_update(domain,in_scope)
         # instantiate the update axioms
+#        iu.dbg('[str(x) for x in domain.updates]')
         for u in domain.updates:
             updated,transrel,precond = u.get_update_axioms(updated,self)
-            # TODO: do something with the precondition
+           # TODO: do something with the precondition
 #            if transrel:
 ##                print "updated: {}".format(updated)
 ##                print "update from axiom: %s" % transrel
-            clauses = and_clauses(clauses,transrel)
-            pre = or_clauses(pre,precond)
+            if transrel is not None:
+                clauses = and_clauses(clauses,transrel)
+            if precond is not None:
+                pre = or_clauses(pre,precond)
 ##        print "update clauses: %s" % clauses
         res = (updated,clauses,pre)
         return res
@@ -192,8 +197,8 @@ class Action(AST):
         if to_hide:
              update = hide(to_hide,update)
         return update
-    def assert_to_assume(self):
-        args = [a.assert_to_assume() if isinstance(a,Action) else a for a in self.args]
+    def assert_to_assume(self,kinds):
+        args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
@@ -252,7 +257,8 @@ class AssumeAction(Action):
         type_check(domain,self.args[0])
         clauses = formula_to_clauses_tseitin(skolemize_formula(self.args[0]))
         clauses = unfold_definitions_clauses(clauses)
-        return ([],clauses,false_clauses())
+        clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
+        return ([],clauses,false_clauses(annot = EmptyAnnotation()))
 
 class AssertAction(Action):
     def __init__(self,*args):
@@ -267,11 +273,14 @@ class AssertAction(Action):
         ca = checked_assert.get()
         if ca:
             if ca != self.lineno:
-                return ([],formula_to_clauses(self.args[0]),false_clauses())
+                return ([],formula_to_clauses(self.args[0],annot = EmptyAnnotation()),false_clauses(annot = EmptyAnnotation()))
         cl = formula_to_clauses(dual_formula(self.args[0]))
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
-        return ([],true_clauses(),cl)
-    def assert_to_assume(self):
+        cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
+        return ([],true_clauses(annot = EmptyAnnotation()),cl)
+    def assert_to_assume(self,kinds):
+        if type(self) not in kinds:
+            return Action.assert_to_assume(self,kinds)
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
         if hasattr(self,'formal_params'):
@@ -280,12 +289,17 @@ class AssertAction(Action):
             res.formal_returns = self.formal_returns
         return res
     
-# Ensures is same as Assert except it never gets converted to Assume
+# Prior to version 1.7, Ensures is always verified
 
 class EnsuresAction(AssertAction):
-    def assert_to_assume(self):
-        return Action.assert_to_assume(self)
-    
+    def assert_to_assume(self,kinds):
+        if (iu.get_numeric_version() <= [1,6]):
+            return Action.assert_to_assume(self,kinds)
+        return AssertAction.assert_to_assume(self,kinds)
+
+class RequiresAction(AssertAction):
+    pass
+
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
         return eq_atom(ast1,ast2)
@@ -412,7 +426,7 @@ class AssignAction(Action):
             nondet_lhs,new_clauses,mut_n = destr_asgn_val(lhs,fmlas)
             fmlas.append(equiv_ast(nondet_lhs,rhs))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses())
+            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
             # This is the old version that doesn't work for nested destructors
 
@@ -437,7 +451,7 @@ class AssignAction(Action):
                     a2 = [mut] + phs[1:]
                     fmlas.append(eq_atom(destr(*a1),destr(*a2)))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses())
+            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
         # For a variant assignment, we have to choose a new value that points to
         # the rhs, and to nothing else.
@@ -447,7 +461,7 @@ class AssignAction(Action):
         else:
             new_clauses = mk_assign_clauses(lhs,rhs)
 #        print "assign new_clauses = {}".format(new_clauses)
-        return ([n], new_clauses, false_clauses())
+        return ([n], new_clauses, false_clauses(annot=EmptyAnnotation()))
 
 class VarAction(AST):
     pass
@@ -463,7 +477,7 @@ def mk_assign_clauses(lhs,rhs):
     drhs = substitute_ast(rhs,rn)
     if eqs:
         drhs = Ite(And(*eqs),drhs,n(*dlhs.args))
-    new_clauses = Clauses([],[Definition(dlhs,drhs)])
+    new_clauses = Clauses([],[Definition(dlhs,drhs)],EmptyAnnotation())
     return new_clauses
 
 
@@ -541,7 +555,8 @@ class HavocAction(Action):
         else: # TODO: ???
             clauses = And()
         clauses = formula_to_clauses(clauses)
-        return ([n], clauses, false_clauses())
+        clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
+        return ([n], clauses, false_clauses(annot=EmptyAnnotation()))
 
 
 def make_field_update(self,l,f,r,domain,pvars):
@@ -640,11 +655,11 @@ class Sequence(Action):
     def __str__(self):
         return '{' + '; '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
-        update = ([],true_clauses(),false_clauses())
+        update = ([],true_clauses(EmptyAnnotation()),false_clauses(EmptyAnnotation()))
         axioms = domain.background_theory(pvars)
         for op in self.args:
             thing = op.int_update(domain,pvars);
-#            print "op: {}, thing: {}".format(op,thing)
+#            print "op: {}, thing[2].annot: {}".format(op,thing[2].annot)
             update = compose_updates(update,axioms,thing)
         return update
     def __call__(self,interpreter):
@@ -676,7 +691,7 @@ class ChoiceAction(Action):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(Not(cond),self.args[0],self.args[1])
             return ite.int_update(domain,pvars)
-        result = [], false_clauses(), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
         for a in self.args:
             foo = a.int_update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -701,7 +716,7 @@ class EnvAction(ChoiceAction):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
-        result = [], false_clauses(), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
         for a in self.args:
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -769,7 +784,8 @@ class IfAction(Action):
                 raise IvyError(self,'condition must be boolean') 
             branches = [self.args[1],self.args[2] if len(self.args) >= 3 else Sequence()]
             upds = [a.int_update(domain,pvars) for a in branches]
-            return ite_action(self.args[0],upds[0],upds[1],domain.relations)
+            res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
+            return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
         return join_action(if_part,else_part,domain.relations)
     def decompose(self,pre,post,fail=False):
@@ -785,6 +801,10 @@ class IfAction(Action):
         else:
             return self.args[0]
 
+class Ranking(Action):
+    def name(self):
+        return 'decreases'
+
 class WhileAction(Action):
     def name(self):
         return 'while'
@@ -796,27 +816,50 @@ class WhileAction(Action):
         return res
     def expand(self,domain,pvars):
         modset,pre,post = self.args[1].int_update(domain,pvars)  # TODO:cheaper way to get modset
-        asserts = self.args[2:]
-        assumes = [a.assert_to_assume() for a in asserts]
+        if isinstance(self.args[-1],Ranking):
+            asserts = self.args[2:-1]
+            decreases = self.args[-1]
+        else:
+            asserts = self.args[2:]
+            decreases = None
+        assumes = [a.assert_to_assume([AssertAction]) for a in asserts]
+        entry_asserts = []
+        exit_asserts = []
+        if decreases is not None:
+            rank = decreases.args[0]
+            aux = Symbol('$rank',rank.sort)
+            assumes.append(AssumeAction(Equals(aux,rank)))
+            assumes[-1].lineno = decreases.lineno
+            ltsym = Symbol('<',RelationSort([rank.sort,rank.sort]))
+            exit_asserts.append(AssertAction(ltsym(rank,aux)))
+            exit_asserts[-1].lineno = decreases.lineno
+            entry_asserts.append(AssertAction(Not(ltsym(rank,Symbol('0',rank.sort)))))
+            entry_asserts[-1].lineno = decreases.lineno
         havocs = [HavocAction(sym) for sym in modset]
+        for h in havocs:
+            h.lineno = self.lineno
         res =  Sequence(*(
                 asserts +
                 havocs +
                 assumes +
-                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0]),
-                                                     self.args[1]]+asserts+[AssumeAction(And())]))),
+                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
+                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(And())]))),
                 AssumeAction(Not(self.args[0]))]))
+        if decreases is not None:
+            res = LocalAction(aux,res)
         return res
             
     def int_update(self,domain,pvars):
         global context
         if isinstance(context,UnrollContext):
             return self.unroll(context.card).int_update(domain,pvars)
-        return self.expand(domain,pvars).int_update(domain,pvars)
+        exp = self.expand(domain,pvars)
+        res = exp.int_update(domain,pvars)
+        return res
     def decompose(self,pre,post,fail=False):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
-    def assert_to_assume(self):
-        res = self.clone([self.args[0],self.args[1].assert_to_assume()])
+    def assert_to_assume(self,kinds):
+        res = self.clone([self.args[0]]+[x.assert_to_assume(kinds) for x in self.args[1:]])
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
@@ -920,6 +963,8 @@ call_action_ctr = 0
 class BindOldsAction(Action):
     def int_update(self,domain,pvars):
         return bind_olds_action(self.args[0].int_update(domain,pvars))
+    def __str__(self):
+        return 'bindolds {' + str(self.args[0]) + '}'
 
 class CallAction(Action):
     """ Inlines a named state or action """
@@ -932,7 +977,7 @@ class CallAction(Action):
         return 'call'
     def __str__(self):
         actual_returns = self.args[1:]
-        return 'call ' + (','.join(str(a) for a in actual_returns) + ':= ' if actual_returns else '') + str(self.args[0])
+        return 'call ' + (','.join(str(a) for a in actual_returns) + ' := ' if actual_returns else '') + str(self.args[0])
     def get_callee(self):
         global context
         name = self.args[0].rep
@@ -951,6 +996,7 @@ class CallAction(Action):
             else:
                 v = state_to_action(v.value)
 ##                print "called state: {}".format(v)
+
         return v
     def apply_actuals(self,domain,pvars,v):
         assert hasattr(v,'formal_params'), v
@@ -1121,4 +1167,172 @@ def call_set(action_name,env):
     res = set()
     call_set_rec(action_name,env,res)
     return sorted(res)
+    
+# Annotations let us reconstruct an execution trace from a satisfying assignment.
+# They contain two kinds of information:
+
+# 1) for each symbol in the update formula corresponding to a program
+# variable, original program symbol it corresponds to, and the
+# execution point at which it was introduced.
+
+# 2) for each symbol corresponding to a branch decision, the program
+# execution point of the branch.
+
+# A primitive execution point is a sequence of numbers. Each number corresponds
+# to the child action of an IfAction, ChoiceAction or Sequence (or any future control
+# construct that has multiple children). A compound execution point is an if-then-else
+# with a condition, and true branch and a false branch.
+
+# There are four basic operations on annotations:
+
+# 1) conjunction -- this just merges the annotations and requires that their domains
+# be disjoint
+
+# 2) rename -- takes a map on symbols and simply renames the symbols in the domain
+
+# 3) if-then-else -- takes a condition variable c and two annotations
+# x and y, one for the true and one for the false case. It forms v ->
+# ite(c,x(v),y(v)) for each domain element common to x and y, and adds
+# the branch entry c -> []
+
+# 4) prefix -- adds a numer to the beginning of every execution point
+
+class Annotation(object):
+    pass
+
+class EmptyAnnotation(Annotation):
+    def __str__(self):
+        return '()'
+
+class ConjAnnotation(Annotation):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'And(' + ','.join(str(a) for a in self.args) + ')'
+        
+class ComposeAnnotation(Annotation):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'Compose(' + ','.join(str(a) for a in self.args) + ')'
+
+class RenameAnnotation(Annotation):
+    def __init__(self,arg,map):
+        self.map = map.copy()
+        self.arg = arg
+    def __str__(self):
+        return 'Rename({},'.format(str(self.arg)) + '{' + ','.join('{}:{}'.format(x,y) for x,y in self.map.iteritems()) + '})'
+
+class IteAnnotation(Annotation):
+    def __init__(self,cond,thenb,elseb):
+        self.cond = cond
+        self.thenb = thenb
+        self.elseb = elseb
+    def __str__(self):
+        return 'Ite({},{},{})'.format(self.cond,self.thenb,self.elseb)
+
+def conj_annot(self,other):
+    return ConjAnnotation(self,other)
+Annotation.conj = conj_annot
+
+def compose_annot(self,other):
+    return ComposeAnnotation(self,other)
+Annotation.compose = compose_annot
+
+def rename_annot(self,map):
+    return RenameAnnotation(self,map) if map else self
+Annotation.rename = rename_annot
+
+def ite_annot(self,cond,other):
+    return IteAnnotation(cond,self,other)
+Annotation.ite = ite_annot
+
+def unite_annot(annot):
+    if not isinstance(annot,IteAnnotation):
+        return []
+    res = unite_annot(annot.elseb)
+    res.append((annot.cond,annot.thenb))
+    return res
+
+
+def match_annotation(action,annot,handler):
+    def recur(action,annot,env,pos=None):
+        if isinstance(annot,RenameAnnotation):
+            save = dict()
+            for x,y in annot.map.iteritems():
+                if x in env:
+                    save[x] = env[x]
+                env[x] = env.get(y,y)
+            recur(action,annot.arg,env,pos)
+            env.update(save)
+            return
+        if isinstance(action,Sequence):
+            if pos is None:
+                pos = len(action.args)
+            if pos == 0:
+                assert isinstance(annot,EmptyAnnotation),annot
+                return
+            if isinstance(annot,IteAnnotation):
+                # This means a failure may occur here
+                rncond = env.get(annot.cond,annot.cond)
+                cond = handler.eval(rncond)
+                if cond:
+                    annot = annot.thenb
+                else:
+                    recur(action,annot.elseb,env,pos=pos-1)
+                    return
+            if not isinstance(annot,ComposeAnnotation):
+                    iu.dbg('len(action.args)')
+                    iu.dbg('pos')
+                    iu.dbg('annot')
+            assert isinstance(annot,ComposeAnnotation)
+            recur(action,annot.args[0],env,pos-1)
+            recur(action.args[pos-1],annot.args[1],env)
+            return
+        if isinstance(action,IfAction):
+            assert isinstance(annot,IteAnnotation),annot
+            rncond = env.get(annot.cond,annot.cond)
+            try:
+                cond = handler.eval(rncond)
+            except KeyError:
+                print '{}skipping conditional'.format(action.lineno)
+                iu.dbg('str_map(env)')
+                iu.dbg('env.get(annot.cond,annot.cond)')
+                return
+            if cond:
+                recur(action.args[1],annot.thenb,env)
+            else:
+                if len(action.args) > 2:
+                    recur(action.args[2],annot.elseb,env)
+            return
+        if isinstance(action,ChoiceAction):
+            assert isinstance(annot,IteAnnotation)
+            annots = unite_annot(annot)
+            assert len(annots) == len(action.args)
+            for act,(cond,ann) in reversed(zip(action.args,annots)):
+                if handler.eval(cond):
+                    recur(act,ann,env)
+                    return
+            assert False,'problem in match_annotation'
+        if isinstance(action,CallAction):
+            handler.handle(action,env)
+            callee = ivy_module.module.actions[action.args[0].rep]
+            seq = Sequence(*([Sequence() for x in callee.formal_params]
+                             + [callee] 
+                             + [Sequence() for x in callee.formal_returns]))
+            recur(seq,annot,env)
+            return
+        if isinstance(action,LocalAction):
+            recur(action.args[-1],annot,env)
+            return
+        if isinstance(action,WhileAction):
+            recur(action.expand(ivy_module.module,[]),annot,env)
+            return
+        if hasattr(action,'failed_action'):
+#            iu.dbg('annot')
+#            iu.dbg('action.failed_action()')
+            recur(action.failed_action(),annot,env)
+            return
+        handler.handle(action,env)
+    recur(action,annot,dict())
     

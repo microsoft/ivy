@@ -60,7 +60,7 @@ that only the node with the maximum `id` value can be elected.
 Our protocol consists of a collection of concurrent process layered on
 top of two services: a network service and a timer service:
 
-![Leader Election Ring Figure 1](leader_fig1-crop-1.png)
+<p><img src="leader_fig1-crop-1.png" alt="Leader Election Ring Figure 1" /></p>
 
 Let's consider now the two intermediate interfaces.  The specification
 for the network service is quite simple and comes from IVy's standard
@@ -73,7 +73,9 @@ library:
 
         object spec = {
             relation sent(V:pkt, N:addr)
-            init ~sent(V, N)
+            after init {
+                sent(V, N) := false
+            }
 
             before send {
                 sent(v,dst) := true
@@ -177,7 +179,7 @@ would increase the amount of time needed to see an election event.
 We're going to divide the system into three isolates, one for each of
 its major components. Here is what the three isolates will look like:
 
-![Leader Election Ring Figure 2](leader_fig2-crop-1.png)
+<p><img src="leader_fig2-crop-1.png" alt="Leader Election Ring Figure 2" /></p>
 
 Here are the isolate definitions:
 

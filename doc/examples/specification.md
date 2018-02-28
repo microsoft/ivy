@@ -23,7 +23,7 @@ process observed at different interfaces. That is, TCP is sandwiched
 between a higher-level application (say, a web browser and web server)
 and the lower-level datagram protocol (typically the IP protocol) as shown below:
 
-![Network Stack](../images/network_stack1.png)
+<p><img src="../images/network_stack1.png" alt="Network Stack" /></p>
 
 The TCP service specification describes the events we observe at the
 interface between the application layer and the transport layer.  The
@@ -97,7 +97,9 @@ temporal behavior at the interface:
 
     object spec = {
         relation sent(X:packet)
-        init ~sent(X)
+        after init {
+            sent(X) := false
+        }
 
         before intf.send {
             sent(x) := true
@@ -149,11 +151,26 @@ Now, saving this text in the file `trivnet.ivy`, we can check that our
 "protocol" satisfies its service specification like this:
 
     $ ivy_check trivnet.ivy
-    trying ext:intf.send...
+
+    The following actions are present:
+        trivnet.ivy: line 21: intf.recv
+        trivnet.ivy: line 17: intf.send
+
+    The following initializers are present:
+        trivnet.ivy: line 13: spec.init[after]
+
+    Any assertions in initializers must be checked ... PASS
+
+    The following program assertions are treated as guarantees:
+        in action intf.recv when called from intf.send:
+            trivnet.ivy: line 21: guarantee ... PASS
+
     OK
 
-We don't even need an inductive invariant in this case, because the
-assertion is true when `intf.send` is executed in any context. 
+Ivy checked that the precondition of `intf.recv` is true whenever it
+is called by `intf.send`. We don't even need an inductive invariant in
+this case, because the assertion is true when `intf.send` is executed
+in any context.
 
 To get a better idea of what is happening with `before` and
 `implements`, we can print out the program that results from inserting
@@ -164,15 +181,18 @@ the monitor actions and interface implementations:
     type packet
     relation spec.sent(V0:packet)
 
-    init [spec] ~spec.sent(X)
-
-    action intf.send(x:packet) = {
-        spec.sent(x) := true; # inserted by spec
-        call intf.recv(x)
+    after init {
+        spec.sent(X) := false
     }
     action intf.recv(x:packet) = {
-        assert spec.sent(x)   # inserted by spec
+        assert spec.sent(x)
     }
+    action intf.send(x:packet) = {
+        spec.sent(x) := true;
+        call intf.recv(x)
+    }
+    export intf.send
+
 
 Notice that the `before` actions of `spec` have been inserted at the
 beginning of these actions, and the `implement` action of `protocol`
@@ -185,7 +205,9 @@ one-place buffer:
     object protocol = {
         individual full : bool
         individual contents : packet
-        init ~full
+        after init {
+            full := false
+        }
 
         implement intf.send {
             full := true;
@@ -250,7 +272,9 @@ Here is the interface specification:
 
     object spec = {
         individual side : side_t
-        init side = left
+        after init {
+            side := left
+        }
 
         before intf.ping {
             assert side = left;
@@ -275,7 +299,9 @@ Now let's implement the left-hand player:
 
     object left_player = {
         individual ball : bool
-        init ball
+        after init {
+            ball := true
+        }
 
         action hit = {
             if ball {
@@ -302,7 +328,9 @@ The right-hand player is similar:
 
     object right_player = {
         individual ball : bool
-        init ~ball
+        after init {
+            ball := false
+        }
 
         action hit = {
             if ball {
@@ -343,8 +371,12 @@ follows:
     individual spec.side : side_t
     relation left_player.ball
 
-    init [spec] spec.side = left
-    init [left_player] left_player.ball
+    after init {
+        spec.side := left
+    }
+    after init {
+        left_player.ball := true
+    }
 
     conjecture [left_player] left_player.ball -> spec.side = left
 
@@ -387,10 +419,32 @@ Finally, notice that the isolate contains only the left player's invariant
 conjecture. Using this invariant, we can prove the correctness of `ping`:
 
     $ ivy_check isolate=iso_l pingpong.ivy
-    Checking isolate iso_l...
-    trying ext:intf.pong...
-    trying ext:left_player.hit...
+    Isolate iso_l:
+        ...
+
+        The following set of external actions must preserve the invariant:
+            pingpong.ivy: line 19: ext:intf.pong
+                pingpong.ivy: line 40: left_player ... PASS
+            pingpong.ivy: line 30: ext:left_player.async
+                pingpong.ivy: line 40: left_player ... PASS
+
+        The following program assertions are treated as assumptions:
+            in action intf.pong when called from the environment:
+                pingpong.ivy: line 20: assumption
+
+        The following program assertions are treated as guarantees:
+            in action intf.ping when called from left_player.async:
+                pingpong.ivy: line 15: guarantee ... PASS
+
     OK
+
+We've show only some interesting parts of IVy's ouput. Notice first
+that IVy verifies that the two exported action of the left player
+preserve the invariant conjecture `left_player`. These are `intf.pong` and
+`left_player.async`. In addition, notice that IVy treated the
+precondition of `intf.pong` as an *assumption*, and the precondition
+of `intf.ping` as a *guarantee*. It checked the guarantee given the
+assumption and printed PASS to indicate the the guarantee holds.
 
 Now let's look at the other isolate:
 
@@ -398,8 +452,12 @@ Now let's look at the other isolate:
     individual spec.side : side_t
     relation right_player.ball
 
-    init [spec] spec.side = left
-    init [right_player] ~right_player.ball
+    after init {
+        spec.side = left
+    }
+    after init {
+        right_player.ball := false
+    }
 
     conjecture [right_player] right_player.ball -> spec.side = right
 
@@ -427,13 +485,28 @@ The state and actions of the left player are compeltely abstracted away.
 We can check the whole proof using IVY like this:
 
     $ ivy_check pingpong.ivy 
-    Checking isolate iso_l...
-    trying ext:intf.pong...
-    trying ext:left_player.hit...
-    Checking isolate iso_r...
-    trying ext:intf.ping...
-    trying ext:right_player.hit...
+
+    Isolate iso_r:
+
+        The following set of external actions must preserve the invariant:
+            pingpong.ivy: line 14: ext:intf.ping
+                pingpong.ivy: line 58: right_player ... PASS
+            pingpong.ivy: line 48: ext:right_player.async
+                pingpong.ivy: line 58: right_player ... PASS
+
+        The following program assertions are treated as assumptions:
+            in action intf.ping when called from the environment:
+                pingpong.ivy: line 15: assumption
+
+        The following program assertions are treated as guarantees:
+            in action intf.pong when called from right_player.async:
+                pingpong.ivy: line 20: guarantee ... PASS
+
     OK
+
+Notice here, the assume/guarantee relation is reversed. We assume the
+precondition of `intf.ping` when proving the precondition of
+`intf.pong`.
 
 ## Is this really a proof?
 
@@ -490,7 +563,8 @@ the left player's court without hitting it:
 Here's what happens when when we try to verify this version:
 
     ivy_check interference.ivy
-    Checking isolate iso_l...
+
+    Isolate iso_l:
     interference.ivy: line 30: error: Call out to intf.ping may have visible effect on left_player.ball
 
 IVy can't abstract away the right player's implementation of

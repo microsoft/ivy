@@ -53,6 +53,8 @@ def module_type_check_concepts(self):
     self.relations = relations
 
 def module_new_state(self, clauses):
+    if isinstance(clauses,Clauses) and clauses.annot is None:
+        clauses = Clauses(clauses.fmlas,clauses.defs,ivy_actions.EmptyAnnotation())
     return State(self, clauses)
 
 def module_new_state_with_value(self, value):
@@ -392,7 +394,8 @@ class fail_action(Action):
                 pref[-1] = fail_action(pref[-1])
                 res.append((pre,pref,post))
         return res
-
+    def failed_action(self):
+        return self.action
 
 def fail_expr(expr):
     return action_app(fail_action(expr.rep),expr.args[0])
@@ -547,14 +550,14 @@ def undecided_conjectures(state1):
     return [c for c,t in zip(state1.conjs,truths) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 
-def false_properties():
+def false_properties(reporter= None):
     axioms = im.background_theory()
     props = [x for x in im.module.labeled_props if not x.temporal]
     subgoalmap = dict((x.id,y) for x,y in im.module.subgoals)
     aas = ([islvr.Assume(axioms)]
            + [(islvr.Assume if prop.id in subgoalmap else islvr.Assert)
-              (formula_to_clauses(prop.formula)) for prop in props])
-    truths = islvr.check_sequence(aas)
+              (formula_to_clauses(prop.formula),prop) for prop in props])
+    truths = islvr.check_sequence(aas,reporter)
     return [c for c,t in zip(props,truths[1:]) if not t]
 #    return [c for c in state1.conjs if not clauses_imply(clauses1,c)]
 
@@ -583,7 +586,8 @@ def new_history(state):
     return History(state.value)
 
 def history_forward_step(history,state):
-    return history.forward_step(state.pred.domain.background_theory(state.pred.in_scope),state.update)
+    action = state.expr.rep if state.expr != None and is_action_app(state.expr) else None
+    return history.forward_step(state.pred.domain.background_theory(state.pred.in_scope),state.update,action)
 
 def history_satisfy(history,state,_get_model_clauses=None,final_cond=None):
     return history.satisfy(

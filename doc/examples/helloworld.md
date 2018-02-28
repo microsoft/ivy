@@ -16,7 +16,7 @@ write to the "Hello, world!" program in Ivy. Ivy programs are
 their environment.  This means we can't actually write a program that
 spontaneously prints a message. Here is an approximation:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     action world
 
@@ -56,14 +56,16 @@ When we call `hello` the program calls `world`.
 That was exciting. To make things more interesting, let's try computing a value.
 Here's a simple program modeling a bank account:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     type money
 
     object account = {
 
         individual balance : money
-        init balance = 0
+        after init {
+            balance := 0
+        }
 
         action deposit(x:money) = {
             balance := balance + x

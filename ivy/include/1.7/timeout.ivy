@@ -1,0 +1,56 @@
+#lang ivy1.7
+
+module timeout_wrapper = {
+
+    object tmr = {}
+
+    <<< header
+	class sec_timer;
+    >>>
+    <<< impl
+	class sec_timer : public timer {
+	    %`handle_timeout` rcb;
+            int ttl;
+	    ivy_class *ivy;
+	  public:
+	    sec_timer(%`handle_timeout` rcb, ivy_class *ivy)
+	        : rcb(rcb), ivy(ivy) {
+                ttl = 1000;
+	    }
+	    virtual int ms_delay() {
+		return ttl;
+	    }
+	    virtual void timeout(int elapse) {
+                ttl -= elapse;
+                if (ttl <= 0) {
+                    ttl = 1000;
+		    ivy->__lock();
+		    rcb();
+		    ivy->__unlock();
+                }
+	    }
+	};
+    >>>
+    <<< member
+	sec_timer *`tmr`;
+    >>>
+    <<< init
+	install_timer(`tmr` = new sec_timer(`handle_timeout`,this));
+    >>>
+
+    action handle_timeout = {
+	call timeout
+    }
+}
+
+
+module timeout_sec = {
+
+    action timeout
+
+    object spec = {
+    }
+
+    instance impl : timeout_wrapper
+}
+

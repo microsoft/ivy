@@ -1,4 +1,4 @@
-#lang ivy1.6
+#lang ivy
 
 module totally_ordered(t) = {
     property [transitivity] (T:t < U & U < V) -> (T < V)
@@ -13,7 +13,9 @@ module totally_ordered_with_zero(t) = {
 
 module unbounded_sequence = {
     
-    type t
+    
+    type this
+    alias t = this
 
     # returns the least key greater than x
     action next(x:t) returns (y:t)
@@ -27,7 +29,7 @@ module unbounded_sequence = {
 
 	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
-	instantiate totally_ordered(t)
+	instantiate totally_ordered_with_zero(t)
 
 	after next {
 	    assert x < y & (x < Y -> y <= Y);
@@ -44,7 +46,7 @@ module unbounded_sequence = {
 
     object impl = {
 
-	interpret t -> int
+	interpret t -> nat
 
 	definition succ(X,Y) = (Y = X + 1)
 
@@ -64,9 +66,9 @@ module unbounded_sequence = {
 
 }
 
-module bounded_sequence(interp) = {
-    
-    type t
+module bounded_sequence_spec = {
+    type this
+    alias t = this
 
     # returns the least key greater than x
     action next(x:t) returns (y:t)
@@ -81,6 +83,7 @@ module bounded_sequence(interp) = {
 
     object spec = {
 
+        property N:t >= 0
 	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
 
 	instantiate totally_ordered(t)
@@ -103,6 +106,11 @@ module bounded_sequence(interp) = {
 	    assert r <-> ~exists S. S > x
 	}
     }
+}
+
+module bounded_sequence(interp) = {
+    
+    instantiate bounded_sequence_spec
 
     object impl = {
 
@@ -206,8 +214,8 @@ module sequence_iterator(range) = {
 
     instantiate order_iterator(range)
 
-    action next(x:t) returns (y:t)
-    action prev(y:t) returns (x:t)
+    action next(x:t) returns (x:t)
+    action prev(x:t) returns (x:t)
     
     object spec = {
 	...
@@ -215,18 +223,18 @@ module sequence_iterator(range) = {
 	    assert ~is_end(x)
 	}
 	after next {
-	    assert X <= val(x) & is_end(y)
-	           | ~(val(x) < Y & Y < val(y))
-	             & val(x) < val(y) & ~is_end(y)
+	    assert X <= val(old x) & is_end(x)
+	           | ~(val(old x) < Y & Y < val(x))
+	             & val(old x) < val(x) & ~is_end(x)
 	}
 	before prev {
-	    assert is_end(y) | exists X. X < val(y)
+	    assert is_end(x) | exists X. X < val(x)
 	}
 	after prev {
 	    assert ~is_end(x);
-	    assert X <= val(x) & is_end(y)
-	           | ~(val(x) < Y & Y < val(y))
-	             & val(x) < val(y) & ~is_end(y)
+	    assert X <= val(x) & is_end(old x)
+	           | ~(val(x) < Y & Y < val(old x))
+	             & val(x) < val(old x) & ~is_end(old x)
 	}
     }
 
@@ -234,13 +242,13 @@ module sequence_iterator(range) = {
 	...
 	implement next {
 	    if range.is_max(val(x)) {
-		y := end
+		x := end
 	    } else {
-		y := create(range.next(val(x)))
+		x := create(range.next(val(x)))
 	    }
 	}
 	implement prev {
-	    y := create(range.prev(val(x)))
+	    x := create(range.prev(val(x)))
 	}
     }
 
@@ -281,4 +289,50 @@ module unbounded_queue(data) = {
 	tail := tail.next;
     }
     delegate pop
+}
+
+################################################################################
+#
+# Iterable
+#
+# This is a totally ordered sort that can be iterated over. It's good,
+# for example, for process ID's.
+#
+################################################################################
+
+
+module iterable = {
+
+    instantiate bounded_sequence_spec
+
+    instance iter : sequence_iterator(this)
+    isolate iso_iter = iter with this
+
+    individual max : t
+
+    specification {
+        property 0 <= X:t & X <= max
+    }
+
+    implementation {
+        parameter size : t
+        interpret t -> <<< int >>>
+        definition (x:t < y:t) = <<< x < y >>>
+        definition 0:t = <<< 0 >>>
+        definition max = <<< `size` - 1 >>>
+        
+        implement next(x:t) returns (y:t) {
+            <<< y = x + 1; >>>
+        }
+        implement prev(x:t) returns (y:t) {
+            <<< y = x - 1; >>>
+        }
+        implement is_max(x:t) returns (r:bool) {
+            <<< r = (x == `size` - 1); >>>
+        }
+    }
+    
+    trusted isolate iso = this
+    attribute cardinality = size
+
 }

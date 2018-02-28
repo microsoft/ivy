@@ -21,37 +21,40 @@ clock values in a protocol. The protocol doesn't care about the
 quantitative values of the clocks. It only needs to be able to compare
 the values. Here is a possible specification of this type in IVy:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
     object clock = {
         type t
         relation (X:t < Y:t)
-
-        property [transitivity] X:t < Y & Y < Z -> X < Z
-        property [antisymmetry] ~(X:t < Y & Y < X)
+        
+        object spec = {
+            property [transitivity] X:t < Y & Y < Z -> X < Z
+            property [antisymmetry] ~(X:t < Y & Y < X)
+        }
     }
 
-Our datatype `clock` proves a type `clock.t` equipped with a binary
-relation `<` that respects the axioms of a partial order. We can rely
-on the declared properties of `clock.t` in proving correctness of our
-protocol.
+We begin with the interface. Our datatype `clock` provides a type
+`clock.t` equipped with a binary relation `<`. The we give the
+specification of this interface. The specification is a sub-object
+containing two properties. The spec says that the type `clock.t`
+respects the axioms of a partial order. We can rely on the declared
+properties of `clock.t` in proving correctness of our protocol.
 
 Of course, our new datatype isn't very useful, since it provides no
 actual operations. Suppose, for example, that our protocol requires an
 operation `incr` that can add some amount to a clock value. We don't
 care how much is added, so long as the clock value increases. Let's
-add some content to object `clock` to specify this operation:
+add this operation to the interface and specify it:
 
     object clock = {
         type t
         relation (X:t < Y:t)
-
-        property [transitivity] X:t < Y & Y < Z -> X < Z
-        property [antisymmetry] ~(X:t < Y & Y < X)
-
         action incr(inp:t) returns (out:t)
 
         object spec = {
+            property [transitivity] X:t < Y & Y < Z -> X < Z
+            property [antisymmetry] ~(X:t < Y & Y < X)
+
             after incr {
                 assert inp < out
             }
@@ -59,7 +62,7 @@ add some content to object `clock` to specify this operation:
     }
 
 We've added an action `incr` that takes a clock value and returns a
-clock value. In addition, there is a monitor object `spec`.  It
+clock value. In addition, we've added a monitor to object `spec`.  It
 requires that the output value `y` be greater than the input value
 `x`. Notice the new keyword `after`. It specifies that a given action
 be inserted *after* the execution of action `incr`. We need an `after`
@@ -84,7 +87,10 @@ must always increase:
     object spec = {
         individual side : side_t
         individual time : clock.t
-        init side = left & time = 0
+        after init {
+            side := left;
+            time = 0
+        }
 
         before intf.ping {
             assert side = left & time < x;
@@ -104,7 +110,10 @@ Now, using our abstract datatype `clock`, we can implement the left player like 
     object left_player = {
         individual ball : bool
         individual time : clock.t
-        init ball & time = 0
+        after init {
+            ball := true;
+            time := 0
+        }
 
         action hit = {
             if ball {
@@ -127,7 +136,9 @@ clock value using our `incr` operation. The right player is similar:
     object right_player = {
         individual ball : bool
         individual time : clock.t
-        init ~ball
+        after init {
+            ball := false
+        }
 
         action hit = {
             if ball {
@@ -158,12 +169,7 @@ specification of `clock`, we couldn't verify the interface
 specifications in `spec`. Now let's try to use IVy to verify this program:
 
     $ ivy_check coverage=false pingpongclock.ivy
-    Checking isolate iso_l...
-    trying ext:intf.pong...
-    trying ext:left_player.hit...
-    Checking isolate iso_r...
-    trying ext:intf.ping...
-    trying ext:right_player.hit...
+    ...
     OK
 
 The command line option `coverage=false` tells IVy that we know some
@@ -184,11 +190,15 @@ implementation of the abstract datatype `clock`. We will do this using
 IVy's built-in type `int` that represents the integers. Here is
 the implementation:
 
-    object clock_impl = {
-        interpret clock.t -> int
-        
-        implement clock.incr {
-            out := in + 1
+    object clock = {
+        ...
+
+        object impl = {
+            interpret clock.t -> int
+
+            implement incr {
+                out := in + 1
+            }
         }
     }
 
@@ -200,7 +210,7 @@ implementation of `clock.incr` that simply adds one to its argument.
 
 Now let's apply assume-guarantee reasoning to our abstract datatype:
 
-    isolate iso_ci = clock with clock_impl
+    isolate iso_ci = clock
 
 First, let's see what we're actually verifying:
 
@@ -227,8 +237,20 @@ guarantees for the objects that define them.
 Now let's verify this isolate using IVy:
 
     $ ivy_check isolate=iso_ci pingpongclock.ivy
-    Checking isolate iso_ci...
-    trying ext:clock.incr
+
+    Isolate iso_ci:
+
+    The following properties are to be checked:
+        pingpongclock.ivy: line 7: clock.transitivity ... PASS
+        pingpongclock.ivy: line 8: clock.antisymmetry ... PASS
+
+    ...
+
+    The following program assertions are treated as guarantees:
+        in action clock.incr when called from the environment:
+            pingpongclock.ivy: line 14: guarantee ... PASS
+
+    ...
     OK
 
 IVy used the built-in theory of integer arithmetic of the Z3 theorem
@@ -240,16 +262,7 @@ Now that we have a full implementation, we can verify
 the full program:
 
     $ ivy_check pingpongclock.ivy
-    Checking isolate iso_ci...
-    trying ext:clock.incr...
-    Checking isolate iso_l...
-    trying ext:clock.incr...
-    trying ext:intf.pong...
-    trying ext:left_player.hit...
-    Checking isolate iso_r...
-    trying ext:clock.incr...
-    trying ext:intf.ping...
-    trying ext:right_player.hit...
+    ...
     OK
     
 # Is this useful?
@@ -264,6 +277,9 @@ of many processes, or other systems that require quantifiers in the
 proofs. When we mix quantifiers, relations and integers, the
 verification problems become undecidable. This makes the theorem
 prover unreliable. Abstract datatypes give us a way to segregate
-theory reasoning into isolates that do not require quantifiers. In
-this way, we can preserve decidability.
+theory reasoning into isolates that use do not require quantifiers, or
+generally speaking fall into decidable fragments.  In this way, we
+obtain more reliable performance from the prover, and also make sure
+that the prover can generate correct counterexamples when we make a
+mistake.
 

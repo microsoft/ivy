@@ -88,6 +88,8 @@ class ProofChecker(object):
             return []
         if isinstance(proof,ia.SchemaInstantiation):
             return self.match_schema(decls[0].formula,proof) + decls[1:]
+        elif isinstance(proof,ia.LetTactic):
+            return self.let_tactic(decls,proof)
         elif isinstance(proof,ia.ComposeTactics):
             return self.compose_proofs(decls,proof.args)
         assert False,"unknown proof type {}".format(type(proof))
@@ -98,6 +100,11 @@ class ProofChecker(object):
             if decls is None:
                 return None
         return decls
+
+    def let_tactic(self,decls,proof):
+        cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
+        return [ia.LabeledFormula(decls[0].label,
+                                  il.Implies(cond,decls[0].formula))] + decls[1:]
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
@@ -131,6 +138,7 @@ class ProofChecker(object):
                     fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
                     fmla = apply_match(remove_vars_match(res,fmla),fmla)
                     g = ia.LabeledFormula(x.label,fmla)
+                    g.lineno = x.lineno
                     subgoals.append(g)
             return subgoals
         return None

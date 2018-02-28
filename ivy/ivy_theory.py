@@ -96,6 +96,16 @@ def get_qa_arcs(fmla,ast,pol,univs,strat_map):
     for arg in fmla.args:
         for a in get_qa_arcs(arg,ast,pol,univs,strat_map):
             yield a
+    if isinstance(fmla,il.Ite):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+    if isinstance(fmla,il.Iff) or (il.is_eq(fmla) and il.is_boolean(fmla.args[0])):
+        for a in get_qa_arcs(fmla.args[0],ast,not pol,univs,strat_map):
+            yield a
+        for a in get_qa_arcs(fmla.args[1],ast,not pol,univs,strat_map):
+            yield a
+
+
 
 def get_sort_arcs(assumes,asserts,strat_map):
     # for sym in il.all_symbols():
@@ -151,7 +161,7 @@ def map_fmla(fmla,strat_map):
         return nodes[1]
     if il.is_app(fmla):
         func = fmla.rep
-        if func in symbols_over_universals:
+        if func in symbols_over_universals or True:
             for idx,node in enumerate(nodes):
                 if node is not None:
                     unify(strat_map[(func,idx)],node)
@@ -167,7 +177,6 @@ def create_strat_map(assumes,asserts,macros):
 #    for f in all_fmlas:
 #        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
-#    iu.dbg('[str(x) for x in symbols_over_universals]')
     universally_quantified_variables = il.universal_variables(all_fmlas)
     
     strat_map = defaultdict(UFNode)
@@ -190,6 +199,9 @@ def get_unstratified_funs(assumes,asserts,macros):
     macros = map(vupair,macros)
     strat_map = create_strat_map(assumes,asserts,macros)
     
+#    for f,g in macros:
+#        print 'macro: {}'.format(f)
+
 
     arcs = list(get_sort_arcs(assumes+macros,asserts,strat_map))
 
@@ -352,7 +364,7 @@ def check_theory(preconds_only=False):
     raise iu.ErrorList(errs)
     
 theories = {
-'int' : """#lang ivy1.6
+'int' : """#lang ivy
     schema rec[t] = {
 	type q
 	function base(X:t) : q
@@ -379,10 +391,65 @@ theories = {
 """
 }
 
-def get_theory(name):
-    if name.startswith('bv['):
+class Theory(object):
+    def __init__(self,name,*args):
+        self.args = args
+        self.name = name
+    def __str__(self):
+        return self.name
+
+class IntegerTheory(Theory):
+    num_params = 0
+    @property
+    def schemata():
         return theories['int']
-    return theories.get(name,None)
-
-
     
+class BitVectorTheory(Theory):
+    num_params = 1
+    @property
+    def bits(self):
+        return self.args[0]
+    @property
+    def schemata():
+        return theories['int']
+    
+
+theory_classes = {
+    'int' : IntegerTheory,
+    'bv' : BitVectorTheory,
+}
+
+def parse_theory(name):
+    things = name.split('[')
+    thy = things[0]
+    things = things[1:]
+    if not all(t.endswith(']') for t in things):
+        raise iu.IvyError(None,'bad theory syntax: {}'.format(name))
+    prms = [int(t[:-1]) for t in things]
+    if thy not in theory_classes:
+        raise iu.IvyError(None,'unknown theory: {}'.format(name))
+    thyc = theory_classes[thy]
+    na = thyc.num_params
+    if len(prms) != na:
+        raise iu.IvyError(None,'wrong number of theory parameters: {}',format(name))
+    return thyc(name,*prms)
+
+def get_theory_schemata(name):
+    if iu.version_le("1.6",iu.get_string_version()):
+        if name.startswith('bv['):
+            return theories['int']
+        return theories.get(name,None)
+    return None
+
+# This returns the theory associated with a first-order sort, or if the sort
+# is uninterpreted, the sort itself.
+
+def get_sort_theory(sort):
+    name = sort.name
+    if name in il.sig.interp:
+        interp = il.sig.interp[name]
+        if isinstance(interp,str):
+            interp = parse_theory(interp)
+    else:
+        interp = sort
+    return interp

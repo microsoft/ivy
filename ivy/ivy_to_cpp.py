@@ -108,6 +108,20 @@ def varname(name):
     name = re.sub(puncs,'__',name)
     return name.split(':')[-1]
 
+other_varname = varname
+
+def funname(name):
+    if not isinstance(name,str):
+        name = name.name
+    if name[0].isdigit():
+        return '__num' + name
+    if name[0] == '-':
+        return '__negnum'+name
+    if name[0] == '"':
+        raise IvyError(None,"cannot compile a function whose name is a quoted string")
+    return varname(name)
+        
+
 def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
@@ -291,11 +305,30 @@ def ctype_remaining_cases(sort,classname):
 
 global_classname = None
 
-def ctype(sort,classname=None):
+# Parameter passing types
+
+class ValueType(object):  # by value
+    def make(self,t):
+        return t
+class ConstRefType(object):  # by const reference
+    def make(self,t):
+        return 'const ' + t + '&'
+class RefType(object): # by non-const reference
+    def make(self,t):
+        return t + '&'
+
+class ReturnRefType(object): # return by reference in argument position "pos"
+    def __init__(self,pos):
+        self.pos = pos
+    def make(self,t):
+        return 'void'
+
+def ctype(sort,classname=None,ptype=None):
+    ptype = ptype or ValueType()
     classname = classname or global_classname
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
-            return ((classname+'::') if classname != None else '') + varname(sort.name)
+            return ptype.make(((classname+'::') if classname != None else '') + varname(sort.name))
     return ctype_remaining_cases(sort,classname)
     
 def ctypefull(sort,classname=None):
@@ -343,6 +376,16 @@ def expr_to_z3(expr):
 
 
 
+def gather_referenced_symbols(expr,res,ignore=[]):
+    for sym in ilu.used_symbols_ast(expr):
+        if (not sym.is_numeral() and not slv.solver_name(sym) == None
+            and sym.name not in im.module.destructor_sorts and sym not in res and sym not in ignore):
+            res.add(sym)
+            if sym in is_derived:
+                ldf = is_derived[sym]
+                gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
+                
+
 def make_thunk(impl,vs,expr):
     global the_classname
     dom = [v.sort for v in vs]
@@ -353,9 +396,16 @@ def make_thunk(impl,vs,expr):
     thunk_counter += 1
     thunk_class = 'z3_thunk' if target.get() in ["gen","test"] else 'thunk'
     open_scope(impl,line='struct {} : {}<{},{}>'.format(name,thunk_class,D,R))
-    env = [sym for sym in ilu.used_symbols_ast(expr) if not sym.is_numeral()]
+    syms = set()
+    gather_referenced_symbols(expr,syms)
+    env = [sym for sym in syms if sym not in is_derived]
+    funs = [sym for sym in syms if sym in is_derived]
     for sym in env:
         declare_symbol(impl,sym,classname=the_classname)
+    for fun in funs:
+        ldf = is_derived[fun]
+        with ivy_ast.ASTContext(ldf):
+            emit_derived(None,impl,ldf.formula,the_classname,inline=True)
     envnames = [varname(sym) for sym in env]
     open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
@@ -404,11 +454,13 @@ def emit_struct_hash(header,the_type,field_names,field_sorts):
 def emit_cpp_sorts(header):
     for name in im.module.sort_order:
         if name in im.module.native_types:
-            nt = native_type_full(im.module.native_types[name])
-#            header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
-            header.append("    class " + varname(name) + ' : public ' + nt +  "{\n")
-            header.append("        public: size_t __hash() const { return hash_space::hash<"+nt+" >()(*this);};\n")
-            header.append("    };\n");
+            nt = native_type_full(im.module.native_types[name]).strip()
+            if nt in ['int','bool']:
+                header.append("    typedef " + nt + ' ' + varname(name) + ";\n");
+            else:
+                header.append("    class " + varname(name) + ' : public ' + nt +  "{\n")
+                header.append("        public: size_t __hash() const { return hash_space::hash<"+nt+" >()(*this);};\n")
+                header.append("    };\n");
         elif name in im.module.sort_destructors:
             header.append("    struct " + varname(name) + " {\n");
             destrs = im.module.sort_destructors[name]
@@ -426,7 +478,7 @@ def emit_cpp_sorts(header):
             sort_to_cpptype[il.sig.sorts[name]] = cpptype
         elif name in il.sig.interp:
             itp = il.sig.interp[name]
-            if not (isinstance(itp,il.EnumeratedSort) or itp.startswith('{') or itp.startswith('bv[') or itp in ['int','strlit']):
+            if not (isinstance(itp,il.EnumeratedSort) or itp.startswith('{') or itp.startswith('bv[') or itp in ['int','nat','strlit']):
                 cpptype = ivy_cpp_types.get_cpptype_constructor(itp)(varname(name))
                 cpptypes.append(cpptype)
                 sort_to_cpptype[il.sig.sorts[name]] = cpptype
@@ -450,7 +502,7 @@ def emit_sorts(header):
                     indent(header)
                     header.append('mk_bv("{}",{});\n'.format(name,width))
                     continue
-                if sortname == 'int':
+                if sortname in ['int','nat']:
                     indent(header)
                     header.append('mk_int("{}");\n'.format(name))
                     continue
@@ -844,7 +896,7 @@ def emit_action_gen(header,impl,name,action,classname):
     global_classname = None
 
 
-def emit_derived(header,impl,df,classname):
+def emit_derived(header,impl,df,classname,inline=False):
     name = df.defines().name
     sort = df.defines().sort.rng
     retval = il.Symbol("ret:val",sort)
@@ -855,7 +907,7 @@ def emit_derived(header,impl,df,classname):
     action = ia.AssignAction(retval,rhs)
     action.formal_params = ps
     action.formal_returns = [retval]
-    emit_some_action(header,impl,name,action,classname)
+    emit_some_action(header,impl,name,action,classname,inline)
 
 
 def native_split(string):
@@ -935,29 +987,80 @@ def emit_native(header,impl,native,classname):
     with ivy_ast.ASTContext(native):
         header.append(native_to_str(native))
 
-def emit_param_decls(header,name,params,extra=[],classname=None):
-    header.append(varname(name) + '(')
-    header.append(', '.join(extra + [ctype(p.sort,classname=classname) + ' ' + varname(p.name) for p in params]))
+
+# This determines the parameter passing type of each input and output
+# of an action (value, const reference, or no-const reference, return
+# by reference). The rules are as follows: 
+#
+# If an output parameter is the same as an input parameter, that
+# parameter is returned by reference, and the input parameter is
+# passed by reference. Other input parameters are passed by const
+# reference, except if the parameter is assigned on the action body,
+# in which case it is passed by value. Other output parameters are
+# returned by value.
+
+def annotate_action(action):
+    def action_assigns(p):
+        return any(p in sub.modifies() for sub in action.iter_subactions())
+
+    def is_struct(sort):
+       return (il.is_uninterpreted_sort(sort) and
+               (sort.name in im.module.native_types or sort.name in im.module.sort_destructors))
+
+    action.param_types = [RefType() if any(p == q for q in action.formal_returns)
+                          else ValueType() if action_assigns(p) or not is_struct(p.sort) else ConstRefType()
+                          for p in action.formal_params]
+    def return_type(p):
+        for idx,q in enumerate(action.formal_params):
+            if p == q:
+                return ReturnRefType(idx)
+        return ValueType()
+    action.return_types = [return_type(p) for p in action.formal_returns]
+
+def get_param_types(action):
+    if not hasattr(action,"param_types"):
+        annotate_action(action)
+    return (action.param_types, action.return_types)
+
+# Estimate if two expressions may alias. We say conservatively that expressions may alias
+# if they have the same root variable.
+
+def is_destructor(symbol):
+    return symbol.name in im.module.destructor_sorts
+
+def may_alias(x,y):
+    def root_var(x):
+        while il.is_app(x) and is_destructor(x.rep):
+            x = x.args[0]
+        return x
+    return root_var(x) == root_var(y)
+
+# emit parameter declarations of the approriate parameter types
+
+def emit_param_decls(header,name,params,extra=[],classname=None,ptypes=None):
+    header.append(funname(name) + '(')
+    header.append(', '.join(extra + [ctype(p.sort,classname=classname,ptype = ptypes[idx] if ptypes else None) + ' ' + varname(p.name) for idx,p in enumerate(params)]))
     header.append(')')
 
-def emit_method_decl(header,name,action,body=False,classname=None):
+def emit_method_decl(header,name,action,body=False,classname=None,inline=False):
     if not hasattr(action,"formal_returns"):
         print "bad name: {}".format(name)
         print "bad action: {}".format(action)
     rs = action.formal_returns
+    ptypes,rtypes = get_param_types(action)
     if not body:
         header.append('    ')
-    if not body and target.get() != "gen":
+    if not body and target.get() != "gen" and not inline:
         header.append('virtual ')
     if len(rs) == 0:
         header.append('void ')
     elif len(rs) == 1:
-        header.append(ctype(rs[0].sort,classname=classname) + ' ')
+        header.append(ctype(rs[0].sort,classname=classname,ptype=rtypes[0]) + ' ')
     else:
         raise iu.IvyError(action,'cannot handle multiple output values')
-    if body:
+    if body and not inline:
         header.append(classname + '::')
-    emit_param_decls(header,name,action.formal_params)
+    emit_param_decls(header,name,action.formal_params,ptypes=ptypes,classname=classname if inline else None)
     
 def emit_action(header,impl,name,classname):
     action = im.module.actions[name]
@@ -977,15 +1080,16 @@ def trace_action(impl,name,action):
         impl.append(' << ")"')
     impl.append(' << std::endl;\n')
 
-def emit_some_action(header,impl,name,action,classname):
+def emit_some_action(header,impl,name,action,classname,inline=False):
     global indent_level
     global import_callers
-    emit_method_decl(header,name,action)
-    header.append(';\n')
+    if not inline:
+        emit_method_decl(header,name,action)
+        header.append(';\n')
     global thunks
     thunks = impl
     code = []
-    emit_method_decl(code,name,action,body=True,classname=classname)
+    emit_method_decl(code,name,action,body=True,classname=classname,inline=inline)
     code.append('{\n')
     indent_level += 1
     if name in import_callers:
@@ -1003,7 +1107,8 @@ def emit_some_action(header,impl,name,action,classname):
     if name in import_callers:
         if opt_trace.get():
             code_line(code,'__ivy_out << "}" << std::endl')
-    if len(action.formal_returns) == 1:
+    pt,rt = get_param_types(action)
+    if len(action.formal_returns) == 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
     indent_level -= 1
@@ -1033,6 +1138,10 @@ def is_finite_iterable_sort(sort):
 
 def check_iterable_sort(sort):
     if ctype(sort) not in ["bool","int"]:
+        if il.is_uninterpreted_sort(sort) and sort.name in im.module.native_types:
+            nt = native_type_full(im.module.native_types[sort.name]).strip()
+            if nt in ['int','bool']:
+                return
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
 
@@ -1235,9 +1344,9 @@ def module_to_cpp_class(classname,basename):
     encoded_sorts = set()
     check_member_names(classname)
     global is_derived
-    is_derived = set()
+    is_derived = dict()
     for ldf in im.module.definitions + im.module.native_definitions:
-        is_derived.add(ldf.formula.defines())
+        is_derived[ldf.formula.defines()] = ldf
     global cpptypes
     cpptypes = []
     global sort_to_cpptype
@@ -1282,16 +1391,35 @@ def module_to_cpp_class(classname,basename):
                 once_memo.add(code)
                 header.append(code)
 
+    header.append("""
+
+    class reader;
+    class timer;
+
+""")
 
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
 #ifdef _WIN32
     void *mutex;  // forward reference to HANDLE
+#else
+    pthread_mutex_t mutex;
 #endif
     void __lock();
     void __unlock();
 """)
+    header.append("""
+#ifdef _WIN32
+    std::vector<DWORD> thread_ids;\n
+#else
+    std::vector<pthread_t> thread_ids;\n
+#endif
+""")
+    header.append('    void install_reader(reader *);\n')
+    header.append('    void install_timer(timer *);\n')
+    header.append('    virtual ~{}();\n'.format(classname))
+
     header.append('    std::vector<int> ___ivy_stack;\n')
     if target.get() in ["gen","test"]:
         header.append('    ivy_gen *___ivy_gen;\n')
@@ -1339,13 +1467,147 @@ def module_to_cpp_class(classname,basename):
     impl.append("std::ofstream __ivy_out;\n")
     impl.append("std::ofstream __ivy_modelfile;\n")
     impl.append("void __ivy_exit(int code){exit(code);}\n")
+
+    impl.append("""
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+    virtual void bind() {}
+    virtual ~reader() {}
+};
+
+class timer {
+public:
+    virtual int ms_delay() = 0;
+    virtual void timeout(int) = 0;
+    virtual ~timer() {}
+};
+
+#ifdef _WIN32
+DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
+{
+    reader *cr = (reader *) lpParam;
+    cr->bind();
+    while (true)
+        cr->read();
+    return 0;
+} 
+
+DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
+{
+    timer *cr = (reader *) lpParam;
+    while (true) {
+        int ms = timer->ms_delay();
+        Sleep(ms);
+        timer->timeout(ms);
+    }
+    return 0;
+} 
+#else
+void * _thread_reader(void *rdr_void) {
+    reader *rdr = (reader *) rdr_void;
+    rdr->bind();
+    while(true) {
+        rdr->read();
+    }
+    return 0; // just to stop warning
+}
+
+void * _thread_timer( void *tmr_void ) 
+{
+    timer *tmr = (timer *) tmr_void;
+    while (true) {
+        int ms = tmr->ms_delay();
+        struct timespec ts;
+        ts.tv_sec = ms/1000;
+        ts.tv_nsec = (ms % 1000) * 1000000;
+        nanosleep(&ts,NULL);
+        tmr->timeout(ms);
+    }
+    return 0;
+} 
+#endif 
+""")
+
+    if target.get() == "repl":
+        impl.append("""
+void CLASSNAME::install_reader(reader *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            ReaderThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_reader, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+void CLASSNAME::install_timer(timer *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            TimersThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_timer, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+""".replace('CLASSNAME',classname))
+
+    if target.get() == "test":
+        impl.append("""
+std::vector<reader *> readers;
+std::vector<timer *> timers;
+
+void CLASSNAME::install_reader(reader *r) {
+    readers.push_back(r);
+}
+void CLASSNAME::install_timer(timer *r) {
+    timers.push_back(r);
+}
+""".replace('CLASSNAME',classname))
+
     impl.append("""
 #ifdef _WIN32
     void CLASSNAME::__lock() { WaitForSingleObject(mutex,INFINITE); }
     void CLASSNAME::__unlock() { ReleaseMutex(mutex); }
 #else
-    void CLASSNAME::__lock() { }
-    void CLASSNAME::__unlock() { }
+    void CLASSNAME::__lock() { pthread_mutex_lock(&mutex); }
+    void CLASSNAME::__unlock() { pthread_mutex_unlock(&mutex); }
 #endif
 """.replace('CLASSNAME',classname))
     native_exprs = []
@@ -1369,19 +1631,8 @@ def module_to_cpp_class(classname,basename):
     impl.append(hash_cpp)
 
     impl.append("""
-class reader {
-public:
-    virtual int fdes() = 0;
-    virtual void read() = 0;
-    virtual ~reader() {}
-};
-void install_reader(reader *);
-class timer {
-public:
-    virtual int ms_delay() = 0;
-    virtual void timeout(int) = 0;
-};
-void install_timer(timer *);
+
+
 struct ivy_value {
     int pos;
     std::string atom;
@@ -1470,10 +1721,13 @@ struct ivy_binary_deser : public ivy_deser {
     }
     void get(std::string &res) {
         while (pos < inp.size() && inp[pos]) {
-            if (inp[pos] == '\"')
-                throw deser_err();
+//            if (inp[pos] == '\"')
+//                throw deser_err();
+            res.push_back(inp[pos++]);
         }
-        res.push_back(inp[pos++]);
+        if(!(pos < inp.size() && inp[pos] == 0))
+            throw deser_err();
+        pos++;
     }
     void open_list() {
         long long len;
@@ -1517,6 +1771,13 @@ struct out_of_bounds {
 };
 
 template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+
+template <>
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return args[idx].atom == "true";
+}
 
 template <>
 int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
@@ -1799,7 +2060,10 @@ class z3_thunk : public thunk<D,R> {
     impl.append('{\n')
     impl.append('#ifdef _WIN32\n');
     impl.append('mutex = CreateMutex(NULL,FALSE,NULL);\n')
+    impl.append('#else\n');
+    impl.append('pthread_mutex_init(&mutex,NULL);\n')
     impl.append('#endif\n');
+    impl.append('__lock();\n');
     enums = set(sym.sort.name for sym in il.sig.constructors)  
 #    for sortname in enums:
 #        for i,n in enumerate(il.sig.sorts[sortname].extension):
@@ -1822,6 +2086,16 @@ class z3_thunk : public thunk<D,R> {
             indent_level -= 1
 
     impl.append('}\n')
+
+    impl.append("""CLASSNAME::~CLASSNAME(){
+    __lock(); // otherwise, thread may die holding lock!
+    for (unsigned i = 0; i < thread_ids.size(); i++){
+        pthread_cancel(thread_ids[i]);
+        pthread_join(thread_ids[i],NULL);
+    }
+    __unlock();
+}
+""".replace('CLASSNAME',classname))
 
     if target.get() in ["gen","test"]:
         sf = header if target.get() == "gen" else impl
@@ -1863,7 +2137,7 @@ class z3_thunk : public thunk<D,R> {
                 code_line(impl,'return s')
                 close_scope(impl)
 
-            open_scope(header,line='bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
+            open_scope(header,line='inline bool operator ==(const {} &s, const {} &t)'.format(cfsname,cfsname))
             s = il.Symbol('s',sort)
             t = il.Symbol('t',sort)
             code_line(header,'return ' + code_eval(header,il.And(*[field_eq(s,t,sym) for sym in destrs])))
@@ -1904,8 +2178,10 @@ class z3_thunk : public thunk<D,R> {
 
 
         if target.get() in ["repl","test"]:
-            emit_repl_imports(header,impl,classname)
-            emit_repl_boilerplate1(header,impl,classname)
+
+            if  emit_main:
+                emit_repl_imports(header,impl,classname)
+                emit_repl_boilerplate1(header,impl,classname)
 
             for sort_name in sorted(im.module.sort_destructors):
                 destrs = im.module.sort_destructors[sort_name]
@@ -2049,39 +2325,39 @@ class z3_thunk : public thunk<D,R> {
                     close_scope(impl)
 
 
+            if emit_main:
+                if target.get() in ["gen","test"]:
+                    emit_all_ctuples_to_solver(impl,classname)
 
-            if target.get() in ["gen","test"]:
-                emit_all_ctuples_to_solver(impl,classname)
 
-
-            emit_repl_boilerplate1a(header,impl,classname)
-            for actname in sorted(im.module.public_actions):
-                username = actname[4:] if actname.startswith("ext:") else actname
-                action = im.module.actions[actname]
-                argstrings = ['_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params)]
-                getargs = ','.join(argstrings)
-                thing = "ivy.methodname(getargs)"
-                if action.formal_returns:
-                    thing = '__ivy_out << "= " << ' + thing + " << std::endl"
-                if target.get() == "repl" and opt_trace.get():
-                    if action.formal_params:
-                        trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
-                    else:
-                        trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
-                    thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
-                impl.append("""
+                emit_repl_boilerplate1a(header,impl,classname)
+                for actname in sorted(im.module.public_actions):
+                    username = actname[4:] if actname.startswith("ext:") else actname
+                    action = im.module.actions[actname]
+                    argstrings = ['_arg<{}>(args,{},{})'.format(ctype(x.sort,classname=classname),idx,csortcard(x.sort)) for idx,x in enumerate(action.formal_params)]
+                    getargs = ','.join(argstrings)
+                    thing = "ivy.methodname(getargs)"
+                    if action.formal_returns:
+                        thing = '__ivy_out << "= " << ' + thing + " << std::endl"
+                    if target.get() == "repl" and opt_trace.get():
+                        if action.formal_params:
+                            trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                        else:
+                            trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
+                        thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
+                    impl.append("""
                 if (action == "actname") {
                     check_arity(args,numargs,action);
                     thing;
                 }
                 else
     """.replace('thing',thing).replace('actname',username).replace('methodname',varname(actname)).replace('numargs',str(len(action.formal_params))).replace('getargs',getargs))
-            emit_repl_boilerplate2(header,impl,classname)
+                emit_repl_boilerplate2(header,impl,classname)
 
 
-            impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
-            impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
-            impl.append("""
+                impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
+                impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
+                impl.append("""
     int runs = 1;
     int seed = 1;
     int sleep_ms = 10;
@@ -2137,48 +2413,48 @@ class z3_thunk : public thunk<D,R> {
     argc = pargs.size();
     argv = &pargs[0];
 """)
-            impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
-            impl.append("        argc--;\n")
-            impl.append("        int fd = _open(argv[argc],0);\n")
-            impl.append("        if (fd < 0){\n")
-            impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
-            impl.append('            __ivy_exit(1);\n')
-            impl.append('        }\n')
-            impl.append("        _dup2(fd, 0);\n")
-            impl.append("    }\n")
-            impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
-            impl.append('        std::cerr << "usage: {} {}\\n";\n'
-                        .format(classname,' '.join(map(varname,im.module.params))))
-            impl.append('        __ivy_exit(1);\n    }\n')
-            impl.append('    std::vector<std::string> args;\n')
-            impl.append('    std::vector<ivy_value> arg_values(1);\n')
-            impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
-            for idx,s in enumerate(im.module.params):
-                impl.append('    int p__'+varname(s)+';\n')
-                impl.append('    try {\n')
-                impl.append('        int pos = 0;\n')
-                impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
-                impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
-                            .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
-                impl.append('    }\n    catch(out_of_bounds &) {\n')
-                impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+                impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+                impl.append("        argc--;\n")
+                impl.append("        int fd = _open(argv[argc],0);\n")
+                impl.append("        if (fd < 0){\n")
+                impl.append('            std::cerr << "cannot open to read: " << argv[argc] << "\\n";\n')
+                impl.append('            __ivy_exit(1);\n')
+                impl.append('        }\n')
+                impl.append("        _dup2(fd, 0);\n")
+                impl.append("    }\n")
+                impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
+                impl.append('        std::cerr << "usage: {} {}\\n";\n'
+                            .format(classname,' '.join(map(varname,im.module.params))))
                 impl.append('        __ivy_exit(1);\n    }\n')
-                impl.append('    catch(syntax_error &) {\n')
-                impl.append('        std::cerr << "syntax error in command argument\\n";\n')
-                impl.append('        __ivy_exit(1);\n    }\n')
-            cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
-            emit_winsock_init(impl)
-            if target.get() == "test":
-                impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
-            impl.append('    {}_repl ivy{};\n'
-                        .format(classname,cp))
-            if target.get() == "test":
-                emit_repl_boilerplate3test(header,impl,classname)
-            else:
-                emit_repl_boilerplate3(header,impl,classname)
-            if target.get() == "test":
-                impl.append('    }\n')
-            impl.append("    return 0;\n}\n")
+                impl.append('    std::vector<std::string> args;\n')
+                impl.append('    std::vector<ivy_value> arg_values({});\n'.format(len(im.module.params)))
+                impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
+                for idx,s in enumerate(im.module.params):
+                    impl.append('    int p__'+varname(s)+';\n')
+                    impl.append('    try {\n')
+                    impl.append('        int pos = 0;\n')
+                    impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
+                    impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
+                                .format(ctype(s.sort,classname=classname),idx,csortcard(s.sort)))
+                    impl.append('    }\n    catch(out_of_bounds &) {\n')
+                    impl.append('        std::cerr << "parameter {} out of bounds\\n";\n'.format(varname(s)))
+                    impl.append('        __ivy_exit(1);\n    }\n')
+                    impl.append('    catch(syntax_error &) {\n')
+                    impl.append('        std::cerr << "syntax error in command argument\\n";\n')
+                    impl.append('        __ivy_exit(1);\n    }\n')
+                cp = '(' + ','.join('p__'+varname(s) for s in im.module.params) + ')' if im.module.params else ''
+                emit_winsock_init(impl)
+                if target.get() == "test":
+                    impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
+                impl.append('    {}_repl ivy{};\n'
+                            .format(classname,cp))
+                if target.get() == "test":
+                    emit_repl_boilerplate3test(header,impl,classname)
+                else:
+                    emit_repl_boilerplate3(header,impl,classname)
+                if target.get() == "test":
+                    impl.append('    }\n')
+                impl.append("    return 0;\n}\n")
 
 
         
@@ -2276,13 +2552,24 @@ def emit_one_initial_state(header):
     check_init_cond("initial condition",im.module.labeled_inits)
     check_init_cond("axiom",im.module.labeled_axioms)
         
-    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
+    constraints = [ilu.clauses_to_formula(im.module.init_cond)]
+    for a in im.module.axioms:
+        constraints.append(a)
+    for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
+        constraints.append(fix_definition(ldf.formula).to_constraint())
+    clauses = ilu.formula_to_clauses(il.And(*constraints))
+#    clauses = ilu.and_clauses(im.module.init_cond,im.module.background_theory())
     m = slv.get_model_clauses(clauses)
     if m == None:
         print clauses
-        raise IvyError(None,'Initial condition is inconsistent')
+        if iu.version_le(iu.get_string_version(),"1.6"):
+            raise iu.IvyError(None,'Initial condition and/or axioms are inconsistent')
+        else:
+            raise iu.IvyError(None,'Axioms are inconsistent')
     used = ilu.used_symbols_clauses(clauses)
     for sym in all_state_symbols():
+        if sym.name in im.module.destructor_sorts:
+            continue
         if sym in im.module.params:
             name = varname(sym)
             header.append('    this->{} = {};\n'.format(name,name))
@@ -2297,6 +2584,9 @@ def emit_one_initial_state(header):
 
 
 def emit_constant(self,header,code):
+    if self in is_derived:
+        code.append(funname(self.name)+'()')
+        return
     if isinstance(self,il.Symbol) and self.is_numeral():
         if is_native_sym(self) or self.sort.name in im.module.sort_destructors:
             raise iu.IvyError(None,"cannot compile symbol {} of sort {}".format(self.name,self.sort))
@@ -2308,7 +2598,6 @@ def emit_constant(self,header,code):
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
     code.append(varname(self.name))
-    global is_derived
     if self in is_derived:
         code.append('()')
 
@@ -2391,6 +2680,13 @@ def emit_app(self,header,code,capture_args=None):
         if is_bv_term(self):
             emit_bv_op(self,header,code)
             return
+        if self.func.name == '-' and il.sig.interp.get(self.func.sort.rng.name,None) == 'nat':
+            x = new_temp(header)
+            code_line(header,x + ' = ' + code_eval(header,self.args[0]))
+            y = new_temp(header)
+            code_line(header,y + ' = ' + code_eval(header,self.args[1]))
+            code.append('( {} < {} ? 0 : {} - {})'.format(x,y,x,y))
+            return
         assert len(self.args) == 2 # handle only binary ops for now
         code.append('(')
         self.args[0].emit(header,code)
@@ -2398,8 +2694,9 @@ def emit_app(self,header,code,capture_args=None):
         self.args[1].emit(header,code)
         code.append(')')
         return 
-    # no way to deal with polymorphic ops, give up here
-    if il.symbol_is_polymorphic(self.func):
+    global is_derived
+    # no way to deal with polymorphic ops if not derived, give up here
+    if il.symbol_is_polymorphic(self.func) and self.func not in is_derived:
         raise iu.IvyError(None,"symbol has no interpretation: {}".format(il.typed_symbol(self.func)))
     # handle destructors
     skip_params = 0
@@ -2412,8 +2709,7 @@ def emit_app(self,header,code,capture_args=None):
         skip_params = 1
     # handle uninterpreted ops
     else:
-        code.append(varname(self.func.name))
-    global is_derived
+        code.append(funname(self.func.name))
     if self.func in is_derived:
         code.append('(')
         first = True
@@ -2530,7 +2826,10 @@ def get_bounds(header,v0,variables,body,exists,varname=None):
     if not los:
         raise iu.IvyError(None,'cannot find a lower bound for {}'.format(varname))
     if not his:
-        raise iu.IvyError(None,'cannot find an upper bound for {}'.format(varname))
+        if il.is_uninterpreted_sort(v0.sort) and iu.compose_names(v0.sort.name,'cardinality') in im.module.attributes:
+            his.append(other_varname(iu.compose_names(v0.sort.name,im.module.attributes[iu.compose_names(v0.sort.name,'cardinality')].rep)))
+        else:
+            raise iu.IvyError(None,'cannot find an upper bound for {}'.format(varname))
     return los[0],his[0]
 
 def get_all_bounds(header,variables,body,exists,varnames):
@@ -2551,14 +2850,34 @@ def emit_quant(variables,body,header,code,exists=False):
         return
     v0 = variables[0]
     variables = variables[1:]
-    check_iterable_sort(v0.sort)
+    has_iter = il.is_uninterpreted_sort(v0.sort) and iu.compose_names(v0.sort.name,'iterable') in im.module.attributes
+    if has_iter:
+        iter = iu.compose_names(v0.sort.name,'iter')
+    else:
+        check_iterable_sort(v0.sort)
     res = new_temp(header)
     idx = v0.name
     indent(header)
     header.append(res + ' = ' + str(0 if exists else 1) + ';\n')
     indent(header)
-    lo,hi = get_bounds(header,v0,variables,body,exists)
-    header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
+    if has_iter:
+        iter_sort_name = iter
+        if iter_sort_name not in il.sig.sorts:
+            iter_sort_name = iu.compose_names(iter,'t')
+        if iter_sort_name not in il.sig.sorts:
+            print iter_sort_name
+            raise iu.IvyError(None,'sort {} has iterable attribute but no iterator'.format(v0.sort))
+        iter_sort = il.sig.sorts[iter_sort_name]
+        zero = []
+        emit_constant(il.Symbol('0',v0.sort),header,zero)
+        header.append('for (' + ctypefull(iter_sort) + ' ' + idx + ' = '
+                          + varname(iu.compose_names(iter,'create') + '('))
+        header.extend(zero)
+        header.append('); !' + varname(iu.compose_names(iter,'is_end')) + '(' + idx + ');' 
+                       + idx + '=' + varname(iu.compose_names(iter,'next')) + '(' + idx + ')) {\n')
+    else:
+        lo,hi = get_bounds(header,v0,variables,body,exists)
+        header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
     indent_level += 1
     subcode = []
     emit_quant(variables,body,header,subcode,exists)
@@ -2852,7 +3171,8 @@ def emit_assume(self,header):
     code = []
     indent(code)
     code.append('ivy_assume(')
-    il.close_formula(self.args[0]).emit(header,code)
+    with ivy_ast.ASTContext(self):
+        il.close_formula(self.args[0]).emit(header,code)
     code.append(', "{}");\n'.format(iu.lineno_str(self).replace('\\','\\\\')))
     header.extend(code)
 
@@ -2860,24 +3180,56 @@ ia.AssumeAction.emit = emit_assume
 
 
 def emit_call(self,header):
-    indent(header)
-    header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
+    # tricky: a call can have variables on the lhs. we lower this to
+    # a call with temporary return actual followed by assignment 
+    if len(self.args) == 2 and list(ilu.variables_ast(self.args[1])):
+        sort = self.args[1].sort
+        sym = il.Symbol(new_temp(header,sort=sort),sort)
+        emit_call(self.clone([self.args[0],sym]),header)
+        ac = ia.AssignAction(self.args[1],sym)
+        if hasattr(self,'lineno'):
+            ac.lineno = self.lineno
+        emit_assign(ac,header)
+        return
+    if target.get() in ["gen","test"]:
+        indent(header)
+        header.append('___ivy_stack.push_back(' + str(self.unique_id) + ');\n')
     code = []
     indent(code)
+    retval = None
+    args = self.args[0].args
     if len(self.args) == 2:
-        self.args[1].emit(header,code)
-        code.append(' = ')
+        action = im.module.actions[self.args[0].rep]
+        pt,rt = get_param_types(action)
+        pos = rt[0].pos if isinstance(rt[0],ReturnRefType) else None
+        if pos is not None:
+            iparg = self.args[0].args[pos]
+            if (iparg != self.args[1] or
+                any(j != pos and may_alias(arg,iparg) for j,arg in enumerate(self.args[0].args))):
+                retval = new_temp(header,self.args[1].sort)
+                code.append(retval + ' = ')
+                self.args[0].args[pos].emit(header,code)
+                code.append('; ')
+                args = [il.Symbol(retval,self.args[1].sort) if idx == pos else a for idx,a in enumerate(args)]
+        else:
+            self.args[1].emit(header,code)
+            code.append(' = ')
     code.append(varname(str(self.args[0].rep)) + '(')
     first = True
-    for p in self.args[0].args:
+    for p in args:
         if not first:
             code.append(', ')
         p.emit(header,code)
         first = False
     code.append(');\n')    
+    if retval is not None:
+        indent(code) 
+        self.args[1].emit(header,code)
+        code.append(' = ' + retval + ';\n')
     header.extend(code)
-    indent(header)
-    header.append('___ivy_stack.pop_back();\n')
+    if target.get() in ["gen","test"]:
+        indent(header)
+        header.append('___ivy_stack.pop_back();\n')
 
 ia.CallAction.emit = emit_call
 
@@ -3200,13 +3552,6 @@ void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action
         throw bad_arity(action,num);
 }
 
-template <>
-bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
-    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
-        throw out_of_bounds(idx,args[idx].pos);
-    return args[idx].atom == "true";
-}
-
 """.replace('classname',classname))
 
 
@@ -3289,38 +3634,6 @@ def emit_repl_boilerplate2(header,impl,classname):
 };
 
 
-std::vector<reader *> readers;
-
-void install_reader(reader *r){
-    readers.push_back(r);
-}
-
-std::vector<timer *> timers;
-
-void install_timer(timer *r){
-    timers.push_back(r);
-}
-
-#ifdef _WIN32
-DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
-{
-    reader *cr = (reader *) lpParam;
-    while (true)
-        cr->read();
-    return 0;
-} 
-
-DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
-{
-    while (true) {
-        int timer_min = 15; // (ms)
-        Sleep(timer_min);
-        for (unsigned i = 0; i < timers.size(); i++)
-            timers[i]->timeout(timer_min);
-    }
-    return 0;
-} 
-#endif 
 
 """.replace('classname',classname))
 
@@ -3366,159 +3679,21 @@ def emit_winsock_init(impl):
 def emit_repl_boilerplate3(header,impl,classname):
     impl.append("""
 
+    ivy.__unlock();
 
     cmd_reader *cr = new cmd_reader(ivy);
-    install_reader(cr);
-
-#ifdef _WIN32
-    // Windows can't do asynchronous console I/O. Reeaders other than the console
-    // reader are handled with threads. 
-
-    for (unsigned i = 0; i < readers.size() - 1; i++) {
-        DWORD dummy;
-        HANDLE h = CreateThread( 
-            NULL,                   // default security attributes
-            0,                      // use default stack size  
-            ReaderThreadFunction,   // thread function name
-            readers[i],             // argument to thread function 
-            0,                      // use default creation flags 
-            &dummy);                // returns the thread identifier 
-        if (h == NULL) {
-            std::cerr << "failed to create thread" << std::endl;
-            exit(1);
-        }
-    }
-
-    // Also create a thread to advance timers
-
-    {
-        DWORD dummy;
-        HANDLE h = CreateThread( 
-            NULL,                   // default security attributes
-            0,                      // use default stack size  
-            TimerThreadFunction,    // thread function name
-            0,                      // argument to thread function 
-            0,                      // use default creation flags 
-            &dummy);                // returns the thread identifier 
-        if (h == NULL) {
-            std::cerr << "failed to create thread" << std::endl;
-            exit(1);
-        }
-    }
 
     // The main thread runs the console reader
 
     while (!cr->eof())
         cr->read();
     return 0;
-#endif
 
-    while(true) {
-
-        fd_set rdfds;
-        FD_ZERO(&rdfds);
-        int maxfds = 0;
-
-        if (cr->eof())
-            return 0;
-
-        int foo;
-
-        int timer_min = 1000;
-        for (unsigned i = 0; i < timers.size(); i++){
-            int t = timers[i]->ms_delay();
-            if (t < timer_min) 
-                timer_min = t;
-        }
-
-#if 0
-        {
-            std::vector<WSAEVENT> handles;
-
-            for (unsigned i = 0; i < readers.size(); i++) {
-                reader *r = readers[i];
-                int fds = r->fdes();
-                WSAEVENT ev = WSACreateEvent();
-                if (ev == WSA_INVALID_EVENT)
-                { 
-                    printf("WSACreateEvent() failed with error %d\\n", WSAGetLastError());
-                    return 1;
-                }
-                if (WSAEventSelect(fds, ev, FD_READ) == SOCKET_ERROR)
-                {
-                     printf("WSAEventSelect() failed with error %d\\n", WSAGetLastError());
-                     return 1;
-                }
-                // HANDLE h = (HANDLE)_get_osfhandle(fds);
-                handles.push_back(ev);
-            }
-
-            int timer_min = 1000;
-            for (unsigned i = 0; i < timers.size(); i++){
-                int t = timers[i]->ms_delay();
-                if (t < timer_min) 
-                    timer_min = t;
-            }
-
-            struct timeval timeout;
-            timeout.tv_sec = timer_min/1000;
-            timeout.tv_usec = 1000 * (timer_min % 1000);
-
-            DWORD res = WaitForMultipleObjectsEx(handles.size(),&handles[0],false,timer_min,false);
-
-            if (res == WAIT_FAILED)
-            {
-                printf("select failed with error: %d\\n", GetLastError());
-                __ivy_exit(1);
-            }
-
-            foo = res != WAIT_TIMEOUT;
-    
-            if (foo) {
-                int idx = res - WSA_WAIT_EVENT_0;
-
-            } 
-
-        }
-#else
-        for (unsigned i = 0; i < readers.size(); i++) {
-            reader *r = readers[i];
-            int fds = r->fdes();
-            FD_SET(fds,&rdfds);
-            if (fds > maxfds)
-                maxfds = fds;
-        }
-
-
-        struct timeval timeout;
-        timeout.tv_sec = timer_min/1000;
-        timeout.tv_usec = 1000 * (timer_min % 1000);
-
-        foo = select(maxfds+1,&rdfds,0,0,&timeout);
-
-        if (foo < 0)
-        {
-            perror("select failed"); 
-            __ivy_exit(1);
-        }
-#endif        
-        if (foo == 0){
-            // std::cout << "TIMEOUT\\n";            
-           for (unsigned i = 0; i < timers.size(); i++)
-               timers[i]->timeout(timer_min);
-        }
-        else {
-            for (unsigned i = 0; i < readers.size(); i++) {
-                reader *r = readers[i];
-                if (FD_ISSET(r->fdes(),&rdfds))
-                    r->read();
-            }
-        }            
-    }
 """.replace('classname',classname))
 
 def emit_repl_boilerplate3test(header,impl,classname):
     impl.append("""
+        ivy.__unlock();
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
@@ -4061,7 +4236,7 @@ public:
 };
 """.replace('classname',classname))
 
-target = iu.EnumeratedParameter("target",["impl","gen","repl","test"],"gen")
+target = iu.EnumeratedParameter("target",["impl","gen","repl","test","class"],"gen")
 opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
@@ -4071,18 +4246,23 @@ opt_main = iu.Parameter("main","main")
 opt_stdafx = iu.BooleanParameter("stdafx",False)
 opt_outdir = iu.Parameter("outdir","")
 
+emit_main = True
 
 def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
     ivy_init.read_params()
-    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test'})
+    iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test','assume_invariants':'false'})
     if target.get() == "gen":
         iu.set_parameters({'filter_symbols':'false'})
     else:
         iu.set_parameters({'keep_destructors':'true'})
         
+    if target.get() == 'class':
+        target.set('repl')
+        global emit_main
+        emit_main = False
         
 
     with im.Module():
@@ -4161,9 +4341,13 @@ def main():
                         else:
                             _dir = os.path.dirname(os.path.abspath(__file__))
                             paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
-                        cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
+                        if emit_main:
+                            cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
+                        else:
+                            cmd = "g++ {} -g -c {}.cpp".format(paths,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
+                        cmd += ' -pthread'
                     print cmd
                     import sys
                     sys.stdout.flush()

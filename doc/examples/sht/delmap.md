@@ -17,7 +17,9 @@ server id's. Here's its specification as an abstract datatype:
         # not be stratified.
 
         relation map(K:key.t, X:id)
-        init map(K,X) <-> X = 0
+        after init {
+            map(K,X) := X = 0
+        }
 
         object spec = {
             before set {

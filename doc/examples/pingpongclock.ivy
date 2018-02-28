@@ -1,51 +1,68 @@
-#lang ivy1.6
+#lang ivy1.7
 
-object clock = {
-    type t
-    relation (X:t < Y:t)
+isolate clock = {
 
-    property [transitivity] X:t < Y & Y < Z -> X < Z
-    property [antisymmetry] ~(X:t < Y & Y < X)
+    type this
+    relation (X:clock < Y:clock)
+    action incr(inp:clock) returns (out:clock)
 
-    action incr(inp:t) returns (out:t)
+    specification {
+        property [transitivity] X:clock < Y & Y < Z -> X < Z
+        property [antisymmetry] ~(X:clock < Y & Y < X)
 
-    object spec = {
 	after incr {
 	    assert inp < out
 	}
     }
-}
 
-object intf = {
-    action ping(x:clock.t)
-    action pong(x:clock.t)
-}
+    implementation {
+        interpret clock -> int
 
-type side_t = {left,right}
-
-object spec = {
-    individual side : side_t
-    individual time : clock.t
-    init side = left & time = 0
-
-    before intf.ping {
-	assert side = left & time < x;
-	side := right;
-	time := x
-    }
-
-    before intf.pong {
-	assert side = right & time < x;
-	side := left;
-	time := x
+        implement incr {
+	    out := inp + 1
+        }
     }
 }
 
+isolate intf = {
 
-object left_player = {
+    action ping(x:clock)
+    action pong(x:clock)
+
+    specification {
+
+        type side_t = {left,right}
+        individual side : side_t
+        individual time : clock
+
+        after init {
+            side := left;
+            time := 0
+        }
+
+        before ping {
+            assert side = left & time < x;
+            side := right;
+            time := x
+        }
+
+        before pong {
+            assert side = right & time < x;
+            side := left;
+            time := x
+        }
+    }
+}
+
+
+isolate left_player = {
+
     individual ball : bool
-    individual time : clock.t
-    init ball & time = 0
+    individual time : clock
+    after init {
+        ball := true;
+        time := 0
+    }
 
     action hit = {
 	if ball {
@@ -59,13 +76,18 @@ object left_player = {
 	time := x
     }
 
-    conjecture ball -> (spec.side = left & spec.time <= time)
+    conjecture ball -> (intf.side = intf.left & intf.time <= time)
 }
+with intf, clock
 
-object right_player = {
+
+isolate right_player = {
+
     individual ball : bool
-    individual time : clock.t
-    init ~ball
+    individual time : clock
+    after init {
+        ball := false
+    }
 
     action hit = {
 	if ball {
@@ -79,22 +101,10 @@ object right_player = {
 	time := x
     }
 
-    conjecture ball -> (spec.side = right & spec.time <= time)
+    conjecture ball -> (intf.side = intf.right & intf.time <= time)
 }
-
-object clock_impl = {
-    interpret clock.t -> int
-
-    implement clock.incr {
-	out := inp + 1
-    }
-}
-
-
+with intf, clock
 
 export left_player.hit
 export right_player.hit
 
-isolate iso_l = left_player with spec, clock
-isolate iso_r = right_player with spec, clock
-isolate iso_ci = clock, clock_impl

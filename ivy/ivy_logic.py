@@ -121,7 +121,7 @@ class alpha_sort_as_default(sort_as_default):
         self.sort = lg.TopSort('alpha')
 
 def is_numeral_name(s):
-    return s[0].isdigit() or s[0] == '"'
+    return s[0].isdigit() or s[0] == '"'  or (s[0] == '-' and len(s) > 1 and s[1].isdigit)
 
 Symbol = lg.Const
 
@@ -205,6 +205,11 @@ class Some(AST):
         return self.args[2] if len(self.args) == 4 else None
     def else_value(self):
         return self.args[3] if len(self.args) == 4 else None
+    @property
+    def variables(self):
+        return [self.args[0]]
+    def clone_binder(self,vs,body):
+        return Some(*(vs+self.args[1:]))
 
 
 class Definition(AST):
@@ -580,10 +585,10 @@ def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
 
 def is_binder(term):
-    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder))
+    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder, Some))
 
 for b in [lg.ForAll,lg.Exists,lg.Lambda]:
-    b.clone_binder = lambda self, variables, body: b(variables,body)
+    b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
 
 lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
 
@@ -596,8 +601,16 @@ def is_temporal(term):
 def quantifier_vars(term):
     return term.variables
 
+def binder_vars(term):
+    return term.variables
+
 def quantifier_body(term):
     return term.body
+
+def binder_args(term):
+    if isinstance(term,Some):
+        return term.args[1:]
+    return [term.body]
 
 def is_epr_rec(term,uvars):
     if is_forall(term):
@@ -778,6 +791,9 @@ def is_boolean(term):
 # TODO: arguably boolean and enumerated are first-order sorts
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
+
+def is_function_sort(s):
+    return isinstance(s,FunctionSort)
 
 def FuncConstSort(*sorts):
     return FunctionSort(*sorts) if len(sorts) > 1 else sorts[0]
@@ -1002,7 +1018,7 @@ def is_ite(ast):
     return isinstance(ast,lg.Ite)
 
 def is_enumerated(term):
-    return isinstance(term.get_sort(),EnumeratedSort)
+    return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
     return term.sort != lg.Boolean
@@ -1024,7 +1040,7 @@ def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
             if x.name not in unsorted_var_names:
                 if no_error:
                     raise lg.SortError
-                raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
+                raise IvyError(None,"cannot infer sort of {} in {}".format(x,repr(term)))
 
 
 def sort_infer(term,sort=None,no_error=False):
@@ -1146,7 +1162,7 @@ lg.Globally.ugly = lambda self: ('globally {}'.format(self.body.ugly()))
 lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
-lg.Ite.ugly = lambda self:  '{} if {} else {}'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
+lg.Ite.ugly = lambda self:  '({} if {} else {})'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
 
 lg.Apply.ugly = app_ugly
 

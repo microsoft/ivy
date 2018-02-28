@@ -132,6 +132,10 @@ class Const(recstruct('Const', ['name', 'sort'], [])):
         return Apply(self, *terms) if len(terms) > 0 else self
 
 
+def report_bad_sort(op,position,expected,got):
+    raise SortError("in application of {}, at position {}, expected sort {}, got sort {}" 
+                    .format(op,position+1,expected,got))
+
 class Apply(recstruct('Apply', [], ['func', '*terms'])):
     __slots__ = ()
 
@@ -150,12 +154,8 @@ class Apply(recstruct('Apply', [], ['func', '*terms'])):
             bad_sorts = [i for i in range(func.sort.arity) if
                          terms[i].sort != func.sort.domain[i] and
                          not any(type(t) is TopSort for t in (terms[i].sort, func.sort.domain[i]))]
-            if len(bad_sorts) > 0:
-                raise SortError("Bad sorts in: {}({}) (positions: {})".format(
-                    str(func),
-                    ', '.join(repr(t) for t in terms),
-                    bad_sorts,
-                ))
+            for i in bad_sorts:
+                report_bad_sort(func,i,func.sort.domain[i],terms[i].sort)
         return (func, ) + terms
 
     def __str__(self):
@@ -277,7 +277,8 @@ class Or(recstruct('Or', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'Or({})'.format(
             ', '.join(str(t) for t in self)

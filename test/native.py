@@ -3,7 +3,7 @@ from ivy import ivy_module as im
 from ivy.ivy_compiler import ivy_from_string
 from ivy.tk_ui import new_ui
 from ivy import ivy_utils as iu
-from ivy import ivy_check as ick
+#from ivy import ivy_check as ick
 from ivy import ivy_logic as il
 from ivy import ivy_to_cpp as i2c
 from ivy import ivy_actions as ia

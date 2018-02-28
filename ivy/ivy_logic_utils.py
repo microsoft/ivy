@@ -36,12 +36,13 @@ def coerce_clause_to_formula(c):
     return drop_universals(c)
 
 class Clauses(object):
-    def __init__(self,fmlas=[],defs=[]):
+    def __init__(self,fmlas=[],defs=[],annot=None):
         assert isinstance(fmlas,list)
         self.defs = defs
         self.defidx = dict((d.defines(),d) for d in defs)
         self.fmlas = list(collect_and_list([coerce_clause_to_formula(c) for c in fmlas]))
-
+        self.annot = annot
+        
     @property
     def clauses(self):
         res = tseitin_encode(self.to_open_formula())
@@ -71,11 +72,13 @@ class Clauses(object):
         """ return an iterator that applies an iterator to all subformulas"""
         return chain(gen_list(fun,self.fmlas,*args),
                      gen_list(fun,self.defs,*args))
-    def apply(self,fun,*args):
+    def apply(self,fun,*args,**kwargs):
         """ apply a function to all subformulas"""
         fmlas = [fun(f,*args) for f in self.fmlas]
         defs = [fun(dfn,*args) for dfn in self.defs]
-        res = Clauses(fmlas,defs)
+        annot_fun = kwargs.pop('annot_fun',lambda x,*args:x)
+        annot = annot_fun(self.annot,*args)
+        res = Clauses(fmlas,defs,annot)
         return res
     def symbols(self):
         return self.gen(symbols_ast)
@@ -125,9 +128,9 @@ def apply_gen_to_clauses(gen):
     """ return a function that returns a generator that applies a generator to a Clauses """
     return lambda cls,*args: cls.gen(gen,*args) if isinstance(cls,Clauses) else gen(cls,*args)
 
-def apply_func_to_clauses(func):
+def apply_func_to_clauses(func,annot_fun = lambda x,*args: x):
     """ return a function that applies func to a Clauses """
-    return lambda cls,*args: cls.apply(func,*args) if isinstance(cls,Clauses) else func(cls,*args)
+    return lambda cls,*args: cls.apply(func,*args,annot_fun=annot_fun) if isinstance(cls,Clauses) else func(cls,*args)
 
 def to_formula(s):
     return formula_parser.parse(s,lexer=lexer).compile_with_sort_inference()
@@ -327,7 +330,9 @@ substitute_clauses = substitute_cubes = apply_func_to_clauses(substitute_ast)
 substitute_constants_clause = substitute_constants_cube = apply_func_to_list(substitute_constants_ast)
 substitute_constants_clauses = substitute_constants_cubes = apply_func_to_clauses(substitute_constants_ast)
 rename_clause = rename_cube = apply_func_to_list(rename_ast)
-rename_clauses = rename_cubes = apply_func_to_clauses(rename_ast)
+def rename_clauses_annot_fun(annot,map):
+    return None if annot is None else annot.rename(map)
+rename_clauses = rename_cubes = apply_func_to_clauses(rename_ast, annot_fun = rename_clauses_annot_fun)
 resort_clauses = resort_cubes = apply_func_to_clauses(resort_ast)
 
 
@@ -337,10 +342,11 @@ def variables_ast(ast):
     if isinstance(ast,Variable):
         yield ast
     elif is_binder(ast):
-        bounds = set(quantifier_vars(ast))
-        for x in variables_ast(quantifier_body(ast)):
-            if x not in bounds:
-                yield x
+        bounds = set(binder_vars(ast))
+        for a in binder_args(ast):
+            for x in variables_ast(a):
+                if x not in bounds:
+                    yield x
     else:
         for arg in ast.args:
             for x in variables_ast(arg):
@@ -795,11 +801,11 @@ def de_morgan(f):
         return And(*[negate(x) for x in g.args])
     return Not(g)
 
-def formula_to_clauses(f):
+def formula_to_clauses(f,annot=None):
     if type(f) in (lg.And, lg.Or) and len(f) == 1:
         f = f[0]
 #    assert is_prenex_universal(f), f
-    return Clauses([drop_universals(f)])
+    return Clauses([drop_universals(f)],annot=annot)
 
 formula_to_clauses_tseitin = formula_to_clauses
 
@@ -1099,18 +1105,40 @@ def or_clauses2(clauses1,clauses2):
 def coerce_args_to_clauses(args):
     return [(a if isinstance(a,Clauses) else formula_to_clauses(a)) for a in args]
 
+def fix_or_annot(res,vs,args):
+    if len(args) == 0:
+        return res
+    annots = [a.annot for a in args]
+    annot = annots[0]
+    for a,v in zip(annots[1:],vs[1:]):
+        annot = None if annot is None or a is None else a.ite(v,annot)
+    return Clauses(res.fmlas,res.defs,annot)
+
 def or_clauses(*args):
     if not any(isinstance(a,Clauses) for a in args):
         return Or(*args)
     args = coerce_args_to_clauses(args)
+    orig_args = list(args)
+#    args = [a for a in args if not a.is_false() or a.annot is not None]
     args = [a for a in args if not a.is_false()]
     if len(args) == 0:
-        return false_clauses()
-    if len(args) == 1:
-        return args[0]
-    used = set(chain(*[arg.symbols() for arg in args]))
-    rn = UniqueRenamer('__ts0',used)
-    return or_clauses_int(rn,args)
+        res,vs = false_clauses(),[]
+    elif len(args) == 1:
+        res,vs = args[0],[And()]
+    else:
+        used = set(chain(*[arg.symbols() for arg in args]))
+        rn = UniqueRenamer('__ts0',used)
+        res,vs = or_clauses_int(rn,args)
+    fixed_vs = []
+    idx = 0
+    for a in orig_args:
+        if a.is_false():
+            fixed_vs.append(Or())
+        else:
+            fixed_vs.append(vs[idx])
+            idx += 1
+    return fix_or_annot(res,fixed_vs,orig_args)
+
 
 def ite_clauses(cond,args):
     assert len(args) == 2
@@ -1129,7 +1157,7 @@ def elim_definitions(clauses,dead):
 #    print "elim_definitions fmlas = {}".format(["%s" % f for f in fmlas])
     deadset = set(dead)
     defs = [d for d in clauses.defs if d.defines() not in deadset]
-    return Clauses(fmlas,defs)
+    return Clauses(fmlas,defs,clauses.annot)
 
 def rename_symbols(rn,clauses1,to_rename):
     map1 = dict((s,s.rename(rn)) for s in to_rename)
@@ -1166,17 +1194,30 @@ def or_clauses_int(rn,args):
                 defidx[s] = Definition(d.args[0],Ite(v,d.args[1],defidx[s].args[1]))
     defs = [d for n,d in defidx.iteritems()] # TODO: hash traversal dependency
     res = Clauses(fmlas,defs)
-#    print "or_clauses_int res = {}".format(res)
-    return res
+    #    print "or_clauses_int res = {}".format(res)
+    return res,vs
+
+def debug_clauses_list(cl):
+    for clauses in cl:
+        print "definitions:"
+        for df in clauses.defs:
+            print df
+        print "fmlas:"
+        for fmla in clauses.fmlas:
+            print ivy_logic.close_formula(fmla)
 
 def ite_clauses_int(rn,cond,args):
     assert len(args) == 2
-#    print "or_clauses_int: args = {}".format(args)
+    # print "ite_clauses_int args:"
+    # debug_clauses_list(args)
     args = elim_dead_definitions(rn,args)
+    a0,a1 = args[0].annot,args[1].annot
 #    print "or_clauses_int: args = {}".format(args)
     v = bool_const(rn())
-    argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
-    fmlas = [simp_ite(v,argfmlas[0],argfmlas[1])]
+#    argfmlas = [cls.fmlas[0] if len(cls.fmlas) == 1 else And(*cls.fmlas) for cls in args]
+#    fmlas = [simp_ite(v,argfmlas[0],argfmlas[1])]
+    fmlas = ([Or(Not(v),f) for f in args[0].fmlas]
+             + [Or(v,f) for f in args[1].fmlas])
     defidx = dict()
     for d in args[0].defs:
         s = d.defines()
@@ -1188,8 +1229,10 @@ def ite_clauses_int(rn,cond,args):
         else:
             defidx[s] = Definition(d.args[0],simp_ite(v,defidx[s].args[1],d.args[1]))
     defs = [d for n,d in defidx.iteritems()] + [Definition(v,cond)] # TODO: hash traversal dependency
-    res = Clauses(fmlas,defs)
-#    print "or_clauses_int res = {}".format(res)
+    annot = None if a0 is None or a1 is None else a0.ite(v,a1)
+    res = Clauses(fmlas,defs,annot)
+    # print "ite_clauses_int res:"
+    # debug_clauses_list([res])
     return res
 
 def bool_const(name):
@@ -1201,7 +1244,8 @@ def tagged_or_clauses(prefix,*args):
     predicate symbols begin with "prefix". See find_true_disjunct.
     """
     args = coerce_args_to_clauses(args)
-    return or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    res,vs = or_clauses_int(UniqueRenamer('__to0',dict()),args)
+    return fix_or_annot(res,vs,args)
 
 def find_true_disjunct(clauses,eval_fun):
     """See tagged_or_clauses. If a tagged disjunction is satisfiable,
@@ -1222,17 +1266,26 @@ def find_true_disjunct(clauses,eval_fun):
 #    return reduce(or_clauses2,args)
 
 
-def and_clauses(*args):
+def and_clauses(*args,**kwargs):
     if not any(isinstance(a,Clauses) for a in args):
         return And(*args)
     args = coerce_args_to_clauses(args)
     if not args:
         return true_clauses()
+
+    annot_op = kwargs.pop('annot_op',None)
+    if annot_op is None:
+        annot = None
+        for a in args:
+            annot = a.annot if annot is None else annot if a.annot is None else annot.conj(a.annot)
+    else:
+         annot = annot_op(*[c.annot for c in args])
+         
     if any(cls.is_false() for cls in args):
-        return false_clauses()
+        return false_clauses(annot=annot)
     fmlas = [c for cls in args for c in cls.fmlas]
     defs = [d for cls in args for d in cls.defs]
-    return Clauses(fmlas,defs)
+    return Clauses(fmlas,defs,annot)
 
 def negate_clauses(clauses):
     if isinstance(clauses,Clauses):
@@ -1285,12 +1338,12 @@ def var_to_constant(v,name):
     return Constant(sym)
 
 
-def false_clauses():
-    return Clauses([[]])
+def false_clauses(annot=None):
+    return Clauses([[]],annot=annot)
 
 
-def true_clauses():
-    return Clauses([])
+def true_clauses(annot=None):
+    return Clauses([],annot=annot)
 
 instantiator = None
 
@@ -1335,7 +1388,7 @@ def dual_formula(fmla, skolemizer=None):
 
 def skolemize_formula(fmla, skolemizer=None):
     if skolemizer == None:
-        skolemizer = lambda v: var_to_skolem('__',Variable(v.rep,v.sort))
+        skolemizer = lambda v: var_to_skolem('__sk__',Variable(v.rep,v.sort))
     vs = []
     while is_exists(fmla):
         vs.extend(fmla.variables)

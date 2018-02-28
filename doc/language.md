@@ -32,10 +32,10 @@ as arguments. That is, data and functions are "first class" values. On
 the other hand, procedures cannot be stored in variables or passed as
 arguments.
 
-A particularly unusual aspect of the IVy langauge is that there are
+A particularly unusual aspect of the IVy language is that there are
 *no references*. Two distinct variables are never "aliases" for the
 same underlying "object". Modifying variable `a` never has an effect
-on the value of variable `b`. IVy's philosphy is that references are a
+on the value of variable `b`. IVy's philosophy is that references are a
 low-level optimization that should be used by compilers to avoid
 copying, but should never appear in high-level programs. The absense
 of aliases enormously simplifies the analysis, testing and
@@ -56,19 +56,24 @@ We will now consider the basic elements of an IVy program.
 
 Every IVy file begins with a line like the following:
 
-    #lang ivy1.6
+    #lang ivy1.7
 
-This tells IVy what version of the language we are using.
+This tells IVy what version of the language we are using. This is
+important because in successive version of the language, certain
+features may be changed or deprecated. Providing the language version
+allows old programs to keep working. They current version of the IVy
+language is 1.7. Changes between versions of the language are listed
+at the end of this document.
 
 ## State and actions
 
-An IVy program describes *objects* that have state variables and
+An IVy program describes *objects* that have state and
 provide *actions* that operate on state. State variables may hold
 either plain old data or mathematical relations and functions (much as
 in the [Alloy][al] language, but with important differences that we
 will discuss later).
 
-[al]: http://alloy.mit.edu
+[al]: http://alloy.mit.edu/alloy/
 
 ### Types and declarations <a name="declarations"></a>
 
@@ -129,8 +134,9 @@ individuals `red`, `green` and `blue` as its elements.
 
 ### Actions
 
-An *action* in IVy mutates the values of state variables. For example,
-here is a declaration of an action that adds a link between two nodes:
+An *action* is IVy's notion of a procedure that mutates the values of
+state variables. For example, here is a declaration of an action that
+adds a link between two nodes:
 
     action connect(x:node, y:node) = {
         link(x,y) := true
@@ -141,7 +147,7 @@ actions: an assignment. An assignment modifies the value of a
 variable.  In this case, the single pair (*x*,*y*) is added to the
 relation `link` (or put another way, the value of the expression
 `link(x,y)` is set to true, without otherwise modifying
-`link`). Because there is no aliasing in IVy.  the values of all other
+`link`). Because there is no aliasing in IVy,  the values of all other
 variables remain unchanged by the assignment.
 
 We can use place-holders to make larger modifications to a relation. For
@@ -206,7 +212,7 @@ We could also have written `connect_unique` by *calling* `clear` and `connect`:
         call connect(a,b)
     }
     
-Since there are no references in IVy, so in effect, IVy uses the
+IVy uses the
 [call-by-value][cbv] convention. That is, when we call `clear(a)` a
 local variable *x* is created during the execution of `clear` and
 assigned the value *a*. This means that, as in the [C programming
@@ -230,7 +236,7 @@ is equivalent to
     call temp := sqrt(z)
     x := y + temp
 
-If there is more than call within an expression, the calls are
+If there is more than one call within an expression, the calls are
 executed in left-to-right order.
 
 Parentheses are not used when calling an action with no parameters. 
@@ -272,8 +278,8 @@ clause, for example:
         link(y,z) := true
     }
 
-As in the C programming language, the "else" is associated to the
-nearest "if". 
+Because brackets are required, there is no ambiguity as to which 'if'
+an 'else' belongs to.
 
 The following syntax can be used to find a element of a type that
 satisfies some condition:
@@ -323,7 +329,7 @@ For example, instead of something like this:
         link(x,y) := false
     }
 
-we can instead write this:
+we can write this:
 
     link(x,Y) := false
 
@@ -350,6 +356,21 @@ A loop can be decorated with a invariants, like this:
 The invariant `sum >= 0` is a special assertion that is applied
 on each loop iteration, before the evaluation of the condition.
 Invariants are helpful in proving properties of programs with loops.
+
+In some situations we need to guarantee that a loop always terminates. We can do this
+with ranking function that is supplied by the keyword `decreases`, like this:
+
+    while i > 0
+    invariant sum >= 0
+    decreases i
+    {
+        sum := sum + f(i);
+        i := i - 1
+    }
+
+The argument of `decreases` is an expression whose value must decrease
+with every loop iteration and such that the loop is never entered when
+the expression is less than `0`.
 
 
 ## Non-deterministic choice
@@ -405,30 +426,44 @@ annotate at least one variable, like this:
 
     forall X:node,Y,Z. X=Y & Y=Z -> X=Y
 
-## Assume, assert and init
+## Assume, require and ensure
 
-The primitive actions `assume` and `assert` allow us to write
-specifications. The `assert` action fails if the associated condition
+The primitive actions `require` and `ensure` allow us to write
+specifications. These actions fail if the associated condition
 is false. For example, suppose we wish the `connect` action to handle
 only the case where the node *y* is not in the failed set. We could
 write
 
     action connect(x:node, y:node) = {
-        assert ~failed(y);
+        require ~failed(y);
         link(x,y) := true
     }
 
 If the condition `~failed(y)` is true, control passes through the
-`assert` and this action behaves in the same way as the original.  If
-the condition `~failed(y)` is false, however, the semantics of
-`assert` is undefined.  This means that whenever we use `connect` we
-must prove that the *y* argument is not in the failed set.
+`require` and this action behaves in the same way as the original.  If
+the condition `~failed(y)` is false, however, the `require` action
+fails.  This means that whenever we use `connect` we must prove that
+the *y* argument is not in the failed set.
+
+The `ensure` action is similar, except it is the responsibility of the action
+itself to ensure the truth of the formula. For example:
+
+    action increment(x:node) returns (y:node) = {
+        y := x + 1;
+        ensure y > x
+    }
+
+The semantics of `require` and `ensure` are the same, except for the
+assignment of blame when they fail. With `require`, the onus of
+guaranteeing the truth of the formula falls on the action's caller,
+while with `ensure` it falls on the action itself. We will refer to
+`require` and `ensure` actions collectively as *assertions*.
 
 On the other hand, the `assume` action does not allow control to pass
 through if the associated condition is false. A typical application of
-`assume` in modeling a protocol is to implement a guarded command. For
-example, this action non-deterministically chooses a non-failed node
-and connects *x* to it:
+`assume` is to make a temporary modeling assumption that we wish later
+to remove. For example, this action non-deterministically chooses a
+non-failed node and connects *x* to it:
 
     action connect_non_failed(x:node) = {
         y := *;
@@ -439,9 +474,10 @@ and connects *x* to it:
 Of course, if all the nodes are failed, this action cannot
 terminate. There is some degree of risk in using assumptions when
 modeling, since assumptions can eliminate behaviors in unexpected
-ways.
+ways. Ideally, a finished program will not contain any occurrence of
+`assume`.
 
-In `assert` and `assume` actions, any [free variables][fv] are treated
+In `require`, `ensure` and `assume` actions, any [free variables][fv] are treated
 as universally quantified. For example, if we want to connect *x* to a
 node that is not currently linked to any node, we could change the
 assumption above to
@@ -450,34 +486,44 @@ assumption above to
 
 [fv]: https://en.wikipedia.org/wiki/Free_variables_and_bound_variables
 
+## Initialization
+
 Normally, we expect a system to start in some well-defined state, or
 at least for some specified conditions to hold initially. In IVy, we use an
-`init` declaration for this purpose. For example:
+`after init` declaration for this purpose. For example:
 
-    init ~link(X,Y)
+    after init {
+        link(X,Y) := false
+    }
 
-This says that initially, no two nodes are linked. As in `assume` and
-`assert`, unbound variables are universal.
+This provides an action that executes at initialization, before the
+environment calls any other actions. Multiple `after init` actions are
+executed in the order in which they are declared in the program.
 
 
 ## Local variables
 
 The above example of a guarded command action assumes that *y* is a
-declared component of type `node`. We can also declare *y* locally,
-however, like this:
+declared program variable of type `node`. We can also declare *y* locally
+within the action, like this:
 
     action connect_non_failed(x:node) = {
-        local y:node {
-            y := *;
-            assume ~failed(y);
-            link(x,y) := true
-        }
+        var y:node;
+        assume ~failed(y);
+        link(x,y) := true
     }
 
-This creates a fresh *y* that is in scope only within the 'local'
-declaration. In fact, we don't need the non-deterministic assignment
-to *y* since the value of *y* is already non-deterministic at the
-beginning of the `local` action.
+This creates a fresh *y* that is in scope only within the action (or generally to the
+end of the most tightly enclosing pair of brackets). We don't need a non-deterministic assignment
+to *y* since the value of *y* is already non-deterministic at the point where it is declared.
+We can create a local variable and assign it in the same statement, like this:
+
+    var y:node := x
+
+or, if the type of `y` can be inferred, just this:
+
+    var y := x
+
 
 ## Modelling interleaving concurrency in IVy
 
@@ -522,16 +568,19 @@ connected to the server.
     relation link(X:client, Y:server)
     relation semaphore(X:server)
 
-    init semaphore(W) & ~link(X,Y)
+    after init {
+        semaphore(W) := true;
+        link(X,Y) := false
+    }
 
     action connect(x:client,y:server) = {
-      assume semaphore(y);
+      require semaphore(y);
       link(x,y) := true;
       semaphore(y) := false
     }
 
     action disconnect(x:client,y:server) = {
-      assume link(x,y);
+      require link(x,y);
       link(x,y) := false;
       semaphore(y) := true
     }
@@ -549,24 +598,26 @@ that represent the interface user's view of the system.
 The program exports two actions to the environment: `connect` and
 `disconnect`. The `connect` actions creates a link from client `x` to
 server `y`, putting the server's semaphore down. Notice that `connect`
-assumes the server's semaphore is initially up. The `disconnect`
+requires that server's semaphore be up on entry. The `disconnect`
 action removes a link and puts the semaphore up. The two `export`
 declarations at the end tell us that the environment may call
 `connect` and `disconnect` in arbitrary sequence, though it must obey
-the stated assumptions.
+the stated requirements.
 
 ## Safety and invariant conjectures
 
-A program is *safe* if the environment cannot call it in any way that
-causes an assertion to be false. There are various ways to use
-assertions to specify desired safety properties of a program. A simple
-one is to add a test action that asserts some property of the program
-state. In the client/server example above, we might specify that no
-two distinct clients can be connected to a single server using the
-following test action:
+A program is *safe* if it cannot fail, so long as in the past all
+requirements of the environment have been satisfied (that is, it is safe if 
+any failure of the program can be blamed on the environment).
+
+There are various ways to use assertions to specify desired safety
+properties of a program. A simple one is to add a test action that
+asserts some property of the program state. In the client/server
+example above, we might specify that no two distinct clients can be
+connected to a single server using the following test action:
 
     action test = {
-      assert ~(X ~= Z & link(X,Y) & link(Z,Y))
+      ensure ~(X ~= Z & link(X,Y) & link(Z,Y))
     }
 
     export test
@@ -587,23 +638,30 @@ each of our three actions preserves them. Moreover, they are
 sufficient to guarantee that our test assertion is true. Thus, IVy can
 use these conjectures to prove safety of the program.
 
-While we can give IVy conjectured invariants, there is no way outside
-of an action to *assert* that a proposition is invariant. This is to
-avoid ambiguity as to exactly *when* an invariant should be
-established. In IVy we can only state that a formula is true at a
-specific point in the execution of an action.
+We can also specify an invariant of the program that *must* hold, like
+this:
+
+    invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
+
+This invariant is asserted to hold at all times after initialization
+when an exported action is *not* executing. In particular, the
+invariant is not guaranteed to hold when the program calls back to the
+environment (see `import` below) or when it calls one of its own
+actions.
+
 
 ## Axioms and background theories
 
 The built-in types and operators provided by IVy are fairly
-impoverished. We have only uninterpreted types, enumerated types and
-the basic operators of first-order logic. This is by design. By
-introducing richer data types, or *theories*, we would quickly make
-our verification problems undecidable, meaning we would sacrifice
-reliability of automated verification. In practice, before
-introducing, say, the integers into a model, we should make sure that
-the power of the integers is really needed. It may be, for example,
-that all we require is a totally ordered set.
+impoverished. We have only uninterpreted types, the Boolean type
+`bool`, enumerated types and the basic operators of first-order
+logic. This is by design. By introducing richer data types, or
+*theories*, we would quickly make our verification problems
+undecidable, meaning we would sacrifice reliability of automated
+verification. In practice, before introducing, say, the integers into
+a model, we should make sure that the power of the integers is really
+needed. It may be, for example, that all we require is a totally
+ordered set.
 
 IVy allows us to introduce background theories in the form of logical
 axioms. This in turn allows us to avoid using unnecessarily powerful
@@ -647,10 +705,10 @@ such polymorphic operators to avoid, for example, having to invent a
 new "less than" symbol for every ordered type, or adding type
 annotations to operators. 
 
-IVy provides for this in a limited way. Certain symbols, such as `<`
-and `+` are always polymorphic. This allows us to declare relations
-with the same symbol over different sorts and to disambiguate them
-based on type inference.
+IVy provides for this in a limited way. Certain symbols, such as `<`,
+`+` and `0` are always polymorphic. This allows use the same symbol
+with different type signatures disambiguate these uses based on type
+inference.
 
 To make type inference stronger, the polymorphic operators also come
 with type constraints. In functional language terms, `<` has type
@@ -677,7 +735,7 @@ specific meanings.
 
 ### Quoted symbols
 
-A quoted symbols a possibly-empty sequence of characters enclosed in
+A quoted symbol is a possibly-empty sequence of characters enclosed in
 double quote characters (and not containing a double quote character).
 An example would be `"ab$c"`. Quoted symbols are similar to numerals:
 their type is inferred from context. 
@@ -695,7 +753,9 @@ with a test for zero:
     module counter(t) = {
 
         individual val : t
-        init val = 0
+        after init {
+            val := 0
+        }
 
         action up = {
             val := val + 1
@@ -769,7 +829,9 @@ We can create a module with just one instance like this:
 
     object foo = {
         relation bit
-        init ~bit
+        after init {
+            bit := false
+        }
         action flip = {
             bit := ~bit
         }
@@ -858,7 +920,7 @@ down. We could express this property as a monitor like this:
 
     object mon = {
         action pre_connect(x:client,y:server) = {
-            assert semaphore(y)
+            require semaphore(y)
         }        
         execute pre_connect before connect
     }
@@ -866,41 +928,67 @@ down. We could express this property as a monitor like this:
 The `execute` declaration says that whenever `connect` is called,
 action `pre_connect` should be executed first, with the same
 parameters. If any caller tries to connect a client to a busy server,
-the assertion will fail.
+the assertion will fail. Notice we used `require` here, so the
+blame for the failure is on the caller of `connect`.
 
 Monitors can also check the return values of actions. For example:
 
     action post_incr(inp:t) returns(out:t) = {
-        assert inp < out
+        ensure inp < out
     }
 
     execute post_incr after incr
 
 Here, we have an action `incr` that is supposed to increment a value,
-and we specify that the output must be greater than the input.
+and we specify that the output must be greater than the input. Here,
+we use `ensure`, so the blame for any failure falls in the
+implementation of action `incr`.
 
-As a shorthand, we can write out monitor action like this:
+As a shorthand, we can write our monitor action like this:
 
     after c.post(inp:t) returns(out:t) {
-        assert inp < out
+        ensure inp < out
     }
 
 This creates a monitor action called `post.after` that is executed after `c.post`.
 Similarly, we can write:
 
     before connect(x:client,y:server) {
-        assert semaphore(y)
+        require semaphore(y)
     }        
 
 If we drop the input or output parameters, they are inherited from the monitored action.
 For example:
 
     after c.post {
-        assert inp < out
+        ensure inp < out
     }
 
 This is a useful shorthand when the declaration of `c.post` is nearby,
 but should probably be avoided otherwise.
+
+We can write this:
+
+    around foo {
+        stmts1
+        ...
+        stmts2
+    }
+
+as a shorthand for this:
+
+    before foo {
+        stmts1
+    }
+
+    after foo {
+        stmts2
+    }
+
+At present, local variables declared in `stmts1` cannot be referenced
+in `stmts2`, but the intention os to make this possible, to reduce the
+need to use `old` in after monitors.
+
 
 ### Monitor state
 
@@ -912,7 +1000,9 @@ the `is_zero` action cannot return true:
     module counter_prop(c) = {
 
         relation was_up
-        init ~was_up 
+        after init {
+            was_up := false
+        }
 
         after c.up {
             was_up := true
@@ -923,7 +1013,7 @@ the `is_zero` action cannot return true:
         }
 
         after c.is_zero returns (z:bool) {
-            assert was_up -> ~z
+            ensure was_up -> ~z
         }
     }
 
@@ -938,6 +1028,20 @@ fact about the return value: if the last action was `up` the result
 cannot be true. 
 
 
+## Action implementations
+
+It is often usefult to separate the declaration of an action from its
+implementation. We can declare an action like this:
+
+    action incr(x:t) returns(y:t)
+
+and then give its implementation separately like this:
+
+    implement incr {
+        y := x + 1
+    }
+
+
 ## Assume/guarantee reasoning
 
 IVy doesn't require us to prove all at once that a program is safe.
@@ -946,17 +1050,22 @@ Instead, we can break the proof down into smaller proofs using the
 
 For example, suppose we have the following program with two objects:
 
-    #lang ivy1.5
+    #lang ivy1.7
 
-    type nat
+    object nat {
+        type this
 
-    relation even(N:nat), odd(N:nat)
-    axiom even(0) & (even(N) -> odd(N+1))
-    axiom odd(1) & (odd(N) -> even(N+1))
+        relation even(N:nat), odd(N:nat)
+
+        axiom even(0) & (even(N) -> odd(N+1))
+        axiom odd(1) & (odd(N) -> even(N+1))
+    }
 
     object evens = {
-        individual number : nat
-        init nat = 0
+        var number : nat
+        after init {
+            number := 0
+        }
 
         action step = {
             call odds.put(number + 1)
@@ -968,8 +1077,10 @@ For example, suppose we have the following program with two objects:
     }
 
     object odds = {
-        individual number : nat
-        init nat = 1
+        var number : nat
+        after init {
+            number := 1
+        }
 
         action step = {
             call evens.put(number + 1)
@@ -986,62 +1097,121 @@ For example, suppose we have the following program with two objects:
 Each object stores a number when its `put` action is called and sends this number plus one to the
 other object when its `step` action is called by the environment. We want to
 prove that `even.put` only receives even numbers, while `odd.put` only receives
-odd numbers. Here is a specification of this property as a monitor:
+odd numbers. Here is the `evens` object with separate specification and implementation:
 
-    object spec = {
+    isolate evens = {
 
-        before even.put {
-            assert even(n)
+        action step
+        action put(n:nat)
+
+        specification {
+            before put {
+                require n.even
+            }
         }
 
-        before odd.put = {
-            assert odd(n)
+        implementation {
+
+            var number : nat
+            after init {
+                nat := 0
+            }
+
+            implement step = {
+                call odds.put(number + 1)
+            }
+
+            implement put(n:nat) = {
+                number := n;
+            }
         }
     }
+    with odds,nat
 
-We would like to break the proof that these two assertions always hold
+An *isolate* is a special kind of object that acts as a unit of
+verification.  It generally has three parts. It starts with a
+declaration of the *interface* of the object. This usually consists of
+types, functions and actions that are provided by the object. The next
+section is the *specification*. This usually consists of variables,
+properties and monitors that are *visible* outside the
+isolate. Finally, we have the *implementation*.  It usually consists
+of variables, function definitions and action implementations that are
+*hidden*. An isolate may depend on the visible parts of other objects.
+This is declares using the keyword `with`. In this case `evens`
+depends on `odds` and `nat`.
+
+The isolate for `odds` is similar:
+
+    isolate odds = {
+
+        action step
+        action put(n:nat)
+
+        specification {
+            before put {
+                require n.odd
+            }
+        }
+
+        implementation {
+
+            var number : nat
+            after init {
+                number := 1
+            }
+
+            action step = {
+                call evens.put(number + 1)
+            }
+
+            action put(n:nat) = {
+                number := n;
+            }
+        }
+    }
+    with evens,nat
+
+Effectively, this breaks the proof that the two assertions always hold
 into two parts. In the first part, we assume the object `evens` gets
-correct inputs and prove that it always produces correct outputs. In
-the second part, we assume the object `odds` gets correct inputs and
-prove that it always produces correct outputs.
+correct inputs and prove that it always sends correct outputs to
+`odds`. In the second part, we assume the object `odds` gets correct
+inputs and prove that it always sends correct outputs to `evens`.
 
 This argument seems circular on the surface. It isn't, though, because
 when we prove one of the assertion holds, we are only assuming that
-the other assertions has always held *in the past*. So what we're
+the other assertion has always held *in the past*. So what we're
 really proving is that neither of the two objects is the first to
 break the rules, and so the rules always hold.
 
-IVy calls the two parts of the proof *isolates*. They are declared like this:
-
-    isolate iso_even = evens with spec
-    isolate iso_odd = odds with spec
-
 In the first isolate, we prove the assertion that `evens`
-guarantees. We do this in context of the `spec` object, but we forget
-about the state of the `odds` object. What this means is that in isolate `iso_even`,
-the `assert` statement in `even.put` becomes an `assume` statement.
+guarantees. We do this using the visible part of `odds`, but we forget
+about the hidden state of the `odds` object (in particular, the
+variable `odss.number`). To model the call to `evens.put` in the
+hidden part of `odds`, Ivy exports `evens.put` to the environment.
+The `requires` statement in the specification `even.put` thus becomes a
+guarantee of the environment. That is, each isolate only guarantees those assertions for
+which it receives the blame. The rest are assumed.
 
-The result is as if we had actually entered the following program:
+When we verifiy isolate `evens`, the result is as if we had actually entered the following program:
 
-    #lang ivy1.5
+    #lang ivy1.7
 
-    type nat
-    function (X:nat + Y:nat) := nat
-
-    relation even(N:nat), odd(N:nat)
-    axiom even(0) & (even(N) -> odd(N+1))
-    axiom odd(1) & (odd(N) -> even(N+1))
+    object nat {
+        ...
+    }
 
     object evens = {
-        individual number : nat
-        init nat = 0
+        var number : nat
+        after init {
+            nat := 0
+        }
 
         action step = {
             call odds.put(number + 1)
         }
 
         action put(n:nat) = {
-            assume even(nat)
+            require even(nat)
             number := n;
         }
     }
@@ -1049,50 +1219,48 @@ The result is as if we had actually entered the following program:
     object odds = {
 
         action put(n:nat) = {
-            assert odd(nat)
+            require odd(nat)
         }
     }
 
     export evens.step
     export evens.put
 
-In isolate `iso_even`, the `odds` object acts like part of the
-environment. The side effect of `odds.put` has been eliminated, and
-what remains is just the assertion that the input value is odd (IVy
-has to verify that this side effect is in fact invisible to
-`evens`). The assertion that inputs to `evens` are even has become as
-assumption. We can prove this isolate is safe by showing that
-`even.number` is invariantly even, which means that `odds.put` is
-always called with an odd number.
+Notice the implementation of `odds.put` has been eliminated, and what
+remains is just the assertion that the input value is odd (IVy
+verifies that the eliminated side effect of `odds.put` is in fact
+invisible to `evens`). The assertion that inputs to `evens` are even
+has in effect become an assumption. We can prove this isolate is safe
+by showing that `even.number` is invariantly even, which means that
+`odds.put` is always called with an odd number.
 
-The other isolate, `iso_odd` looks like this:
+The other isolate, `odds`, looks like this:
 
-    #lang ivy1.5
+    #lang ivy1.7
 
-    type nat
-    function (X:nat + Y:nat) := nat
-
-    relation even(N:nat), odd(N:nat)
-    axiom even(0) & (even(N) -> odd(N+1))
-    axiom odd(1) & (odd(N) -> even(N+1))
+    object nat {
+        ...
+    }
 
     object evens = {
 
         action put(n:nat) = {
-            assert even(nat)
+            require even(nat)
         }
     }
 
     object odds = {
-        individual number : nat
-        init nat = 1
+        var number : nat
+        after init {
+            nat = 1
+        }
 
         action step = {
             call evens.put(number + 1)
         }
 
         action put(n:nat) = {
-            assume odd(nat)
+            require odd(nat)
             number := n;
         }
     }
@@ -1102,97 +1270,31 @@ The other isolate, `iso_odd` looks like this:
 
 
 If both of these isolates are safe, then we know that neither
-assertion in `spec` is the first to fail, so the original program is
-safe.
+assertion is the first to fail, so the original program is safe.
 
-IVy has default rules for determining, for each object, which
-assertions are assumptions and which assertions are guarantees.
+The general rule is that a `require` assertion is a guarantee for the
+caller and and assumption for the callee, while an `ensure` action is
+a guarantee for the callee and an assumption for the caller. When we
+verify an isolate, we check only those assertions that are gurantees
+for actions in the isolate.
 
-The assumptions are:
 
-- Monitor assertions executed *before* the object's actions
-- Monitor assertions executed *after* the object's calls
 
-The guarantees are:
-
-- Assertions within the object's actions
-- Monitor assertions executed *after* the object's actions
-- Monitor assertions executed *before* the object's calls
-
-Roughly speaking, this means that assertions about an object's inputs
-are assumptions for that object, while assertions about its outputs
-are guarantees.
-
-## Action implementations
-
-Often it is useful to separate the declaration of an action from
-its implementation. We can declare an action like this:
-
-    action incr(x:t) returns(y:t)
-
-and then give its implementation like this:
-
-    implement incr {
-        y := x + 1
-    }
-
-This is useful for defining and specifying interfaces. For example,
-we could define the interface between "evens" and "odds" like this:
-
-    object intf = {
-    
-        action put_even(n:nat)
-        action put_odd(n:nat)
-
-        object spec = {
-
-            before put_even {
-                assert even(n)
-            }
-
-            before put_odd = {
-                assert odd(n)
-            }
-        }
-    }
-
-The `even` object would then be:
-
-    object evens = {
-        individual number : nat
-        init nat = 0
-
-        action step = {
-            call intf.put_odd(number + 1)
-        }
-
-        implement intf.put_even(n:nat) = {
-            number := n;
-        }
-    }
-
-In this way, we can make the interface specification into a re-usable
-component.
 
 
 ## Initializers
 
-In some cases it is awkward to give the initial condition as a
-formula. An alternative is to use an initializer. This is a special
-action that is executed once initially, before any exported actions
-are called. For example:
+As noted above, an initializer is a special action that is executed
+once initially, before any exported actions are called. For example:
 
-    individual bit : bool
+    var bit : bool
 
     after init {
         bit := false
     }
 
 This behaves like a monitor after a special internal action called
-`init`. As the `after` implies, the initial condition prescribed by
-the `init` declarations is assumed to be established before any
-initializers are called. Initializers are executed in the order they
-are declared.
+`init`. Initializers are executed once in the order they are declared.
 
 Initializers may call other actions. For example, suppose we have a
 module `collection` representing a set of objects that is initially
@@ -1218,7 +1320,7 @@ only the bit of object 0 is true:
     type t
 
     object foo(self:t) = {
-        individual bit : bool
+        var bit : bool
 
         after init {
             bit := (self = 0)
@@ -1236,7 +1338,7 @@ For example, this initializer would not be legal:
 
     type t
 
-    individual bit : bool
+    var bit : bool
 
     object foo(self:t) = {
         after init {
@@ -1302,7 +1404,7 @@ Notice that the argument of `rng` is a constant `x`, not a place-holder
 instantiated for specific values of `x`. So, for example, if we have an assertion
 to prove like this:
 
-    assert rng(y)
+    ensure rng(y)
 
 Ivy will instantiate the definition like this:
 
@@ -1406,3 +1508,53 @@ For example:
 
 Here `bfe[3][0]` is the bit field extraction operator the takes the
 low order 4 bits of a bit vector.
+
+## Parameters
+
+A *parameter* is a value supplied by the environment before
+initialization. A parameter is declared like this:
+
+    parameter p : t
+
+where *p* is the parameter name and *t* is the type. Parameters may be
+declared anywhere in the object hierarchy. Except for the fact that it
+is initialized by the environment, a parameter is identical to an
+individual. The manner in which parameters are supplied is dependent
+on the compiler. For example, if a program is compiled to an
+executable file, the parameter values are supplied on the command
+line. If it is compiled to a class in C++, parameters are supplied as
+arguments to the constructor. In either case, the order of parameters
+is the same as their order of declaration in the program.
+
+
+## Changes between IVy language versions
+
+### New in version 1.2
+
+- Keywords: returns, mixin, before, after, isolate, with, export, import, delegate, include
+
+### Deprecated in version 1.2
+
+- Keywords: state, set, null, match
+
+### New in version 1.5
+
+- Keywords: function, class, object, method, execute, destructor, 
+  some, maximizing, maximizing, private, implement, using, property, while, invariant,
+  struct, definition, ghost, alias, trusted, this, var, attribute, scenario, proof, named, fresh
+
+### New in version 1.6
+
+- Keywords: variant, of, globally, eventually, temporal
+
+### New in version 1.7
+
+- Keywords: decreases, specification, implementation, require, ensure, around, parameter
+- The `iterable` module is added the standard library file `order`. This makes it possible
+to declare a type that is finite and iterable, and whose size is a parameter.
+
+### Deprecated in version 1.7
+
+- The init declation (only 'after init' is now supported for initialization)
+
+

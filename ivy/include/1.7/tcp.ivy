@@ -1,0 +1,53 @@
+#lang ivy1.6
+
+include order
+
+module tcp_channel(addr,pkt) = {
+
+    object sndr = {
+	action send(p : pkt)
+    }
+
+    object rcvr = {
+	action recv(p:pkt)
+    }
+
+    instance index : unbounded_sequence
+
+    object spec = {
+	individual send_idx : index.t
+	individual recv_idx : index.t
+	relation sent(I:index.t,P:pkt)
+	
+	after init {
+	    send_idx := 0;
+	    recv_idx := 0;
+	    sent(I,P) := false;
+	}
+
+	before sndr.send(p : pkt) {
+	    sent(send_idx,p) := true;
+	    send_idx := index.next(send_idx);
+	}
+
+	before rcvr.recv(p : pkt) {
+	    assert recv_idx < send_idx;
+	    assert sent(recv_idx,p);
+	    sent(recv_idx,p) := false;
+	    recv_idx := index.next(recv_idx);
+	}
+    }
+
+    object impl = {
+	action internal(p:pkt) = {
+	    call rcvr.recv(p);
+	}
+	implement sndr.send(p : pkt) {
+	    # seriously need to do something here!
+	}
+    }
+
+    trusted isolate iso = impl with spec
+
+}
+

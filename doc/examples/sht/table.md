@@ -21,7 +21,9 @@ is the interface of `hash_table`:
         function hash(X:key.t) : value
 
         object spec = {
-            init hash(X) = 0
+            after init {
+                hash(X) := 0
+            }
 
             before set {
                 hash(k) := v
@@ -52,11 +54,14 @@ contents of the table. Initially, all keys map to the background value
 bound `hi`, such that keys in the interval `[lo,hi)` match the
 abstract table `hash`. Notice the use of the representation function
 `shard.value` and also the use of `between` to test whether a key `X`
-is in the interval `[lo,hi)`. As an aside, `extract_` has an underscore
-since it conflicts with an IVy keyword.
+is in the interval `[lo,hi)`. Using IVy's method notation, we can also
+write `key.iter.between(lo,X,hi)` as `lo.between(X,hi)`.
 
-The `incorporate` action set all the keys in the interval `[lo,hi)` to
-match the hard `s`. Because of the way `shard.value` is defined, this
+As an aside, `extract_` has an underscore since it conflicts with an
+IVy keyword.
+
+The `incorporate` action sets all the keys in the interval `[lo,hi)` to
+match the shard `s`. Because of the way `shard.value` is defined, this
 means that keys not present in the shard's array are set to `0`.
 
 # Implementation
@@ -117,27 +122,20 @@ call the actions of `tab` to implement `get` and `set`:
 To implement `extract_`, we iterate over the interval `[lo,hi)` in the map,
 recording the key/value pairs in a shard:
 
-        implement extract_ {
-            shard.pairs(res) := shard.arr.empty;
-            local idx : key.iter.t, pos : shard.index.t {
-                idx := tab.lub(lo);
-                while idx < hi
-                    invariant lo <= idx
-                    invariant shard.value(res,X) = hash(X) if key.iter.between(lo,X,idx) else 0  
-                    invariant shard.valid(res)
-                {
-                    local pair : shard.pair, k:key.t {
-                        k := key.iter.val(idx);
-                        shard.p_key(pair) := k;
-                        shard.p_value(pair) := tab.get(k);
-                        shard.pairs(res) := shard.arr.append(shard.pairs(res),pair);
-                        idx := tab.next(idx)
-                    }
-                };                
-                shard.lo(res) := lo;
-                shard.hi(res) := hi
-            }
-        }
+    implement extract_ {
+        res.kv := shard.kvt.empty;
+        var idx := tab.lub(lo);
+        while idx < hi
+        ...
+        {
+            var k := idx.val;
+            res.kv := res.kv.append_pair(k,tab.get(k,0));
+            idx := tab.next(idx)
+        };                
+        res.lo := lo;
+        res.hi := hi
+    }
+
 
 We start be setting the shard's array to an empty array. We set our
 iterator `idx` to point to the least key (if any) greater than or
@@ -146,59 +144,89 @@ key/value pair pointed to by `idx` to the array and move `idx` to the
 next `key` in the map. Finally, we set the `lo` and `hi` fields of the
 shard.
 
-The while loop is decorated with several invariants that allow IVy to
-prove the post-condition of `extract_`. The first is obvious. We don't
-state that `idx <= hi` since this may be false when we enter the loop
-(if no keys are in the interval). Then we say that the contents of the
-shard match the map up to `idx`. Finally, we need to state the
-representation invariant of `shard`. That is, we need to maintain the
-invariant that no key occurs twice in the shard.
+To prove correctness of this implementation, we must decorate the loop
+with several invariants that allow IVy to prove the post-condition of
+`extract_`. These are inserted in place of `...` above:
+
+    invariant lo <= idx & (idx < hi -> tab.contains(idx.val))
+    invariant lo.between(X,idx) & tab.contains(X) -> 
+                   exists I. (res.key_at(I,X) & tab.maps(X,res.value_at(I)))
+    invariant res.key_at(I,X) -> lo.between(X,idx) & tab.contains(X)
+    invariant shard.valid(res)
+
+
+The first is fairly obvious. We don't state that `idx <= hi` since
+this may be false when we enter the loop (if no keys are in the
+interval). Because we are iterating over `tab`, we know that `idx` is
+always present in `tab`, except if we are at the end of the iteration.
+
+The second two invariants say that that the contents of the shard
+match the map up to the current index `idx`. That is, any key in the
+map we have already seen must occur in some position *I* in the
+key/value array, and this position must contain the expected
+value. Conversley, any key in the shard must be a key we have already
+seen.
+
+Finally, we need to establish the representation invariant of
+`shard`. That is, we need to maintain the invariant that no key occurs
+twice in the shard.
+
+Notice the use of the `key_at` relation here. We never have to use a
+function that looks up the key in a given position. Rather, we say
+there *exists* a position having a given key. This means our functions
+are always from keys to positions rather than the other way around,
+avoiding a function cycle. When we do look up the key in a position in
+the code, we use the *method* `get_key`. This implicitly guarantees
+that there is a key in the given position, but *only* in that one
+position. Thus, all functions from positions to keys are hidden in the
+implementation of `keyval`. This is a very typical idiom in IVy: if
+there is a function cycle, we break it by segragating the functions in
+different directions into different isolates.
 
 ## Incorporate
 
 This operation is more or less the reverse of `extract`. We loop over
 the key/value pairs in a shard, inserting them in the map. First,
 though, we must erase any keys in the interval [lo,hi), since the
-specification requires that keys not present in the shard be removed:
+specification requires that keys not present in the shard be removed.
+Here is the implementation:
 
-        implement incorporate(s:shard.t) {
-            local lo:key.iter.t, hi:key.iter.t, pairs:shard.arr.t {
-                lo := shard.lo(s);
-                hi := shard.hi(s);
-                pairs := shard.pairs(s);
-                call tab.erase(lo,hi);
-                local idx : key.iter.t, pos : shard.index.t {
-                    pos := 0;
-                    while pos < shard.arr.end(pairs)
-                       ...
-                    {
-                        local pair:shard.pair {
-                            pair := shard.arr.get(pairs,pos);
-                            if key.iter.between(lo,shard.p_key(pair),hi) & shard.p_value(pair) ~= 0{
-                                call tab.set(shard.p_key(pair),shard.p_value(pair))
-                            }
-                        };                        
-                        pos := shard.index.next(pos)
-                    }
-                }
-            }
-        }        
+    implement incorporate(s:shard.t) {
+        var lo := s.lo;
+        var hi := s.hi;
+        call tab.erase(lo,hi);
+        var pos:shard.index.t  := 0;
+        while pos < s.kv.end
+        ...
+        {
+            var k := s.kv.get_key(pos);
+            var d := s.kv.get_value(pos);
+            if lo.between(k,hi) & d ~= 0{
+                call tab.set(k,d)
+            };                        
+            pos := pos.next
+        }
+    }        
+
+
 
 Notice that in the loop, we use `between` to test whether each key is
 actually in the shard's interval. As an alternative, we could have
 stated in the shard representation invariant that no keys are outside
-the interval.
+the interval. There is a slight optimization: if a key has the
+background value `0`, we don't add it to `tab`.
 
 Also notice that we left out the invariants of the loop. Here they are:
 
-    invariant 0 <= pos & pos <= shard.arr.end(pairs)
+    invariant 0 <= pos & pos <= s.kv.end
 
-    invariant key.iter.between(lo,X,hi) & shard.value(s,X) = 0 -> ~tab.contains(X)
-    invariant key.iter.between(lo,X,hi) & Y < pos & shard.at(s,X,Y) & shard.value(s,X) ~= 0
-                     -> tab.contains(X) & tab.maps(X,shard.value(s,X))
-    invariant ~key.iter.between(lo,X,hi) -> spec.tab_invar(X,Y)
+    invariant lo.between(X,hi) & s.value(X) = 0 -> ~tab.contains(X)
+    invariant lo.between(X,hi) & 0 <= Y & Y < pos & s.key_at(Y,X) & s.value(X) ~= 0
+                     -> tab.contains(X) & tab.maps(X,s.value(X))
+    invariant ~lo.between(X,hi) -> spec.tab_invar(X,Y)
 
-    invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z
+    invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z & tab.contains(X)
+
 
 Yikes. Let's take them in groups. The first standard: the loop index
 `pos` ranges from `0` up to the end of the array. The next three state
@@ -218,19 +246,14 @@ for key `X` and value `Y`:
 
 Finally, the last invariant is just injectivity of the map. This is
 really an object invariant of `tab`, but we have to state it here
-since `tab` is modified by the loop. Some day, IVy will have explicit
+since `tab` is modified by the loop. Some day, IVy will have implicit
 object invariants and this won't be needed.
 
 To prove our implementation is correct, we need one invariant conjecture:
 
-    conjecture shard.value(S,X)=Z -> spec.tab_invar(X,Y)
+    conjecture spec.tab_invar(X,Y)
 
 This says that the concrete map `tab` matches the abstract map `hash`.
-But where does the condition `shard.value(S,X)=Z` come from? This
-doesn't change the meaning of the conjecture. It was just added
-because to prove the conjecture we needed to unfold the definition of
-the representation function `shard.value` for the key `X`. This tricks
-IVy into doing that.
 
 # Verifying the table implementation
 
@@ -288,14 +311,8 @@ Let's try verifiying:
 
 Life is good. Of course it didn't work out that way the first
 time. The bugs in the implementations, specifications and invariants
-have to be work our by examining counterexamples. It is a useful
+have to be worked out by examining counterexamples. It is a useful
 exercise to try removing some invariants to see the counterexamples.
-Also, try changing the conjecture to simply:
-
-    conjecture spec.tab_invar(X,Y)
-
-to see what happens (hint: to visualize `shard.value(S,K) = V`, you
-need to project onto a shard `S`).
 
 # Testing
 
@@ -312,17 +329,17 @@ Let's try running a few manual tests:
     > tab.get(14)
     0
     > tab.extract_({is_end:false,val:11},{is_end:false,val:15})
-    {lo:{is_end:0,val:11},hi:{is_end:0,val:15},pairs:[{p_key:13,p_value:42}]}
+    {lo:{is_end:0,val:11},hi:{is_end:0,val:15},kv:[{p_key:13,p_value:42}]}
     > tab.set(17,666)
     > tab.extract_({is_end:false,val:11},{is_end:false,val:19})
-    {lo:{is_end:0,val:11},hi:{is_end:0,val:19},pairs:[{p_key:13,p_value:42},{p_key:17,p_value:666}]}
+    {lo:{is_end:0,val:11},hi:{is_end:0,val:19},kv:[{p_key:13,p_value:42},{p_key:17,p_value:666}]}
     > tab.extract_({is_end:false,val:11},{is_end:false,val:14})
-    {lo:{is_end:0,val:11},hi:{is_end:0,val:14},pairs:[{p_key:13,p_value:42}]}
+    {lo:{is_end:0,val:11},hi:{is_end:0,val:14},kv:[{p_key:13,p_value:42}]}
     > tab.extract_({is_end:false,val:11},{is_end:false,val:13})
-    {lo:{is_end:0,val:11},hi:{is_end:0,val:13},pairs:[]}
+    {lo:{is_end:0,val:11},hi:{is_end:0,val:13},kv:[]}
     ...
 
-This exercise useful before implementing on top of `hash_table`, since
+This exercise is useful before implementing on top of `hash_table`, since
 we aren't sure at this point if the specification is right. 
 
 

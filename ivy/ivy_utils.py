@@ -6,6 +6,9 @@ import string
 import operator
 import functools
 import collections
+import re
+import os
+import platform
 
 # some useful combinators
 
@@ -124,6 +127,14 @@ def partition(things,key):
         res[key(t)].append(t)
     return res
 
+# split a l list into a pair of lists (lp,1n) such that lp has the
+# elements of l satisfying predicate p and ln has the rest.
+
+def split_list(l,p):
+    pl = [p[x] for x in l]
+    return ([x for x,c in zip(l,pl) if c],
+            [x for x,c in zip(l,pl) if not c])
+
 # unique name generation
 
 def constant_name_generator():
@@ -216,10 +227,17 @@ class LocationTuple(tuple):
     def line(self):
         return self[1]
     def __str__(self):
-        res =  (((str(self.filename)) if self.filename else '')
-                + ('(' + str(self.line) + ')') if self.line else '')
-        if res:
-            res += ': '
+        if platform.system() == 'Windows':
+            res =  (((str(self.filename)) if self.filename else '')
+                    + ('(' + str(self.line) + ')') if self.line else '')
+            if res:
+                res += ': '
+        else:
+            res = ''
+            if self.filename:
+                res += str(self.filename) + ': '
+            if self.line:
+                res += 'line ' + str(self.line) + ': '
         return res
 
 def lineno_str(ast):
@@ -306,6 +324,7 @@ class Parameter(object):
         self.check = check
         self.process = process
         self.key = key
+        self.callback = lambda x:None
         assert key not in registry
         registry[key] = self
 
@@ -316,9 +335,13 @@ class Parameter(object):
         if not self.check(new_val):
             raise IvyError(None,"bad parameter value: {}={}".format(self.key,new_val))
         self.value = self.process(new_val)
+        self.callback(self.value)
 
     def __nonzero__(self):
         return True if self.value else False
+
+    def set_callback(self,callback):
+        self.callback = callback
 
 class BooleanParameter(Parameter):
     """ Parameter that takes "true" for True and "false" for False """
@@ -374,6 +397,9 @@ def pairs_to_dict(pairs,key=lambda x:x):
     for x,y in pairs:
         d[key(x)].append(y)
     return d
+
+def dict_to_pairs(d):
+    return [(x,y) for x,l in d.iteritems() for y in l]
 
 def topological_sort(items,order,key=lambda x:x):
     """ items is a list, key maps list elements to hashable keys,
@@ -452,11 +478,12 @@ def p_error(token):
         report_error(ParseError(None,None,'unexpected end of input'));
 
 # the default language version is the latest
-ivy_latest_language_version = '1.6'
+ivy_latest_language_version = '1.7'
 ivy_language_version = ivy_latest_language_version
 ivy_compose_character = '.'
 ivy_have_polymorphism = True
 ivy_use_polymorphic_macros = False
+ivy_forbid_ghost_init = False
 
 def set_string_version(version):
     global ivy_language_version
@@ -467,12 +494,33 @@ def set_string_version(version):
     ivy_compose_character = ':' if get_numeric_version() <= [1,1] else '.'
     ivy_have_polymorphism = not get_numeric_version() <= [1,2]
     ivy_use_polymorphic_macros = not get_numeric_version() <= [1,5]
+    ivy_forbid_ghost_init = not get_numeric_version() <= [1,6]
     
 def get_string_version():
     return ivy_language_version
 
+def string_version_to_numeric_version(v):
+    return map(int,string.split(v,'.'))
+
 def get_numeric_version():
-    return map(int,string.split(ivy_language_version,'.'))
+    return string_version_to_numeric_version(ivy_language_version)
+
+def version_le(v1,v2):
+    return string_version_to_numeric_version(v1) <= string_version_to_numeric_version(v2)
+
+inc_dir_pat = re.compile(r'[0-9]*\.[0-9]*')
+
+def get_std_include_dir():
+    inc_base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include')
+    inc_dir = None
+    for d in os.listdir(inc_base_dir):
+        m = inc_dir_pat.match(d)
+        if (m and m.end() == len(d) and
+              version_le(ivy_language_version,d) and (inc_dir is None or version_le(d,inc_dir))):
+            inc_dir = d
+    if inc_dir is None:
+        raise IvyError(None,'cannot find standard library for language version {}'.format(ivy_language_version))
+    return os.path.join(inc_base_dir,inc_dir)
 
 def compose_names(*names):
     if names[0] == 'this':

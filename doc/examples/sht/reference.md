@@ -94,13 +94,19 @@ and data value associate with the transaction.
 This is the monitor state:
 
         relation generated(T:txid)
-        init ~generated(T)
+        after init {
+            generated(T) := false
+        }
 
         relation committed(T:txid)
-        init ~committed(T)
+        after init {
+            committed(T) := false
+        }
 
         individual map(A:key.t) : data
-        init map(A) = 0
+        after init {
+            map(A) := 0
+        }
 
 We keep track of a set of `generated` transactions (those that have
 begun) as well as a set of `committed` transactions, and the abstract state

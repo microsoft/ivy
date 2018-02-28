@@ -28,8 +28,8 @@ checks = [
       ['arrayset2','OK'],
       ['arrayset3','OK'],
       ['arrayset','OK'],
-      ['client_server_example','error: safety failed'],
-      ['counter_example','error: safety failed'],
+      ['client_server_example','client_server_example.ivy: line 24: guarantee ... FAIL'],
+      ['counter_example','counter_example.ivy: line 54: guarantee ... FAIL'],
       ['coveragefail','error: Some assertions are not checked'],
       ['helloworld','OK'],
       ['interference2','OK'],
@@ -61,6 +61,9 @@ checks = [
       [
           ['fundef1','error: Variable Y:t occurs free on right-hand side of definition'],
           ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
+          ['strat1','error: The verification condition is not in logic epr'],
+          ['skolem1','error: failed checks: 1'],
+          ['ifstar1','OK'],
       ]
     ],
 ]
