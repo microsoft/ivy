@@ -8,29 +8,36 @@ proving temporal properties.
 
 TODO's and open issues:
 
-* automatically add conjectures of original system to the saved state
+* allow exporting and using of temporal properties
 
-* automatically add basic conjectures about the monitor (e.g. states
-  are mutually exclusive)
+* support for ivy1.7 syntax
+
+* add support for enumerated types
+
+* add support for adding all elements smaller than a constant (downward finite total order)
+
+* automatically add conjectures of original system to the saved state
 
 * handle multiple temporal properties
 
 * temporal axioms?
 
-* support nesting structure?
-
 * review the correctness
-
-* figure out the public_actions issue
 
 * decide abotu normalizing the Boolean structure of temporal formulas,
   properties, waited formulas, and named binders (e.g. normalize ~~phi
   to phi?)
 
-* a syntax for accessing Skolem constants and functions from the
+* syntax for accessing Skolem constants and functions from the
   negation of temporal properties.
 
+* syntax for fair scheduling of actions (e.g., eliminate scheduled
+  from ticket)
 
+* use assetions instead of l2s_error
+"""
+
+"""
 Useful definitions from ivy_module:
 self.definitions = []  # TODO: these are actually "derived" relations
 self.labeled_axioms = []
@@ -50,18 +57,20 @@ from ivy_printer import print_module
 from ivy_actions import (AssignAction, Sequence, ChoiceAction,
                          AssumeAction, AssertAction, HavocAction,
                          concat_actions)
+import ivy_ast as ast
 import logic as lg
 import ivy_logic_utils as ilu
 import ivy_utils as iu
 
+
 debug = iu.BooleanParameter("l2s_debug",False)
+
 
 def forall(vs, body):
     return lg.ForAll(vs, body) if len(vs) > 0 else body
 
 
-def l2s(mod, lf):
-
+def l2s(mod, temporal_goal):
     # modify mod in place
 
     # module pass helper funciton
@@ -80,12 +89,31 @@ def l2s(mod, lf):
     l2s_waiting = lg.Const('l2s_waiting', lg.Boolean)
     l2s_frozen = lg.Const('l2s_frozen', lg.Boolean)
     l2s_saved = lg.Const('l2s_saved', lg.Boolean)
+    l2s_error = lg.Const('l2s_error', lg.Boolean)
     l2s_d = lambda sort: lg.Const('l2s_d',lg.FunctionSort(sort,lg.Boolean))
     l2s_a = lambda sort: lg.Const('l2s_a',lg.FunctionSort(sort,lg.Boolean))
     l2s_w = lambda vs, t: lg.NamedBinder('l2s_w', vs, t)
     l2s_s = lambda vs, t: lg.NamedBinder('l2s_s', vs, t)
     l2s_g = lambda vs, t: lg.NamedBinder('l2s_g', vs, t)
     old_l2s_g = lambda vs, t: lg.NamedBinder('old_l2s_g', vs, t)
+
+    # add conjectures about monitor state
+    conjs = [
+        lg.Or(l2s_waiting, l2s_frozen, l2s_saved),
+        lg.Or(lg.Not(l2s_waiting), lg.Not(l2s_frozen)),
+        lg.Or(lg.Not(l2s_waiting), lg.Not(l2s_saved)),
+        lg.Or(lg.Not(l2s_frozen), lg.Not(l2s_saved)),
+    ]
+    for f in conjs:
+        c = ast.LabeledFormula(ast.Atom('l2s_internal'), f)
+        c.lineno = temporal_goal.lineno
+        mod.labeled_conjs.append(c)
+
+    # add conjecture that we are not in the error state (this is
+    # instead of using an assertion. see below)
+    c = ast.LabeledFormula(ast.Atom('not_l2s_error'), lg.Not(l2s_error))
+    c.lineno = temporal_goal.lineno
+    mod.labeled_conjs.append(c)
 
     #print ilu.used_symbols_asts(mod.labeled_conjs)
     #print '='*40
@@ -105,7 +133,7 @@ def l2s(mod, lf):
         return res
     replace_temporals_by_l2s_g = lambda ast: ilu.replace_temporals_by_named_binder_g_ast(ast, _l2s_g)
     mod_pass(replace_temporals_by_l2s_g)
-    not_lf = replace_temporals_by_l2s_g(lg.Not(lf.formula))
+    not_temporal_goal = replace_temporals_by_l2s_g(lg.Not(temporal_goal.formula))
     if debug.get():
         print "=" * 80 +"\nafter replace_temporals_by_named_binder_g_ast"+ "\n"*3
         print "=" * 80 + "\nl2s_gs:"
@@ -122,7 +150,9 @@ def l2s(mod, lf):
         print_module(mod)
         print "=" * 80 + "\n"*3
 
-    # TODO: what about normalizing lf?
+    # TODO: what about normalizing temporal_goal? - temporal_goal
+    # should not contain any named binders except for temporal
+    # properties, so it is normalized by construction
 
     # construct the monitor related building blocks
 
@@ -144,7 +174,7 @@ def l2s(mod, lf):
     named_binders_conjs = defaultdict(list) # dict mapping names to lists of (vars, body)
     for b in ilu.named_binders_asts(mod.labeled_conjs):
         named_binders_conjs[b.name].append((b.variables, b.body))
-    named_binders_conjs = defaultdict(list,((k,list(set(v))) for k,v in named_binders_conjs.iteritems()))
+    named_binders_conjs = defaultdict(list,((k,sorted(list(set(v)))) for k,v in named_binders_conjs.iteritems()))
     to_wait = [] # list of (variables, term) corresponding to l2s_w in conjectures
     to_wait += named_binders_conjs['l2s_w']
     to_save = [] # list of (variables, term) corresponding to l2s_s in conjectures
@@ -154,8 +184,8 @@ def l2s(mod, lf):
         print "=" * 40 + "\nto_wait:\n"
         for vs, t in to_wait:
             print vs, t
-            print list(ilu.variables_ast(t)) == list(vs)
-            print
+            # print list(ilu.variables_ast(t)) == list(vs)
+            # print
         print "=" * 40
 
     save_state = [
@@ -176,8 +206,9 @@ def l2s(mod, lf):
     update_w = [
         AssignAction(
             l2s_w(vs,t)(*vs),
-            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(lg.Not(t)))))
-            # TODO check this and make sure its correct
+            lg.And(l2s_w(vs,t)(*vs), lg.Not(t), replace_temporals_by_l2s_g(lg.Not(lg.Globally(ilu.negate(t)))))
+            # ($l2s_w.  phi) waits until ( phi | globally ~phi), but
+            # ($l2s_w. ~phi) waits until (~phi | globally  phi) (i.e., we avoid "globally ~~phi" here)
             # note this adds to l2s_gs
         )
         for vs, t in to_wait
@@ -219,8 +250,21 @@ def l2s(mod, lf):
             isinstance(t.sort, lg.FunctionSort) and isinstance(t.sort.range, lg.UninterpretedSort)
         )
     ]
-    assert_no_fair_cycle = AssertAction(lg.Not(lg.And(*fair_cycle)))
-    assert_no_fair_cycle.lineno = lf.lineno
+    if debug.get():
+        print "=" * 40 + "\nfair_cycle:\n"
+        for x in fair_cycle:
+            print x
+            print
+        print "=" * 40
+    # TODO: figure out why AssertAction doesn't work properly
+    def assert_no_fair_cycle(a):
+        # comment and uncomment the following lines to debug:
+        # res = AssertAction(lg.Not(lg.And(*fair_cycle)))
+        # res = AssertAction(lg.false)
+        # res.lineno = temporal_goal.lineno
+        # res.lineno = a.lineno
+        res = AssignAction(l2s_error, lg.And(*fair_cycle))
+        return res
 
     monitor_edge = lambda s1, s2: [
         AssumeAction(s1),
@@ -234,55 +278,24 @@ def l2s(mod, lf):
             [AssumeAction(x) for x in done_waiting] +
             reset_a
         )),
-        # # frozen -> saved
-        # Sequence(*(
-        #     monitor_edge(l2s_frozen, l2s_saved) +
-        #     save_state +
-        #     reset_w
-        # )),
+        # frozen -> saved
+        Sequence(*(
+            monitor_edge(l2s_frozen, l2s_saved) +
+            save_state +
+            reset_w
+        )),
         # stay in same state (self edge)
         Sequence(),
     )]
 
-    # tableau construction (sort of)
-
-    # Note that we first transformed globally and eventually to named
-    # binders, in order to normalize. Without this, we would get
-    # multiple redundant axioms like:
-    # forall X. (globally phi(X)) -> phi(X)
-    # forall Y. (globally phi(Y)) -> phi(Y)
-    # and the same redundancy will happen for transition updates.
-
-    # temporals = []
-    # temporals += list(ilu.temporals_asts(
-    #     # TODO: these should be handled by mod_pass instead (and come via l2s_gs):
-    #     # mod.labeled_axioms +
-    #     # mod.labeled_props +
-    #     [lf]
-    # ))
-    # temporals += [lg.Globally(lg.Not(t)) for vs, t in to_wait]
-    # temporals += [lg.Globally(t) for vs, t in l2s_gs]
-    # # TODO get from temporal axioms and temporal properties as well
-    # print '='*40 + "\ntemporals:"
-    # for t in temporals:
-    #     print t, '\n'
-    # print '='*40
-    # to_g = [ # list of (variables, formula)
-    #     (tuple(sorted(ilu.variables_ast(tt))), tt) # TODO what about variable normalization??
-    #     for t in temporals
-    #     for tt in [t.body if type(t) is lg.Globally else
-    #                lg.Not(t.body) if type(t) is lg.Eventually else 1/0]
-    # ]
-    # TODO: get rid of the above, after properly combining it
+    # tableau construction
     to_g = [] # list of (variables, formula)
-    to_g += list(l2s_gs)
-    to_g = list(set(to_g))
+    to_g += sorted(list(l2s_gs))
     if debug.get():
         print '='*40 + "\nto_g:\n"
-        for vs, t in sorted(to_g):
+        for vs, t in to_g:
             print vs, t, '\n'
         print '='*40
-
     assume_g_axioms = [
         AssumeAction(forall(vs, lg.Implies(l2s_g(vs, t)(*vs), t)))
         for vs, t in to_g
@@ -295,14 +308,8 @@ def l2s(mod, lf):
 
     # now patch the module actions with monitor and tableau
 
-
     if debug.get():
         print "public_actions:", mod.public_actions
-    # TODO: this includes the succ action (for the ticket example of
-    # test/test_liveness.ivy). seems to be a bug, and this causes
-    # wrong behavior for the monitor, since a call to succ from within
-    # another action lets it take a step
-
     for a in mod.public_actions:
         action = mod.actions[a]
         add_params_to_d = [
@@ -310,6 +317,8 @@ def l2s(mod, lf):
             for p in action.formal_params
         ]
         new_action = concat_actions(*(
+            # TODO: check this with Sharon
+            assume_g_axioms +
             change_monitor_state +
             add_params_to_d +
             update_g +
@@ -317,7 +326,7 @@ def l2s(mod, lf):
             assume_g_axioms +
             add_consts_to_d +
             update_w +
-            [assert_no_fair_cycle]
+            [assert_no_fair_cycle(action)]
         ))
         new_action.lineno = action.lineno
         new_action.formal_params = action.formal_params
@@ -328,11 +337,12 @@ def l2s(mod, lf):
         AssignAction(l2s_waiting, lg.true),
         AssignAction(l2s_frozen, lg.false),
         AssignAction(l2s_saved, lg.false),
+        AssignAction(l2s_error, lg.false),
     ]
     l2s_init += add_consts_to_d
     l2s_init += reset_w
     l2s_init += assume_g_axioms
-    l2s_init += [AssumeAction(not_lf)]
+    l2s_init += [AssumeAction(not_temporal_goal)]
     mod.initializers.append(('l2s_init', Sequence(*l2s_init)))
 
     if debug.get():
@@ -363,8 +373,10 @@ def l2s(mod, lf):
     )
     if debug.get():
         print "=" * 80 + "\nsubs:" + "\n"*3
-        for k, v in subs.items():
-            print k, ' : ', v, '\n'
+        for k in sorted(named_binders.keys()):
+            v = named_binders[k]
+            for i, b in enumerate(v):
+                print '{}_{}'.format(k, i), ' : ', b
         print "=" * 80 + "\n"*3
     mod_pass(lambda ast: ilu.replace_named_binders_ast(ast, subs))
 

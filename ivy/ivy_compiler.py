@@ -1310,10 +1310,6 @@ def check_properties(mod):
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
-        # elif prop.temporal:
-        #     from ivy_l2s import l2s
-        #     print "=================" + "\n" * 10
-        #     l2s(mod, prop)
         else:
             mod.labeled_props.append(prop)
             if prop.id in nmap:

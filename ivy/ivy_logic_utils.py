@@ -203,12 +203,16 @@ def normalize_free_variables(ast):
     subs = dict()
     vs = []
     nvs = []
+    seen = set()
     for v in variables_ast(ast):
-        if v not in subs:
+        if v not in seen:
+            seen.add(v)
+            assert v.name not in subs # we have a problem if two different variables have the same name
             nv = lg.Var('V{}'.format(len(subs)), v.sort)
             subs[v.name] = nv
             vs.append(v)
             nvs.append(nv)
+    assert len(set(nvs)) == len(nvs)
     nast = substitute_ast(ast, subs)
     return vs, nvs, nast
 

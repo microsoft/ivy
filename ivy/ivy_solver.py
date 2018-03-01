@@ -10,6 +10,7 @@ from itertools import chain
 from collections import defaultdict
 import re
 import functools
+import random
 
 import z3
 import ivy_logic
@@ -32,15 +33,16 @@ z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to
 use_z3_enums = False
 
 def set_seed(seed):
-    print 'setting seed to {}'.format(seed)
+    print 'setting smt seed to {}'.format(seed)
     z3.set_param('smt.random_seed',seed)
+    # TODO: should we also set sat.random_seed?
 
-opt_seed = iu.Parameter("seed",0,process=int)
+opt_seed = iu.Parameter("seed",0,process=lambda seed: random.randint(0,4294967295) if seed in ('r', 'rand', 'random') else int(seed))
 opt_seed.set_callback(set_seed)
 
 def set_macro_finder(truth):
     z3.set_param('smt.macro_finder',truth)
-    
+
 opt_incremental = iu.BooleanParameter("incremental",True)
 
 #z3.set_param('smt.mbqi.trace',True)
@@ -91,7 +93,7 @@ def sorts(name):
     if name == 'strlit':
         return z3.StringSort()
     return None
-        
+
 #sorts = {}
 #sorts = {"S":S,
 #         "Int":z3.IntSort()}
@@ -102,7 +104,7 @@ def parse_int_params(name):
     if not all(t.endswith(']') for t in things):
         raise SyntaxError()
     return [int(t[:-1]) for t in things]
-    
+
 
 def is_solver_sort(name):
     return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'nat' or name == 'strlit' or name.startswith('strbv[')
@@ -149,7 +151,7 @@ def clear():
     z3_constants = dict()
     z3_functions = dict()
 
-clear()    
+clear()
 
 #z3_sorts_inv = dict((get_id(z3sort),ivysort) for ivysort,z3sort in z3_sorts.iteritems())
 z3_sorts_inv = {}
@@ -205,7 +207,7 @@ def lookup_native(thing,table,kind):
     return z3val
 
 def check_native_compat_sym(sym):
-    table,kind = (relations,"relation") if sym.is_relation() else (functions,"function") 
+    table,kind = (relations,"relation") if sym.is_relation() else (functions,"function")
     thing = lookup_native(sym,table,kind)
 #    print "check_native_compat_sym: {} {}".format(sym,thing)
     try:
@@ -338,7 +340,7 @@ def lt_pred(sort):
     sym = ivy_logic.Symbol('<',sort)
     sig = sym.sort.to_z3()
     return z3.Function(solver_name(sym), *sig)
-    
+
 polymacs = {
     '<=' : lambda s,x,y: z3.Or(x == y,lt_pred(s)(x,y)),
     '>' : lambda s,x,y: lt_pred(s)(y,x),
@@ -424,7 +426,7 @@ def type_constraints(syms):
         z3_fmla = formula_to_z3_closed(fmla)
         res.append(z3_fmla)
     return res
-                             
+
 
 def clauses_to_z3(clauses):
     z3_clauses = [conj_to_z3(cl) for cl in clauses.fmlas]
@@ -480,7 +482,7 @@ def formula_to_z3(fmla):
     if len(tcs) > 0:
         z3_fmla = z3.And(*([z3_fmla] + tcs))
     return z3_fmla
-                           
+
 
 
 def unsat_core(clauses1, clauses2, implies = None, unlikely=lambda x:False):
@@ -594,7 +596,7 @@ class SortOrder(object):
         fact = substitute(self.order,*interp)
         fact_val = self.model.eval(fact)
 #        print "order: %s = %s" % (fact,fact_val)
-        return -1 if z3.is_true(fact_val) else 1   
+        return -1 if z3.is_true(fact_val) else 1
 
 def collect_numerals(z3term):
     if z3.is_int_value(z3term) or z3.is_bv_value(z3term):
@@ -625,7 +627,7 @@ def mine_interpreted_constants(model,vocab):
         if sort in sort_values:
             sort_values[sort].update(collect_model_values(sort,model,s))
     return dict((x,map(term_to_z3,list(y))) for x,y in sort_values.iteritems())
-    
+
 
 class HerbrandModel(object):
     def __init__(self,solver,model,vocab):
@@ -704,7 +706,7 @@ class HerbrandModel(object):
 
     def __str__(self):
         return self.model.sexpr()
-    
+
 # TODO: need to map Z3 sorts back to ivy sorts
 def sort_from_z3(s):
     return z3_sorts_inv[get_id(s)]
@@ -756,7 +758,7 @@ def clauses_imply_list(clauses1, clauses2_list):
 
     res = []
     negs = map(dual_clauses,clauses2_list)
-        
+
     for clauses2 in negs:
         z2 = clauses_to_z3(clauses2)
 #        print "check {}".format(clauses2)
@@ -1013,7 +1015,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
 
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
-    
+
     # res = decide(s)
     # if res == z3.unsat:
     #     return None
@@ -1209,7 +1211,7 @@ def filter_redundant_facts(clauses,axioms):
     "axioms".  Currently, this removes only negative formulas that are
     implied by the positive formulas, so it should work well for facts
     about total orders, for example. """
-    
+
     fmlas = clauses.fmlas
     pos_fmlas = [fmla for fmla in fmlas if not isinstance(fmla,ivy_logic.Not)]
     neg_fmlas = [fmla for fmla in fmlas if isinstance(fmla,ivy_logic.Not)]
@@ -1324,7 +1326,7 @@ def function_model_to_clauses(h,f):
         for c in rng.defines():
             eq = ivy_logic._eq_lit(fterm,ivy_logic.Constant(ivy_logic.Symbol(c,rng)))
 #            print "function_model_to_clauses: {}".format(eq)
-            get_lit_facts(h,eq,res) 
+            get_lit_facts(h,eq,res)
     # non-enumerated function types
     else:
         lit = ivy_logic.Literal(1,fun_eq_inst(f))

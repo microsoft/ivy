@@ -18,6 +18,7 @@ import ivy_ast
 import ivy_theory as ith
 import ivy_transrel as itr
 import ivy_solver as islv
+from ivy_l2s import l2s
 
 import sys
 from collections import defaultdict
@@ -36,7 +37,7 @@ def display_cex(msg,ag):
         ui.ui_main_loop(ag)
         exit(1)
     raise iu.IvyError(None,msg)
-    
+
 def check_properties():
     if itp.false_properties():
         if diagnose.get():
@@ -68,7 +69,7 @@ def show_counterexample(ag,state,bmc_res):
     gui.tk.mainloop()
     exit(1)
 
-    
+
 def check_conjectures(kind,msg,ag,state):
     failed = itp.undecided_conjectures(state)
     if failed:
@@ -87,13 +88,12 @@ def check_conjectures(kind,msg,ag,state):
 def has_temporal_stuff(f):
     return any(True for x in lut.temporals_ast(f)) or any(True for x in lut.named_binders_ast(f))
 
-    
+
 def check_temporals():
     props = im.module.labeled_props
     proved = []
     for prop in props:
         if prop.temporal:
-            from ivy_l2s import l2s
             mod = im.module.copy()
             mod.labeled_axioms.extend(proved)
             mod.labeled_props = []
@@ -139,7 +139,7 @@ failures = 0
 def print_dots():
     print '...',
     sys.stdout.flush()
-    
+
 
 class Checker(object):
     def __init__(self,conj,report_pass=True):
@@ -171,7 +171,7 @@ def pretty_lineno(ast):
 
 def pretty_lf(lf,indent=8):
     return indent*' ' + "{}{}".format(pretty_lineno(lf),pretty_label(lf.label))
-    
+
 class ConjChecker(Checker):
     def __init__(self,lf,indent=8):
         self.lf = lf
@@ -180,7 +180,7 @@ class ConjChecker(Checker):
     def start(self):
         print pretty_lf(self.lf,self.indent),
         print_dots()
-    
+
 class ConjAssumer(Checker):
     def __init__(self,lf):
         self.lf = lf
@@ -234,7 +234,7 @@ class MatchHandler(object):
                 continue
             self.current[lhs] = rhs
             print '    {}'.format(rfmla)
-        
+
     def eval(self,cond):
         truth = self.model.eval_to_constant(cond)
         if lg.is_false(truth):
@@ -242,9 +242,9 @@ class MatchHandler(object):
         elif lg.is_true(truth):
             return True
         assert False,truth
-        
+
     def handle(self,action,env):
-        
+
 #        iu.dbg('env')
         if hasattr(action,'lineno'):
 #            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
@@ -264,7 +264,7 @@ class MatchHandler(object):
         for sym in self.vocab:
             if not itr.is_new(sym) and not itr.is_skolem(sym):
                 self.show_sym(sym,sym)
-            
+
 
 
 def filter_fcs(fcs):
@@ -426,7 +426,7 @@ def summarize_isolate(mod):
                 check_conjs_in_state(mod,ag,post,indent=12)
             else:
                 print ''
-            
+
 
 
     callgraph = defaultdict(list)
@@ -501,7 +501,6 @@ def check_isolate():
     if temporals:
         if len(temporals) > 1:
             raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
-        from ivy_l2s import l2s
         l2s(mod, temporals[0])
         mod.concept_spaces = []
         mod.update_conjs()
@@ -565,7 +564,7 @@ def check_module():
         else:
             if coverage.get():
                 missing = ivy_isolate.check_isolate_completeness()
-            
+
     if missing:
         raise iu.IvyError(None,"Some assertions are not checked")
 
@@ -608,4 +607,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
