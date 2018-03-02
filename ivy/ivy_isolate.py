@@ -718,16 +718,23 @@ def get_isolate_info(mod,isolate,kind,extra_with=[]):
 
 
     xtra = set(iu.compose_names(a.relname,kind) for a in isolate.verified())
+    verified.update(xtra)
+    present.update(xtra)
+
+    vp = set()
+    for isol in mod.isolates.values():
+        for v in isol.verified():
+            vp.add(v.rep)
     for name in mod.attributes:
         p,c = iu.parent_child_name(name)
         if c == kind or c == "private":
             p1,c1 = iu.parent_child_name(p)
             if p1 in verified:
-                xtra.add(p)
+                if p not in vp:
+                    verified.add(p)
+                present.add(p)
     
 
-    verified.update(xtra)
-    present.update(xtra)
     return verified,present
 
 
@@ -969,12 +976,20 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # filter the conjectures
 
+    iu.dbg('verified')
+    iu.dbg('mod.privates')
+    global vprivates
+    iu.dbg('vprivates')
+    iu.dbg('[c.label for c in  mod.labeled_conjs]')
+
     if iu.version_le(iu.get_string_version(),"1.6"):
         new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
     else:
         new_conjs = [c for c in mod.labeled_conjs if vstartswith_eq_some(c.label.rep,verified,mod)]
         assumed_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,present,mod) and not vstartswith_eq_some(c.label.rep,verified,mod)]
         
+    iu.dbg('[c.label for c in  new_conjs]')
+
     del mod.labeled_conjs[:]
     if not create_imports.get(): # no conjectures if compiling
         mod.labeled_conjs.extend(new_conjs)
@@ -1707,37 +1722,53 @@ def check_isolate_completeness(mod = None):
         
     return missing
 
-# Get the set of actions present in an isolate. 
+
+# Iterate over all the components of and isolate iso in module mod,
+# applying a function fun. If verified is true, include the verified
+# components. If present is true, include the the present components.
+#
+# This is a little tricky, because of sub-isolates. That is, a sub-isolate
+# is considered to be 'present', not 'verified'. 
+#
+# Note that a component may be touched more that once if there are
+# redundant entries in the isolate's 'verified' or 'present' list.
 
 
 def iter_isolate(mod,iso,fun,verified=True,present=True):
     suff = "spec" if isinstance(iso,ivy_ast.ExtractDef) else "impl"
-    def recur(name):
-        fun(name)
+
+    # Record all the isolate roots, so we can detect sub-isolates
+
+    vp = set()
+    for isol in mod.isolates.values():
+        for v in isol.verified():
+            vp.add(v.rep)
+            
+    # Iterate over all the public (non-strict) descendants of a root 'name'.
+    # The parameter 'in_sub' indicidates that we are in a 'present' component.
+    # This parameter is set when we descend into a sub-isolate.
+
+    def recur(name, in_sub=False):
+        if (present if in_sub else verified):
+            fun(name)
         assert not isinstance(name,ivy_ast.This)
         if name in mod.hierarchy:
             for child in mod.hierarchy[name]:
                 cname = iu.compose_names(name,child)
-                if not(child == suff
+                if not in_sub or not(child == suff
                        or iu.compose_names(cname,suff) in mod.attributes
                        or iu.compose_names(cname,'private') in mod.attributes):
-                    recur(cname)
+                    recur(cname, in_sub or cname in vp)
         
-    if verified:
-        for ver in iso.verified():
-            name = ver.rep
-            fun(name)
-            assert not isinstance(name,ivy_ast.This)
-            if name in mod.hierarchy:
-                for child in mod.hierarchy[name]:
-                    cname = iu.compose_names(name,child)
-                    recur(cname)
+    for ver in iso.verified():
+        recur(ver.rep)
 
     if present:
         for pres in iso.present():
-            name = pres.rep
-            recur(name)
+            recur(pres.rep,True)
     
+
+# Get the set of actions present in an isolate. 
 
 def get_isolate_actions(mod,iso):
     actions = set()

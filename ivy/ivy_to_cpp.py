@@ -1712,20 +1712,22 @@ struct ivy_binary_deser : public ivy_deser {
     int pos;
     std::vector<int> lenstack;
     ivy_binary_deser(const std::vector<char> &inp) : inp(inp),pos(0) {}
+    virtual bool more(unsigned bytes) {return inp.size() >= pos + bytes;}
+    virtual bool can_end() {return pos == inp.size();}
     void get(long long &res) {
-        if (inp.size() < pos + sizeof(long long))
+        if (!more(sizeof(long long)))
             throw deser_err();
         res = 0;
         for (int i = 0; i < sizeof(long long); i++)
             res = (res << 8) | (((long long)inp[pos++]) & 0xff);
     }
     void get(std::string &res) {
-        while (pos < inp.size() && inp[pos]) {
+        while (more(1) && inp[pos]) {
 //            if (inp[pos] == '\"')
 //                throw deser_err();
             res.push_back(inp[pos++]);
         }
-        if(!(pos < inp.size() && inp[pos] == 0))
+        if(!(more(1) && inp[pos] == 0))
             throw deser_err();
         pos++;
     }
@@ -1755,10 +1757,30 @@ struct ivy_binary_deser : public ivy_deser {
         return res;
     }
     void end() {
-        if (pos != inp.size())
+        if (!can_end())
             throw deser_err();
     }
 };
+struct ivy_socket_deser : public ivy_binary_deser {
+      int sock;
+    public:
+      ivy_socket_deser(int sock, const std::vector<char> &inp)
+          : ivy_binary_deser(inp), sock(sock) {}
+    virtual bool more(unsigned bytes) {
+        while (inp.size() < pos + bytes) {
+            int get = pos + bytes - inp.size();
+            get = (get < 256) ? 256 : get;
+            int bytes;
+	    if ((bytes = recvfrom(sock,&buf[0],get,0,0,0)) < 0)
+		 { std::cerr << "recvfrom failed\n"; exit(1); }
+            if (bytes == 0)
+                 return false;
+        }
+        return true;
+    }
+    virtual bool can_end() {return true;}
+}
+
 struct out_of_bounds {
     std::string txt;
     int pos;
