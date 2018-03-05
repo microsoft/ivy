@@ -423,7 +423,7 @@ def has_side_effect(mod,new_actions,actname):
     return has_side_effect_rec(mod,new_actions,actname,set())
 
 
-def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops):
+def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops,interf_syms):
     if actname in calls or actname not in summarized_actions:
         return
     action = mod.actions[actname]
@@ -437,13 +437,13 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops):
     loops[actname] = aloops
     for sub in action.iter_subactions():
         for sym in sub.modifies():
-            if sym.name in mod.sig.symbols:
+            if sym in interf_syms:
                 amods.add(sym)
         if isinstance(sub,ia.CallAction):
             calledname = sub.args[0].rep
             if calledname not in summarized_actions:
                 acalls.add(calledname)
-            get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops)
+            get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops,interf_syms)
             if calledname in calls:
                 acalls.update(calls[calledname])
                 acalls.update(mixins[calledname]) # tricky -- mixins of callees count as callees
@@ -455,7 +455,7 @@ def get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops):
         calledname = mixin.args[0].relname
         if calledname not in summarized_actions:
             amixins.add(calledname)
-        get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops)
+        get_calls_mods(mod,summarized_actions,calledname,calls,mods,mixins,loops,interf_syms)
         if calledname in calls:
             acalls.update(calls[calledname])
             amixins.update(mixins[calledname]) # mixins of mixins count as mixins
@@ -517,14 +517,14 @@ def find_references(mod,syms,new_actions):
     return refs
     
 
-def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term):
+def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms):
     calls = dict()
     mods = dict()
     mixins = dict()
     locmods = dict()
     loops = dict()
     for actname in summarized_actions:
-        get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops)
+        get_calls_mods(mod,summarized_actions,actname,calls,mods,mixins,loops,interf_syms)
         locmods[actname] = get_loc_mods(mod,actname)
     callouts = dict()  # these are triples (midcalls,headcalls,tailcalls,bothcalls)
     for actname in new_actions:
@@ -1055,7 +1055,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         for sym in list(all_syms):
             collect_relevant_destructors(sym,all_syms)
 
-
     # check that any dropped axioms do not refer to the isolate's signature
 
     if enforce_axioms.get():
@@ -1082,6 +1081,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 raise iu.IvyError(c,"Definition of {} is referenced, but not present in extract".format(c.formula.args[0].rep)) 
 
 
+    orig_defs = mod.definitions
 
     mod.definitions = [c for c in mod.definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
     mod.native_definitions = [c for c in mod.native_definitions if keep_ax(c.label) and c.formula.args[0].rep in all_syms]
@@ -1144,6 +1144,17 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 #        print iu.pretty(ia.action_def_to_str(x,y))
 
 
+    #check non-interference (temporarily put back in old_actions)
+
+    if do_check_interference.get():
+        interf_syms = set(ivy_logic.all_symbols())
+        follow_definitions(orig_defs,interf_syms)
+        save_new_actions = mod.actions
+        mod.actions = old_actions
+        check_term = enforce_axioms.get() and iu.version_le("1.7",iu.get_string_version())
+        check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms)
+        mod.actions = save_new_actions
+
     # filter the sorts
 
     if filter_symbols.get() or cone_of_influence.get():
@@ -1176,14 +1187,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 del mod.destructor_sorts[destr]
 
 
-    #check non-interference (temporarily put back in old_actions)
-
-    if do_check_interference.get():
-        save_new_actions = mod.actions
-        mod.actions = old_actions
-        check_term = enforce_axioms.get() and iu.version_le("1.7",iu.get_string_version())
-        check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term)
-        mod.actions = save_new_actions
 
     # check that native code does not occur in an untrusted isolate
 
