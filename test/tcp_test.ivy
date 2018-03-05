@@ -1,5 +1,7 @@
 #lang ivy1.7
 
+include tcp_impl
+
 module tcp_network(addr,pkt) = {
 
     type socket
@@ -10,7 +12,7 @@ module tcp_network(addr,pkt) = {
 
     action connect(self:addr,other:addr) returns (s:socket)
 
-    action send(self:addr,s:socket,p:pkt)
+    action send(self:addr,s:socket,p:pkt) returns (ok:bool)
 
 # callbacks
 
@@ -67,9 +69,11 @@ module tcp_network(addr,pkt) = {
         around send {
             require open(self,s);
             ...
-            if some (other:addr,s2:socket) conn(self,s,other,s2) {
-                sent_to(other,s2,p) := true
-            }
+            if ok {
+                if some (other:addr,s2:socket) conn(self,s,other,s2) {
+                    sent_to(other,s2,p) := true
+                }
+            } 
         }
 
         before recv {
@@ -104,257 +108,9 @@ module tcp_network(addr,pkt) = {
     
     implementation {
     
-        object impl(self:addr) = {
-
-
-    <<< header
-	class tcp_reader;
-
-        class tcp_config {
-	public:
-	    virtual void get(int id, unsigned long &inetaddr, unsigned long &inetport);
-        };
-    >>>
-
-    <<< impl
-        void tcp_config::get(int id, unsigned long &inetaddr, unsigned long &inetport) {
-#ifdef _WIN32
-	        inetaddr = ntohl(inet_addr("127.0.0.1")); // can't send to INADDR_ANY in windows
-#else
-	        inetaddr = INADDR_ANY;
-#endif
-	        inetport = `port_base`+ id;
-        }
-
-        struct tcp_callbacks {
-	    %`handle_accept` acb;
-	    %`handle_recv` rcb;
-	    %`handle_fail` fcb;
-	    %`handle_connected` ccb;
-        }
-
-        class tcp_task : public reader {
-	    int sock;
-	    int my_id;
-            tcp_callbacks cb;
-	    ivy_class *ivy;
-	    tcp_config *conf;
-          public:
-            tcp_task(int my_id, int sock, const tcp_callbacks &cb, ivy_class *ivy)
-              : my_id(_my_id), sock(sock), cb(cb), ivy(ivy), conf(0) {} 
-
-            tcp_config *get_conf() {
-	        if (!conf) {
-	            conf = ivy -> get_tcp_config();
-                }
-                return conf;
-            }
-
-	    virtual void get_addr(int my_id, sockaddr_in &myaddr) {
-		memset((char *)&myaddr, 0, sizeof(myaddr));
-		unsigned long inetaddr;
-		unsigned long inetport;
-		get_conf() -> get(my_id,inetaddr,inetport);
-		myaddr.sin_family = AF_INET;
-		myaddr.sin_addr.s_addr = htonl(inetaddr);
-		myaddr.sin_port = htons(inetport);
-	    }
-
-            virtual int get_id(const sockaddr_in &myaddr) {
-               return get_conf() -> rev(ntohl(other_addr.sin_addr.s_addr), ntohs(other_addr.addr.sin_port));
-            }
-
-	    virtual int fdes() {
-		return sock;
-	    }
-
-
-        };
-
-        class tcp_listener : public tcp_task {
-	  public:
-	    tcp_listener(int _my_id, const tcp_callbacks &cb, ivy_class *ivy)
-	        : tcp_task(my_id,0,cb,ivy) {
-		sock = ::socket(AF_INET, SOCK_STREAM, 0);
-		if (sock < 0)
-		    { std::cerr << "cannot create socket\n"; exit(1); }
-            }
-
-	    virtual void bind() {
-	        ivy -> __lock();  // can be asynchronous, so must lock ivy!
-                struct sockaddr_in myaddr;
-                get_addr(my_id,myaddr);
-//                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
-                if (::bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
-                    { std::cerr << "bind failed\n"; exit(1); }
-                if (listen(sock,2) < 0) 
-                    { std::cerr << "cannot listen on socket\n"; exit(1); }
-	        ivy -> __unlock();
-	    }
-
-	    virtual ~tcp_listener() {
-#ifdef _WIN32
-                closesocket(sock);
-#else
-	        close(sock);
-#endif
-	    }
-
-	    virtual void read() {
-		std::cout << "ACCEPTING\n";
-                sockaddr_in other_addr;
-                socklen_t addrlen = sizeof(other_addr);    
-                int new_sock = accept(sock, &other_addr, &addrlen);
-                if (new_sock < 0)
-	            { perror("accept failed"); exit(1); }
-		int other = get_id(other_addr);
-		ivy->__lock();
-		acb(new_sock,other);
-		ivy->__unlock();
-	        install_reader(new tcp_reader(my_id,new_sock,other,rcb,fcb,ivy));
-            }
-	};
-
-        class tcp_connector: public tcp_task {
-
-            int other;
-	    std::vector<char> buf;  // holds left-over bytes from last read
-
-	  public:
-
-	    tcp_reader(int _my_id, int sock, const tcp_callbacks &cb, ivy_class *ivy)
-	        : tcp_task(my_id,0,cb,ivy), other(other) {
-            }
-
-	    virtual void read() {
-		std::cout << "CONNECTING\n";
-	        `pkt` pkt;
-		ivy_socket_deser ds(sock,buf);
-                buf.clear();
-	        try {
-		    __deser(ds,pkt);
-                } catch (deser_err &) {
-                    if (ds.pos > 0)
-		        std::cout << "BAD PACKET RECEIVED\n";
-                    else
-		        std::cout << "EOF ON SOCKET\n";
-                    cb.fcb(sock);
-                    close(sock);
-                    sock = -1;
-		    return;
-		}
-                buf.resize(ds.inp.size()-ds.pos);  // capture the unused bytes
-                std::copy(ds.inp.begin()+ds.pos,ds.inp.end(),buf.begin())
-		ivy->__lock();
-		rcb(pkt);
-		ivy->__unlock();
-	    }
-	    virtual void write(int dst, `pkt` pkt) {
-	        bind_int();
-		struct sockaddr_in dstaddr;
-		get_addr(dst,dstaddr);
-		ivy_binary_ser sr;
-	        __ser(sr,pkt);
-		//std::cout << "SENDING\n";
-		if (sendto(sock,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
-#ifdef _WIN32
-		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
-#else
-		     { std::cerr << "sendto failed\n"; exit(1); }
-#endif
-	    }
-	};
-
-	class tcp_reader : public reader {
-	    int sock;
-	    int my_id;
-            int other;
-	    %`handle_recv` rcb;
-	    %`handle_fail` fcb;
-	    ivy_class *ivy;
-	    std::vector<char> buf;
-	  public:
-	    tcp_reader(int _my_id, int sock, int other, %`handle_recv` rcb, %`handle_fail` fcb, ivy_class *ivy)
-	        : my_id(_my_id), sock(sock), other(other), rcb(rcb), fcb(fcb), ivy(ivy)  {
-            }
-	    virtual int fdes() {
-		return sock;
-	    }
-	    virtual void read() {
-		std::cout << "RECEIVING\n";
-	        `pkt` pkt;
-		ivy_socket_deser ds(sock,buf);
-	        try {
-                    buf.clear();
-		    __deser(ds,pkt);
-                    buf.resize(ds.inp.size()-ds.pos);
-                    std::copy(ds.inp.begin()+ds.pos,ds.inp.end(),buf.begin())
-                } catch (deser_err &){
-                    if (ds.pos > 0)
-		        std::cout << "BAD PACKET RECEIVED\n";
-                    else
-		        std::cout << "EOF ON SOCKET\n";
-                    fcb(sock);
-                    close(sock);
-                    sock = -1;
-		    return;
-		}
-		ivy->__lock();
-		rcb(pkt);
-		ivy->__unlock();
-	    }
-	    virtual void write(int dst, `pkt` pkt) {
-	        bind_int();
-		struct sockaddr_in dstaddr;
-		get_addr(dst,dstaddr);
-		ivy_binary_ser sr;
-	        __ser(sr,pkt);
-		//std::cout << "SENDING\n";
-		if (sendto(sock,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
-#ifdef _WIN32
-		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
-#else
-		     { std::cerr << "sendto failed\n"; exit(1); }
-#endif
-	    }
-	};
-
-
-    >>>
-    <<< member
-	tcp_reader *`rdr`;
-
-        tcp_config *the_tcp_config;        
-
-        tcp_config *get_tcp_config() {
-	    if (!the_tcp_config) 
-	        the_tcp_config = new tcp_config();
-	    return the_tcp_config; 
-	}
-
-        void set_tcp_config(tcp_config *conf) {
-	    the_tcp_config = conf;
-        }
-    >>>
-    <<< init
-        the_tcp_config = 0;
-	install_reader(`rdr` = new tcp_reader(`me`,`handle_recv`, this));
-    >>>
-
-    action handle_recv(x:pkt) = {
-	call recv(me,x)
-    }
-
-    implement send(dst:addr,x:pkt) {
-	<<< impure
-	    `rdr`->write(`dst`,`x`);
-	>>>
-    }
-
-        }
+        instance impl(X:addr) : tcp_impl(addr,pkt,X,5990)
 
     }
-
 
     isolate iso = this
 }
@@ -406,7 +162,13 @@ module simple_tcp(addr,pkt) = {
                         pend(dst) := true
                     }
                 } else {
-                    call tcp.send(self,sock(dst),v)
+                    var ok := tcp.send(self,sock(dst),v);
+                    if ~ok {
+                        call tcp.close(self,sock(dst));
+                        sock(dst) := tcp.connect(self,dst);
+                        isup(dst) := false;
+                        pend(dst) := true
+                    }
                 }
             }
 
@@ -452,12 +214,22 @@ type pkt
 instance net : simple_tcp(addr,pkt)
 
 export net.send
-export net.tcp.recv
-export net.tcp.connected
-export net.tcp.accept
-export net.tcp.failed
+
+# export net.tcp.recv
+# export net.tcp.connected
+# export net.tcp.accept
+# export net.tcp.failed
 
 import net.recv
+
+isolate test = {
+    implementation {
+        interpret addr -> bv[1]
+        interpret pkt -> int
+    }
+}
+
+extract iso_impl = this,test
 
 # instance net : tcp_network(addr,pkt)
 

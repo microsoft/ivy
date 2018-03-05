@@ -1508,9 +1508,10 @@ DWORD WINAPI TimerThreadFunction( LPVOID lpParam )
 void * _thread_reader(void *rdr_void) {
     reader *rdr = (reader *) rdr_void;
     rdr->bind();
-    while(true) {
+    while(rdr->fdes() >= 0) {
         rdr->read();
     }
+    delete rdr;
     return 0; // just to stop warning
 }
 
@@ -1769,17 +1770,18 @@ struct ivy_socket_deser : public ivy_binary_deser {
     virtual bool more(unsigned bytes) {
         while (inp.size() < pos + bytes) {
             int get = pos + bytes - inp.size();
-            get = (get < 256) ? 256 : get;
+            get = (get < 1024) ? 1024 : get;
+            inp.resize(pos + get);
             int bytes;
-	    if ((bytes = recvfrom(sock,&buf[0],get,0,0,0)) < 0)
-		 { std::cerr << "recvfrom failed\n"; exit(1); }
+	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+		 { std::cerr << "recvfrom failed\\n"; exit(1); }
             if (bytes == 0)
                  return false;
         }
         return true;
     }
     virtual bool can_end() {return true;}
-}
+};
 
 struct out_of_bounds {
     std::string txt;
