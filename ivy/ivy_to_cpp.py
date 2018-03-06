@@ -1508,9 +1508,10 @@ DWORD WINAPI TimerThreadFunction( LPVOID lpParam )
 void * _thread_reader(void *rdr_void) {
     reader *rdr = (reader *) rdr_void;
     rdr->bind();
-    while(true) {
+    while(rdr->fdes() >= 0) {
         rdr->read();
     }
+    delete rdr;
     return 0; // just to stop warning
 }
 
@@ -1592,9 +1593,12 @@ void CLASSNAME::install_timer(timer *r) {
         impl.append("""
 std::vector<reader *> readers;
 std::vector<timer *> timers;
+bool initializing = false;
 
 void CLASSNAME::install_reader(reader *r) {
     readers.push_back(r);
+    if (!initializing)
+        r->bind();
 }
 void CLASSNAME::install_timer(timer *r) {
     timers.push_back(r);
@@ -1712,20 +1716,22 @@ struct ivy_binary_deser : public ivy_deser {
     int pos;
     std::vector<int> lenstack;
     ivy_binary_deser(const std::vector<char> &inp) : inp(inp),pos(0) {}
+    virtual bool more(unsigned bytes) {return inp.size() >= pos + bytes;}
+    virtual bool can_end() {return pos == inp.size();}
     void get(long long &res) {
-        if (inp.size() < pos + sizeof(long long))
+        if (!more(sizeof(long long)))
             throw deser_err();
         res = 0;
         for (int i = 0; i < sizeof(long long); i++)
             res = (res << 8) | (((long long)inp[pos++]) & 0xff);
     }
     void get(std::string &res) {
-        while (pos < inp.size() && inp[pos]) {
+        while (more(1) && inp[pos]) {
 //            if (inp[pos] == '\"')
 //                throw deser_err();
             res.push_back(inp[pos++]);
         }
-        if(!(pos < inp.size() && inp[pos] == 0))
+        if(!(more(1) && inp[pos] == 0))
             throw deser_err();
         pos++;
     }
@@ -1755,10 +1761,32 @@ struct ivy_binary_deser : public ivy_deser {
         return res;
     }
     void end() {
-        if (pos != inp.size())
+        if (!can_end())
             throw deser_err();
     }
 };
+struct ivy_socket_deser : public ivy_binary_deser {
+      int sock;
+    public:
+      ivy_socket_deser(int sock, const std::vector<char> &inp)
+          : ivy_binary_deser(inp), sock(sock) {}
+    virtual bool more(unsigned bytes) {
+        while (inp.size() < pos + bytes) {
+            int get = pos + bytes - inp.size();
+            get = (get < 1024) ? 1024 : get;
+            inp.resize(pos + get);
+            int bytes;
+	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+		 { std::cerr << "recvfrom failed\\n"; exit(1); }
+            inp.resize(pos + bytes);
+            if (bytes == 0)
+                 return false;
+        }
+        return true;
+    }
+    virtual bool can_end() {return true;}
+};
+
 struct out_of_bounds {
     std::string txt;
     int pos;
@@ -2446,6 +2474,7 @@ class z3_thunk : public thunk<D,R> {
                 emit_winsock_init(impl)
                 if target.get() == "test":
                     impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
+                    impl.append('    initializing = true;\n')
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
                 if target.get() == "test":
@@ -3694,6 +3723,11 @@ def emit_repl_boilerplate3(header,impl,classname):
 def emit_repl_boilerplate3test(header,impl,classname):
     impl.append("""
         ivy.__unlock();
+        initializing = false;
+        for(int rdridx = 0; rdridx < readers.size(); rdridx++) {
+            readers[rdridx]->bind();
+        }
+                    
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
@@ -3774,7 +3808,9 @@ def emit_repl_boilerplate3test(header,impl,classname):
         for (unsigned i = 0; i < readers.size(); i++) {
             reader *r = readers[i];
             int fds = r->fdes();
-            FD_SET(fds,&rdfds);
+            if (fds >= 0) {
+                FD_SET(fds,&rdfds);
+            }
             if (fds > maxfds)
                 maxfds = fds;
         }
