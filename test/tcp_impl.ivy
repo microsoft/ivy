@@ -68,11 +68,11 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     // construct a sockaddr_in for a specified process id using the configuration
 
-    void get_tcp_addr(int my_id, sockaddr_in &myaddr) {
+    void get_tcp_addr(ivy_class *ivy, int my_id, sockaddr_in &myaddr) {
         memset((char *)&myaddr, 0, sizeof(myaddr));
         unsigned long inetaddr;
         unsigned long inetport;
-        get_tcp_config() -> get(my_id,inetaddr,inetport);
+        ivy->get_tcp_config() -> get(my_id,inetaddr,inetport);
         myaddr.sin_family = AF_INET;
         myaddr.sin_addr.s_addr = htonl(inetaddr);
         myaddr.sin_port = htons(inetport);
@@ -80,8 +80,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     // get the process id of a sockaddr_in using the configuration in reverse
 
-    int get_tcp_id(const sockaddr_in &myaddr) {
-       return get_tcp_config() -> rev(ntohl(other_addr.sin_addr.s_addr), ntohs(other_addr.addr.sin_port));
+    int get_tcp_id(ivy_class *ivy, const sockaddr_in &myaddr) {
+       return ivy->get_tcp_config() -> rev(ntohl(myaddr.sin_addr.s_addr), ntohs(myaddr.sin_port));
     }
 
     // get a new TCP socket
@@ -90,7 +90,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
         int sock = ::socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0)
             { std::cerr << "cannot create socket\n"; exit(1); }
-        return sock
+        return sock;
+    }
     
 
     // This structure holds all the callbacks for the endpoint. These are function objects
@@ -101,7 +102,12 @@ module tcp_impl(addr,pkt,me,port_base) = {
         %`handle_recv` rcb;
         %`handle_fail` fcb;
         %`handle_connected` ccb;
-    }
+        tcp_callbacks(const %`handle_accept` &acb,
+                      const %`handle_recv` &rcb,
+                      const %`handle_fail` &fcb,
+                      const %`handle_connected` ccb)
+            : acb(acb), rcb(rcb), fcb(fcb), ccb(ccb) {}
+    };
 
     // This is a general class for an asynchronous task. These objects are called in a loop
     // by a thread allocated by the runtime. The fdes method returns a file descriptor
@@ -109,7 +115,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
     // object and terminates.
 
     class tcp_task : public reader {
-
+      protected:
         int sock;           // socket associated to this task, or -1 if task complete
         int my_id;          // endpoint id associated to this task
         tcp_callbacks cb;   // callbacks to ivy
@@ -118,13 +124,63 @@ module tcp_impl(addr,pkt,me,port_base) = {
       public:
 
         tcp_task(int my_id, int sock, const tcp_callbacks &cb, ivy_class *ivy)
-          : my_id(_my_id), sock(sock), cb(cb), ivy(ivy) {} 
+          : my_id(my_id), sock(sock), cb(cb), ivy(ivy) {} 
 
         virtual int fdes() {
             return sock;
         }
 
 
+    };
+
+
+    // This task reads messages from a socket and calls the "recv" callback.
+
+    class tcp_reader : public tcp_task {
+        std::vector<char> buf;
+      public:
+        tcp_reader(int my_id, int sock, const tcp_callbacks &cb, ivy_class *ivy)
+            : tcp_task(my_id, sock, cb, ivy) {
+        }
+
+        // This is called in a loop by the task thread.
+
+        virtual void read() {
+//            std::cout << "RECEIVING\n";
+
+            `pkt` pkt;                      // holds received message
+            ivy_socket_deser ds(sock,buf);  // initializer deserialize with any leftover bytes
+            buf.clear();                    // clear the leftover bytes
+
+            try {
+                __deser(ds,pkt);            // read the message
+            } 
+
+            // If packet has bad syntax, we drop it, close the socket, call the "failed"
+            // callback and terminate the task.
+
+            catch (deser_err &){
+                if (ds.pos > 0)
+                    std::cout << "BAD PACKET RECEIVED\n";
+                else
+                    std::cout << "EOF ON SOCKET\n";
+                cb.fcb(sock);
+                close(sock);
+                sock = -1;
+                return;
+            }
+
+            // copy the leftover bytes to buf
+
+            buf.resize(ds.inp.size()-ds.pos);
+            std::copy(ds.inp.begin()+ds.pos,ds.inp.end(),buf.begin());
+
+            // call the "recv" callback with the received message
+
+            ivy->__lock();
+            cb.rcb(sock,pkt);
+            ivy->__unlock();
+        }
     };
 
     // This task listens for connections on a socket in the background. 
@@ -134,7 +190,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
         // The constructor creates a socket to listen on.
 
-        tcp_listener(int _my_id, const tcp_callbacks &cb, ivy_class *ivy)
+        tcp_listener(int my_id, const tcp_callbacks &cb, ivy_class *ivy)
             : tcp_task(my_id,0,cb,ivy) {
             sock = make_tcp_socket();
         }
@@ -147,7 +203,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
             // Get our endpoint address from the configuration
             struct sockaddr_in myaddr;
-            get_tcp_addr(my_id,myaddr);
+            get_tcp_addr(ivy,my_id,myaddr);
 
 //                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
 
@@ -174,22 +230,22 @@ module tcp_impl(addr,pkt,me,port_base) = {
             // Call accept to get an incoming connection request. May block.
             sockaddr_in other_addr;
             socklen_t addrlen = sizeof(other_addr);    
-            int new_sock = accept(sock, &other_addr, &addrlen);
+            int new_sock = accept(sock, (sockaddr *)&other_addr, &addrlen);
 
             // If this fails, something is very wrong: fail stop.
             if (new_sock < 0)
                 { perror("accept failed"); exit(1); }
 
             // Get the endpoint id of the other from its address.
-            int other = get_tcp_id(other_addr);
+            int other = get_tcp_id(ivy,other_addr);
 
             // Run the "accept" callback. Since it's async, we must lock.
             ivy->__lock();
-            acb(new_sock,other);
+            cb.acb(new_sock,other);
             ivy->__unlock();
 
             // Install a reader task to read messages from the new socket.
-            install_reader(new tcp_reader(my_id,new_sock,other,cb,ivy));
+            ivy->install_reader(new tcp_reader(my_id,new_sock,cb,ivy));
         }
     };
 
@@ -217,74 +273,25 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
             ivy -> __lock();               // can be asynchronous, so must lock ivy!
             struct sockaddr_in myaddr;
-            get_tcp_addr(other,myaddr);
+            get_tcp_addr(ivy,other,myaddr);
             ivy -> __unlock(); 
 
             // Call connect to make connection
 
-            int res = connect(sock,&myaddr,sizeof(myaddr));
+            int res = connect(sock,(sockaddr *)&myaddr,sizeof(myaddr));
 
             // If successful, call the "connected" callback, else "failed"
             
             ivy->__lock();
             if (res >= 0) 
-                ccb(sock);
+                cb.ccb(sock);
             else
-                fcb(sock);
+                cb.fcb(sock);
             ivy->__unlock();
 
             // Set sock to -1 to end task
 
             sock = -1;
-        }
-    };
-
-    // This task reads messages from a socket and calls the "recv" callback.
-
-    class tcp_reader : public reader {
-        std::vector<char> buf;
-      public:
-        tcp_reader(int my_id, int sock, const tcp_callbacks &cb, ivy_class *ivy)
-            : tcp_task(my_id, sock, cb, ivy) {
-        }
-
-        // This is called in a loop by the task thread.
-
-        virtual void read() {
-            std::cout << "RECEIVING\n";
-
-            `pkt` pkt;                      // holds received message
-            ivy_socket_deser ds(sock,buf);  // initializer deserialize with any leftover bytes
-            buf.clear();                    // clear the leftover bytes
-
-            try {
-                __deser(ds,pkt);            // read the message
-            } 
-
-            // If packet has bad syntax, we drop it, close the socket, call the "failed"
-            // callback and terminate the task.
-
-            catch (deser_err &){
-                if (ds.pos > 0)
-                    std::cout << "BAD PACKET RECEIVED\n";
-                else
-                    std::cout << "EOF ON SOCKET\n";
-                fcb(sock);
-                close(sock);
-                sock = -1;
-                return;
-            }
-
-            // copy the leftover bytes to buf
-
-            buf.resize(ds.inp.size()-ds.pos);
-            std::copy(ds.inp.begin()+ds.pos,ds.inp.end(),buf.begin())
-
-            // call the "recv" callback with the received message
-
-            ivy->__lock();
-            cb.rcb(sock,pkt);
-            ivy->__unlock();
         }
     };
 
@@ -337,10 +344,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
     // that captures the instance environment, in this case including
     // the instance's endpoint id "me".
 
-    `cb`->acb = `handle_accept`;
-    `cb`->rcb = `handle_recv`;
-    `cb`->fcb = `handle_fail`;
-    `cb`->ccb = `handle_connected`;
+    `cb` = new tcp_callbacks(`handle_accept`,`handle_recv`,`handle_fail`,`handle_connected`);
 
     // Install a listener task for this endpoint. If parameterized, this creates
     // one for each endpoint.
@@ -375,7 +379,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     implement close(s:socket) {
         <<< impure
-                ::close(s)
+                ::close(s);
         >>>
     }
 
@@ -385,19 +389,19 @@ module tcp_impl(addr,pkt,me,port_base) = {
     implement connect(other:addr) returns (s:socket) {
         <<< impure
             s = make_tcp_socket();
-            install_reader(new tcp_connector(`me`,s,other,`cb`,this));
+            install_reader(new tcp_connector(`me`,s,other,*`cb`,this));
         >>>
     }
 
     # send serializes the message and calls unix send to send it in the
     # given socket. It returns true is sending was successful.
 
-    implement send(s:socket,x:pkt) returns (ok:bool) {
+    implement send(s:socket,p:pkt) returns (ok:bool) {
         <<< impure
                 ivy_binary_ser sr;
-                __ser(sr,pkt);
-                std::cout << "SENDING\n";
-                ok = send(sock,&sr.res[0],sr.res.size(),MSG_NOSIGNAL) >= 0;
+                __ser(sr,p);
+//                std::cout << "SENDING\n";
+                ok = send(s,&sr.res[0],sr.res.size(),MSG_NOSIGNAL) >= 0;
         >>>
     }
 
@@ -405,4 +409,5 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     trusted isolate iso = this
 
+    attribute test = impl
 }

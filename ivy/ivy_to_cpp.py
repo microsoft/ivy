@@ -1593,9 +1593,12 @@ void CLASSNAME::install_timer(timer *r) {
         impl.append("""
 std::vector<reader *> readers;
 std::vector<timer *> timers;
+bool initializing = false;
 
 void CLASSNAME::install_reader(reader *r) {
     readers.push_back(r);
+    if (!initializing)
+        r->bind();
 }
 void CLASSNAME::install_timer(timer *r) {
     timers.push_back(r);
@@ -1775,6 +1778,7 @@ struct ivy_socket_deser : public ivy_binary_deser {
             int bytes;
 	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
 		 { std::cerr << "recvfrom failed\\n"; exit(1); }
+            inp.resize(pos + bytes);
             if (bytes == 0)
                  return false;
         }
@@ -2470,6 +2474,7 @@ class z3_thunk : public thunk<D,R> {
                 emit_winsock_init(impl)
                 if target.get() == "test":
                     impl.append('    for(int runidx = 0; runidx < runs; runidx++) {\n')
+                    impl.append('    initializing = true;\n')
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
                 if target.get() == "test":
@@ -3718,6 +3723,11 @@ def emit_repl_boilerplate3(header,impl,classname):
 def emit_repl_boilerplate3test(header,impl,classname):
     impl.append("""
         ivy.__unlock();
+        initializing = false;
+        for(int rdridx = 0; rdridx < readers.size(); rdridx++) {
+            readers[rdridx]->bind();
+        }
+                    
         init_gen my_init_gen;
         my_init_gen.generate(ivy);
         std::vector<gen *> generators;
@@ -3798,7 +3808,9 @@ def emit_repl_boilerplate3test(header,impl,classname):
         for (unsigned i = 0; i < readers.size(); i++) {
             reader *r = readers[i];
             int fds = r->fdes();
-            FD_SET(fds,&rdfds);
+            if (fds >= 0) {
+                FD_SET(fds,&rdfds);
+            }
             if (fds > maxfds)
                 maxfds = fds;
         }

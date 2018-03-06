@@ -24,14 +24,15 @@ module tcp_network(addr,pkt) = {
 
     action connected(self:addr,s:socket)
     
-    specification {
-
         var open(A:addr,S:socket) : bool
         var req(A1:addr,S1:socket,A2:addr) : bool
         var ack(A1:addr,S1:socket) : bool
         var conn(A1:addr,S1:socket,A2:addr,S2:socket) : bool
         var sent_to(A:addr,S:socket,P:pkt) : bool
         
+    object spec =  {
+
+
         after init {
             open(A,S) := false;
             req(A,S,A1) := false;
@@ -106,13 +107,10 @@ module tcp_network(addr,pkt) = {
     }
 
     
-    implementation {
-    
-        instance impl(X:addr) : tcp_impl(addr,pkt,X,5990)
-
-    }
+    instance impl(X:addr) : tcp_impl(addr,pkt,X,5990)
 
     isolate iso = this
+    attribute test = impl
 }
 
 module simple_tcp(addr,pkt) = {
@@ -189,9 +187,11 @@ module simple_tcp(addr,pkt) = {
 
             implement tcp.failed(s:tcp.socket) {
                 if some(other:addr) (isup(other) | pend(other)) & sock(other) = s {
+                    # isup(other) := false;
+                    # pend(other) := true;
+                    # sock(other) := tcp.connect(self,other);
                     isup(other) := false;
-                    pend(other) := true;
-                    sock(other) := tcp.connect(self,other);
+                    pend(other) := false;
                 }
             }
 
@@ -225,11 +225,16 @@ import net.recv
 isolate test = {
     implementation {
         interpret addr -> bv[1]
-        interpret pkt -> int
+        interpret pkt -> bv[1]
+        interpret net.tcp.socket -> bv[4]
     }
 }
 
 extract iso_impl = this,test
+
+isolate iso_test = net,test with net.tcp,net.tcp.impl
+
+extract iso_proc(self:addr) = net(self),test
 
 # instance net : tcp_network(addr,pkt)
 
