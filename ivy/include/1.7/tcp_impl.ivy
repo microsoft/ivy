@@ -372,6 +372,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
         call connected(me,s)
     }
 
+    object impl = {
+
     # These are the implementations of the interface calls. These
     # operations are synchronous.
 
@@ -406,6 +408,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
     }
 
     # This has to be a trusted isolate, since ivy can't verify C++ code formally.
+
+    }
 
     trusted isolate iso = this
 

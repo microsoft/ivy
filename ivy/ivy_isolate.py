@@ -976,11 +976,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     # filter the conjectures
 
-    iu.dbg('verified')
-    iu.dbg('mod.privates')
     global vprivates
-    iu.dbg('vprivates')
-    iu.dbg('[c.label for c in  mod.labeled_conjs]')
 
     if iu.version_le(iu.get_string_version(),"1.6"):
         new_conjs = [c for c in mod.labeled_conjs if keep_ax(c.label)]
@@ -988,8 +984,6 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         new_conjs = [c for c in mod.labeled_conjs if vstartswith_eq_some(c.label.rep,verified,mod)]
         assumed_conjs = [c for c in mod.labeled_conjs if startswith_eq_some(c.label.rep,present,mod) and not vstartswith_eq_some(c.label.rep,verified,mod)]
         
-    iu.dbg('[c.label for c in  new_conjs]')
-
     del mod.labeled_conjs[:]
     if not create_imports.get(): # no conjectures if compiling
         mod.labeled_conjs.extend(new_conjs)
