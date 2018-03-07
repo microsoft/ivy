@@ -1,0 +1,117 @@
+#lang ivy1.7
+
+module file(data) = {
+    action write(d:data)
+    action read returns (d:data)
+
+    specification {
+        var contents : data
+        before write {
+            contents := d;
+        }
+        after read {
+            ensure d = contents
+        }
+    }
+}
+
+object intf = {
+    action ping
+    action pong
+}
+
+type side_t = {left,right}
+
+object spec = {
+    individual side : side_t
+
+    after init {
+        side := left
+    }
+
+    before intf.ping {
+	assert side = left;
+	side := right
+    }
+
+    before intf.pong {
+	assert side = right;
+	side := left
+    }
+}
+
+object left_player = {
+
+    individual ball : bool
+
+    instance backup : file(bool)
+
+    after init {
+        ball := true;
+        call backup.write(ball)
+    }
+
+    action async = {
+	if ball {
+	    call intf.ping;
+	    ball := false;
+            call backup.write(ball)
+	}
+    }
+    
+    implement intf.pong {
+	ball := true;
+        call backup.write(ball)
+    }
+
+    action crash = *
+
+    after crash {
+        ball := backup.read;
+    }
+
+    conjecture left_player.ball -> spec.side = left
+    conjecture ball <-> backup.contents
+}
+
+object right_player = {
+    individual ball : bool
+
+    instance backup : file(bool)
+
+    after init {
+        ball := false;
+        call backup.write(ball)
+    }
+
+    action async = {
+	if ball {
+	    call intf.pong;
+	    ball := false;
+            call backup.write(ball)
+	}
+    }
+    
+    implement intf.ping {
+	ball := true;
+        call backup.write(ball)
+    }
+
+    action crash = *
+
+    after crash {
+        ball := backup.read;
+    }
+
+    conjecture right_player.ball -> spec.side = right
+    conjecture ball <-> backup.contents
+}
+
+
+export left_player.async
+export right_player.async
+export left_player.crash
+export right_player.crash
+
+isolate iso_l = left_player with spec
+isolate iso_r = right_player with spec
