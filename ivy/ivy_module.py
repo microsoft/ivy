@@ -111,6 +111,8 @@ class Module(object):
             pref,suff = string.rsplit(name,iu.ivy_compose_character,1)
             self.add_to_hierarchy(pref)
             self.hierarchy[pref].add(suff)
+        else:
+            self.hierarchy['this'].add(name)
 
     def add_object(self,name):
         assert not isinstance(name,ivy_ast.This)

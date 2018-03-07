@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef,Ivy,inst_mod
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, ChoiceAction, has_code
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, ChoiceAction, CrashAction, has_code
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -553,6 +553,18 @@ def compile_assert_action(self):
 AssertAction.cmpl = compile_assert_action
 AssumeAction.cmpl = compile_assert_action
 
+def compile_crash_action(self):
+    iu.dbg('self')
+    iu.dbg('type(self.args[0].rep)')
+    name = self.args[0].rep
+    if isinstance(name,ivy_ast.This):
+        name = 'this'
+    thing = ivy_ast.Atom(name,map(sortify_with_inference,self.args[0].args))
+    res = self.clone([thing])
+    return res
+
+CrashAction.cmpl = compile_crash_action
+
 def compile_native_arg(arg):
     if isinstance(arg,ivy_ast.Variable):
         return sortify_with_inference(arg)
@@ -611,6 +623,7 @@ def compile_action_def(a,sig):
             returns = [compile_const(v,sig) for v in a.formal_returns]
     #        print returns
             res = sortify(a.args[1])
+            iu.dbg('res')
             assert hasattr(res,'lineno'), res
             for suba in res.iter_subactions():
                 if isinstance(suba,CallAction):

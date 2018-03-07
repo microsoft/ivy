@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction, CrashAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -1030,6 +1030,11 @@ else:
     'optactiondef : EQ topseq'
     p[0] = p[2]
 
+  def p_optactiondef_eq_symbol(p):
+    'optactiondef : EQ TIMES'
+    p[0] = CrashAction()
+    p[0].lineno = get_lineno(p,2)
+
   def p_optimpex(p):
       'optimpex : '
       p[0] = None
@@ -1048,6 +1053,9 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
+    if isinstance(adef,CrashAction):
+        adef = adef.clone([Atom(This(),p[5])])
+        iu.dbg('adef')
     decl = ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6]))
     p[0].declare(decl)
     for foo in decl.args:

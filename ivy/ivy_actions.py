@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula,symbol_is_polymorphic,is_interpreted_symbol 
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -938,6 +938,55 @@ class LetAction(Action):
         res = subst_action(update,subst)
 #        print "let res: {}".format(res)
         return res
+
+# Havoc all of the non-specification mutable symbols
+
+class CrashAction(Action):
+    def name(self):
+        return 'crash'
+    def __str__(self):
+        return 'crash {}'.format(self.args[0])
+    def modifies(self,domain=None):
+        iu.dbg('self')
+        if domain is None:
+            domain = ivy_module.module
+        lhs = self.args[0]
+        n = lhs.rep
+        iu.dbg('n')
+
+        iu.dbg('domain.sig.symbols')
+        iu.dbg('domain.hierarchy')
+        dfnd = [ldf.formula.defines().name for ldf in domain.definitions]
+        def recur(n,res):
+            if n in domain.hierarchy:
+                for child in domain.hierarchy[n]:
+                    cname = iu.compose_names(n,child)
+                    if child != "spec" and iu.compose_names(cname,"spec") not in domain.attributes:
+                        recur(cname,res)
+            else:
+                if n in domain.sig.symbols and n not in dfnd:
+                    for sym in domain.sig.all_symbols_named(n):
+                        if not symbol_is_polymorphic(sym) and not is_interpreted_symbol(sym):
+                            res.append(sym)
+        syms = []
+        recur(n,syms)
+        return syms
+    def action_update(self,domain,pvars):
+
+        syms = self.modifies(domain)
+        havocs = []
+        for sym in syms:
+            if len(sym.sort.dom) < len(self.args[0].args) or not all(a.sort == s for a,s in zip(self.args[0].args,sym.sort.dom)):
+                raise iu.IvyError(self,'action "{}" cannot be applied to {} because of argument mismatch'.format(self,sym))
+            args = self.args[0].args + [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(sym.sort.dom[len(self.args[0].args):])]
+            havocs.append(HavocAction(sym(*args)))
+
+        seq = Sequence(*havocs)
+        iu.dbg('seq')
+        return seq.int_update(domain,pvars)
+            
+
+    
 
 class NativeAction(Action):
     """ Quote native code in an action """

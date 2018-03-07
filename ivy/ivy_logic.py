@@ -893,6 +893,14 @@ class Sig(object):
             return symbol.sort in sort.sorts
         return True
 
+    def all_symbols_named(self,name):
+        if name not in self.symbols:
+            return []
+        sort = self.symbols[name].sort
+        if isinstance(sort,UnionSort):
+            return [Symbol(name,s) for s in sort.sorts]
+        return [Symbol(name,sort)]
+
     def __str__(self):
         return sig_to_str(self)
 

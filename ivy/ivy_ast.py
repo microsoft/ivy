@@ -974,7 +974,9 @@ class ActionDef(Definition):
         self.formal_returns = [s.prefix('fml:') for s in returns]
         if formals or returns:
             subst = dict((x.rep,y.rep) for x,y in zip(formals+returns,self.formal_params+self.formal_returns))
+            iu.dbg('action')
             action = subst_prefix_atoms_ast(action,subst,None,None)
+            iu.dbg('action')
         self.args = [atom,action]
     def __repr__(self):
         return self.args[0].relname + ' = ' + str(self.args[1])
