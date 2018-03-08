@@ -969,7 +969,12 @@ def native_typeof(arg):
     return int + len(arg.sort.dom) * '[]'
 
 def native_z3name(arg):
-    return arg.sort.name if il.is_variable(arg) else arg.rep.name
+    if il.is_variable(arg):
+        return arg.sort.name
+    rep = arg.rep
+    if isinstance(rep,str):
+        return rep
+    return arg.rep.name
 
 def native_to_str(native,reference=False,code=None):
     if code is None:
@@ -2100,8 +2105,6 @@ class z3_thunk : public thunk<D,R> {
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),csortcard(il.sig.sorts[sortname])))
-    if target.get() not in ["gen","test"]:
-        emit_one_initial_state(impl)
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "init":
@@ -2113,6 +2116,8 @@ class z3_thunk : public thunk<D,R> {
             indent_code(impl,code)
             close_loop(impl,vs)
             indent_level -= 1
+    if target.get() not in ["gen","test"]:
+        emit_one_initial_state(impl)
 
     impl.append('}\n')
 
