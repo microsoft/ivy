@@ -1776,7 +1776,8 @@ struct ivy_socket_deser : public ivy_binary_deser {
             get = (get < 1024) ? 1024 : get;
             inp.resize(pos + get);
             int bytes;
-	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+//	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+	    if ((bytes = read(sock,&inp[pos],get)) < 0)
 		 { std::cerr << "recvfrom failed\\n"; exit(1); }
             inp.resize(pos + bytes);
             if (bytes == 0)
@@ -3261,6 +3262,11 @@ def emit_call(self,header):
         header.append('___ivy_stack.pop_back();\n')
 
 ia.CallAction.emit = emit_call
+
+def emit_crash(self,header):
+    pass
+
+ia.CrashAction.emit = emit_crash
 
 def local_start(header,params,nondet_id=None):
     global indent_level

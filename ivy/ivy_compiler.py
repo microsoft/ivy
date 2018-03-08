@@ -585,6 +585,8 @@ def compile_native_symbol(arg):
         return ivy_logic.Variable('X',ivy_logic.sig.sorts[name])
     if ivy_logic.is_numeral_name(name):
         return ivy_logic.Symbol(name,ivy_logic.TopS)
+    if name in im.module.hierarchy:
+        return compile_native_name(arg)
     raise iu.IvyError(arg,'{} is not a declared symbol or type'.format(name))
 
 def compile_native_action(self):
@@ -599,6 +601,7 @@ def compile_native_name(atom):
     return ivy_ast.Atom(atom.rep,[ivy_ast.Variable(a.rep,resolve_alias(a.sort)) for a in atom.args])
 
 def compile_native_def(self):
+    iu.dbg('self.args')
     fields = self.args[1].code.split('`')
     args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
     return self.clone(args)

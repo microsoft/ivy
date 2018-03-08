@@ -13,6 +13,55 @@ module file(data) = {
             ensure d = contents
         }
     }
+    implementation {
+        object fildes = {}
+        <<< member
+            int fildes;
+        >>>
+        <<< init
+            std::string pathname = "`this`.log";
+            int f = ::open(pathname.cstr(),O_RDWR|O_CREAT|O_TRUNC,0666);
+            if (f < 0) {
+                perror("cannot open file to write");
+            }
+            `fildes` = f;
+        >>>
+        implement write {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            ivy_binary_ser sr;
+            __ser(sr,d);
+            if (::write(`fildes`,&sr.res[0],sr.res.size()) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            if (::ftruncate(`fildes`,&sr.res[0],sr.res.size()) < 0) {
+                perror("cannot truncate file");
+            }
+        >>>
+        }
+        implement read {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            std::vector<char> buf;
+            ivy_socket_deser ds(sock,buf);  // initializer deserializer with zero bytes
+            try {
+                __deser(ds,d);            // read the message
+            } 
+
+            // If file has bad syntax, something really terrible happened so we give up
+
+            catch (deser_err &){
+                std::cerr << "syntax error in log file";
+                exit(1);
+            }
+        >>>
+        }
+    }
+    trusted isolate iso = this 
 }
 
 object intf = {
@@ -115,3 +164,5 @@ export right_player.crash
 
 isolate iso_l = left_player with spec
 isolate iso_r = right_player with spec
+
+extract iso_impl = this
