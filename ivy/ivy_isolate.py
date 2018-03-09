@@ -1282,8 +1282,15 @@ def get_cone(actions,action_name,cone):
     if action_name not in cone:
 #        print '({} '.format(action_name)
         cone.add(action_name)
-        for a in actions[action_name].iter_calls():
-            get_cone(actions,a,cone)
+        for a in actions[action_name].iter_subactions():
+            if isinstance(a,ia.CallAction):
+                get_cone(actions,a.callee(),cone)
+            elif isinstance(a,ia.NativeAction):
+                for arg in a.args[1:]:
+                    if isinstance(arg,ivy_ast.Atom):
+                        n = arg.relname
+                        if n in actions:
+                            get_cone(actions,n,cone)
 #        print ')'
             
 # Get the names of the actions that accessible from a given set of

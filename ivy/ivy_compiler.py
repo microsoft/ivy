@@ -554,8 +554,6 @@ AssertAction.cmpl = compile_assert_action
 AssumeAction.cmpl = compile_assert_action
 
 def compile_crash_action(self):
-    iu.dbg('self')
-    iu.dbg('type(self.args[0].rep)')
     name = self.args[0].rep
     if isinstance(name,ivy_ast.This):
         name = 'this'
@@ -601,7 +599,6 @@ def compile_native_name(atom):
     return ivy_ast.Atom(atom.rep,[ivy_ast.Variable(a.rep,resolve_alias(a.sort)) for a in atom.args])
 
 def compile_native_def(self):
-    iu.dbg('self.args')
     fields = self.args[1].code.split('`')
     args = [compile_native_name(self.args[0]),self.args[1]] + [compile_native_arg(a) if not fields[i*2].endswith('"') else compile_native_symbol(a) for i,a in enumerate(self.args[2:])]
     return self.clone(args)
@@ -626,7 +623,6 @@ def compile_action_def(a,sig):
             returns = [compile_const(v,sig) for v in a.formal_returns]
     #        print returns
             res = sortify(a.args[1])
-            iu.dbg('res')
             assert hasattr(res,'lineno'), res
             for suba in res.iter_subactions():
                 if isinstance(suba,CallAction):

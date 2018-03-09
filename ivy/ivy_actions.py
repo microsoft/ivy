@@ -947,15 +947,10 @@ class CrashAction(Action):
     def __str__(self):
         return 'crash {}'.format(self.args[0])
     def modifies(self,domain=None):
-        iu.dbg('self')
         if domain is None:
             domain = ivy_module.module
         lhs = self.args[0]
         n = lhs.rep
-        iu.dbg('n')
-
-        iu.dbg('domain.sig.symbols')
-        iu.dbg('domain.hierarchy')
         dfnd = [ldf.formula.defines().name for ldf in domain.definitions]
         def recur(n,res):
             if n in domain.hierarchy:
@@ -982,7 +977,6 @@ class CrashAction(Action):
             havocs.append(HavocAction(sym(*args)))
 
         seq = Sequence(*havocs)
-        iu.dbg('seq')
         return seq.int_update(domain,pvars)
             
 

@@ -1622,9 +1622,10 @@ void CLASSNAME::install_timer(timer *r) {
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
-    for n in im.module.actions.values():
-        if isinstance(n,ia.NativeAction):
-            native_exprs.extend(n.args[1:])
+    for actn,actb in im.module.actions.iteritems():
+        for n in actb.iter_subactions():
+            if isinstance(n,ia.NativeAction):
+                native_exprs.extend(n.args[1:])
     callbacks = set()
     for e in native_exprs:
         if isinstance(e,ivy_ast.Atom) and e.rep in im.module.actions:

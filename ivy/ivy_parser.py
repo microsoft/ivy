@@ -1055,7 +1055,6 @@ else:
         adef.lineno = get_lineno(p,4)
     if isinstance(adef,CrashAction):
         adef = adef.clone([Atom(This(),p[5])])
-        iu.dbg('adef')
     decl = ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6]))
     p[0].declare(decl)
     for foo in decl.args:
