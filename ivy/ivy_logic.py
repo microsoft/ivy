@@ -660,7 +660,7 @@ def exclusivity(sort,variants):
     def pto(s):
         return Symbol('*>',RelationSort([sort,s]))
     excs = [partial_function(pto(s)) for s in variants]
-    for s in enumerate(variants):
+    for s in variants:
         x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',sort),('Z',s)]]
         excs.append(Implies(And(pto(s)(x,z),pto(s)(y,z)),Equals(x,y)))
     for i1,s1 in enumerate(variants):
@@ -1228,7 +1228,7 @@ def apply_drop_annotations(self,inferred_sort,annotated_vars):
     name = self.func.name
     if name in polymorphic_symbols:
         arg0 = self.args[0].drop_annotations(inferred_sort and self.sort != lg.Boolean,annotated_vars)
-        rest = [arg.drop_annotations(True,annotated_vars) for arg in self.args[1:]]
+        rest = [arg.drop_annotations(name != '*>',annotated_vars) for arg in self.args[1:]]
         return self.clone([arg0]+rest)
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 

@@ -185,7 +185,7 @@ def compile_field_reference_rec(symbol_name,args,top=False):
                            
 def field_reference_action(actname,args,top):
     nformals = len(top_context.actions[actname][0])
-    return compile_inline_call(ivy_ast.Atom(actname,[]),pull_args(args,nformals,actname,top))
+    return compile_inline_call(ivy_ast.Atom(actname,[]),pull_args(args,nformals,actname,top),methodcall=True)
 
 def compile_field_reference(symbol_name,args):
     try:
@@ -205,7 +205,7 @@ def sort_infer_contravariant(term,sort):
             raise IvyError(None,"cannot convert argument of type {} to {}".format(res.sort,sort))
         return res
 
-def compile_inline_call(self,args):
+def compile_inline_call(self,args,methodcall=False):
     params,returns = top_context.actions[self.rep]
     if return_context is None or return_context.values is None:
         if len(returns) != 1:
@@ -231,7 +231,30 @@ def compile_inline_call(self,args):
         if len(params) != len(args):
             raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
         args = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
-    expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+return_values)))
+
+    call = CallAction(*([ivy_ast.Atom(self.rep,args)]+return_values))
+#    iu.dbg('self')
+#    call.lineno = self.lineno
+
+    # Handle dispatch for method call with variants
+
+    if methodcall and args[0].sort.name in im.module.variants:
+        _,methodname = iu.parent_child_name(self.rep)
+        for vsort in im.module.variants[args[0].sort.name]:
+            vactname = iu.compose_names(vsort.name,methodname)
+            if vactname not in im.module.actions:
+                parent,_ = iu.parent_child_name(vsort.name)
+                vactname = iu.compose_names(parent,methodname)
+                if vactname not in im.module.actions:
+                    continue
+            tmpsym = ivy_logic.Symbol('self:'+vsort.name,vsort)
+            new_call = CallAction(*([ivy_ast.Atom(vactname,[tmpsym] +  args[1:])]+return_values))
+ #           new_call.lineno = self.lineno
+            call = IfAction(ivy_ast.Some(tmpsym,ivy_logic.Symbol('*>',ivy_logic.RelationSort([args[0].sort,vsort]))(args[0],tmpsym)),
+                            new_call,
+                            call)
+
+    expr_context.code.append(call)
     if return_context is None or return_context.values is None:
         return res()
     return None
@@ -398,7 +421,10 @@ def compile_local(self):
                     ctmp_lhs = tmp_lhs.compile()
                     crhs = rhs.compile()
             with ASTContext(self):
-                teq = sort_infer(Equals(ctmp_lhs,crhs))
+                if im.module.is_variant(ctmp_lhs.sort,crhs.sort):
+                    teq = sort_infer(ivy_logic.pto(ctmp_lhs.sort,crhs.sort)(ctmp_lhs,crhs))
+                else:
+                    teq = sort_infer(Equals(ctmp_lhs,crhs))
             clhs,crhs = list(teq.args)
 #            clhs = clhs.drop_prefix('__var_tmp:')
             asgn = v.clone([clhs,crhs])
@@ -491,7 +517,7 @@ def compile_call(self):
     if len(params) != len(args):
         raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))
     with ASTContext(self):
-        mas = [sort_infer(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
+        mas = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
 #        print self.args
     res = CallAction(*([ivy_ast.Atom(name,mas)] + [a.cmpl() for a in self.args[1:]]))
     res.lineno = self.lineno

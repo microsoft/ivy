@@ -1376,8 +1376,8 @@ def p_top_attribute_callatom_eq_callatom(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
-def p_top_variant_symbol_of_symbol(p):
-    'top : top VARIANT SYMBOL OF SYMBOL'
+def p_top_variant_symbol_of_atype(p):
+    'top : top VARIANT typesymbol OF atype'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
@@ -1388,7 +1388,7 @@ def p_top_variant_symbol_of_symbol(p):
     p[0].declare(VariantDecl(vdfn))
 
 def p_top_variant_symbol_of_symbol_eq_sort(p):
-    'top : top VARIANT SYMBOL OF SYMBOL EQ sort'
+    'top : top VARIANT typesymbol OF atype EQ sort'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
