@@ -7,7 +7,7 @@ from ivy_interp import Interp, eval_state_facts
 from functools import partial
 from ivy_concept_space import *
 from ivy_parser import parse,ConstantDecl,ActionDef,Ivy,inst_mod
-from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, ChoiceAction, CrashAction, has_code
+from ivy_actions import DerivedUpdate, type_check_action, type_check, SymbolList, UpdatePattern, ActionContext, LocalAction, AssignAction, CallAction, Sequence, IfAction, WhileAction, AssertAction, AssumeAction, NativeAction, ChoiceAction, CrashAction, ThunkAction, has_code
 from ivy_utils import IvyError
 import ivy_logic
 import ivy_dafny_compiler as dc
@@ -1006,6 +1006,20 @@ class IvyDomainSetup(IvyDeclInterp):
     def mixin(self,m):
         if m.args[1].relname  != 'init' and m.args[1].relname not in top_context.actions:
             raise IvyError(m,'unknown action: {}'.format(m.args[1].relname))
+
+    # Here, we scan the actions for thunks to declare the thunk types 
+    def action(self,a):
+        counter = 0
+        for action in a.args[1].iter_subactions():
+            if isinstance(action,ThunkAction):
+                subtype = ivy_ast.Atom('{}[thunk{}]'.format(action.args[0].relname,counter))
+                counter += 1
+                suptype = action.args[1]
+                tdef = ivy_ast.TypeDef(subtype,UninterpretedSort())
+                self.type(tdef)
+                vdef = ivy_ast.VariantDef(subtype,suptype)
+                self.variant(vdef)
+
             
 class IvyConjectureSetup(IvyDeclInterp):
     def __init__(self,domain):

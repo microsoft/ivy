@@ -1814,6 +1814,15 @@ if not (iu.get_numeric_version() <= [1,5]):
         p[0] = VarAction(p[2],p[3]) if p[3] is not None else VarAction(p[2])
         p[0].lineno = get_lineno(p,2)
 
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_action_thunk_symbol_optargs_colon_atype_assign_sequence(p):
+        'action : THUNK SYMBOL optargs COLON atype ASSIGN sequence'
+        action = Atom(p[2],p[3])
+        action.lineno = get_lineno(p,2)
+        p[0] = ThunkAction(action,p[5],p[7])
+        p[0].lineno = get_lineno(p,1)
+
+
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'
     p[0] = Equals(App(p[1]),App(p[3]))
