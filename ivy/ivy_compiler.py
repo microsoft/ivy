@@ -589,6 +589,24 @@ def compile_crash_action(self):
 
 CrashAction.cmpl = compile_crash_action
 
+def compile_thunk_action(self):
+    body = sortify(self.args[-1])
+    symset = set()
+    syms = []
+    for sym in ilu.symbols_ast(body):
+        if ((sym.name.startswith('fml:') or sym.name.startswith('loc:'))
+            and sym.name in im.module.symbols and sym not in symset):
+            symset.add(sym)
+            syms.append(sym)
+    subtypename = ivy_ast.Atom('{}[thunk{}]'.format(self.args[0].relname,thunk_counter))
+    subsort = il.find_sort(subtypename)
+    for sym in syms:
+        dsort = il.Functionsort([subsort] + sym.sort.dom + [sym.sort.rng])
+        dsym = il.Symbol(iu.compose_names(subtypename,sym.name[4:]),dsort)
+        self.domain.destructor_sorts[dsym.name] = subsort
+        self.domain.sort_destructors[subsort.name].append(sym)
+
+
 def compile_native_arg(arg):
     if isinstance(arg,ivy_ast.Variable):
         return sortify_with_inference(arg)
