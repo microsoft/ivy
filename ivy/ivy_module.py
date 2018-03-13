@@ -70,6 +70,7 @@ class Module(object):
         self.before_export = {} # map from string to action
         self.attributes = {} # map from name to atom
         self.variants = defaultdict(list) # map from sort name to list of sort
+        self.supertypes = defaultdict(list) # map from sort name to sort
         self.ext_preconds = {} # map from action name to formula
         self.proofs = [] # list of pair (labeled formula, proof)
         self.named = [] # list of pair (labeled formula, atom)
@@ -152,7 +153,7 @@ class Module(object):
         # exclusivity axioms for variants
         for sort in sorted(self.variants):
             sort_variants = self.variants[sort]
-            if any(v.name in self.sig.sorts for v in sort_variants):
+            if any(v.name in self.sig.sorts for v in sort_variants) and sort in self.sig.sorts:
                 ea = il.exclusivity(self.sig.sorts[sort],sort_variants)
                 theory.append(ea) # these are always in EPR
         self.theory = lu.Clauses(theory)

@@ -165,7 +165,7 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         except cfrfail as err:
             raise cfrfail(symbol_name if err.symbol_name in im.module.hierarchy else err.symbol_name)
         sort = base.sort
-        # trucky: we first look for the method as a child of the sort.
+        # tricky: we first look for the method as a child of the sort.
         # if not found, we look for a sibling of the sort
         destr_name = iu.compose_names(sort.name,child_name)
         if top_context and destr_name not in ivy_logic.sig.symbols and destr_name not in top_context.actions:
@@ -174,7 +174,10 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         if top_context and destr_name in top_context.actions:
             if not expr_context:
                 raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
-            args.insert(0,base)
+            actparams = top_context.actions[destr_name]
+            keypos = actparams[2] if len(actparams) > 2 else 0
+            args.insert(keypos,base)
+            iu.dbg('args')
             return field_reference_action(destr_name,args,top)
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
         args.insert(0,base)
@@ -185,9 +188,14 @@ def compile_field_reference_rec(symbol_name,args,top=False):
                            
 def field_reference_action(actname,args,top):
     nformals = len(top_context.actions[actname][0])
-    return compile_inline_call(ivy_ast.Atom(actname,[]),pull_args(args,nformals,actname,top),methodcall=True)
+    call = ivy_ast.Atom(actname,[])
+    global field_reference_lineno
+    call.lineno = field_reference_lineno
+    return compile_inline_call(call,pull_args(args,nformals,actname,top),methodcall=True)
 
-def compile_field_reference(symbol_name,args):
+def compile_field_reference(symbol_name,args,lineno):
+    global field_reference_lineno
+    field_reference_lineno = lineno
     try:
         return compile_field_reference_rec(symbol_name,args,top=True)
     except cfrfail as err:
@@ -206,7 +214,7 @@ def sort_infer_contravariant(term,sort):
         return res
 
 def compile_inline_call(self,args,methodcall=False):
-    params,returns = top_context.actions[self.rep]
+    params,returns,keypos = top_context.actions[self.rep]
     if return_context is None or return_context.values is None:
         if len(returns) != 1:
             raise IvyError(self,"wrong number of return values")
@@ -233,14 +241,16 @@ def compile_inline_call(self,args,methodcall=False):
         args = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
 
     call = CallAction(*([ivy_ast.Atom(self.rep,args)]+return_values))
-#    iu.dbg('self')
-#    call.lineno = self.lineno
+    iu.dbg('type(self)')
+    call.lineno = self.lineno
+    iu.dbg('call')
 
     # Handle dispatch for method call with variants
 
-    if methodcall and args[0].sort.name in im.module.variants:
+    print 'variants:{}'.format(im.module.variants)
+    if methodcall and args[keypos].sort.name in im.module.variants:
         _,methodname = iu.parent_child_name(self.rep)
-        for vsort in im.module.variants[args[0].sort.name]:
+        for vsort in im.module.variants[args[keypos].sort.name]:
             vactname = iu.compose_names(vsort.name,methodname)
             if vactname not in im.module.actions:
                 parent,_ = iu.parent_child_name(vsort.name)
@@ -248,11 +258,14 @@ def compile_inline_call(self,args,methodcall=False):
                 if vactname not in im.module.actions:
                     continue
             tmpsym = ivy_logic.Symbol('self:'+vsort.name,vsort)
-            new_call = CallAction(*([ivy_ast.Atom(vactname,[tmpsym] +  args[1:])]+return_values))
+            tmpargs = list(args)
+            tmpargs[keypos] = tmpsym
+            new_call = CallAction(*([ivy_ast.Atom(vactname,tmpargs)]+return_values))
  #           new_call.lineno = self.lineno
-            call = IfAction(ivy_ast.Some(tmpsym,ivy_logic.Symbol('*>',ivy_logic.RelationSort([args[0].sort,vsort]))(args[0],tmpsym)),
+            call = IfAction(ivy_ast.Some(tmpsym,ivy_logic.Symbol('*>',ivy_logic.RelationSort([args[keypos].sort,vsort]))(args[keypos],tmpsym)),
                             new_call,
                             call)
+    iu.dbg('call')
 
     expr_context.code.append(call)
     if return_context is None or return_context.values is None:
@@ -272,7 +285,7 @@ def compile_app(self):
                 sym = ivy_logic.Symbol(sym.name,variable_sort(self))
     if sym is not None:
         return (sym)(*args)
-    res = compile_field_reference(self.rep,args)
+    res = compile_field_reference(self.rep,args,self.lineno)
     return res
     
 def compile_method_call(self):
@@ -294,6 +307,8 @@ def compile_method_call(self):
         if not expr_context:
             raise IvyError(None,'call to action {} not allowed outside an action'.format(destr_name))
         args.insert(0,base)
+        global field_reference_lineno
+        field_reference_lineno = self.lineno
         return field_reference_action(destr_name,args,True) # True means use all args
     sym = ivy_logic.find_polymorphic_symbol(destr_name)
     args.insert(0,base)
@@ -395,6 +410,8 @@ def sortify_with_inference(ast):
 ivy_ast.AST.compile_with_sort_inference = sortify_with_inference
 
 def compile_const(v,sig):
+    iu.dbg('type(v)')
+    iu.dbg('v')
     with ASTContext(v):
       rng = cmpl_sort(v.sort) if hasattr(v,'sort') else ivy_logic.default_sort()
       sort = get_function_sort(sig,v.args,rng)
@@ -501,17 +518,19 @@ def compile_call(self):
     if name not in top_context.actions:
         with ctx:
             with ReturnContext([a.cmpl() for a in self.args[1:]]):
-                res = compile_field_reference(name,[a.compile() for a in self.args[0].args])
+                res = compile_field_reference(name,[a.compile() for a in self.args[0].args],self.lineno)
         if res is not None:
             raise IvyError(self,'call to non-action')
         res = ctx.extract()
+        iu.dbg('res')
+        iu.dbg('res.lineno')
         return res
     #    print "compiled call action: {}".format(res)
         return res
 
     with ctx:
         args = [a.cmpl() for a in self.args[0].args]
-    params,returns = top_context.actions[name]
+    params,returns,keypos = top_context.actions[name]
     if len(returns) != len(self.args) - 1:
         raise iu.IvyError(self,"wrong number of output parameters (got {}, expecting {})".format(len(self.args) - 1,len(returns)))
     if len(params) != len(args):
@@ -590,21 +609,61 @@ def compile_crash_action(self):
 CrashAction.cmpl = compile_crash_action
 
 def compile_thunk_action(self):
-    body = sortify(self.args[-1])
-    symset = set()
+    iu.dbg('self')
+    global thunk_counter
+    sig = ivy_logic.sig.copy()
+    with sig:
+        formals =  [compile_const(v,sig) for v in self.args[0].args + self.args[1].args]
+        body = sortify(self.args[3])
+        body.formal_params = formals
+        body.formal_returns = []
+    symset = set(formals)  # formal parameters don't go in the struct
     syms = []
-    for sym in ilu.symbols_ast(body):
+    for sym in lu.symbols_ast(body):
         if ((sym.name.startswith('fml:') or sym.name.startswith('loc:'))
-            and sym.name in im.module.symbols and sym not in symset):
+            and sym.name in ivy_logic.sig.symbols and sym not in symset):
             symset.add(sym)
             syms.append(sym)
-    subtypename = ivy_ast.Atom('{}[thunk{}]'.format(self.args[0].relname,thunk_counter))
-    subsort = il.find_sort(subtypename)
+#    subtypename = '{}[thunk{}]'.format(self.args[1].relname,thunk_counter)
+    subtypename = self.args[0].relname
+    thing = ivy_logic.sig.sorts
+    iu.dbg('thing')
+    subsort = ivy_logic.find_sort(subtypename)
+    selfparam = ivy_logic.Symbol('$self',subsort)
+    subs = {}
+    dsyms = []
     for sym in syms:
-        dsort = il.Functionsort([subsort] + sym.sort.dom + [sym.sort.rng])
-        dsym = il.Symbol(iu.compose_names(subtypename,sym.name[4:]),dsort)
-        self.domain.destructor_sorts[dsym.name] = subsort
-        self.domain.sort_destructors[subsort.name].append(sym)
+        dsort = ivy_logic.FunctionSort(*([subsort] + sym.sort.dom + [sym.sort.rng]))
+        dsym = ivy_logic.Symbol(iu.compose_names(subtypename,sym.name[4:]),dsort)
+        iu.dbg('dsym')
+        iu.dbg('dsym.sort')
+        im.module.destructor_sorts[dsym.name] = subsort
+        im.module.sort_destructors[subsort.name].append(dsym)
+        subs[sym] = dsym(selfparam)
+        dsyms.append(dsym)
+    # insert "self" argument in last position (see comment at "def action" below)
+    body.formal_params.insert(len(body.formal_params),selfparam)
+    new_body = lu.substitute_constants_ast(body,subs)
+    new_body.formal_params = body.formal_params
+    new_body.formal_returns = body.formal_returns
+    body = new_body
+    iu.dbg('body.formal_params')
+    subtyperun = iu.compose_names(subtypename,'run')
+    im.module.actions[subtyperun] = body
+    sig = ivy_logic.sig.copy()
+    with sig:
+        lsym = add_symbol('loc:' + self.args[1].relname,subsort)
+        cont = sortify(self.args[4])
+    asgns = []
+    for sym,dsym in zip(syms,dsyms):
+        asgns.append(AssignAction(dsym(lsym),sym))
+    res = LocalAction(lsym,Sequence(*(asgns + [cont])))
+    res.lineno = self.lineno
+    iu.dbg('res')
+    return res
+
+ThunkAction.cmpl = compile_thunk_action
+    
 
 
 def compile_native_arg(arg):
@@ -655,7 +714,9 @@ def compile_action_def(a,sig):
     with sig:
         with ASTContext(a.args[1]):
             params = a.args[0].args
+            iu.dbg('params')
             pformals = [v.to_const('prm:') for v in params] 
+            iu.dbg('pformals')
             if params:
                 subst = dict((x.rep,y) for x,y in zip(params,pformals))
                 a = ivy_ast.substitute_ast(a,subst)
@@ -667,6 +728,7 @@ def compile_action_def(a,sig):
             returns = [compile_const(v,sig) for v in a.formal_returns]
     #        print returns
             res = sortify(a.args[1])
+            iu.dbg('res')
             assert hasattr(res,'lineno'), res
             for suba in res.iter_subactions():
                 if isinstance(suba,CallAction):
@@ -968,6 +1030,7 @@ class IvyDomainSetup(IvyDeclInterp):
             if r.rep not in self.domain.sig.sorts:
                 raise IvyError(v,"undefined sort: {}".format(r.rep))
         self.domain.variants[v.args[1].rep].append(self.domain.sig.sorts[v.args[0].rep])
+        self.domain.supertypes[v.args[0].rep] = self.domain.sig.sorts[v.args[1].rep]
     def implementtype(self,thing):
         v = thing.formula
         for r in v.args:
@@ -1030,13 +1093,29 @@ class IvyDomainSetup(IvyDeclInterp):
         counter = 0
         for action in a.args[1].iter_subactions():
             if isinstance(action,ThunkAction):
-                subtype = ivy_ast.Atom('{}[thunk{}]'.format(action.args[0].relname,counter))
+#                subtype = ivy_ast.Atom('{}[thunk{}]'.format(action.args[1].relname,counter))
+                subtype = action.args[0]
+
+                iu.dbg('action')
+
                 counter += 1
-                suptype = action.args[1]
-                tdef = ivy_ast.TypeDef(subtype,UninterpretedSort())
+                suptype = action.args[2]
+                tdef = ivy_ast.TypeDef(subtype,ivy_ast.UninterpretedSort())
                 self.type(tdef)
+
                 vdef = ivy_ast.VariantDef(subtype,suptype)
                 self.variant(vdef)
+
+                actname = iu.compose_names(subtype.relname,'run')
+                selfparam = ivy_ast.Atom('fml:$self',[])
+                selfparam.sort = subtype.relname
+
+                # tricky: the key position for the thunk is the *last* argument.
+                # this is because the first N arguments might be stripped, so we
+                # can't insert an argument at position zero.
+                orig_args = action.args[0].args + action.args[1].args
+                top_context.actions[actname] = (orig_args + [selfparam], [], len(orig_args))
+
 
             
 class IvyConjectureSetup(IvyDeclInterp):
@@ -1078,6 +1157,8 @@ class IvyARGSetup(IvyDeclInterp):
 #            raise IvyError(ax,"initial condition must be a clause")
         im.module.init_cond = and_clauses(im.module.init_cond,formula_to_clauses(la.formula))
     def action(self,a):
+        global thunk_counter
+        thunk_counter = 0
         name = a.args[0].relname
         self.mod.actions[name] = compile_action_def(a,self.mod.sig)
         self.mod.public_actions.add(name)
@@ -1213,7 +1294,14 @@ def collect_actions(decls):
     for d in decls:
         if d.name() == 'action':
             for a in d.args:
-                res[a.defines()] = (a.args[0].args + a.formal_params,a.formal_returns)
+                formals = a.args[0].args + a.formal_params
+                keypos = 0
+                for idx,p in enumerate(formals):
+                    if isinstance(p,ivy_ast.KeyArg):
+                        keypos = idx
+                iu.dbg('a.defines()')
+                iu.dbg('keypos')
+                res[a.defines()] = (formals,a.formal_returns,keypos)
     return res
 
 def infer_parameters(decls):

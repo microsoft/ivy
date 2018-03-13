@@ -1,0 +1,272 @@
+#lang ivy1.7
+
+module file(pid,data) = {
+    
+    type cb
+
+    action write(d:data)
+    action read returns (d:data)
+    action sync(c:cb)
+
+    action run(^c:cb) = {}
+
+    action synced(c:cb) = {
+        var x : bool;
+        call c.run(pid)
+    }
+
+    specification {
+        var contents : data
+        relation pending(C:cb)
+        
+        after init {
+#            contents := ival;
+            pending(C) := false;
+        }
+
+        before write {
+            contents := d;
+        }
+
+        after read {
+            ensure d = contents
+        }
+
+        before sync {
+            require ~pending(c);
+            pending(c) := true;
+        }
+
+        before synced {
+            require pending(c);
+            pending(c) := false;
+        }
+    }
+    implementation {
+        object fildes = {}
+        <<< member
+            int `fildes`;
+        >>>
+        <<< init
+            {
+		std::string pathname = "`this`.log";
+		int f = ::open(pathname.c_str(),O_RDWR|O_CREAT|O_TRUNC,0666);
+		if (f < 0) {
+		    perror("cannot open file to write");
+		}
+		`fildes` = f;
+//                ivy_binary_ser sr;
+//                __ser(sr,`ival`);
+//                if (::write(`fildes`,&sr.res[0],sr.res.size()) < 0) {
+//                   perror("cannot write to file");
+//                }
+	    }
+        >>>
+        implement write {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            ivy_binary_ser sr;
+            __ser(sr,d);
+            if (::write(`fildes`,&sr.res[0],sr.res.size()) < 0) {
+                perror("cannot write to file");
+            }
+            if (::ftruncate(`fildes`,sr.res.size()) < 0) {
+                perror("cannot truncate file");
+            }
+        >>>
+        }
+        implement read {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            std::vector<char> buf;
+            ivy_socket_deser ds(`fildes`,buf);  // initializer deserializer with zero bytes
+            try {
+                __deser(ds,d);            // read the message
+            } 
+
+            // If file has bad syntax, something really terrible happened so we give up
+
+            catch (deser_err &){
+                std::cerr << "syntax error in log file";
+                exit(1);
+            }
+        >>>
+        }
+        <<< impl
+            template<typename cont, typename cbtype> class sync_reader : public reader {
+                cont c;
+                cbtype cb;
+                int fd;
+                ivy_class *ivy;
+            public:
+                sync_reader(cont c, int fd, cbtype cb, ivy_class *ivy) : c(c), fd(fd), cb(cb), ivy(ivy) {}
+                int fdes() {return fd;}
+                void read() {
+                    ivy->__lock();
+                    if (::fsync(fd) < 0)
+                        { perror("failed to sync file"); }
+                    fd = -1;
+                    cb(c);
+                    ivy->__unlock();
+                }  
+            };
+        >>>
+        implement sync {
+        <<<
+            install_reader(new sync_reader<`cb`,%`synced`>(c,`fildes`,`synced`, this));
+        >>>
+        }
+        action handle_synced(c:cb) = {
+            call synced(c)
+        }
+
+    }
+    trusted isolate iso = this 
+}
+
+object packet = {
+    type t
+
+    interpret t -> bv[1]
+}
+
+################################################################################
+#
+# Concrete type of node addresses.
+#
+################################################################################
+
+
+object node = {
+    type t
+
+    interpret t -> bv[1]
+
+    action next(x:t) returns (y:t) = {
+        y := x + 1
+    }
+}
+
+
+
+################################################################################
+#
+# The transport service specification
+#
+################################################################################
+
+include trans
+instance trans : transport(net,packet.t,node.t)
+
+################################################################################
+#
+# The network service specification
+#
+################################################################################
+
+include udp
+instance net : udp_simple(node.t,trans.net_msg.t)
+
+
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    action grant(v:node.t)                 # grant lock to client
+    action release(v:node.t)               # client releases lock
+
+    object spec = {
+        relation lock(X:node.t)
+
+        after init {
+            lock(X) := X = 0
+        }
+
+        
+        before grant {
+            assert ~lock(X);
+            lock(v) := true
+        }
+        
+        before release {
+            assert lock(v);
+            lock(v) := false
+        }
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+implementation {
+
+object proto(me:node.t) = {
+
+    relation token
+    instance backup : file(me,bool)
+
+    after init {
+        token := me = 0
+    }
+
+    implement serv.release {
+        if token {
+
+            token := false;
+            call backup.write(token);
+
+            thunk [synccb] cb : backup.cb := {
+                var pkt : packet.t;
+                call trans.send(me,node.next(me),pkt)
+            };
+
+            call backup.sync(cb)
+        }
+    }
+
+    implement trans.recv(pkt:packet.t) {
+        token := true;
+        call backup.write(token);
+        call serv.grant(me)
+    }
+
+    action crash = *
+
+    after crash {
+        token := backup.read;
+    }
+
+
+    private {
+        invariant proto(X).token & proto(Y).token -> X = Y
+        invariant trans.sent(D,P) & trans.sent(D1,P1) -> D = D1 & P = P1
+        invariant trans.sent(D,P) -> ~proto(X).token
+        invariant serv.spec.lock(X) <-> proto(X).token
+        invariant backup.contents -> token
+    }
+}
+}
+
+export serv.release
+import serv.grant
+
+isolate iso_p = proto with serv,node,trans
+trusted isolate iso_t = trans with net,node
+trusted isolate iso_n = net with node
+
+# trusted isolate iso_pt = proto with serv,trans.impl,trans.seq_num,net.impl,node
+
+# extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num

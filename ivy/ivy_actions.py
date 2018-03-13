@@ -240,6 +240,11 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_subactions():
                     yield c
+    def iter_internal_defines(self):
+        for a in self.args:
+            if isinstance(a,Action):
+                for c in a.iter_internal_defines():
+                    yield c
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
     def modifies(self):
@@ -339,6 +344,8 @@ def type_ast(domain,ast):
     return ast
 
 def destr_asgn_val(lhs,fmlas):
+    iu.dbg('lhs')
+    iu.dbg('fmlas')
     mut = lhs.args[0]
     rest = list(lhs.args[1:])
     mut_n = mut.rep
@@ -358,6 +365,7 @@ def destr_asgn_val(lhs,fmlas):
     if eqs:
         fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
     for destr in ivy_module.module.sort_destructors[mut.sort.name]:
+        iu.dbg('destr')
         if destr != n:
             phs = sym_placeholders(destr)
             a1 = [lval] + phs[1:]
@@ -984,8 +992,19 @@ class CrashAction(Action):
         seq = Sequence(*havocs)
         return seq.int_update(domain,pvars)
             
+# Assign a thunk to a local variable. This action doesn't need an update method because it
+# is desugared. 
 
-    
+class ThunkAction(Action):
+    def name(self):
+        return 'thunk'
+    def __str__(self):
+        return ('thunk [' + str(self.args[0]) + '] ' + str(self.args[1]) + ' : ' + str(self.args[2]) + ' := ' + str(self.args[3]) + 
+                (' ; ' + str(self.args[4]) if len(self.args) > 4 else ''))
+    def iter_internal_defines(self):
+        lineno = self.lineno if hasattr(self,'lineno') else None
+        yield (self.args[0].rep,lineno)
+        yield (iu.compose_names(self.args[0].rep,'run'),lineno)
 
 class NativeAction(Action):
     """ Quote native code in an action """
@@ -1089,7 +1108,7 @@ class CallAction(Action):
         if hasattr(res,'lineno'):
             res.lineno = self.lineno
         else: 
-            print 'no lineno: {}'.format(self)
+            print 'no lineno in prefix_calls: {}'.format(self)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
@@ -1161,6 +1180,8 @@ def concat_actions(*actions):
 
 def apply_mixin(decl,action1,action2):
     assert hasattr(action1,'lineno')
+    if not hasattr(action2,'lineno'):
+        print action2
     assert  hasattr(action2,'lineno')
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):

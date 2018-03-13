@@ -37,6 +37,7 @@ tokens = (
    'NATIVEQUOTE',
    'PTO',
    'DOLLAR',
+   'CARET',
 )
 
 reserved = all_reserved = {
@@ -168,6 +169,7 @@ t_COLON = r':'
 t_DOTS = r'\.\.'
 t_DOTDOTDOT = r'\.\.\.'
 t_DOLLAR = r'\$'
+t_CARET = r'\^'
 
 t_ignore  = ' \t\r'
 t_ignore_COMMENT = r'\#.*'

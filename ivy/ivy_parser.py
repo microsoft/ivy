@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction, CrashAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction, CrashAction, ThunkAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -128,6 +128,8 @@ def inst_mod(ivy,module,pref,subst,vsubst):
     save = ivy.attributes
     ivy.attributes = ()
     for decl in module.decls:
+        if isinstance(decl,ActionDecl):
+            iu.dbg('decl')
         if isinstance(decl,AttributeDecl):
             if vsubst:
                 map1 = distinct_variable_renaming(used_variables_ast(pref),used_variables_ast(decl))
@@ -142,10 +144,12 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
             idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined,static=module.static)
+            iu.dbg('idecl')
             idecl = substitute_constants_ast(idecl,vvsubst)
         else:
             idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined,static=module.static)
         if isinstance(idecl,ActionDecl):
+            iu.dbg('idecl')
             for foo in idecl.args:
                 if not hasattr(foo.args[1],'lineno'):
                     print 'no lineno: {}'.format(foo)
@@ -1503,6 +1507,13 @@ def lower_var_stmts(stmts):
             res = LocalAction(*[asgn,body])
             res.lineno = body.lineno;
             return stmts[:idx] + [res]
+        if isinstance(stmt,ThunkAction):
+            name = stmt.args[1].rep
+            lname = 'loc:'+name
+            subst = {name:lname}
+            lines = lower_var_stmts(stmts[idx+1:])
+            lines = [subst_prefix_atoms_ast(s,subst,None,None) for s in lines]
+            return stmts[:idx] + [stmt.clone(stmt.args + [Sequence(*lines)])]
     return stmts
 
 def p_sequence_lcb_rcb(p):
@@ -1769,6 +1780,14 @@ def p_lparam_variable_colon_symbol(p):
     p[0].lineno = get_lineno(p,1)
     p[0].sort = p[3]
 
+if not (iu.get_numeric_version() <= [1,6]):
+
+    def p_lparam_caret_variable_colon_symbol(p):
+        'lparam : CARET SYMBOL COLON atype'
+        p[0] = KeyArg(p[2])
+        p[0].lineno = get_lineno(p,2)
+        p[0].sort = p[4]
+
 def p_lparams_lparam(p):
     'lparams : lparam'
     p[0] = [p[1]]
@@ -1816,10 +1835,10 @@ if not (iu.get_numeric_version() <= [1,5]):
 
 if not (iu.get_numeric_version() <= [1,6]):
     def p_action_thunk_symbol_optargs_colon_atype_assign_sequence(p):
-        'action : THUNK SYMBOL optargs COLON atype ASSIGN sequence'
-        action = Atom(p[2],p[3])
-        action.lineno = get_lineno(p,2)
-        p[0] = ThunkAction(action,p[5],p[7])
+        'action : THUNK LABEL SYMBOL optargs COLON atype ASSIGN sequence'
+        action = Atom(p[3],p[4])
+        action.lineno = get_lineno(p,3)
+        p[0] = ThunkAction(Atom(p[2][1:-1],[]),action,Atom(p[6]),p[8])
         p[0].lineno = get_lineno(p,1)
 
 

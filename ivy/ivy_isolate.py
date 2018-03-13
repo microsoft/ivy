@@ -48,6 +48,7 @@ def add_mixins(mod,actname,action2,assert_to_assume=lambda m:[],use_mixin=lambda
             ata = assert_to_assume(mixin)
             if ata:
                 action1 = action1.assert_to_assume(ata)
+            iu.dbg('action1')
             action1 = mod_mixin(mixin,action1)
             res = ia.apply_mixin(mixin,action1,res)
     return res
