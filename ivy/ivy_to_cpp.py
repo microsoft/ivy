@@ -1068,7 +1068,7 @@ def emit_action(header,impl,name,classname):
 
 def trace_action(impl,name,action):
     indent(impl)
-    impl.append('__ivy_out << "< ' + name + '"')
+    impl.append('__ivy_out ' + number_format + ' << "< ' + name + '"')
     if action.formal_params:
         impl.append(' << "("')
         first = True
@@ -1095,7 +1095,7 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
     if name in import_callers:
         trace_action(code,name,action)
         if opt_trace.get():
-            code_line(code,'__ivy_out << "{" << std::endl')
+            code_line(code,'__ivy_out ' + number_format + ' << "{" << std::endl')
     if len(action.formal_returns) == 1:
         indent(code)
         p = action.formal_returns[0]
@@ -1106,7 +1106,7 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
         action.emit(code)
     if name in import_callers:
         if opt_trace.get():
-            code_line(code,'__ivy_out << "}" << std::endl')
+            code_line(code,'__ivy_out ' + number_format + ' << "}" << std::endl')
     pt,rt = get_param_types(action)
     if len(action.formal_returns) == 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
@@ -1352,6 +1352,12 @@ def module_to_cpp_class(classname,basename):
     global sort_to_cpptype
     sort_to_cpptype = {}
 
+    global number_format
+    number_format = ''
+    if 'radix' in im.module.attributes and im.module.attributes['radix'].rep == '16':
+        number_format = ' << std::hex << std::showbase '
+    iu.dbg('number_format')
+        
     # remove the actions not reachable from exported
         
 # TODO: may want to call internal actions from testbench
@@ -1719,10 +1725,13 @@ struct ivy_binary_deser : public ivy_deser {
     virtual bool more(unsigned bytes) {return inp.size() >= pos + bytes;}
     virtual bool can_end() {return pos == inp.size();}
     void get(long long &res) {
-        if (!more(sizeof(long long)))
+       getn(res,8);
+    }
+    void getn(long long &res, int bytes) {
+        if (!more(bytes))
             throw deser_err();
         res = 0;
-        for (int i = 0; i < sizeof(long long); i++)
+        for (int i = 0; i < bytes; i++)
             res = (res << 8) | (((long long)inp[pos++]) & 0xff);
     }
     void get(std::string &res) {
@@ -2366,12 +2375,12 @@ class z3_thunk : public thunk<D,R> {
                     getargs = ','.join(argstrings)
                     thing = "ivy.methodname(getargs)"
                     if action.formal_returns:
-                        thing = '__ivy_out << "= " << ' + thing + " << std::endl"
+                        thing = '__ivy_out ' + number_format + ' << "= " << ' + thing + " << std::endl"
                     if target.get() == "repl" and opt_trace.get():
                         if action.formal_params:
-                            trace_code = '__ivy_out << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
+                            trace_code = '__ivy_out ' + number_format + ' << "{}("'.format(actname.split(':')[-1]) + ' << "," '.join(' << {}'.format(arg) for arg in argstrings) + ' << ") {" << std::endl'
                         else:
-                            trace_code = '__ivy_out << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
+                            trace_code = '__ivy_out ' + number_format + ' << "{} {{"'.format(actname.split(':')[-1]) + ' << std::endl'
                         thing = trace_code + ';\n                    ' + thing + ';\n                    __ivy_out << "}" << std::endl' 
                     impl.append("""
                 if (action == "actname") {
@@ -2458,7 +2467,7 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('    std::vector<ivy_value> arg_values({});\n'.format(len(im.module.params)))
                 impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
                 for idx,s in enumerate(im.module.params):
-                    impl.append('    int p__'+varname(s)+';\n')
+                    impl.append('    {} p__'.format(ctypefull(s.sort,classname=classname))+varname(s)+';\n')
                     impl.append('    try {\n')
                     impl.append('        int pos = 0;\n')
                     impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
@@ -2480,7 +2489,10 @@ class z3_thunk : public thunk<D,R> {
                 if target.get() == "test":
                     emit_repl_boilerplate3test(header,impl,classname)
                 else:
-                    emit_repl_boilerplate3(header,impl,classname)
+                    if im.module.public_actions:
+                        emit_repl_boilerplate3(header,impl,classname)
+                    else:
+                        emit_repl_boilerplate3server(header,impl,classname)
                 if target.get() == "test":
                     impl.append('    }\n')
                 impl.append("    return 0;\n}\n")
@@ -3078,7 +3090,7 @@ def emit_assign_simple(self,header):
     if opt_trace.get() and ':' not in self.args[0].rep.name:
         trace = []
         indent(trace)
-        trace.append('__ivy_out << "  write("')
+        trace.append('__ivy_out ' + number_format + ' << "  write("')
         cargs = []
         if il.is_constant(self.args[0]):
             self.args[0].emit(header,code)
@@ -3432,7 +3444,7 @@ int ask_ret(int bound) {
             if target.get() == "test":
                 impl.append("{}\n")
                 continue
-            impl.append('{\n    __ivy_out << "< ' + name[5:] + '"')
+            impl.append('{\n    __ivy_out ' + number_format + ' << "< ' + name[5:] + '"')
             if action.formal_params:
                 impl.append(' << "("')
                 first = True
@@ -3716,6 +3728,28 @@ def emit_repl_boilerplate3(header,impl,classname):
 
     while (!cr->eof())
         cr->read();
+    return 0;
+
+""".replace('classname',classname))
+
+def emit_repl_boilerplate3server(header,impl,classname):
+    impl.append("""
+
+    
+    ivy.__unlock();
+
+    // The main thread waits for all reader threads to die
+
+    for(unsigned i = 0; true ; i++) {
+        ivy.__lock();
+        if (i >= ivy.thread_ids.size()){
+            ivy.__unlock();
+            break;
+        }
+        pthread_t tid = ivy.thread_ids[i];
+        ivy.__unlock();
+        pthread_join(tid,NULL);
+    }
     return 0;
 
 """.replace('classname',classname))

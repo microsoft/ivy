@@ -736,7 +736,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight","test","iterable","cardinality"])
+defined_attributes = set(["weight","test","iterable","cardinality","radix"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -1043,7 +1043,7 @@ class IvyARGSetup(IvyDeclInterp):
         oname = iu.ivy_compose_character.join(fields[:-1])
         oname = 'this' if oname == '' else oname
         aname = fields[-1]
-        if oname not in self.mod.actions and oname not in self.mod.hierarchy:
+        if oname not in self.mod.actions and oname not in self.mod.hierarchy and oname != 'this':
             raise IvyError(a,'"{}" does not name an action or object'.format(oname))
         if aname not in defined_attributes:
             raise IvyError(a,'"{}" does not name a defined attribute'.format(aname))
@@ -1483,9 +1483,9 @@ def read_module(f,nested=False):
         decls = dc.parse_to_ivy(s)
     else:
         err = IvyError(None,'file must begin with "#lang ivyN.N"')
-        err.lineno = 1
-        if iu.filename:
-            err.filename = iu.filename
+        err.lineno = Location(iu.filename,1)
+#        if iu.filename:
+#            err.filename = iu.filename
         raise err
     return decls
 
