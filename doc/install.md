@@ -120,6 +120,8 @@ like this:
     $ sudo apt-get install python-ply python-pygraphviz
     $ pip install tarjan
 
+To use the IVy command line tools only, there is no need to install `python-pygraphviz`.
+
 Make sure you get version 3.4 of python-ply as some later versions are broken.
 As an alternative, `pip` can install all the packages, but you need to make sure
 the dependencies on system packages are met:
@@ -136,6 +138,9 @@ package tk, and the tix widget set. On Ubuntu, install them like
 this:
 
     $ sudo apt-get install python-tk tix
+
+This step is not necessary if using the IVy command line tools only.
+
 
 ## Install IVy
 
