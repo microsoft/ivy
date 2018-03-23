@@ -210,11 +210,11 @@ module tcp_impl(addr,pkt,me,port_base) = {
             struct sockaddr_in myaddr;
             get_tcp_addr(ivy,my_id,myaddr);
 
-//                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
+                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
 
             // Bind the socket to our address
             if (::bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
-                { std::cerr << "bind failed\n"; exit(1); }
+                { perror("bind failed"); exit(1); }
 
             // Start lisetning on the socket
             if (listen(sock,2) < 0) 
@@ -386,7 +386,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     implement close(s:socket) {
         <<< impure
-                ::close(s);
+                ::shutdown(s,SHUT_RDWR);
         >>>
     }
 

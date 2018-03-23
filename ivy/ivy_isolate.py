@@ -659,8 +659,11 @@ def set_privates(mod,isolate,suff=None):
             mod.privates.add(iu.compose_names(n,nsuff))
     for name in mod.attributes:
         p,c = iu.parent_child_name(name)
-        if c == suff or c == "private":
-            mod.privates.add(p)
+        if c in ['spec','impl','private']:
+            pp,pc = iu.parent_child_name(p)
+            nsuff = get_private_from_attributes(mod,pp,suff)
+            if c == nsuff or c == "private":
+                mod.privates.add(p)
     global vprivates
     vprivates = set()
     for isol in mod.isolates.values():
