@@ -1356,7 +1356,6 @@ def module_to_cpp_class(classname,basename):
     number_format = ''
     if 'radix' in im.module.attributes and im.module.attributes['radix'].rep == '16':
         number_format = ' << std::hex << std::showbase '
-    iu.dbg('number_format')
         
     # remove the actions not reachable from exported
         
@@ -2690,6 +2689,13 @@ def emit_bv_op(self,header,code):
     code.append('(')
     if len(self.args) == 2:
         self.args[0].emit(header,code)
+    if self.func.name.startswith('bfe['):
+        fname,fparams = parse_int_params(self.func.name)
+        if (len(fparams) != 2):
+            iu.IvyError(None,'malformed operator: {}'.format(self.func.name))
+        self.args[-1].emit(header,code)
+        code.append(' >> {}) & {})'.format(fparams[0],2**(fparams[1]-fparams[0]+1)-1))
+        return
     code.append(' {} '.format(bv_ops.get(self.func.name,self.func.name)))
     self.args[-1].emit(header,code)
     code.append(') & {})'.format((1 << sparms[0])-1))
@@ -3001,6 +3007,10 @@ def emit_some(self,header,code):
     for p,v in zip(params,vs):
         code_asgn(header,varname(p),varname(v))
     code_line(header,some+'= 1')
+    # optimization: if minimizing first params, first hit is minimum, so exit loop
+    # this is particularly helpful when searching a big type like int!
+    if isinstance(self,ivy_ast.SomeMinMax) and self.params()[0] == self.index():
+        code_line(header,'break')
     close_scope(header)
     close_loop(header,vs)
     if isinstance(self,ivy_ast.Some):

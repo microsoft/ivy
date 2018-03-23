@@ -964,7 +964,18 @@ polymorphic_symbols_list = [
     ('l2s_a', [alpha, lg.Boolean]),
 ]
 
-polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
+# Tricky: since the bfe operator is parameterized, we add instances of it to
+# the polymorphic_symbols table on demand.
+
+class PolySymsDict(dict):
+    def __contains__(self,name):
+        return dict.__contains__(self,name) or name.startswith('bfe[')
+    def __getitem__(self,name):
+        if name.startswith('bfe[') and not dict.__contains__(self,name):
+            dict.__setitem__(self,name,lg.Const(name,lg.FunctionSort(alpha,beta)))
+        return dict.__getitem__(self,name)
+
+polymorphic_symbols = PolySymsDict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
                            for x,y in polymorphic_symbols_list)
 
 polymorphic_macros_map = {

@@ -54,7 +54,7 @@ def set_use_native_enums(t):
 
 def solver_name(symbol):
     name = symbol.name
-    if name in iu.polymorphic_symbols:
+    if name in iu.polymorphic_symbols or name.startswith('bfe['):
         sort = symbol.sort.domain[0].name
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
