@@ -1,0 +1,102 @@
+#lang ivy1.7
+
+
+include pcap
+include order
+
+type type_bits
+
+interpret type_bits -> bv[7]
+
+object quic_long_type = {
+    type this = {initial,retry,handshake,zero_rtt_protected}
+}
+
+type cid
+interpret cid -> bv[64]
+
+type version 
+interpret version -> bv[32]
+
+type pkt_num
+interpret pkt_num -> bv[32]
+
+# a fake type for packets
+
+type quic_packet = struct {
+    hdr_long : bool,
+    hdr_type : type_bits,
+    hdr_cid : cid,
+    hdr_version : version,
+    hdr_pkt_num : pkt_num
+}
+
+include quic_deser
+
+instance pc : pcap(quic_packet,quic_deser)
+
+action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
+import show_packet
+
+# Monitor packets on the wire
+
+# For each endpoint, the set of connectino ids that have been sent
+relation conn_seen(E:ip.endpoint,C:cid)
+
+# For each endpoint and connection id, track the last packet number sent
+function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
+
+after init {
+    conn_seen(E,C) := false;
+}
+
+implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    call show_packet(src,dst,pkt);
+    
+    var cid := pkt.hdr_cid;
+    var pnum := pkt.hdr_pkt_num;
+
+    # If the connection is new, the packet number is exact. Just
+    # record we have seen this cid.
+
+    if ~conn_seen(src,cid) {
+        conn_seen(src,cid) := true;
+    }
+
+    # Else, we have to figure the current packet number based on the last.
+    # It should be the least packet number greater than the last whose
+    # low order bits match the number given in the packet. To compute
+    # this, we have to take into account the actual number of bits.
+
+    else {
+        var last := last_pkt_num(src,cid);
+
+        # If long format or type is 0x1d, we match 32 bits
+
+        if pkt.hdr_long | pkt.hdr_type = 0x1d {
+            if some(n:pkt_num) n > last & bfe[0][31](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else if long format or type is 0x1e, we match 16 bits
+
+        else if pkt.hdr_type = 0x1e {
+            if some(n:pkt_num) n > last & bfe[0][15](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else (type is 0x1f) we match 8 bits
+
+        else {
+            if some(n:pkt_num) n > last & bfe[0][7](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+    };
+
+    last_pkt_num(src,cid) := pnum
+}
+
+attribute radix=16
