@@ -1772,14 +1772,15 @@ struct ivy_socket_deser : public ivy_binary_deser {
           : ivy_binary_deser(inp), sock(sock) {}
     virtual bool more(unsigned bytes) {
         while (inp.size() < pos + bytes) {
-            int get = pos + bytes - inp.size();
+            int oldsize = inp.size();
+            int get = pos + bytes - oldsize;
             get = (get < 1024) ? 1024 : get;
-            inp.resize(pos + get);
-            int bytes;
-	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+            inp.resize(oldsize + get);
+            int newbytes;
+	    if ((newbytes = recvfrom(sock,&inp[oldsize],get,0,0,0)) < 0)
 		 { std::cerr << "recvfrom failed\\n"; exit(1); }
-            inp.resize(pos + bytes);
-            if (bytes == 0)
+            inp.resize(oldsize + newbytes);
+            if (newbytes == 0)
                  return false;
         }
         return true;
