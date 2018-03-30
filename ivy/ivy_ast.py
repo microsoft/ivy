@@ -286,13 +286,13 @@ class App(Term):
     def is_numeral(self):
         return self.rep.rep[0].isdigit() or self.rep.rep[0] == '"'
     def prefix(self,s):
-        res = App(s + self.rep)
+        res = type(self)(s + self.rep)
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
     def drop_prefix(self,s):
         assert self.rep.startswith(s)
-        res = App(self.rep[len(s):],*self.args)
+        res = type(self)(self.rep[len(s):],*self.args)
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
@@ -687,7 +687,10 @@ class ActionDecl(Decl):
     def name(self):
         return 'action'
     def defines(self):
-        return [(c.defines(),lineno(c)) for c in self.args]
+        res =  [(c.defines(),lineno(c)) for c in self.args]
+        for a in self.args:
+            res.extend(a.iter_internal_defines())
+        return res
 
 class StateDecl(Decl):
     def name(self):
@@ -977,9 +980,11 @@ class ActionDef(Definition):
             action = subst_prefix_atoms_ast(action,subst,None,None)
         self.args = [atom,action]
     def __repr__(self):
-        return self.args[0].relname + ' = ' + str(self.args[1])
+        return str(self.args[0]) + '(' + ','.join(str(p) for p in self.formal_params) + ') = ' + str(self.args[1])
     def defines(self):
         return self.args[0].relname
+    def iter_internal_defines(self):
+        return self.args[1].iter_internal_defines()
     def clone(self,args):
         if not hasattr(self.args[1],'lineno'):
             print 'no lineno!!!!!: {}'.format(self)
@@ -999,7 +1004,7 @@ class ActionDef(Definition):
                 [s.drop_prefix('fml:') for s in self.formal_returns])
 
 def rewrite_param(p,rewrite):
-    res = App(p.rep)
+    res = type(p)(p.rep)
     res.sort = rewrite_sort(rewrite,p.sort)
     return res
 
@@ -1365,3 +1370,6 @@ class ASTContext(object):
                 exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
 
+class KeyArg(App):
+    def __repr__(self):
+        return '^' + App.__repr__(self)

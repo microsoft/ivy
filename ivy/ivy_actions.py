@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula,symbol_is_polymorphic,is_interpreted_symbol 
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -240,6 +240,11 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_subactions():
                     yield c
+    def iter_internal_defines(self):
+        for a in self.args:
+            if isinstance(a,Action):
+                for c in a.iter_internal_defines():
+                    yield c
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
     def modifies(self):
@@ -339,6 +344,8 @@ def type_ast(domain,ast):
     return ast
 
 def destr_asgn_val(lhs,fmlas):
+    iu.dbg('lhs')
+    iu.dbg('fmlas')
     mut = lhs.args[0]
     rest = list(lhs.args[1:])
     mut_n = mut.rep
@@ -358,6 +365,7 @@ def destr_asgn_val(lhs,fmlas):
     if eqs:
         fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
     for destr in ivy_module.module.sort_destructors[mut.sort.name]:
+        iu.dbg('destr')
         if destr != n:
             phs = sym_placeholders(destr)
             a1 = [lval] + phs[1:]
@@ -661,6 +669,8 @@ class Sequence(Action):
             thing = op.int_update(domain,pvars);
 #            print "op: {}, thing[2].annot: {}".format(op,thing[2].annot)
             update = compose_updates(update,axioms,thing)
+            if hasattr(op,'lineno') and update[1].annot is not None:
+                update[1].annot.lineno = op.lineno
         return update
     def __call__(self,interpreter):
         for op in self.args:
@@ -787,7 +797,10 @@ class IfAction(Action):
             res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+        # tricky: "else" branch is first in the join because the annotation
+        # for join is of the form "if v then second arg else firs arg"
+        res = join_action(else_part,if_part,domain.relations)
+        return res
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
     def get_cond(self):
@@ -939,6 +952,60 @@ class LetAction(Action):
 #        print "let res: {}".format(res)
         return res
 
+# Havoc all of the non-specification mutable symbols
+
+class CrashAction(Action):
+    def name(self):
+        return 'crash'
+    def __str__(self):
+        return 'crash {}'.format(self.args[0])
+    def modifies(self,domain=None):
+        if domain is None:
+            domain = ivy_module.module
+        lhs = self.args[0]
+        n = lhs.rep
+        dfnd = [ldf.formula.defines().name for ldf in domain.definitions]
+        def recur(n,res):
+            if n in domain.hierarchy:
+                for child in domain.hierarchy[n]:
+                    cname = iu.compose_names(n,child)
+                    if child != "spec" and iu.compose_names(cname,"spec") not in domain.attributes:
+                        recur(cname,res)
+            else:
+                if n in domain.sig.symbols and n not in dfnd:
+                    for sym in domain.sig.all_symbols_named(n):
+                        if not symbol_is_polymorphic(sym) and not is_interpreted_symbol(sym):
+                            res.append(sym)
+        syms = []
+        recur(n,syms)
+        return syms
+    def action_update(self,domain,pvars):
+
+        syms = self.modifies(domain)
+        havocs = []
+        for sym in syms:
+            if len(sym.sort.dom) < len(self.args[0].args) or not all(a.sort == s for a,s in zip(self.args[0].args,sym.sort.dom)):
+                raise iu.IvyError(self,'action "{}" cannot be applied to {} because of argument mismatch'.format(self,sym))
+            args = self.args[0].args + [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(sym.sort.dom[len(self.args[0].args):])]
+            havocs.append(HavocAction(sym(*args)))
+
+        seq = Sequence(*havocs)
+        return seq.int_update(domain,pvars)
+            
+# Assign a thunk to a local variable. This action doesn't need an update method because it
+# is desugared. 
+
+class ThunkAction(Action):
+    def name(self):
+        return 'thunk'
+    def __str__(self):
+        return ('thunk [' + str(self.args[0]) + '] ' + str(self.args[1]) + ' : ' + str(self.args[2]) + ' := ' + str(self.args[3]) + 
+                (' ; ' + str(self.args[4]) if len(self.args) > 4 else ''))
+    def iter_internal_defines(self):
+        lineno = self.lineno if hasattr(self,'lineno') else None
+        yield (self.args[0].rep,lineno)
+        yield (iu.compose_names(self.args[0].rep,'run'),lineno)
+
 class NativeAction(Action):
     """ Quote native code in an action """
     def __init__(self,*args):
@@ -1022,6 +1089,8 @@ class CallAction(Action):
             raise IvyError(self,"wrong number of output parameters");
         for x,y in zip(formal_params,actual_params):
             if x.sort != y.sort and not domain.is_variant(x.sort,y.sort):
+                iu.dbg('x.sort')
+                iu.dbg('y.sort')
                 raise IvyError(self,"value for input parameter {} has wrong sort".format(x))
         for x,y in zip(formal_returns,actual_returns):
             if x.sort != y.sort and not domain.is_variant(y.sort,x.sort):
@@ -1036,7 +1105,10 @@ class CallAction(Action):
         return res
     def prefix_calls(self,pref):
         res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
-        res.lineno = self.lineno
+        if hasattr(res,'lineno'):
+            res.lineno = self.lineno
+        else: 
+            print 'no lineno in prefix_calls: {}'.format(self)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
@@ -1108,6 +1180,8 @@ def concat_actions(*actions):
 
 def apply_mixin(decl,action1,action2):
     assert hasattr(action1,'lineno')
+    if not hasattr(action2,'lineno'):
+        print action2
     assert  hasattr(action2,'lineno')
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):
@@ -1214,7 +1288,7 @@ class ComposeAnnotation(Annotation):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
-        return 'Compose(' + ','.join(str(a) for a in self.args) + ')'
+        return (str(self.lineno) if hasattr(self,'lineno') else '') + 'Compose(' + ','.join(str(a) for a in self.args) + ')'
 
 class RenameAnnotation(Annotation):
     def __init__(self,arg,map):
@@ -1299,11 +1373,14 @@ def match_annotation(action,annot,handler):
                 iu.dbg('str_map(env)')
                 iu.dbg('env.get(annot.cond,annot.cond)')
                 return
+            # tricky: "if some" prepends conditions to the branches. We must account for this...
+            def fixarg(arg):
+                return Sequence(Sequence(),arg) if isinstance(action.args[0],ivy_ast.Some) else arg
             if cond:
-                recur(action.args[1],annot.thenb,env)
+                recur(fixarg(action.args[1]),annot.thenb,env)
             else:
                 if len(action.args) > 2:
-                    recur(action.args[2],annot.elseb,env)
+                    recur(fixarg(action.args[2]),annot.elseb,env)
             return
         if isinstance(action,ChoiceAction):
             assert isinstance(annot,IteAnnotation)

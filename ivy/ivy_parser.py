@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction, CrashAction, ThunkAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -142,6 +142,7 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
             idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined,static=module.static)
+            iu.dbg('idecl')
             idecl = substitute_constants_ast(idecl,vvsubst)
         else:
             idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined,static=module.static)
@@ -1030,6 +1031,11 @@ else:
     'optactiondef : EQ topseq'
     p[0] = p[2]
 
+  def p_optactiondef_eq_symbol(p):
+    'optactiondef : EQ TIMES'
+    p[0] = CrashAction()
+    p[0].lineno = get_lineno(p,2)
+
   def p_optimpex(p):
       'optimpex : '
       p[0] = None
@@ -1048,6 +1054,8 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
+    if isinstance(adef,CrashAction):
+        adef = adef.clone([Atom(This(),p[5])])
     decl = ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6]))
     p[0].declare(decl)
     for foo in decl.args:
@@ -1336,7 +1344,7 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
 def parse_nativequote(p,n):
     string = p[n][3:-3] # drop the quotation marks
     fields = string.split('`')
-    bqs = [Atom(s) for idx,s in enumerate(fields) if idx % 2 == 1]
+    bqs = [(Atom(This()) if s == 'this' else Atom(s))  for idx,s in enumerate(fields) if idx % 2 == 1]
     text = "`".join([(s if idx % 2 == 0 else str(idx/2)) for idx,s in enumerate(fields)])
     eols = [sum(1 for c in s if c == '\n') for idx,s in enumerate(fields) if idx % 2 == 0]
     seols = 0
@@ -1369,8 +1377,8 @@ def p_top_attribute_callatom_eq_callatom(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
-def p_top_variant_symbol_of_symbol(p):
-    'top : top VARIANT SYMBOL OF SYMBOL'
+def p_top_variant_symbol_of_atype(p):
+    'top : top VARIANT typesymbol OF atype'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
@@ -1381,7 +1389,7 @@ def p_top_variant_symbol_of_symbol(p):
     p[0].declare(VariantDecl(vdfn))
 
 def p_top_variant_symbol_of_symbol_eq_sort(p):
-    'top : top VARIANT SYMBOL OF SYMBOL EQ sort'
+    'top : top VARIANT typesymbol OF atype EQ sort'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
@@ -1496,6 +1504,13 @@ def lower_var_stmts(stmts):
             res = LocalAction(*[asgn,body])
             res.lineno = body.lineno;
             return stmts[:idx] + [res]
+        if isinstance(stmt,ThunkAction):
+            name = stmt.args[1].rep
+            lname = 'loc:'+name
+            subst = {name:lname}
+            lines = lower_var_stmts(stmts[idx+1:])
+            lines = [subst_prefix_atoms_ast(s,subst,None,None) for s in lines]
+            return stmts[:idx] + [stmt.clone(stmt.args + [Sequence(*lines)])]
     return stmts
 
 def p_sequence_lcb_rcb(p):
@@ -1762,6 +1777,14 @@ def p_lparam_variable_colon_symbol(p):
     p[0].lineno = get_lineno(p,1)
     p[0].sort = p[3]
 
+if not (iu.get_numeric_version() <= [1,6]):
+
+    def p_lparam_caret_variable_colon_symbol(p):
+        'lparam : CARET SYMBOL COLON atype'
+        p[0] = KeyArg(p[2])
+        p[0].lineno = get_lineno(p,2)
+        p[0].sort = p[4]
+
 def p_lparams_lparam(p):
     'lparams : lparam'
     p[0] = [p[1]]
@@ -1806,6 +1829,15 @@ if not (iu.get_numeric_version() <= [1,5]):
         'action : VAR opttypedsym optinit'
         p[0] = VarAction(p[2],p[3]) if p[3] is not None else VarAction(p[2])
         p[0].lineno = get_lineno(p,2)
+
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_action_thunk_symbol_optargs_colon_atype_assign_sequence(p):
+        'action : THUNK LABEL SYMBOL optargs COLON atype ASSIGN sequence'
+        action = Atom(p[3],p[4])
+        action.lineno = get_lineno(p,3)
+        p[0] = ThunkAction(Atom(p[2][1:-1],[]),action,Atom(p[6]),p[8])
+        p[0].lineno = get_lineno(p,1)
+
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'

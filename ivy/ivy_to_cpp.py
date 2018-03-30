@@ -139,7 +139,7 @@ def mk_nondet_sym(code,sym,name,unique_id):
     if is_large_type(sym.sort):
         code_line(code,varname(sym) + ' = ' + make_thunk(code,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,name,unique_id)))
         return
-    fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + 0 + ',"' + name + '",' + str(unique_id) + ')')
+    fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + '0' + ',"' + name + '",' + str(unique_id) + ')')
                      if not (is_native_sym(v) or ctype(v.sort) == '__strlit' or v.sort in sort_to_cpptype) else None)
     dom = sym.sort.dom
     if dom:
@@ -969,7 +969,12 @@ def native_typeof(arg):
     return int + len(arg.sort.dom) * '[]'
 
 def native_z3name(arg):
-    return arg.sort.name if il.is_variable(arg) else arg.rep.name
+    if il.is_variable(arg):
+        return arg.sort.name
+    rep = arg.rep
+    if isinstance(rep,str):
+        return rep
+    return arg.rep.name
 
 def native_to_str(native,reference=False,code=None):
     if code is None:
@@ -1622,9 +1627,10 @@ void CLASSNAME::install_timer(timer *r) {
     native_exprs = []
     for n in im.module.natives:
         native_exprs.extend(n.args[2:])
-    for n in im.module.actions.values():
-        if isinstance(n,ia.NativeAction):
-            native_exprs.extend(n.args[1:])
+    for actn,actb in im.module.actions.iteritems():
+        for n in actb.iter_subactions():
+            if isinstance(n,ia.NativeAction):
+                native_exprs.extend(n.args[1:])
     callbacks = set()
     for e in native_exprs:
         if isinstance(e,ivy_ast.Atom) and e.rep in im.module.actions:
@@ -1784,7 +1790,8 @@ struct ivy_socket_deser : public ivy_binary_deser {
             get = (get < 1024) ? 1024 : get;
             inp.resize(pos + get);
             int bytes;
-	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+//	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+	    if ((bytes = read(sock,&inp[pos],get)) < 0)
 		 { std::cerr << "recvfrom failed\\n"; exit(1); }
             inp.resize(pos + bytes);
             if (bytes == 0)
@@ -2107,8 +2114,6 @@ class z3_thunk : public thunk<D,R> {
     for sortname in il.sig.interp:
         if sortname in il.sig.sorts:
             impl.append('    __CARD__{} = {};\n'.format(varname(sortname),csortcard(il.sig.sorts[sortname])))
-    if target.get() not in ["gen","test"]:
-        emit_one_initial_state(impl)
     for native in im.module.natives:
         tag = native_type(native)
         if tag == "init":
@@ -2120,6 +2125,8 @@ class z3_thunk : public thunk<D,R> {
             indent_code(impl,code)
             close_loop(impl,vs)
             indent_level -= 1
+    if target.get() not in ["gen","test"]:
+        emit_one_initial_state(impl)
 
     impl.append('}\n')
 
@@ -3283,6 +3290,11 @@ def emit_call(self,header):
         header.append('___ivy_stack.pop_back();\n')
 
 ia.CallAction.emit = emit_call
+
+def emit_crash(self,header):
+    pass
+
+ia.CrashAction.emit = emit_crash
 
 def local_start(header,params,nondet_id=None):
     global indent_level

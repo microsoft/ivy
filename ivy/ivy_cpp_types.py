@@ -192,6 +192,15 @@ class VariantType(CppClass):
             add_member('static int temp_counter;\n')
             add_member('static void prepare() {temp_counter = 0;}\n')
             add_member('static void cleanup() {}\n')
+            add_member('size_t __hash() const {\n')
+            add_member('    switch(tag) {\n')
+            for idx,var in enumerate(self.variants):
+                sort,ctype = var
+                add_member('        case {}: return {} + hash_space::hash<{}>()({});\n'
+                             .format(idx,idx,ctype,self.downcast(idx,'(*this)')))
+            add_member('    }\n')
+            add_member('    return 0;\n')
+            add_member('}\n')
 
     def isa(self,variant_idx,expr):
         """ return a test indicating whether expr is of the variant

@@ -30,7 +30,8 @@ type quic_packet = struct {
     hdr_type : type_bits,
     hdr_cid : cid,
     hdr_version : version,
-    hdr_pkt_num : pkt_num
+    hdr_pkt_num : pkt_num,
+    payload : frame
 }
 
 include quic_deser
@@ -102,3 +103,5 @@ implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 }
 
 attribute radix=16
+
+extract iso_impl = this
