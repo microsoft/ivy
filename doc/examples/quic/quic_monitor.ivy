@@ -21,6 +21,8 @@ interpret version -> bv[32]
 type pkt_num
 interpret pkt_num -> bv[32]
 
+include quic_frame
+
 # a fake type for packets
 
 type quic_packet = struct {

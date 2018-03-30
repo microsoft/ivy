@@ -126,7 +126,7 @@ def mk_nondet(code,v,rng,name,unique_id):
     global nondet_cnt
     indent(code)
     ct = 'int' if isinstance(v,str) else ctype(v.sort)
-    code.append(varname(v) + ' = ('+ct+')___ivy_choose(' + str(rng) + ',"' + name + '",' + str(unique_id) + ');\n')
+    code.append(varname(v) + ' = ('+ct+')___ivy_choose(' + str(0) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def is_native_sym(sym):
     return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    
@@ -139,7 +139,7 @@ def mk_nondet_sym(code,sym,name,unique_id):
     if is_large_type(sym.sort):
         code_line(code,varname(sym) + ' = ' + make_thunk(code,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,name,unique_id)))
         return
-    fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + csortcard(v.sort) + ',"' + name + '",' + str(unique_id) + ')')
+    fun = lambda v: (('('+ctype(v.sort)+')___ivy_choose(' + 0 + ',"' + name + '",' + str(unique_id) + ')')
                      if not (is_native_sym(v) or ctype(v.sort) == '__strlit' or v.sort in sort_to_cpptype) else None)
     dom = sym.sort.dom
     if dom:
