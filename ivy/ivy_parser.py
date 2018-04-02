@@ -637,6 +637,7 @@ def p_fun_defnlhs_colon_atype(p):
     'fun : typeddefn'
 #    p[1].sort = p[3]
     p[0] = ConstantDecl(p[1])
+    p[0].lineno = p[1].lineno
 
 def p_fun_defn(p):
     'fun : typeddefn EQ defnrhs'
@@ -1858,21 +1859,22 @@ def p_defns_defns_comma_defn(p):
 
 def p_dotsym_symbol(p):
     'dotsym : SYMBOL'
-    p[0] = p[1]
+    p[0] = Atom(p[1],[])
+    p[0].lineno = get_lineno(p,1)
 
 def p_dotsym_dotsym_dot_symbol(p):
     'dotsym : dotsym DOT SYMBOL'
-    p[0] = p[1] + iu.ivy_compose_character + p[3]
+    p[0] = Atom(p[1].relname + iu.ivy_compose_character + p[3],[])
+    p[0].lineno = p[1].lineno
 
 def p_defnlhs_symbol(p):
     'defnlhs : dotsym'
-    p[0] = Atom(p[1],[])
-    p[0].lineno = get_lineno(p,1)
+    p[0] = p[1]
     
 def p_defnlhs_symbol_lparen_defargs_rparen(p):
     'defnlhs : dotsym LPAREN defargs RPAREN'
-    p[0] = Atom(p[1],p[3])
-    p[0].lineno = get_lineno(p,1)
+    p[0] = p[1]
+    p[0].args.extend(p[3])
     
 def p_defargs_defarg(p):
     'defargs : defarg'

@@ -843,7 +843,7 @@ class WhileAction(Action):
                 havocs +
                 assumes +
                 [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
-                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(And())]))),
+                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(Or())]))),
                 AssumeAction(Not(self.args[0]))]))
         if decreases is not None:
             res = LocalAction(aux,res)
@@ -1334,7 +1334,5 @@ def match_annotation(action,annot,handler):
             recur(action.failed_action(),annot,env)
             return
         handler.handle(action,env)
-    iu.dbg('action')
-    iu.dbg('annot')
     recur(action,annot,dict())
     
