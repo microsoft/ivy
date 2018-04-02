@@ -19,9 +19,18 @@ object quic_deser = {}
               quic_s_version,
               quic_s_pkt_num,
               quic_s_payload,
+              quic_stream_id,
+              quic_stream_off,
+              quic_stream_len,
+              quic_stream_fin,
+              quic_stream_offset,
+              quic_stream_length,
+              quic_stream_data,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
+        char frame_type;
+        int data_remaining;
 
     public:
         quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
@@ -48,10 +57,58 @@ object quic_deser = {}
                 state = quic_s_pkt_num;
             } else if (state == quic_s_pkt_num) {
                 ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
-                state = quic_s_done;
+                state = quic_s_payload;
+            } else if (state == quic_stream_off) {
+                res = (0x04 & frame_type) ? 1 : 0;
+                state = quic_stream_len;
+            } else if (state == quic_stream_len) {
+                res = (0x02 & frame_type) ? 1 : 0;
+                state = quic_stream_fin;
+            } else if (state == quic_stream_fin) {
+                res = (0x01 & frame_type) ? 1 : 0;
+                state = quic_stream_id;
+            } else if (state == quic_stream_id) {
+                ivy_binary_deser::getn(res,4);
+                state = quic_stream_offset;
+            } else if (state == quic_stream_offset) {
+                if (0x04 & frame_type)
+                    ivy_binary_deser::getn(res,4);
+                else res = 0;
+                state = quic_stream_length;
+            } else if (state == quic_stream_length) {
+                if (0x02 & frame_type)
+                    ivy_binary_deser::getn(res,4);
+                else res = 0;
+                data_remaining = res;
+                state = quic_stream_data;
+            } else if (state == quic_stream_data) {
+                ivy_binary_deser::getn(res,1);
             }
             else throw deser_err();
         }
+
+        virtual int open_tag(const std::vector<std::string> &tags) {
+            if (state == quic_s_payload) {
+                long long ft;
+                ivy_binary_deser::getn(ft,1);
+                frame_type = ft;
+                if (frame_type >= 0x10 && frame_type <= 0x17)
+                    state = quic_stream_off;
+                    return 0;
+            }
+            throw deser_err();
+        }
+
+        virtual bool open_list_elem() {
+            if (state == quic_stream_data)
+                return (0x02 & frame_type) ? (data_remaining > 0) : more(1);
+            throw deser_err();
+        }
+
+        virtual void close_tag() {
+            state = quic_s_payload;
+        }
+
         ~quic_deser(){}
     };
 

@@ -77,8 +77,10 @@ static void cleanup() {
     next_bv = 0;
 }
 #endif""".replace('BITS',str(bits)).replace('CLASSNAME',classname))
-    
- 
+     
+    def emit_inlines(self):
+        pass
+
     def emit_templates(self):
        add_impl(
 """
@@ -225,6 +227,24 @@ class VariantType(CppClass):
     def rand(self):
         return self.short_name()+'()'
 
+    def emit_inlines(self):
+        add_global(
+"""
+bool operator ==(const CLASSNAME &s, const CLASSNAME &t){
+    if (s.tag != t.tag) return false;
+    switch (s.tag) {
+""".replace('CLASSNAME',self.short_name()))
+        for idx,var in enumerate(self.variants):
+            sort,ctype = var
+            add_global('        case {}: return {} == {};\n'.format(idx,self.downcast(idx,'s'),self.downcast(idx,'t')))
+        add_global(
+"""
+    }
+    return true;
+}
+"""
+)
+
     def emit_templates(self):
        add_impl(
 """
@@ -242,18 +262,6 @@ std::ostream &operator <<(std::ostream &s, const CLASSNAME &t){
     }
     s << "}";
     return s;
-}
-bool operator ==(const CLASSNAME &s, const CLASSNAME &t){
-    if (s.tag != t.tag) return false;
-    switch (s.tag) {
-""".replace('CLASSNAME',self.short_name()))
-       for idx,var in enumerate(self.variants):
-           sort,ctype = var
-           add_impl('        case {}: return {} == {};\n'.format(idx,self.downcast(idx,'s'),self.downcast(idx,'t')))
-       add_impl(
-"""
-    }
-    return true;
 }
 template <>
 CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, int bound) {

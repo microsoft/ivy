@@ -340,12 +340,14 @@ def relevant_definitions(symbols):
     
 def sort_dependencies(mod,sortname):
     if sortname in mod.sort_destructors:
-        for destr in mod.sort_destructors[sortname]:
-            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
+        return [s.name for destr in mod.sort_destructors[sortname]
+                for s in destr.sort.dom[1:] + (destr.sort.rng,)]
     if sortname in mod.interps:
         t = mod.interps[sortname]
         if isinstance(t,ivy_ast.NativeType):
             return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
+    if sortname in mod.variants:
+        return [s.name for s in mod.variants[sortname]]
     return []
 
 # Holds info about isolate for user consumption

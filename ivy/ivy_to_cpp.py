@@ -2153,6 +2153,13 @@ class z3_thunk : public thunk<D,R> {
     if True or target.get() == "repl":
 
         for sort_name in im.module.sort_order:
+            if sort_name in im.module.variants:
+                sort = im.module.sig.sorts[sort_name] 
+                global sort_to_cpptype
+                assert sort in sort_to_cpptype
+                if sort in sort_to_cpptype:
+                    sort_to_cpptype[sort].emit_inlines()
+                continue
             if sort_name not in sorted(im.module.sort_destructors):
                 continue
             destrs = im.module.sort_destructors[sort_name]
