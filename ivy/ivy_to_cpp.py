@@ -1417,6 +1417,7 @@ def module_to_cpp_class(classname,basename):
 #endif
 """)
     header.append('    void install_reader(reader *);\n')
+    header.append('    void install_thread(reader *);\n')
     header.append('    void install_timer(timer *);\n')
     header.append('    virtual ~{}();\n'.format(classname))
 
@@ -1474,6 +1475,7 @@ public:
     virtual int fdes() = 0;
     virtual void read() = 0;
     virtual void bind() {}
+    virtual bool running() {return fdes() >= 0;}
     virtual ~reader() {}
 };
 
@@ -1508,7 +1510,7 @@ DWORD WINAPI TimerThreadFunction( LPVOID lpParam )
 void * _thread_reader(void *rdr_void) {
     reader *rdr = (reader *) rdr_void;
     rdr->bind();
-    while(rdr->fdes() >= 0) {
+    while(rdr->running()) {
         rdr->read();
     }
     delete rdr;
@@ -1560,6 +1562,10 @@ void CLASSNAME::install_reader(reader *r) {
     #endif
 }      
 
+void CLASSNAME::install_thread(reader *r) {
+    install_reader(r);
+}
+
 void CLASSNAME::install_timer(timer *r) {
     #ifdef _WIN32
 
@@ -1591,6 +1597,7 @@ void CLASSNAME::install_timer(timer *r) {
 
     if target.get() == "test":
         impl.append("""
+std::vector<reader *> threads;
 std::vector<reader *> readers;
 std::vector<timer *> timers;
 bool initializing = false;
@@ -1600,6 +1607,34 @@ void CLASSNAME::install_reader(reader *r) {
     if (!initializing)
         r->bind();
 }
+
+void CLASSNAME::install_thread(reader *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            ReaderThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_reader, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
 void CLASSNAME::install_timer(timer *r) {
     timers.push_back(r);
 }

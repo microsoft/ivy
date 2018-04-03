@@ -35,14 +35,14 @@ isolate test = {
         }
 }
 
-#extract iso_impl = this,test
+# extract iso_impl = this,test
 
-isolate iso_test = net,test with net.tcp,net.tcp.impl
+# isolate iso_test = net,test with net.tcp,net.tcp.impl
 
 
-export test.close_socket
+# export test.close_socket
 
-#extract iso_proc(self:addr) = net(self),test
+extract iso_proc(self:addr) = net(self),test
 
 # instance net : tcp_network(addr,pkt)
 

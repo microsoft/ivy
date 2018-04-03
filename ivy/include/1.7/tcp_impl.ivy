@@ -17,7 +17,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     object rdr = {}         # the listener object
     object cb = {}          # struct holding the callbacks
-    object send_queue = {}  # queue of blocked outgoing packets
+    object send_queue = {}  # queues of outgoing packets
     
 # This code goes in the C++ header file, ahead of the ivy object declaration.
 # Here, we put declarations (perhaps forward) of any auxiliary classes we need).
@@ -28,6 +28,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
 <<< header
 
     #include <netinet/tcp.h>
+    #include <list>
+    #include <semaphore.h>
 
     class tcp_listener;   // class of threads that listen for connections
     class tcp_callbacks;  // class holding callbacks to ivy
@@ -43,6 +45,9 @@ module tcp_impl(addr,pkt,me,port_base) = {
         virtual int rev(unsigned long inetaddr, unsigned long inetport);
     };
 
+    class tcp_queue;
+
+
 >>>
 
 # This code goes in the C++ implementation file. Here, we put implementations of
@@ -54,14 +59,74 @@ module tcp_impl(addr,pkt,me,port_base) = {
    // buffers, the total number of untransmitted backets that can back up will be greater
    // than this. This number *must* be at least one to void packet corruption.
 
-   #define MAX_SEND_QUEUE 1
+   #define MAX_TCP_SEND_QUEUE 16
 
-   struct tcp_send_queue {
+   struct tcp_mutex {
+#ifdef _WIN32
+       HANDLE mutex;
+       tcp_mutex() { mutex = CreateMutex(NULL,FALSE,NULL); }
+       void lock() { WaitForSingleObject(mutex,INFINITE); }
+       void unlock() { ReleaseMutex(mutex); }
+#else
+       pthread_mutex_t mutex;
+       tcp_mutex() { pthread_mutex_init(&mutex,NULL); }
+       void lock() { pthread_mutex_lock(&mutex); }
+       void unlock() { pthread_mutex_unlock(&mutex); }
+#endif
+   };
+
+   struct tcp_sem {
        sem_t sem;
-       bool error;
+       tcp_sem() { sem_init(&sem,0,0); }
+       void up() {sem_post(&sem); }
+       void down() {sem_wait(&sem);}
+   };
+
+   class tcp_queue {
+       tcp_mutex mutex; 
+       tcp_sem sem;
+       bool closed;
        std::list<std::vector<char> > bufs;
-       tcp_send_queue() : error(false) {
-            sem_init(&sem,0,0);
+    public:
+       tcp_queue() : closed(false) {}
+       bool enqueue_swap(std::vector<char> &buf) {
+           mutex.lock();
+           if (closed) {
+               mutex.unlock();
+               return true;
+           }
+           if (bufs.size() < MAX_TCP_SEND_QUEUE) {
+               bufs.push_back(std::vector<char>());
+               buf.swap(bufs.back());
+           }
+           mutex.unlock();
+           sem.up();
+           return false;
+       }
+       bool dequeue_swap(std::vector<char> &buf) {
+           while(true) {
+               sem.down();
+               mutex.lock();
+               if (closed) {
+                   mutex.unlock();
+                   return true;
+               }
+               if (bufs.size() > 0) {
+                   buf.swap(bufs.front());
+                   bufs.erase(bufs.begin());
+                   mutex.unlock();
+                   return false;
+               }
+               mutex.unlock();
+            }
+       }
+       void set_closed(bool val) {
+           mutex.lock();
+           closed = val;
+           if (val) 
+               bufs.clear();
+           mutex.unlock();
+           sem.up();
        }
    };
 
@@ -210,13 +275,16 @@ module tcp_impl(addr,pkt,me,port_base) = {
     // the queue will be emptied asynchrnonously. When the queue is empty the writer deletes
     // the queue and exits.
 
+    // invariant: if socket is closed, queue is closed
+
     class tcp_writer : public reader {
         int sock;
-        tcp_send_queue *queue;
+        tcp_queue *queue;
         ivy_class *ivy;
+        bool closed;
       public:
-        tcp_reader(int sock, std::list<std::vector<char> > *queue, ivy_class *ivy)
-            : sock(sock), queue(queue), ivy(ivy) {
+        tcp_writer(int sock, tcp_queue *queue, ivy_class *ivy)
+            : sock(sock), queue(queue), ivy(ivy), closed(false) {
         }
 
         virtual int fdes() {
@@ -227,37 +295,32 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
         virtual void read() {
 
-            // wait on the semaphore
-
-            sem_wait(&queue->sem);
-
-            // try to dequeue a packet 
-
-            ivy->__lock();
-
-            if (queue->buf.size() == 0) // could happen if asynchronous clear occurred
-                return;
+            // dequeue a packet to send
 
             std::vector<char> buf;
-            buf.swap(queue->front());
-            queue->erase(queue->begin());
-        
-            bool error = queue->error;
+            bool qclosed = queue->dequeue_swap(buf);        
 
-            ivy->__unlock();
+            // if queue is closed and socket is open, close socket. Note the
+            // queue can't be opened again until the socket is closed, so
+            // there is no race here.
 
-            if (error) return; // just drop packet if in error state
+            if (qclosed) {
+                if (!closed) {
+                    closed = true;
+                    ::close(sock);
+                }
+                return;
+            }
+            closed = false; // if socket was closed and queue is open, then socket must be open again
 
             // try a blocking send
 
-            int bytes = send(sock,&buf[0],buf.size(),MSG_NOSIGNAL)
+            int bytes = send(sock,&buf[0],buf.size(),MSG_NOSIGNAL);
         
-            // if not all bytes sent, channel is dead, record an error
+            // if not all bytes sent, channel has failed, close the queue
 
-            if (bytes < (int)buf.size()){
-                ivy->__lock();
-                queue->error = true;
-                ivy->__unlock();
+            if (bytes < (int)buf.size())
+                queue-> set_closed(true);
         }
     };
 
@@ -384,7 +447,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     tcp_listener *`rdr`;             // the listener task
     tcp_callbacks *`cb`;             // the callbacks to ivy
-    hash_space::hash<int,tcp_send_queue *> `send_queue`   // queues of blocked packets, per socket
+    hash_space::hash_map<int,tcp_queue *> `send_queue`;   // queues of blocked packets, per socket
 
 >>>
 
@@ -461,12 +524,24 @@ module tcp_impl(addr,pkt,me,port_base) = {
     implement close(s:socket) {
         <<< impure
             
-            // shut down the socket and trust someone else to clean it up
+            // We don't want to close a socket when there is another thread
+            // waiting, because the other thread won't know what to do with the
+            // error. 
+        
+            // Instead we shut down the socket and let the other thread close it.
+            // If there is a reader thread, it will see EOF and close the socket. If there is
+            // on open writer thread, it will close the socket after we close the
+            // send queue. If the queue is already closed, closing it has no effect.
+
+            // invariant: if a socket is open there is a reader thread or
+            // an open writer thread, but not both. 
+
+            // Because of this invariant, the socket will be closed exactly once.
 
             ::shutdown(s,SHUT_RDWR);
 
-            
-
+            if (`send_queue`.find(s) != `send_queue`.end()) 
+                `send_queue`[s] -> set_closed(true);
 
         >>>
     }
@@ -480,25 +555,23 @@ module tcp_impl(addr,pkt,me,port_base) = {
             install_reader(new tcp_connector(`me`,s,other,*`cb`,this));
 
             // create a send queue for this socket, if needed, along with
-            // its thread
+            // its thread. if the queue exists, it must be closed, so
+            // we open it.
 
-            std::list<std::vector<char> > *queue;
-            bool have_queue = `send_queue`.find(s) != `send_queue`.end();
-            if (!have_queue) {
-                `send_queue`[s] = queue = new std::list<std::vector<char> >();
-                 install_reader(new tcp_writer(s,queue,this));
-            } else {
-                queue = `send_queue`[s]
-                queue->buf.clear();
-                queue->error = false;
-            }
-
-
+            tcp_queue *queue;
+            if (`send_queue`.find(s) == `send_queue`.end()) {
+                `send_queue`[s] = queue = new tcp_queue();
+                 install_thread(new tcp_writer(s,queue,this));
+            } else
+                `send_queue`[s] -> set_closed(false);
         >>>
     }
 
     # send serializes the message and calls unix send to send it in the
-    # given socket. It returns true if sending was successful.
+    # given socket. It returns true if sending was successful. Not, a "successfully"
+    # sent packet could still be lost to due congestion. If we want to maintain
+    # ordered semantics, we will need to have an additional return code indicating
+    # the packet could not be queued (analogous to EAGAIN). 
 
     implement send(s:socket,p:pkt) returns (ok:bool) {
         <<< impure
@@ -506,42 +579,19 @@ module tcp_impl(addr,pkt,me,port_base) = {
                 __ser(sr,p);
 //                std::cout << "SENDING\n";
 
-                // if there are no queued packets, send synchronously
+                // if the send queue for this sock doesn's exist, it isn't open,
+                // so the client has vioalted the precondition. we do the bad client
+                // the service of not crashing. 
 
-                int sent = 0;
-                bool have_queue = `send_queue`.find(s) != `send_queue`.end();
-                if (!have_queue)
-                    sent = send(s,&sr.res[0],sr.res.size(),MSG_NOSIGNAL|MSG_DONTWAIT);
+                if (`send_queue`.find(s) == `send_queue`.end())
+                    ok = true;
 
-                // if whole packet not sent, queue the remainder
+                else {
+                    // get the send queue, and enqueue the packet, returning false if
+                    // the queue is closed.
 
-                if (sent < (int)sr.res.size()) {
-
-                    // create a send queue for this socket, if needed, along with
-                    // its thread
-
-                    std::list<std::vector<char> > *queue;
-                    if (!have_queue) {
-                        `send_queue`[s] = queue = new std::list<std::vector<char> >();
-                         install_reader(new tcp_writer(s,queue,this));
-                    } else
-                        queue = `send_queue`[s]
-
-                    // if queue is full, drop the packet
-
-                    if (queue->size() >= MAX_SEND_QUEUE) { 
-                        ok = false;
-                        return;
-                    }
-
-                    // add the remaining bytes to the queue
-
-                    queue->append(std::vector<char>());
-                    sent = (sent < 0) ? 0 : sent;
-                    queue->back().resize(sr.res.size() - sent);
-                    std::copy(sr.res.begin()+bytes,sr.res.end(),queue->back().begin());
-                }
-                ok = true;
+                    ok = !`send_queue`[s]->enqueue_swap(sr.res);
+               }
         >>>
     }
 
