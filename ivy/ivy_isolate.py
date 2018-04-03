@@ -580,7 +580,7 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term
                 if cmods:
                     things = ','.join(sorted(map(str,cmods)))
                     refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
-                    raise iu.IvyError(action,"External call to {} may have visible effect on {}{}"
+                    raise iu.IvyError(None,"External call to {} may have visible effect on {}{}"
                                       .format(called,things,refs))
             
 
@@ -1192,6 +1192,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 add_deps(sort.rng.name)
             else:
                 add_deps(sort.name)
+        for s in isolate.params():
+            if s.sort not in mod.sig.sorts:
+                raise iu.IvyError(isolate,"bad type {} in isolate parameter".format(s.sort))
+            add_deps(s.sort)
         old_sorts = list(mod.sig.sorts.keys())
         for sort in old_sorts:
             if sort not in all_sorts and sort != 'bool':
