@@ -2155,7 +2155,6 @@ class z3_thunk : public thunk<D,R> {
         for sort_name in im.module.sort_order:
             if sort_name in im.module.variants:
                 sort = im.module.sig.sorts[sort_name] 
-                global sort_to_cpptype
                 assert sort in sort_to_cpptype
                 if sort in sort_to_cpptype:
                     sort_to_cpptype[sort].emit_inlines()

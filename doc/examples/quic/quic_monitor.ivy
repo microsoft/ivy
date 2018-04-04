@@ -31,7 +31,7 @@ type quic_packet = struct {
     hdr_cid : cid,
     hdr_version : version,
     hdr_pkt_num : pkt_num,
-    payload : frame
+    payload : frame.arr
 }
 
 include quic_deser
