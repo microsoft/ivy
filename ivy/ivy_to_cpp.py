@@ -36,7 +36,10 @@ def sort_card(sort):
         return 2
     if sort in sort_to_cpptype:
         return sort_to_cpptype[sort].card()
-    return slv.sort_card(sort)
+    card = slv.sort_card(sort)
+#    if card and card > (2 ** 32):
+#        card = None
+    return card
     if hasattr(sort,'name'):
         name = sort.name
         if name in il.sig.interp:
@@ -362,7 +365,7 @@ def ctype_function(sort,classname=None,skip_params=0):
     cty = ctypefull(sort.rng,classname)
     if all(cards) and reduce(mul,cards,1) <= large_thresh:
         return (cty,cards)
-    cty = 'hash_thunk<'+ctuple(sort.dom,classname=classname)+','+cty+'>'
+    cty = 'hash_thunk<'+ctuple(sort.dom[skip_params:],classname=classname)+','+cty+'>'
     return (cty,[])
     
 native_expr_full = native_type_full

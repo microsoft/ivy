@@ -177,7 +177,6 @@ def compile_field_reference_rec(symbol_name,args,top=False):
             actparams = top_context.actions[destr_name]
             keypos = actparams[2] if len(actparams) > 2 else 0
             args.insert(keypos,base)
-            iu.dbg('args')
             return field_reference_action(destr_name,args,top)
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
         args.insert(0,base)
@@ -241,9 +240,7 @@ def compile_inline_call(self,args,methodcall=False):
         args = [sort_infer_contravariant(a,cmpl_sort(p.sort)) for a,p in zip(args,params)]
 
     call = CallAction(*([ivy_ast.Atom(self.rep,args)]+return_values))
-    iu.dbg('type(self)')
     call.lineno = self.lineno
-    iu.dbg('call')
 
     # Handle dispatch for method call with variants
 
@@ -265,7 +262,6 @@ def compile_inline_call(self,args,methodcall=False):
             call = IfAction(ivy_ast.Some(tmpsym,ivy_logic.Symbol('*>',ivy_logic.RelationSort([args[keypos].sort,vsort]))(args[keypos],tmpsym)),
                             new_call,
                             call)
-    iu.dbg('call')
 
     expr_context.code.append(call)
     if return_context is None or return_context.values is None:
@@ -520,8 +516,6 @@ def compile_call(self):
         if res is not None:
             raise IvyError(self,'call to non-action')
         res = ctx.extract()
-        iu.dbg('res')
-        iu.dbg('res.lineno')
         return res
     #    print "compiled call action: {}".format(res)
         return res

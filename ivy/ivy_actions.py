@@ -344,8 +344,6 @@ def type_ast(domain,ast):
     return ast
 
 def destr_asgn_val(lhs,fmlas):
-    iu.dbg('lhs')
-    iu.dbg('fmlas')
     mut = lhs.args[0]
     rest = list(lhs.args[1:])
     mut_n = mut.rep
@@ -365,7 +363,6 @@ def destr_asgn_val(lhs,fmlas):
     if eqs:
         fmlas.append(Or(And(*eqs),equiv_ast(dlhs,drhs)))
     for destr in ivy_module.module.sort_destructors[mut.sort.name]:
-        iu.dbg('destr')
         if destr != n:
             phs = sym_placeholders(destr)
             a1 = [lval] + phs[1:]
