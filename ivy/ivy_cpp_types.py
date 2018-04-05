@@ -94,7 +94,7 @@ std::ostream &operator <<(std::ostream &s, const CLASSNAME &t){
     return s;
 }
 template <>
-CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (args[idx].fields.size())
         throw out_of_bounds(idx);
     return args[idx].atom;
@@ -264,7 +264,7 @@ std::ostream &operator <<(std::ostream &s, const CLASSNAME &t){
     return s;
 }
 template <>
-CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (args[idx].atom.size())
         throw out_of_bounds("unexpected value for sort SORTNAME: " + args[idx].atom,args[idx].pos);
     if (args[idx].fields.size() == 0)

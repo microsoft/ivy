@@ -1816,17 +1816,17 @@ struct out_of_bounds {
     out_of_bounds(const std::string &s, int pos = 0) : txt(s), pos(pos) {}
 };
 
-template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, long long bound);
 
 template <>
-bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom == "true";
 }
 
 template <>
-int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+int _arg<int>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     int res = atoi(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
@@ -1839,7 +1839,7 @@ std::ostream &operator <<(std::ostream &s, const __strlit &t){
 }
 
 template <>
-__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom;
@@ -1981,7 +1981,7 @@ class z3_thunk : public thunk<D,R> {
         if sort_name not in encoded_sorts:
             impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
             impl.append('template <>\n')
-            impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+            impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, long long bound);\n')
             impl.append('template <>\n')
             impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
             impl.append('template <>\n')
@@ -2001,7 +2001,7 @@ class z3_thunk : public thunk<D,R> {
             if sort_name not in encoded_sorts:
                 impl.append('std::ostream &operator <<(std::ostream &s, const {} &t);\n'.format(cfsname))
                 impl.append('template <>\n')
-                impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound);\n')
+                impl.append(cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, long long bound);\n')
                 impl.append('template <>\n')
                 impl.append('void  __ser<' + cfsname + '>(ivy_ser &res, const ' + cfsname + '&);\n')
                 impl.append('template <>\n')
@@ -2065,7 +2065,7 @@ class z3_thunk : public thunk<D,R> {
 #    for sym in il.sig.constructors:
 #        declare_symbol(header,sym)
     for sname in il.sig.interp:
-        header.append('    int __CARD__' + varname(sname) + ';\n')
+        header.append('    long long __CARD__' + varname(sname) + ';\n')
     find_import_callers()
     for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
@@ -2242,7 +2242,7 @@ class z3_thunk : public thunk<D,R> {
                 cfsname = classname + '::' + csname
                 if sort_name not in encoded_sorts:
                     impl.append('template <>\n')
-                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, long long bound)')
                     code_line(impl,cfsname + ' res')
                     code_line(impl,'ivy_value &arg = args[idx]')
                     code_line(impl,'if (arg.atom.size() || arg.fields.size() != {}) throw out_of_bounds("wrong number of fields",args[idx].pos)'.format(len(destrs)))
@@ -2346,7 +2346,7 @@ class z3_thunk : public thunk<D,R> {
                 cfsname = classname + '::' + csname
                 if sort_name not in encoded_sorts:
                     impl.append('template <>\n')
-                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, int bound)')
+                    open_scope(impl,line=cfsname + ' _arg<' + cfsname + '>(std::vector<ivy_value> &args, unsigned idx, long long bound)')
                     code_line(impl,'ivy_value &arg = args[idx]')
                     code_line(impl,'if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos)')
                     for idx,sym in enumerate(sort.extension):
@@ -3427,7 +3427,7 @@ def emit_repl_imports(header,impl,classname):
 def emit_repl_boilerplate1(header,impl,classname):
     impl.append("""
 
-int ask_ret(int bound) {
+int ask_ret(long long bound) {
     int res;
     while(true) {
         __ivy_out << "? ";
