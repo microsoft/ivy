@@ -1,0 +1,217 @@
+#lang ivy1.7
+
+include quic_types
+include quic_frame
+include quic_packet
+
+# Connections
+# ===========
+
+# This section gives the wire specification of the QUIC protocol.  It
+# tracks the state of connections resulting from a sequence of packet
+# events.
+
+# State representation
+# --------------------
+
+
+# For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has
+# been sent by E.
+
+relation conn_seen(E:ip.endpoint,C:cid)
+
+# The predicate `initializing(C,S)` holds if client endpoint C has sent an
+# Initial packet to server endpoint S, but the server has not replied.
+
+relation initializing(C:ip.endpoint,S:ip.endpoint)
+
+# The packet number of the initial packet from client endpoint C to
+# server endpoint S is represented by `initial_pkt_num(C,S)`.
+
+function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
+
+# For each endpoint E and cid C, last_pkt_num(E,C) represents the
+# number of the latest packet sent by E on C.
+
+function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
+
+# For each endpoint E and cid C, sent_pkt(E,C,N) is true if
+# a packet numbered N has been sent by E on C.
+
+relation sent_pkt(E:ip.endpoint,C:cid,N:pkt_num)
+
+
+# Initial state
+# -------------
+
+# Initially, no connections have been seen and no packeter have been
+# sent.
+
+after init {
+    conn_seen(E,C) := false;
+    sent_pkt(E,C,N) := false;
+}
+
+# Packet events
+# -------------
+
+# A packet event represents the transmision of a UDP packet `pkt` from
+# source endpoint `src` to destination endpoint `dst`.
+
+# The packet *kind* depends on its type bits, according to
+# the following table:
+#
+#   | hdr_type  | kind      |
+#   -------------------------
+#   | 0x7f      | Initial   |
+#   | 0x7d      | Handshake |
+#
+# An Initial packet represents an attempt by a client to establish a
+# connection. The cid is arbitary, but must not have been previously
+# used. The initial packet must consist (apart from padding) of a
+# single stream frame for stream zero, containing the initial security
+# handshake information [1].
+#
+# TEMPORARY: We require that only one connection be initializing for
+# a given client endpoint at a given time [2]. This seems unreasonable,
+# but otherwise there is no way to match Handshake packets to Initial
+# packets, at least without looking a the security information.
+
+
+before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    
+    # Extract the cid and packet number from the packet.
+
+    var pcid := pkt.hdr_cid;
+    var pnum := decode_packet_number(src,dst,pkt);
+
+    # Record that the connection has been seen from this source, and
+    # the packet has been sent.
+
+    conn_seen(src,pcid) := true;
+    sent_pkt(src,pcid,pnum) := true;
+
+    # Record the packet number as latest seen
+
+    last_pkt_num(src,pcid) := pnum;
+
+    # An Initial packet has hdr_type 0x7f
+
+    if pkt.hdr_type = 0x7f {
+        require pkt.payload.end = 1;  # [1]
+#        require exists X:frame.stream. (pkt.payload.value(0) :> X);  # [1]
+        require ~initializing(src,dst);  # [2]
+
+        initializing(src,dst) := true;
+        initial_pkt_num(src,dst) := pnum;
+    }
+
+    # A Handshake packet has hdr_type 0x7d
+
+    else if pkt.hdr_type = 0x7d {
+   
+        # Match the Handshake to the cid `icid` of an Initial packet sent
+        # by the destination. We mark this connection as no longer
+        # initializing and transfer the Initial packet to the new cid.
+        
+        if initializing(dst,src) {
+            initializing(dst,src) := false;
+            var ipnum := initial_pkt_num(dst,src);
+            sent_pkt(dst,pcid,ipnum) := true;
+            last_pkt_num(dst,pcid) := ipnum;
+        }
+    };
+
+    # Handle all of the frames
+
+    var idx : frame.idx := 0;
+    while idx < pkt.payload.end {
+        call pkt.payload.value(idx).handle(src,dst);
+        idx := idx + 1
+    }
+
+}
+
+
+# ### Frame handlers
+
+# Extend `frame` with an action `handle` that handles a frame on the
+# wire.
+
+object frame = {
+   ...
+   action handle(f:this,src:ip.endpoint,dst:ip.endpoint) = {}
+}
+
+# #### Ack handler
+
+object frame = {
+    ...
+    object ack = {
+        ...
+        action handle(f:this,src:ip.endpoint,dst:ip.endpoint) = {
+        }
+    }
+}
+
+
+# ### Packet number decoding
+
+# The packet number is decoded from the packet header fields as follows.
+
+# If the connection is new, the field `hdr_pkt_num` gives the
+# exact first packet number. Otherwise, it represents only a number
+# of low order bits. The high-order bits must be inferred from the
+# last packet number seen for this connection.
+
+# For short format packets. the number of low order bits present
+# in `hdr_pkt_num` depends on the `hdr_type` field of the packet,
+# according to this table:
+#
+#   | hdr_type | bits |
+#   -------------------
+#   | 0x1d     | 32   |
+#   | 0x1e     | 16   | 
+#   | 0x1f     |  8   |
+#
+# For long format packets, the number of bits is always 32.  The
+# decoded packet number is the *least* number greater than the
+# last seen whose low-order bits agree with `hdr_pkt_num`.
+    
+
+action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
+
+    var cid := pkt.hdr_cid;
+    var pnum := pkt.hdr_pkt_num;
+
+    if conn_seen(src,cid) {
+
+        # This is a last number transmitted by the source on this connection.
+
+        var last := last_pkt_num(src,cid);
+
+        # If long format or type is 0x1d, we match 32 bits
+
+        if pkt.hdr_long | pkt.hdr_type = 0x1d {
+            if some(n:pkt_num) n > last & bfe[0][31](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else if long format or type is 0x1e, we match 16 bits
+
+        else if pkt.hdr_type = 0x1e {
+            if some(n:pkt_num) n > last & bfe[0][15](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else (type is 0x1f) we match 8 bits
+
+        else {
+            if some(n:pkt_num) n > last & bfe[0][7](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+    }
+}

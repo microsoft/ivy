@@ -1,0 +1,52 @@
+#lang ivy1.7
+
+# Terminology
+# -----------
+
+# An *endpoint* is consists of a protocol, a network address and a
+# port. Endpoints uniquely identify entities in the protocol.
+
+# A *connection* is a form of session that may be established between
+# two enpoints, one having the role of *client* and the other of
+# *server*. It is unclear whether a given client/server pair may have
+# multipl connections established simultaneously.
+
+# A *cid* is a connection identifier. Connection identifiers are
+# uniquely associated to connections and are not reused. The exception
+# is that the first cid sent by a client in an Initial packet may be
+# replaced by ther server with a different cid, which is used by all
+# subsequent packets associated with the connection.
+
+
+# Common types
+# ------------
+
+# This section describes the common types used by the protocol specification.
+
+# ### Connection identifiers
+
+# The type `cid` represents a cid as a 64-bit unsigned integer.
+
+type cid
+interpret cid -> bv[64]
+
+# ### Protocol verion numbers
+
+# The type `version` represents a protocol version as a 32-bit unsigned number.
+
+type version 
+interpret version -> bv[32]
+
+# ### Packet numbers
+
+# The type `pkt_num` represents a packet number as a 64-bit unsigned number.
+
+type pkt_num
+interpret pkt_num -> bv[64]
+
+# ### Time values
+
+# The type `microsecs` represents a time value in
+# microseconds. Currently this type is uninterpreted.
+
+type microsecs

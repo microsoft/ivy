@@ -106,6 +106,7 @@ def get_lineno(p,n):
     return iu.Location(iu.filename,p.lineno(n))
 
 def report_error(error):
+    assert False,error
     error_list.append(error)
 
 def stack_lookup(name):
@@ -176,6 +177,8 @@ def do_insts(ivy,insts):
                     raise iu.IvyError(instantiation,"variable {} is unbound".format(v))
             module = defn.args[1]
             inst_mod(ivy,module,pref,subst,vsubst)
+            if pref is None:
+                ivy.objects.update(module.objects)
         else:
             others.append(inst)
     if others:
@@ -192,6 +195,7 @@ def check_non_temporal(x):
         return x
 
 special_attribute = None
+parent_object = None
 
 class Ivy(object):
     def __init__(self):
@@ -199,6 +203,7 @@ class Ivy(object):
         self.defined = defaultdict(list)
         self.static = set()
         self.modules = dict()
+        self.objects = dict()  # maps object names to "defined" dictionary
         self.macros = dict()
         self.actions = dict()
         self.included = set()
@@ -207,6 +212,18 @@ class Ivy(object):
         global special_attribute
         self.attributes = (special_attribute,) if special_attribute is not None else ()
         special_attribute = None
+        # if we are a continuation object, inherent defined symbols from previous declaration
+        global parent_object
+        if parent_object is not None:
+            print 'got parent_object = {}'.format(parent_object)
+            parent = stack[-1]
+            if parent_object in parent.defined:
+                print parent.defined[parent_object]
+            defined = parent.get_object_defined(parent_object)
+            print 'defined = {}'.format(defined)
+            if defined is not None:
+                self.defined = defined
+            parent_object = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
     def declare(self,decl):
@@ -229,10 +246,13 @@ class Ivy(object):
         else:
             name,lineno = df
             cls = None
-        for olineno,ocls in self.defined[name]:
+        for x in self.defined[name]:
+            olineno,ocls = x[0],x[1]
             conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 
                         else (ocls is not TypeDecl) if cls is ObjectDecl else True)
             if conflict:
+                print lineno
+                print olineno
                 report_error(Redefining(name,lineno,olineno))
         self.defined[name].append((lineno,cls))
 
@@ -241,6 +261,19 @@ class Ivy(object):
         if name in self.defined_types:
             report_error(Redefining(name,lineno,self.defined[name]))
         self.defined[name] = lineno
+
+    def get_object_defined(self,name):
+        if name in self.defined:
+            x = self.defined[name][0]
+            if len(x) >= 3:
+                return x[2]
+        return None
+
+    def set_object_defined(self,name,defined):
+        print 'set_object_defined: {}'.format(name)
+        if name in self.defined:
+            print 'prev: {}'.format(self.defined[name])
+            self.defined[name] = [(x[0],x[1],defined) for x in self.defined[name]]
 
     @property
     def args(self):
@@ -381,6 +414,8 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
 
 def p_optdotdotdot(p):
     'optdotdotdot : '
+    global parent_object
+    parent_object = None
     p[0] = False
 
 def p_optdotdotdot_dotdotdot(p):
@@ -397,12 +432,14 @@ def p_objectend(p):
     stack[-1].is_object=False
     p[0] = None
 
-def create_object(top,name,objectargs,module,continuation=False):
+def create_object(top,name,objectargs,module,lineno=None,continuation=False):
     prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(objectargs)]
     pref = Atom(name,prefargs)
+    pref.lineno = lineno
 #    top.define((pref.rep,get_lineno(p,2)))
     if not continuation:
         top.declare(ObjectDecl(pref))
+        top.set_object_defined(name,module.defined)
     vsubst = dict((pr.rep,v) for pr,v in zip(objectargs,prefargs))
     inst_mod(top,module,pref,{},vsubst)
     # for decl in module.decls:
@@ -410,10 +447,16 @@ def create_object(top,name,objectargs,module,continuation=False):
     #     top.declare(idecl)
     stack.pop()
 
-def p_top_object_symbol_eq_lcb_top_rcb(p):
-    'top : top OBJECT SYMBOL objectargs EQ LCB optdotdotdot top RCB objectend'
+def p_objsym(p):
+    'objsym : SYMBOL'
     p[0] = p[1]
-    create_object(p[0],p[3],p[4],p[8],p[7])
+    global parent_object
+    parent_object = p[0]
+
+def p_top_object_symbol_eq_lcb_top_rcb(p):
+    'top : top OBJECT objsym objectargs EQ LCB optdotdotdot top RCB objectend'
+    p[0] = p[1]
+    create_object(p[0],p[3],p[4],p[8],get_lineno(p,3),p[7])
 
 def p_optsemi(p):
     'optsemi : '
@@ -1194,7 +1237,7 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_optwith(p):
         'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB optwith'
         p[0] = p[1]
-        create_object(p[0],p[4],p[5],p[8])
+        create_object(p[0],p[4],p[5],p[8],get_lineno(p,4))
         ty = TrustedIsolateDef if p[2] else IsolateDef
         d = IsolateObjectDecl(ty(*([Atom(p[4],p[5]),Atom(p[4],p[5])]+p[10])))
         d.args[0].with_args = len(p[10])
