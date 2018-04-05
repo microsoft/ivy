@@ -149,7 +149,7 @@ object frame = {
     ...
     object ack = {
         ...
-        action handle(f:this,src:ip.endpoint,dst:ip.endpoint) = {
+        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint) = {
         }
     }
 }

@@ -215,12 +215,12 @@ class Ivy(object):
         # if we are a continuation object, inherent defined symbols from previous declaration
         global parent_object
         if parent_object is not None:
-            print 'got parent_object = {}'.format(parent_object)
+#            print 'got parent_object = {}'.format(parent_object)
             parent = stack[-1]
-            if parent_object in parent.defined:
-                print parent.defined[parent_object]
+#            if parent_object in parent.defined:
+#                print parent.defined[parent_object]
             defined = parent.get_object_defined(parent_object)
-            print 'defined = {}'.format(defined)
+#            print 'defined = {}'.format(defined)
             if defined is not None:
                 self.defined = defined
             parent_object = None
@@ -251,8 +251,6 @@ class Ivy(object):
             conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 
                         else (ocls is not TypeDecl) if cls is ObjectDecl else True)
             if conflict:
-                print lineno
-                print olineno
                 report_error(Redefining(name,lineno,olineno))
         self.defined[name].append((lineno,cls))
 
@@ -270,9 +268,9 @@ class Ivy(object):
         return None
 
     def set_object_defined(self,name,defined):
-        print 'set_object_defined: {}'.format(name)
+#        print 'set_object_defined: {}'.format(name)
         if name in self.defined:
-            print 'prev: {}'.format(self.defined[name])
+#            print 'prev: {}'.format(self.defined[name])
             self.defined[name] = [(x[0],x[1],defined) for x in self.defined[name]]
 
     @property

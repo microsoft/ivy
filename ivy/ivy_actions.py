@@ -1105,7 +1105,8 @@ class CallAction(Action):
         if hasattr(res,'lineno'):
             res.lineno = self.lineno
         else: 
-            print 'no lineno in prefix_calls: {}'.format(self)
+            pass
+#            print 'no lineno in prefix_calls: {}'.format(self)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):

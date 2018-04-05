@@ -244,7 +244,7 @@ def compile_inline_call(self,args,methodcall=False):
 
     # Handle dispatch for method call with variants
 
-    print 'variants:{}'.format(im.module.variants)
+#    print 'variants:{}'.format(im.module.variants)
     if methodcall and args[keypos].sort.name in im.module.variants:
         _,methodname = iu.parent_child_name(self.rep)
         for vsort in im.module.variants[args[keypos].sort.name]:
