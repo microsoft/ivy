@@ -1,0 +1,28 @@
+#lang ivy1.7
+
+# Definitions for the internet protocol
+
+# Note, "ip" here refers to IPv4.
+
+object ip = {
+
+    type addr
+    type port
+    type protocol = {udp,tcp}
+
+    object endpoint = {
+        type this = struct {
+            protocol : ip.protocol,
+            addr : ip.addr,
+            port : ip.port
+        }
+    }
+
+    implementation {
+        
+        interpret addr -> bv[32]
+        interpret port -> bv[16]
+
+    }
+
+}    
