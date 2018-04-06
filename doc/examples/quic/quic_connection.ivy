@@ -182,7 +182,7 @@ object frame = {
 action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
 
     var cid := pkt.hdr_cid;
-    var pnum := pkt.hdr_pkt_num;
+    pnum := pkt.hdr_pkt_num;
 
     if conn_seen(src,cid) {
 
