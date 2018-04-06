@@ -106,7 +106,7 @@ def get_lineno(p,n):
     return iu.Location(iu.filename,p.lineno(n))
 
 def report_error(error):
-    assert False,error
+    assert False
     error_list.append(error)
 
 def stack_lookup(name):
@@ -217,18 +217,22 @@ class Ivy(object):
         if parent_object is not None:
 #            print 'got parent_object = {}'.format(parent_object)
             parent = stack[-1]
-#            if parent_object in parent.defined:
-#                print parent.defined[parent_object]
-            defined = parent.get_object_defined(parent_object)
+            if parent_object == "this":
+                defined = parent.defined
+            else:
+#                if parent_object in parent.defined:
+#                    print parent.defined[parent_object]
+#                print parent.defined.keys()
+                defined = parent.get_object_defined(parent_object)
 #            print 'defined = {}'.format(defined)
             if defined is not None:
                 self.defined = defined
             parent_object = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
-    def declare(self,decl):
+    def declare(self,decl,allow_redef=False):
         for df in decl.defines():
-            self.define(df)
+            self.define(df,allow_redef)
         for df in decl.static():
             self.static.add(df)
         decl.attributes = self.attributes + decl.attributes
@@ -240,7 +244,7 @@ class Ivy(object):
             for d in decl.args:
                 self.actions[d.defines()] = d
 
-    def define(self,df):
+    def define(self,df,allow_redef=False):
         if len(df) == 3:
             name,lineno,cls = df
         else:
@@ -251,6 +255,8 @@ class Ivy(object):
             conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 
                         else (ocls is not TypeDecl) if cls is ObjectDecl else True)
             if conflict:
+                if allow_redef:
+                    return
                 report_error(Redefining(name,lineno,olineno))
         self.defined[name].append((lineno,cls))
 
@@ -302,9 +308,14 @@ def p_top_include_symbol(p):
         pref = Atom(p[3],[])
         pref.lineno = get_lineno(p,2)
         with ASTContext(pref):
+            global parent_object
+            parent_object = "this"
             module = importer(p[3])
+            stack.pop()
         for decl in module.decls:
-            p[0].declare(decl)
+            p[0].declare(decl,allow_redef=True)
+        p[0].included.update(module.included)
+        p[0].modules.update(module.modules)
 
 def p_labeledfmla_fmla(p):
     'labeledfmla : fmla'

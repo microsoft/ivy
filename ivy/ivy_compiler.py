@@ -244,15 +244,16 @@ def compile_inline_call(self,args,methodcall=False):
 
     # Handle dispatch for method call with variants
 
-#    print 'variants:{}'.format(im.module.variants)
     if methodcall and args[keypos].sort.name in im.module.variants:
+#        print 'variants:{}'.format(im.module.variants)
+#        print top_context.actions.keys()
         _,methodname = iu.parent_child_name(self.rep)
         for vsort in im.module.variants[args[keypos].sort.name]:
             vactname = iu.compose_names(vsort.name,methodname)
-            if vactname not in im.module.actions:
+            if vactname not in top_context.actions:
                 parent,_ = iu.parent_child_name(vsort.name)
                 vactname = iu.compose_names(parent,methodname)
-                if vactname not in im.module.actions:
+                if vactname not in top_context.actions or vactname == self.rep:
                     continue
             tmpsym = ivy_logic.Symbol('self:'+vsort.name,vsort)
             tmpargs = list(args)

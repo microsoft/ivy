@@ -108,7 +108,7 @@ def varname(name):
         return name
 
     name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__')
-    name = re.sub(puncs,'__',name)
+    name = re.sub(puncs,'__',name).replace('@@','.')
     return name.split(':')[-1]
 
 other_varname = varname
@@ -422,7 +422,7 @@ def make_thunk(impl,vs,expr):
                                              ,','.join('{}({})'.format(n,n) for n in envnames))),
     close_scope(impl)
     open_scope(impl,line='{} operator()(const {} &arg)'.format(R,D))
-    subst = {vs[0].name:il.Symbol('arg',vs[0].sort)} if len(vs)==1 else dict((v.name,il.Symbol('arg.arg{}'.format(idx),v.sort)) for idx,v in enumerate(vs))
+    subst = {vs[0].name:il.Symbol('arg',vs[0].sort)} if len(vs)==1 else dict((v.name,il.Symbol('arg@@arg{}'.format(idx),v.sort)) for idx,v in enumerate(vs))
     expr = ilu.substitute_ast(expr,subst)
     code_line(impl,'return ' + code_eval(impl,expr))
     close_scope(impl)
@@ -2824,7 +2824,7 @@ def emit_app(self,header,code,capture_args=None):
             first = False
         code.append(')')
     elif is_large_type(self.rep.sort) and len(self.args[skip_params:]) > 1:
-        code.append('[' + ctuple(self.rep.sort.dom[skip_params:]) + '(')
+        code.append('[' + ctuple(self.rep.sort.dom[skip_params:],classname=the_classname) + '(')
         first = True
         for a in self.args[skip_params:]:
             if not first:
@@ -2918,7 +2918,7 @@ def get_bounds(header,v0,variables,body,exists,varname=None):
             args = [args[1],args[0]]
         if args[0] == v0 and args[1] != v0 and args[1] not in variables:
             e = code_eval(header,args[1])
-            his.append('('+e+')-1' if not strict else e)
+            his.append('('+e+')+1' if not strict else e)
         if args[1] == v0 and args[0] != v0 and args[0] not in variables:
             e = code_eval(header,args[0])
             los.append('('+e+')+1' if strict else e)
