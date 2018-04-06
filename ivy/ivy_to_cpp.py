@@ -174,7 +174,7 @@ def basename(name):
 def ctuple(dom,classname=None):
     if len(dom) == 1:
         return ctypefull(dom[0],classname=classname)
-    return (classname+'::' if classname else '') + '__tup__' + '__'.join(basename(ctypefull(s)) for s in dom)
+    return (classname+'::' if classname else '') + '__tup__' + '__'.join(basename(ctypefull(s).replace(" ","_")) for s in dom)
 
 declared_ctuples = set()
 
@@ -303,7 +303,14 @@ def ctype_remaining_cases(sort,classname):
         sn = sort_to_cpptype[sort].short_name()
         return sn
         return ((classname+'::') if classname != None else '') + sn
-    return 'int'
+    card = slv.sort_card(sort)
+    if card is None:
+        return 'int'   # for uninterpreted sorts, can be anything
+    if card <= 2**32:
+        return 'int'
+    if card <= 2**64:
+       return 'long long'
+    raise iu.IvyError(None,'sort {} is too large to represent with a machine integer'.format(sort))
 
 
 global_classname = None
@@ -1145,10 +1152,10 @@ def is_finite_iterable_sort(sort):
     return is_iterable_sort(sort) and sort_card(sort) is not None
 
 def check_iterable_sort(sort):
-    if ctype(sort) not in ["bool","int"]:
+    if ctype(sort) not in ["bool","int","long long"]:
         if il.is_uninterpreted_sort(sort) and sort.name in im.module.native_types:
             nt = native_type_full(im.module.native_types[sort.name]).strip()
-            if nt in ['int','bool']:
+            if nt in ['int','bool','long long']:
                 return
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
@@ -1160,7 +1167,8 @@ def open_loop(impl,vs,declare=True,bounds=None):
         indent(impl)
         bds = bounds[num] if bounds else ["0",str(sort_card(idx.sort))]
         vn = varname(idx.name)
-        impl.append('for ('+ ('int ' if declare else '') + vn + ' = ' + bds[0] + '; ' + vn + ' < ' + bds[1] + '; ' + vn + '++) {\n')
+        ct = 'long long ' if ctype(idx.sort) == 'long long' else 'int '
+        impl.append('for ('+ (ct if declare else '') + vn + ' = ' + bds[0] + '; ' + vn + ' < ' + bds[1] + '; ' + vn + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
@@ -1833,6 +1841,14 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     return res;
 }
 
+template <>
+long long _arg<long long>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    long long res = atoll(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return res;
+}
+
 std::ostream &operator <<(std::ostream &s, const __strlit &t){
     s << "\\"" << t.c_str() << "\\"";
     return s;
@@ -1853,6 +1869,11 @@ void __ser<int>(ivy_ser &res, const int &inp) {
 }
 
 template <>
+void __ser<long long>(ivy_ser &res, const long long &inp) {
+    res.set(inp);
+}
+
+template <>
 void __ser<bool>(ivy_ser &res, const bool &inp) {
     res.set(inp);
 }
@@ -1869,6 +1890,11 @@ void __deser<int>(ivy_deser &inp, int &res) {
     long long temp;
     inp.get(temp);
     res = temp;
+}
+
+template <>
+void __deser<long long>(ivy_deser &inp, long long &res) {
+    inp.get(res);
 }
 
 template <>
@@ -1896,6 +1922,11 @@ void __from_solver<int>( gen &g, const  z3::expr &v, int &res) {
 }
 
 template <>
+void __from_solver<long long>( gen &g, const  z3::expr &v, long long &res) {
+    res = g.eval(v);
+}
+
+template <>
 void __from_solver<bool>( gen &g, const  z3::expr &v, bool &res) {
     res = g.eval(v);
 }
@@ -1916,6 +1947,11 @@ template <class T> z3::expr __to_solver( gen &g, const  z3::expr &v, T &val) {
 
 template <>
 z3::expr __to_solver<int>( gen &g, const  z3::expr &v, int &val) {
+    return v == g.int_to_z3(v.get_sort(),val);
+}
+
+template <>
+z3::expr __to_solver<long long>( gen &g, const  z3::expr &v, long long &val) {
     return v == g.int_to_z3(v.get_sort(),val);
 }
 
@@ -1950,6 +1986,11 @@ template <class T> void __randomize( gen &g, const  z3::expr &v);
 
 template <>
 void __randomize<int>( gen &g, const  z3::expr &v) {
+    g.randomize(v);
+}
+
+template <>
+void __randomize<long long>( gen &g, const  z3::expr &v) {
     g.randomize(v);
 }
 
@@ -2940,7 +2981,8 @@ def emit_quant(variables,body,header,code,exists=False):
                        + idx + '=' + varname(iu.compose_names(iter,'next')) + '(' + idx + ')) {\n')
     else:
         lo,hi = get_bounds(header,v0,variables,body,exists)
-        header.append('for (int ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
+        ct = 'long long' if ctype(v0.sort) == 'long long' else 'int'
+        header.append('for (' + ct + ' ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
     indent_level += 1
     subcode = []
     emit_quant(variables,body,header,subcode,exists)
@@ -4350,9 +4392,22 @@ opt_outdir = iu.Parameter("outdir","")
 emit_main = True
 
 def main():
+    main_int(False)
+
+def ivyc():
+    main_int(True)
+
+def main_int(is_ivyc):
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
     iso.set_interpret_all_sorts(True)
+
+    # set different defaults for ivyc
+
+    if is_ivyc:
+        target.set("repl")
+        opt_build.set("true")
+
     ivy_init.read_params()
     iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test','assume_invariants':'false'})
     if target.get() == "gen":
@@ -4370,19 +4425,34 @@ def main():
         ivy_init.ivy_init(create_isolate=False)
 
         isolate = ic.isolate.get()
-        if isolate != None:
-            isolates = [isolate]
-        else:
-            if isolate == 'all':
-                if target.get() == 'repl':
-                    isolates = sorted(list(m for m in im.module.isolates if isinstance(m,ivy_ast.ExtractDef)))
-                else:
-                    isolates = sorted(list(m for m in im.module.isolates if not isinstance(m,ivy_ast.ExtractDef)))
-            else:
+
+        if is_ivyc:
+            if isolate != None:
                 isolates = [isolate]
-                
-            if len(isolates) == 0:
-                isolates = [None]
+            else:
+                extracts = list(m for m in im.module.isolates if isinstance(m,ivy_ast.ExtractDef))
+                if len(extracts) == 0:
+                    isol = ivy_ast.ExtractDef(ivy_ast.Atom('extract'),ivy_ast.Atom('this'))
+                    isol.with_args = 0
+                    im.module.isolates['extract'] = isol
+                    isolates = ['extract']
+                elif len(extracts) == 1:
+                    isolates = [extracts[0].args[0].relname]
+
+        else:
+            if isolate != None:
+                isolates = [isolate]
+            else:
+                if isolate == 'all':
+                    if target.get() == 'repl':
+                        isolates = sorted(list(m for m in im.module.isolates if isinstance(m,ivy_ast.ExtractDef)))
+                    else:
+                        isolates = sorted(list(m for m in im.module.isolates if not isinstance(m,ivy_ast.ExtractDef)))
+                else:
+                    isolates = [isolate]
+
+                if len(isolates) == 0:
+                    isolates = [None]
 
         for the_isolate in isolates:
             with im.module.copy():
@@ -4522,6 +4592,14 @@ namespace hash_space {
         class hash<int> {
     public:
         size_t operator()(const int &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<long long> {
+    public:
+        size_t operator()(const long long &s) const {
             return s;
         }
     };
