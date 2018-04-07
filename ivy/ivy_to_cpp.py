@@ -4508,11 +4508,14 @@ def main_int(is_ivyc):
                         if opt_outdir.get():
                             cmd = 'cd {} & '.format(opt_outdir.get()) + cmd
                     else:
-                        if 'Z3DIR' in os.environ:
-                            paths = '-I $Z3DIR/include -L $Z3DIR/lib -Wl,-rpath=$Z3DIR/lib' 
+                        if target.get() in ['gen','test']:
+                            if 'Z3DIR' in os.environ:
+                                paths = '-I $Z3DIR/include -L $Z3DIR/lib -Wl,-rpath=$Z3DIR/lib' 
+                            else:
+                                _dir = os.path.dirname(os.path.abspath(__file__))
+                                paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
                         else:
-                            _dir = os.path.dirname(os.path.abspath(__file__))
-                            paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
+                            paths = ''
                         if emit_main:
                             cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
                         else:
