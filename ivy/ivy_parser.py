@@ -106,7 +106,6 @@ def get_lineno(p,n):
     return iu.Location(iu.filename,p.lineno(n))
 
 def report_error(error):
-    assert False
     error_list.append(error)
 
 def stack_lookup(name):

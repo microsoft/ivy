@@ -32,17 +32,27 @@ include quic_packet
 
 # - For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has
 #   been sent by E.
+#
 # - The predicate `initializing(C,S)` holds if client endpoint C has sent an
 #   Initial packet to server endpoint S, but the server has not replied.
+#
 # - The packet number of the initial packet from client endpoint C to
 #   server endpoint S is represented by `initial_pkt_num(C,S)`.
+#
 # - For each endpoint E and cid C, last_pkt_num(E,C) represents the
 #   number of the latest packet sent by E on C.
+#
 # - For each endpoint E and cid C, sent_pkt(E,C,N) is true if
 #   a packet numbered N has been sent by E on C.
+#
 # - For each endpoint E and cid C, acked_pkt(E,C,N) is true if
 #   a packet numbered N sent by E on connection C has been
 #   acknowledged. 
+#
+# - For each endpoint E and cid C, max_acked(E,C) is the greatest
+#   packet number N such that acked_pkt(E,C,N), or zero if
+#   forall N. ~acked(E,C,N).
+
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
@@ -50,6 +60,7 @@ function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
 function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
 relation sent_pkt(E:ip.endpoint,C:cid,N:pkt_num)
 relation acked_pkt(E:ip.endpoint,C:cid,N:pkt_num)
+function max_acked(E:ip.endpoint,C:cid) : pkt_num
 
 
 # Initial state
@@ -63,6 +74,7 @@ after init {
     conn_seen(E,C) := false;
     sent_pkt(E,C,N) := false;
     acked_pkt(E,C,N) := false;
+    max_acked(E,C) := 0;
 }
 
 # Packet events
@@ -96,6 +108,8 @@ after init {
 #   a given client endpoint at a given time [2]. This seems unreasonable,
 #   but otherwise there is no way to match Handshake packets to Initial
 #   packets, at least without looking at the security information.
+#
+# - A packet number may not be re-sent on a civen connection. 
 
 # ### Effects
 #
@@ -109,6 +123,7 @@ after init {
 # - For Handshake packets, `initializing` is set to false for the
 #   source and destination of the Initial packet (the reverse of the
 #   handshake packet). The initial packet is transfered to the cid
+# - A sender may not re-use a packet number on a given cid [4].
 #   
 #
 # ### Notes
@@ -122,6 +137,8 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     var pcid := pkt.hdr_cid;
     var pnum := decode_packet_number(src,dst,pkt);
+
+    require ~sent_pkt(src,pcid,pnum);  # [4]
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.
@@ -137,7 +154,8 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     if pkt.hdr_type = 0x7f {
         require pkt.payload.end = 1;  # [1]
-#        require exists X:frame.stream. (pkt.payload.value(0) :> X);  # [1]
+        if some (x:frame.stream) pkt.payload.value(0) *> x {}
+        else {require false};
         require ~initializing(src,dst);  # [2]
 
         initializing(src,dst) := true;  # [3]
@@ -199,6 +217,7 @@ object frame = {
 # - The acknowledged packets are recorded in the relation `acked_pkts(S,C,N)`
 #   where `S` is the *source* of the acknowledged packet (not of the Ack) `C` is
 #   the cid and `N` is the packet number [2].
+# - The greatest acked packet is also tracked in `max_act(S,C)` [3]
 
 object frame = {
     ...
@@ -207,12 +226,15 @@ object frame = {
         action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
+            if max_acked(dst,pcid) < last {
+                max_acked(dst,pcid) := last;  # [3]
+            };
             while idx < f.ack_blocks.end {
                 var ack_block := f.ack_blocks.value(idx);
                 var upper := last - ack_block.gap;
                 last := upper - ack_block.blocks;
                 require (last <= N & N <= upper) -> sent_pkt(dst,pcid,N);  # [1]
-                acked_pkt(src,pcid,N) := (last <= N & N <= upper) | acked_pkt(src,pcid,N);  # [2]
+                acked_pkt(dst,pcid,N) := (last <= N & N <= upper) | acked_pkt(dst,pcid,N);  # [2]
                 idx := idx.next;
             }
         }
@@ -242,12 +264,37 @@ object frame = {
 # For long format packets, the number of bits is always 32.  The
 # decoded packet number is the *least* number greater than the
 # last seen whose low-order bits agree with `hdr_pkt_num`.
-    
+#
+# Requirements
+#
+# - The sent packet number must be no greater than `la + max/2` where
+#   `la` is the greatest acknowledged packet number (or zero if there
+#   have been no acks) and `max` is a largest number that can be
+#   represented with the number of bits provided [1].
+#
+# Notes:
+#
+# - The IETF draft uses this langauge: "The sender MUST use a packet
+#   number size able to represent more than twice as large a range
+#   than the difference between the largest acknowledged packet and
+#   packet number being sent." The meaning of "more than twice as
+#   large a range" isn't clear, but here we take it to mean that
+#   `2 * (pnum - la) ` is representable. It is also not clear how the
+#   maximum packet number is computed if no acks have been received,
+#   but we assume here that `la` is zero in this case.
+#
+#   TODO: this seems inconsistent with the following statement: "The
+#   initial value for packet number MUST be selected randomly from a
+#   range between 0 and 2^32 - 1025 (inclusive)." Possibly there is no
+#   upper limit on the packet number if no acks have been received
+#   yet, but this seems questionable.
 
 action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
 
     var cid := pkt.hdr_cid;
+    var la := max_acked(src,cid);
     pnum := pkt.hdr_pkt_num;
+
 
     if conn_seen(src,cid) {
 
@@ -258,6 +305,7 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         # If long format or type is 0x1d, we match 32 bits
 
         if pkt.hdr_long | pkt.hdr_type = 0x1d {
+            require pnum <= la + 0x7ffffffe;
             if some(n:pkt_num) n > last & bfe[0][31](n) = pnum minimizing n {
                 pnum := n
             }
@@ -266,6 +314,7 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         # else if long format or type is 0x1e, we match 16 bits
 
         else if pkt.hdr_type = 0x1e {
+            require pnum <= la + 0x7ffe;
             if some(n:pkt_num) n > last & bfe[0][15](n) = pnum minimizing n {
                 pnum := n
             }
@@ -274,6 +323,7 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         # else (type is 0x1f) we match 8 bits
 
         else {
+            require pnum <= la + 0x7e;
             if some(n:pkt_num) n > last & bfe[0][7](n) = pnum minimizing n {
                 pnum := n
             }
