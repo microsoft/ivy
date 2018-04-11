@@ -89,7 +89,8 @@ module tcp_impl(addr,pkt,me,port_base) = {
        bool reported_closed;
        std::list<std::vector<char> > bufs;
     public:
-       tcp_queue() : closed(false), reported_closed(false) {}
+       int other; // only acces while holding lock!
+       tcp_queue(int other) : closed(false), reported_closed(false), other(other) {}
        bool enqueue_swap(std::vector<char> &buf) {
            mutex.lock();
            if (closed) {
@@ -116,6 +117,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
                    }
                    reported_closed = true;
                    mutex.unlock();
+                   // std::cout << "REPORTING CLOSED" << std::endl;
                    return true;
                }
                if (bufs.size() > 0) {
@@ -127,16 +129,35 @@ module tcp_impl(addr,pkt,me,port_base) = {
                mutex.unlock();
             }
        }
-       void set_closed(bool val) {
+       void set_closed(bool report=true) {
            mutex.lock();
-           closed = val;
-           if (val) 
-               bufs.clear();
-           else
-               reported_closed = false;
+           closed = true;
+           bufs.clear();
+           if (!report)
+               reported_closed = true;
            mutex.unlock();
            sem.up();
        }
+       void set_open(int _other) {
+           mutex.lock();
+           closed = false;
+           reported_closed = false;
+           other = _other;
+           mutex.unlock();
+           sem.up();
+       }
+       void wait_open(bool closed_val = false){
+           while (true) {
+               mutex.lock();
+               if (closed == closed_val) {
+                   mutex.unlock();
+                   return;
+               }
+               mutex.unlock();
+               sem.down();
+            }
+       }
+
    };
 
    // The default configuration gives address 127.0.0.1 and port port_base + id.
@@ -286,13 +307,12 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
     // invariant: if socket is closed, queue is closed
 
-    class tcp_writer : public reader {
-        int sock;
+    class tcp_writer : public tcp_task {
         tcp_queue *queue;
-        ivy_class *ivy;
+        bool connected;
       public:
-        tcp_writer(int sock, tcp_queue *queue, ivy_class *ivy)
-            : sock(sock), queue(queue), ivy(ivy) {
+        tcp_writer(int my_id, int sock, tcp_queue *queue, const tcp_callbacks &cb, ivy_class *ivy)
+            : tcp_task(my_id,sock,cb,ivy), queue(queue), connected(false) {
         }
 
         virtual int fdes() {
@@ -303,16 +323,27 @@ module tcp_impl(addr,pkt,me,port_base) = {
 
         virtual void read() {
 
+            if (!connected) {
+            
+                // if the socket is not connected, wait for the queue to be open,
+                // then connect
+
+                queue->wait_open();
+                connect();
+                return;
+            }
+
             // dequeue a packet to send
 
             std::vector<char> buf;
             bool qclosed = queue->dequeue_swap(buf);        
 
-            // if queue is closed, close the socket. 
+            // if queue has been closed asynchrononously, close the socket. 
 
             if (qclosed) {
                 // std::cout << "CLOSING " << sock << std::endl;
                 ::close(sock);
+                connected = false;
                 return;
             }
 
@@ -325,8 +356,56 @@ module tcp_impl(addr,pkt,me,port_base) = {
             // if not all bytes sent, channel has failed, close the queue
 
             if (bytes < (int)buf.size())
-                queue-> set_closed(true);
+                fail_close();
         }
+
+        void connect() {
+
+            // Get the address of the other from the configuration
+
+            // std::cout << "ENTERING CONNECT " << sock << std::endl;
+
+            ivy -> __lock();               // can be asynchronous, so must lock ivy!
+            struct sockaddr_in myaddr;
+            int other = queue->other;
+            get_tcp_addr(ivy,other,myaddr);
+            ivy -> __unlock(); 
+
+            // Call connect to make connection
+
+            // std::cout << "CONNECTING sock=" << sock << "other=" << other << std::endl;
+
+            int res = ::connect(sock,(sockaddr *)&myaddr,sizeof(myaddr));
+
+            // If successful, call the "connected" callback, else "failed"
+            
+            ivy->__lock();
+            if (res >= 0) {
+                // std::cout << "CONNECT SUCCEEDED " << sock << std::endl;
+                cb.ccb(sock);
+                connected = true;
+            }
+            else {
+                // std::cout << "CONNECT FAILED " << sock << std::endl;
+                fail_close();
+            }
+            ivy->__unlock();
+
+        }
+
+        void fail_close() {
+            queue -> set_closed(false);  // close queue synchronously
+
+            // make sure socket is closed before fail callback, since this
+            // might open another socket, and we don't want to build up
+            // zombie sockets.
+
+            // std::cout << "CLOSING ON FAILURE " << sock << std::endl;
+            ::close(sock);
+            cb.fcb(sock);
+            connected = false;
+        }
+
     };
 
     // This task listens for connections on a socket in the background. 
@@ -395,63 +474,6 @@ module tcp_impl(addr,pkt,me,port_base) = {
         }
     };
 
-    // This task sets up a new connection. When the connection is set
-    // up, it calls back asynchronously.
-
-    class tcp_connector: public tcp_task {
-
-        int other;              // endpoint id of other end of connection
-        std::vector<char> buf;  // holds left-over bytes from last read
-
-      public:
-
-        // Constructor records other id. Socket is provided by caller.
-
-        tcp_connector(int _my_id, int sock, int other, const tcp_callbacks &cb, ivy_class *ivy)
-            : tcp_task(my_id,sock,cb,ivy), other(other) {
-        }
-
-        // This is called in a loop by the runtime, but executes only once.
-
-        virtual void read() {
-
-            // Get the address of the other from the configuration
-
-            // std::cout << "ENTERING CONNECTOR THREAD " << sock << std::endl;
-
-            ivy -> __lock();               // can be asynchronous, so must lock ivy!
-            struct sockaddr_in myaddr;
-            get_tcp_addr(ivy,other,myaddr);
-            ivy -> __unlock(); 
-
-            // Call connect to make connection
-
-            // std::cout << "CONNECTING " << sock << std::endl;
-
-            int res = connect(sock,(sockaddr *)&myaddr,sizeof(myaddr));
-
-            // If successful, call the "connected" callback, else "failed"
-            
-            ivy->__lock();
-            if (res >= 0) {
-                // std::cout << "CONNECT SUCCEEDED " << sock << std::endl;
-                cb.ccb(sock);
-            }
-            else {
-                // std::cout << "CONNECT FAILED " << sock << std::endl;
-                if (ivy->`send_queue`.find(sock) != ivy->`send_queue`.end()) {
-                    ivy->`send_queue`[sock] -> set_closed(true);
-                    // std::cout << "CLOSED QUEUE " << sock << std::endl;
-                }
-                cb.fcb(sock);
-            }
-            ivy->__unlock();
-
-            // Set sock to -1 to end task
-
-            sock = -1;
-        }
-    };
 
 
 >>>
@@ -558,7 +580,7 @@ module tcp_impl(addr,pkt,me,port_base) = {
             ::shutdown(s,SHUT_RDWR);
 
             if (`send_queue`.find(s) != `send_queue`.end()) 
-                `send_queue`[s] -> set_closed(true);
+                `send_queue`[s] -> set_closed();
 
         >>>
     }
@@ -571,18 +593,16 @@ module tcp_impl(addr,pkt,me,port_base) = {
             s = make_tcp_socket();
             // std::cout << "SOCKET " << s << std::endl;
 
-            install_reader(new tcp_connector(`me`,s,other,*`cb`,this));
-
             // create a send queue for this socket, if needed, along with
             // its thread. if the queue exists, it must be closed, so
             // we open it.
 
             tcp_queue *queue;
             if (`send_queue`.find(s) == `send_queue`.end()) {
-                `send_queue`[s] = queue = new tcp_queue();
-                 install_thread(new tcp_writer(s,queue,this));
+                `send_queue`[s] = queue = new tcp_queue(other);
+                 install_thread(new tcp_writer(`me`,s,queue,*`cb`,this));
             } else
-                `send_queue`[s] -> set_closed(false);
+                `send_queue`[s] -> set_open(other);
         >>>
     }
 
