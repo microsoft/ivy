@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula, find_sort
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -22,6 +22,11 @@ def p_c_a(s):
 
 checked_assert = iu.Parameter("assert","",check=lambda s: len(s.split(':'))==2,
                               process=p_c_a)
+
+opt_error_flag = iu.BooleanParameter("error_flag",True)
+
+error_flag = Symbol('err$flag',find_sort('bool'))
+
 
 class Schema(AST):
     def __init__(self,defn,fresh):
@@ -187,7 +192,14 @@ class Action(AST):
         res = (updated,clauses,pre)
         return res
     def update(self,domain,in_scope):
-        return self.hide_formals(bind_olds_action(self.int_update(domain,in_scope)))
+        res =  self.hide_formals(bind_olds_action(self.int_update(domain,in_scope)))
+        if opt_error_flag.get():
+            # Using the error flag construction, the precondition says the
+            # error flag is initially false and finally true
+            new_error_flag = new(error_flag) if error_flag in res[0] else error_flag
+            res = (res[0],res[1],
+                   and_clauses(res[2],formula_to_clauses(And(Not(error_flag),new_error_flag))))
+        return res
     def hide_formals(self,update):
         to_hide = []
         if hasattr(self,'formal_params'):
@@ -258,7 +270,16 @@ class AssumeAction(Action):
         clauses = formula_to_clauses_tseitin(skolemize_formula(self.args[0]))
         clauses = unfold_definitions_clauses(clauses)
         clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
-        return ([],clauses,false_clauses(annot = EmptyAnnotation()))
+        pre = false_clauses(annot = EmptyAnnotation())
+        if opt_error_flag.get():
+            # if using the error flag construction for the
+            # precondition computation, we treat "assume phi" as if it were this:
+            #
+            #     assume err$flag | phi
+            pre = formula_to_clauses(Or(error_flag,skolemize_formula(self.args[0])));
+            pre = unfold_definitions_clauses(pre)
+            pre = Clauses(pre.fmlas,pre.defs,EmptyAnnotation())
+        return ([],clauses,pre)
 
 class AssertAction(Action):
     def __init__(self,*args):
@@ -273,11 +294,24 @@ class AssertAction(Action):
         ca = checked_assert.get()
         if ca:
             if ca != self.lineno:
-                return ([],formula_to_clauses(self.args[0],annot = EmptyAnnotation()),false_clauses(annot = EmptyAnnotation()))
-        cl = formula_to_clauses(dual_formula(self.args[0]))
+                return ([],formula_to_clauses(self.args[0],annot = EmptyAnnotation()),no_error())
+
+        if opt_error_flag.get():
+            # if using the error flag construction for the
+            # precondition computation, we treat "assert phi" as if it were this:
+            #
+            #     if * {} else {assume ~phi; error$flag := true}
+            
+            cl = formula_to_clauses(Or(Iff(error_flag,new(error_flag)),
+                                          dual_formula(self.args[0])))
+            upd = [error_flag]
+        else:
+            cl = formula_to_clauses(dual_formula(self.args[0]))
+            upd = []
 #        return ([],formula_to_clauses_tseitin(self.args[0]),cl)
         cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
-        return ([],true_clauses(annot = EmptyAnnotation()),cl)
+
+        return (upd,true_clauses(annot = EmptyAnnotation()),cl)
     def assert_to_assume(self,kinds):
         if type(self) not in kinds:
             return Action.assert_to_assume(self,kinds)
@@ -426,7 +460,7 @@ class AssignAction(Action):
             nondet_lhs,new_clauses,mut_n = destr_asgn_val(lhs,fmlas)
             fmlas.append(equiv_ast(nondet_lhs,rhs))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
+            return ([mut_n], new_clauses, no_error())
 
             # This is the old version that doesn't work for nested destructors
 
@@ -451,7 +485,7 @@ class AssignAction(Action):
                     a2 = [mut] + phs[1:]
                     fmlas.append(eq_atom(destr(*a1),destr(*a2)))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
-            return ([mut_n], new_clauses, false_clauses(annot=EmptyAnnotation()))
+            return ([mut_n], new_clauses, no_error())
 
         # For a variant assignment, we have to choose a new value that points to
         # the rhs, and to nothing else.
@@ -461,7 +495,17 @@ class AssignAction(Action):
         else:
             new_clauses = mk_assign_clauses(lhs,rhs)
 #        print "assign new_clauses = {}".format(new_clauses)
-        return ([n], new_clauses, false_clauses(annot=EmptyAnnotation()))
+
+        if opt_error_flag.get():
+            return ([n], new_clauses, new_clauses)
+            
+        return ([n], new_clauses, no_error())
+
+def no_error():
+    if opt_error_flag.get():
+        return true_clauses(annot=EmptyAnnotation())
+    else:
+        return false_clauses(annot=EmptyAnnotation())
 
 class VarAction(AST):
     pass
@@ -556,7 +600,9 @@ class HavocAction(Action):
             clauses = And()
         clauses = formula_to_clauses(clauses)
         clauses = Clauses(clauses.fmlas,clauses.defs,EmptyAnnotation())
-        return ([n], clauses, false_clauses(annot=EmptyAnnotation()))
+        if opt_error_flag.get():
+            return ([n], clauses, clauses)
+        return ([n], clauses, no_error())
 
 
 def make_field_update(self,l,f,r,domain,pvars):
@@ -655,12 +701,12 @@ class Sequence(Action):
     def __str__(self):
         return '{' + '; '.join(str(x) for x in self.args) + '}'
     def int_update(self,domain,pvars):
-        update = ([],true_clauses(EmptyAnnotation()),false_clauses(EmptyAnnotation()))
+        update = ([],true_clauses(EmptyAnnotation()),no_error())
         axioms = domain.background_theory(pvars)
         for op in self.args:
             thing = op.int_update(domain,pvars);
 #            print "op: {}, thing[2].annot: {}".format(op,thing[2].annot)
-            update = compose_updates(update,axioms,thing)
+            update = compose_updates(update,axioms,thing,errf = opt_error_flag.get())
         return update
     def __call__(self,interpreter):
         for op in self.args:
@@ -716,7 +762,7 @@ class EnvAction(ChoiceAction):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
-        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
         for a in self.args:
             foo = a.update(domain, pvars)
             result = join_action(result, foo, domain.relations)
@@ -835,7 +881,7 @@ class WhileAction(Action):
             exit_asserts[-1].lineno = decreases.lineno
             entry_asserts.append(AssertAction(Not(ltsym(rank,Symbol('0',rank.sort)))))
             entry_asserts[-1].lineno = decreases.lineno
-        havocs = [HavocAction(sym) for sym in modset]
+        havocs = [HavocAction(sym) for sym in modset if sym != error_flag]
         for h in havocs:
             h.lineno = self.lineno
         res =  Sequence(*(
@@ -1256,6 +1302,12 @@ def unite_annot(annot):
 
 
 def match_annotation(action,annot,handler):
+    def handle(action,env):
+        if opt_error_flag.get():
+            rncond = env.get(error_flag,error_flag)
+            if handler.eval(rncond):
+                return
+        handler.handle(action,env)
     def recur(action,annot,env,pos=None):
         if isinstance(annot,RenameAnnotation):
             save = dict()
@@ -1315,7 +1367,7 @@ def match_annotation(action,annot,handler):
                     return
             assert False,'problem in match_annotation'
         if isinstance(action,CallAction):
-            handler.handle(action,env)
+            handle(action,env)
             callee = ivy_module.module.actions[action.args[0].rep]
             seq = Sequence(*([Sequence() for x in callee.formal_params]
                              + [callee] 
@@ -1333,6 +1385,11 @@ def match_annotation(action,annot,handler):
 #            iu.dbg('action.failed_action()')
             recur(action.failed_action(),annot,env)
             return
-        handler.handle(action,env)
+        handle(action,env)
     recur(action,annot,dict())
+    if opt_error_flag.get():
+        if handler.eval(error_flag):
+            return
+    handler.end()
+
     

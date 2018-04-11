@@ -297,19 +297,26 @@ def rename_distinct(clauses1,clauses2):
             map1[s] = rename(s,rn)
     return rename_clauses(clauses1,map1)
 
-# TODO: this will be quadratic for chains of updates
+#
+# With errf = True, we use the "error flag" construction.
+# In this case, the transition relation and the "precondition"
+# are compose in the same way. Without this flag the composition
+# is quadratic, which doesn't work for action with many assertions.
+# 
 
-def compose_updates(update1,axioms,update2):
+def compose_updates(update1,axioms,update2,errf=False):
     updated1, clauses1, pre1 = update1
     updated2, clauses2, pre2 = update2
     clauses2 = rename_distinct(clauses2,clauses1)
-    pre2 = rename_distinct(pre2,clauses1)
+    pre2 = rename_distinct(pre2, pre1 if errf else clauses1)
 #    print "clauses2 = {}".format(clauses2)
     us1 = set(updated1)
     us2 = set(updated2)
     mid = us1.intersection(us2)
     mid_ax = clauses_using_symbols(mid,axioms)
     used = used_symbols_clauses(and_clauses(clauses1,clauses2))
+    if errf: # this protects err$flag
+        used.update(used_symbols_clauses(and_clauses(pre1,pre2)))
     rn = UniqueRenamer('__m_',used)
     map1 = dict()
     map2 = dict()
@@ -328,11 +335,13 @@ def compose_updates(update1,axioms,update2):
 #    print "pre1 before = {}".format(pre1)
 #    iu.dbg('pre1.annot')
 #    iu.dbg('pre1')
-    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
-#    print "pre1 = {}".format(pre1)
-    temp = and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=my_annot_op)
-#    iu.dbg('temp.annot')
-    new_pre = or_clauses(pre1,temp)
+    if errf:
+        pre1 = rename_clauses(pre1,map1)
+        new_pre = and_clauses(pre1, rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=annot_op)
+    else:
+        pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
+        temp = and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=my_annot_op)
+        new_pre = or_clauses(pre1,temp)
 #    iu.dbg('new_pre.annot')
 #    print "new_pre = {}".format(new_pre)
 #    iu.dbg('new_clauses')

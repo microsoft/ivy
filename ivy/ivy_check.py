@@ -224,6 +224,8 @@ class MatchHandler(object):
     def show_sym(self,sym,renamed_sym):
         if sym in self.renaming and self.renaming[sym] == renamed_sym:
             return
+        if '$' in sym.name:
+            return
         self.renaming[sym] = renamed_sym
         rmap = {renamed_sym:sym}
         # TODO: what if the renamed symbol is not in the model?
@@ -293,7 +295,6 @@ def check_fcs_in_state(mod,ag,post,fcs):
 #            iu.dbg('actions')
             action = act.Sequence(*actions)
             act.match_annotation(action,clauses.annot,handler)
-            handler.end()
             exit(0)
     else:
         res = history.satisfy(axioms,gmc,filter_fcs(fcs))
