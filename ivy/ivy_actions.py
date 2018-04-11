@@ -460,6 +460,8 @@ class AssignAction(Action):
             nondet_lhs,new_clauses,mut_n = destr_asgn_val(lhs,fmlas)
             fmlas.append(equiv_ast(nondet_lhs,rhs))
             new_clauses = and_clauses(new_clauses,Clauses(fmlas))
+            if opt_error_flag.get():
+                return ([mut_n], new_clauses, new_clauses)
             return ([mut_n], new_clauses, no_error())
 
             # This is the old version that doesn't work for nested destructors
