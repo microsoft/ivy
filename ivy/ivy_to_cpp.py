@@ -2952,6 +2952,24 @@ def emit_quant(variables,body,header,code,exists=False):
     if len(variables) == 0:
         body.emit(header,code)
         return
+
+    if (exists and len(variables) == 1 and il.is_app(body)
+        and body.func.name == '*>' and body.args[1] == variables[0]):
+        vsort = body.args[0].sort
+        vsortname = vsort.name
+        if vsortname not in im.module.variants:
+            raise iu.IvyError(None,'type {} is not a variant type but used as first argument of *>'.format(vsortname))
+        variants = im.module.variants[vsortname]
+        rsort = variables[0].sort
+        for idx, sort in enumerate(variants):
+            if sort == rsort:
+                cpptype = sort_to_cpptype[vsort]
+                lhs = code_eval(header,body.args[0])
+                isa = cpptype.isa(idx,lhs)
+                code.append(isa)
+                return
+        raise iu.IvyError(None,'type {} is not a variant of type {}'.format(vsortname,rsort))
+
     v0 = variables[0]
     variables = variables[1:]
     has_iter = il.is_uninterpreted_sort(v0.sort) and iu.compose_names(v0.sort.name,'iterable') in im.module.attributes

@@ -368,14 +368,24 @@ if (iu.get_numeric_version() <= [1,6]):
 
 else:
 
-    def p_fmla_forall_vars_dot_fmla(p):
+    def p_fmla_forall_simplevars_dot_fmla(p):
         'fmla : FORALL simplevars DOT fmla %prec SEMI'
         p[0] = Forall(p[2],p[4])
         p[0].lineno = get_lineno(p,1)
 
-    def p_fmla_exists_vars_dot_fmla(p):
+    def p_fmla_exists_simplevars_dot_fmla(p):
         'fmla : EXISTS simplevars DOT fmla %prec SEMI'
         p[0] = Exists(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_forall_lp_vars_lp_fmla(p):
+        'fmla : FORALL LPAREN vars RPAREN fmla'
+        p[0] = Forall(p[3],p[5])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_exists_lp_vars_lp_fmla(p):
+        'fmla : EXISTS LPAREN vars RPAREN fmla'
+        p[0] = Exists(p[3],p[5])
         p[0].lineno = get_lineno(p,1)
 
 def p_fmla_globally_fmla(p):
@@ -400,4 +410,12 @@ def p_term_namedbinder_dot_fmla(p):
     p[0] = NamedBinder(p[2], [],p[4])
     p[0].lineno = get_lineno(p,1)
 
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_fmla_fmla_isa_atype(p):
+        'fmla : fmla ISA atype'
+        tp = Atom(p[3],[])
+        tp.lineno = get_lineno(p,2)
+        p[0] = Isa(p[1],tp)
+        p[0].lineno = get_lineno(p,2)
+    
 # TODO: should the above rules create formulas also or only for terms

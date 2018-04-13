@@ -183,6 +183,9 @@ class Forall(Quantifier):
 class Exists(Quantifier):
     pass
 
+class Isa(Formula):
+    pass
+
 class NamedBinder(Formula):
     def __init__(self, name, bounds, body):
         self.name = name

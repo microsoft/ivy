@@ -150,12 +150,16 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     last_pkt_num(src,pcid) := pnum;
 
+    # An ack-only packet must be in response to a non-ack-only packet
+
+    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
+                                 (pkt.payload.value(I) isa frame.ack);
+
     # An Initial packet has hdr_type 0x7f
 
     if pkt.hdr_type = 0x7f {
         require pkt.payload.end = 1;  # [1]
-        if some (x:frame.stream) pkt.payload.value(0) *> x {}
-        else {require false};
+	require pkt.payload.value(0) isa frame.stream;
         require ~initializing(src,dst);  # [2]
 
         initializing(src,dst) := true;  # [3]

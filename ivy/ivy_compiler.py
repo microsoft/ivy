@@ -325,6 +325,17 @@ ivy_ast.NativeExpr.cmpl = cmpl_native_expr
 
 ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
+def compile_isa(self):
+    lhs = self.args[0].compile()
+    rhs = cmpl_sort(self.args[1].relname)
+    vars = variables_ast(lhs)
+    rn = UniqueRenamer(used=[v.name for v in vars])
+    v = ivy_logic.Variable(rn('V'),rhs)
+    res = ivy_logic.Exists([v],ivy_logic.pto(lhs.sort,rhs)(lhs,v))
+    return res
+    
+ivy_ast.Isa.cmpl = compile_isa
+
 def variable_sort(self):
     return cmpl_sort(self.sort) if isinstance(self.sort,str) else self.sort
 
