@@ -12,20 +12,33 @@ include quic_deser
 
 # Compile the monitor like this:
 #
-# ivy_to_cpp target=repl isolate=iso_impl build=true quic_monitor.ivy
+#     ivyc quic_monitor.ivy
+#
+# Run it like this:
+#
+#     ./quic_monitor file.pcap
+#
+# where `file.pcap` is a file of captured packets in pcap format. The
+# monitor assumes that *only* QUIC packets are present in the file,
+# so must be captured on a virtual network or appropriately filtered.
+# 
+#
 
 # Instantiate a pcap file reader with our packet type and deserializer
 
 instance pc : pcap(quic_packet,quic_deser)
 
-# Print a packet on stdout
+# Print a packet on stdout. In the compiled REPL importing `show_packet`
+# causes calls to be logged to stdout.
 
 action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 import show_packet
 
-# A call-back to handle for packets read from the file
+# The wire specification monitors this action.
 
 action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
+
+# For each packet read, first call `show_packet`, then `packet_event`.
 
 implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     call show_packet(src,dst,pkt);     # print the packet
@@ -34,4 +47,3 @@ implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
 attribute radix=16       # print in hex
 
-extract iso_impl = this  # extract everything

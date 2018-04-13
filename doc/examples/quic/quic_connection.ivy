@@ -6,9 +6,9 @@
 # ---
 
 # This document describes the wire specification of QUIC. The protocol
-# is modeled in terms of a sequece of *packet events* corresponding
-# to transmission of a UDP packet a QUIC source endpoint to a QUIC
-# destination endpoint.
+# is modeled in terms of a sequence of *packet events* corresponding
+# to transmission of a UDP packet from a QUIC source endpoint to a
+# QUIC destination endpoint.
 
 # References
 # ==========
@@ -109,13 +109,13 @@ after init {
 #   but otherwise there is no way to match Handshake packets to Initial
 #   packets, at least without looking at the security information.
 #
-# - A packet number may not be re-sent on a civen connection. 
+# - A packet number may not be re-sent on a given connection. 
 
 # ### Effects
 #
 # - The `conn_seen` and `sent_pkt` relations are updated to reflect
 #   the observed packet [1].
-# - The `last_pkt_num` functions is updated to indicate the observed
+# - The `last_pkt_num` functiona is updated to indicate the observed
 #   packets as most recent for the packet's source and cid.
 # - For Initial packets, `initializing` is set to true for the packet's
 #   source and destination. The packet number is recorded in
