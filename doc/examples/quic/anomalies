@@ -1,0 +1,14 @@
+Capture file: anomaly1.pcap
+Implementation:
+  minquic, commit ???????
+Endpoints:
+  - 10.0.0.1: server
+  - 10.0.0.2: client
+Issue:
+  Client sends ack-only packet in response to an ack-only packet.
+  That is the packet does not ack any packet with data that is not
+  previously acked. The number of ack-only packets from client is three,
+  while server has sent only two packets with data.
+
+
+

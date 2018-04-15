@@ -52,7 +52,10 @@ include quic_packet
 # - For each endpoint E and cid C, max_acked(E,C) is the greatest
 #   packet number N such that acked_pkt(E,C,N), or zero if
 #   forall N. ~acked(E,C,N).
-
+#
+# - For each endpoint E and cid C, ack_credit(E,C) is the number
+#   of non-ack-only packets sent to E on C, less the number of
+#   ack-only packets sent from E on C.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
@@ -61,7 +64,7 @@ function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
 relation sent_pkt(E:ip.endpoint,C:cid,N:pkt_num)
 relation acked_pkt(E:ip.endpoint,C:cid,N:pkt_num)
 function max_acked(E:ip.endpoint,C:cid) : pkt_num
-
+function ack_credit(E:ip.endpoint,C:cid) : pkt_num
 
 # Initial state
 # -------------
@@ -75,6 +78,7 @@ after init {
     sent_pkt(E,C,N) := false;
     acked_pkt(E,C,N) := false;
     max_acked(E,C) := 0;
+    ack_credit(E,C) := 0;
 }
 
 # Packet events
@@ -124,12 +128,21 @@ after init {
 #   source and destination of the Initial packet (the reverse of the
 #   handshake packet). The initial packet is transfered to the cid
 # - A sender may not re-use a packet number on a given cid [4].
+# - A packet containing only ack frames and padding is *ack-only*.
+#   For a given cid, the number of ack-only packets sent from src to dst
+#   must not be greater than the number of non-ack-only packets sent
+#   from dst to src [5].
 #   
 #
 # ### Notes
 #
 # - The effective packet number is computed according to the procedure
 #   `decode_packet_number` defined below.
+#
+# - It isn't clear whether a packet that is multiply-delivered packet
+#   can be responded to by multple ack-only packets. Here, we assume it
+#   cannot. That is, only a new distinct packet number allows an ack-only
+#   packet to be sent in response.
 
 before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
@@ -154,7 +167,13 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
-
+    if ack_only {
+	require ack_credit(src,pcid) > 0;  # [5]
+	ack_credit(src,pcid) := ack_credit(src,pcid) - 1;
+    } else {
+	ack_credit(dst,pcid) := ack_credit(dst,pcid) + 1;
+    };
+    
     # An Initial packet has hdr_type 0x7f
 
     if pkt.hdr_type = 0x7f {
@@ -179,6 +198,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
             var ipnum := initial_pkt_num(dst,src);
             sent_pkt(dst,pcid,ipnum) := true;
             last_pkt_num(dst,pcid) := ipnum;
+	    ack_credit(src,pcid) := 1;  # one credit for initial packet
         }
     };
 
