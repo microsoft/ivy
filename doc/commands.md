@@ -101,7 +101,7 @@ decidable fragment. The possible values of `logic` are:
 - `epr` This is the "effectively propositional" fragment, which is extended to
   include stratified use of function symbols.
 - `qf` This fragment allows interpreted theories of the prover, but no quantifiers.
-- `fol` This is unrestricted first-order logic modulo the prover's theories.
+- `fol` This is unrestricted first-order logic module the prover's theories.
 
 The last option does not guarantee decidability and may result in
 significant instability of the prover. The default value is `epr`.
