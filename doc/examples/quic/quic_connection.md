@@ -3,14 +3,17 @@
 layout: page
 title: QUIC connection protocol
 ---
+
     
 This document describes the wire specification of QUIC. The protocol
 is modeled in terms of a sequence of *packet events* corresponding
 to transmission of a UDP packet from a QUIC source endpoint to a
 QUIC destination endpoint.
+
     
 References
 ==========
+
     
     include quic_types
     include quic_frame
@@ -18,16 +21,20 @@ References
     
 Connections
 ===========
+
     
 This section gives the wire specification of the QUIC protocol.  It
 tracks the state of connections resulting from a sequence of packet
 events.
+
     
 History variables
 -----------------
+
     
 These history variables are referenced in the specification of QUIC
 packet events.
+
     
 - For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has
   been sent by E.
@@ -55,6 +62,8 @@ packet events.
 - For each endpoint E and cid C, ack_credit(E,C) is the number
   of non-ack-only packets sent to E on C, less the number of
   ack-only packets sent from E on C.
+
+
     
     relation conn_seen(E:ip.endpoint,C:cid)
     relation initializing(C:ip.endpoint,S:ip.endpoint)
@@ -67,10 +76,12 @@ packet events.
     
 Initial state
 -------------
+
     
 The history variables are initialized as follows.  Initially, no
 connections have been seen and no packets have been sent or
 acknowledged.
+
     
     after init {
         conn_seen(E,C) := false;
@@ -82,9 +93,11 @@ acknowledged.
     
 Packet events
 -------------
+
     
 A packet event represents the transmision of a UDP packet `pkt` from
 QUIC source endpoint `src` to a QUIC destination endpoint `dst`.
+
     
 The packet *kind* depends on the field `hdr_type` according to
 the following table:
@@ -93,6 +106,7 @@ the following table:
   |-----------|-----------|
   | 0x7f      | Initial   |
   | 0x7d      | Handshake |
+
 
     
 ### Requirements
@@ -113,6 +127,7 @@ the following table:
   packets, at least without looking at the security information.
 
 - A packet number may not be re-sent on a given connection. 
+
     
 ### Effects
 
@@ -142,10 +157,12 @@ the following table:
   can be responded to by multple ack-only packets. Here, we assume it
   cannot. That is, only a new distinct packet number allows an ack-only
   packet to be sent in response.
+
     
     before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         
 Extract the cid and packet number from the packet.
+
     
         var pcid := pkt.hdr_cid;
         var pnum := decode_packet_number(src,dst,pkt);
@@ -154,15 +171,18 @@ Extract the cid and packet number from the packet.
     
 Record that the connection has been seen from this source, and
 the packet has been sent.
+
     
         conn_seen(src,pcid) := true;  # [1]
         sent_pkt(src,pcid,pnum) := true;  # [1]
     
 Record the packet number as latest seen
+
     
         last_pkt_num(src,pcid) := pnum;
     
 An ack-only packet must be in response to a non-ack-only packet
+
     
         var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                      (pkt.payload.value(I) isa frame.ack);
@@ -174,6 +194,7 @@ An ack-only packet must be in response to a non-ack-only packet
         };
         
 An Initial packet has hdr_type 0x7f
+
     
         if pkt.hdr_type = 0x7f {
             require pkt.payload.end = 1;  # [1]
@@ -185,12 +206,14 @@ An Initial packet has hdr_type 0x7f
         }
     
 A Handshake packet has hdr_type 0x7d
+
     
         else if pkt.hdr_type = 0x7d {
        
 Match the Handshake to the cid `icid` of an Initial packet sent
 by the destination. We mark this connection as no longer
 initializing and transfer the Initial packet to the new cid.
+
             
             if initializing(dst,src) {
                 initializing(dst,src) := false;
@@ -202,6 +225,7 @@ initializing and transfer the Initial packet to the new cid.
         };
     
 Handle all of the frames
+
     
         var idx : frame.idx := 0;
         while idx < pkt.payload.end {
@@ -213,9 +237,11 @@ Handle all of the frames
     
     
 ### Frame handlers
+
     
 Extend `frame` with an action `handle` that handles a frame on the
 wire.
+
     
     object frame = {
        ...
@@ -223,6 +249,7 @@ wire.
     }
     
 #### Ack handler
+
     
 The set of packet numbers acknowledged by an Ack frame is determined
 by the `largest_ack` field and the `ack_blocks` field. Each Ack
@@ -230,10 +257,12 @@ block acknowledges packet numbers in the inclusive range `[last - gap, last -
 gap - blocks]` where `gap` and `blocks` are the fields of the Ack
 block and `last` is `largest_ack` minus the sum of `gap + blocks`
 for all the previous ack blocks.
+
     
 Requirements:
 
 - Every acknowledged packet must have been sent by the destination endpoint [1].
+
     
 Effects:
 
@@ -241,6 +270,7 @@ Effects:
   where `S` is the *source* of the acknowledged packet (not of the Ack) `C` is
   the cid and `N` is the packet number [2].
 - The greatest acked packet is also tracked in `max_act(S,C)` [3]
+
     
     object frame = {
         ...
@@ -266,13 +296,16 @@ Effects:
     
     
 ### Packet number decoding
+
     
 The packet number is decoded from the packet header fields as follows.
+
     
 If the connection is new, the field `hdr_pkt_num` gives the
 exact first packet number. Otherwise, it represents only a number
 of low order bits. The high-order bits must be inferred from the
 last packet number seen for this connection.
+
     
 For short format packets. the number of low order bits present
 in `hdr_pkt_num` depends on the `hdr_type` field of the packet,
@@ -311,6 +344,7 @@ Notes:
   range between 0 and 2^32 - 1025 (inclusive)." Possibly there is no
   upper limit on the packet number if no acks have been received
   yet, but this seems questionable.
+
     
     action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
     
@@ -322,10 +356,12 @@ Notes:
         if conn_seen(src,cid) {
     
 This is a last number transmitted by the source on this connection.
+
     
             var last := last_pkt_num(src,cid);
     
 If long format or type is 0x1d, we match 32 bits
+
     
             if pkt.hdr_long | pkt.hdr_type = 0x1d {
                 require pnum <= la + 0x7ffffffe;
@@ -335,6 +371,7 @@ If long format or type is 0x1d, we match 32 bits
             }
     
 else if long format or type is 0x1e, we match 16 bits
+
     
             else if pkt.hdr_type = 0x1e {
                 require pnum <= la + 0x7ffe;
@@ -344,6 +381,7 @@ else if long format or type is 0x1e, we match 16 bits
             }
     
 else (type is 0x1f) we match 8 bits
+
     
             else {
                 require pnum <= la + 0x7e;

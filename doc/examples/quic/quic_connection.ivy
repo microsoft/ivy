@@ -56,6 +56,7 @@ include quic_packet
 # - For each endpoint E and cid C, ack_credit(E,C) is the number
 #   of non-ack-only packets sent to E on C, less the number of
 #   ack-only packets sent from E on C.
+#
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
