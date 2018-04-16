@@ -6,7 +6,7 @@
 # ---
 
 # This document describes the wire specification of QUIC. The protocol
-# is modeled in terms of a sequence of *packet events* corresponding
+# is viewed as a sequence of *packet events* corresponding
 # to transmission of a UDP packet from a QUIC source endpoint to a
 # QUIC destination endpoint.
 
@@ -190,9 +190,9 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     else if pkt.hdr_type = 0x7d {
    
-        # Match the Handshake to the cid `icid` of an Initial packet sent
-        # by the destination. We mark this connection as no longer
-        # initializing and transfer the Initial packet to the new cid.
+        # The Handshake is matched to the cid `icid` of an Initial packet sent
+        # by the destination. This connection is marked as no longer
+        # initializing. The state of the Initial packet is transferred to the new cid.
         
         if initializing(dst,src) {
             initializing(dst,src) := false;
@@ -203,7 +203,8 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         }
     };
 
-    # Handle all of the frames
+    # The frames are handled in order of occurrence in the packet. The frame
+    # handlers are defined below.
 
     var idx : frame.idx := 0;
     while idx < pkt.payload.end {
@@ -216,8 +217,10 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
 # ### Frame handlers
 
-# Extend `frame` with an action `handle` that handles a frame on the
-# wire.
+# The `handle` action of a frame provides a monitor for the
+# frame. This action takes as arguments the frame, the source and
+# desitnation endpoints, and the cid of the connection. Each frame
+# variant has an implementation of `handle` defined below.
 
 object frame = {
    ...
@@ -232,6 +235,9 @@ object frame = {
 # gap - blocks]` where `gap` and `blocks` are the fields of the Ack
 # block and `last` is `largest_ack` minus the sum of `gap + blocks`
 # for all the previous ack blocks.
+#
+# The `gap` field for the first ack block is always zero and is not
+# present in the low-level syntax.
 
 # Requirements:
 #
