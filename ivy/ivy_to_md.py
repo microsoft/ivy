@@ -24,10 +24,14 @@ def main():
         print 'could not open {} for output'.format(outname)
 
 
-    last_was_comment = False
+    last_was_comment = True
     with outf:
         for line in content[1:]:
-            if line.strip().startswith('#'):
+            if not line.strip():
+                outf.write('\n')
+            elif line.strip().startswith('#'):
+                if not last_was_comment:
+                    outf.write('```\n')
                 comment = '#'.join(line.split('#')[1:])
                 if comment.startswith(' '):
                     comment = comment[1:]
@@ -35,6 +39,7 @@ def main():
                 last_was_comment = True
             else:
                 if last_was_comment:
-                    outf.write('\n')
-                outf.write('    '+line)
+                    outf.write('```\n')
+#                outf.write('    '+line)
+                outf.write(line)
                 last_was_comment = False
