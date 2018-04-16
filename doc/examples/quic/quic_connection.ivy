@@ -91,7 +91,7 @@ after init {
 # the following table:
 #
 #   | hdr_type  | kind      |
-#   -------------------------
+#   |-----------|-----------|
 #   | 0x7f      | Initial   |
 #   | 0x7d      | Handshake |
 #
@@ -280,7 +280,7 @@ object frame = {
 # according to this table:
 #
 #   | hdr_type | bits |
-#   -------------------
+#   |----------|------|
 #   | 0x1d     | 32   |
 #   | 0x1e     | 16   | 
 #   | 0x1f     |  8   |
