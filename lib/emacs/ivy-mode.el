@@ -87,6 +87,7 @@
    "ensure"
    "around"
    "parameter"
+   "autoinstance"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))

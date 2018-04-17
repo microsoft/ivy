@@ -500,6 +500,8 @@ class Decl(AST):
         return []
     def static(self):
         return []
+    def get_type_names(self,names):
+        return
 
 
 class ModuleDecl(Decl):
@@ -626,6 +628,11 @@ class InstantiateDecl(Decl):
     def name(self):
         return 'instantiate'
 
+class AutoInstanceDecl(Decl):
+    def name(self):
+        return 'autoinstance'
+
+
 class RelationDecl(Decl):
     def name(self):
         return 'relation'
@@ -637,6 +644,14 @@ class ConstantDecl(Decl):
         return 'individual'
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
+    def get_type_names(self,names):
+        for c in self.args:
+            if hasattr(c,'sort'):
+                names.add(c.sort)
+            for arg in c.args:
+                if hasattr(arg,'sort'):
+                    names.add(arg.sort)
+                
 
 class ParameterDecl(ConstantDecl):
     def name(self):
@@ -1064,7 +1079,6 @@ class ScenarioDef(AST):
         res.extend(self.places())
         return res
     
-
 # predefined things
 
 universe = 'S'

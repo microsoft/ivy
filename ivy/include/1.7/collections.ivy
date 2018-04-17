@@ -1,5 +1,7 @@
 #lang ivy
 
+include order
+
 ################################################################################
 #
 # Arrays
@@ -12,7 +14,6 @@
 #
 # The implementation of this type requires that domain.t be
 # interpreted as 'int'.
-
 
 module array(domain,range) = {
 
@@ -248,6 +249,38 @@ module array(domain,range) = {
 
     attribute test = impl
 }
+
+################################################################################
+# 
+# Use of the type array[domain][range], where domain and range are
+# types, implicitly creates an instance of array(domain,range) called
+# array[domain][range].
+#
+
+autoinstance array[domain][range] : array(domain,range)
+
+################################################################################
+#
+# Vector types
+#
+# A vector is the same as an array, except that the domain type is implicitly
+# an instance of `unbounded sequence`.
+#
+
+module vector(range) = {
+    
+    instance domain : unbounded_sequence
+    
+    instantiate array(domain,range)
+}
+
+################################################################################
+# 
+# Use of the type vector[range], where range is a type, implicitly
+# creates an instance of vector(range) called vector[range].
+#
+
+autoinstance vector[range] : vector(range)
 
 ################################################################################
 #
