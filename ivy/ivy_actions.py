@@ -786,6 +786,8 @@ class IfAction(Action):
     def int_update(self,domain,pvars):
 #        update = self.args[1].int_update(domain,pvars)
 #        return condition_update_on_fmla(update,self.args[0],domain.relations)
+        if used_variables_ast(self.args[0]):
+            raise IvyError(self,'variables in "if" conditions must be explicitly quantified')
         if not isinstance(self.args[0],ivy_ast.Some):
             if not is_boolean(self.args[0]):
                 raise IvyError(self,'condition must be boolean') 
@@ -853,7 +855,7 @@ class WhileAction(Action):
                 havocs +
                 assumes +
                 [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
-                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(And())]))),
+                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(Or())]))),
                 AssumeAction(Not(self.args[0]))]))
         if decreases is not None:
             res = LocalAction(aux,res)

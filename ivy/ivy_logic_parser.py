@@ -20,7 +20,10 @@ def p_aterm_symbol(p):
 def p_aterm_aterm_terms(p):
     'aterm : aterm LPAREN terms RPAREN'
     p[0] = p[1]
-    p[0].args.extend(p[3])
+    if isinstance(p[0],MethodCall):
+        p[0].args[1].args.extend(p[3])
+    else:
+        p[0].args.extend(p[3])
 
 if iu.get_numeric_version() <= [1,2]:
 

@@ -17,17 +17,30 @@ export net.send
 
 import net.recv
 
+relation foo
+
 isolate test = {
     implementation {
         interpret addr -> bv[1]
         interpret pkt -> bv[1]
         interpret net.tcp.socket -> bv[4]
+
+        action close_socket(src:addr,dst:addr) = {
+            call net.tcp.close(src,net.proc.sock(src,dst))
+        }
+
     }
+        before close_socket(src:addr,dst:addr) {
+            require net.proc.isup(src,dst)
+        }
 }
 
-extract iso_impl = this,test
+# extract iso_impl = this,test
 
 # isolate iso_test = net,test with net.tcp,net.tcp.impl
+
+
+# export test.close_socket
 
 extract iso_proc(self:addr) = net(self),test
 

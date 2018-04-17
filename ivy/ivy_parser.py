@@ -548,6 +548,11 @@ def p_top_instantiate_insts(p):
     p[0] = p[1]
     do_insts(p[0],p[3])
 
+def p_top_autoinstance_insts(p):
+    'top : top AUTOINSTANCE insts'
+    p[0] = p[1]
+    p[0].declare(AutoInstanceDecl(*p[3]))
+
 def p_insts_inst(p):
     'insts : inst'
     p[0] = [p[1]]
@@ -689,6 +694,7 @@ def p_fun_defnlhs_colon_atype(p):
     'fun : typeddefn'
 #    p[1].sort = p[3]
     p[0] = ConstantDecl(p[1])
+    p[0].lineno = p[1].lineno
 
 def p_fun_defn(p):
     'fun : typeddefn EQ defnrhs'
@@ -1941,21 +1947,22 @@ def p_defns_defns_comma_defn(p):
 
 def p_dotsym_symbol(p):
     'dotsym : SYMBOL'
-    p[0] = p[1]
+    p[0] = Atom(p[1],[])
+    p[0].lineno = get_lineno(p,1)
 
 def p_dotsym_dotsym_dot_symbol(p):
     'dotsym : dotsym DOT SYMBOL'
-    p[0] = p[1] + iu.ivy_compose_character + p[3]
+    p[0] = Atom(p[1].relname + iu.ivy_compose_character + p[3],[])
+    p[0].lineno = p[1].lineno
 
 def p_defnlhs_symbol(p):
     'defnlhs : dotsym'
-    p[0] = Atom(p[1],[])
-    p[0].lineno = get_lineno(p,1)
+    p[0] = p[1]
     
 def p_defnlhs_symbol_lparen_defargs_rparen(p):
     'defnlhs : dotsym LPAREN defargs RPAREN'
-    p[0] = Atom(p[1],p[3])
-    p[0].lineno = get_lineno(p,1)
+    p[0] = p[1]
+    p[0].args.extend(p[3])
     
 def p_defargs_defarg(p):
     'defargs : defarg'
@@ -2154,6 +2161,35 @@ parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger
 #parser = yacc.yacc(start='top',tabmodule='ivy_parsetab')
 # formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 
+def expand_autoinstances(ivy):
+    autos = defaultdict(list)
+    trefs = set()
+    decls = ivy.decls
+    ivy.decls = []
+    for decl in decls:
+        if isinstance(decl,AutoInstanceDecl):
+            for inst in decl.args:
+                if len(inst.args) == 2:
+                    pref,parms = iu.extract_parameters_name(inst.args[0].rep)
+                    key = (pref,len(parms))
+                    autos[key].append(inst)
+        else:
+            drefs = set()
+            decl.get_type_names(drefs)
+            for tname in drefs:
+                if tname not in trefs:
+                    trefs.add(tname)
+                    pref,refparms = iu.extract_parameters_name(tname)
+                    key = (pref,len(refparms))
+                    for inst in autos[key]:
+                        pref,parms = iu.extract_parameters_name(inst.args[0].rep)
+                        lhs = Atom(tname,[]) 
+                        subst = dict(zip(parms,refparms))
+                        rhs = inst.args[1].clone([Atom(subst.get(a.rep,a.rep),[]) for a in inst.args[1].args])
+                        newinst = Instantiation(lhs,rhs)
+                        do_insts(ivy,[newinst])
+            ivy.decls.append(decl)                    
+
 def parse(s,nested=False):
     global error_list
     global stack
@@ -2164,6 +2200,8 @@ def parse(s,nested=False):
     with LexerVersion(vernum):
         # shallow copy the parser and lexer to try for re-entrance (!!!)
         res = copy.copy(parser).parse(s,lexer=copy.copy(lexer))
+    if not nested:
+        expand_autoinstances(res)
     if error_list:
         raise iu.ErrorList(error_list)
     return res

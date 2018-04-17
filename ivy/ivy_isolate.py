@@ -517,7 +517,8 @@ def find_references(mod,syms,new_actions):
     return refs
     
 
-def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms):
+def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms,
+                       after_inits,all_after_inits):
     calls = dict()
     mods = dict()
     mixins = dict()
@@ -563,6 +564,10 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term
                             raise iu.IvyError(action,"Call to {} may cause interfering callback to {}"
                                               .format(midcall,','.join(callbacks)))
                 
+    after_init_refs = set()
+    for ainame in after_inits:
+        after_init_refs.update(lu.used_symbols_ast(new_actions[ainame]))
+
     for e in mod.exports:
         called_name = canon_act(e.exported())
         all_calls = ([called_name] + [m.mixer() for m in mod.mixins[called_name]]
@@ -570,10 +575,12 @@ def check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term
         for called in all_calls:
             if called in summarized_actions:
                 cmods = set(mods[called])
+                if called in all_after_inits:
+                    cmods = set(sym for sym in cmods if sym in after_init_refs)
                 if cmods:
                     things = ','.join(sorted(map(str,cmods)))
                     refs = ''.join('\n' + str(ln) + 'referenced here' for ln in find_references(mod,cmods,new_actions))
-                    raise iu.IvyError(action,"External call to {} may have visible effect on {}{}"
+                    raise iu.IvyError(None,"External call to {} may have visible effect on {}{}"
                                       .format(called,things,refs))
             
 
@@ -652,8 +659,11 @@ def set_privates(mod,isolate,suff=None):
             mod.privates.add(iu.compose_names(n,nsuff))
     for name in mod.attributes:
         p,c = iu.parent_child_name(name)
-        if c == suff or c == "private":
-            mod.privates.add(p)
+        if c in ['spec','impl','private']:
+            pp,pc = iu.parent_child_name(p)
+            nsuff = get_private_from_attributes(mod,pp,suff)
+            if c == nsuff or c == "private":
+                mod.privates.add(p)
     global vprivates
     vprivates = set()
     for isol in mod.isolates.values():
@@ -1167,7 +1177,8 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
         save_new_actions = mod.actions
         mod.actions = old_actions
         check_term = enforce_axioms.get() and iu.version_le("1.7",iu.get_string_version())
-        check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms)
+        check_interference(mod,new_actions,summarized_actions,impl_mixins,check_term,interf_syms,
+                           after_inits,all_after_inits)
         mod.actions = save_new_actions
 
     # filter the sorts
@@ -1187,6 +1198,10 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
                 add_deps(sort.rng.name)
             else:
                 add_deps(sort.name)
+        for s in isolate.params():
+            if s.sort not in mod.sig.sorts:
+                raise iu.IvyError(isolate,"bad type {} in isolate parameter".format(s.sort))
+            add_deps(s.sort)
         old_sorts = list(mod.sig.sorts.keys())
         for sort in old_sorts:
             if sort not in all_sorts and sort != 'bool':

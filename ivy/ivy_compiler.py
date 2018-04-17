@@ -1534,24 +1534,25 @@ def create_conj_actions(mod):
 
     # check that object invariants are used correctly
     
-    for ison,actions in myexports.iteritems():
-        for action in actions:
-            action_isos[action].add(ison)
-    for ison,isol in mod.isolates.iteritems():
-        memo = set()
-        conjs = iso.get_isolate_conjs(mod,isol)
-        exports = myexports[ison]
-        roots = set(iu.reachable(exports,lambda x: cg[x]))
-        for conj in conjs:
-            actions = mod.conj_actions[conj.label.rep]
+    if iso.do_check_interference.get():
+        for ison,actions in myexports.iteritems():
             for action in actions:
-                for ison1 in action_isos[action]:
-                    if ison1 != ison and action not in memo:
-                        memo.add(action)
-                        if action in roots:
-                            for victim in exports:
-                                if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
-                                    raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
+                action_isos[action].add(ison)
+        for ison,isol in mod.isolates.iteritems():
+            memo = set()
+            conjs = iso.get_isolate_conjs(mod,isol)
+            exports = myexports[ison]
+            roots = set(iu.reachable(exports,lambda x: cg[x]))
+            for conj in conjs:
+                actions = mod.conj_actions[conj.label.rep]
+                for action in actions:
+                    for ison1 in action_isos[action]:
+                        if ison1 != ison and action not in memo:
+                            memo.add(action)
+                            if action in roots:
+                                for victim in exports:
+                                    if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
+                                        raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
     
     

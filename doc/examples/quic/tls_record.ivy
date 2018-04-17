@@ -1,5 +1,9 @@
 #lang ivy1.7
 
+include order
+include collections
+include byte_stream
+
 # TLS Records
 # ===========
 #
@@ -86,8 +90,8 @@ object tls = {
     #   this is prefixed by a two-byte length field.
 
     type extension
-    instance extension_idx : unbounded_sequence
-    instance extension_seq : array(extension_idx,extension)
+#    instance extension_idx : unbounded_sequence
+#    instance extension_seq : array(extension_idx,extension)
 
     # ##### Client Hello
     #
@@ -101,7 +105,7 @@ object tls = {
 
     type random = struct {
         gmt_unix_time : gmt,
-        random bytes : stream_data
+        random_bytes : stream_data
     }
 
     # A cipher suite descriptor is a two-byte field used to indicate
@@ -114,7 +118,7 @@ object tls = {
     # order of preference. In serialized form it is prefixed by a two-byte
     # length field.
 
-    instance cipher_suite_idx : unbounded_array
+    instance cipher_suite_idx : unbounded_sequence
     instance cipher_suite_seq : array(cipher_suite_idx,cipher_suite)
 
     # The Client Hello message has the following fields:
@@ -138,7 +142,7 @@ object tls = {
         rand_info : random,
         session_id : stream_data,
         cipher_suites : cipher_suite_seq,
-        extensions : extension_seq
+        extensions : vector[extension]
     }
 
 

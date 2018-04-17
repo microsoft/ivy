@@ -17,12 +17,6 @@ include quic_types
 include quic_frame
 include quic_packet
 
-# A connection is associated with a collection of streams, each of
-# which has a associated stream identifier, or `stream_id` that is
-# unique within the connection.
-
-type stream_id                                   # stream identifier
-
 # Connections
 # ===========
 

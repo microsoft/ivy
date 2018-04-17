@@ -539,6 +539,30 @@ def parent_child_name(name):
         return parts
     return ['this',name]
 
+def extract_parameters_name(name):
+    parms = []
+    pos = len(name) - 1
+    while pos >= 0 and name[pos] == ']':
+        end = pos
+        pos -= 1
+        count = 1
+        while pos >= 0 and count > 0:
+            if name[pos] == '[':
+                count -= 1
+            elif name[pos] == ']':
+                count += 1
+            pos -= 1
+        if pos >= 0:
+            parms.append(name[pos+2:end])
+    if pos >= 0:
+        parms.reverse()
+        return (name[:pos+1],parms)
+    # name is malformed, just return it
+    return (name,[])
+
+def add_params_name(name,parms):
+    return name + ''.join(('[' + p + ']') for p in parms) 
+
 def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')
     lines = [s.strip() for s in lines]

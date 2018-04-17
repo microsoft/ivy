@@ -249,16 +249,18 @@ module simple_tcp(addr,pkt) = {
                 }
             }
 
-            invariant isup(A) -> tcp.open(self,sock(A))
-            invariant pend(A) -> (isup(A) | tcp.req(self,sock(A),A) | tcp.ack(self,sock(A)))
-#            invariant tcp.conn(self,S,A1,S1) -> S = sock(A1) & (isup(A1) | tcp.ack(self,S) & pend(A1))
-            invariant (isup(A) | pend(A)) & tcp.conn(self,sock(A),A1,S1) -> A = A1
-            invariant (isup(A) | pend(A)) & (isup(A1) | pend(A1)) & sock(A) = sock(A1) -> A = A1
-            invariant tcp.sent_to(A,S,V) -> sent(V,A)
-
+            specification {
+                invariant isup(A) -> tcp.open(self,sock(A))
+                invariant pend(A) -> (isup(A) | tcp.req(self,sock(A),A) | tcp.ack(self,sock(A)))
+#                invariant tcp.conn(self,S,A1,S1) -> S = sock(A1) & (isup(A1) | tcp.ack(self,S) & pend(A1))
+                invariant (isup(A) | pend(A)) & tcp.conn(self,sock(A),A1,S1) -> A = A1
+                invariant (isup(A) | pend(A)) & (isup(A1) | pend(A1)) & sock(A) = sock(A1) -> A = A1
+                invariant tcp.sent_to(A,S,V) -> sent(V,A)
+            }
         }
     }
 
    isolate iso = this
+   attribute test = impl
 }
 
