@@ -642,6 +642,14 @@ class RelationDecl(Decl):
     def defines(self):
         return [(c.relname,lineno(c)) for c in self.args if c.relname not in iu.polymorphic_symbols]
 
+def tterm_type_names(c,names):
+    if hasattr(c,'sort'):
+        names.add(c.sort)
+    for arg in c.args:
+        if hasattr(arg,'sort'):
+            names.add(arg.sort)
+
+
 class ConstantDecl(Decl):
     def name(self):
         return 'individual'
@@ -649,11 +657,7 @@ class ConstantDecl(Decl):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
     def get_type_names(self,names):
         for c in self.args:
-            if hasattr(c,'sort'):
-                names.add(c.sort)
-            for arg in c.args:
-                if hasattr(arg,'sort'):
-                    names.add(arg.sort)
+            tterm_type_names(c,names)
                 
 
 class ParameterDecl(ConstantDecl):
@@ -730,6 +734,12 @@ class TypeDecl(Decl):
     def static(self):
         res = [a for a,b in self.args[0].defines()]
         return res
+    def get_type_names(self,names):
+        for c in self.args:
+            t = c.args[1]
+            if isinstance(t,StructSort):
+                for s in t.args:
+                    tterm_type_names(s,names)
 
 class VariantDecl(Decl):
     def name(self):
