@@ -1,0 +1,17 @@
+#lang ivy1.7
+
+# QUIC/TLS interface
+# ==================
+#
+# This document describes the interface between the QUIC protocol and TLS.
+#
+
+object quic_tls = {
+
+    # Extract the QUIC transport parameters from a TLS  message
+
+    action extract_transport_params (msg : stream_data) returns (res:stream_data) {
+        
+    }
+}
+

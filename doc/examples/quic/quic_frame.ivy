@@ -2,16 +2,7 @@
 
 include collections
 include order
-
-# These definitions should be elsewhere
-
-type stream_id                                   # stream identifier
-instance stream_pos : unbounded_sequence         # stream position values
-type byte
-interpret byte -> bv[8]
-instance stream_data : array(stream_pos,byte)    # stream data
-
-
+include quic_stream
 
 object frame = {
 

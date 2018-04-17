@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+# QUIC Stream definitions
+# =======================
+#
+# A byte is a vector of eight bits.
+
+type byte
+interpret byte -> bv[8]
+
+# QUIC streams are unbounded sequence of bytes of type `stream_data`,
+# indexed by type `stream_pos`.
+
+instance stream_pos : unbounded_sequence         # stream position values
+instance stream_data : array(stream_pos,byte)    # stream data
+
+# A connection is associated with a collection of streams, each of
+# which has a associated stream identifier, or `stream_id` that is
+# unique within the connection.
+
+type stream_id                                   # stream identifier
+
+
