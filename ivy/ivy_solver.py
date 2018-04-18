@@ -1002,14 +1002,14 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
 
     """
 
-    # print "definitions:"
-    # for df in clauses.defs:
-    #     print df
-    #     print
-    # print "fmlas:"
-    # for fmla in clauses.fmlas:
-    #     print ivy_logic.close_formula(fmla)
-    #     print
+    print "definitions:"
+    for df in clauses.defs:
+        print df
+        print
+    print "fmlas:"
+    for fmla in clauses.fmlas:
+        print ivy_logic.close_formula(fmla)
+        print
 
     s = z3.Solver()
     s.add(clauses_to_z3(clauses))
@@ -1035,7 +1035,9 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 else:
                     if opt_incremental.get():
                         s.push()
-                    s.add(clauses_to_z3(fc.cond()))
+                    foo = fc.cond()
+                    print 'goal: {}'.format(foo)
+                    s.add(clauses_to_z3(foo))
                     res = decide(s)
                     if res != z3.unsat:
                         if fc.sat():
