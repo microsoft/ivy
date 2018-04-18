@@ -1,0 +1,242 @@
+#lang ivy1.3
+
+################################################################################
+#
+# Modules that should probably come from a standard library
+#
+################################################################################
+
+
+################################################################################
+#
+# Module describing an acyclic partial function. The function is built by
+# calling the "set" action. This has preconditions that enforce the required
+# invariants. The function can be accessed using "dom" to query if an element is
+# in the domain of the function, and "get" to get its value. The "get" action
+# has a precondition that the given element must be in the domain.
+#
+# Because of the invariant that the relation re construct by "set" is an acyclic
+# partial function, we can represent it by its transitive closure "tc", while
+# remainin in EPR.
+#
+################################################################################
+
+module acyclic_partial_function(carrier) = {
+    relation tc(X:carrier,Y:carrier)  # transitive closure of the function
+    relation f(X:carrier, Y:carrier)  # the function itself, but this is just an under-approximation
+
+    # Conjectures that ensure that tc really describes the transitive closure
+    # of an acyclic partial function.
+    # These conjectures form part of the safety property.
+    conjecture tc(X,X)                          # Reflexivity
+    conjecture tc(X, Y) & tc(Y, Z) -> tc(X, Z)  # Transitivity
+    conjecture tc(X, Y) & tc(Y, X) -> X = Y     # Anti-symmetry
+    conjecture tc(X, Y) & tc(X, Z) -> (tc(Y, Z) | tc(Z, Y)) # Semi-linearity
+
+    # conjecture about f (we can't have the iff)
+    conjecture f(X,Y) -> tc(X,Y) & X ~= Y & ((tc(X, Z) & X ~= Z) -> tc(Y, Z))
+    conjecture f(X,Y1) & f(X,Y2) -> Y1 = Y2
+
+    # initially empty
+    init (tc(X,Y) <-> X = Y)
+    init ~f(X,Y)
+
+    action set(x:carrier,y:carrier) = {
+        tc(X, Y) := tc(X, Y) | (tc(X, x) & tc(y, Y));
+        f(x, Y) := Y = y
+    }
+
+    action get(x:carrier) returns (y:carrier) = {
+        #assume tc(x,y) & x ~= y & ((tc(x, Z) & x ~= Z) -> tc(y, Z))
+        assume f(x,y)
+    }
+}
+
+################################################################################
+#
+# Module for axiomatizing a total order
+#
+################################################################################
+
+module total_order(r) = {
+    axiom r(X,X)                        # Reflexivity
+    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X, Y) | r(Y, X)             # Totality
+}
+
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+type node
+type value
+type quorum
+type round
+
+individual first : round
+individual none: round
+relation le(X:round, Y:round)
+instantiate total_order(le)
+axiom le(none, X)
+axiom ~le(first, none)
+axiom ~le(X, none) -> le(first, X)
+
+relation member(N:node, Q:quorum)
+# forall Q1 Q2 exists N. member(N, Q1) & member(N, Q2)
+individual quorum_intersection(Q1:quorum, Q2:quorum) : node  # a Skolem function
+axiom member(quorum_intersection(Q1, Q2), Q1)
+axiom member(quorum_intersection(Q1, Q2), Q2)
+
+# ghost functions for recording the existence of quorums and voter nodes
+individual quorum_of_proposal(R:round) : quorum
+individual quorum_of_decision(R:round) : quorum
+
+relation proposal(R1:round, V:value) # 2a
+instantiate p_round : acyclic_partial_function(round) # a proposal round ghost partial function modeled by its transitive closure
+
+relation vote(N:node, R:round, V:value) # 2b
+relation decision(R:round, V:value) # got 2b from a quorum
+relation rnd(N:node, R:round) # rnd(n,r) means node n sent 1b to round r
+
+
+init ~proposal(R,V)
+init ~vote(N,R,V)
+init ~decision(R,V)
+init rnd(N, R) <-> R = first
+
+action cast_vote = {
+    # phase 2b
+    local n:node, v:value, r:round {
+        assume r ~= none;
+        assume rnd(n, r) & (rnd(n,R) -> le(R,r));
+        assume proposal(r, v);
+        vote(n, r, v) := true
+    }
+}
+
+action decide = {
+  # get 2b from a quorum
+    local r:round, v:value, q:quorum {
+        assume r ~= none;
+        assume member(N, q) -> vote(N, r, v);
+        quorum_of_decision(r) := q;
+        decision(r, v) := true
+    }
+}
+
+action join_round = {
+    # receive 1a and answer with 1b
+    local n:node, r:round {
+        assume r ~= none;
+        assume rnd(n,R) -> ~le(r,R);
+        # node n joins r2:
+        rnd(n, r) := true
+    }
+}
+
+action propose = {
+    local r:round, v:value, q:quorum, pr:round, voter:node {
+        assume r ~= none;
+        assume ~proposal(r,V);
+        assume p_round.tc(r,R) -> r = R; # this is actually not so good that we need this here
+        assume member(N, q) -> rnd(N,r);
+
+        # find the latest vote in the quorum before round r
+        if ~(member(VOTER:node, q) & vote(VOTER:node, PR:round, V:value) & ~le(r,  PR:round)) {
+            assume pr = none
+        } else {
+            assume member(voter, q) & vote(voter, pr, v) & ~le(r, pr);
+            assume member(VOTER ,q) & vote(VOTER, PR, V) & ~le(r, PR) -> le(PR, pr)
+        };
+        proposal(r, v) := true;
+        quorum_of_proposal(r) := q;
+        call p_round.set(r, pr)
+    }
+}
+
+export cast_vote
+export join_round
+export decide
+export propose
+
+# Bogus conjectures to test the system
+
+# # counter-example in 7 steps:
+# conjecture ~(
+#     R1 ~= R2 &
+#     decision(R1,V1) &
+#     decision(R2,V2)
+# )
+
+# # counter-example in 11 steps:
+# conjecture ~(
+#     R1 ~= R2 & R3 ~= R2 & R1 ~= R3 &
+#     decision(R1,V1) &
+#     decision(R2,V2) &
+#     decision(R3,V3)
+# )
+
+# safety property:
+conjecture (
+    decision(R1,V1) &
+    decision(R2,V2)
+) -> V1 = V2
+
+# a proposal in round comes from a quorum:
+conjecture proposal(R,V) & member(N, quorum_of_proposal(R)) -> rnd(N, R)
+
+# proposals are unique per round
+conjecture proposal(R,V1) & proposal(R,V2) -> V1 = V2
+
+# decisions come from quorums of votes:
+conjecture decision(R,V) & member(N, quorum_of_decision(R)) -> vote(N,R,V)
+
+# only vote for joined rounds
+conjecture vote(N,R,V) -> rnd(N,R)
+
+# only vote for proposed values
+conjecture vote(N,R,V) -> proposal(R,V)
+
+# decisions are respected by future proposals
+# conjecture le(R1, R2) & decision(R1,V1) & proposal(R2,V2) -> V1 = V2
+#
+# decisions are respected by future proposals
+conjecture le(R1, R2) & decision(R1,V1) & proposal(R2,V2) -> V1 = V2
+
+# need to apply induction to obtain the minimal R2 that violates the
+# above conjecture, and then obtain its p_round.f
+individual min_bad_r1:round
+individual min_bad_r2:round
+individual min_bad_v1:value
+individual min_bad_v2:value
+individual min_bad_f:round
+axiom (
+    # if R2 is a bad round w.r.t. R1, then min_bad_r2 is bad w.r.t. min_bad_r1, and R2 >= min_bad_r2
+    (le(R1, R2) & decision(R1,V1) & proposal(R2,V2) & V1 ~= V2) -> (
+        (le(min_bad_r1, min_bad_r2) & decision(min_bad_r1,min_bad_v1) & proposal(min_bad_r2,min_bad_v2) & min_bad_v1 ~= min_bad_v2) &
+        le(min_bad_r2, R2)
+    )
+)
+# manually instantiate an AE axiom for min_bad_r2
+axiom p_round.tc(min_bad_r2,R) & min_bad_r2 ~= R -> p_round.f(min_bad_r2, min_bad_f)
+
+# properties of none
+conjecture ~proposal(none,V)
+conjecture ~rnd(N,none)
+conjecture ~vote(N,none,V)
+conjecture ~decision(none,V)
+
+# properties of p_round.tc
+conjecture p_round.tc(R1,R2) -> le(R2,R1)
+conjecture proposal(R,V) -> p_round.tc(R,none)
+conjecture proposal(R1,V1) & proposal(R2,V2) & p_round.tc(R1,R2) -> V1 = V2
+conjecture ~(p_round.tc(R3,R2) & proposal(R3,V0) & ~proposal(R2,V0) & R2 ~= none)
+
+# properties of p_round.f
+# we want to say that p_round is the last voted round, but we have to use p_round.f
+conjecture ~le(R3,R2) & proposal(R3,V3) & member(N,quorum_of_proposal(R3)) & vote(N,R2,V2) & p_round.f(R3,R1) -> le(R2,R1)
+# now all we have to say but can't is proposal(R,V) -> exists PR. p_round.f(R,PR)

@@ -1,0 +1,116 @@
+#lang ivy1.3
+
+#
+# A quorum based concencus protocol.
+# Similar to a single round of Paxos (I think).
+#
+# This has an interesting AE issue: every two quorums have a node in their intersection,
+# and every decided node should have a quorum that it decided based on - this is cyclic.
+# Here we get around this by remembering the quorum in the decided relation.
+#
+
+type node
+type value
+type quorum
+
+relation member(N:node, Q:quorum)
+
+# forall Q1 Q2 exists N. member(N, Q1) & member(N, Q2)
+individual quorum_intersection(Q1:quorum, Q2:quorum) : node  # a Skolem function
+axiom member(quorum_intersection(Q1, Q2), Q1)
+axiom member(quorum_intersection(Q1, Q2), Q2)
+
+module lone(f) = {
+    axiom ~f(X, Y1) | ~f(X, Y2) | Y1 = Y2
+}
+
+relation val(N:node, V:value)  # node N has value V
+relation decided(N:node, Q:quorum) # node N has decided based on quorum Q
+
+instantiate lone(val)
+
+relation propose(S:node, V:value, R:node)  # node S proposed value V to node R
+relation ack(S:node, V:value, R:node)  # node S acknowledged value V to node R
+relation knowledge(X:node, Y:node, V:value) # node X knows node Y has value V
+
+init ~propose(X, Y, Z)
+init ~ack(X, Y, Z)
+init ~knowledge(X, Y, Z)
+init ~decided(X, Q)
+init ~val(X, Y)
+
+
+action prop = {
+    local n:node, v:value {
+        # chose a node without a value and propose an arbitraty value to everyone (including self)
+        assume ~val(n, V);
+        propose(n, v, X) := true
+    }
+}
+
+action receive_prop = {
+    local n1:node, n2:node, v1:value, v2:value {
+        # process a propose message and reply an acknowledge message
+        assume propose(n1, v1, n2);
+        if ~val(n2, V:value) & ~decided(n2, Q:quorum) {
+            # if we have no value and are undecided - take the proposed value
+
+            # actually, we would like to remove the undecided part
+            # from the if, but this would require an AE invariant!
+
+            val(n2, v1) := true
+        };
+        # acknowledge back with n2's current value
+        assume val(n2, v2);
+        ack(n2, v2, n1) := true
+    }
+}
+
+action receive_ack = {
+    local n1:node, n2:node, v:value {
+        # process an acknowledge message by updating the knowledge
+        assume ack(n1, v, n2);
+        knowledge(n2, n1, v) := true
+    }
+}
+
+action decide = {
+    local n:node, v:value, q:quorum {
+        # assume that node n has value v, and has knowledge of a quorum that also has v, and make n decided.
+        assume val(n, v);
+        assume member(N, q) -> knowledge(n, N, v);
+        decided(n, q) := true
+    }
+}
+
+export prop
+export receive_prop
+export receive_ack
+export decide
+
+
+# The safety property
+conjecture (decided(N1, Q1) & decided(N2, Q2) & val(N1, V1) & val(N2, V2)) -> V1 = V2
+
+# found interactiveley - second attempt (after knowing the first attempt below)
+# conjecture ~(knowledge(N0,N1,V0) & ~ack(N1,V0,N0))  # taken from concensus_unanimously
+# conjecture ~(ack(N1,V1,N0) & ~val(N1,V1))  # taken from concensus_unanimously
+# conjecture ~(decided(N1,Q0) & member(N0,Q0) & val(N1,V1) & ~val(N0,V1))
+
+
+###
+
+# # found using IND-MUSMSS
+# conjecture ~(knowledge(N1, N0, V0) & ~ack(N0, V0, N1))
+# # conjecture ~(decided(N0, Q0) & member(N0, Q0) & val(N0, V0) & ~knowledge(N0, N0, V0))
+# conjecture ~(decided(N1, Q0) & member(N0, Q0) & val(N1, V1) & ~knowledge(N1, N0, V1))
+# conjecture ~(ack(N1, V1, N0) & ~val(N1, V1))
+
+###
+
+# found interactiveley - first attempt
+# conjecture ~(knowledge(N1, N1, V0) & val(N1, V1) & V0 ~= V1)
+# conjecture ~(decided(N0, Q) & member(N1, Q) & val(N0, V0) & val(N1, V1) & V0 ~= V1)
+# conjecture ~(ack(N0, V1, N1) & val(N0, V0) & V1 ~= V0)
+# conjecture ~(ack(N0, V0, N1) & ~val(N0, V0))
+# conjecture ~(knowledge(N0, N1, V0) & ~ack(N1, V0, N0))

@@ -709,7 +709,7 @@ class Graph(object):
         return witness_concept(witness)
 
     def empty_edge(self,edge,recomp=False):
-        self.materialize_edge(edge,false)
+        self.materialize_edge(edge,False)
 
     def materialize_edge(self,edge,truth,recomp=False):
         rel,head,tail = edge

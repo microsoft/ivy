@@ -67,12 +67,10 @@ object ticket_protocol = {
         assume ~le(y,x) & forall Z:ticket. ~le(Z,x) -> le(y,Z)
     }
 
-    action step12(t:thread,k1:ticket, k2:ticket) = {
+    action step12(t:thread) = {
         assume pc1(t);
-        assume k1 = next_ticket;
-        assume k2 = succ(k1);
-        m(t,K) := K = k1;
-        next_ticket := k2;
+        m(t,K) := K = next_ticket;
+        next_ticket := succ(next_ticket);
         pc1(t) := false;
         pc2(t) := true;
         scheduled(T) := T = t;
@@ -95,11 +93,9 @@ object ticket_protocol = {
         scheduled(T) := T = t;
     }
 
-    action step31(t:thread, k1:ticket, k2:ticket) = {
+    action step31(t:thread) = {
         assume pc3(t);
-        assume k1 = service;
-        assume k2 = succ(k1);
-        service := k2;
+        service := succ(service);
         pc3(t) := false;
         pc1(t) := true;
         scheduled(T) := T = t;
@@ -200,7 +196,7 @@ object ticket_protocol = {
 
 	    # basic temporal information
 	    conjecture forall T:thread. globally eventually scheduled(T)
-	    conjecture ~(globally ~(pc2(sk0) & globally ~pc3(sk0)))
+	    conjecture eventually (pc2(sk0) & globally ~pc3(sk0))
 	    conjecture ~($l2s_w. (pc2(sk0) & globally ~pc3(sk0))) <-> (pc2(sk0) & globally ~pc3(sk0)) # TODO: why does this make sense immediately after the save point?
 
 	    # TODO: look into why these are not working:
@@ -253,7 +249,7 @@ object ticket_protocol = {
 	    # the thread that must advance - the thread that had the service as its local ticket at the save point
 	    conjecture (
 	        l2s_saved &
-	        ($l2s_s T,K. m(T,K))    (T,($l2s_s. service)) &
+	        ($l2s_s T,K. m(T,K))(T,($l2s_s. service)) &
 	        ~($l2s_w X. scheduled(X))(T) &
 	        ($l2s_s T. pc2(T))(T) &
 	        m(T,K) &
