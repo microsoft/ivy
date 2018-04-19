@@ -672,9 +672,10 @@ def compile_schema_prem(self,sig):
     
 def compile_schema_conc(self,sig):
     with ivy_logic.WithSymbols(sig.all_symbols()):
-        if isinstance(self,ivy_ast.Definition):
-            return compile_defn(self)
-        return sortify_with_inference(self)
+        with ivy_logic.WithSorts(sig.sorts.values()):
+            if isinstance(self,ivy_ast.Definition):
+                return compile_defn(self)
+            return sortify_with_inference(self)
 
 def compile_schema_body(self):
     sig = ivy_logic.Sig()
@@ -685,10 +686,15 @@ def compile_schema_body(self):
 
 ivy_ast.SchemaBody.compile = compile_schema_body    
 
+def lookup_schema(name):
+    if name in im.module.schemata:
+        return im.module.schemata[name]
+    if name in im.module.theorems:
+        return im.module.theorems[name]
+    raise iu.IvyError(self,'applied schema {} does not exist'.format(name))
+
 def compile_schema_instantiation(self,fmla):
-    if self.schemaname() not in im.module.schemata:
-        raise iu.IvyError(self,'schema {} does not exist'.format(self.schemaname()))
-    schema = im.module.schemata[self.schemaname()]
+    schema = lookup_schema(self.schemaname())
     schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
     schemasorts = [s for s in schema.prems() if isinstance(s,ivy_logic.UninterpretedSort)]
     sortmap = dict()
@@ -787,6 +793,13 @@ class IvyDomainSetup(IvyDeclInterp):
             self.domain.schemata[sch.defn.defines()] = sch.defn.args[1].compile()
         else:
             self.domain.schemata[sch.defn.defines()] = sch
+    def theorem(self,sch):
+        if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
+            label = ivy_ast.Atom(sch.defn.defines(),[])
+            ldf = ivy_ast.LabeledFormula(label,sch.defn.args[1].compile())
+            self.domain.labeled_props.append(ldf)
+            self.domain.theorems[label.relname] = ldf.formula
+            self.last_fact = ldf
     def instantiate(self,inst):
         try:
             self.domain.schemata[inst.relname].instantiate(inst.args)
@@ -1275,10 +1288,18 @@ def check_definitions(mod):
         prover.admit_definition(d,pmap[d.id])
         
 
-
+# take a goal with premises and convert it to an implication
+def theorem_to_property(prop):
+    prems = [x.formula for x in prop.formula.args[:-1] if isinstance(x,ivy_ast.LabeledFormula)]
+    conc = prop.formula.args[-1]
+    if isinstance(conc,ivy_logic.Definition):
+        raise iu.IvyError(prop,"definitional subgoal must be discharged")
+    fmla = ivy_logic.implies(ivy_logic.And(prems),conc) if prems else conc
+    return ivy_ast.LabeledFormula(prop.label,fmla)
 
 def check_properties(mod):
     props = mod.labeled_props
+
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)
@@ -1315,6 +1336,9 @@ def check_properties(mod):
         #     print "=================" + "\n" * 10
         #     l2s(mod, prop)
         else:
+            if isinstance(prop.formula,ivy_ast.SchemaBody):
+                prover.schemata[prop.label.relname] = prop.formula
+                prop = theorem_to_property(prop)
             mod.labeled_props.append(prop)
             if prop.id in nmap:
                 nprop = named_trans(prop)

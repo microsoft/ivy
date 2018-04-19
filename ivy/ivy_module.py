@@ -37,6 +37,7 @@ class Module(object):
         self.functions = dict()  # TODO: this is redundant, remove
         self.updates = []
         self.schemata = dict()
+        self.theorems = dict()
         self.instantiations = []
         self.concept_spaces = []
         self.labeled_conjs = []  # conjectures

@@ -283,7 +283,12 @@ def strip_labeled_fmla(lfmla,strip_map):
     return lfmla.clone([lbl,fmla])
     
 def strip_labeled_fmlas(lfmlas,strip_map):
-    new_lfmlas = [strip_labeled_fmla(f,strip_map) for f in lfmlas]
+    if not strip_map:
+        return
+    for f in lfmlas:
+        if isinstance(f.formula,ivy_ast.SchemaBody):
+            raise IvyError(f,'cannot strip parameter from a theorem')
+    new_lfmlas = [strip_labeled_fmla(f,strip_map) for f in llfmlas]
     del lfmlas[:]
     lfmlas.extend(new_lfmlas)
     
@@ -1060,7 +1065,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
-        asts += [y.formula for y in x]
+        asts += [y.formula for y in x if not isinstance(y.formula,ivy_ast.SchemaBody)]
     asts += [action for action in new_actions.values()]
     for a in mod.actions.values():
         asts.extend(a.formal_params)
@@ -1123,7 +1128,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
-        asts.extend(y.formula for y in x)
+        asts.extend(y.formula for y in x if not isinstance(y.formula,ivy_ast.SchemaBody))
     asts.extend(action for action in mod.actions.values())
     if opt_keep_destructors.get():
         asts.extend(mod.params) # if compiling, keep all of the parameters

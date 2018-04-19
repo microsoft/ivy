@@ -491,6 +491,11 @@ def p_top_schema_defn(p):
     p[0] = p[1]
     p[0].declare(SchemaDecl(Schema(p[3],[])))
 
+def p_top_theorem_defn(p):
+    'top : top THEOREM schdefn'
+    p[0] = p[1]
+    p[0].declare(TheoremDecl(Schema(p[3],[])))
+
 def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
     p[0] = p[1]

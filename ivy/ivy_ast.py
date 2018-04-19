@@ -594,6 +594,12 @@ class SchemaBody(AST):
     def conc(self):
         return self.args[-1]
 
+class TheoremDecl(Decl):
+    def name(self):
+        return 'theorem'
+    def defines(self):
+        return [(c.defines(),lineno(c)) for c in self.args]
+
 class SchemaInstantiation(AST):
     def __init__(self,*args):
         self.args = args

@@ -87,7 +87,8 @@ class ProofChecker(object):
         if len(decls) == 0:
             return []
         if isinstance(proof,ia.SchemaInstantiation):
-            return self.match_schema(decls[0].formula,proof) + decls[1:]
+            m = self.match_schema(decls[0].formula,proof)
+            return None if m is None else m + decls[1:]
         elif isinstance(proof,ia.LetTactic):
             return self.let_tactic(decls,proof)
         elif isinstance(proof,ia.ComposeTactics):
@@ -122,19 +123,30 @@ class ProofChecker(object):
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
         prob = transform_defn_match(prob)
+        iu.dbg('prob')
         pmatch = compile_match(proof,prob,schemaname)
+        if pmatch is None:
+            raise ProofError(proof,'Match is inconsistent')
+        iu.dbg('pmatch')
         prob.pat = apply_match_alt(pmatch,prob.pat)
+        prob.freesyms = apply_match_freesyms(pmatch,prob.freesyms)
+        iu.dbg('prob.freesyms')
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+        iu.dbg('fomatch')
         if fomatch is not None:
             prob.pat = apply_match(fomatch,prob.pat)
             prob.freesyms = apply_match_freesyms(fomatch,prob.freesyms)
+        iu.dbg('prob')
         res = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-#        show_match(res)
+        show_match(res)
         if res is not None:
             subgoals = []
             for x in schema.prems():
                 if isinstance(x,ia.LabeledFormula):
+                    iu.dbg('pmatch')
+                    iu.dbg('repr(x.formula)')
                     fmla = apply_match_alt(remove_vars_match(pmatch,x.formula),x.formula)
+                    iu.dbg('repr(fmla)')
                     fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
                     fmla = apply_match(remove_vars_match(res,fmla),fmla)
                     g = ia.LabeledFormula(x.label,fmla)
@@ -247,7 +259,14 @@ def compile_match(proof,prob,schemaname):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
-    match = proof.match()
+    iu.dbg('prob.freesyms')
+    matches = [match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in proof.match()]
+    iu.dbg('matches')
+    res = merge_matches(*matches)
+    iu.dbg('res')
+    return res
+        
+        
     freesyms = prob.freesyms
     res = dict()
     for m in proof.match():
@@ -289,6 +308,8 @@ def apply_match_alt(match,fmla):
 
     args = [apply_match_alt(match,f) for f in fmla.args]
     if il.is_app(fmla):
+        if fmla.rep in match:
+            return match[fmla.rep](*args)
         func = apply_match_func(match,fmla.rep)
         if func in match:
             func = match[func]
@@ -297,6 +318,10 @@ def apply_match_alt(match,fmla):
     if il.is_variable(fmla):
         fmla = il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
         fmla = match.get(fmla,fmla)
+        return fmla
+    if il.is_quantifier(fmla):
+        fmla = fmla.clone_binder([apply_match_alt(match,v) for v in fmla.variables],args[0])
+        iu.dbg('repr(fmla)')
         return fmla
     return fmla.clone(args)
 
@@ -320,9 +345,12 @@ def apply_match_freesyms_alt(match,freesyms):
 def func_sorts(func):
     return list(func.sort.dom) + [func.sort.rng]
 
+def lambda_sorts(lmbd):
+    return [v.sort for v in lmbd.variables] + [lmbd.body.sort]
+
 def term_sorts(term):
     """ Returns a list of the domain and range sorts of the head function of a term, if any """
-    return func_sorts(term.rep) if il.is_app(term) else []
+    return func_sorts(term.rep) if il.is_app(term) else [term.sort] if il.is_variable(term) else []
 
 def funcs_match(pat,inst,freesyms):
     psorts,isorts = map(func_sorts,(pat,inst))
@@ -391,26 +419,49 @@ def match(pat,inst,freesyms,constants):
 
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
+    iu.dbg('pat')
+    iu.dbg('inst')
     if heads_match(pat,inst,freesyms):
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
         matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),term_sorts(inst))])
-        return merge_matches(*matches)
-    if il.is_app(pat) and pat.rep in freesyms:
+        if il.is_variable(pat):
+            matches.append({pat:inst})
+        iu.dbg('[str(m) for m in matches]')
+        res = merge_matches(*matches)
+        iu.dbg('res')
+        return res
+    elif il.is_app(pat) and pat.rep in freesyms:
         B = extract_terms(inst,pat.args)
+        iu.dbg('B')
         if all(v in constants for v in lu.variables_ast(B)):
-            return {pat.rep:B}
+            matches = [{pat.rep:B}]
+            matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),lambda_sorts(B))])
+            res = merge_matches(*matches)
+            iu.dbg('res')
+            return res
 
 
 def match_quants(pat,inst,freesyms,constants):
     """ Match an instance to a pattern that is a quantifier.
     """
 
+    iu.dbg('pat')
     if type(pat) is not type(inst) or len(pat.variables) != len(inst.variables):
         return None
     with AddSymbols(freesyms,pat.variables):
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.variables,inst.variables)]
-        matches.append(match(pat.body,inst.body,freesyms,constants))
         mat = merge_matches(*matches)
+        iu.dbg('"thingy"')
+        iu.dbg('mat')
+        if mat is not None:
+            mbody = apply_match(mat,pat.body)
+            bodyfreesyms = apply_match_freesyms(mat,freesyms)
+            iu.dbg('freesyms')
+            bodymat = match(mbody,inst.body,bodyfreesyms,constants)
+        mat = merge_matches(mat,bodymat)
+        iu.dbg('mat')
+#        matches.append(match(pat.body,inst.body,freesyms,constants))
+#        mat = merge_matches(*matches)
         if mat is not None:
             for x in pat.variables:
                 if x in mat:
