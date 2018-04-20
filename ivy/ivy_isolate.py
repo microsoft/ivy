@@ -288,7 +288,7 @@ def strip_labeled_fmlas(lfmlas,strip_map):
     for f in lfmlas:
         if isinstance(f.formula,ivy_ast.SchemaBody):
             raise IvyError(f,'cannot strip parameter from a theorem')
-    new_lfmlas = [strip_labeled_fmla(f,strip_map) for f in llfmlas]
+    new_lfmlas = [strip_labeled_fmla(f,strip_map) for f in lfmlas]
     del lfmlas[:]
     lfmlas.extend(new_lfmlas)
     
@@ -701,6 +701,9 @@ def get_props_proved_in_isolate(mod,isolate):
     not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
     proved = [a for a in mod.labeled_props if check_pr(a.label)]
     mod.privates = save_privates
+    # remove the subgoals from not_proved
+    subs = set(sg.id for p,sgs in mod.subgoals for sg in sgs)
+    not_proved = [a for a in not_proved if a.id not in subs]
     return proved,not_proved
     
 

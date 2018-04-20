@@ -538,6 +538,9 @@ class LabeledFormula(AST):
     def label(self):
         return self.args[0]
     @property
+    def name(self):
+        return self.args[0].relname
+    @property
     def formula(self):
         return self.args[1]
     def __str__(self):
@@ -600,7 +603,7 @@ class TheoremDecl(Decl):
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
 
-class SchemaInstantiation(AST):
+class TacticWithMatch(AST):
     def __init__(self,*args):
         self.args = args
     def schemaname(self):
@@ -608,7 +611,15 @@ class SchemaInstantiation(AST):
     def match(self):
         return self.args[1:]
     def __str__(self):
-        return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+        return self.tactic_name() + ' ' + str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+
+class SchemaInstantiation(TacticWithMatch):
+    def tactic_name(self):
+        return 'apply'
+
+class AssumeTactic(TacticWithMatch):
+    def tactic_name(self):
+        return 'assume'
 
 class LetTactic(AST):
     def __init__(self,*args):

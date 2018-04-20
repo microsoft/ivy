@@ -178,18 +178,18 @@ def create_strat_map(assumes,asserts,macros):
     all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
     all_fmlas.extend(il.Not(pair[0]) for pair in asserts)
     all_fmlas.extend(pair[0] for pair in macros)
-    for f in all_fmlas:
-        print f
+#    for f in all_fmlas:
+#        print f
     symbols_over_universals = il.symbols_over_universals(all_fmlas)
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts+macros:
         map_fmla(pair[0],strat_map)
 
-    show_strat_map(strat_map)
+#    show_strat_map(strat_map)
 #    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
     return strat_map
 
@@ -245,12 +245,10 @@ def get_unstratified_funs(assumes,asserts,macros):
     for x,y in strat_map.iteritems():
         y = find(y)
         if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
-            print 'x[0] = {}, y = {}'.format(x[0],y)
             for v in y.variables:
                 if v in universally_quantified_variables:
                     if v.sort == x[0].sort.dom[x[1]]:
                         if il.has_infinite_interpretation(v.sort):
-                            print 'v = {}'.format(v)
                             bad_interpreted.add(x[0])
                             break
 
@@ -296,12 +294,12 @@ def get_assumes_and_asserts(preconds_only):
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-            print 'axiom : {}'.format(ldf.formula)
+#            print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-            print 'prop : {}'.format(ldf.formula)
+#            print 'prop : {}'.format(ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
@@ -309,12 +307,12 @@ def get_assumes_and_asserts(preconds_only):
         assumes.append((ldf.formula,ldf))
     # TODO: check axioms, inits, conjectures
 
-    for x in assumes:
-        print 'assume: {}'.format(x[0])
-    for x in asserts:
-        print 'assert: {}'.format(x[0])
-    for x in macros:
-        print 'macro: {}'.format(x[0])
+#    for x in assumes:
+#        print 'assume: {}'.format(x[0])
+#    for x in asserts:
+#        print 'assert: {}'.format(x[0])
+#    for x in macros:
+#        print 'macro: {}'.format(x[0])
     return assumes,asserts,macros
 
 def report_error(logic,note,ast):

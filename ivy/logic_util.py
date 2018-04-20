@@ -88,13 +88,13 @@ def bound_variables(*terms):
 
     elif type(t) in (tuple, Const, Apply, Eq, Ite, Not, And, Or,
                      Implies, Iff):
-        return union(*(used_variables(x) for x in t))
+        return union(*(bound_variables(x) for x in t))
 
     elif type(t) in (ForAll, Exists, Lambda, NamedBinder):
-        return union(used_variables(t.body), t.variables)
+        return union(bound_variables(t.body), t.variables)
 
     elif hasattr(t,'args'):
-        return union(*(used_variables(x) for x in t.args))
+        return union(*(bound_variables(x) for x in t.args))
 
     else:
         assert False, type(t)

@@ -468,6 +468,12 @@ def p_schconc_propdecl(p):
     'schconc : PROPERTY fmla'
     p[0] = check_non_temporal(p[2])
 
+def p_schdecl_theorem(p):
+    'schdecl :  schdefnrhs'
+    lf = LabeledFormula(None,p[1])
+    lf.lineno = p[1].lineno
+    p[0] = [addlabel(lf,'sch')]
+
 def p_schdecls(p):
     'schdecls :'
     p[0] = []
@@ -480,6 +486,7 @@ def p_schdecls_schdecls_schdecl(p):
 def p_schdefnrhs_lcb_schdecls_rcb(p):
     'schdefnrhs : LCB schdecls schconc RCB'
     p[0] = SchemaBody(*(p[2]+[p[3]]))
+    p[0].lineno = get_lineno(p,1)
 
 def p_schdefn_atom_eq_fmla(p):
     'schdefn : defnlhs EQ schdefnrhs'
@@ -489,12 +496,14 @@ def p_schdefn_atom_eq_fmla(p):
 def p_top_schema_defn(p):
     'top : top SCHEMA schdefn'
     p[0] = p[1]
-    p[0].declare(SchemaDecl(Schema(p[3],[])))
+    p[0].declare(SchemaDecl(Schema(p[3])))
 
 def p_top_theorem_defn(p):
-    'top : top THEOREM schdefn'
+    'top : top THEOREM schdefn optproof'
     p[0] = p[1]
-    p[0].declare(TheoremDecl(Schema(p[3],[])))
+    p[0].declare(TheoremDecl(Schema(p[3])))
+    if p[4] is not None:
+        p[0].declare(ProofDecl(p[4]))
 
 def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
@@ -690,6 +699,13 @@ else:
         p[0] = SchemaInstantiation(a)
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_assume(p):
+        'proofstep : ASSUME SYMBOL'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(a)
+        p[0].lineno = get_lineno(p,1)
+
     
 def p_match_defn(p):
     'match : defn'
@@ -718,10 +734,17 @@ if iu.get_numeric_version() <= [1,6]:
         p[0].lineno = get_lineno(p,1)
 else:
     def p_proofstep_symbol_with_defns(p):
-        'proofstep : APPLY SYMBOL WITH matches'
+        'proofstep : APPLY atype WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = SchemaInstantiation(*([a]+p[4]))
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_assume_with_defns(p):
+        'proofstep : ASSUME atype WITH matches'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(*([a]+p[4]))
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):

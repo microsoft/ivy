@@ -1441,10 +1441,13 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     """ Rename the free variables in formula list fmlas1
     so they occur nowhere in fmlas2, avoiding capture """
     uvs = lu.used_variables(*fmlas2)
+    iu.dbg('uvs')
     uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
+    iu.dbg('uvs')
     rn = iu.UniqueRenamer('',(v.name for v in uvs))
     vs = lu.free_variables(*fmlas1)
     vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
+    iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
 class VariableUniqifier(object):
@@ -1473,3 +1476,16 @@ class VariableUniqifier(object):
             return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
+
+def alpha_avoid(fmla,vs):
+    """ Alpha-convert a formula so that bound variable names do not clash with vs. """
+    vu = VariableUniqifier()
+    freevars = set(vs)
+    freevars.update(lu.free_variables(fmla))  # avoid capturing free variables
+    vmap = dict()
+    for v in freevars:
+        vu.rn(v.name)  # reserve the name
+        vmap[v] = v    # preserve the variable in formula
+    res = vu.rec(fmla,vmap)
+    return res
+        

@@ -668,7 +668,12 @@ def compile_schema_prem(self,sig):
         return t
     elif isinstance(self,ivy_ast.LabeledFormula):
         with ivy_logic.WithSymbols(sig.all_symbols()):
-            return self.compile()
+            with ivy_logic.WithSorts(sig.sorts.values()):
+                return self.compile()
+    # elif isinstance(self,ivy_ast.SchemaBody):
+    #     with ivy_logic.WithSymbols(sig.all_symbols()):
+    #         with ivy_logic.WithSorts(sig.sorts.values()):
+    #             return compile_schema_body(self)
     
 def compile_schema_conc(self,sig):
     with ivy_logic.WithSymbols(sig.all_symbols()):
@@ -725,7 +730,7 @@ def compile_schema_instantiation(self,fmla):
 
 last_fmla = None
 
-ivy_ast.SchemaInstantiation.compile = lambda self: compile_schema_instantiation(self,last_fmla)
+ivy_ast.TacticWithMatch.compile = lambda self: compile_schema_instantiation(self,last_fmla)
 
 def compile_let_tactic(self):
     fmla = ivy_ast.And(*[ivy_ast.Atom('=',x.args[0],x.args[1]) for x in self.args])
@@ -1290,16 +1295,19 @@ def check_definitions(mod):
 
 # take a goal with premises and convert it to an implication
 def theorem_to_property(prop):
-    prems = [x.formula for x in prop.formula.args[:-1] if isinstance(x,ivy_ast.LabeledFormula)]
-    conc = prop.formula.args[-1]
-    if isinstance(conc,ivy_logic.Definition):
-        raise iu.IvyError(prop,"definitional subgoal must be discharged")
-    fmla = ivy_logic.implies(ivy_logic.And(prems),conc) if prems else conc
-    return ivy_ast.LabeledFormula(prop.label,fmla)
+    if isinstance(prop.formula,ivy_ast.SchemaBody):
+        prems = [theorem_to_property(x).formula for x in prop.formula.prems()
+                 if isinstance(x,ivy_ast.LabeledFormula)]
+        conc = prop.formula.conc()
+        if isinstance(conc,ivy_logic.Definition):
+            raise iu.IvyError(prop,"definitional subgoal must be discharged")
+        fmla = ivy_logic.Implies(ivy_logic.And(*prems),conc) if prems else conc
+        return ivy_ast.LabeledFormula(prop.label,fmla)
+    return prop
 
 def check_properties(mod):
     props = mod.labeled_props
-
+    
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)
@@ -1318,18 +1326,21 @@ def check_properties(mod):
     prover = ivy_proof.ProofChecker([],[],mod.schemata)
     for prop in props:
         if prop.id in pmap:
-#            print 'checking {}...'.format(prop.label)
+            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
             if len(subgoals) == 0:
-                mod.labeled_axioms.append(prop)
+                if not isinstance(prop.formula,ivy_ast.SchemaBody):
+                    mod.labeled_axioms.append(prop)
             else:
+                subgoals = map(theorem_to_property,subgoals)
                 for g in subgoals:
                     if prop.label is None:
                         raise IvyError(prop,'Properties with subgoals must be labeled')
                     label = ia.compose_atoms(prop.label,g.label)
                     mod.labeled_props.append(g.clone([label,g.formula]))
-                mod.labeled_props.append(prop)
+                if not isinstance(prop.formula,ivy_ast.SchemaBody):
+                    mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
         # elif prop.temporal:
         #     from ivy_l2s import l2s

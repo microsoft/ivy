@@ -87,12 +87,14 @@ class ProofChecker(object):
         if len(decls) == 0:
             return []
         if isinstance(proof,ia.SchemaInstantiation):
-            m = self.match_schema(decls[0].formula,proof)
-            return None if m is None else m + decls[1:]
+            m = self.match_schema(goal_conc(decls[0]),proof)
+            return None if m is None else goals_subst(decls,m)
         elif isinstance(proof,ia.LetTactic):
             return self.let_tactic(decls,proof)
         elif isinstance(proof,ia.ComposeTactics):
             return self.compose_proofs(decls,proof.args)
+        elif isinstance(proof,ia.AssumeTactic):
+            return self.assume_tactic(decls,proof)
         assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
@@ -107,6 +109,26 @@ class ProofChecker(object):
         return [ia.LabeledFormula(decls[0].label,
                                   il.Implies(cond,decls[0].formula))] + decls[1:]
 
+    def setup_matching(self,decl,proof):
+        schemaname = proof.schemaname()
+        if schemaname not in self.schemata:
+            raise ProofError(proof,"No schema {} exists".format(schemaname))
+        schema = self.schemata[schemaname]
+        schema = transform_defn_schema(schema,decl)
+        prob = match_problem(schema,decl)
+        prob = transform_defn_match(prob)
+        pmatch = compile_match(proof,prob,schemaname)
+        if pmatch is None:
+            raise ProofError(proof,'Match is inconsistent')
+        return schema, prob, pmatch
+
+    def assume_tactic(self,decls,proof):
+        decl = decls[0]
+        schema, prob, pmatch = self.setup_matching(decl,proof)
+        prem = make_goal(fresh_label(goal_prems(decl)),[],schema)
+        prem  = apply_match_goal(pmatch,prem,apply_match_alt)
+        return [goal_add_prem(decls[0],prem)] + decls[1:]
+
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
 
@@ -116,44 +138,64 @@ class ProofChecker(object):
         Returns a match or None
         """
         
-        schemaname = proof.schemaname()
-        if schemaname not in self.schemata:
-            raise ProofError(proof,"No schema {} exists".format(schemaname))
-        schema = self.schemata[schemaname]
-        schema = transform_defn_schema(schema,decl)
-        prob = match_problem(schema,decl)
-        prob = transform_defn_match(prob)
-        iu.dbg('prob')
-        pmatch = compile_match(proof,prob,schemaname)
-        if pmatch is None:
-            raise ProofError(proof,'Match is inconsistent')
-        iu.dbg('pmatch')
-        prob.pat = apply_match_alt(pmatch,prob.pat)
-        prob.freesyms = apply_match_freesyms(pmatch,prob.freesyms)
-        iu.dbg('prob.freesyms')
+        schema, prob, pmatch = self.setup_matching(decl,proof)
+        apply_match_to_problem(pmatch,prob,apply_match_alt)
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        iu.dbg('fomatch')
         if fomatch is not None:
-            prob.pat = apply_match(fomatch,prob.pat)
-            prob.freesyms = apply_match_freesyms(fomatch,prob.freesyms)
-        iu.dbg('prob')
-        res = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        show_match(res)
-        if res is not None:
+            apply_match_to_problem(fomatch,prob,apply_match)
+        somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+        if somatch is not None:
             subgoals = []
             for x in schema.prems():
-                if isinstance(x,ia.LabeledFormula):
-                    iu.dbg('pmatch')
-                    iu.dbg('repr(x.formula)')
-                    fmla = apply_match_alt(remove_vars_match(pmatch,x.formula),x.formula)
-                    iu.dbg('repr(fmla)')
-                    fmla = apply_match(remove_vars_match(fomatch,fmla),fmla)
-                    fmla = apply_match(remove_vars_match(res,fmla),fmla)
-                    g = ia.LabeledFormula(x.label,fmla)
-                    g.lineno = x.lineno
+                if isinstance(x,ia.LabeledFormula) or isinstance(x,ia.SchemaBody) :
+                    g = apply_match_goal(pmatch,x,apply_match_alt)
+                    g = apply_match_goal(fomatch,g,apply_match)
+                    g = apply_match_goal(somatch,g,apply_match)
                     subgoals.append(g)
             return subgoals
         return None
+
+
+# A proof goal is a LabeledFormula whose body is either a Formula or a SchemaBody
+
+# Get the conclusion of a goal
+
+def goal_conc(g):
+    return g.formula.conc() if isinstance(g.formula,ia.SchemaBody) else g.formula
+
+# Get the premises of a goal
+
+def goal_prems(g):
+    return list(g.formula.prems()) if isinstance(g.formula,ia.SchemaBody) else []
+
+# Make a goal with given label, premises (goals), conclusion (formula)
+
+def make_goal(label,prems,conc):
+    return ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
+
+# Substitute a goal g2 for the conclusion of goal g2. The result has the label of g2.
+
+def goal_subst(g1,g2):
+    return make_goal(g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
+
+# Substitute a sequence of subgoals in to the conclusion of the first goal
+
+def goals_subst(goals,subgoals):
+    return [goal_subst(goals[0],g) for g in subgoals] + goals[1:]
+
+# Add a formula or schema as a premise to a goal. Make up a fresh name for it.
+
+# Make a fresh label not used in any of a list of goals
+
+def fresh_label(goals):
+    rn = iu.UniqueRenamer(used=[x.name for x in goals])
+    return ia.Atom(rn(),[])
+    
+# Add a premise to a goal
+
+def goal_add_prem(goal,prem):
+    return make_goal(goal.label,goal_prems(goal) + [prem], goal_conc(goal))
+    
 
 def remove_vars_match(mat,fmla):
     """ Remove the variables bindings from a match. This is used to
@@ -163,7 +205,8 @@ def remove_vars_match(mat,fmla):
     sympairs = [(s,v) for s,v in mat.iteritems() if il.is_constant(s)]
     symfmlas = il.rename_vars_no_clash([v for s,v in sympairs],[fmla])
     res.update((s,w) for (s,v),w in zip(sympairs,symfmlas))
-#    show_match(res)
+    iu.dbg('fmla')
+    show_match(res)
     return res
 
 
@@ -259,11 +302,8 @@ def compile_match(proof,prob,schemaname):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
-    iu.dbg('prob.freesyms')
     matches = [match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in proof.match()]
-    iu.dbg('matches')
     res = merge_matches(*matches)
-    iu.dbg('res')
     return res
         
         
@@ -282,14 +322,48 @@ def compile_match(proof,prob,schemaname):
     #         raise ProofError(proof,'{} is not a premise of schema {}'.format(repr(sym),schemaname))
     return res
 
+def match_rhs_vars(match):
+    """ Get the variables occurring free on the right-hand side of a match """
+    rhss = [v for s,v in match.iteritems() if il.is_constant(s)]
+    return lu.used_variables_asts(rhss)
+
+
+def apply_match_goal(match,x,apply_match):
+    """ Apply a match to a goal """
+    if isinstance(x,ia.LabeledFormula):
+        fmla = x.formula
+        if isinstance(fmla,ia.SchemaBody):
+            fmla = fmla.clone([apply_match_goal(match,y,apply_match)
+                               for y in fmla.prems()]+[apply_match(match,fmla.conc())])
+        else:
+            fmla = apply_match(match,fmla)
+        g = x.clone([x.label,fmla])
+        return g
+    if isinstance(x,il.UninterpretedSort):
+        return apply_match_sort(match,x)
+    else:
+        return apply_match_func(match,x.args[0])
+
+def apply_match_to_problem(match,prob,apply_match):
+    prob.pat = apply_match(match,prob.pat)
+    prob.freesyms = apply_match_freesyms(match,prob.freesyms)
+
+
 def apply_match(match,fmla):
     """ apply a match to a formula. 
 
     In effect, substitute all symbols in the match with the
     corresponding lambda terms and apply beta reduction
-    """
 
-    args = [apply_match(match,f) for f in fmla.args]
+    Have to first alpha-rename to avoid capture of variables by binders
+
+    """
+    freevars = match_rhs_vars(match)
+    fmla = il.alpha_avoid(fmla,freevars)
+    return apply_match_rec(match,fmla)
+
+def apply_match_rec(match,fmla):
+    args = [apply_match_rec(match,f) for f in fmla.args]
     if il.is_app(fmla):
         if fmla.rep in match:
             func = match[fmla.rep]
@@ -305,8 +379,12 @@ def apply_match_alt(match,fmla):
     In effect, substitute all symbols in the match with the
     corresponding lambda terms and apply beta reduction
     """
+    freevars = match_rhs_vars(match)
+    fmla = il.alpha_avoid(fmla,freevars)
+    return apply_match_alt_rec(match,fmla)
 
-    args = [apply_match_alt(match,f) for f in fmla.args]
+def apply_match_alt_rec(match,fmla):
+    args = [apply_match_alt_rec(match,f) for f in fmla.args]
     if il.is_app(fmla):
         if fmla.rep in match:
             return match[fmla.rep](*args)
@@ -320,8 +398,7 @@ def apply_match_alt(match,fmla):
         fmla = match.get(fmla,fmla)
         return fmla
     if il.is_quantifier(fmla):
-        fmla = fmla.clone_binder([apply_match_alt(match,v) for v in fmla.variables],args[0])
-        iu.dbg('repr(fmla)')
+        fmla = fmla.clone_binder([apply_match_alt_rec(match,v) for v in fmla.variables],args[0])
         return fmla
     return fmla.clone(args)
 
@@ -419,47 +496,37 @@ def match(pat,inst,freesyms,constants):
 
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
-    iu.dbg('pat')
-    iu.dbg('inst')
     if heads_match(pat,inst,freesyms):
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
         matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),term_sorts(inst))])
         if il.is_variable(pat):
             matches.append({pat:inst})
-        iu.dbg('[str(m) for m in matches]')
         res = merge_matches(*matches)
-        iu.dbg('res')
         return res
     elif il.is_app(pat) and pat.rep in freesyms:
         B = extract_terms(inst,pat.args)
-        iu.dbg('B')
         if all(v in constants for v in lu.variables_ast(B)):
             matches = [{pat.rep:B}]
             matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),lambda_sorts(B))])
             res = merge_matches(*matches)
-            iu.dbg('res')
             return res
+        
 
 
 def match_quants(pat,inst,freesyms,constants):
     """ Match an instance to a pattern that is a quantifier.
     """
 
-    iu.dbg('pat')
     if type(pat) is not type(inst) or len(pat.variables) != len(inst.variables):
         return None
     with AddSymbols(freesyms,pat.variables):
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.variables,inst.variables)]
         mat = merge_matches(*matches)
-        iu.dbg('"thingy"')
-        iu.dbg('mat')
         if mat is not None:
             mbody = apply_match(mat,pat.body)
             bodyfreesyms = apply_match_freesyms(mat,freesyms)
-            iu.dbg('freesyms')
             bodymat = match(mbody,inst.body,bodyfreesyms,constants)
         mat = merge_matches(mat,bodymat)
-        iu.dbg('mat')
 #        matches.append(match(pat.body,inst.body,freesyms,constants))
 #        mat = merge_matches(*matches)
         if mat is not None:
