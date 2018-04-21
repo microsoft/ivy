@@ -95,6 +95,11 @@ module array(domain,range) = {
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert value(a,end(old a)) = v
 	}
+
+        theorem extensionality = {
+            property end(X) = end(Y) & forall I. 0 <= I & I < end(X) -> value(X,I) = value(Y,I)
+            property X:t = Y
+        }
     }
 
     object impl = {

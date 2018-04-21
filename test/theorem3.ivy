@@ -1,0 +1,35 @@
+#lang ivy1.7
+
+isolate ob1 = {
+    specification {
+        theorem impi = {
+            function p : bool
+            function q : bool
+            {
+                property p
+                property q
+            }
+            property p -> q
+        }
+    }
+}
+
+theorem refl = {
+    type t
+    property X:t = X
+}
+
+relation a
+
+type t1
+var b : t1
+
+object bar = {
+    theorem silly = {
+        property a -> (b = b)
+    }
+    proof apply ob1.impi; apply refl
+}
+
+
+

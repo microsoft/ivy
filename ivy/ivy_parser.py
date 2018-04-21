@@ -693,17 +693,27 @@ if iu.get_numeric_version() <= [1,6]:
         p[0].lineno = get_lineno(p,1)
 else:
     def p_proofstep_symbol(p):
-        'proofstep : APPLY SYMBOL'
+        'proofstep : APPLY atype'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = SchemaInstantiation(a)
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_assume(p):
-        'proofstep : ASSUME SYMBOL'
+        'proofstep : ASSUME atype'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
         p[0] = AssumeTactic(a)
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_showgoals(p):
+        'proofstep : SHOWGOALS'
+        p[0] = ShowGoalsTactic()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_defergoal(p):
+        'proofstep : DEFERGOAL'
+        p[0] = DeferGoalTactic()
         p[0].lineno = get_lineno(p,1)
 
     

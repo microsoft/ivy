@@ -1,0 +1,106 @@
+#lang ivy1.7
+
+include order
+include collections
+
+instance idx : unbounded_sequence
+
+relation rev(U : idx, X : idx, Y : idx)
+
+
+schema impi = {
+    function p : bool
+    function q : bool
+    {
+        property p
+        #----------------------
+        property q
+    }
+    #----------------------
+    property p -> q
+}
+
+schema andi = {
+    function p : bool
+    function q : bool
+    property p
+    property q
+    #----------------------
+    property p & q
+}
+
+
+schema exi = {
+    type t
+    function p(X:t) : bool
+    function witness : t
+    property p(witness)
+    #----------------------
+    property exists X. p(X)
+}
+
+schema alli = {
+    type t
+    function p(X:t) : bool
+    {
+        function x : t
+        property p(x)
+    }
+    #----------------------
+    property forall X. p(X)
+}
+
+# properties of rev relation
+
+isolate rev_theory = {
+    
+    specification {
+        property idx.succ(Y,U) -> rev(U,0,Y)
+        property rev(U,X,Y) & idx.succ(X,X1) & idx.succ(Y1,Y) -> rev(U,X1,Y1)
+        property rev(U,X,Y) -> rev(U,Y,X)
+        theorem foo = {
+            property 0 <= X & X < U -> exists Y. rev(U,X,Y)
+        }
+        proof
+            apply impi;
+            apply exi with witness = U - X - 1
+    }
+
+    implementation {
+        definition rev(U,X,Y) = (X + Y = U - 1)
+    }
+} with idx.impl
+
+type t
+
+instance arr : array(idx,t)
+
+function arr_rev(A1:arr,A2:arr) =
+    arr.end(A1) = arr.end(A2) & forall X,Y. rev(arr.end(A1),X,Y) -> arr.value(A1,X) = arr.value(A2,Y)
+
+property arr_rev(A1,A2) -> arr_rev(A2,A1)
+
+# property arr_rev(A,B) & arr_rev(A,C) & 0 <= X & X < arr.end(B) -> arr.value(B,X) = arr.value(C,X)
+# proof assume rev_theory.foo with U = arr.end(B)
+
+# property arr_rev(A,B) & arr_rev(A,C) -> B = C
+# proof
+#     assume arr.spec.extensionality with X = B, Y = C
+
+
+property arr_rev(A,B) & arr_rev(A,C) -> B = C
+proof
+    apply impi;
+    showgoals;
+    apply arr.spec.extensionality;
+    showgoals;
+    apply andi;
+    showgoals;
+    defergoal;
+    showgoals;
+    apply alli ;
+    showgoals;
+    assume rev_theory.foo with U = arr.end(B), X = x;
+    showgoals
+
+

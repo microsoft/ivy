@@ -691,15 +691,15 @@ def compile_schema_body(self):
 
 ivy_ast.SchemaBody.compile = compile_schema_body    
 
-def lookup_schema(name):
+def lookup_schema(name,proof):
     if name in im.module.schemata:
         return im.module.schemata[name]
     if name in im.module.theorems:
         return im.module.theorems[name]
-    raise iu.IvyError(self,'applied schema {} does not exist'.format(name))
+    raise iu.IvyError(proof,'applied schema {} does not exist'.format(name))
 
 def compile_schema_instantiation(self,fmla):
-    schema = lookup_schema(self.schemaname())
+    schema = lookup_schema(self.schemaname(),self)
     schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
     schemasorts = [s for s in schema.prems() if isinstance(s,ivy_logic.UninterpretedSort)]
     sortmap = dict()
@@ -802,6 +802,7 @@ class IvyDomainSetup(IvyDeclInterp):
         if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
             label = ivy_ast.Atom(sch.defn.defines(),[])
             ldf = ivy_ast.LabeledFormula(label,sch.defn.args[1].compile())
+            ldf.lineno = sch.defn.args[1].lineno
             self.domain.labeled_props.append(ldf)
             self.domain.theorems[label.relname] = ldf.formula
             self.last_fact = ldf
@@ -876,6 +877,7 @@ class IvyDomainSetup(IvyDeclInterp):
             return # this is a conjecture
         global last_fmla
         last_fmla = self.last_fact.formula
+        # postpone compileing the proof
         self.domain.proofs.append((self.last_fact,pf.compile()))
 
     def progress(self,df):
@@ -1302,7 +1304,9 @@ def theorem_to_property(prop):
         if isinstance(conc,ivy_logic.Definition):
             raise iu.IvyError(prop,"definitional subgoal must be discharged")
         fmla = ivy_logic.Implies(ivy_logic.And(*prems),conc) if prems else conc
-        return ivy_ast.LabeledFormula(prop.label,fmla)
+        res = ivy_ast.LabeledFormula(prop.label,fmla)
+        res.lineno = prop.lineno
+        return res
     return prop
 
 def check_properties(mod):
@@ -1311,6 +1315,13 @@ def check_properties(mod):
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)
+
+    # Give empty proofs to theorems without proofs. 
+    for prop in props:
+        if prop.id not in pmap and isinstance(prop.formula,ivy_ast.SchemaBody):
+            emptypf = ivy_ast.ComposeTactics()
+            emptypf.lineno = prop.lineno
+            pmap[prop.id] = emptypf
 
     def named_trans(prop):
         if prop.id in nmap:
@@ -1324,6 +1335,7 @@ def check_properties(mod):
             
     import ivy_proof
     prover = ivy_proof.ProofChecker([],[],mod.schemata)
+
     for prop in props:
         if prop.id in pmap:
             print 'checking {}...'.format(prop.label)
@@ -1334,10 +1346,11 @@ def check_properties(mod):
                     mod.labeled_axioms.append(prop)
             else:
                 subgoals = map(theorem_to_property,subgoals)
+                lb = ivy_ast.Labeler()
                 for g in subgoals:
                     if prop.label is None:
                         raise IvyError(prop,'Properties with subgoals must be labeled')
-                    label = ia.compose_atoms(prop.label,g.label)
+                    label = ia.compose_atoms(prop.label,lb())
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 if not isinstance(prop.formula,ivy_ast.SchemaBody):
                     mod.labeled_props.append(prop)

@@ -591,7 +591,27 @@ class SchemaDecl(Decl):
     
 class SchemaBody(AST):
     def __str__(self):
-        return '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
+        lines = []
+        def indent(ind,s):
+            lines.append(ind * '    ' + s)
+        def sub(thing,ind):
+            indent(ind,'{\n')
+            for x in thing.prems():
+                if isinstance(x,LabeledFormula):
+                    fmla = x.formula
+                    if isinstance(fmla,SchemaBody):
+                        sub(fmla,ind+1)
+                    else:
+                        indent(ind+1,'property ' + str(x) + '\n')
+                elif isinstance(x,ivy_logic.UninterpretedSort):
+                    indent(ind+1,'type ' + str(x) + '\n')
+                else:
+                    indent(ind+1,ivy_logic.sym_decl_to_str(x.args[0]) + '\n')
+            indent(ind+1,'property ' + str(thing.conc()) + '\n')
+            indent(ind,'}\n')
+        sub(self,0)
+        return ''.join(lines)
+        return indent * ' ' + '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
     def prems(self):
         return self.args[:-1]
     def conc(self):
@@ -620,6 +640,14 @@ class SchemaInstantiation(TacticWithMatch):
 class AssumeTactic(TacticWithMatch):
     def tactic_name(self):
         return 'assume'
+
+class ShowGoalsTactic(AST):
+    def tactic_name(self):
+        return 'showgoals'
+
+class DeferGoalTactic(AST):
+    def tactic_name(self):
+        return 'defergoal'
 
 class LetTactic(AST):
     def __init__(self,*args):
@@ -1382,3 +1410,8 @@ class ASTContext(object):
                 exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
 
+class Labeler(object):
+    def __init__(self):
+        self.rn = iu.UniqueRenamer()
+    def __call__(self):
+        return Atom(self.rn(),[])

@@ -78,6 +78,8 @@ class ProofChecker(object):
         if subgoals is None:
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
+        if isinstance(prop.formula,ia.SchemaBody):
+            self.schemata[prop.name] = prop.formula
         return subgoals
 
     def apply_proof(self,decls,proof):
@@ -88,6 +90,8 @@ class ProofChecker(object):
             return []
         if isinstance(proof,ia.SchemaInstantiation):
             m = self.match_schema(goal_conc(decls[0]),proof)
+            for s in m:
+                check_name_clash(decls[0],s,proof)
             return None if m is None else goals_subst(decls,m)
         elif isinstance(proof,ia.LetTactic):
             return self.let_tactic(decls,proof)
@@ -95,6 +99,10 @@ class ProofChecker(object):
             return self.compose_proofs(decls,proof.args)
         elif isinstance(proof,ia.AssumeTactic):
             return self.assume_tactic(decls,proof)
+        elif isinstance(proof,ia.ShowGoalsTactic):
+            return self.show_goals_tactic(decls,proof)
+        elif isinstance(proof,ia.DeferGoalTactic):
+            return self.defer_goal_tactic(decls,proof)
         assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
@@ -104,10 +112,22 @@ class ProofChecker(object):
                 return None
         return decls
 
+    def show_goals_tactic(self,decls,proof):
+        print
+        print '{}Proof goals:'.format(proof.lineno)
+        for decl in decls:
+            print
+            print 'theorem ' + str(decl)
+        return decls
+
+    def defer_goal_tactic(self,decls,proof):
+        return decls[1:] + decls[0:1]
+
     def let_tactic(self,decls,proof):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
-        return [ia.LabeledFormula(decls[0].label,
-                                  il.Implies(cond,decls[0].formula))] + decls[1:]
+        subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
+        subgoal.lineno = decls[0].lineno
+        return [subgoal] + decls[1:]
 
     def setup_matching(self,decl,proof):
         schemaname = proof.schemaname()
@@ -125,7 +145,7 @@ class ProofChecker(object):
     def assume_tactic(self,decls,proof):
         decl = decls[0]
         schema, prob, pmatch = self.setup_matching(decl,proof)
-        prem = make_goal(fresh_label(goal_prems(decl)),[],schema)
+        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem  = apply_match_goal(pmatch,prem,apply_match_alt)
         return [goal_add_prem(decls[0],prem)] + decls[1:]
 
@@ -145,12 +165,15 @@ class ProofChecker(object):
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if somatch is not None:
+            show_match(somatch)
+            for s in somatch.keys():
+                print repr(s)
             subgoals = []
             for x in schema.prems():
                 if isinstance(x,ia.LabeledFormula) or isinstance(x,ia.SchemaBody) :
                     g = apply_match_goal(pmatch,x,apply_match_alt)
                     g = apply_match_goal(fomatch,g,apply_match)
-                    g = apply_match_goal(somatch,g,apply_match)
+                    g = apply_match_goal(somatch,g,apply_match_alt)
                     subgoals.append(g)
             return subgoals
         return None
@@ -170,13 +193,15 @@ def goal_prems(g):
 
 # Make a goal with given label, premises (goals), conclusion (formula)
 
-def make_goal(label,prems,conc):
-    return ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
+def make_goal(lineno,label,prems,conc):
+    res =  ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
+    res.lineno = lineno
+    return res
 
 # Substitute a goal g2 for the conclusion of goal g2. The result has the label of g2.
 
 def goal_subst(g1,g2):
-    return make_goal(g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
+    return make_goal(g2.lineno, g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
 
 # Substitute a sequence of subgoals in to the conclusion of the first goal
 
@@ -194,8 +219,26 @@ def fresh_label(goals):
 # Add a premise to a goal
 
 def goal_add_prem(goal,prem):
-    return make_goal(goal.label,goal_prems(goal) + [prem], goal_conc(goal))
+    return make_goal(goal.lineno,goal.label,goal_prems(goal) + [prem], goal_conc(goal))
     
+# Get the symbols and types defined in the premises of a goal
+
+def goal_defns(goal):
+    res = set()
+    for x in goal_prems(goal):
+        if isinstance(x,ia.ConstantDecl):
+            res.add(x.args[0])
+        elif isinstance(x,il.UninterpretedSort):
+            res.add(x)
+    return res
+
+# Check that there are no name clashes in a pair of goals
+
+def check_name_clash(g1,g2,proof):
+    d1,d2 = map(goal_defns,(g1,g2))
+    for s1 in d1:
+        if s1 in d2:
+            raise ProofError(proof,'premise {} of sugboal clashes with context'.format(s1))
 
 def remove_vars_match(mat,fmla):
     """ Remove the variables bindings from a match. This is used to
@@ -298,11 +341,16 @@ def parameterize_schema(sorts,schema):
 
 # A "match" is a map from symbols to lambda terms
     
+def compile_one_match(lhs,rhs,freesyms,constants):
+    if il.is_variable(lhs):
+        return fo_match(lhs,rhs,freesyms,constants)
+    return match(lhs,rhs,freesyms,constants)
+
 def compile_match(proof,prob,schemaname):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
-    matches = [match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in proof.match()]
+    matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in proof.match()]
     res = merge_matches(*matches)
     return res
         
@@ -342,7 +390,7 @@ def apply_match_goal(match,x,apply_match):
     if isinstance(x,il.UninterpretedSort):
         return apply_match_sort(match,x)
     else:
-        return apply_match_func(match,x.args[0])
+        return x.clone([apply_match_func(match,x.args[0])])
 
 def apply_match_to_problem(match,prob,apply_match):
     prob.pat = apply_match(match,prob.pat)
@@ -494,6 +542,10 @@ def match(pat,inst,freesyms,constants):
 
     """
 
+    # iu.dbg('pat')
+    # iu.dbg('inst')
+    # iu.dbg('freesyms')
+    # iu.dbg('constants')
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
     if heads_match(pat,inst,freesyms):
