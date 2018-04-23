@@ -699,6 +699,7 @@ def lookup_schema(name,proof):
     raise iu.IvyError(proof,'applied schema {} does not exist'.format(name))
 
 def compile_schema_instantiation(self,fmla):
+    return self
     schema = lookup_schema(self.schemaname(),self)
     schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
     schemasorts = [s for s in schema.prems() if isinstance(s,ivy_logic.UninterpretedSort)]
@@ -795,7 +796,11 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.named.append((self.last_fact,sym(*targs) if targs else sym))
     def schema(self,sch):
         if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
-            self.domain.schemata[sch.defn.defines()] = sch.defn.args[1].compile()
+            label = ivy_ast.Atom(sch.defn.defines(),[])
+            ldf = ivy_ast.LabeledFormula(label,sch.defn.args[1].compile())
+            ldf.lineno = sch.defn.args[1].lineno
+#            self.domain.labeled_axioms.append(ldf)
+            self.domain.schemata[label.relname] = ldf
         else:
             self.domain.schemata[sch.defn.defines()] = sch
     def theorem(self,sch):
@@ -1285,7 +1290,7 @@ def check_definitions(mod):
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     sccs = tarjan_arcs(arcs)
     import ivy_proof
-    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[])
     for scc in sccs:
         if len(scc) > 1:
             raise iu.IvyError(None,'these definitions form a dependency cycle: {}'.format(','.join(scc)))
@@ -1334,7 +1339,7 @@ def check_properties(mod):
         return prop
             
     import ivy_proof
-    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[],mod.schemata)
 
     for prop in props:
         if prop.id in pmap:
@@ -1360,9 +1365,9 @@ def check_properties(mod):
         #     print "=================" + "\n" * 10
         #     l2s(mod, prop)
         else:
-            if isinstance(prop.formula,ivy_ast.SchemaBody):
-                prover.schemata[prop.label.relname] = prop.formula
-                prop = theorem_to_property(prop)
+            # if isinstance(prop.formula,ivy_ast.SchemaBody):
+            #     prover.schemata[prop.label.relname] = prop.formula
+            #     prop = theorem_to_property(prop)
             mod.labeled_props.append(prop)
             if prop.id in nmap:
                 nprop = named_trans(prop)

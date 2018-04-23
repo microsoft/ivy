@@ -25,17 +25,22 @@ class MatchProblem(object):
 class ProofChecker(object):
     """ This is IVY's built-in proof checker """
 
-    def __init__(self,axioms,definitions,schemata):
+    def __init__(self,axioms,definitions,schemata=None):
         """ A proof checker starts with sets of axioms, definitions and schemata
     
         - axioms is a list of ivy_ast.LabeledFormula
         - definitions is a list of ivy_ast.LabeledFormula
-        - schemata is a map from string names to ivy_ast.SchemaBody
+        - schemata is a map from string names to ivy_ast.LabeledFormula
+
+        The schemata argument is optional and is included for backward compatibility
+        with ivy_mc.
         """
     
         self.axioms  = list(axioms)
         self.definitions = dict((d.formula.defines(),d) for d in definitions)
-        self.schemata = dict(schemata.iteritems())
+        self.schemata = schemata.copy() if schemata is not None else dict()
+        for ax in axioms:
+            self.schemata[ax.name] = ax
         self.deps = set()  # set of dependencies of existing definitions
 
     def admit_definition(self,defn,proof=None):
@@ -79,7 +84,7 @@ class ProofChecker(object):
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
         if isinstance(prop.formula,ia.SchemaBody):
-            self.schemata[prop.name] = prop.formula
+            self.schemata[prop.name] = prop
         return subgoals
 
     def apply_proof(self,decls,proof):
@@ -89,9 +94,10 @@ class ProofChecker(object):
         if len(decls) == 0:
             return []
         if isinstance(proof,ia.SchemaInstantiation):
-            m = self.match_schema(goal_conc(decls[0]),proof)
-            for s in m:
-                check_name_clash(decls[0],s,proof)
+            m = self.match_schema(decls[0],proof)
+            if m is not None:
+                for s in m:
+                    check_name_clash(decls[0],s,proof)
             return None if m is None else goals_subst(decls,m)
         elif isinstance(proof,ia.LetTactic):
             return self.let_tactic(decls,proof)
@@ -137,7 +143,7 @@ class ProofChecker(object):
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
         prob = transform_defn_match(prob)
-        pmatch = compile_match(proof,prob,schemaname)
+        pmatch = compile_match(proof,prob,schema,decl)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
         return schema, prob, pmatch
@@ -169,9 +175,11 @@ class ProofChecker(object):
             for s in somatch.keys():
                 print repr(s)
             subgoals = []
-            for x in schema.prems():
-                if isinstance(x,ia.LabeledFormula) or isinstance(x,ia.SchemaBody) :
+            for x in goal_prems(schema):
+                if isinstance(x,ia.LabeledFormula) :
                     g = apply_match_goal(pmatch,x,apply_match_alt)
+                    iu.dbg('pmatch')
+                    iu.dbg('g')
                     g = apply_match_goal(fomatch,g,apply_match)
                     g = apply_match_goal(somatch,g,apply_match_alt)
                     subgoals.append(g)
@@ -197,6 +205,10 @@ def make_goal(lineno,label,prems,conc):
     res =  ia.LabeledFormula(label,ia.SchemaBody(*(prems+[conc])) if prems else conc)
     res.lineno = lineno
     return res
+
+# Replace the premises and conclusions of a goal, keeping label and lineno
+def clone_goal(goal,prems,conc):
+    return make_goal(goal.lineno,goal.label,prems,conc)
 
 # Substitute a goal g2 for the conclusion of goal g2. The result has the label of g2.
 
@@ -240,6 +252,39 @@ def check_name_clash(g1,g2,proof):
         if s1 in d2:
             raise ProofError(proof,'premise {} of sugboal clashes with context'.format(s1))
 
+# A *vocabulary* consists of three lists: sorts, symbols and variables
+
+class Vocab(object):
+    def __init__(self,sorts,symbols,variables):
+        self.sorts,self.symbols,self.variables = sorts,symbols,variables
+
+# Get the vocabulary of a goal. This is the collection of sorts, symbols and
+# variables that are bound in the goal.
+
+def goal_vocab(goal):
+    prems = goal_prems(goal)
+    conc = goal_conc(goal)
+    symbols = [x.args[0] for x in prems if isinstance(x,ia.ConstantDecl)]
+    sorts = [s for s in prems if isinstance(s,il.UninterpretedSort)]
+    fmlas = [x.formula for x in prems + [conc] if isinstance(x,ia.LabeledFormula)]
+    variables = list(lu.used_variables_asts(fmlas))
+    return Vocab(sorts,symbols,variables)
+
+# Compile an expression using a vocabulary. The expression could be a formula or a type.
+
+def compile_expr_vocab(expr,vocab):
+    with il.WithSymbols(vocab.symbols):
+        with il.WithSorts(vocab.sorts):
+            if isinstance(expr,ia.Atom) and expr.rep in il.sig.sorts:
+                return il.sig.sorts[expr.rep]
+            with il.top_sort_as_default():
+                with ia.ASTContext(expr):
+                    expr = il.sort_infer_list([expr.compile()] + vocab.variables)[0]
+                    return expr
+
+
+
+
 def remove_vars_match(mat,fmla):
     """ Remove the variables bindings from a match. This is used to
     prevent variable capture when applying the match to premises. Make sure free variables
@@ -264,14 +309,17 @@ def show_match(m):
         
 def match_problem(schema,decl):
     """ Creating a matching problem from a schema and a declaration """
-    freesyms = set(x.args[0] for x in schema.prems() if isinstance(x,ia.ConstantDecl))
-    freesyms.update(x for x in schema.prems() if isinstance(x,il.UninterpretedSort))
-    freesyms.update(lu.variables_ast(schema.conc()))
-    return MatchProblem(schema.conc(),decl,freesyms,set(lu.variables_ast(decl)))
+    prems = goal_prems(schema)
+    conc = goal_conc(schema)
+    freesyms = set(x.args[0] for x in prems if isinstance(x,ia.ConstantDecl))
+    freesyms.update(x for x in prems if isinstance(x,il.UninterpretedSort))
+    freesyms.update(lu.variables_ast(conc))
+    return MatchProblem(conc,goal_conc(decl),freesyms,set(lu.variables_ast(decl)))
 
 def transform_defn_schema(schema,decl):
     """ Transform definition schema to match a definition. """
-    conc = schema.conc()
+    conc = goal_conc(schema)
+    decl = goal_conc(decl)
     if not(isinstance(decl,il.Definition) and isinstance(conc,il.Definition)):
         return schema
     declargs = decl.lhs().args
@@ -322,12 +370,12 @@ def transform_defn_match(prob):
 def parameterize_schema(sorts,schema):
     """ Add initial parameters to all the free symbols in a schema.
 
-    Takes a list of sorts and an ivy_ast.SchemaBody. """
+    Takes a list of sorts and an ia.SchemaBody. """
 
     vars = make_distinct_vars(sorts,schema.conc())
     match = {}
     prems = []
-    for prem in schema.prems():
+    for prem in goal_prems(schema):
         if isinstance(prem,ia.ConstantDecl):
             sym = prem.args[0]
             vs2 = [il.Variable('X'+str(i),y) for i,y in enumerate(sym.sort.dom)]
@@ -336,8 +384,24 @@ def parameterize_schema(sorts,schema):
             prems.append(ia.ConstantDecl(sym2))
         else:
             prems.append(prem)
-    conc = apply_match(match,schema.conc())
-    return schema.clone(prems + [conc])
+    conc = apply_match(match,goal_conc(schema))
+    return goal_clone(schema,prems,conc)
+
+# A schema instantiataion has an associated list of mathces
+# (following 'with').  When compiling this, the left-hand sides
+# use names of constants and variables from the shema being
+# instantiated, while the right-hand sides uses names from the
+# current goal (and both may use names from the globla context
+
+def compile_match_list(proof,left_goal,right_goal):
+    def compile_match(d):
+        x,y = d.lhs(),d.rhs()
+        x = compile_expr_vocab(x,left_goal_vocab)
+        y = compile_expr_vocab(y,right_goal_vocab)
+        return ia.Definition(x,y)
+    left_goal_vocab = goal_vocab(left_goal)
+    right_goal_vocab = goal_vocab(right_goal)
+    return [compile_match(d) for d in proof.match()]
 
 # A "match" is a map from symbols to lambda terms
     
@@ -346,11 +410,14 @@ def compile_one_match(lhs,rhs,freesyms,constants):
         return fo_match(lhs,rhs,freesyms,constants)
     return match(lhs,rhs,freesyms,constants)
 
-def compile_match(proof,prob,schemaname):
+def compile_match(proof,prob,schema,decl):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
-    matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in proof.match()]
+    matches = compile_match_list(proof,schema,decl)
+    iu.dbg('matches')
+    matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
+    iu.dbg('matches')
     res = merge_matches(*matches)
     return res
         
@@ -479,9 +546,11 @@ def term_sorts(term):
 
 def funcs_match(pat,inst,freesyms):
     psorts,isorts = map(func_sorts,(pat,inst))
-    return (pat.name == inst.name and len(psorts) == len(isorts)
+    res = (pat.name == inst.name and len(psorts) == len(isorts)
             and all(x == y for x,y in zip(psorts,isorts) if x not in freesyms))
-
+    iu.dbg('res')
+    return res
+    
 def heads_match(pat,inst,freesyms):
     """Returns true if the heads of two terms match. This means they have
     the same top-level operator and same number of
@@ -489,6 +558,7 @@ def heads_match(pat,inst,freesyms):
     if it has the same name and if it agrees on the non-free sorts in
     its type.
     """
+    iu.dbg('type(pat)')
     return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms)
         or not il.is_app(pat) and not il.is_quantifier(pat)
            and type(pat) is type(inst) and len(pat.args) == len(inst.args))
@@ -542,13 +612,14 @@ def match(pat,inst,freesyms,constants):
 
     """
 
-    # iu.dbg('pat')
-    # iu.dbg('inst')
-    # iu.dbg('freesyms')
-    # iu.dbg('constants')
+    iu.dbg('repr(pat)')
+    iu.dbg('repr(inst)')
+    iu.dbg('freesyms')
+    iu.dbg('constants')
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
     if heads_match(pat,inst,freesyms):
+        iu.dbg('"got here"')
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
         matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),term_sorts(inst))])
         if il.is_variable(pat):

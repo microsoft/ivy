@@ -99,7 +99,7 @@ class Module(object):
     def get_axioms(self):
         res = self.axioms
         for n,sch in self.schemata.iteritems():
-            res += sch.instances
+            res += sch.formula.instances
         return res
 
     def background_theory(self, symbols=None):

@@ -580,7 +580,8 @@ def expand_schemata(mod,sort_constants,funs):
     for s in mod.sig.sorts.values():
         if not il.is_function_sort(s):
             match.add(s,s)
-    for name,schema in mod.schemata.iteritems():
+    for name,lf in mod.schemata.iteritems():
+        schema = lf.formula
         if any(name.startswith(pref) for pref in ['rec[','lep[','ind[']):
             continue
         conc = schema.args[-1]
