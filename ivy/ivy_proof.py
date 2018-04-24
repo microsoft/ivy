@@ -315,6 +315,10 @@ def show_match(m):
         
 def match_problem(schema,decl):
     """ Creating a matching problem from a schema and a declaration """
+    vocab = goal_vocab(schema)
+    freesyms = set(vocab.symbols + vocab.sorts + vocab.variables)
+    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,set(lu.variables_ast(decl)))
+
     prems = goal_prems(schema)
     conc = goal_conc(schema)
     freesyms = set(x.args[0] for x in prems if isinstance(x,ia.ConstantDecl))
