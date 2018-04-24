@@ -1402,7 +1402,8 @@ class ASTContext(object):
         if isinstance(exc_val,ivy_logic.Error):
 #            assert False
             raise IvyError(self.ast,str(exc_val))
-        if exc_type == IvyError:
+        if isinstance(exc_val,IvyError):
+#        if exc_type == IvyError:
 #            print "no lineno: {}".format(self.ast)
             needs_lineno = not exc_val.lineno.line
             if needs_lineno and hasattr(self.ast,'lineno'):

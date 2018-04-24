@@ -937,6 +937,24 @@ class WithSorts(object):
             sig.sorts[sym.name] = sym
         return False # don't block any exceptions
 
+class BindSymbols(object):
+    def __init__(self,env,symbols):
+        self.env, self.symbols = env, list(symbols)
+    def __enter__(self):
+        self.saved = []
+        for sym in self.symbols:
+            if sym in self.env:
+                self.saved.append(sym)
+                self.env.remove(sym)
+            self.env.add(sym)
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        for sym in self.symbols:
+            self.env.remove(sym)
+        for sym in self.saved:
+            self.env.add(sym)
+        return False # don't block any exceptions
+
 
 alpha = lg.TopSort('alpha')
 beta = lg.TopSort('beta')

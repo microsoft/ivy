@@ -15,6 +15,10 @@ class NoMatch(iu.IvyError):
     pass
 class ProofError(iu.IvyError):
     pass
+class CaptureError(iu.IvyError):
+    pass
+
+
 
 class MatchProblem(object):
     def __init__(self,pat,inst,freesyms,constants):
@@ -91,25 +95,27 @@ class ProofChecker(object):
         """ Apply a proof to a list of goals, producing subgoals, or None if
         the proof fails. """
 
-        if len(decls) == 0:
-            return []
-        if isinstance(proof,ia.SchemaInstantiation):
-            m = self.match_schema(decls[0],proof)
-            if m is not None:
-                for s in m:
-                    check_name_clash(decls[0],s,proof)
-            return None if m is None else goals_subst(decls,m)
-        elif isinstance(proof,ia.LetTactic):
-            return self.let_tactic(decls,proof)
-        elif isinstance(proof,ia.ComposeTactics):
-            return self.compose_proofs(decls,proof.args)
-        elif isinstance(proof,ia.AssumeTactic):
-            return self.assume_tactic(decls,proof)
-        elif isinstance(proof,ia.ShowGoalsTactic):
-            return self.show_goals_tactic(decls,proof)
-        elif isinstance(proof,ia.DeferGoalTactic):
-            return self.defer_goal_tactic(decls,proof)
-        assert False,"unknown proof type {}".format(type(proof))
+        with ia.ASTContext(proof):
+            if len(decls) == 0:
+                return []
+            if isinstance(proof,ia.SchemaInstantiation):
+                iu.dbg('proof.lineno')
+                m = self.match_schema(decls[0],proof)
+                if m is not None:
+                    for s in m:
+                        check_name_clash(decls[0],s,proof)
+                return None if m is None else goals_subst(decls,m)
+            elif isinstance(proof,ia.LetTactic):
+                return self.let_tactic(decls,proof)
+            elif isinstance(proof,ia.ComposeTactics):
+                return self.compose_proofs(decls,proof.args)
+            elif isinstance(proof,ia.AssumeTactic):
+                return self.assume_tactic(decls,proof)
+            elif isinstance(proof,ia.ShowGoalsTactic):
+                return self.show_goals_tactic(decls,proof)
+            elif isinstance(proof,ia.DeferGoalTactic):
+                return self.defer_goal_tactic(decls,proof)
+            assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
         for proof in proofs:
@@ -151,8 +157,8 @@ class ProofChecker(object):
     def assume_tactic(self,decls,proof):
         decl = decls[0]
         schema, prob, pmatch = self.setup_matching(decl,proof)
-        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
-        prem  = apply_match_goal(pmatch,prem,apply_match_alt)
+#        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
+        prem  = apply_match_goal(pmatch,schema,apply_match_alt)
         return [goal_add_prem(decls[0],prem)] + decls[1:]
 
     def match_schema(self,decl,proof):
@@ -266,7 +272,7 @@ def goal_vocab(goal):
     conc = goal_conc(goal)
     symbols = [x.args[0] for x in prems if isinstance(x,ia.ConstantDecl)]
     sorts = [s for s in prems if isinstance(s,il.UninterpretedSort)]
-    fmlas = [x.formula for x in prems + [conc] if isinstance(x,ia.LabeledFormula)]
+    fmlas = [x.formula for x in prems if isinstance(x,ia.LabeledFormula)] + [conc]
     variables = list(lu.used_variables_asts(fmlas))
     return Vocab(sorts,symbols,variables)
 
@@ -443,15 +449,20 @@ def match_rhs_vars(match):
     return lu.used_variables_asts(rhss)
 
 
-def apply_match_goal(match,x,apply_match):
+def apply_match_goal(match,x,apply_match,env = None):
     """ Apply a match to a goal """
+    env = env if env is not None else set()
     if isinstance(x,ia.LabeledFormula):
         fmla = x.formula
         if isinstance(fmla,ia.SchemaBody):
-            fmla = fmla.clone([apply_match_goal(match,y,apply_match)
-                               for y in fmla.prems()]+[apply_match(match,fmla.conc())])
+            bound = [s for s in goal_defns(x) if s not in match]
+            iu.dbg('bound')
+            with il.BindSymbols(env,goal_defns(x)):
+                iu.dbg('env')
+                fmla = fmla.clone([apply_match_goal(match,y,apply_match,env)
+                                   for y in fmla.prems()]+[apply_match(match,fmla.conc(),env)])
         else:
-            fmla = apply_match(match,fmla)
+            fmla = apply_match(match,fmla,env)
         g = x.clone([x.label,fmla])
         return g
     if isinstance(x,il.UninterpretedSort):
@@ -464,7 +475,7 @@ def apply_match_to_problem(match,prob,apply_match):
     prob.freesyms = apply_match_freesyms(match,prob.freesyms)
 
 
-def apply_match(match,fmla):
+def apply_match(match,fmla,env = None):
     """ apply a match to a formula. 
 
     In effect, substitute all symbols in the match with the
@@ -488,32 +499,53 @@ def apply_match_rec(match,fmla):
         return match[fmla]
     return fmla.clone(args)
 
-def apply_match_alt(match,fmla):
+def match_get(match,sym,env,default=None):
+    """ get the value of a symbol in a match, checking that no symbols
+    are captured in env """
+    val = match.get(sym,None)
+    if val is not None:
+        vocab = lu.used_symbols_ast(val)
+        vocab.update(lu.variables_ast(val))
+        iu.dbg('sym')
+        iu.dbg('env')
+        iu.dbg('vocab')
+        for v in vocab:
+            if v in env:
+                raise CaptureError(None,'symbol {} is captured in substitution'.format(v))
+        return val
+    return default
+    
+
+def apply_match_alt(match,fmla,env = None):
     """ apply a match to a formula. 
 
     In effect, substitute all symbols in the match with the
     corresponding lambda terms and apply beta reduction
+
+    If present, env is list of symbols bound in the environment.
+    Substituting one of these symbols into the formula will be considered
+    capture and cause CaptureError to be raised.
+
     """
     freevars = match_rhs_vars(match)
     fmla = il.alpha_avoid(fmla,freevars)
-    return apply_match_alt_rec(match,fmla)
+    return apply_match_alt_rec(match,fmla,env if env is not None else set())
 
-def apply_match_alt_rec(match,fmla):
-    args = [apply_match_alt_rec(match,f) for f in fmla.args]
+def apply_match_alt_rec(match,fmla,env):
+    args = [apply_match_alt_rec(match,f,env) for f in fmla.args]
     if il.is_app(fmla):
         if fmla.rep in match:
-            return match[fmla.rep](*args)
+            return match_get(match,fmla.rep,env)(*args)
         func = apply_match_func(match,fmla.rep)
-        if func in match:
-            func = match[func]
-            return func(*args)
+        func = match_get(match,func,env,func)
         return func(*args)
     if il.is_variable(fmla):
         fmla = il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
-        fmla = match.get(fmla,fmla)
+        fmla = match_get(match,fmla,env,fmla)
         return fmla
     if il.is_quantifier(fmla):
-        fmla = fmla.clone_binder([apply_match_alt_rec(match,v) for v in fmla.variables],args[0])
+        with il.BindSymbols(env,fmla.variables):
+            fmla = fmla.clone_binder([apply_match_alt_rec(match,v,env) for v in fmla.variables],args[0])
         return fmla
     return fmla.clone(args)
 
@@ -548,7 +580,6 @@ def funcs_match(pat,inst,freesyms):
     psorts,isorts = map(func_sorts,(pat,inst))
     res = (pat.name == inst.name and len(psorts) == len(isorts)
             and all(x == y for x,y in zip(psorts,isorts) if x not in freesyms))
-    iu.dbg('res')
     return res
     
 def heads_match(pat,inst,freesyms):
@@ -558,7 +589,6 @@ def heads_match(pat,inst,freesyms):
     if it has the same name and if it agrees on the non-free sorts in
     its type.
     """
-    iu.dbg('type(pat)')
     return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms)
         or not il.is_app(pat) and not il.is_quantifier(pat)
            and type(pat) is type(inst) and len(pat.args) == len(inst.args))
@@ -612,14 +642,9 @@ def match(pat,inst,freesyms,constants):
 
     """
 
-    iu.dbg('repr(pat)')
-    iu.dbg('repr(inst)')
-    iu.dbg('freesyms')
-    iu.dbg('constants')
     if il.is_quantifier(pat):
         return match_quants(pat,inst,freesyms,constants)
     if heads_match(pat,inst,freesyms):
-        iu.dbg('"got here"')
         matches = [match(x,y,freesyms,constants) for x,y in zip(pat.args,inst.args)]
         matches.extend([match_sort(x,y,freesyms) for x,y in zip(term_sorts(pat),term_sorts(inst))])
         if il.is_variable(pat):
