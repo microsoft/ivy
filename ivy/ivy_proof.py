@@ -99,12 +99,8 @@ class ProofChecker(object):
             if len(decls) == 0:
                 return []
             if isinstance(proof,ia.SchemaInstantiation):
-                iu.dbg('proof.lineno')
                 m = self.match_schema(decls[0],proof)
-                if m is not None:
-                    for s in m:
-                        check_name_clash(decls[0],s,proof)
-                return None if m is None else goals_subst(decls,m)
+                return None if m is None else m + decls[1:]
             elif isinstance(proof,ia.LetTactic):
                 return self.let_tactic(decls,proof)
             elif isinstance(proof,ia.ComposeTactics):
@@ -177,18 +173,20 @@ class ProofChecker(object):
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if somatch is not None:
-            show_match(somatch)
-            for s in somatch.keys():
-                print repr(s)
-            subgoals = []
-            for x in goal_prems(schema):
-                if isinstance(x,ia.LabeledFormula) :
-                    g = apply_match_goal(pmatch,x,apply_match_alt)
-                    iu.dbg('pmatch')
-                    iu.dbg('g')
-                    g = apply_match_goal(fomatch,g,apply_match)
-                    g = apply_match_goal(somatch,g,apply_match_alt)
-                    subgoals.append(g)
+            schema = apply_match_goal(pmatch,schema,apply_match_alt)
+            schema = apply_match_goal(fomatch,schema,apply_match)
+            schema = apply_match_goal(somatch,schema,apply_match_alt)
+            return goal_subgoals(schema,decl)
+            
+            # subgoals = []
+            # for x in goal_prems(schema):
+            #     if isinstance(x,ia.LabeledFormula) :
+            #         g = apply_match_goal(pmatch,x,apply_match_alt)
+            #         iu.dbg('pmatch')
+            #         iu.dbg('g')
+            #         g = apply_match_goal(fomatch,g,apply_match)
+            #         g = apply_match_goal(somatch,g,apply_match_alt)
+            #         subgoals.append(g)
             return subgoals
         return None
 
@@ -216,9 +214,10 @@ def make_goal(lineno,label,prems,conc):
 def clone_goal(goal,prems,conc):
     return make_goal(goal.lineno,goal.label,prems,conc)
 
-# Substitute a goal g2 for the conclusion of goal g2. The result has the label of g2.
+# Substitute a goal g2 for the conclusion of goal g1. The result has the label of g2.
 
 def goal_subst(g1,g2):
+    check_name_clash(g1,g2)
     return make_goal(g2.lineno, g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
 
 # Substitute a sequence of subgoals in to the conclusion of the first goal
@@ -252,11 +251,11 @@ def goal_defns(goal):
 
 # Check that there are no name clashes in a pair of goals
 
-def check_name_clash(g1,g2,proof):
+def check_name_clash(g1,g2):
     d1,d2 = map(goal_defns,(g1,g2))
     for s1 in d1:
         if s1 in d2:
-            raise ProofError(proof,'premise {} of sugboal clashes with context'.format(s1))
+            raise ProofError(None,'premise {} of sugboal clashes with context'.format(s1))
 
 # A *vocabulary* consists of three lists: sorts, symbols and variables
 
@@ -275,6 +274,34 @@ def goal_vocab(goal):
     fmlas = [x.formula for x in prems if isinstance(x,ia.LabeledFormula)] + [conc]
     variables = list(lu.used_variables_asts(fmlas))
     return Vocab(sorts,symbols,variables)
+
+# Check that the conclusions of two goals match
+
+def check_concs_match(g1,g2):
+    c1,c2 = map(goal_conc,(g1,g2))
+    if not il.equal_mod_alpha(c1,c2):
+        raise ProofError(None,'conclusions do not match:\n    {}\n     {}'.format(c1,c2))
+
+# Check that the non-proposition premises of g1 are provided by g2.
+
+def check_premises_provided(g1,g2):
+    defns = goal_defns(g2)
+    for thing in goal_defns(g1):
+#        syms = lu.used_symbols_ast(thing) if il.is_lambda(thing) else [thing]
+        syms = [] if il.is_lambda(thing) else [thing]
+        for sym in syms:
+            if sym not in defns and not il.sig.contains(sym):
+                raise ProofError(None,'premise "{}" does not match anything in the environment'.format(thing))
+
+# Turn the propositional premises of a goal into a list of subgoals. The
+# symbols and types in the goal must be provided by the environment.
+
+def goal_subgoals(schema,goal):
+    check_concs_match(schema,goal)
+    check_premises_provided(schema,goal)
+    return [goal_subst(goal,x) for x in goal_prems(schema) if isinstance(x,ia.LabeledFormula)]
+
+
 
 # Compile an expression using a vocabulary. The expression could be a formula or a type.
 
@@ -299,8 +326,6 @@ def remove_vars_match(mat,fmla):
     sympairs = [(s,v) for s,v in mat.iteritems() if il.is_constant(s)]
     symfmlas = il.rename_vars_no_clash([v for s,v in sympairs],[fmla])
     res.update((s,w) for (s,v),w in zip(sympairs,symfmlas))
-    iu.dbg('fmla')
-    show_match(res)
     return res
 
 
@@ -425,9 +450,7 @@ def compile_match(proof,prob,schema,decl):
     freesyms may be used in the match."""
 
     matches = compile_match_list(proof,schema,decl)
-    iu.dbg('matches')
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
-    iu.dbg('matches')
     res = merge_matches(*matches)
     return res
         
@@ -460,9 +483,7 @@ def apply_match_goal(match,x,apply_match,env = None):
         fmla = x.formula
         if isinstance(fmla,ia.SchemaBody):
             bound = [s for s in goal_defns(x) if s not in match]
-            iu.dbg('bound')
             with il.BindSymbols(env,goal_defns(x)):
-                iu.dbg('env')
                 fmla = fmla.clone([apply_match_goal(match,y,apply_match,env)
                                    for y in fmla.prems()]+[apply_match(match,fmla.conc(),env)])
         else:
@@ -472,7 +493,7 @@ def apply_match_goal(match,x,apply_match,env = None):
     if isinstance(x,il.UninterpretedSort):
         return apply_match_sort(match,x)
     else:
-        return x.clone([apply_match_func(match,x.args[0])])
+        return x.clone([apply_match_func_alt(match,x.args[0],env)])
 
 def apply_match_to_problem(match,prob,apply_match):
     prob.pat = apply_match(match,prob.pat)
@@ -510,9 +531,6 @@ def match_get(match,sym,env,default=None):
     if val is not None:
         vocab = lu.used_symbols_ast(val)
         vocab.update(lu.variables_ast(val))
-        iu.dbg('sym')
-        iu.dbg('env')
-        iu.dbg('vocab')
         for v in vocab:
             if v in env:
                 raise CaptureError(None,'symbol {} is captured in substitution'.format(v))
@@ -544,7 +562,7 @@ def apply_match_alt_rec(match,fmla,env):
         func = match_get(match,func,env,func)
         return func(*args)
     if il.is_variable(fmla):
-        fmla = il.Variable(fmla.name,match.get(fmla.sort,fmla.sort))
+        fmla = il.Variable(fmla.name,apply_match_sort(match,fmla.sort))
         fmla = match_get(match,fmla,env,fmla)
         return fmla
     if il.is_quantifier(fmla):
@@ -558,10 +576,21 @@ def apply_match_func(match,func):
     sorts = [match.get(s,s) for s in sorts]
     return il.Symbol(func.name,sorts[0] if len(sorts) == 1 else il.FunctionSort(*sorts))
 
+def apply_match_func_alt(match,func,env):
+    if il.is_lambda(func):
+        return apply_match_alt(match,func,env)
+    if func in match:
+        return match[func]
+    func = apply_match_func(match,func)
+    return match.get(func,func)
+
 def apply_match_sym(match,sym):
     if il.is_variable(sym):
         return il.Variable(sym.name,match.get(sym.sort,sym.sort))
     return match.get(sym,sym) if isinstance(sym,il.UninterpretedSort) else apply_match_func(match,sym)
+
+def apply_match_sort(match,sort):
+    return match.get(sort,sort)
 
 def apply_match_freesyms(match,freesyms):
     return set(apply_match_sym(match,sym) for sym in freesyms if sym not in match)

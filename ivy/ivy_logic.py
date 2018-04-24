@@ -579,7 +579,7 @@ def is_exists(term):
     return isinstance(term,lg.Exists)
 
 def is_lambda(term):
-    return isinstance(term,lg.ForAll)
+    return isinstance(term,lg.Lambda)
 
 def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
@@ -892,6 +892,11 @@ class Sig(object):
         if isinstance(sort,UnionSort):
             return symbol.sort in sort.sorts
         return True
+
+    def contains(self,sort_or_symbol):
+        if isinstance(sort_or_symbol,Symbol):
+            return self.contains_symbol(sort_or_symbol)
+        return self.sorts.get(sort_or_symbol.name,None) == sort_or_symbol
 
     def __str__(self):
         return sig_to_str(self)
@@ -1507,3 +1512,5 @@ def alpha_avoid(fmla,vs):
     res = vu.rec(fmla,vmap)
     return res
         
+def equal_mod_alpha(t,u):
+    return lu.equal_mod_alpha(t,u)
