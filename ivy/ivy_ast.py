@@ -623,15 +623,27 @@ class TheoremDecl(Decl):
     def defines(self):
         return [(c.defines(),lineno(c)) for c in self.args]
 
+class Renaming(AST):
+    def __str__(self):
+        return '<' + ','.join('{}/{}'.format(x.rhs(),x.lhs()) for x in self.args) + '>'
+
 class TacticWithMatch(AST):
+    """ First arg is a schema name, second is a renaming, rest are matches """
     def __init__(self,*args):
         self.args = args
     def schemaname(self):
         return self.args[0].rep
+    def renaming(self):
+        return self.args[1]
     def match(self):
-        return self.args[1:]
+        return self.args[2:]
     def __str__(self):
-        return self.tactic_name() + ' ' + str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+        res = self.tactic_name() + ' ' + str(args[0]) 
+        if len(self.args) > 1:
+            res += ' ' + str(self.args[1])
+        if len(self.args) > 2:
+            res += ' with ' + ','.join(str(x) for x in self.args[2:])
+        return res
 
 class SchemaInstantiation(TacticWithMatch):
     def tactic_name(self):

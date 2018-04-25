@@ -444,6 +444,20 @@ def temporals_ast(ast):
         for x in temporals_ast(arg):
             yield x
 
+def sorts_ast(ast):
+    if is_app(ast):
+        if is_binder(ast.rep):
+            for x in sorts_ast(ast.rep.body):
+                yield x
+        else:
+            yield ast.rep.sort.rng
+            for s in ast.rep.sort.dom:
+                yield s
+    elif is_variable(ast):
+        yield ast.sort
+    for arg in ast.args:
+        for x in sorts_ast(arg):
+            yield x
 
 # extend to clauses, etc...
 
@@ -460,6 +474,12 @@ temporals_asts = apply_gen_to_list(temporals_ast)
 used_symbols_ast = gen_to_set(symbols_ast)
 used_symbols_asts = used_symbols_clause = gen_to_set(symbols_clause)
 used_symbols_clauses = gen_to_set(symbols_clauses)
+
+# get set of symbols occurring
+
+used_sorts_ast = gen_to_set(sorts_ast)
+used_sorts_asts = used_sorts_clause = gen_to_set(sorts_clause)
+used_sorts_clauses = gen_to_set(sorts_clauses)
 
 # generate symbols in order of first occurrence
 

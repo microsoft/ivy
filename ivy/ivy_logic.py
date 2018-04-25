@@ -960,6 +960,24 @@ class BindSymbols(object):
             self.env.add(sym)
         return False # don't block any exceptions
 
+class BindSymbolValues(object):
+    def __init__(self,env,bindings):
+        self.env, self.bindings = env, list(bindings)
+    def __enter__(self):
+        self.saved = []
+        for sym,val in self.bindings:
+            if sym in self.env:
+                self.saved.append((sym,env[sym]))
+                def self.env[sym]
+            self.env[sym] = val
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        for sym in self.bindings:
+            del self.env[sym]
+        for sym,val in self.saved:
+            self.env[sym] = val
+        return False # don't block any exceptions
+
 
 alpha = lg.TopSort('alpha')
 beta = lg.TopSort('beta')

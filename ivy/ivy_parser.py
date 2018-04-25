@@ -689,21 +689,21 @@ if iu.get_numeric_version() <= [1,6]:
         'proofstep : SYMBOL'
         a = Atom(p[1])
         a.lineno = get_lineno(p,1)
-        p[0] = SchemaInstantiation(a)
+        p[0] = SchemaInstantiation(a,Renaming())
         p[0].lineno = get_lineno(p,1)
 else:
     def p_proofstep_symbol(p):
-        'proofstep : APPLY atype'
+        'proofstep : APPLY atype optrenaming'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = SchemaInstantiation(a)
+        p[0] = SchemaInstantiation(a,p[3])
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_assume(p):
-        'proofstep : ASSUME atype'
+        'proofstep : ASSUME atype optrenaming'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = AssumeTactic(a)
+        p[0] = AssumeTactic(a,p[3])
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_showgoals(p):
@@ -740,21 +740,50 @@ if iu.get_numeric_version() <= [1,6]:
         'proofstep : SYMBOL WITH matches'
         a = Atom(p[1])
         a.lineno = get_lineno(p,1)
-        p[0] = SchemaInstantiation(*([a]+p[3]))
+        p[0] = SchemaInstantiation(*([a,Renaming()]+p[3]))
         p[0].lineno = get_lineno(p,1)
 else:
+
+    def p_renamingitem_variable_div_variable(p):
+        'renamingitem : VARIABLE DIV VARIABLE'
+        p[0] = Definition(Variable(p[1],universe),Variable(p[3],universe))
+        p[0].lineno = get_lineno(p,2)
+
+    def p_renamingitem_symbol_div_symbol(p):
+        'renamingitem : SYMBOL DIV SYMBOL'
+        p[0] = Definition(Atom(p[1],[]),Atom(p[3],[]))
+        p[0].lineno = get_lineno(p,2)
+
+    def p_renaminglist_renamingitem(p):
+        'renaminglist : renamingitem'
+        p[0] = [p[1]]
+
+    def p_renaminglist_renaminglist_comma_renamingitem(p):
+        'renaminglist : renaminglist COMMA renamingitem'
+        p[0] = p[1]
+        p[0].append(p[3])
+
+    def p_renaming(p):
+        'optrenaming : '
+        p[0] = Renaming()
+
+    def p_renaming_lt_renaminglist_gt(p):
+        'optrenaming : LT renaminglist GT'
+        p[0] = Renaming(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
     def p_proofstep_symbol_with_defns(p):
-        'proofstep : APPLY atype WITH matches'
+        'proofstep : APPLY atype optrenaming WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = SchemaInstantiation(*([a]+p[4]))
+        p[0] = SchemaInstantiation(*([a,p[4]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_assume_with_defns(p):
-        'proofstep : ASSUME atype WITH matches'
+        'proofstep : ASSUME atype optrenaming WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = AssumeTactic(*([a]+p[4]))
+        p[0] = AssumeTactic(*([a,p[4]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):

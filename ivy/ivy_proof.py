@@ -142,6 +142,7 @@ class ProofChecker(object):
         if schemaname not in self.schemata:
             raise ProofError(proof,"No schema {} exists".format(schemaname))
         schema = self.schemata[schemaname]
+        schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
         prob = transform_defn_match(prob)
@@ -302,6 +303,31 @@ def goal_subgoals(schema,goal):
     return [goal_subst(goal,x) for x in goal_prems(schema) if isinstance(x,ia.LabeledFormula)]
 
 
+# Get the free vocabulary of a goal, including sorts, symbols and variables
+
+def goal_free(goal):
+    bound = set()
+    def rec(goal,res):
+        vocab = goal_vocab(schema)
+        decls = goal_decls(goal)
+        with il.BindSymbols(bound,decls):
+            for x in goal_prem_goals(goal):
+                if isinstance(x.formula,ia.SchemaBody):
+                    rec(x,res)
+                else:
+                    things = lu.used_sorts_ast(x.formula)
+                    things.extend(lu.used_symbols_ast(x.formula))
+                    things.extend(lu.used_variables_ast(x.formula))
+                    for y in things:
+                        if y not in bound:
+                            res.add(y)
+    res = set()
+    rec(goal,res)
+    return res
+
+def rename_goal(goal,renaming):
+    check_renaming(goal,renaming)
+    
 
 # Compile an expression using a vocabulary. The expression could be a formula or a type.
 
