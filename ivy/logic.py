@@ -155,6 +155,7 @@ class Apply(recstruct('Apply', [], ['func', '*terms'])):
                          terms[i].sort != func.sort.domain[i] and
                          not any(type(t) is TopSort for t in (terms[i].sort, func.sort.domain[i]))]
             for i in bad_sorts:
+                print 'terms = {}'.format(terms)
                 report_bad_sort(func,i,func.sort.domain[i],terms[i].sort)
         return (func, ) + terms
 

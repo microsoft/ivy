@@ -250,6 +250,11 @@ def goal_defns(goal):
             res.add(x)
     return res
 
+# Get all the premises of a goal that are goals
+
+def goal_prem_goals(goal):
+    return [x for x in goal_prems(goal) if isinstance(x,ia.LabeledFormula)]
+
 # Check that there are no name clashes in a pair of goals
 
 def check_name_clash(g1,g2):
@@ -307,27 +312,65 @@ def goal_subgoals(schema,goal):
 
 def goal_free(goal):
     bound = set()
+    def fmla_vocab(fmla):
+        things = lu.used_sorts_ast(fmla)
+        things.update(lu.used_symbols_ast(fmla))
+        things.update(lu.used_variables_ast(fmla))
+        return things
+    def rec_fmla(fmla,res):
+        for y in fmla_vocab(fmla):
+            if y not in bound:
+                res.add(y)
     def rec(goal,res):
-        vocab = goal_vocab(schema)
-        decls = goal_decls(goal)
-        with il.BindSymbols(bound,decls):
+        defns = goal_defns(goal)
+        with il.BindSymbols(bound,defns):
             for x in goal_prem_goals(goal):
                 if isinstance(x.formula,ia.SchemaBody):
                     rec(x,res)
                 else:
-                    things = lu.used_sorts_ast(x.formula)
-                    things.extend(lu.used_symbols_ast(x.formula))
-                    things.extend(lu.used_variables_ast(x.formula))
-                    for y in things:
-                        if y not in bound:
-                            res.add(y)
+                    rec_fmla(x.formula,res)
+            rec_fmla(goal_conc(goal),res)
     res = set()
     rec(goal,res)
     return res
 
+def check_alpha_capture(goal,match):
+    rev_match = dict((y,x) for x,y in match.iteritems())
+    for s in goal_free(goal).union(goal_defns(goal)):
+        if s in rev_match and s not in match:
+            raise CaptureError(None,'"{}" is captured by renaming "{}"'.format(s,rev_match[s]))
+
+def check_renaming(goal,renaming):
+    fwd = dict()
+    rev = dict()
+    for x in renaming.args:
+        l,r = x.lhs().rep, x.rhs().rep
+        if l in fwd:
+            raise ProofError(None,'"{}" is renamed to both "{}" and "{}"'.format(l,fwd[l],r))
+        if r in rev:
+            raise ProofError(None,'both "{}" and "{}" are renamed to "{}"'.format(rev[r],l,r))
+        fwd[l] = r
+        fwd[r] = l
+    return
+        
 def rename_goal(goal,renaming):
+    if len(renaming.args) == 0:
+        return goal
     check_renaming(goal,renaming)
-    
+    rmap = dict((x.lhs().rep,x.rhs().rep) for x in renaming.args)
+    def rec_goal(goal):
+        if not isinstance(goal,ia.LabeledFormula):
+            return goal
+        goal = clone_goal(goal,map(rec_goal,goal_prems(goal)),goal_conc(goal))
+        match = dict((x,x.rename(lambda n: rmap[x.name])) for x in goal_defns(goal) if x.name in rmap)
+        match = dict((x,apply_match_sym(match,y)) for x,y in match.iteritems())
+        check_alpha_capture(goal,match)
+        goal = apply_match_goal(match,goal,apply_match_alt)
+        return goal
+    return rec_goal(goal)
+                
+            
+            
 
 # Compile an expression using a vocabulary. The expression could be a formula or a type.
 
@@ -648,7 +691,7 @@ def heads_match(pat,inst,freesyms):
     if it has the same name and if it agrees on the non-free sorts in
     its type.
     """
-    return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms)
+    return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms) and pat.rep not in freesyms
         or not il.is_app(pat) and not il.is_quantifier(pat)
            and type(pat) is type(inst) and len(pat.args) == len(inst.args))
     

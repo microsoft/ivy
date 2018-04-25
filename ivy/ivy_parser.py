@@ -751,7 +751,7 @@ else:
 
     def p_renamingitem_symbol_div_symbol(p):
         'renamingitem : SYMBOL DIV SYMBOL'
-        p[0] = Definition(Atom(p[1],[]),Atom(p[3],[]))
+        p[0] = Definition(Atom(p[3],[]),Atom(p[1],[]))
         p[0].lineno = get_lineno(p,2)
 
     def p_renaminglist_renamingitem(p):
@@ -776,14 +776,14 @@ else:
         'proofstep : APPLY atype optrenaming WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = SchemaInstantiation(*([a,p[4]]+p[5]))
+        p[0] = SchemaInstantiation(*([a,p[3]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
     def p_proofstep_assume_with_defns(p):
         'proofstep : ASSUME atype optrenaming WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = AssumeTactic(*([a,p[4]]+p[5]))
+        p[0] = AssumeTactic(*([a,p[3]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):

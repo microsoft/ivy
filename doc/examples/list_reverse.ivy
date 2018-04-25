@@ -1,56 +1,23 @@
 #lang ivy1.7
 
+# Deduction example: array reversal
+# =================================
+# 
+# This is an example of using tactics in Ivy to solve the problem of
+# unstratified functions.
+#
+# We will define what it means for one array to be the reverse of another,
+# then prove that reversing an array twice gives the original array.
+
 include order
 include collections
+include deduction
+
+# properties of rev relation
 
 instance idx : unbounded_sequence
 
 relation rev(U : idx, X : idx, Y : idx)
-
-
-schema impi = {
-    function p : bool
-    function q : bool
-    {
-        property p
-        #----------------------
-        property q
-    }
-    #----------------------
-    property p -> q
-}
-
-schema andi = {
-    function p : bool
-    function q : bool
-    property p
-    property q
-    #----------------------
-    property p & q
-}
-
-
-schema exi = {
-    type t
-    function p(X:t) : bool
-    function witness : t
-    property p(witness)
-    #----------------------
-    property exists X. p(X)
-}
-
-schema alli = {
-    type t
-    function p(X:t) : bool
-    {
-        function x : t
-        property p(x)
-    }
-    #----------------------
-    property forall X. p(X)
-}
-
-# properties of rev relation
 
 isolate rev_theory = {
     
@@ -76,31 +43,29 @@ type t
 instance arr : array(idx,t)
 
 function arr_rev(A1:arr,A2:arr) =
-    arr.end(A1) = arr.end(A2) & forall X,Y. rev(arr.end(A1),X,Y) -> arr.value(A1,X) = arr.value(A2,Y)
+        arr.end(A1) = arr.end(A2) & forall X,Y. rev(arr.end(A1),X,Y) -> arr.value(A1,X) = arr.value(A2,Y)
 
 property arr_rev(A1,A2) -> arr_rev(A2,A1)
 
-# property arr_rev(A,B) & arr_rev(A,C) & 0 <= X & X < arr.end(B) -> arr.value(B,X) = arr.value(C,X)
-# proof assume rev_theory.foo with U = arr.end(B)
+isolate double_reverse1 = {
+    property arr_rev(A,B) & arr_rev(A,C) & 0 <= X & X < arr.end(B) -> arr.value(B,X) = arr.value(C,X)
+    proof assume rev_theory.foo with U = arr.end(B)
 
-# property arr_rev(A,B) & arr_rev(A,C) -> B = C
-# proof
-#     assume arr.spec.extensionality with X = B, Y = C
+    property arr_rev(A,B) & arr_rev(A,C) -> B = C
+    proof
+        assume arr.spec.extensionality with X = B, Y = C
+} with this
 
 
-property arr_rev(A,B) & arr_rev(A,C) -> B = C
-proof
-    apply impi;
-    showgoals;
-    apply arr.spec.extensionality;
-    showgoals;
-    apply andi;
-    showgoals;
-    defergoal;
-    showgoals;
-    apply alli ;
-    showgoals;
-    assume rev_theory.foo with U = arr.end(B), X = x;
-    showgoals
-
+isolate double_reverse2 = {
+    property arr_rev(A,B) & arr_rev(A,C) -> B = C
+    proof
+        apply impi;
+        apply arr.spec.extensionality;
+        apply andi;
+        defergoal;
+        apply alli ;
+        assume rev_theory.foo with U = arr.end(B), X = x;
+        showgoals
+} with this
 

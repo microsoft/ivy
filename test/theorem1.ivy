@@ -24,6 +24,6 @@ type t1
 var v1 : t1
 
 property exists X:t1. X = v1
-proof apply exi<foo/witness> with witness = v1; apply refl
+proof apply exi<foo/witness,t2/t> with foo = v1; apply refl
 
 

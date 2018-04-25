@@ -735,6 +735,7 @@ ConstantSort.rep = property(lambda self: self.name)
 
 UninterpretedSort = ConstantSort
 UninterpretedSort.is_relational = lambda self: False
+UninterpretedSort.rename = lambda self,rn: UninterpretedSort(rn(self.name))
 
 EnumeratedSort = lg.EnumeratedSort
 
@@ -968,7 +969,7 @@ class BindSymbolValues(object):
         for sym,val in self.bindings:
             if sym in self.env:
                 self.saved.append((sym,env[sym]))
-                def self.env[sym]
+                del self.env[sym]
             self.env[sym] = val
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):

@@ -478,8 +478,6 @@ used_symbols_clauses = gen_to_set(symbols_clauses)
 # get set of symbols occurring
 
 used_sorts_ast = gen_to_set(sorts_ast)
-used_sorts_asts = used_sorts_clause = gen_to_set(sorts_clause)
-used_sorts_clauses = gen_to_set(sorts_clauses)
 
 # generate symbols in order of first occurrence
 
