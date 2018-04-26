@@ -89,14 +89,14 @@ The proof of this theorem requires the definition of `rev`
 given below. If we try to prove it directly with Z3, however, we
 get following error message:
 
-   error: The verification condition is not in logic epr.
+    error: The verification condition is not in logic epr.
 
-   Note: the following interpreted functions occur over variables:
-     relation <=(V0:idx,V1:idx)
-     function +(V0:idx,V1:idx) : idx
-     function -(V0:idx,V1:idx) : idx
-     relation <(V0:idx,V1:idx)
-     relation =(V0:idx,V1:idx)
+    Note: the following interpreted functions occur over variables:
+      relation <=(V0:idx,V1:idx)
+      function +(V0:idx,V1:idx) : idx
+      function -(V0:idx,V1:idx) : idx
+      relation <(V0:idx,V1:idx)
+      relation =(V0:idx,V1:idx)
 
 The problem here is that, after expanding the definition of `rev`,
 we have arithmetic applied to universally quantified variables,
