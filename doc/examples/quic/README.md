@@ -19,7 +19,7 @@ implementations.
 Setup for virtual networking and packet capture
 -----------------------------------------------
 
-To monitor implementations of the protocol, it is useful to run then
+To monitor implementations of the protocol, it is useful to run them
 in a virtual network environment. For this we use the [CORE virtual
 networking
 environment](https://www.nrl.navy.mil/itd/ncs/products/core), the
