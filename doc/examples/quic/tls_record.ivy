@@ -11,6 +11,7 @@ include byte_stream
 # this is not a fully general description. In particular, it does not allow for TLS messages that
 # span multiple TLS records.
 #
+# The information in this document is derived from [RFC 4256](https://tools.ietf.org/html/rfc5246)
 # 
 
 object tls = {
@@ -43,6 +44,7 @@ object tls = {
     #
     # - `fragment` the record content
     #
+    # The fragment content is preceded by a two-byte length field.
     # In general, messages may span fragment boundaries, but we do not
     # allow that here. The content type field indicates the type of messages
     # occurring in the fragment, as detailed below. 
@@ -52,6 +54,8 @@ object tls = {
         version : protocol_version,
         fragment : stream_data
     }
+
+    # attribute fragment.format = length[2]
     
     # ### Content types
     # 
@@ -90,8 +94,6 @@ object tls = {
     #   this is prefixed by a two-byte length field.
 
     type extension
-#    instance extension_idx : unbounded_sequence
-#    instance extension_seq : array(extension_idx,extension)
 
     # ##### Client Hello
     #
