@@ -126,10 +126,10 @@ that corresponds to `X` under reversal is `U - X -1` (we can get this
 by solving for `Y` in the definition of `rev` below. This gives us the
 following goal:
 
-   {
-       property 0 <= X & X < U
-       property rev(U,X,U - X - 1)
-   }
+    {
+        property 0 <= X & X < U
+        property rev(U,X,U - X - 1)
+    }
 
 With the quantifier removed, expanding the definition of `rev` no
 longer gives us arithmetic over quantified variables. This means we
