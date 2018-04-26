@@ -299,19 +299,3 @@ isolate double_reverse2 = {
 
 } with this
 
-    # Here are the two proof goals we get:
-    #
-    #    {
-    #        property [prop183] (arr_rev(A,B) & arr_rev(A,C))
-    #        individual x : idx
-    #        {
-    #            property (0:idx <= x & x < arr.end(B)) -> exists Y. rev(arr.end(B),x,Y)
-    #        }
-    #        property (0:idx <= x & x < arr.end(B)) -> arr.value(B,x) = arr.value(C,x)
-    #    }
-    #
-    #    {
-    #        property [prop183] (arr_rev(A,B) & arr_rev(A,C))
-    #        property arr.end(B) = arr.end(C)
-    #    }
-
