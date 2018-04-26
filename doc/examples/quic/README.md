@@ -10,7 +10,7 @@ packets on the wire, and will eventually allow for modular testing of
 implementations and possibly a fully verified implementation.
 
 The Ivy spec is being developed from the informal IETF draft cited
-above. Ambuiguities are resovled by observing the behavior of existing
+above. Ambiguities are resolved by observing the behavior of existing
 implementations. In particular, we use the evolving specification to
 monitor packet traces captured from implementations.  This allows us
 to check consistency and possibly discover incompatibilities between
@@ -20,7 +20,7 @@ Setup for virtual networking and packet capture
 -----------------------------------------------
 
 To monitor implementations of the protocol, it is useful to run then
-in a virtual network environent. For this we use the [CORE virtual
+in a virtual network environment. For this we use the [CORE virtual
 networking
 environment](https://www.nrl.navy.mil/itd/ncs/products/core), the
 `tcpdump` command and the `pcap` library. To install these on an Ubuntu
@@ -43,7 +43,7 @@ compatible with the IETF draft.
 
 ### MinQUIC
 
-This implementation of verion 9 in the go language is available [on
+This implementation of version 9 in the go language is available [on
 github](https://github.com/ekr/minq). However, for Ivy you should use
 the fork [here](https://github.com/kenmcmil/minq) which has been
 modified to disable crypto.
@@ -55,7 +55,7 @@ modified to disable crypto.
 
 #### Running MinQUIC and capturing packets
 
-Change to the directory containin MinQUIC:
+Change to the directory containing MinQUIC:
 
     cd $GOPATH/src/githuib.com/kenmcmil/minq
 
