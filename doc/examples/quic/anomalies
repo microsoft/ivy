@@ -10,5 +10,12 @@ Issue:
   previously acked. The number of ack-only packets from client is three,
   while server has sent only two packets with data.
 
+  This is a violation of the following section of the version 9 draft:
+
+   8.16.2.  Sending ACK Frames
+
+   ... Implementations MUST NOT send more than one ACK frame per received
+   packet that contains frames other than ACK frames. ...
+
 
 
