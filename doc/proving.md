@@ -3,23 +3,22 @@ layout: page
 title: IVy as a theorem prover
 ---
 
-IVy is intended primarily for the development of distributed
-systems. In this process, we sometimes have to reason about
+In the development of systems, we sometimes have to reason about
 mathematical functions and relations in ways that automated theorem
-provers can't handle. IVy provides facilities for the user to supply
-the necessary proofs. IVy's approach to theorem proving is designed to
-make maximal use of automated provers. We do this by localizing the
-proof into "isolates". Our proof obligations in each isolate are
-confined to a logical fragment that an automated prover can handle
-reliably.
+provers can't handle reliably. For these cases, IVy provides a
+facility that allows the user to supply the necessary proofs. IVy's
+approach to theorem proving is designed to make maximal use of
+automated provers. We do this by localizing the proof into
+"isolates". Our proof obligations in each isolate are confined to a
+logical fragment that an automated prover can handle reliably.
 
 
 Primitives
 ==========
 
 A logical development in IVy is a succession of statements or
-*judgments*. Each statement must be justified by a primitive axiom or
-inference rule of the system.
+*judgments*. Each judgment must be justified by a primitive axiom or
+inference rule.
 
 Type declarations
 -----------------
@@ -28,7 +27,7 @@ On such primitive is a type declaration, like this:
 
     type t
 
-This can be read as "let `t` be a type". This judgemnt is admissible
+This can be read as "let `t` be a type". This judgement is admissible
 provided `t` is new symbol that has not been used up to this point
 in the development.
 
@@ -43,7 +42,7 @@ where `n` is new. This can be read as "let `n` be of type
 `t`". Every type has at least one element in it. This judgement gives
 a name to such an element.
 
-Similarly, we can introduce functions:
+Similarly, we can introduce new function symbolss:
 
     function f(X:t) : t
 
@@ -73,8 +72,8 @@ logically from judgments in the current context. For example:
 
 A property requires a proof (see below). If a proof is not supplied,
 IVy applies its proof tactic `auto`.  This calls the automated prover
-Z3 to attempt to prove the property from the judgments in the current
-context.
+Z3 to attempt to prove the property from all of previously admitted
+judgments in the current context.
 
 Definitions
 -----------
@@ -96,29 +95,31 @@ Theory instantiations
 
 IVy has built-in theories that can be instantated with a specific type
 as their carrier. For example, the theory of integer arithmetic is
-called `int`. It has the signature `{+,-,*,/}`, plus the integer
+called `int`. It has the signature `{+,-,*,/,<}`, plus the integer
 numerals, and provides the axioms of Peano arithmetic. To instantiate
 the theory `int` using type *t* for the integers, we write:
 
     interpret t -> int
 
-This declaration requires that type `t` as well as the symbols
-`{+,-,*,/}` in the signature of `int` be fresh. Notice, though, that
-the symbols `{+,-,*,/}` are polymorphic. This means that `+` over
-distinct types is considered to be a distinct symbol.  Thus, we can we
-can instantiate the `int` theory over different types (and also
-instantiate other theorys that have these symbols in their signature).
+This declaration requires that type `t` is not previously interpreted
+and that the symbols `{+,-,*,/,<}` in the signature of `int` are
+fresh. Notice, though, that the symbols `{+,-,*,/,<}` are
+overloaded. This means that `+` over distinct types is considered to
+be a distinct symbol.  Thus, we can we can instantiate the `int`
+theory over different types (and also instantiate other theories that
+have these symbols in their signature).
 
-Inference rules
-===============
+Schemata
+========
 
-An inference rule takes a collection of judgments as input (the
-premises) and produces a judgment as output (the conclusion). The rule
-is *sound* if the conclusion logically follows from the premises.
+A *schema* is a compound judgment that a collection of judgments as
+input (the premises) and produces a judgment as output (the
+conclusion). The meaning of schema is that we can provide any
+type-correct values for the premises and the conclusion will follow.
 
-Here is a simple example of an inference rule:
+Here is a simple example of a schema taken as an axiom:
 
-    schema congruence = {
+    axiom [congruence] {
         type d
 	type r
         function f(X:d) : r
@@ -126,50 +127,66 @@ Here is a simple example of an inference rule:
         property X=Y -> f(X) = f(Y)
     }
 
-This rules says that, given types *d* and *r* and a function *f* from
+The schema is contained in curly brackets and gives a list of premises
+following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
 *d* to *r*, we can infer that, for all *X*,*Y*, *X*=*Y* implies
 *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
 just a comment. The conclusion is always the last judgement in the rule.
 
-The keyword `schema` tells IVY that this rule should be taken as
-primitive, without proof. Like `axiom`, `schema` runs the risk of
-introducing an inconsistency.
+The keyword `axiom` tells IVy that this rule should be taken as
+primitive, without proof. 
 
-Any schema that is defined in the current context can be used in a proof.
-Here is an example:
+Any judgment that has been admitted in the current context can be
+*applied* in a proof. When we apply a schema, we supply values for its
+premises to infer its conclusion.
 
     property [prop_n] Z=n -> Z + 1 = n + 1
-    proof congruence
+    proof 
+        apply congruence
 
-The `proof` declaration tells IVy to use schema `congruence` to prove the property. 
+The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
 IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
-values for types *d*,*r* function *f* and the free variables *X*,*Y*. In this case, it
+values for premises, that is, the types *d*,*r* function *f*. It also chooses values for the
+the free variables *X*,*Y* occurring in the schema. In this case, it
 discovers the following assignment:
 
     d = t
     r = t
     X = Z
     Y = n
-    f(X) = X + 1
+    f(N) = N + 1
 
 After plugging in this assignment, the conclusion of the rule exactly matches
 the property to be proved, so the property is admitted.
 
-In case IVY did not succeed in finding this match, we could also write
-the proof more explicitly, like this:
+The problem of finding an assignment such as the one above is called
+"second order matching".  It is a hard problem, and the answer is not
+unique. In case IVy did not succeed in finding the above match, we
+could also write the proof more explicitly, like this:
 
-    proof congruence with d=t, r=t, X=Z, Y=n, f(X)=X+1
+    proof
+        apply congruence with d=t, r=t, X=Z, Y=n, f(N)=N+1
 
-We could also give a subset of this assignment, relying on IVY's
+Each of the above equations acts as a constraint on the assignment. That is,
+it must convert *d* to *t*, *r* to *t*, *X* to *Z* and so on. By giving such equations,
+we can narrow the possibilities down to just one assignment. We don't have to do this,
+however. We can also give a subset of the desired assignment, relying on Ivy's
 matching algorithm to fill in the rest.
+
+It's also possible to write constraints that do not allow for any
+assignment. In this case, Ivy complains that the provided match is
+inconsistent.
 
 Proof chaining
 --------------
 
-If the premises of a rule contain a property that is not present in the current context,
-IVy will try to prove these premises in turn. For example, consider the following rule:
+When applying a schema, we are not required to provide values for the
+premises of the schema that are properties. An unsupplied premise
+becomes a *subgoal* which we must then prove.
 
-    schema mortality_of_man = {
+For example, consider the following axiom schema:
+
+    axiom [mortality_of_man] {
         property [prem] man(X)
         #---------------
         property mortal(X)
@@ -178,28 +195,44 @@ IVy will try to prove these premises in turn. For example, consider the followin
 Suppose we write this proof:
 
     property mortal(socrates)
-    proof mortality_of_man with X=socrates
+    proof
+        apply mortality_of_man with X=socrates
 
-To match the rule, IVy needs to supply the premise
-`man(socrates)`. IVy sets it up as a new proof goal. Since we haven't
-specified any proof for this sub-goal, IVy will use its default tactic
-`auto` which supplies the proof using the automated prover.
+To apply the axiom `mortality _of_man`, IVy needs to supply the premise
+`man(socrates)`. In the absense of such a judgment, IVy sets it up as a new proof goal. Since we didn't
+supply a proof for this subgoal, IVy would use its default tactic
+`auto`, which supplies the proof using the automated prover, if possible.
 
-Suppose on the other hand that we have this rule available:
+Suppose on the other hand that we have this axiom available:
 
-    schema socrates_species = {
+    axiom [socrates_species] {
         #------------------
 	property man(socrates)
     }
 
 We could chain this rule to the first one like this:
 
-    proof mortality_of_man with X=socrates; socrates_species
+    proof
+        apply mortality_of_man with X=socrates;
+        apply socrates_species
 
-The prover maintains a list of proof goals, each with a context.
+The prover maintains a list of proof goals, to be proved in order from
+first to last
 Applying a rule, if it succeeds, removes the first goal from the list,
-possibly replacing it with sub-goals. At the end of the proof, the
+possibly replacing it with subgoals. At the end of the proof, the
 prover applies its default tactic `auto` to the remaining goals.
+
+In the above proof, we start with this goal:
+
+    property mortal(socrates)
+
+Applying axiom `mortality_of_man` we are left with the following subgoal:
+
+    property man(socrates)
+
+Applying axiom `socrates_species` then leaves us with no unproved goals.
+
+Notice that proof chaining works backward from conclusions to premises.
 
 Generally speaking, it isn't a good idea to build up complex proof
 sequences. Such proofs are difficult to read, since the sub-goals are
@@ -207,18 +240,24 @@ not visible. We could instead have been a bit more explicit, like
 this:
 
     property man(socrates)
-    proof socrates_species
+    proof
+        apply socrates_species
     
     property mortal(socrates)
-    proof mortality_of_man with X=socrates
+        apply proof mortality_of_man with X=socrates
+
+The first proof provides the premis needed by the second.
 
 A note on matching. There may be many ways to match a given proof goal
 to the conclusion of a rule. Different matches can result in different
 sub-goals, which may affect whether a proof succeeds. IVy doesn't
-attempt to verify that the match it finds is unique. For this
-reason, when sub-goals are produced, it may be a good idea to give
-the match explicitly (as we did above, though in this case there is
-only one match).
+attempt to verify that the match it finds is unique. For this reason,
+when subgoals are produced, it may be a good idea to give the match
+explicitly (as we did above, though in this case there is only one
+match).
+
+When chaining proof rules, it is helpful 
+
 
 Recursion
 ---------

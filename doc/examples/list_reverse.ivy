@@ -125,7 +125,8 @@ isolate rev_theory = {
         # can leave the rest of the proof to the default tactic using Z3. 
         # The general approach is to do just enough tactical reasoning to
         # eliminate the offending quantifiers or unstratified functions.        
-    }
+
+    } # end specification section
 
     # The definition of `rev` is given in the implementation section so that
     # the arithmetic will be hidden from users of this isolate.
@@ -190,11 +191,11 @@ isolate double_reverse1 = {
 
     # Here is the resulting proof goal:
     #
-    #    {
-    #        property 0 <= X & X < arr.end(B) -> exists Y. rev(arr.end(B),X,Y)
-    #        property (arr_rev(A,B) & arr_rev(A,C) & 0:idx <= X & X < arr.end(B)) 
-    #                     -> arr.value(B,X) = arr.value(C,X)
-    #     }
+    #     #     {
+    #     #        property 0 <= X & X < arr.end(B) -> exists Y. rev(arr.end(B),X,Y)
+    #     #        property (arr_rev(A,B) & arr_rev(A,C) & 0:idx <= X & X < arr.end(B)) 
+    #     #                     -> arr.value(B,X) = arr.value(C,X)
+    #     #     }
     #
     # We can allow the default tactic to prove this. In this proof,
     # `X` is a constant, so there is no unstratified quantifier
