@@ -244,9 +244,10 @@ this:
         apply socrates_species
     
     property mortal(socrates)
-        apply proof mortality_of_man with X=socrates
+    proof
+        apply mortality_of_man with X=socrates
 
-The first proof provides the premis needed by the second.
+The first proof provides the premise needed by the second.
 
 A note on matching. There may be many ways to match a given proof goal
 to the conclusion of a rule. Different matches can result in different
@@ -256,16 +257,38 @@ when subgoals are produced, it may be a good idea to give the match
 explicitly (as we did above, though in this case there is only one
 match).
 
-When chaining proof rules, it is helpful 
+When chaining proof rules, it is helpful to be able to see the
+intermediate subgoals. This can be done with the `showgoals` tactic,
+like this:
 
+    proof
+        apply mortality_of_man with X=socrates;
+        showgoals;
+        apply socrates_species
+
+When checking the proof, the `showgoals` tactic has the effect of printing the current list
+of proof goals, leaving the goals unchanged.
+
+Theorems
+--------
+
+Thus far, we have seen schemata used only as axioms. However, we can also
+prove the validity of a schema as a *theorem*. Here's a simple example:
+
+    theorem [simple] {
+        type t
+        function f(X:t) : t
+        property forall X. f(f(x)) = f(x)
+        #--------------------------------
+        
 
 Recursion
 ---------
 
 Recursive definitions are permitted in IVy by instantiating a
-definitional schema. As an example, consider the following schema:
+definitional schema. As an example, consider the following axiom schema:
 
-    schema rec[t] = {
+    axiom [ rec[t] ] {
 	type q
 	function base(X:t) : q
 	function step(X:q,Y:t) : q
@@ -285,20 +308,23 @@ adds the non-negative numbers less than or equal to *X* like this:
 
     function sum(X:t) : t
     definition sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
-    proof rec[t]
+    proof
+       apply rec[t]
 
 IVy matches this definition to the schema `rec[t]` with the following
 assignment:
 
     q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
-This allows the recursive definition to be admitted. When we instantiate
-a theory, it generally comes with an induction schema for the given type.
-For example, if we say:
+This allows the recursive definition to be admitted, providing that
+`sum` is fresh in the current context.
+
+When we instantiate a theory, it generally comes with a recursion
+schema for the given type.  For example, if we say:
 
     intepret t -> int
 
-then the above induction schema automatically becomes available.
+then the above recursion schema `rec[t]` automatically becomes available.
 
 ### Extended matching
 
@@ -307,13 +333,14 @@ parameter. For example, before summing, we want to divide all the
 numbers by *N*. We can define such a function like this:
 
     definition sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
-    proof rec[t]
+    proof
+       apply rec[t]
 
 In matching the recursion schema `rec[t]`, IVy will extend the free
 function symbols in the schema with an extra parameter *N* so that
 schema becomes:
 
-    schema rec[t] = {
+    axiom [ rec[t] ] = {
 	type q
 	function base(N:t,X:t) : q
 	function step(N:t,X:q,Y:t) : q
@@ -326,10 +353,10 @@ The extended schema matches the definition, with the following assignment:
 
     q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
     
-This is somewhat as if functions were "Curried", in which case the free symbol `fun`
-would match the term `sum2 N`. The upshot of this is that to match the
-recursion schema, a function definition must be recursive in its last
-parameter.
+This is somewhat as if functions were "curried", in which case the
+free symbol `fun` would match the term `sum2 N`. The upshot of this is
+that to match the recursion schema, a function definition must be
+recursive in its last parameter.
 
 Induction
 ---------
@@ -339,7 +366,7 @@ that IVy needs manual help. To prove a property by induction, we define
 an invariant and prove it by instantiating an induction schema. Here is
 an example of such a schema:
 
-   schema ind[t] = {
+   axiom ind[t] = {
        relation p(X:t)
        property X <= 0 -> p(X)
        property p(X) -> p(X+1)
@@ -351,54 +378,38 @@ Suppose we want to prove that `sum(X)` is always greater than or equal
 to *X*:
 
     property sum(X) >= X
-    proof ind[t]
+    proof
+       apply ind[t]
 
-This produces two sub-goals:
+This produces two sub-goals, a base case and an induction step:
 
     property X <= 0 -> sum(X) <= X
     property sum(X) <= X -> sum(X+1) <= X + 1
 
 The `auto` tactic can prove both of these using the definition of
-`sum`, if we allow it to use undecidable theories. Later, we'll se a
+`sum`, if we allow it to use undecidable theories. Later, we'll see a
 more reliable way to do this, however.
 
-Generally, when a theory such as the theory of integer arithmetic is instantiated,
-a suitable induction schema such as the above is made available.
+Generally, when a theory such as the theory of integer arithmetic is
+instantiated, a suitable induction schema such as the above is made
+available.
 
 Naming
 ------
 
-If we can prove that something exists, we can give it a name. That is,
-we can reason according to this schema:
-
-    schema existsE = {
-        type t
-	relation p(X:t)
-        property exists X. p(X)
-	fresh individual n:t
-	#----------------------
-	property p(n)
-    }
-
-This rule gives a name to a value satisfying *p*, provided we can show that such a value exists. For example:
-
-    property exists Y. succ(X,Y)
-
-    function next(X:t):t
-
-    property succ(X,next(X))
-    proof existsE with n = next(X), p(Y) = succ(X,Y)
-
-This generates a proof goal `exists Y. succ(X,Y)` that is discharged
-by `auto` using the property above.
-
-This kind of argument is common enough that IVy provides a shorthand
-for it:
+If we can prove that something exists, we can give it a name.
+For example, suppose that we can prove that, for every *X*, there
+exists a *Y* such that `succ(X,Y)`. The there exists a function
+that, given an *X*, produces such a *Y*. We can define such a function
+called `next` in the following way:
 
     property exists Y. succ(X,Y) named next(X)
 
-This transforms the property to `succ(X,next(X))`, provided `next` is
-new. Readers may recognize this transformation as "Skolemization".
+Provided we can prove the property, and that `next` is fresh, we can infer
+that, for all *X*, `succ(X,next(X))` holds. Defining a function in this way,
+(that is, as a "Skolem function") can be quite useful in constructibg a proof.
+It doesn't, however, give us any way to *compute* the function `next`.
+
 
 
 Hierarchical proof development
@@ -596,7 +607,8 @@ We can use this schema as follows:
     property [myprop] X-2 < X
 
     definition mysum(X:t) = 0 if X <= 0 else (X + sum(X-2))
-    proof genrec[t] with descending = myprop
+    proof
+       apply genrec[t] with descending = myprop
 
 
 

@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+theorem congruence = {
+        type d
+	type r
+        function f(X:d) : r
+        property X:d = Y
+        #--------------------------
+        property f(X) = f(Y)
+    }
+
+theorem idem2 = {
+    type t
+    function f(X:t) : t
+    property forall X. f(f(X)) = f(X)
+    #--------------------------------
+    property f(f(f(X))) = f(X)
+}
+
+proof
+    apply congruence;
+    showgoals
+        

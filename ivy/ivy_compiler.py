@@ -1259,6 +1259,18 @@ def get_symbol_dependencies(mp,res,t):
 
 def check_definitions(mod):
 
+    defs = dict()
+    def checkdef(sym,lf):
+        if sym in defs:
+            raise IvyError(lf,'redefinition of {}\n{} from here'.format(sym,defs[sym].lineno))
+        defs[sym] = lf
+    for ldf in mod.definitions:
+        checkdef(ldf.formula.defines(),ldf)
+    for ldf in mod.native_definitions:
+        checkdef(ldf.formula.defines(),ldf)
+    for ldf,term in mod.named:
+        checkdef(term.rep,ldf)
+
     # check that no actions interfere with axioms or definitions
     
     if iu.version_le("1.7",iu.get_string_version()):
@@ -1290,7 +1302,7 @@ def check_definitions(mod):
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     sccs = tarjan_arcs(arcs)
     import ivy_proof
-    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[])
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[],mod.schemata)
     for scc in sccs:
         if len(scc) > 1:
             raise iu.IvyError(None,'these definitions form a dependency cycle: {}'.format(','.join(scc)))

@@ -66,7 +66,7 @@ class ProofChecker(object):
             # Recursive definitions must match a schema
             if proof is None:
                 raise NoMatch(defn,"no proof given for recursive definition")
-            subgoals = self.match_schema(defn.formula,proof)
+            subgoals = self.apply_proof([defn],proof)
             if subgoals is None:
                 raise NoMatch(defn,"recursive definition does not match the given schema")
         else:
@@ -111,6 +111,8 @@ class ProofChecker(object):
                 return self.show_goals_tactic(decls,proof)
             elif isinstance(proof,ia.DeferGoalTactic):
                 return self.defer_goal_tactic(decls,proof)
+            elif isinstance(proof,ia.DeferGoalTactic):
+                return self.defer_goal_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
@@ -144,8 +146,11 @@ class ProofChecker(object):
         schema = self.schemata[schemaname]
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
+        iu.dbg('schema')
         prob = match_problem(schema,decl)
-        prob = transform_defn_match(prob)
+        prob,schema = transform_defn_match(prob,schema)
+        iu.dbg('prob.pat')
+        iu.dbg('schema')
         pmatch = compile_match(proof,prob,schema,decl)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
@@ -170,6 +175,10 @@ class ProofChecker(object):
         schema, prob, pmatch = self.setup_matching(decl,proof)
         apply_match_to_problem(pmatch,prob,apply_match_alt)
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
+        iu.dbg('prob.freesyms')
+        iu.dbg('prob.constants')
+        iu.dbg('prob.inst')
+        iu.dbg('fomatch')
         if fomatch is not None:
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
@@ -411,7 +420,7 @@ def match_problem(schema,decl):
     """ Creating a matching problem from a schema and a declaration """
     vocab = goal_vocab(schema)
     freesyms = set(vocab.symbols + vocab.sorts + vocab.variables)
-    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,set(lu.variables_ast(decl)))
+    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,set(lu.variables_ast(goal_conc(decl))))
 
     prems = goal_prems(schema)
     conc = goal_conc(schema)
@@ -432,13 +441,13 @@ def transform_defn_schema(schema,decl):
         schema = parameterize_schema([x.sort for x in declargs[:len(declargs)-len(concargs)]],schema)
     return schema
 
-def transform_defn_match(prob):
+def transform_defn_match(prob,schema):
     """ Transform a problem of matching definitions to a problem of
     matching the right-hand sides. Requires prob.inst is a definition. """
 
     conc,decl,freesyms = prob.pat,prob.inst,prob.freesyms
     if not(isinstance(decl,il.Definition) and isinstance(conc,il.Definition)):
-        return prob
+        return prob,schema
     declsym = decl.defines()
     concsym = conc.defines()
     # dmatch = match(conc.lhs(),decl.lhs(),freesyms)
@@ -448,7 +457,7 @@ def transform_defn_match(prob):
     declargs = decl.lhs().args
     concargs = conc.lhs().args
     if len(declargs) < len(concargs):
-        return None
+        return None,schema
     declrhs = decl.rhs()
     concrhs = conc.rhs()
     vmap = dict((x.name,y.resort(x.sort)) for x,y in zip(concargs,declargs))
@@ -458,17 +467,21 @@ def transform_defn_match(prob):
         if x in freesyms:
             if x in dmatch and dmatch[x] != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
-                return None
+                return None,schema
             dmatch[x] = y
         else:
             if x != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
-                return None
+                return None,schema
+    iu.dbg('dmatch')
     concrhs = apply_match(dmatch,concrhs)
     freesyms = apply_match_freesyms(dmatch,freesyms)
     freesyms = [x for x in freesyms if x not in concargs]
     constants = set(x for x in prob.constants if x not in declargs)
-    return MatchProblem(concrhs,declrhs,freesyms,constants)
+    vvmap = dict((x,y.resort(x.sort)) for x,y in zip(concargs,declargs))
+    schema = apply_match_goal(vvmap,schema,apply_match_alt)
+    schema = apply_match_goal(dmatch,schema,apply_match_alt)
+    return MatchProblem(concrhs,declrhs,freesyms,constants),schema
 
 
 def parameterize_schema(sorts,schema):
@@ -476,7 +489,7 @@ def parameterize_schema(sorts,schema):
 
     Takes a list of sorts and an ia.SchemaBody. """
 
-    vars = make_distinct_vars(sorts,schema.conc())
+    vars = make_distinct_vars(sorts,goal_conc(schema))
     match = {}
     prems = []
     for prem in goal_prems(schema):
@@ -488,8 +501,10 @@ def parameterize_schema(sorts,schema):
             prems.append(ia.ConstantDecl(sym2))
         else:
             prems.append(prem)
+    show_match(match)
     conc = apply_match(match,goal_conc(schema))
-    return goal_clone(schema,prems,conc)
+    iu.dbg('conc')
+    return clone_goal(schema,prems,conc)
 
 # A schema instantiataion has an associated list of mathces
 # (following 'with').  When compiling this, the left-hand sides

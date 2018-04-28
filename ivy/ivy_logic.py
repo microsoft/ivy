@@ -244,6 +244,8 @@ class Definition(AST):
     @property
     def sort(self):
         return lg.Boolean
+    def __eq__(self,other):
+        return type(self) is type(other) and all(x == y for (x,y) in zip(self.args,other.args))
 
 
 
@@ -1532,4 +1534,6 @@ def alpha_avoid(fmla,vs):
     return res
         
 def equal_mod_alpha(t,u):
+    if isinstance(t,Definition):
+        return isinstance(t,Definition) and all(equal_mod_alpha(x,y) for (x,y) in zip(t.args,u.args))
     return lu.equal_mod_alpha(t,u)

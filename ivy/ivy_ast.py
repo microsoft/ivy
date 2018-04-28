@@ -606,7 +606,8 @@ class SchemaBody(AST):
                 elif isinstance(x,ivy_logic.UninterpretedSort):
                     indent(ind+1,'type ' + str(x) + '\n')
                 else:
-                    indent(ind+1,ivy_logic.sym_decl_to_str(x.args[0]) + '\n')
+                    foob = ivy_logic.sym_decl_to_str(x.args[0]) if isinstance(x.args[0],ivy_logic.Symbol) else str(x.args[0])
+                    indent(ind+1,foob + '\n')
             indent(ind+1,'property ' + str(thing.conc()) + '\n')
             indent(ind,'}\n')
         sub(self,0)
@@ -667,6 +668,11 @@ class LetTactic(AST):
     def __str__(self):
         return 'let' ','.join(str(x) for x in self.args)
     
+class SpoilTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'spoil ' + str(self.args[0])
 
 class ComposeTactics(AST):
     def __str__(self):

@@ -440,6 +440,14 @@ def p_schdecl_fresh_funcdecl(p):
     'schdecl : FRESH FUNCTION funs'
     p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
 
+def p_schdecl_indivdecl(p):
+    'schdecl : INDIV funs'
+    p[0] = p[2]
+
+def p_schdecl_fresh_indivdecl(p):
+    'schdecl : FRESH INDIV funs'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
 def p_schdecl_relation_rel(p):
     'schdecl : RELATION rels'
     p[0] = p[2]
@@ -716,6 +724,12 @@ else:
         p[0] = DeferGoalTactic()
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_spoil_atype(p):
+        'proofstep : SPOIL atype'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = SpoilTactic(a)
+        p[0].lineno = get_lineno(p,1)
     
 def p_match_defn(p):
     'match : defn'
