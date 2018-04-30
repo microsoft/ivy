@@ -146,11 +146,8 @@ class ProofChecker(object):
         schema = self.schemata[schemaname]
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
-        iu.dbg('schema')
         prob = match_problem(schema,decl)
         prob,schema = transform_defn_match(prob,schema)
-        iu.dbg('prob.pat')
-        iu.dbg('schema')
         pmatch = compile_match(proof,prob,schema,decl)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
@@ -173,12 +170,9 @@ class ProofChecker(object):
         """
         
         schema, prob, pmatch = self.setup_matching(decl,proof)
+        prob, schema = avoid_capture_problem(prob,schema,pmatch)
         apply_match_to_problem(pmatch,prob,apply_match_alt)
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
-        iu.dbg('prob.freesyms')
-        iu.dbg('prob.constants')
-        iu.dbg('prob.inst')
-        iu.dbg('fomatch')
         if fomatch is not None:
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
@@ -197,7 +191,7 @@ class ProofChecker(object):
             #         g = apply_match_goal(fomatch,g,apply_match)
             #         g = apply_match_goal(somatch,g,apply_match_alt)
             #         subgoals.append(g)
-            return subgoals
+            # return [s for s in subgoals if not trivial_goal(s)]
         return None
 
 
@@ -314,8 +308,8 @@ def check_premises_provided(g1,g2):
 def goal_subgoals(schema,goal):
     check_concs_match(schema,goal)
     check_premises_provided(schema,goal)
-    return [goal_subst(goal,x) for x in goal_prems(schema) if isinstance(x,ia.LabeledFormula)]
-
+    subgoals = [goal_subst(goal,x) for x in goal_prems(schema) if isinstance(x,ia.LabeledFormula)]
+    return [s for s in subgoals if not trivial_goal(s)]
 
 # Get the free vocabulary of a goal, including sorts, symbols and variables
 
@@ -473,7 +467,6 @@ def transform_defn_match(prob,schema):
             if x != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
                 return None,schema
-    iu.dbg('dmatch')
     concrhs = apply_match(dmatch,concrhs)
     freesyms = apply_match_freesyms(dmatch,freesyms)
     freesyms = [x for x in freesyms if x not in concargs]
@@ -501,9 +494,7 @@ def parameterize_schema(sorts,schema):
             prems.append(ia.ConstantDecl(sym2))
         else:
             prems.append(prem)
-    show_match(match)
     conc = apply_match(match,goal_conc(schema))
-    iu.dbg('conc')
     return clone_goal(schema,prems,conc)
 
 # A schema instantiataion has an associated list of mathces
@@ -556,7 +547,7 @@ def compile_match(proof,prob,schema,decl):
 
 def match_rhs_vars(match):
     """ Get the variables occurring free on the right-hand side of a match """
-    rhss = [v for s,v in match.iteritems() if il.is_constant(s)]
+    rhss = [v for s,v in match.iteritems() if not isinstance(s,il.UninterpretedSort)]
     return lu.used_variables_asts(rhss)
 
 
@@ -583,6 +574,37 @@ def apply_match_to_problem(match,prob,apply_match):
     prob.pat = apply_match(match,prob.pat)
     prob.freesyms = apply_match_freesyms(match,prob.freesyms)
 
+def rename_problem(match,prob):
+    prob.pat = apply_match(match,prob.pat)
+    prob.freesyms = set(match.get(sym,sym) for sym in prob.freesyms)
+
+def avoid_capture_problem(prob,schema,match):
+    """ Rename a match problem to avoid capture when applying a
+    match"""
+    show_match(match)
+    iu.dbg('schema')
+    matchvars = list(x for x in match_rhs_vars(match) if x not in match)
+    iu.dbg('matchvars')
+    freevocab = goal_free(schema)
+    rn = iu.UniqueRenamer(used=[v.name for v in freevocab if il.is_variable(v)])
+    cmatch = dict((v,v.rename(rn(v.name))) for v in matchvars if v in freevocab)
+    show_match(cmatch)
+    iu.dbg('prob')
+    rename_problem(cmatch,prob)
+    iu.dbg('prob')
+    schema = apply_match_goal(cmatch,schema,apply_match)
+    iu.dbg('schema')
+    return prob,schema
+
+def trivial_goal(goal):
+    """ A goal is trivial if the conclusion is equal to one of the premises modulo
+    alpha conversion """
+    conc = goal_conc(goal)
+    for prem in goal_prem_goals(goal):
+        if len(goal_prems(prem)) == 0:
+            if il.equal_mod_alpha(goal_conc(prem),conc):
+                return True
+    return False
 
 def apply_match(match,fmla,env = None):
     """ apply a match to a formula. 
@@ -633,7 +655,9 @@ def apply_match_alt(match,fmla,env = None):
     capture and cause CaptureError to be raised.
 
     """
-    freevars = match_rhs_vars(match)
+    freevars = list(match_rhs_vars(match))
+    iu.dbg('freevars')
+    iu.dbg('fmla')
     fmla = il.alpha_avoid(fmla,freevars)
     return apply_match_alt_rec(match,fmla,env if env is not None else set())
 
@@ -646,6 +670,8 @@ def apply_match_alt_rec(match,fmla,env):
         func = match_get(match,func,env,func)
         return func(*args)
     if il.is_variable(fmla):
+        if fmla in match:
+            return match_get(match,fmla,env)
         fmla = il.Variable(fmla.name,apply_match_sort(match,fmla.sort))
         fmla = match_get(match,fmla,env,fmla)
         return fmla

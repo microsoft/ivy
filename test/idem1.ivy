@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-theorem congruence = {
+theorem [congruence] {
         type d
 	type r
         function f(X:d) : r
@@ -9,7 +9,24 @@ theorem congruence = {
         property f(X) = f(Y)
     }
 
-theorem idem2 = {
+theorem [trans] {
+    type t
+    property X:t = Y
+    property Y:t = Z
+    property X:t = Z
+}
+
+theorem [elimA] {
+    type t
+    function p(X:t) : bool
+    property forall Y. p(Y)
+    #--------------------------------
+    property p(X)
+}
+    
+
+
+theorem [idem2] {
     type t
     function f(X:t) : t
     property forall X. f(f(X)) = f(X)
@@ -18,6 +35,10 @@ theorem idem2 = {
 }
 
 proof
-    apply congruence;
+    apply trans with Y = f(f(X));
+    showgoals;
+    apply elimA with X = f(X);
+    showgoals;
+    apply elimA with X = X;
     showgoals
         

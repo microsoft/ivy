@@ -513,6 +513,17 @@ def p_top_theorem_defn(p):
     if p[4] is not None:
         p[0].declare(ProofDecl(p[4]))
 
+def p_top_theorem_label_rhs(p):
+    'top : top THEOREM LABEL schdefnrhs optproof'
+    p[0] = p[1]
+    label = Atom(p[3][1:-1],[])
+    label.lineno = get_lineno(p,3)
+    df = Definition(label,p[4])
+    df.lineno = get_lineno(p,3)
+    p[0].declare(TheoremDecl(Schema(df)))
+    if p[5] is not None:
+        p[0].declare(ProofDecl(p[5]))
+
 def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
     p[0] = p[1]
