@@ -185,7 +185,7 @@ def t_SYMBOL(t):
     return t
 
 def t_LABEL(t):
-    r'\[[_a-zA-Z0-9]+\]'
+    r'\[[_a-zA-Z0-9\]\[]+\]'
     t.type = reserved.get(t.value,'LABEL')
     return t
 

@@ -140,7 +140,8 @@ class Module(object):
         for ldf in self.definitions:
             cnst = ldf.formula.to_constraint()
             if all(isinstance(p,il.Variable) for p in ldf.formula.args[0].args):
-                theory.append(cnst) # TODO: make this a def?
+                if not isinstance(ldf.formula,il.DefinitionSchema):
+                    theory.append(cnst) # TODO: make this a def?
         # extensionality axioms for structs
         for sort in sorted(self.sort_destructors):
             destrs = self.sort_destructors[sort]

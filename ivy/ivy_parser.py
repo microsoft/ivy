@@ -842,12 +842,43 @@ def p_optproof_symbol(p):
     'optproof : PROOF proofstep'
     p[0] = p[2]
     
-def p_top_definition_defns(p):
-    'top : top DEFINITION defns optproof'
-    p[0] = p[1]
-    p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
-    if p[4] is not None:
-        p[0].declare(ProofDecl(p[4]))
+if iu.get_numeric_version() <= [1,6]:
+    def p_top_definition_defns(p):
+        'top : top DEFINITION defns optproof'
+        p[0] = p[1]
+        p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
+        if p[4] is not None:
+            p[0].declare(ProofDecl(p[4]))
+else:
+
+    def p_optlabel_label(p):
+        'optlabel : LABEL'
+        p[0] = Atom(p[1][1:-1],[])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_optlabel(p):
+        'optlabel : '
+        p[0] = None
+
+    def p_gdefn_defn(p):
+        'gdefn : defn'
+        p[0] = p[1]
+
+    def p_gdefn_lcb_defn_rcb(p):
+        'gdefn : LCB defn RCB'
+        p[0] = DefinitionSchema(*p[2].args)
+        p[0].lineno = p[2].lineno
+
+    def p_top_definition_optlabel_gdefn_optproof(p):
+        'top : top DEFINITION optlabel gdefn optproof'
+        lf = LabeledFormula(p[3],p[4])
+        lf.lineno = get_lineno(p,2)
+        iu.dbg('type(lf.formula)')
+        p[0] = p[1]
+        p[0].declare(DefinitionDecl(addlabel(lf,'def')))
+        if p[5] is not None:
+            p[0].declare(ProofDecl(p[5]))
+
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'

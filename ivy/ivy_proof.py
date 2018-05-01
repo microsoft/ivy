@@ -41,7 +41,7 @@ class ProofChecker(object):
         """
     
         self.axioms  = list(axioms)
-        self.definitions = dict((d.formula.defines(),d) for d in definitions)
+        self.definitions = dict((d.formula.defines().name,d) for d in definitions)
         self.schemata = schemata.copy() if schemata is not None else dict()
         for ax in axioms:
             self.schemata[ax.name] = ax
@@ -56,7 +56,7 @@ class ProofChecker(object):
         """
 
         sym = defn.formula.defines()
-        if sym in self.definitions:
+        if sym.name in self.definitions:
             raise Redefinition(defn,"redefinition of {}".format(sym))
         if sym in self.deps:
             raise Circular(defn,"symbol {} defined after reference".format(sym))
@@ -71,7 +71,7 @@ class ProofChecker(object):
                 raise NoMatch(defn,"recursive definition does not match the given schema")
         else:
             subgoals = []
-        self.definitions[sym] = defn
+        self.definitions[sym.name] = defn
         
     def admit_proposition(self,prop,proof=None):
         """ Admits a proposition with proof.  If a proof is given it
@@ -141,9 +141,14 @@ class ProofChecker(object):
 
     def setup_matching(self,decl,proof):
         schemaname = proof.schemaname()
-        if schemaname not in self.schemata:
+        if schemaname in self.schemata:
+            schema = self.schemata[schemaname]
+        elif schemaname in self.definitions:
+            schema = self.definitions[schemaname]
+            schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
+        else:
+            iu.dbg('self.definitions.keys()')
             raise ProofError(proof,"No schema {} exists".format(schemaname))
-        schema = self.schemata[schemaname]
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)

@@ -287,10 +287,11 @@ def get_assumes_and_asserts(preconds_only):
             assumes.append((foo,action))
         
     for ldf in im.module.definitions:
-        if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-            macros.append((ldf.formula.to_constraint(),ldf))
-        else: # can't treat recursive definition as macro
-            assumes.append((ldf.formula.to_constraint(),ldf))
+        if not isinstance(ldf.formula,il.DefinitionSchema):
+            if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
+                macros.append((ldf.formula.to_constraint(),ldf))
+            else: # can't treat recursive definition as macro
+                assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:

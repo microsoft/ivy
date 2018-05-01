@@ -137,6 +137,9 @@ class Definition(Formula):
             return Atom(equals,self.args)
         return Iff(*self.args)
 
+class DefinitionSchema(Definition):
+    pass
+
 class Implies(Formula):
     """
     Implication of formulas

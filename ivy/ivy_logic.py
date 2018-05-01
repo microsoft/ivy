@@ -247,6 +247,8 @@ class Definition(AST):
     def __eq__(self,other):
         return type(self) is type(other) and all(x == y for (x,y) in zip(self.args,other.args))
 
+class DefinitionSchema(Definition):
+    pass
 
 
 lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]

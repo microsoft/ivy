@@ -112,9 +112,9 @@ have these symbols in their signature).
 Schemata
 ========
 
-A *schema* is a compound judgment that a collection of judgments as
-input (the premises) and produces a judgment as output (the
-conclusion). The meaning of schema is that we can provide any
+A *schema* is a compound judgment that takse a collection of judgments
+as input (the premises) and produces a judgment as output (the
+conclusion). If the schema is valid, then we can provide any
 type-correct values for the premises and the conclusion will follow.
 
 Here is a simple example of a schema taken as an axiom:
@@ -124,17 +124,22 @@ Here is a simple example of a schema taken as an axiom:
 	type r
         function f(X:d) : r
         #--------------------------
-        property X=Y -> f(X) = f(Y)
+        property X = Y -> f(X) = f(Y)
     }
 
 The schema is contained in curly brackets and gives a list of premises
 following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
-*d* to *r*, we can infer that, for all *X*,*Y*, *X*=*Y* implies
+*d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
 *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
 just a comment. The conclusion is always the last judgement in the rule.
 
-The keyword `axiom` tells IVy that this rule should be taken as
-primitive, without proof. 
+The keyword `axiom` tells IVy that this rule should be taken as a
+given, without proof. However, as we will see, the default `auto`
+tactic treats a schema differently from a simple proposition. That is,
+a schema is never used by default, but instead must be explicitly
+instantiated.  This allows is to express and use facts that, if they
+occerred in a verification condition, would take us outside the
+decidable fragment.
 
 Any judgment that has been admitted in the current context can be
 *applied* in a proof. When we apply a schema, we supply values for its
@@ -159,7 +164,7 @@ discovers the following assignment:
 After plugging in this assignment, the conclusion of the rule exactly matches
 the property to be proved, so the property is admitted.
 
-The problem of finding an assignment such as the one above is called
+The problem of finding an assignment such as the one above is one of
 "second order matching".  It is a hard problem, and the answer is not
 unique. In case IVy did not succeed in finding the above match, we
 could also write the proof more explicitly, like this:
@@ -167,11 +172,12 @@ could also write the proof more explicitly, like this:
     proof
         apply congruence with d=t, r=t, X=Z, Y=n, f(N)=N+1
 
-Each of the above equations acts as a constraint on the assignment. That is,
-it must convert *d* to *t*, *r* to *t*, *X* to *Z* and so on. By giving such equations,
-we can narrow the possibilities down to just one assignment. We don't have to do this,
-however. We can also give a subset of the desired assignment, relying on Ivy's
-matching algorithm to fill in the rest.
+Each of the above equations acts as a constraint on the
+assignment. That is, it must convert *d* to *t*, *r* to *t*, *X* to
+*Z* and so on. By giving such equations, we can narrow the
+possibilities down to just one assignment. Alternatively, we can also
+give a subset of the desired assignment, relying on Ivy's matching
+algorithm to fill in the rest.
 
 It's also possible to write constraints that do not allow for any
 assignment. In this case, Ivy complains that the provided match is
@@ -273,22 +279,126 @@ Theorems
 --------
 
 Thus far, we have seen schemata used only as axioms. However, we can also
-prove the validity of a schema as a *theorem*. Here's a simple example:
+prove the validity of a schema as a *theorem*. For example, here is a theorem
+expressing the transitivity of equality:
 
-    theorem [simple] {
+    theorem [trans] {
+        type t
+        property X:t = Y
+        property Y:t = Z
+        #--------------------------------
+        property X:t = Z
+    }
+
+We don't need a proof for this, since the `auto` tactic can handle it. Here is a rule
+for eliminating existential quantifiers:
+
+theorem [elimA] {
+    type t
+    function p(X:t) : bool
+    property forall Y. p(Y)
+    #--------------------------------
+    property p(X)
+}
+
+It says, for any predicate *p*, if `p(Y)` holds for all *Y*, then
+`p(X)` holds for a particular *X*. Again, the `auto` tactic can prove
+this. Now let's derive a consequence of these facts. A function *f* is
+*idempotent* if applying twice gives the same result as applying it
+once. This theorem says that, if *f* is idempotent, then applying three
+times is the same as applying it once:
+
+    theorem [idem2] {
         type t
         function f(X:t) : t
-        property forall X. f(f(x)) = f(x)
+        property forall X. f(f(X)) = f(X)
         #--------------------------------
-        
+        property f(f(f(X))) = f(X)
+    }
+
+The auto tactic can't prove this because the presmise contains a
+function cycle with a universally quantified variable. Here's the
+error message it gives:
+
+    error: The verification condition is not in logic epr.
+
+    Note: the following functions form a cycle:
+      function f(V0:t) : t
+
+This means we'll need to apply some other tactic. Here is one possible proof:
+
+    proof
+        apply trans with Y = f(f(X));
+        apply elimA with X = f(X);
+        apply elimA with X = X
+
+We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
+(by idempotence of *f*) which in turn is equal to `f(X)` (again, by
+idempotence of *f*). This means we want to apply the transitivy rule, where
+the intermediate term *Y* is `f(f(x))`. Notice we have to give the value of *Y*
+explicitly. Ivy isn't clever enough to guess this intermediate term for us.
+This gives us the following two proof subgoals:
+
+    theorem [prop2] {
+        type t
+        function f(V0:t) : t
+        property [prop5] forall X. f(f(X)) = f(X)
+        #----------------------------------------
+        property f(f(f(X))) = f(f(X))
+    }
+
+
+    theorem [prop3] {
+        type t
+        function f(V0:t) : t
+        property [prop5] forall X. f(f(X)) = f(X)
+        #----------------------------------------
+        property f(f(X)) = f(X)
+    }
+
+Now we see the the conclusion in both cases is an instance of the
+idempotence assumption, for a particular value of *X*. This means
+we can apply the `elimA` rule that we proved above. In the first case,
+the value of `X` for which we are claiming idempotence is `f(X)`.
+With this assignment, IVy can match `p(X)` to `f(f(f(X))) = f(X)`.
+Thi substituion produces a new subgoal as follows:
+
+    theorem [prop2] {
+        type t
+        function f(V0:t) : t
+        property [prop5] forall X. f(f(X)) = f(X)
+        #----------------------------------------
+        property forall Y. f(f(f(Y))) = f(f(Y))
+    }
+
+This goal is trivial, since the conclusion is exactly the same as one
+of the premises, except for the names of bound variables. Ivy proves
+this goal automatically and drops it from the list. This leaves the
+second subgoal `prop3` above. We can also prove this using `elimA`. In
+this case `X` in the `elimA` rule corresponds to `X` in our goal.
+Thus, we write `apply elimA with X = X`. This might seem a little
+strange, but keep in mind that the `X` on the left refers to `X` in
+the `elimA` rule, while `X` on the right refers to `X` in our goal. It
+just happens that we chose the same name for both variables.
+
+Ance again, the subgoal we obtain is trivial and Ivy drops it. Since
+there are no more subgoals, the proof is now complete.
+
+# ### The deduction library
+
+Facts like `trans` and `elimA` above are included in the library
+`deduction`. This library contains a complete set of rules of a system
+[natural deduction](https://en.wikipedia.org/wiki/Natural_deduction)
+for first-order logic with equality.
+
 
 Recursion
 ---------
 
 Recursive definitions are permitted in IVy by instantiating a
-definitional schema. As an example, consider the following axiom schema:
+*definitional schema*. As an example, consider the following axiom schema:
 
-    axiom [ rec[t] ] {
+    axiom [rec[t]] {
 	type q
 	function base(X:t) : q
 	function step(X:q,Y:t) : q
@@ -307,17 +417,27 @@ symbol be fresh. With this schema, we can define a recursive function that
 adds the non-negative numbers less than or equal to *X* like this:
 
     function sum(X:t) : t
-    definition sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
+
+    definition [defsum] {
+       sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
+    }
     proof
        apply rec[t]
 
-IVy matches this definition to the schema `rec[t]` with the following
-assignment:
+Notice that we wrote the definition as a schema rather than a simple
+proposition.  This is because it has a universally quantified variable
+`X` under arithmetic operators, which puts it outside the decidable
+fragment. Becuase this definitoin is a schema, when we want to use it,
+we'll have to apply it explicitly,
+
+In order to admit this definition, we applied the definition
+schema `rec[t]`. Ivy infers the following assignment:
 
     q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 This allows the recursive definition to be admitted, providing that
-`sum` is fresh in the current context.
+`sum` is fresh in the current context (i.e., we have not previously refered to
+`sum` except to declare its type).
 
 When we instantiate a theory, it generally comes with a recursion
 schema for the given type.  For example, if we say:
@@ -332,12 +452,13 @@ Suppose we want to define a function that takes an additional
 parameter. For example, before summing, we want to divide all the
 numbers by *N*. We can define such a function like this:
 
-    definition sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
+    definition [defsumdiv]
+        sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
     proof
        apply rec[t]
 
-In matching the recursion schema `rec[t]`, IVy will extend the free
-function symbols in the schema with an extra parameter *N* so that
+In matching the recursion schema `rec[t]`, IVy will extend the
+function symbols in the premises of `rec[t]` with an extra parameter *N* so that
 schema becomes:
 
     axiom [ rec[t] ] = {
@@ -354,9 +475,11 @@ The extended schema matches the definition, with the following assignment:
     q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
     
 This is somewhat as if functions were "curried", in which case the
-free symbol `fun` would match the term `sum2 N`. The upshot of this is
-that to match the recursion schema, a function definition must be
-recursive in its last parameter.
+free symbol `fun` would match the curried function term `sumdiv N`.
+Since Ivy's logic doesn't allow for partial application of functions,
+extended matching provides an alternative. Notice that, 
+to match the recursion schema, a function definition must be
+recursive in its *last* parameter.
 
 Induction
 ---------
@@ -385,6 +508,14 @@ This produces two sub-goals, a base case and an induction step:
 
     property X <= 0 -> sum(X) <= X
     property sum(X) <= X -> sum(X+1) <= X + 1
+
+Unfortunately, the `auto` tactic can't prove these goals using the
+definition of `sum`, because this definition is a schema. Fortunately,
+it suffices to instantiate this schema just for the specific `X`
+in our subgoals. 
+
+Because the definition of `sum` is problematic in this way.
+
 
 The `auto` tactic can prove both of these using the definition of
 `sum`, if we allow it to use undecidable theories. Later, we'll see a

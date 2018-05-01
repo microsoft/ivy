@@ -628,6 +628,7 @@ def compile_action_def(a,sig):
 def compile_defn(df):
     has_consts = any(not isinstance(p,ivy_ast.Variable) for p in df.args[0].args)
     sig = ivy_logic.sig.copy() if has_consts else ivy_logic.sig
+    is_schema = isinstance(df,ivy_ast.DefinitionSchema)
     with ivy_ast.ASTContext(df):
         with sig:
             for p in df.args[0].args:
@@ -653,6 +654,9 @@ def compile_defn(df):
                     eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
                     eqn = sortify_with_inference(eqn)
                     df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+            if is_schema:
+                df = ivy_logic.DefinitionSchema(*df.args)
+                iu.dbg('type(df)')
             return df
     
 def compile_schema_prem(self,sig):
@@ -870,6 +874,7 @@ class IvyDomainSetup(IvyDeclInterp):
     def definition(self,ldf):
         label = ldf.label
         df = ldf.formula
+        iu.dbg('type(df)')
         df = compile_defn(df)
         self.add_definition(ldf.clone([label,df]))
         self.domain.updates.append(DerivedUpdate(df))
@@ -1351,7 +1356,7 @@ def check_properties(mod):
         return prop
             
     import ivy_proof
-    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[],mod.schemata)
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
 
     for prop in props:
         if prop.id in pmap:
