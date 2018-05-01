@@ -656,7 +656,6 @@ def compile_defn(df):
                     df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
             if is_schema:
                 df = ivy_logic.DefinitionSchema(*df.args)
-                iu.dbg('type(df)')
             return df
     
 def compile_schema_prem(self,sig):
@@ -874,7 +873,6 @@ class IvyDomainSetup(IvyDeclInterp):
     def definition(self,ldf):
         label = ldf.label
         df = ldf.formula
-        iu.dbg('type(df)')
         df = compile_defn(df)
         self.add_definition(ldf.clone([label,df]))
         self.domain.updates.append(DerivedUpdate(df))

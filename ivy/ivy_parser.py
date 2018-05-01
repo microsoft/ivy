@@ -313,13 +313,32 @@ def addlabel(lf,pref):
     res.lineno = lf.lineno
     return res
 
-def p_top_axiom_labeledfmla(p):
-    'top : top opttemporal AXIOM labeledfmla'
-    p[0] = check_non_temporal(p[1])
-    lf = addlabel(p[4],'axiom')
-    d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-    d.lineno = get_lineno(p,3)
-    p[0].declare(d)
+if iu.get_numeric_version() <= [1,6]:
+    def p_top_axiom_labeledfmla(p):
+        'top : top opttemporal AXIOM labeledfmla'
+        p[0] = check_non_temporal(p[1])
+        lf = addlabel(p[4],'axiom')
+        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,3)
+        p[0].declare(d)
+else:
+    def p_gprop_fmla(p):
+        'gprop : fmla'
+        p[0] = p[1]
+
+    def p_gprop_schdefnrhs(p):
+        'gprop : schdefnrhs'
+        p[0] = p[1]
+
+    def p_top_axiom_optlabel_gprop(p):
+        'top : top opttemporal AXIOM optlabel gprop'
+        p[0] = check_non_temporal(p[1])
+        lf = LabeledFormula(p[4],p[5])
+        lf.lineno = get_lineno(p,3)
+        lf = addlabel(p[4],'axiom')
+        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,3)
+        p[0].declare(d)
 
 def p_optskolem(p):
     'optskolem : '
@@ -873,7 +892,6 @@ else:
         'top : top DEFINITION optlabel gdefn optproof'
         lf = LabeledFormula(p[3],p[4])
         lf.lineno = get_lineno(p,2)
-        iu.dbg('type(lf.formula)')
         p[0] = p[1]
         p[0].declare(DefinitionDecl(addlabel(lf,'def')))
         if p[5] is not None:

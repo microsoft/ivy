@@ -163,7 +163,7 @@ class ProofChecker(object):
         schema, prob, pmatch = self.setup_matching(decl,proof)
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem  = apply_match_goal(pmatch,schema,apply_match_alt)
-        return [goal_add_prem(decls[0],prem)] + decls[1:]
+        return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
@@ -185,18 +185,7 @@ class ProofChecker(object):
             schema = apply_match_goal(pmatch,schema,apply_match_alt)
             schema = apply_match_goal(fomatch,schema,apply_match)
             schema = apply_match_goal(somatch,schema,apply_match_alt)
-            return goal_subgoals(schema,decl)
-            
-            # subgoals = []
-            # for x in goal_prems(schema):
-            #     if isinstance(x,ia.LabeledFormula) :
-            #         g = apply_match_goal(pmatch,x,apply_match_alt)
-            #         iu.dbg('pmatch')
-            #         iu.dbg('g')
-            #         g = apply_match_goal(fomatch,g,apply_match)
-            #         g = apply_match_goal(somatch,g,apply_match_alt)
-            #         subgoals.append(g)
-            # return [s for s in subgoals if not trivial_goal(s)]
+            return goal_subgoals(schema,decl,proof.lineno)
         return None
 
 
@@ -225,14 +214,14 @@ def clone_goal(goal,prems,conc):
 
 # Substitute a goal g2 for the conclusion of goal g1. The result has the label of g2.
 
-def goal_subst(g1,g2):
+def goal_subst(g1,g2,lineno):
     check_name_clash(g1,g2)
-    return make_goal(g2.lineno, g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
+    return make_goal(lineno, g2.label, goal_prems(g1) + goal_prems(g2), goal_conc(g2))
 
 # Substitute a sequence of subgoals in to the conclusion of the first goal
 
-def goals_subst(goals,subgoals):
-    return [goal_subst(goals[0],g) for g in subgoals] + goals[1:]
+def goals_subst(goals,subgoals,lineno):
+    return [goal_subst(goals[0],g,lineno) for g in subgoals] + goals[1:]
 
 # Add a formula or schema as a premise to a goal. Make up a fresh name for it.
 
@@ -244,8 +233,8 @@ def fresh_label(goals):
     
 # Add a premise to a goal
 
-def goal_add_prem(goal,prem):
-    return make_goal(goal.lineno,goal.label,goal_prems(goal) + [prem], goal_conc(goal))
+def goal_add_prem(goal,prem,lineno):
+    return make_goal(lineno,goal.label,goal_prems(goal) + [prem], goal_conc(goal))
     
 # Get the symbols and types defined in the premises of a goal
 
@@ -310,10 +299,10 @@ def check_premises_provided(g1,g2):
 # Turn the propositional premises of a goal into a list of subgoals. The
 # symbols and types in the goal must be provided by the environment.
 
-def goal_subgoals(schema,goal):
+def goal_subgoals(schema,goal,lineno):
     check_concs_match(schema,goal)
     check_premises_provided(schema,goal)
-    subgoals = [goal_subst(goal,x) for x in goal_prems(schema) if isinstance(x,ia.LabeledFormula)]
+    subgoals = [goal_subst(goal,x,lineno) for x in goal_prem_goals(schema)]
     return [s for s in subgoals if not trivial_goal(s)]
 
 # Get the free vocabulary of a goal, including sorts, symbols and variables
@@ -586,19 +575,12 @@ def rename_problem(match,prob):
 def avoid_capture_problem(prob,schema,match):
     """ Rename a match problem to avoid capture when applying a
     match"""
-    show_match(match)
-    iu.dbg('schema')
     matchvars = list(x for x in match_rhs_vars(match) if x not in match)
-    iu.dbg('matchvars')
     freevocab = goal_free(schema)
     rn = iu.UniqueRenamer(used=[v.name for v in freevocab if il.is_variable(v)])
     cmatch = dict((v,v.rename(rn(v.name))) for v in matchvars if v in freevocab)
-    show_match(cmatch)
-    iu.dbg('prob')
     rename_problem(cmatch,prob)
-    iu.dbg('prob')
     schema = apply_match_goal(cmatch,schema,apply_match)
-    iu.dbg('schema')
     return prob,schema
 
 def trivial_goal(goal):
@@ -661,8 +643,6 @@ def apply_match_alt(match,fmla,env = None):
 
     """
     freevars = list(match_rhs_vars(match))
-    iu.dbg('freevars')
-    iu.dbg('fmla')
     fmla = il.alpha_avoid(fmla,freevars)
     return apply_match_alt_rec(match,fmla,env if env is not None else set())
 

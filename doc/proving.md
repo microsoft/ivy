@@ -272,8 +272,11 @@ like this:
         showgoals;
         apply socrates_species
 
-When checking the proof, the `showgoals` tactic has the effect of printing the current list
-of proof goals, leaving the goals unchanged.
+When checking the proof, the `showgoals` tactic has the effect of
+printing the current list of proof goals, leaving the goals unchanged.
+A good way to develop a proof is to start with just `showgoals`, and to add tactics
+before this. Running the Ivy proof checker in an Emacs compilation buffer
+is a convenient way to do this. 
 
 Theorems
 --------
@@ -487,7 +490,7 @@ Induction
 The `auto` tactic can't generally prove properties by induction. For
 that IVy needs manual help. To prove a property by induction, we define
 an invariant and prove it by instantiating an induction schema. Here is
-an example of such a schema:
+an example of such a schema, that works for the non-negative integers:
 
    axiom ind[t] = {
        relation p(X:t)
@@ -497,68 +500,95 @@ an example of such a schema:
        property p(X)    
    }
 
-Suppose we want to prove that `sum(X)` is always greater than or equal
-to *X*:
+Like the recursion schema `rec[t]`, the induction schema `ind[t]` is
+part of the integer theory, and becomes available when we interpret
+type `t` as `int`.
 
-    property sum(X) >= X
+Suppose we want to prove that `sum(Y)` is always greater than or equal
+to *Y*, that is:
+
+    property sum(Y) >= Y
+
+We can prove this by applying our induction schema:
+
     proof
-       apply ind[t]
+        apply ind[t];
+        assume sum with X = Y;
+        defergoal;
+        assume sum with X = Y + 1;
 
-This produces two sub-goals, a base case and an induction step:
+
+Applying `ind[t]` produces two sub-goals, a base case and an induction step:
 
     property X <= 0 -> sum(X) <= X
+
     property sum(X) <= X -> sum(X+1) <= X + 1
 
-Unfortunately, the `auto` tactic can't prove these goals using the
-definition of `sum`, because this definition is a schema. Fortunately,
-it suffices to instantiate this schema just for the specific `X`
-in our subgoals. 
+The `auto` tactic can't prove these goals because the definition of
+`sum` is a schema that must explicitly instantiated (if we try it,
+we'll get counterexamples). Fortunately, it suffices to instantiate
+this schema just for the specific arguments of `sum` in our
+subgoals. For the base case, we need to instantiate the definition for
+`X`, while for the induction step, we need `X+1`. Notice that we
+referred to the definiton of `sum` by the name `sum`.  Alternatively,
+we can name the definition itself and refer to it by this name.
 
-Because the definition of `sum` is problematic in this way.
+After instantiating the definition of `sum`, our two subgoals look like this:
+
+    ind1.ivy: line 21: Proof goals:
+
+    theorem [prop5] {
+        property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
+        property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
+    }
 
 
-The `auto` tactic can prove both of these using the definition of
-`sum`, if we allow it to use undecidable theories. Later, we'll see a
-more reliable way to do this, however.
+    theorem [prop4] {
+        property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
+        property Y:t <= 0 -> sum(Y) >= Y
+    }
 
-Generally, when a theory such as the theory of integer arithmetic is
-instantiated, a suitable induction schema such as the above is made
-available.
+
+Because these goals are quantifier-free the `auto` tactic can easily
+handle them, so our proof is complete.
+
 
 Naming
 ------
 
-If we can prove that something exists, we can give it a name.
-For example, suppose that we can prove that, for every *X*, there
-exists a *Y* such that `succ(X,Y)`. The there exists a function
-that, given an *X*, produces such a *Y*. We can define such a function
-called `next` in the following way:
+If we can prove that something exists, we can give it a name.  For
+example, suppose that we can prove that, for every *X*, there exists a
+*Y* such that `succ(X,Y)`. The there exists a function that, given an
+*X*, produces such a *Y*. We can define such a function called `next`
+in the following way:
 
     property exists Y. succ(X,Y) named next(X)
 
-Provided we can prove the property, and that `next` is fresh, we can infer
-that, for all *X*, `succ(X,next(X))` holds. Defining a function in this way,
-(that is, as a "Skolem function") can be quite useful in constructibg a proof.
-It doesn't, however, give us any way to *compute* the function `next`.
-
-
+Provided we can prove the property, and that `next` is fresh, we can
+infer that, for all *X*, `succ(X,next(X))` holds. Defining a function
+in this way, (that is, as a Skolem function) can be quite useful in
+constructibg a proof.  However, since proofs in Ivy are not generally
+constructive, we have no way to *compute* the function `next`, so we
+can't use it in extracted code.
 
 Hierarchical proof development
 ==============================
 
-A proof structured as a sequence of judgments isn't very
-organized. Moreover, as the proof context gets larger, it becomes
-increasingly difficult for the automated prover to handle it.
+As the proof context gets larger, it becomes increasingly difficult
+for the automated prover to handle all of the judgements we have
+admitted. This is especially true as combining facts or theories may
+take us outside the automated prover's decidable fragment. For this
+reason, we need some way to break the proof into manageable parts.
+For this purpose, IVy provides a mechanism to structure the proof into
+a collection of localized proofs called *isolates*.
 
 Isolates
 --------
 
-IVy provides a mechanism to structure the proof into a collection of
-localized proofs called "isolates". An isolate is a restricted proof
-context. An isolate can make parts of its proof context available to
-other isolates and keep other parts hidden. Moreover, isolates can
-contain isolates, allowing us to structure a proof development
-hierarchically.
+An isolate is a restricted proof context. An isolate can make parts of
+its proof context available to other isolates and keep other parts
+hidden. Moreover, isolates can contain isolates, allowing us to
+structure a proof development hierarchically.
 
 Suppose, for example, that we want to define a function *f*, but keep
 the exact definition hidden, exposing only certain properties of the
@@ -577,14 +607,18 @@ function. We could write something like this:
 
     }
 
+Any names declared within the isolate belong to its namespace. For
+example, the names of the two properties above are
+`t_theory.expanding` and `t_theory.transitivity`.
+
 The isolate contains four statements. The first, says the type `t` is
 to be interpreted as the integers. This instantiates the theory of the
 integers for type `t`, giving the usual meaning to operators like `+`
 and `<`. The second defines *f* to be the integer successor function.
 
 The remaining two statements are properties about *t* and *f* to
-prove. These properties are proved using only the context of the
-isolate, without any facts declared outside.
+be proved. These properties are proved using only the context of the
+isolate, without any judgments admitted outside.
 
 Now suppose we want to prove an extra property using `t_theory`:
 
@@ -603,16 +637,17 @@ and the definiton of *f* as the successor function are ignored.
 Exporting properties
 --------------------
 
-As an alternative, we cal tell IVY which facts in `t_theory` are to be
-made available to other isolates and which are to be hidden. We place
-the hidden parts in a component object called `impl`:
+As a more convenient alternative, we can tell IVy which facts in
+`t_theory` are to be made available to other isolates and which are to
+be hidden. We place the hidden parts in a section called
+`implementation`:
 
     type t
     function f(X:t) : t
 
     isolate t_theory = {
 
-        object impl = {
+        implementation {
             interpret t -> int
 	    definition f(X) = X + 1
         }
@@ -622,7 +657,7 @@ the hidden parts in a component object called `impl`:
 
     }
 
-Now, we can bring in the visible parts of `t_theory` like this:
+Now, we can use just the visible parts of `t_theory` like this:
 
     isolate extra = {
  
@@ -630,6 +665,15 @@ Now, we can bring in the visible parts of `t_theory` like this:
 
     }
     with t_theory
+
+Hiding a theory inside an isolate in this way is a very useful
+technique for keeping verification conditions decidable. Although
+definitions in the implementation section of an isolate are hidden
+from the `auto` tactic while proving other isolates, they can still be
+used when extracting executable code. Also, other isolates can still
+use the implementation declarations by explicitly referring to them.
+In particular, attaching the clause `with t` to any isolate will cause
+the `auto` tactic to use the integer theory for `t` in that isolate.
 
 Hierarchies of isolates
 -----------------------
@@ -645,7 +689,7 @@ structured like this:
  
 	isolate t_theory = {
 
-	    object impl = {
+	    implementation {
 		interpret t -> int
 		definition f(X) = X + 1
 	    }
@@ -668,27 +712,16 @@ Thus far, proof developments have been presented in order. That is,
 judgements occur in the file in the order in which they are admitted
 to the proof context.
 
-In practice, this strict ordering can be inconvenient, or at least not
-very pedagogically sound. For example suppose we are developing a
-representation of sets based on arrays. We would like to specify first
-the visible parts of the interface (for example the algebraic
-properties of sets) and then later give the actual definitions of the
-set operations in terms of array operations.
+In practice, this strict ordering can be inconvenient. For example,
+from the point of view of clear presentation, it may often be better
+to state a theorem, and *then* develop a sequence of auxiliary
+definitions and lemmas needed to prove it.  Moreover, when developing
+an isolate, we would like to first state the visible judgments, then
+give the hidden implementation.
 
-To allow this sort of development, IVY constructs the proof order
-based on dependencies rather than the textual order within the file.
-The rules for dependencies are:
-
-- A property or definition referencing symbol *s* depends on the definition of *s*,
-- The properties in an isolate depend on any properties and definitions referenced in its `with` clause,
-- A property depends on any textually preceeding properties within the same isolate, and
-- A judgment depends on any property explicitly named in its proof.
-
-For these purposes, a property whose proof requires *s* to be fresh
-counts as a definition of *s*. For example, `property ... named s`
-counts as a definition of *s*.
-
-A proof that can't be ordered because of a dependency cycle is invalid.
+To achieve this, we can use a *specification* section. The
+declarations in this section are admitted logically *after* the other
+declarations in the section.
 
 As an example, we can rewrite the above proof development so that the
 visible properties of the isolates occur textually at the beginning:
@@ -699,47 +732,23 @@ visible properties of the isolates occur textually at the beginning:
 
     isolate extra = {
  
-        property [prop] f(f(X)) > X
+        specification {
+            property [prop] f(f(X)) > X
+        }
 
 	isolate t_theory = {
 
-	    property [expanding] f(X) > X
-	    property [transitivity] X:t < Y & Y < Z -> X < Z	
+            specification {
+	        property [expanding] f(X) > X
+	        property [transitivity] X:t < Y & Y < Z -> X < Z
+            }
 
-	    object impl = {
+	    implementation {
 		interpret t -> int
 		definition f(X) = X + 1
 	    }
-
 	}
     }
-
-IVy still requires that the first use of a symbol be its `type` or
-`function` declaration.
-
-Note that according to the above rules, a definition cannot depend on
-property unless the property is explicitly named in its proof. Suppose,
-for example, we have this definitional schema:
-
-    schema genrec[t] = {
-        type q
-	function pred(X:t) : q
-        function step(X:q,Y:t) : q
-        function fun(X:t) : q
-        property [descending] pred(X) < X
-	#--------------------------------
-        definition fun(X:t) = 0 if X <= 0 else step(fun(pred(X),X))
-    }
-
-This allows us to recur on any value less than *X* rather than just *X*-1.
-However, to admit this, we must prove the the function `pred` is descending.	
-We can use this schema as follows:
-
-    property [myprop] X-2 < X
-
-    definition mysum(X:t) = 0 if X <= 0 else (X + sum(X-2))
-    proof
-       apply genrec[t] with descending = myprop
 
 
 
