@@ -53,6 +53,26 @@ modified to disable crypto.
 - Install the [go language](https://golang.org/doc/install) on your platform.
 - Follow the instructions [here](https://github.com/kenmcmil/minq) to install MinQUIC.
 
+##### Go installation notes:
+
+Some instructions for installing specifically on Ubuntu are [here](https://github.com/golang/go/wiki/Ubuntu). Note that you need to make sure that the go binary is in your path, and do this:
+
+    $ cd ~
+    $ mkdir go
+    $ cd go
+    $ mkdir src
+    $ export GOPATH=`pwd`
+    $ echo export GOPATH=`pwd` >> ~/.profile 
+
+##### MinQUIC installation notes
+
+To get MinQUIC running, this command may be helpful:
+
+    cd $GOPATH/src
+    go get github.com/cloudflare/cfssl/helpers
+
+
+
 #### Running MinQUIC and capturing packets
 
 Change to the directory containing MinQUIC:
