@@ -512,7 +512,22 @@ def compile_match_list(proof,left_goal,right_goal):
 def compile_one_match(lhs,rhs,freesyms,constants):
     if il.is_variable(lhs):
         return fo_match(lhs,rhs,freesyms,constants)
-    return match(lhs,rhs,freesyms,constants)
+    rhsvs = dict((v.name,v) for v in lu.used_variables_ast(rhs))
+    vmatches = [{v.sort:rhsvs[v.name].sort} for v in lu.used_variables_ast(lhs)
+                  if v.name in rhsvs and v.sort in freesyms]
+    vmatch = merge_matches(*vmatches)
+    iu.dbg('vmatch')
+    if vmatch is None:
+        return None
+    lhs = apply_match_alt(vmatch,lhs)
+    iu.dbg('lhs')
+    freesyms = apply_match_freesyms(vmatch,freesyms)
+    iu.dbg('freesyms')
+    somatch = match(lhs,rhs,freesyms,constants)
+    iu.dbg('somatch')
+    fmatch = merge_matches(vmatch,somatch)
+    iu.dbg('fmatch')
+    return fmatch
 
 def compile_match(proof,prob,schema,decl):
     """ Compiles match in a proof. Only the symbols in
@@ -521,6 +536,7 @@ def compile_match(proof,prob,schema,decl):
     matches = compile_match_list(proof,schema,decl)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
     res = merge_matches(*matches)
+    iu.dbg
     return res
         
         
@@ -717,6 +733,9 @@ def heads_match(pat,inst,freesyms):
     if it has the same name and if it agrees on the non-free sorts in
     its type.
     """
+    iu.dbg('pat')
+    iu.dbg('inst')
+
     return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms) and pat.rep not in freesyms
         or not il.is_app(pat) and not il.is_quantifier(pat)
            and type(pat) is type(inst) and len(pat.args) == len(inst.args))

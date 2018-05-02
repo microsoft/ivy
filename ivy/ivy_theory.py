@@ -291,20 +291,20 @@ def get_assumes_and_asserts(preconds_only):
     for ldf in im.module.definitions:
         if not isinstance(ldf.formula,il.DefinitionSchema):
             if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-#                print 'macro : {}'.format(ldf.formula)
+                print 'macro : {}'.format(ldf.formula)
                 macros.append((ldf.formula.to_constraint(),ldf))
             else: # can't treat recursive definition as macro
-#                print 'axiom : {}'.format(ldf.formula)
+                print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-#            print 'axiom : {}'.format(ldf.formula)
+            print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-#            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:

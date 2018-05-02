@@ -324,7 +324,10 @@ ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.args[0].compile()
 )
 
-ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,sortify_with_inference(self.formula)])
+ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,
+                                                       self.formula.compile() 
+                                                       if isinstance(self.formula,ivy_ast.SchemaBody)
+                                                       else sortify_with_inference(self.formula)])
 
 # compiling update patterns is complicated because they declare constants internally
 def UpdatePattern_cmpl(self):
@@ -761,7 +764,11 @@ class IvyDomainSetup(IvyDeclInterp):
     def object(self,atom):
         self.domain.add_object(atom.rep)
     def axiom(self,ax):
-        self.domain.labeled_axioms.append(ax.compile())
+        cax = ax.compile()
+        if isinstance(cax.formula,ivy_ast.SchemaBody):
+            self.domain.schemata[cax.label.relname] = cax
+        else:
+            self.domain.labeled_axioms.append(cax)
     def property(self,ax):
         lf = ax.compile()
         self.domain.labeled_props.append(lf)
@@ -963,6 +970,7 @@ class IvyDomainSetup(IvyDeclInterp):
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
+            print self.domain.sig
             return
         rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)
@@ -971,9 +979,11 @@ class IvyDomainSetup(IvyDeclInterp):
         if lhs in interp:
             if interp[lhs] != rhs:
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
+            print self.domain.sig
             return
         if isinstance(rhs,ivy_ast.Range):
             interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+            print self.domain.sig
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.is_solver_sort,slv.is_solver_op],

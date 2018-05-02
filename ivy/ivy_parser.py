@@ -335,7 +335,7 @@ else:
         p[0] = check_non_temporal(p[1])
         lf = LabeledFormula(p[4],p[5])
         lf.lineno = get_lineno(p,3)
-        lf = addlabel(p[4],'axiom')
+        lf = addlabel(lf,'axiom')
         d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
         d.lineno = get_lineno(p,3)
         p[0].declare(d)

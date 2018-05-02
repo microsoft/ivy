@@ -642,7 +642,7 @@ class TacticWithMatch(AST):
     def match(self):
         return self.args[2:]
     def __str__(self):
-        res = self.tactic_name() + ' ' + str(args[0]) 
+        res = self.tactic_name() + ' ' + str(self.args[0]) 
         if len(self.args) > 1:
             res += ' ' + str(self.args[1])
         if len(self.args) > 2:
@@ -659,6 +659,8 @@ class AssumeTactic(TacticWithMatch):
 
 class ShowGoalsTactic(AST):
     def tactic_name(self):
+        return 'showgoals'
+    def __str__(self):
         return 'showgoals'
 
 class DeferGoalTactic(AST):

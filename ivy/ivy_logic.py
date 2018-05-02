@@ -915,17 +915,17 @@ class WithSymbols(object):
         global sig
         self.saved = []
         for sym in self.symbols:
-            if sig.contains_symbol(sym):
-                self.saved.append(sym)
-                sig.remove_symbol(sym)
-            sig.add_symbol(sym.name,sym.sort)
+            if sym.name in sig.symbols:
+                self.saved.append((sym.name,sig.symbols[sym.name]))
+                del sig.symbols[sym.name]
+            sig.symbols[sym.name] = sym
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
         for sym in self.symbols:
-            sig.remove_symbol(sym)
-        for sym in self.saved:
-            sig.add_symbol(sym.name,sym.sort)
+            del sig.symbols[sym.name]
+        for name,sym in self.saved:
+            sig.symbols[name] = sym
         return False # don't block any exceptions
 
 class WithSorts(object):
