@@ -1034,7 +1034,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                 fc.start()
                 if fc.assume():
                     if opt_show_vcs.get():
-                        print 'assume: {}'.format(fc.cond())
+                        print '\nassume: {}'.format(fc.cond())
                     s.add(clauses_to_z3(fc.cond()))
                     assumes.append(fc.cond())
                 else:
@@ -1042,7 +1042,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                         s.push()
                     foo = fc.cond()
                     if opt_show_vcs.get():
-                        print 'assert: {}'.format(foo)
+                        print '\nassert: {}'.format(foo)
                     s.add(clauses_to_z3(foo))
                     res = decide(s)
                     if res != z3.unsat:

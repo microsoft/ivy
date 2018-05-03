@@ -515,6 +515,10 @@ def universal_variables_rec(fmla,pos,univs):
         if pos == isinstance(fmla,lg.ForAll):
             univs.update(fmla.variables)
             return
+    if isinstance(fmla,Implies):
+        universal_variables_rec(fmla.args[0],not pos,univs),
+        universal_variables_rec(fmla.args[1],pos,univs)
+        return
     if isinstance(fmla,Not):
         pos = not pos
     for a in fmla.args:

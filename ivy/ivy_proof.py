@@ -147,7 +147,7 @@ class ProofChecker(object):
             schema = self.definitions[schemaname]
             schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
         else:
-            iu.dbg('self.definitions.keys()')
+            # iu.dbg('self.definitions.keys()')
             raise ProofError(proof,"No schema {} exists".format(schemaname))
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
@@ -516,17 +516,12 @@ def compile_one_match(lhs,rhs,freesyms,constants):
     vmatches = [{v.sort:rhsvs[v.name].sort} for v in lu.used_variables_ast(lhs)
                   if v.name in rhsvs and v.sort in freesyms]
     vmatch = merge_matches(*vmatches)
-    iu.dbg('vmatch')
     if vmatch is None:
         return None
     lhs = apply_match_alt(vmatch,lhs)
-    iu.dbg('lhs')
     freesyms = apply_match_freesyms(vmatch,freesyms)
-    iu.dbg('freesyms')
     somatch = match(lhs,rhs,freesyms,constants)
-    iu.dbg('somatch')
     fmatch = merge_matches(vmatch,somatch)
-    iu.dbg('fmatch')
     return fmatch
 
 def compile_match(proof,prob,schema,decl):
@@ -733,9 +728,6 @@ def heads_match(pat,inst,freesyms):
     if it has the same name and if it agrees on the non-free sorts in
     its type.
     """
-    iu.dbg('pat')
-    iu.dbg('inst')
-
     return (il.is_app(pat) and il.is_app(inst) and funcs_match(pat.rep,inst.rep,freesyms) and pat.rep not in freesyms
         or not il.is_app(pat) and not il.is_quantifier(pat)
            and type(pat) is type(inst) and len(pat.args) == len(inst.args))

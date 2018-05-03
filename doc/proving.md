@@ -1,7 +1,6 @@
----
-layout: page
-title: IVy as a theorem prover
----
+
+IVy as a theorem prover
+=======================
 
 In the development of systems, we sometimes have to reason about
 mathematical functions and relations in ways that automated theorem
@@ -9,8 +8,8 @@ provers can't handle reliably. For these cases, IVy provides a
 facility that allows the user to supply the necessary proofs. IVy's
 approach to theorem proving is designed to make maximal use of
 automated provers. We do this by localizing the proof into
-"isolates". Our proof obligations in each isolate are confined to a
-logical fragment that an automated prover can handle reliably.
+"isolates". Our verification conditions in each isolate are confined
+to a logical fragment that an automated prover can handle reliably.
 
 
 Primitives
@@ -25,7 +24,9 @@ Type declarations
 
 On such primitive is a type declaration, like this:
 
+```
     type t
+```
 
 This can be read as "let `t` be a type". This judgement is admissible
 provided `t` is new symbol that has not been used up to this point
@@ -36,27 +37,34 @@ Functions and individuals
 
 We can introduce a constant like this:
 
+```
     individual n : t
 
+```
 where `n` is new. This can be read as "let `n` be of type
 `t`". Every type has at least one element in it. This judgement gives
 a name to such an element.
 
-Similarly, we can introduce new function symbolss:
+Similarly, we can introduce new function and relation symbols:
 
+```
     function f(X:t) : t
+    relation r(X:t,Y:t)
 
-This is read as "for all *X* of type *t*, let *f*(*X*) be of type *t*". 
+```
+The first can be read as "for all *X* of type *t*, let *f*(*X*) be of type *t*". 
 
 Axioms
 ------
 
 An *axiom* is a statement that is admitted by fiat. For example:
 
-    axiom [idempotence] f(f(X)) = f(X)
+```
+    axiom [symmety_r] r(X,Y) -> r(Y,X)
 
+```
 The free variable *X* in the formula is taken as universally
-quantified. The text "idempotence" between brackets is a name for the
+quantified. The text `symmetry_r` between brackets is a name for the
 axiom and is optional. The axiom is simply admitted in the current
 context without proof. Axioms are dangerous, since they can introduce
 inconsistencies. You should use axioms only if you are developing a
@@ -68,11 +76,13 @@ Properties
 A *property* is a statement that can be admitted only if it follows
 logically from judgments in the current context. For example:
 
-    property [idem_n] f(n) = n -> f(f(n)) = n
+```
+    property [myprop] r(n,X) -> r(X,n)
 
+```
 A property requires a proof (see below). If a proof is not supplied,
 IVy applies its proof tactic `auto`.  This calls the automated prover
-Z3 to attempt to prove the property from all of previously admitted
+Z3 to attempt to prove the property from the previously admitted
 judgments in the current context.
 
 Definitions
@@ -81,9 +91,12 @@ Definitions
 A definition is a special form of axiom that cannot introduce an
 inconsistency. As an example:
 
+```
     function g(X:t) : t
+
     definition g(X) = f(X) + 1
 
+```
 This is read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
 definition is admissible if the symbol *g* is "fresh", meaning it does
 not occur in any existing properties or definitions. Further *g* must
@@ -99,9 +112,12 @@ called `int`. It has the signature `{+,-,*,/,<}`, plus the integer
 numerals, and provides the axioms of Peano arithmetic. To instantiate
 the theory `int` using type *t* for the integers, we write:
 
-    interpret t -> int
+```
+    type u
+    interpret u -> int
 
-This declaration requires that type `t` is not previously interpreted
+```
+This declaration requires that type `u` is not previously interpreted
 and that the symbols `{+,-,*,/,<}` in the signature of `int` are
 fresh. Notice, though, that the symbols `{+,-,*,/,<}` are
 overloaded. This means that `+` over distinct types is considered to
@@ -119,14 +135,18 @@ type-correct values for the premises and the conclusion will follow.
 
 Here is a simple example of a schema taken as an axiom:
 
+```
     axiom [congruence] {
         type d
-	type r
+        type r
         function f(X:d) : r
-        #--------------------------
+```
+--------------------------
+```
         property X = Y -> f(X) = f(Y)
     }
 
+```
 The schema is contained in curly brackets and gives a list of premises
 following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
 *d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
@@ -138,28 +158,32 @@ given, without proof. However, as we will see, the default `auto`
 tactic treats a schema differently from a simple proposition. That is,
 a schema is never used by default, but instead must be explicitly
 instantiated.  This allows is to express and use facts that, if they
-occerred in a verification condition, would take us outside the
+occurred in a verification condition, would take us outside the
 decidable fragment.
 
 Any judgment that has been admitted in the current context can be
 *applied* in a proof. When we apply a schema, we supply values for its
 premises to infer its conclusion.
 
-    property [prop_n] Z=n -> Z + 1 = n + 1
-    proof 
-        apply congruence
 
+```
+    property [prop_n] Z = n -> Z + 1 = n + 1
+    proof 
+        apply congruence;
+        showgoals
+
+```
 The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
 IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
 values for premises, that is, the types *d*,*r* function *f*. It also chooses values for the
 the free variables *X*,*Y* occurring in the schema. In this case, it
 discovers the following assignment:
 
-    d = t
-    r = t
-    X = Z
-    Y = n
-    f(N) = N + 1
+    # d = t
+    # r = t
+    # X = Z
+    # Y = n
+    # f(N) = N + 1
 
 After plugging in this assignment, the conclusion of the rule exactly matches
 the property to be proved, so the property is admitted.
@@ -169,15 +193,18 @@ The problem of finding an assignment such as the one above is one of
 unique. In case IVy did not succeed in finding the above match, we
 could also write the proof more explicitly, like this:
 
+```
+    property [prop_n_2] Z = n -> Z + 1 = n + 1
     proof
-        apply congruence with d=t, r=t, X=Z, Y=n, f(N)=N+1
+        apply congruence with X=Z, Y=n, f(X) = X:t + 1
 
+```
 Each of the above equations acts as a constraint on the
-assignment. That is, it must convert *d* to *t*, *r* to *t*, *X* to
-*Z* and so on. By giving such equations, we can narrow the
-possibilities down to just one assignment. Alternatively, we can also
-give a subset of the desired assignment, relying on Ivy's matching
-algorithm to fill in the rest.
+assignment. That is, it must convert *X* to
+*Z*, *Y* to *n* and *f*(*X*) to *X* + 1. Notice that we had to
+explicitly type *X* on the right-hand side of the last equation,
+since its type couldn't be inferred (and in fact it's not the same
+as the type of *X* on the left-hand side, which is *d*). 
 
 It's also possible to write constraints that do not allow for any
 assignment. In this case, Ivy complains that the provided match is
@@ -192,36 +219,48 @@ becomes a *subgoal* which we must then prove.
 
 For example, consider the following axiom schema:
 
+```
+    relation man(X:t)
+    relation mortal(X:t)
+
     axiom [mortality_of_man] {
         property [prem] man(X)
-        #---------------
+```
+---------------
+```
         property mortal(X)
     }
 
-Suppose we write this proof:
+```
+We take as a given that Socrates is a man, and prove he is mortal:
+
+```
+    individual socrates : t
+
+    axiom [soc_man] man(socrates)
 
     property mortal(socrates)
     proof
-        apply mortality_of_man with X=socrates
+        apply mortality_of_man
 
-To apply the axiom `mortality _of_man`, IVy needs to supply the premise
-`man(socrates)`. In the absense of such a judgment, IVy sets it up as a new proof goal. Since we didn't
-supply a proof for this subgoal, IVy would use its default tactic
-`auto`, which supplies the proof using the automated prover, if possible.
+```
+The axiom `mortality _of_man`, requires us supply the premise
+`man(socrates)`. Since this premise isn't present in our theorem,
+IVy sets it up as a proof subgoal. We didn't supply a proof of this
+subgoal, so IVy uses its default tactic `auto`, which in this case
+can easily prove that the axiom `man(socrates)` implies
+`man(socrates)`.
 
-Suppose on the other hand that we have this axiom available:
+If we wanted to prove this manually, however, we could continue our proof by
+applying the axiom `soc_man`, like this:
 
-    axiom [socrates_species] {
-        #------------------
-	property man(socrates)
-    }
-
-We could chain this rule to the first one like this:
-
+```
+    property mortal(socrates)
     proof
-        apply mortality_of_man with X=socrates;
-        apply socrates_species
+        apply mortality_of_man;
+        apply soc_man
 
+```
 The prover maintains a list of proof goals, to be proved in order from
 first to last
 Applying a rule, if it succeeds, removes the first goal from the list,
@@ -230,48 +269,36 @@ prover applies its default tactic `auto` to the remaining goals.
 
 In the above proof, we start with this goal:
 
-    property mortal(socrates)
+    # property mortal(socrates)
 
 Applying axiom `mortality_of_man` we are left with the following subgoal:
 
-    property man(socrates)
+    # property man(socrates)
 
-Applying axiom `socrates_species` then leaves us with no unproved goals.
+Applying axiom `soc_man` then leaves us with no subgoals.
 
-Notice that proof chaining works backward from conclusions to premises.
+Notice that the proof works backward from conclusions to premises.
 
-Generally speaking, it isn't a good idea to build up complex proof
-sequences. Such proofs are difficult to read, since the sub-goals are
-not visible. We could instead have been a bit more explicit, like
-this:
-
-    property man(socrates)
-    proof
-        apply socrates_species
-    
-    property mortal(socrates)
-    proof
-        apply mortality_of_man with X=socrates
-
-The first proof provides the premise needed by the second.
-
-A note on matching. There may be many ways to match a given proof goal
-to the conclusion of a rule. Different matches can result in different
-sub-goals, which may affect whether a proof succeeds. IVy doesn't
-attempt to verify that the match it finds is unique. For this reason,
-when subgoals are produced, it may be a good idea to give the match
-explicitly (as we did above, though in this case there is only one
-match).
+A note on matching: There may be many ways to match a given proof
+goal to the conclusion of a rule. Different matches can result in
+different sub-goals, which may affect whether a proof succeeds. IVy
+doesn't attempt to verify that the match it finds is unique. For
+this reason, when it isn't obvious there there is a single match, it
+may be a good idea to give the match explicitly (though we didn't
+above, as in this case there is only one possible match).
 
 When chaining proof rules, it is helpful to be able to see the
 intermediate subgoals. This can be done with the `showgoals` tactic,
 like this:
 
+```
+    property mortal(socrates)
     proof
-        apply mortality_of_man with X=socrates;
+        apply mortality_of_man;
         showgoals;
-        apply socrates_species
+        apply soc_man
 
+```
 When checking the proof, the `showgoals` tactic has the effect of
 printing the current list of proof goals, leaving the goals unchanged.
 A good way to develop a proof is to start with just `showgoals`, and to add tactics
@@ -285,56 +312,73 @@ Thus far, we have seen schemata used only as axioms. However, we can also
 prove the validity of a schema as a *theorem*. For example, here is a theorem
 expressing the transitivity of equality:
 
+```
     theorem [trans] {
         type t
         property X:t = Y
         property Y:t = Z
-        #--------------------------------
+```
+--------------------------------
+```
         property X:t = Z
     }
 
-We don't need a proof for this, since the `auto` tactic can handle it. Here is a rule
-for eliminating existential quantifiers:
+```
+We don't need a proof for this, since the `auto` tactic can handle
+it. The verification condition that ivy generates is `X = Y & Y = Z
+-> X = Z`.  Here is a theorem that lets us elimiante universal
+quantifiers:
 
-theorem [elimA] {
-    type t
-    function p(X:t) : bool
-    property forall Y. p(Y)
-    #--------------------------------
-    property p(X)
-}
+```
+    theorem [elimA] {
+        type t
+        function p(X:t) : bool
+        property forall Y. p(Y)
+```
+--------------------------------
+```
+        property p(X)
+    }
 
+```
 It says, for any predicate *p*, if `p(Y)` holds for all *Y*, then
-`p(X)` holds for a particular *X*. Again, the `auto` tactic can prove
-this. Now let's derive a consequence of these facts. A function *f* is
-*idempotent* if applying twice gives the same result as applying it
-once. This theorem says that, if *f* is idempotent, then applying three
-times is the same as applying it once:
+`p(X)` holds for a particular *X*. Again, the `auto` tactic can
+prove this easily. Now let's derive a consequence of these facts. A
+function *f* is *idempotent* if applying it twice gives the same
+result as applying it once. This theorem says that, if *f* is
+idempotent, then applying three times is the same as applying it
+once:
 
+```
     theorem [idem2] {
         type t
         function f(X:t) : t
         property forall X. f(f(X)) = f(X)
-        #--------------------------------
+```
+--------------------------------
+```
         property f(f(f(X))) = f(X)
     }
 
+```
 The auto tactic can't prove this because the presmise contains a
 function cycle with a universally quantified variable. Here's the
 error message it gives:
 
-    error: The verification condition is not in logic epr.
-
-    Note: the following functions form a cycle:
-      function f(V0:t) : t
+    # error: The verification condition is not in logic epr.
+    #
+    # Note: the following functions form a cycle:
+    #  function f(V0:t) : t
 
 This means we'll need to apply some other tactic. Here is one possible proof:
 
+```
     proof
         apply trans with Y = f(f(X));
         apply elimA with X = f(X);
         apply elimA with X = X
 
+```
 We think this theorem holds because `f(f(f(X)))` is equal to `f(f(X))`
 (by idempotence of *f*) which in turn is equal to `f(X)` (again, by
 idempotence of *f*). This means we want to apply the transitivy rule, where
@@ -342,37 +386,37 @@ the intermediate term *Y* is `f(f(x))`. Notice we have to give the value of *Y*
 explicitly. Ivy isn't clever enough to guess this intermediate term for us.
 This gives us the following two proof subgoals:
 
-    theorem [prop2] {
-        type t
-        function f(V0:t) : t
-        property [prop5] forall X. f(f(X)) = f(X)
-        #----------------------------------------
-        property f(f(f(X))) = f(f(X))
-    }
+    # theorem [prop2] {
+    #     type t
+    #     function f(V0:t) : t
+    #     property [prop5] forall X. f(f(X)) = f(X)
+    #     #----------------------------------------
+    #     property f(f(f(X))) = f(f(X))
+    # }
 
 
-    theorem [prop3] {
-        type t
-        function f(V0:t) : t
-        property [prop5] forall X. f(f(X)) = f(X)
-        #----------------------------------------
-        property f(f(X)) = f(X)
-    }
+    # theorem [prop3] {
+    #     type t
+    #     function f(V0:t) : t
+    #     property [prop5] forall X. f(f(X)) = f(X)
+    #     #----------------------------------------
+    #     property f(f(X)) = f(X)
+    # }
 
-Now we see the the conclusion in both cases is an instance of the
+Now we see that the conclusion in both cases is an instance of the
 idempotence assumption, for a particular value of *X*. This means
 we can apply the `elimA` rule that we proved above. In the first case,
 the value of `X` for which we are claiming idempotence is `f(X)`.
 With this assignment, IVy can match `p(X)` to `f(f(f(X))) = f(X)`.
-Thi substituion produces a new subgoal as follows:
+This substituion produces a new subgoal as follows:
 
-    theorem [prop2] {
-        type t
-        function f(V0:t) : t
-        property [prop5] forall X. f(f(X)) = f(X)
-        #----------------------------------------
-        property forall Y. f(f(f(Y))) = f(f(Y))
-    }
+    # theorem [prop2] {
+    #     type t
+    #     function f(V0:t) : t
+    #     property [prop5] forall X. f(f(X)) = f(X)
+    #     #----------------------------------------
+    #     property forall Y. f(f(f(Y))) = f(f(Y))
+    # }
 
 This goal is trivial, since the conclusion is exactly the same as one
 of the premises, except for the names of bound variables. Ivy proves
@@ -401,16 +445,18 @@ Recursion
 Recursive definitions are permitted in IVy by instantiating a
 *definitional schema*. As an example, consider the following axiom schema:
 
-    axiom [rec[t]] {
-	type q
-	function base(X:t) : q
-	function step(X:q,Y:t) : q
-	fresh function fun(X:t) : q
-	#---------------------------------------------------------
-	definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
-    }
+    # axiom [rec[u]] {
+    #     type q
+    #     function base(X:u) : q
+    #     function step(X:q,Y:u) : q
+    #     fresh function fun(X:u) : q
+    #     #---------------------------------------------------------
+    #     definition fun(X:u) = base(X) if X <= 0 else step(fun(X-1),X)
+    # }
 
-This schema shows how to construct a fresh function `fun` from two functions:
+This axiom was provided as part of the integer theory when we
+interpreted type *u* as `int`.  It gives a way to construct a fresh
+function `fun` from two functions:
 
 - `base` gives the value of the function for inputs less than or equal to zero.
 - `step` gives the value for positive *X* in terms of *X* and the value for *X*-1
@@ -419,13 +465,15 @@ A definition schema such as this requires that the defined function
 symbol be fresh. With this schema, we can define a recursive function that
 adds the non-negative numbers less than or equal to *X* like this:
 
-    function sum(X:t) : t
+```
+    function sum(X:u) : u
 
     definition [defsum] {
-       sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
+       sum(X:u) = 0 if X <= 0 else (X + sum(X-1))
     }
     proof
-       apply rec[t]
+       apply rec[u]
+```
 
 Notice that we wrote the definition as a schema rather than a simple
 proposition.  This is because it has a universally quantified variable
@@ -434,9 +482,9 @@ fragment. Becuase this definitoin is a schema, when we want to use it,
 we'll have to apply it explicitly,
 
 In order to admit this definition, we applied the definition
-schema `rec[t]`. Ivy infers the following assignment:
+schema `rec[u]`. Ivy infers the following assignment:
 
-    q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
+    # q=t, base(X) = 0, step(X,Y) = Y + X, fun(X) = sum(X)
 
 This allows the recursive definition to be admitted, providing that
 `sum` is fresh in the current context (i.e., we have not previously refered to
@@ -445,9 +493,9 @@ This allows the recursive definition to be admitted, providing that
 When we instantiate a theory, it generally comes with a recursion
 schema for the given type.  For example, if we say:
 
-    intepret t -> int
+    # intepret t -> int
 
-then the above recursion schema `rec[t]` automatically becomes available.
+then the above recursion schema `rec[u]` automatically becomes available.
 
 ### Extended matching
 
@@ -455,27 +503,31 @@ Suppose we want to define a function that takes an additional
 parameter. For example, before summing, we want to divide all the
 numbers by *N*. We can define such a function like this:
 
-    definition [defsumdiv]
+```
+    function sumdiv(N:u,X:u) : u
+
+    definition
         sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
     proof
-       apply rec[t]
+       apply rec[u]
 
-In matching the recursion schema `rec[t]`, IVy will extend the
-function symbols in the premises of `rec[t]` with an extra parameter *N* so that
+```
+In matching the recursion schema `rec[u]`, IVy will extend the
+function symbols in the premises of `rec[u]` with an extra parameter *N* so that
 schema becomes:
 
-    axiom [ rec[t] ] = {
-	type q
-	function base(N:t,X:t) : q
-	function step(N:t,X:q,Y:t) : q
-	fresh function fun(N:t,X:t) : q
-	#---------------------------------------------------------
-	definition fun(N:t,X:t) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
-    }
+    # axiom [rec[u]] = {
+    #     type q
+    #     function base(N:u,X:u) : q
+    #     function step(N:u,X:q,Y:u) : q
+    #     fresh function fun(N:u,X:u) : q
+    #     #---------------------------------------------------------
+    #     definition fun(N:u,X:u) = base(N,X) if X <= 0 else step(N,fun(N,X-1),X)
+    # }
 
 The extended schema matches the definition, with the following assignment:
 
-    q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
+    # q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
     
 This is somewhat as if functions were "curried", in which case the
 free symbol `fun` would match the curried function term `sumdiv N`.
@@ -492,37 +544,44 @@ that IVy needs manual help. To prove a property by induction, we define
 an invariant and prove it by instantiating an induction schema. Here is
 an example of such a schema, that works for the non-negative integers:
 
-   axiom ind[t] = {
-       relation p(X:t)
-       property X <= 0 -> p(X)
-       property p(X) -> p(X+1)
-       #--------------------------
-       property p(X)    
-   }
+```
+    axiom [ind[u]] {
+        relation p(X:u)
+        property X <= 0 -> p(X)
+        property p(X) -> p(X+1)
+```
+--------------------------
+```
+        property p(X)    
+    }
 
-Like the recursion schema `rec[t]`, the induction schema `ind[t]` is
+```
+Like the recursion schema `rec[u]`, the induction schema `ind[u]` is
 part of the integer theory, and becomes available when we interpret
 type `t` as `int`.
 
 Suppose we want to prove that `sum(Y)` is always greater than or equal
 to *Y*, that is:
 
+```
     property sum(Y) >= Y
 
+```
 We can prove this by applying our induction schema:
 
+```
     proof
-        apply ind[t];
+        apply ind[u] with X = Y;
         assume sum with X = Y;
         defergoal;
-        assume sum with X = Y + 1;
+        assume sum with X = Y + 1
 
+```
+Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 
-Applying `ind[t]` produces two sub-goals, a base case and an induction step:
+    # property X <= 0 -> sum(X) <= X
 
-    property X <= 0 -> sum(X) <= X
-
-    property sum(X) <= X -> sum(X+1) <= X + 1
+    # property sum(X) <= X -> sum(X+1) <= X + 1
 
 The `auto` tactic can't prove these goals because the definition of
 `sum` is a schema that must explicitly instantiated (if we try it,
@@ -535,18 +594,18 @@ we can name the definition itself and refer to it by this name.
 
 After instantiating the definition of `sum`, our two subgoals look like this:
 
-    ind1.ivy: line 21: Proof goals:
+    # ind1.ivy: line 21: Proof goals:
 
-    theorem [prop5] {
-        property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
-        property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
-    }
+    # theorem [prop5] {
+    #     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
+    #     property sum(Y) >= Y -> sum(Y + 1) >= Y + 1
+    # }
 
 
-    theorem [prop4] {
-        property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
-        property Y:t <= 0 -> sum(Y) >= Y
-    }
+    # theorem [prop4] {
+    #     property [def2] sum(Y) = (0 if Y <= 0 else Y + sum(Y - 1))
+    #     property Y:u <= 0 -> sum(Y) >= Y
+    # }
 
 
 Because these goals are quantifier-free the `auto` tactic can easily
@@ -562,8 +621,13 @@ example, suppose that we can prove that, for every *X*, there exists a
 *X*, produces such a *Y*. We can define such a function called `next`
 in the following way:
 
+```
+    relation succ(X:t,Y:t)
+    axiom exists Y. succ(X,Y)
+
     property exists Y. succ(X,Y) named next(X)
 
+```
 Provided we can prove the property, and that `next` is fresh, we can
 infer that, for all *X*, `succ(X,next(X))` holds. Defining a function
 in this way, (that is, as a Skolem function) can be quite useful in
@@ -594,27 +658,33 @@ Suppose, for example, that we want to define a function *f*, but keep
 the exact definition hidden, exposing only certain properties of the
 function. We could write something like this:
 
-    type t
-    function f(X:t) : t
-
+```
     isolate t_theory = {
 
-        interpret t -> int
-	definition f(X) = X + 1
+        implementation {
+            interpret t -> int
+            definition f(X) = X + 1
+        }
 
-        property [expanding] f(X) > X
-	property [transitivity] X:t < Y & Y < Z -> X < Z	
+        theorem [expanding] { 
+            property f(X) > X
+        }
+        property [transitivity] X:t < Y & Y < Z -> X < Z        
 
     }
 
+```
 Any names declared within the isolate belong to its namespace. For
 example, the names of the two properties above are
 `t_theory.expanding` and `t_theory.transitivity`.
 
-The isolate contains four statements. The first, says the type `t` is
-to be interpreted as the integers. This instantiates the theory of the
-integers for type `t`, giving the usual meaning to operators like `+`
-and `<`. The second defines *f* to be the integer successor function.
+The isolate contains four declarations. The first, says the type `t`
+is to be interpreted as the integers. This instantiates the theory
+of the integers for type `t`, giving the usual meaning to operators
+like `+` and `<`. The second defines *f* to be the integer successor
+function.  These two declarations are contained an *implemenation*
+section. This means that the `auto` tactic will use them only within
+the isolate and not outside.
 
 The remaining two statements are properties about *t* and *f* to
 be proved. These properties are proved using only the context of the
@@ -622,58 +692,44 @@ isolate, without any judgments admitted outside.
 
 Now suppose we want to prove an extra property using `t_theory`:
 
+```
     isolate extra = {
- 
-        property [prop] f(f(X)) > X
 
-    }
-    with t_theory.expanding, t_theory.transitivity
-
-The 'with' clause says that the properties `expanding` and
-`transitivy` from isolate `t_theory` should be included in the context when
-proving `extra.prop`. The interpretation of *t* as the integers
-and the definiton of *f* as the successor function are ignored.
-
-Exporting properties
---------------------
-
-As a more convenient alternative, we can tell IVy which facts in
-`t_theory` are to be made available to other isolates and which are to
-be hidden. We place the hidden parts in a section called
-`implementation`:
-
-    type t
-    function f(X:t) : t
-
-    isolate t_theory = {
-
-        implementation {
-            interpret t -> int
-	    definition f(X) = X + 1
+        theorem [prop] {  
+            property Y < Z -> Y < f(Z)
         }
-
-        property [expanding] f(X) > X
-	property [transitivity] X:t < Y & Y < Z -> X < Z	
-
-    }
-
-Now, we can use just the visible parts of `t_theory` like this:
-
-    isolate extra = {
- 
-        property [prop] f(f(X)) > X
-
+        proof
+            assume t_theory.expanding with X = Z
     }
     with t_theory
 
-Hiding a theory inside an isolate in this way is a very useful
-technique for keeping verification conditions decidable. Although
-definitions in the implementation section of an isolate are hidden
-from the `auto` tactic while proving other isolates, they can still be
-used when extracting executable code. Also, other isolates can still
-use the implementation declarations by explicitly referring to them.
-In particular, attaching the clause `with t` to any isolate will cause
-the `auto` tactic to use the integer theory for `t` in that isolate.
+```
+The 'with' clause says that the properties in `t_theory` should be
+used by the `auto` tactic within the isolate. In this case, the `transitivy` 
+property will be used by default. This pattern is particularly useful when
+we have a collection of propties of an abstract datatype that we wish to
+use widely without explicitly instantiating them. 
+
+Notice that `auto` will not use the interpretation of *t* as the
+integers and the definiton of *f* as the successor function, since
+these are in the implementation section of isolate `t_theory` and are therefore
+hidden from other isolates. Similarly, theorem `expanding` is not used by default
+because it is a schema. This is as intended, since including any of these facts would
+put the verification condition outside the decidable fragment.
+
+We used two typical techniques here to keep the verification
+conditions decidable.  First, we hid the integer theory and the
+definition of *f* inside an isolate, replacing them with some
+abstract properties. Second, we eliminated a potential cycle in the
+function graph by instantiating the quantifier implicit in theorm
+`expanding`, resulting in a quantifier-free proof goal.
+
+The `with` clause of an isolate can also refer to specific
+properties, definitions and types. For example, if we wish the
+`auto` tactic to use the definition of *f* in spite of its being
+hidden, we can say `with f` and similarly, if we wish to use the
+interpretation of `t` as the integers, we can say `with t`.
+
 
 Hierarchies of isolates
 -----------------------
@@ -682,28 +738,36 @@ An isolate can in turn contain isolates. This allows us to structure a
 proof hierarchically. For example, the above proof could have been
 structured like this:
 
-    type t
-    function f(X:t) : t
 
-    isolate extra = {
- 
-	isolate t_theory = {
+```
+    isolate extra2 = {
 
-	    implementation {
-		interpret t -> int
-		definition f(X) = X + 1
-	    }
+        function f(X:t) : t
 
-	    property [expanding] f(X) > X
-	    property [transitivity] X:t < Y & Y < Z -> X < Z	
+        isolate t_theory = {
 
-	}
- 
-        property [prop] f(f(X)) > X
+            implementation {
+                interpret t -> int
+                definition f(X) = X + 1
+            }
+
+            theorem [expanding] { 
+                property f(X) > X
+            }
+            property [transitivity] X:t < Y & Y < Z -> X < Z        
+
+        }
+
+        theorem [prop] {  
+            property Y < Z -> Y < f(Z)
+        }
+        proof
+            assume t_theory.expanding with X = Z
 
     }
 
-The parent isolate uses only the visible parts of the child isolate. 
+```
+The parent isolate `extra2` uses only the visible parts of the child isolate `t_theory`. 
 
 Proof ordering and refinement
 -----------------------------
@@ -727,54 +791,32 @@ As an example, we can rewrite the above proof development so that the
 visible properties of the isolates occur textually at the beginning:
 
 
-    type t
-    function f(X:t) : t
 
-    isolate extra = {
- 
+```
+    isolate extra3 = {
+
+        function f(X:t) : t
+
         specification {
-            property [prop] f(f(X)) > X
+            theorem [prop] {  
+                property Y < Z -> Y < f(Z)
+            }
+            proof
+                assume t_theory.expanding with X = Z
         }
 
-	isolate t_theory = {
+        isolate t_theory = {
 
             specification {
-	        property [expanding] f(X) > X
-	        property [transitivity] X:t < Y & Y < Z -> X < Z
+                theorem [expanding] { 
+                    property f(X) > X
+                }
+                property [transitivity] X:t < Y & Y < Z -> X < Z        
             }
 
-	    implementation {
-		interpret t -> int
-		definition f(X) = X + 1
-	    }
-	}
+            implementation {
+                interpret t -> int
+                definition f(X) = X + 1
+            }
+        }
     }
-
-
-
-
-
-    
-
-    
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-

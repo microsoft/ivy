@@ -119,7 +119,7 @@ def get_sort_arcs(assumes,asserts,strat_map):
 
 #    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
-        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
+        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]) and func[0] in symbols_over_universals:
             yield (find(node),find(strat_map[func[0]]),func[0])
 
     for fmla,ast in assumes + asserts:
@@ -151,8 +151,6 @@ def map_fmla(fmla,strat_map):
     if il.is_variable(fmla):
         if fmla not in strat_map:
             res = UFNode()
-            if fmla in universally_quantified_variables:
-                res.variables.add(fmla)
             strat_map[fmla] = res
         return strat_map[fmla]
     nodes = [map_fmla(f,strat_map) for f in fmla.args]
@@ -181,11 +179,11 @@ def create_strat_map(assumes,asserts,macros):
     all_fmlas.extend(pair[0] for pair in macros)
 #    for f in all_fmlas:
 #        print f
-    symbols_over_universals = il.symbols_over_universals(all_fmlas)
+    symbols_over_universals = set(il.symbols_over_universals(all_fmlas))
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-#    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
-#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
+    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts+macros:
@@ -205,6 +203,7 @@ def get_unstratified_funs(assumes,asserts,macros):
     assumes = map(vupair,assumes)
     asserts = map(vupair,asserts)
     macros = map(vupair,macros)
+
     strat_map = create_strat_map(assumes,asserts,macros)
     
 #    for f,g in macros:
@@ -222,8 +221,11 @@ def get_unstratified_funs(assumes,asserts,macros):
         if scc_map[ds] == scc_map[rng]:
             scc_arcs[scc_map[ds]].append(ast)
             
-    for y in strat_map.values():
-        find(y).variables.update(y.variables)
+    for x,y in strat_map.iteritems():
+        if il.is_variable(x) and x in universally_quantified_variables:
+            find(y).variables.add(x)
+
+#    show_strat_map(strat_map)
 
     fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs)
                 if y and any(len(n.variables) > 0 for n in x)]
