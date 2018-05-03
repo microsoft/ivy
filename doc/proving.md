@@ -140,9 +140,7 @@ Here is a simple example of a schema taken as an axiom:
         type d
         type r
         function f(X:d) : r
-```
---------------------------
-```
+        #--------------------------
         property X = Y -> f(X) = f(Y)
     }
 
@@ -225,9 +223,7 @@ For example, consider the following axiom schema:
 
     axiom [mortality_of_man] {
         property [prem] man(X)
-```
----------------
-```
+        #---------------
         property mortal(X)
     }
 
@@ -317,9 +313,7 @@ expressing the transitivity of equality:
         type t
         property X:t = Y
         property Y:t = Z
-```
---------------------------------
-```
+        #--------------------------------
         property X:t = Z
     }
 
@@ -334,9 +328,7 @@ quantifiers:
         type t
         function p(X:t) : bool
         property forall Y. p(Y)
-```
---------------------------------
-```
+        #--------------------------------
         property p(X)
     }
 
@@ -354,9 +346,7 @@ once:
         type t
         function f(X:t) : t
         property forall X. f(f(X)) = f(X)
-```
---------------------------------
-```
+        #--------------------------------
         property f(f(f(X))) = f(X)
     }
 
@@ -549,9 +539,7 @@ an example of such a schema, that works for the non-negative integers:
         relation p(X:u)
         property X <= 0 -> p(X)
         property p(X) -> p(X+1)
-```
---------------------------
-```
+        #--------------------------
         property p(X)    
     }
 
