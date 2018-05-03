@@ -182,8 +182,8 @@ def create_strat_map(assumes,asserts,macros):
     symbols_over_universals = set(il.symbols_over_universals(all_fmlas))
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
-    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+#    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
+#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts+macros:
@@ -293,20 +293,20 @@ def get_assumes_and_asserts(preconds_only):
     for ldf in im.module.definitions:
         if not isinstance(ldf.formula,il.DefinitionSchema):
             if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-                print 'macro : {}'.format(ldf.formula)
+#                print 'macro : {}'.format(ldf.formula)
                 macros.append((ldf.formula.to_constraint(),ldf))
             else: # can't treat recursive definition as macro
-                print 'axiom : {}'.format(ldf.formula)
+#                print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-            print 'axiom : {}'.format(ldf.formula)
+#            print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+#            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:

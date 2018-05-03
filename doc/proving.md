@@ -9,7 +9,8 @@ facility that allows the user to supply the necessary proofs. IVy's
 approach to theorem proving is designed to make maximal use of
 automated provers. We do this by localizing the proof into
 "isolates". Our verification conditions in each isolate are confined
-to a logical fragment that an automated prover can handle reliably.
+to a logical fragment or theory that an automated prover can handle
+reliably.
 
 
 Primitives
@@ -52,7 +53,8 @@ Similarly, we can introduce new function and relation symbols:
     relation r(X:t,Y:t)
 
 ```
-The first can be read as "for all *X* of type *t*, let *f*(*X*) be of type *t*". 
+The first can be read as "for all *X* of type *t*, let *f*(*X*) be of type *t*".
+The second is a shorthand to declare a function *r* whose range is type `bool`. 
 
 Axioms
 ------
@@ -66,9 +68,10 @@ An *axiom* is a statement that is admitted by fiat. For example:
 The free variable *X* in the formula is taken as universally
 quantified. The text `symmetry_r` between brackets is a name for the
 axiom and is optional. The axiom is simply admitted in the current
-context without proof. Axioms are dangerous, since they can introduce
-inconsistencies. You should use axioms only if you are developing a
-foundational theory and you know what you are doing.
+context without proof. Axioms are dangerous, since they can
+introduce inconsistencies. You should use axioms only if you are
+developing a foundational theory and you know what you are doing, or
+to make a temporary assumption that will later be removed.
 
 Properties
 ----------
@@ -81,9 +84,22 @@ logically from judgments in the current context. For example:
 
 ```
 A property requires a proof (see below). If a proof is not supplied,
-IVy applies its proof tactic `auto`.  This calls the automated prover
-Z3 to attempt to prove the property from the previously admitted
-judgments in the current context.
+IVy applies its default proof tactic `auto`.  This calls the
+automated prover Z3 to attempt to prove the property from the
+previously admitted judgments in the current context.
+
+The `auto` tactic works by generating a *verification condition* to
+be checked by Z3. This is a formula whose validity implies that the
+proeprty is admissible in the current context. In this case, the
+verification condition is:
+
+    #   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
+
+That is, it states that axiom `symmetry_r` implies property `myprop`. 
+IVy checks that this formula is within a logical fragment that Z3 can
+decide, then passes the formula to Z3. If Z3 finds that the formula is
+valid, the property is admitted.
+
 
 Definitions
 -----------
@@ -97,7 +113,7 @@ inconsistency. As an example:
     definition g(X) = f(X) + 1
 
 ```
-This is read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
+This can be read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
 definition is admissible if the symbol *g* is "fresh", meaning it does
 not occur in any existing properties or definitions. Further *g* must
 not occur on the right-hand side of the equality (that is, a recursive
@@ -110,7 +126,7 @@ IVy has built-in theories that can be instantated with a specific type
 as their carrier. For example, the theory of integer arithmetic is
 called `int`. It has the signature `{+,-,*,/,<}`, plus the integer
 numerals, and provides the axioms of Peano arithmetic. To instantiate
-the theory `int` using type *t* for the integers, we write:
+the theory `int` using type *u* for the integers, we write:
 
 ```
     type u
@@ -128,7 +144,7 @@ have these symbols in their signature).
 Schemata
 ========
 
-A *schema* is a compound judgment that takse a collection of judgments
+A *schema* is a compound judgment that takes a collection of judgments
 as input (the premises) and produces a judgment as output (the
 conclusion). If the schema is valid, then we can provide any
 type-correct values for the premises and the conclusion will follow.
@@ -189,7 +205,7 @@ the property to be proved, so the property is admitted.
 The problem of finding an assignment such as the one above is one of
 "second order matching".  It is a hard problem, and the answer is not
 unique. In case IVy did not succeed in finding the above match, we
-could also write the proof more explicitly, like this:
+could also have written the proof more explicitly, like this:
 
 ```
     property [prop_n_2] Z = n -> Z + 1 = n + 1
@@ -257,11 +273,11 @@ applying the axiom `soc_man`, like this:
         apply soc_man
 
 ```
-The prover maintains a list of proof goals, to be proved in order from
-first to last
-Applying a rule, if it succeeds, removes the first goal from the list,
-possibly replacing it with subgoals. At the end of the proof, the
-prover applies its default tactic `auto` to the remaining goals.
+The prover maintains a list of proof goals, to be proved in order
+from first to last.  Applying a rule, if it succeeds, removes the
+first goal from the list, possibly replacing it with subgoals. At
+the end of the proof, the prover applies its default tactic `auto`
+to the remaining goals.
 
 In the above proof, we start with this goal:
 
@@ -276,7 +292,7 @@ Applying axiom `soc_man` then leaves us with no subgoals.
 Notice that the proof works backward from conclusions to premises.
 
 A note on matching: There may be many ways to match a given proof
-goal to the conclusion of a rule. Different matches can result in
+goal to the conclusion of a schema. Different matches can result in
 different sub-goals, which may affect whether a proof succeeds. IVy
 doesn't attempt to verify that the match it finds is unique. For
 this reason, when it isn't obvious there there is a single match, it
@@ -297,8 +313,8 @@ like this:
 ```
 When checking the proof, the `showgoals` tactic has the effect of
 printing the current list of proof goals, leaving the goals unchanged.
-A good way to develop a proof is to start with just `showgoals`, and to add tactics
-before this. Running the Ivy proof checker in an Emacs compilation buffer
+A good way to develop a proof is to start with just the tactic `showgoals`, and to add tactics
+before it. Running the Ivy proof checker in an Emacs compilation buffer
 is a convenient way to do this. 
 
 Theorems
@@ -319,9 +335,11 @@ expressing the transitivity of equality:
 
 ```
 We don't need a proof for this, since the `auto` tactic can handle
-it. The verification condition that ivy generates is `X = Y & Y = Z
--> X = Z`.  Here is a theorem that lets us elimiante universal
-quantifiers:
+it. The verification condition that ivy generates is:
+
+    #   X = Y & Y = Z -> X = Z
+
+Here is a theorem that lets us eliminate universal quantifiers:
 
 ```
     theorem [elimA] {
@@ -338,7 +356,7 @@ It says, for any predicate *p*, if `p(Y)` holds for all *Y*, then
 prove this easily. Now let's derive a consequence of these facts. A
 function *f* is *idempotent* if applying it twice gives the same
 result as applying it once. This theorem says that, if *f* is
-idempotent, then applying three times is the same as applying it
+idempotent, then applying *f* three times is the same as applying it
 once:
 
 ```
@@ -397,13 +415,13 @@ Now we see that the conclusion in both cases is an instance of the
 idempotence assumption, for a particular value of *X*. This means
 we can apply the `elimA` rule that we proved above. In the first case,
 the value of `X` for which we are claiming idempotence is `f(X)`.
-With this assignment, IVy can match `p(X)` to `f(f(f(X))) = f(X)`.
+With this assignment, IVy can match `p(X)` in theorem `elimA` to `f(f(f(X))) = f(X)`.
 This substituion produces a new subgoal as follows:
 
     # theorem [prop2] {
     #     type t
     #     function f(V0:t) : t
-    #     property [prop5] forall X. f(f(X)) = f(X)
+    #     property [prop5] forall X. f(f(f(X))) = f(f(X))
     #     #----------------------------------------
     #     property forall Y. f(f(f(Y))) = f(f(Y))
     # }
@@ -418,10 +436,10 @@ strange, but keep in mind that the `X` on the left refers to `X` in
 the `elimA` rule, while `X` on the right refers to `X` in our goal. It
 just happens that we chose the same name for both variables.
 
-Ance again, the subgoal we obtain is trivial and Ivy drops it. Since
+Once again, the subgoal we obtain is trivial and Ivy drops it. Since
 there are no more subgoals, the proof is now complete.
 
-# ### The deduction library
+#### The deduction library
 
 Facts like `trans` and `elimA` above are included in the library
 `deduction`. This library contains a complete set of rules of a system
@@ -465,10 +483,11 @@ adds the non-negative numbers less than or equal to *X* like this:
        apply rec[u]
 ```
 
-Notice that we wrote the definition as a schema rather than a simple
-proposition.  This is because it has a universally quantified variable
+Notice that we wrote the definition in curly brackets. This causes Ivy to 
+treat it as an axioms schema, as opposed to a simple axiom.
+We did this because the definition has a universally quantified variable
 `X` under arithmetic operators, which puts it outside the decidable
-fragment. Becuase this definitoin is a schema, when we want to use it,
+fragment. Because this definition is a schema, when we want to use it,
 we'll have to apply it explicitly,
 
 In order to admit this definition, we applied the definition
@@ -480,16 +499,10 @@ This allows the recursive definition to be admitted, providing that
 `sum` is fresh in the current context (i.e., we have not previously refered to
 `sum` except to declare its type).
 
-When we instantiate a theory, it generally comes with a recursion
-schema for the given type.  For example, if we say:
-
-    # intepret t -> int
-
-then the above recursion schema `rec[u]` automatically becomes available.
 
 ### Extended matching
 
-Suppose we want to define a function that takes an additional
+Suppose we want to define a recursive function that takes an additional
 parameter. For example, before summing, we want to divide all the
 numbers by *N*. We can define such a function like this:
 
@@ -519,8 +532,8 @@ The extended schema matches the definition, with the following assignment:
 
     # q=t, base(N,X)=0, step(N,X,Y)=Y/N+X, fun(N,X) = sum2(N,X)
     
-This is somewhat as if functions were "curried", in which case the
-free symbol `fun` would match the curried function term `sumdiv N`.
+This is somewhat as if the functions were "curried", in which case the
+free symbol `fun` would match the partially applied term `sumdiv N`.
 Since Ivy's logic doesn't allow for partial application of functions,
 extended matching provides an alternative. Notice that, 
 to match the recursion schema, a function definition must be
@@ -572,17 +585,15 @@ Applying `ind[u]` produces two sub-goals, a base case and an induction step:
     # property sum(X) <= X -> sum(X+1) <= X + 1
 
 The `auto` tactic can't prove these goals because the definition of
-`sum` is a schema that must explicitly instantiated (if we try it,
-we'll get counterexamples). Fortunately, it suffices to instantiate
-this schema just for the specific arguments of `sum` in our
-subgoals. For the base case, we need to instantiate the definition for
-`X`, while for the induction step, we need `X+1`. Notice that we
-referred to the definiton of `sum` by the name `sum`.  Alternatively,
-we can name the definition itself and refer to it by this name.
+`sum` is a schema that must explicitly instantiated. Fortunately, it
+suffices to instantiate this schema just for the specific arguments
+of `sum` in our subgoals. For the base case, we need to instantiate
+the definition for `X`, while for the induction step, we need
+`X+1`. Notice that we referred to the definiton of `sum` by the name
+`sum`.  Alternatively, we can name the definition itself and refer
+to it by this name.
 
 After instantiating the definition of `sum`, our two subgoals look like this:
-
-    # ind1.ivy: line 21: Proof goals:
 
     # theorem [prop5] {
     #     property [def2] sum(Y + 1) = (0 if Y + 1 <= 0 else Y + 1 + sum(Y + 1 - 1))
@@ -773,7 +784,7 @@ give the hidden implementation.
 
 To achieve this, we can use a *specification* section. The
 declarations in this section are admitted logically *after* the other
-declarations in the section.
+declarations in the isolate.
 
 As an example, we can rewrite the above proof development so that the
 visible properties of the isolates occur textually at the beginning:

@@ -892,7 +892,12 @@ class IvyDomainSetup(IvyDeclInterp):
             return # this is a conjecture
         global last_fmla
         last_fmla = self.last_fact.formula
-        # postpone compileing the proof
+        # tricky: if proof is of a definition, move the definition to labeled_props
+        if isinstance(last_fmla,ivy_logic.Definition):
+            defs = self.domain.definitions
+            assert len(defs) >= 1 and defs[-1].id == self.last_fact.id
+            self.domain.labeled_props.append(self.last_fact)
+            defs.pop()
         self.domain.proofs.append((self.last_fact,pf.compile()))
 
     def progress(self,df):
@@ -979,7 +984,6 @@ class IvyDomainSetup(IvyDeclInterp):
         if lhs in interp:
             if interp[lhs] != rhs:
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
-            print self.domain.sig
             return
         if isinstance(rhs,ivy_ast.Range):
             interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
@@ -1339,8 +1343,32 @@ def theorem_to_property(prop):
         return res
     return prop
 
+# re-order the props so specification props comes afer other props in object
+
+def reorder_props(mod,props):
+    specprops = defaultdict(list)
+    iprops = []
+    for prop in props:
+        if iu.compose_names(prop.name,'spec') in mod.attributes:
+            p,c = parent_child_name(prop.name)
+            specprops[p].append(prop)
+        else:
+            iprops.append(prop)
+    rprops = []
+    for prop in reversed(iprops):
+        name = prop.name
+        while name != 'this':
+            name,c = parent_child_name(name)
+            if name in specprops:
+                rprops.extend(reversed(specprops[name]))
+                del specprops[name]
+        rprops.append(prop)
+    rprops.reverse()
+    return rprops
+        
+
 def check_properties(mod):
-    props = mod.labeled_props
+    props = reorder_props(mod,mod.labeled_props)
     
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
@@ -1373,7 +1401,10 @@ def check_properties(mod):
             prop = named_trans(prop)
             if len(subgoals) == 0:
                 if not isinstance(prop.formula,ivy_ast.SchemaBody):
-                    mod.labeled_axioms.append(prop)
+                    if isinstance(prop.formula,ivy_logic.Definition):
+                        mod.definitions.append(prop)
+                    else: 
+                        mod.labeled_axioms.append(prop)
             else:
                 subgoals = map(theorem_to_property,subgoals)
                 lb = ivy_ast.Labeler()
@@ -1383,7 +1414,10 @@ def check_properties(mod):
                     label = ia.compose_atoms(prop.label,lb())
                     mod.labeled_props.append(g.clone([label,g.formula]))
                 if not isinstance(prop.formula,ivy_ast.SchemaBody):
-                    mod.labeled_props.append(prop)
+                    if isinstance(prop.formula,ivy_logic.Definition):
+                        mod.definitions.append(prop)
+                    else:
+                        mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
         # elif prop.temporal:
         #     from ivy_l2s import l2s
@@ -1398,7 +1432,10 @@ def check_properties(mod):
                 nprop = named_trans(prop)
                 mod.labeled_props.append(nprop)
                 mod.subgoals.append((nprop,[prop]))
-                
+                prover.admit_proposition(nprop,ivy_ast.ComposeTactics())
+            else:
+                prover.admit_proposition(prop,ivy_ast.ComposeTactics())
+
 
 
 def ivy_compile_theory(mod,decls,**kwargs):

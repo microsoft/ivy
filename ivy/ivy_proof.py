@@ -45,7 +45,12 @@ class ProofChecker(object):
         self.schemata = schemata.copy() if schemata is not None else dict()
         for ax in axioms:
             self.schemata[ax.name] = ax
-        self.deps = set()  # set of dependencies of existing definitions
+        self.stale = set() # set of symbols that are not fresh
+        for lf in axioms + definitions:
+            self.stale.update(lu.used_symbols_ast(lf.formula))
+        for goal in schemata.values():
+            vocab = goal_vocab(goal)
+            self.stale.update(vocab.symbols)
 
     def admit_definition(self,defn,proof=None):
         """ Admits a definition if it is non-recursive or match a definition schema. 
@@ -58,10 +63,10 @@ class ProofChecker(object):
         sym = defn.formula.defines()
         if sym.name in self.definitions:
             raise Redefinition(defn,"redefinition of {}".format(sym))
-        if sym in self.deps:
+        if sym in self.stale:
             raise Circular(defn,"symbol {} defined after reference".format(sym))
         deps = list(lu.symbols_ast(defn.formula.rhs()))
-        self.deps.update(deps)
+        self.stale.update(deps)
         if sym in deps:
             # Recursive definitions must match a schema
             if proof is None:
@@ -72,6 +77,7 @@ class ProofChecker(object):
         else:
             subgoals = []
         self.definitions[sym.name] = defn
+        return subgoals
         
     def admit_proposition(self,prop,proof=None):
         """ Admits a proposition with proof.  If a proof is given it
@@ -81,6 +87,8 @@ class ProofChecker(object):
         - prop is an ivy_ast.LabeledFormula
         """
 
+        if isinstance(prop.formula,il.Definition):
+            return self.admit_definition(prop,proof)
         if proof is None:
             raise NoMatch(prop,"no proof given for property")
         subgoals = self.apply_proof([prop],proof)
@@ -89,6 +97,8 @@ class ProofChecker(object):
         self.axioms.append(prop)
         if isinstance(prop.formula,ia.SchemaBody):
             self.schemata[prop.name] = prop
+        vocab = goal_vocab(prop)
+        self.stale.update(vocab.symbols)
         return subgoals
 
     def apply_proof(self,decls,proof):
@@ -128,6 +138,7 @@ class ProofChecker(object):
         for decl in decls:
             print
             print 'theorem ' + str(decl)
+            print
         return decls
 
     def defer_goal_tactic(self,decls,proof):
