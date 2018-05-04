@@ -293,7 +293,7 @@ def equal_mod_alpha(t,u):
         if type(t) is Const and type(u) is Const:
             return t == u
         if type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff) and type(u) is type(t):
-            return all(rec(v,w,m1,m2,n) for v,w in zip(tuple(t),tuple(u)))
+            return len(t) == len(u) and all(rec(v,w,m1,m2,n) for v,w in zip(tuple(t),tuple(u)))
         return False
     return rec(t,u,dict(),dict(),0)
 

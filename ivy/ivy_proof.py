@@ -314,7 +314,8 @@ def goal_subgoals(schema,goal,lineno):
     check_concs_match(schema,goal)
     check_premises_provided(schema,goal)
     subgoals = [goal_subst(goal,x,lineno) for x in goal_prem_goals(schema)]
-    return [s for s in subgoals if not trivial_goal(s)]
+    subgoals = [s for s in subgoals if not trivial_goal(s)]
+    return subgoals
 
 # Get the free vocabulary of a goal, including sorts, symbols and variables
 
@@ -419,7 +420,8 @@ def match_problem(schema,decl):
     """ Creating a matching problem from a schema and a declaration """
     vocab = goal_vocab(schema)
     freesyms = set(vocab.symbols + vocab.sorts + vocab.variables)
-    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,set(lu.variables_ast(goal_conc(decl))))
+    constants = set(v for v in goal_free(decl) if il.is_variable(v))
+    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,constants)
 
     prems = goal_prems(schema)
     conc = goal_conc(schema)
@@ -574,7 +576,7 @@ def apply_match_goal(match,x,apply_match,env = None):
         fmla = x.formula
         if isinstance(fmla,ia.SchemaBody):
             bound = [s for s in goal_defns(x) if s not in match]
-            with il.BindSymbols(env,goal_defns(x)):
+            with il.BindSymbols(env,bound):
                 fmla = fmla.clone([apply_match_goal(match,y,apply_match,env)
                                    for y in fmla.prems()]+[apply_match(match,fmla.conc(),env)])
         else:

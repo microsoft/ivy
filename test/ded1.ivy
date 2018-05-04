@@ -1,0 +1,382 @@
+#lang ivy1.7
+
+include deduction
+
+theorem [refl] {
+    type t
+    property X:t = X:t
+}
+proof
+    apply introEq;
+    showgoals
+
+theorem [symm] {
+    type t
+    property X:t = Y
+    property Y:t = X
+}
+proof 
+    apply introEq;
+    apply elimEq with x = X, y = Y
+
+theorem [trans] {
+    type t
+    property X:t = Y
+    property Y:t = Z
+    property X:t = Z
+}
+proof
+    apply introEq;
+    apply elimEq with x = Z, y = Y;
+    apply symm;
+    apply elimEq with x = Y, y = X;
+    apply symm
+
+theorem [cong1] {
+    type t
+    type u
+    function f(X:t) : u
+    property X:t = Y:t
+    property f(X) = f(Y)
+}
+proof
+    apply introEq;
+    apply elimEq with x = Y, y = X;
+    apply symm
+
+theorem [cong2] {
+    type t1 
+    type t2
+    type u
+    function f(X1:t1,X2:t2) : u
+    property X1:t1 = Y1:t1
+    property X2:t2 = Y2:t2
+    property f(X1,X2) = f(Y1,Y2)
+}
+proof
+    apply introEq;
+    apply elimEq with x = Y1, y = X1;
+    apply symm;
+    apply elimEq with x = Y2, y = X2;
+    apply symm
+
+theorem [cong3] {
+    type t1 
+    type t2
+    type t3
+    type u
+    function f(X1:t1,X2:t2,X3:t3) : u
+    property X1:t1 = Y1:t1
+    property X2:t2 = Y2:t2
+    property X3:t3 = Y3:t3
+    property f(X1,X2,X3) = f(Y1,Y2,Y3)
+}
+proof
+    apply introEq;
+    apply elimEq with x = Y1, y = X1;
+    apply symm;
+    apply elimEq with x = Y2, y = X2;
+    apply symm;
+    apply elimEq with x = Y3, y = X3;
+    apply symm
+
+
+theorem [commAnd] {
+    relation p
+    relation q
+    property p & q
+    property q & p
+}
+proof
+    apply introAnd;
+    apply elimAndR;
+    apply elimAndL
+
+theorem [commOr] {
+    relation p
+    relation q
+    property p | q
+    property q | p
+}
+proof
+    apply elimOr with r = q | p, p = p, q = q;
+    apply introOrR;
+    apply introOrL;
+    showgoals
+
+theorem [assocAnd] {
+    relation p
+    relation q
+    relation r
+    property (p & q) & r
+    property p & (q & r)
+}
+proof
+    apply introAnd;
+    apply elimAndL with q = q;
+    apply elimAndL with q = r;
+    apply introAnd;
+    apply elimAndR with p = p;
+    apply elimAndL with q = r;
+    apply elimAndR with p = p & q, q = r
+
+
+theorem [introNotNot] {
+    relation p
+    property p
+    property ~~p
+}
+proof
+    apply exmid with p = ~~p, q = ~p;
+    apply elimNot with q = ~~p, p = p
+
+theorem [elimNotNot] {
+    relation p
+    property ~~p
+    property p
+}
+proof
+    apply exmid with p = p, q = p;
+    apply elimNot with q = p, p = ~p;
+    showgoals
+
+theorem [reflImp] {
+    relation p
+    property p -> p
+}
+proof
+    apply introImp;
+    showgoals
+
+theorem [thm1] {
+    relation p
+    relation q
+    relation r
+    property p & q
+    property r
+    property q & r
+}
+proof
+    apply introAnd;
+    apply elimAndR with p = p
+
+theorem [thm2] {
+    relation p
+    relation q
+    relation r
+    property p
+    property ~~(q & r)
+    property ~~p & r
+}
+proof
+    apply introAnd;
+    apply introNot<s/q>;
+    apply elimNot;
+    apply elimAndR with q = r, p = q;
+    apply elimNotNot
+
+theorem [thm3] {
+    relation p
+    relation q
+    relation r
+    property p -> (q -> r)
+    property p
+    property ~r
+    property ~q
+}
+proof
+    apply introNot<s/q>;
+    apply elimNot with q = s, p = r;
+    apply elimImp with q = r, p = q;
+    apply elimImp with q = q -> r, p = p;
+    showgoals
+
+theorem [thm4] {
+    relation a
+    relation b
+    property ~b -> ~a
+    property a -> ~~b
+}
+proof
+    apply introImp;
+    apply introNot;
+    apply elimNot with p = a;
+    apply elimImp with p = ~b
+
+theorem [thm5] {
+    relation p
+    relation q
+    relation r
+    property p & q -> r 
+    property p -> (q -> r)
+}
+proof
+    apply introImp;
+    apply introImp;
+    apply elimImp with q = r, p = p & q;
+    apply introAnd
+
+
+theorem [thm6] {
+    relation a
+    relation b
+    relation c
+    property b -> c 
+    property a | b -> a | c
+}
+proof
+    apply introImp;
+    apply elimOr with p = a, q = b;
+    apply introOrL;
+    apply introOrR;
+    apply elimImp with p = b
+
+theorem [thm7] {
+    relation a
+    relation b
+    relation c
+    property a & (b | c)
+    property (a & b) | (a & c)
+}
+proof
+    apply elimOr with p=b, q=c;
+    apply introOrL;
+    apply introAnd;
+    apply elimAndL with q = b | c;
+    apply introOrR;
+    apply introAnd;
+    apply elimAndL with q = b | c;
+    apply elimAndR with p = a
+
+theorem [thm8] {
+    relation a
+    relation b
+    relation c
+    property (a & b) | (a & c)
+    property a & (b | c)
+}
+proof
+   apply elimOr with p = a & b, q = a & c;
+   apply introAnd;
+   apply elimAndL with q = b;
+   apply introOrL;
+   apply elimAndR with p = a;
+   apply introAnd;
+   apply elimAndL with q = c;
+   apply introOrR;
+   apply elimAndR with p = a
+
+
+theorem [thm9] {
+    relation a
+    relation b
+    property ~a | b
+    property  a -> b
+}
+proof
+    apply introImp;
+    apply elimOr with p = ~a, q = b;
+    apply elimNot with p = a
+
+theorem [thm10] {
+    relation a
+    relation b
+    property a -> b
+    property a -> ~b
+    property ~a
+}
+proof
+    apply introNot;
+    apply elimNot with p = b;
+    apply elimImp with p = a;
+    apply elimImp with p = a;
+    showgoals
+
+theorem [modus_tollens] {
+    relation p
+    relation q
+    property p -> q
+    property ~q
+    property ~p
+}
+proof
+    apply introNot<s/q>;
+    apply elimNot with q = s, p = q;
+    apply elimImp;
+    showgoals
+
+theorem [exmid2] {
+    relation p
+    property p | ~p
+}
+proof
+    apply exmid with p = p | ~p, q = p;
+    apply introOrL;
+    apply introOrR
+
+theorem [reductio] {
+    relation p
+    property ~p -> false
+    property p
+}
+proof
+    apply elimNotNot;
+    apply introNot;
+    apply elimFalse;
+    apply elimImp with p = ~p
+
+theorem [thm11] {
+    type t
+    individual x : t
+    property x + 1 = 1 + x
+    property (x + 1) > 1 -> (x + 1) > 0
+    property (1 + x) > 1 -> (1 + x) > 0
+}
+proof 
+    apply elimEq with x = 1 + x, y = x + 1;
+    apply symm;
+    showgoals
+
+theorem [thm12] {
+    type t
+    function p(X:t) : bool
+    function q(X:t) : bool
+    property forall X. p(X) -> q(X)
+    property forall X. p(X)
+    property forall X. q(X)
+}
+proof
+    apply introA;
+    apply elimImp with p=p(x), q=q(x);
+    apply elimA with X = x;
+    apply elimA with X = x;
+    showgoals
+
+
+theorem [thm13] {
+    type t
+    individual z : t
+    function p(X:t) : bool
+    function q(X:t) : bool
+    property p(z)
+    property forall X. p(X) -> ~q(X)
+    property ~q(z)
+}
+proof
+    apply elimImp with p = p(z);
+    apply elimA with X = z
+
+theorem [thm14] {
+    type t
+    function p(X:t) : bool
+    property forall X. p(X)
+    property exists X. p(X)
+}
+proof
+    apply elimSym;
+    apply introE with witness = x;
+    apply elimA with X = x;
+    showgoals
+
+    
+    

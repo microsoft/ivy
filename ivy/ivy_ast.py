@@ -1428,7 +1428,7 @@ class ASTContext(object):
         if isinstance(exc_val,IvyError):
 #        if exc_type == IvyError:
 #            print "no lineno: {}".format(self.ast)
-            needs_lineno = not exc_val.lineno.line
+            needs_lineno = hasattr(exc_val,'lineno') and not exc_val.lineno.line
             if needs_lineno and hasattr(self.ast,'lineno'):
 #                print "lineno: {}".format(self.ast.lineno)
                 exc_val.lineno = self.ast.lineno

@@ -329,21 +329,21 @@ def p_fmla_not_fmla(p):
 
 def p_fmla_fmla_and_fmla(p):
     'fmla : fmla AND fmla'
-    if isinstance(p[1],And):
-        p[0] = p[1]
-        p[0].args.append(p[3])
-    else:
-        p[0] = And(p[1],p[3])
-        p[0].lineno = get_lineno(p,2)
+    # if isinstance(p[1],And):
+    #     p[0] = p[1]
+    #     p[0].args.append(p[3])
+    # else:
+    p[0] = And(p[1],p[3])
+    p[0].lineno = get_lineno(p,2)
 
 def p_fmla_fmla_or_fmla(p):
     'fmla : fmla OR fmla'
-    if isinstance(p[1],Or):
-        p[0] = p[1]
-        p[0].args.append(p[3])
-    else:
-        p[0] = Or(p[1],p[3])
-        p[0].lineno = get_lineno(p,2)
+    # if isinstance(p[1],Or):
+    #     p[0] = p[1]
+    #     p[0].args.append(p[3])
+    # else:
+    p[0] = Or(p[1],p[3])
+    p[0].lineno = get_lineno(p,2)
 
 if not (iu.get_numeric_version() <= [1]):
 
