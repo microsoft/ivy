@@ -682,7 +682,7 @@ Variable.args = property(lambda self: [])
 Variable.clone = lambda self,args: self
 Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
-Variable.rename = lambda self,name: Variable(name,self.sort)
+Variable.rename = lambda self,name: Variable(name if isinstance(name,str) else name(self.name),self.sort)
 Variable.resort = lambda self,sort : Variable(self.name,sort)
 
 
@@ -981,7 +981,7 @@ class BindSymbolValues(object):
             self.env[sym] = val
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
-        for sym in self.bindings:
+        for sym,val in self.bindings:
             del self.env[sym]
         for sym,val in self.saved:
             self.env[sym] = val
@@ -1479,6 +1479,8 @@ def simp_ite(i,t,e):
 def pto(*asorts):
     return Symbol('*>',RelationSort(asorts))
 
+CaptureError = lu.CaptureError
+
 def lambda_apply(self,args):
     assert len(args) == len(self.variables)
     return lu.substitute(self.body,dict(zip(self.variables,args)))
@@ -1543,3 +1545,23 @@ def equal_mod_alpha(t,u):
     if isinstance(t,Definition):
         return isinstance(t,Definition) and all(equal_mod_alpha(x,y) for (x,y) in zip(t.args,u.args))
     return lu.equal_mod_alpha(t,u)
+
+
+def alpha_rename(nmap,fmla):
+    """ alpha-rename a formula using a map from variable names to
+    variable names.  assumes the map is one-one.
+    """
+    vmap = dict()
+    def rec(fmla):
+        if is_binder(fmla):
+            newvars = tuple(v.rename(nmap.get(v.name,v.name)) for v in fmla.variables)
+            forbidden = frozenset(vmap.get(v,v) for v in lu.free_variables(fmla))
+            if not forbidden.isdisjoint(newvars):
+                raise CaptureError(forbidden.intersection(newvars))
+            bndgs = [(v,v.rename(nmap[v.name])) for v in fmla.variables if v.name in nmap]
+            with BindSymbolValues(vmap,bndgs):
+                return fmla.clone_binder(newvars,rec(fmla.body))
+        if is_variable(fmla):
+            return vmap.get(fmla,fmla)
+        return fmla.clone([rec(f) for f in fmla.args])
+    return rec(fmla)

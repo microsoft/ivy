@@ -7,8 +7,7 @@ theorem [refl] {
     property X:t = X:t
 }
 proof
-    apply introEq;
-    showgoals
+    apply introEq
 
 theorem [symm] {
     type t
@@ -99,10 +98,9 @@ theorem [commOr] {
     property q | p
 }
 proof
-    apply elimOr with r = q | p, p = p, q = q;
+    apply elimOr with p = p, q = q;
     apply introOrR;
-    apply introOrL;
-    showgoals
+    apply introOrL
 
 theorem [assocAnd] {
     relation p
@@ -113,10 +111,10 @@ theorem [assocAnd] {
 }
 proof
     apply introAnd;
-    apply elimAndL with q = q;
+    apply elimAndL;
     apply elimAndL with q = r;
     apply introAnd;
-    apply elimAndR with p = p;
+    apply elimAndR;
     apply elimAndL with q = r;
     apply elimAndR with p = p & q, q = r
 
@@ -137,16 +135,14 @@ theorem [elimNotNot] {
 }
 proof
     apply exmid with p = p, q = p;
-    apply elimNot with q = p, p = ~p;
-    showgoals
+    apply elimNot with q = p, p = ~p
 
 theorem [reflImp] {
     relation p
     property p -> p
 }
 proof
-    apply introImp;
-    showgoals
+    apply introImp
 
 theorem [thm1] {
     relation p
@@ -188,8 +184,7 @@ proof
     apply introNot<s/q>;
     apply elimNot with q = s, p = r;
     apply elimImp with q = r, p = q;
-    apply elimImp with q = q -> r, p = p;
-    showgoals
+    apply elimImp with q = q -> r, p = p
 
 theorem [thm4] {
     relation a
@@ -289,8 +284,7 @@ proof
     apply introNot;
     apply elimNot with p = b;
     apply elimImp with p = a;
-    apply elimImp with p = a;
-    showgoals
+    apply elimImp with p = a
 
 theorem [modus_tollens] {
     relation p
@@ -302,8 +296,7 @@ theorem [modus_tollens] {
 proof
     apply introNot<s/q>;
     apply elimNot with q = s, p = q;
-    apply elimImp;
-    showgoals
+    apply elimImp
 
 theorem [exmid2] {
     relation p
@@ -334,8 +327,7 @@ theorem [thm11] {
 }
 proof 
     apply elimEq with x = 1 + x, y = x + 1;
-    apply symm;
-    showgoals
+    apply symm
 
 theorem [thm12] {
     type t
@@ -349,8 +341,7 @@ proof
     apply introA;
     apply elimImp with p=p(x), q=q(x);
     apply elimA with X = x;
-    apply elimA with X = x;
-    showgoals
+    apply elimA with X = x
 
 
 theorem [thm13] {
@@ -373,10 +364,35 @@ theorem [thm14] {
     property exists X. p(X)
 }
 proof
-    apply elimSym;
-    apply introE with witness = x;
-    apply elimA with X = x;
-    showgoals
+    apply introE;
+    apply elimA with X = witness
 
-    
-    
+theorem [thm15] {
+    type t
+    function p(X:t) : bool
+    function q(X:t) : bool
+    property forall X. p(X) -> q(X)
+    property exists X. p(X)
+    property exists X. q(X)
+}
+proof 
+    apply elimE;
+    apply introE with witness = x;
+    apply elimImp with p = p(x);
+    apply elimA with X = x
+
+theorem [thm16] {
+    type t
+    function p(X:t) : bool
+    function q(X:t) : bool
+    property exists X. p(X)
+    property forall X,Y. p(X) -> q(Y)
+    property forall Y. q(Y)
+}
+proof
+    apply introA<y/x>;
+    apply elimE;
+    apply elimImp with p = p(x);
+    apply elimA with X = y;
+    apply elimA<Z/Y> with X = x;
+    showgoals

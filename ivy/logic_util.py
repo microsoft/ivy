@@ -13,6 +13,10 @@ from logic import contains_topsort
 
 import ivy_utils as iu
 
+class CaptureError(Exception):
+    def __init__(self,variables):
+        self.variables = variables
+
 def union(*sets):
     if len(sets) == 0:
         return frozenset()
@@ -159,6 +163,7 @@ def substitute(t, subs):
                 if k not in t.variables
             )))
         else:
+            raise CaptureError(forbidden_variables.intersection(t.variables))
             assert False, (t, subs) # capturing would be created
 
     else:

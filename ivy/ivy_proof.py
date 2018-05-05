@@ -186,16 +186,20 @@ class ProofChecker(object):
         """
         
         schema, prob, pmatch = self.setup_matching(decl,proof)
-        prob, schema = avoid_capture_problem(prob,schema,pmatch)
+        prob, schema,capmap = avoid_capture_problem(prob,schema,pmatch)
         apply_match_to_problem(pmatch,prob,apply_match_alt)
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if fomatch is not None:
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if somatch is not None:
+            detect_nonce_symbols(capmap,apply_match_freesyms(somatch,prob.freesyms))
             schema = apply_match_goal(pmatch,schema,apply_match_alt)
             schema = apply_match_goal(fomatch,schema,apply_match)
             schema = apply_match_goal(somatch,schema,apply_match_alt)
+            # tmatch = apply_match_match(fomatch,pmatch,apply_match)
+            # tmatch = apply_match_match(somatch,tmatch,apply_match_alt)
+            # schema = apply_match_goal(tmatch,schema,apply_match_alt)
             return goal_subgoals(schema,decl,proof.lineno)
         return None
 
@@ -307,25 +311,50 @@ def check_premises_provided(g1,g2):
             if sym not in defns and not il.sig.contains(sym):
                 raise ProofError(None,'premise "{}" does not match anything in the environment'.format(thing))
 
+def goal_is_defn(x):
+    if isinstance(x,ia.ConstantDecl):
+        return not il.is_lambda(x.args[0])
+    return isinstance(x,il.UninterpretedSort)
+
+def goal_defines(x):
+    if isinstance(x,ia.ConstantDecl):
+        return x.args[0]
+    return x
+
+def get_unprovided_defns(g1,g2):
+    defns = goal_defns(g2)
+    res = []
+    for prem in goal_prems(g1):
+        if goal_is_defn(prem):
+            sym = goal_defines(prem)
+            if sym not in defns and not il.sig.contains(sym):
+                res.append(prem)
+    return res
+
 # Turn the propositional premises of a goal into a list of subgoals. The
 # symbols and types in the goal must be provided by the environment.
 
 def goal_subgoals(schema,goal,lineno):
     check_concs_match(schema,goal)
-    check_premises_provided(schema,goal)
+    upds = get_unprovided_defns(schema,goal)
+    g = clone_goal(goal,upds,goal_conc(goal))
+    goal = goal_subst(goal,g,lineno)
     subgoals = [goal_subst(goal,x,lineno) for x in goal_prem_goals(schema)]
     subgoals = [s for s in subgoals if not trivial_goal(s)]
     return subgoals
 
-# Get the free vocabulary of a goal, including sorts, symbols and variables
+def fmla_vocab(fmla):
+    """ Get the free vocabulary of a formula, including sorts, symbols and variables """
+    
+    things = lu.used_sorts_ast(fmla)
+    things.update(lu.used_symbols_ast(fmla))
+    things.update(lu.used_variables_ast(fmla))
+    return things
+
 
 def goal_free(goal):
+    """ Get the free vocabulary of a goal, including sorts, symbols and variables """
     bound = set()
-    def fmla_vocab(fmla):
-        things = lu.used_sorts_ast(fmla)
-        things.update(lu.used_symbols_ast(fmla))
-        things.update(lu.used_variables_ast(fmla))
-        return things
     def rec_fmla(fmla,res):
         for y in fmla_vocab(fmla):
             if y not in bound:
@@ -367,6 +396,7 @@ def rename_goal(goal,renaming):
         return goal
     check_renaming(goal,renaming)
     rmap = dict((x.lhs().rep,x.rhs().rep) for x in renaming.args)
+    print renaming
     def rec_goal(goal):
         if not isinstance(goal,ia.LabeledFormula):
             return goal
@@ -375,6 +405,9 @@ def rename_goal(goal,renaming):
         match = dict((x,apply_match_sym(match,y)) for x,y in match.iteritems())
         check_alpha_capture(goal,match)
         goal = apply_match_goal(match,goal,apply_match_alt)
+        iu.dbg('goal_conc(goal)')
+        goal = clone_goal(goal,goal_prems(goal),il.alpha_rename(rmap,goal_conc(goal)))
+        iu.dbg('goal_conc(goal)')
         return goal
     return rec_goal(goal)
                 
@@ -564,10 +597,14 @@ def compile_match(proof,prob,schema,decl):
     return res
 
 def match_rhs_vars(match):
-    """ Get the variables occurring free on the right-hand side of a match """
-    rhss = [v for s,v in match.iteritems() if not isinstance(s,il.UninterpretedSort)]
-    return lu.used_variables_asts(rhss)
-
+    """ Get the symbols occurring free on the right-hand side of a match """
+    res = set()
+    for v in match.values():
+        if isinstance(v,il.UninterpretedSort):
+            res.add(v)
+        else:
+            res.update(fmla_vocab(v))
+    return res
 
 def apply_match_goal(match,x,apply_match,env = None):
     """ Apply a match to a goal """
@@ -588,24 +625,49 @@ def apply_match_goal(match,x,apply_match,env = None):
     else:
         return x.clone([apply_match_func_alt(match,x.args[0],env)])
 
+def apply_match_match(match,orig_match,apply_match):
+    """ Apply a match match to match orig_match. Applying the resulting match should
+    have the same effect as apply first orig_match, then match. """
+    print 'apply_match_match:'
+    print 'match:'
+    orig_match = dict((x,apply_match(match,y)) for x,y in orig_match.iteritems())
+    orig_match.update((x,y) for x,y in match.iteritems() if x not in orig_match)
+    return orig_match
+
 def apply_match_to_problem(match,prob,apply_match):
     prob.pat = apply_match(match,prob.pat)
     prob.freesyms = apply_match_freesyms(match,prob.freesyms)
 
 def rename_problem(match,prob):
-    prob.pat = apply_match(match,prob.pat)
+    prob.pat = apply_match_alt(match,prob.pat)
     prob.freesyms = set(match.get(sym,sym) for sym in prob.freesyms)
 
 def avoid_capture_problem(prob,schema,match):
     """ Rename a match problem to avoid capture when applying a
     match"""
     matchvars = list(x for x in match_rhs_vars(match) if x not in match)
+    boundvocab = set(goal_defns(schema))
     freevocab = goal_free(schema)
-    rn = iu.UniqueRenamer(used=[v.name for v in freevocab if il.is_variable(v)])
-    cmatch = dict((v,v.rename(rn(v.name))) for v in matchvars if v in freevocab)
+    boundvocab.update(v for v in freevocab if il.is_variable(v))
+    rn = iu.UniqueRenamer(used=[v.name for v in boundvocab])
+    cmatch = dict((v,v.rename(rn)) for v in matchvars if v in boundvocab)
     rename_problem(cmatch,prob)
     schema = apply_match_goal(cmatch,schema,apply_match)
-    return prob,schema
+    return prob,schema,cmatch
+
+def detect_nonce_symbols(cmatch,freesyms):
+    """ Make sure no nonce symbols produced by avoid_capture_problem
+    appear free after matching. This is done to avoid nonce symbols
+    becoming visible to the user. If one of these symbols occurs in
+    freesyms, we report the original symbol captured, since it would
+    have been captured had the renaming not occurred. """
+
+    rev = dict((y.name,x) for x,y in cmatch.iteritems())
+    for sym in freesyms:
+        if sym.name in rev:
+            raise CaptureError(None,'symbol {} is captured in substitution'.format(rev[sym.name]))
+
+
 
 def trivial_goal(goal):
     """ A goal is trivial if the conclusion is equal to one of the premises modulo
@@ -628,10 +690,10 @@ def apply_match(match,fmla,env = None):
     """
     freevars = match_rhs_vars(match)
     fmla = il.alpha_avoid(fmla,freevars)
-    return apply_match_rec(match,fmla)
+    return apply_match_rec(match,fmla,env if env is not None else set())
 
-def apply_match_rec(match,fmla):
-    args = [apply_match_rec(match,f) for f in fmla.args]
+def apply_match_rec(match,fmla,env):
+    args = [apply_match_rec(match,f,env) for f in fmla.args]
     if il.is_app(fmla):
         if fmla.rep in match:
             func = match[fmla.rep]
@@ -639,7 +701,14 @@ def apply_match_rec(match,fmla):
         return apply_match_func(match,fmla.rep)(*args)
     if il.is_variable(fmla) and fmla in match:
         return match[fmla]
+    if il.is_binder(fmla):
+        with il.BindSymbols(env,fmla.variables):
+            fmla = fmla.clone_binder([apply_match_rec(match,v,env) for v in fmla.variables],args[0])
+        return fmla
     return fmla.clone(args)
+
+def raise_capture(v):
+    raise CaptureError(None,'symbol {} is captured in substitution'.format(v))
 
 def match_get(match,sym,env,default=None):
     """ get the value of a symbol in a match, checking that no symbols
@@ -650,7 +719,7 @@ def match_get(match,sym,env,default=None):
         vocab.update(lu.variables_ast(val))
         for v in vocab:
             if v in env:
-                raise CaptureError(None,'symbol {} is captured in substitution'.format(v))
+                raise_capture(v)
         return val
     return default
     
@@ -670,11 +739,19 @@ def apply_match_alt(match,fmla,env = None):
     fmla = il.alpha_avoid(fmla,freevars)
     return apply_match_alt_rec(match,fmla,env if env is not None else set())
 
+
+def apply_fun(fun,args):
+    try:
+        return fun(*args)
+    except il.CaptureError as err:
+        for sym in err.variables:
+            raise_capture(sym)
+
 def apply_match_alt_rec(match,fmla,env):
     args = [apply_match_alt_rec(match,f,env) for f in fmla.args]
     if il.is_app(fmla):
         if fmla.rep in match:
-            return match_get(match,fmla.rep,env)(*args)
+            return apply_fun(match_get(match,fmla.rep,env),args)
         func = apply_match_func(match,fmla.rep)
         func = match_get(match,func,env,func)
         return func(*args)
@@ -684,7 +761,7 @@ def apply_match_alt_rec(match,fmla,env):
         fmla = il.Variable(fmla.name,apply_match_sort(match,fmla.sort))
         fmla = match_get(match,fmla,env,fmla)
         return fmla
-    if il.is_quantifier(fmla):
+    if il.is_binder(fmla):
         with il.BindSymbols(env,fmla.variables):
             fmla = fmla.clone_binder([apply_match_alt_rec(match,v,env) for v in fmla.variables],args[0])
         return fmla
@@ -770,10 +847,10 @@ def fo_match(pat,inst,freesyms,constants):
     if il.is_variable(pat):
         if pat in freesyms and all(x in constants for x in lu.variables_ast(inst)):
             res = {pat:inst}
-            if pat.sort == inst.sort:
-                return res
             if pat.sort in freesyms:
                 res[pat.sort] = inst.sort
+                return res
+            if pat.sort == inst.sort:
                 return res
     if il.is_quantifier(pat) and il.is_quantifier(inst):
         with RemoveSymbols(freesyms,pat.variables):

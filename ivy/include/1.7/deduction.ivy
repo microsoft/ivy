@@ -227,7 +227,7 @@ axiom [introEq] {
 
 # ### Equality elimination
 #
-# If we can prove `p(x)` and `x = y`, we can prove `p(y).
+# If we can prove `p(x)` and `x = y`, we can prove `p(y)`.
 
 axiom [elimEq] {
     type t
@@ -252,17 +252,3 @@ axiom [exmid] {
     property p
 }
 
-# ### Symbol elimination
-#
-# Every type is inhabited
-#
-
-axiom [elimSym] {
-    type t
-    relation p
-    {
-        individual x : t
-        property p
-    }
-    property p
-}

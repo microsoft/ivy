@@ -790,7 +790,7 @@ else:
 
     def p_renamingitem_variable_div_variable(p):
         'renamingitem : VARIABLE DIV VARIABLE'
-        p[0] = Definition(Variable(p[1],universe),Variable(p[3],universe))
+        p[0] = Definition(Variable(p[3],universe),Variable(p[1],universe))
         p[0].lineno = get_lineno(p,2)
 
     def p_renamingitem_symbol_div_symbol(p):
