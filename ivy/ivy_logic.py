@@ -1565,3 +1565,24 @@ def alpha_rename(nmap,fmla):
             return vmap.get(fmla,fmla)
         return fmla.clone([rec(f) for f in fmla.args])
     return rec(fmla)
+
+def normalize_ops(fmla):
+    """Convert conjucntion and disjunctions to binary ops and quantifiers
+    to single-variable quantifiers. """
+    args = map(normalize_ops(fmla.args))
+    def mkbin(op,first,rest):
+        if len(rest) == 0:
+            return first
+        return mkbin(op,op(first,rest[0]),rest[1:])
+    def mkquant(op,vs,body):
+        if len(vs) == 0:
+            return body
+        return op(vs[0:1],mkquant(op,vs[1:],body))
+    if isinstance(fmla,And) or isinstance(fmla,Or):
+        return fmla.clone([]) if len(args) == 0 else mkbin(type(fmla),args[0],args[1:])
+    if is_quantifier(fmla):
+        return mkquant(type(fmla),fmla.variables,args[0])
+    return fmla.clone(args)
+
+    
+            
