@@ -448,7 +448,11 @@ def formula_to_z3_int(fmla):
     if isinstance(fmla,ivy_logic.Not):
         return z3.Not(args[0])
     if isinstance(fmla,ivy_logic.Definition):
-        return my_eq(args[0],args[1])
+        z3_body = my_eq(args[0],args[1])
+        return z3_body
+        assert all(ivy_logic.is_variable(v) for v in fmla.args[0].args)
+        z3_vs = [term_to_z3(v) for v in fmla.args[0].args]
+        return z3.ForAll(z3_vs, z3_body)
     if isinstance(fmla,ivy_logic.Iff):
         return my_eq(args[0],args[1])
     if isinstance(fmla,ivy_logic.Implies):
@@ -473,6 +477,8 @@ def formula_to_z3_closed(fmla):
         return z3_formula
     else:
         z3_variables = [term_to_z3(v) for v in variables]
+        if isinstance(fmla,ivy_logic.Definition):
+            return z3.ForAll(z3_variables, z3_formula)
         return forall(variables, z3_variables, z3_formula)
 
 def formula_to_z3(fmla):
@@ -968,9 +974,9 @@ def model_if_none(clauses1,implied,model):
 
 def decide(s,atoms=None):
 #    print "solving{"
-    # f = open("ivy.smt2","w")
-    # f.write(s.to_smt2())
-    # f.close()
+    f = open("ivy.smt2","w")
+    f.write(s.to_smt2())
+    f.close()
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
@@ -1011,7 +1017,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
             print
         print "axioms:"
         for fmla in clauses.fmlas:
-            print ivy_logic.close_formula(fmla)
+            print fmla
             print
 
     s = z3.Solver()

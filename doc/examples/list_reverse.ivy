@@ -59,8 +59,10 @@ isolate rev_theory = {
 
     specification {
         property idx.succ(Y,U) -> rev(U,0,Y)
+        property 0 < U & rev(U,0,Y) -> idx.succ(Y,U)
         property rev(U,X,Y) & idx.succ(X,X1) & idx.succ(Y1,Y) -> rev(U,X1,Y1)
         property rev(U,X,Y) -> rev(U,Y,X)
+        property rev(U,X,Y) & rev(U,X,Z) -> Y = Z
 
         # We need one further property, however, to guarantee the relation is
         # a permutation. We need to know that every number in the range `[0,U)`
@@ -72,7 +74,7 @@ isolate rev_theory = {
         # specialize it to particular values of `X`, so that the unstratified
         # quantifier alterntion is eliminated.
 
-        theorem into = {
+        theorem [into] {
             property 0 <= X & X < U -> exists Y. rev(U,X,Y)
         }
 
@@ -95,8 +97,8 @@ isolate rev_theory = {
         # will apply some tactics.
 
         proof
-            apply impi;
-            apply exi with witness = U - X - 1
+            apply introImp;
+            apply introE with witness = U - X - 1
 
         # The first step is to apply the "implication introduction" rule,
         # which is defined in the deduction library. This is a standard rule
@@ -255,7 +257,7 @@ isolate double_reverse2 = {
     # need a `with` claues [2]. 
 
     proof
-        apply impi;  # [1]
+        apply introImp;  # [1]
         apply arr.spec.extensionality;  # [2]
 
     # We now have the following proof goal:
@@ -271,7 +273,7 @@ isolate double_reverse2 = {
     # two separate goals [3], and then we use `defergoal` to defer the first case, since the
     # default tactic can handle it [4]. 
 
-        apply andi;  # [3]
+        apply introAnd;  # [3]
         defergoal;   # [4]
 
     # Now we need to hand the universal quantifier. We apply the "forall introduction" rule,
@@ -279,7 +281,7 @@ isolate double_reverse2 = {
     # `x` in `B` and `C` corresponds to some index in `A`, which we can establish by assuming 
     # the `into` theorem for `x` [6].
 
-        apply alli;  # [5]
+        apply introA;  # [5]
         assume rev_theory.into with U = arr.end(B), X = x #  [6]
 
     # This leaves us with the following goals (the second being the one we deferred):
@@ -300,3 +302,53 @@ isolate double_reverse2 = {
 
 } with this
 
+# Implementing array reversal
+# ---------------------------
+#
+# Now that we have proved our key property of array reversal, let's try implementing array
+# reversal and see if we can prove that reversing twice gives the same array back.
+#
+
+isolate my_rev = {
+
+    # The interface of our array reversal isolate has just one action `rev` that returns
+    # the reverse of the array.
+
+    action reverse(x:arr) returns (y:arr)
+
+    # The specification says that the output is the reverse of the input.
+
+    specification {
+        after reverse {
+            ensure arr_rev(x,old x);
+        }
+    }
+    
+    # The implementation just copies the array backward.
+
+    implementation {
+        implement reverse {
+            y := x;
+            var xidx := x.begin;
+            var yidx := y.end;
+            while xidx < x.end
+            invariant x.begin <= xidx & xidx <= x.end
+            invariant y.begin <= yidx & yidx <= y.end
+            invariant y.end = x.end
+            invariant idx.succ(Y,yidx) -> rev(x.end,xidx,Y)
+            invariant yidx = 0 -> xidx = x.end 
+            invariant x.begin <= I & I < xidx & rev(x.end,I,J) -> x.value(I) = y.value(J)
+            {
+                yidx := yidx.prev;
+                y := y.set(yidx,x.get(xidx));
+                xidx := xidx.next
+            }
+        }
+    }
+    
+
+    # Our specification for
+
+} with arr,idx,rev_theory,arr_rev
+
+export my_rev.reverse

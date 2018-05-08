@@ -40,9 +40,9 @@ class ProofChecker(object):
         with ivy_mc.
         """
     
-        self.axioms  = list(axioms)
-        self.definitions = dict((d.formula.defines().name,d) for d in definitions)
-        self.schemata = schemata.copy() if schemata is not None else dict()
+        self.axioms  = [normalize_goal(ax) for ax in axioms]
+        self.definitions = dict((d.formula.defines().name,normalize_goal(d)) for d in definitions)
+        self.schemata = dict((x,normalize_goal(y)) for x,y in schemata.iteritems()) if schemata is not None else dict()
         for ax in axioms:
             self.schemata[ax.name] = ax
         self.stale = set() # set of symbols that are not fresh
@@ -60,6 +60,7 @@ class ProofChecker(object):
         - defn is an ivy_ast.LabeledFormula
         """
 
+        defn = normalize_goal(defn)
         sym = defn.formula.defines()
         if sym.name in self.definitions:
             raise Redefinition(defn,"redefinition of {}".format(sym))
@@ -87,6 +88,7 @@ class ProofChecker(object):
         - prop is an ivy_ast.LabeledFormula
         """
 
+        prop = normalize_goal(prop)
         if isinstance(prop.formula,il.Definition):
             return self.admit_definition(prop,proof)
         if proof is None:
@@ -95,8 +97,7 @@ class ProofChecker(object):
         if subgoals is None:
             raise NoMatch(proof,"goal does not match the given schema")
         self.axioms.append(prop)
-        if isinstance(prop.formula,ia.SchemaBody):
-            self.schemata[prop.name] = prop
+        self.schemata[prop.name] = prop
         vocab = goal_vocab(prop)
         self.stale.update(vocab.symbols)
         return subgoals
@@ -158,8 +159,11 @@ class ProofChecker(object):
             schema = self.definitions[schemaname]
             schema = clone_goal(schema,goal_prems(schema),goal_conc(schema).to_constraint())
         else:
-            # iu.dbg('self.definitions.keys()')
-            raise ProofError(proof,"No schema {} exists".format(schemaname))
+            premmap = dict((x.name,x) for x in goal_prem_goals(decl))
+            if schemaname in premmap:
+                schema = premmap[schemaname]
+            else:
+                raise ProofError(proof,"No property {} exists in the current context".format(schemaname))
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
@@ -321,6 +325,14 @@ def goal_defines(x):
         return x.args[0]
     return x
 
+def normalize_goal(x):
+    """ normalize the subformulas of a goal, so there are only binary
+    conjunctions/disjunctions and single-variable quantifiers. """
+    if goal_is_defn(x):
+        return x
+    return clone_goal(x,map(normalize_goal,goal_prems(x)),il.normalize_ops(goal_conc(x)))
+
+
 def get_unprovided_defns(g1,g2):
     defns = goal_defns(g2)
     res = []
@@ -396,7 +408,6 @@ def rename_goal(goal,renaming):
         return goal
     check_renaming(goal,renaming)
     rmap = dict((x.lhs().rep,x.rhs().rep) for x in renaming.args)
-    print renaming
     def rec_goal(goal):
         if not isinstance(goal,ia.LabeledFormula):
             return goal
@@ -405,9 +416,7 @@ def rename_goal(goal,renaming):
         match = dict((x,apply_match_sym(match,y)) for x,y in match.iteritems())
         check_alpha_capture(goal,match)
         goal = apply_match_goal(match,goal,apply_match_alt)
-        iu.dbg('goal_conc(goal)')
         goal = clone_goal(goal,goal_prems(goal),il.alpha_rename(rmap,goal_conc(goal)))
-        iu.dbg('goal_conc(goal)')
         return goal
     return rec_goal(goal)
                 
@@ -577,7 +586,6 @@ def compile_match(proof,prob,schema,decl):
     matches = compile_match_list(proof,schema,decl)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
     res = merge_matches(*matches)
-    iu.dbg
     return res
         
         

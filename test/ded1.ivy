@@ -318,6 +318,22 @@ proof
     apply elimFalse;
     apply elimImp with p = ~p
 
+theorem [pbc] {
+    function p : bool
+    property [absurd] { 
+        property ~p
+        property false
+    }
+    property p
+}
+proof
+    apply elimNotNot;
+    apply introNot;
+    apply elimFalse;
+    apply absurd;
+    showgoals
+
+
 theorem [thm11] {
     type t
     individual x : t
@@ -394,5 +410,150 @@ proof
     apply elimE;
     apply elimImp with p = p(x);
     apply elimA with X = y;
-    apply elimA<Z/Y> with X = x;
+    apply elimA<Z/Y> with X = x
+
+
+# capture example
+#
+# theorem [thm17] {
+#     type t
+#     function p(X:t) : bool
+#     function q(X:t) : bool
+#     property exists X. p(X)
+#     property forall X. (p(X) -> q(X))
+#     property forall Y. q(Y)
+# }
+# proof
+#     apply introA;
+#     apply elimE;
+#     showgoals
+
+theorem [dualAE] {
+    type t
+    function p(X:t) : bool
+    property ~forall X. p(X)
+    property exists Y. ~p(Y)
+}
+proof
+    apply pbc;
+    apply elimNot with p = forall X. p(X);
+    apply introA;
+    apply pbc;
+    apply elimNot with p = exists Y. ~p(Y);
+    apply introE with witness = x
+
+theorem [dualEA] {
+    type t
+    function p(X:t) : bool
+    property ~exists X. p(X)
+    property forall Y. ~p(Y)
+}
+proof
+     apply introA;
+     apply introNot;
+     apply elimNot with p = exists X. p(X);
+     apply introE with witness = x
+
+theorem [dualAndOr] {
+    relation p
+    relation q
+    property ~(p & q)
+    property ~p | ~q
+}
+proof
+   apply pbc;
+   apply elimNot with p = p & q;
+   apply introAnd;
+   apply pbc;
+   apply elimNot with p =  ~p | ~q;
+   apply introOrL;
+   apply pbc;
+   apply elimNot with p =  ~p | ~q;
+   apply introOrR
+
+theorem [dualOrAnd] {
+    relation p
+    relation q
+    property ~(p | q)
+    property ~p & ~q
+}
+proof
+     apply introAnd;
+     apply introNot<r/q>;
+     apply elimNot with p = p | q;
+     apply introOrL;
+     apply introNot<r/q>;
+     apply elimNot with p = p | q;
+     apply introOrR
+
+theorem [andA1] {
+    type t
+    function p(X:t) : bool
+    function q : bool
+    property (forall X. p(X)) & q
+    property forall X. p(X) & q
+}
+proof
+    apply introA;
+    apply introAnd;
+    apply elimA with X=x;
+    apply elimAndL with q = q;
+    apply elimAndR with p = forall X. p(X)
+
+theorem [nonce] {
+    type t
+    individual x : t
+    relation p
+    property [triv] p
+    property p
+}
+proof
+    apply triv
+
+theorem [andA2] {
+    type u
+    function p(X:u) : bool
+    function q : bool
+    property forall X. p(X) & q
+    property (forall X. p(X)) & q
+}
+proof
+    apply introAnd;
+    apply introA;
+    apply elimAndL with q = q;
+    apply elimA with X=x;
+    apply nonce<t/u>;
+    apply elimAndR with p = p(x);
+    apply elimA with X=x
+
+
+theorem [orE1] {
+    type t
+    function p(X:t) : bool
+    function q(X:t) : bool
+    property (exists X. p(X)) | (exists X. q(X))
+    property exists X. p(X) | q(X)
+}
+proof
+    apply elimOr with p = exists X. p(X), q = exists X. q(X);
+    apply elimE<r/q> with p(Z) = p(Z);
+    apply introE with witness = x;
+    apply introOrL;
+    apply elimE<r/q> with p(Z) = q(Z);
+    apply introE with witness = x;
+    apply introOrR;
+    showgoals
+
+theorem [commE] {
+    type t
+    type u
+    function p(X:t,Y:u) : bool
+    property exists X. exists Y. p(X,Y)
+    property exists Y. exists X. p(X,Y)
+}
+proof
+    apply elimE with p(X) = exists Y. p(X,Y);
+    apply elimE<y/x> with p(X) = p(x,X);
+    apply introE with witness = y;
+    apply introE with witness = x;
     showgoals

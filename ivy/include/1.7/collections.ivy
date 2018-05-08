@@ -47,6 +47,7 @@ module array(domain,range) = {
     # Function "end" gives the end value of an array while value(a,x)
     # gives the value that x maps to in a.
 
+    function begin(A:t) : domain
     function end(A:t) : domain
     function value(A:t,X:domain) : range
 
@@ -58,6 +59,9 @@ module array(domain,range) = {
 
 
     object spec = {
+
+        definition begin(X) = 0
+
 	property end(X) >= 0
 
 	after empty {

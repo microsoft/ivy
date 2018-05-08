@@ -598,11 +598,12 @@ class SchemaBody(AST):
         def indent(ind,s):
             lines.append(ind * '    ' + s)
         def sub(thing,ind):
-            indent(ind,'{\n')
+            indent(0,'{\n')
             for x in thing.prems():
                 if isinstance(x,LabeledFormula):
                     fmla = x.formula
                     if isinstance(fmla,SchemaBody):
+                        indent(ind+1,'property ' + ('[{}] '.format(x.label) if x.label is not None else ''))
                         sub(fmla,ind+1)
                     else:
                         indent(ind+1,'property ' + str(x) + '\n')

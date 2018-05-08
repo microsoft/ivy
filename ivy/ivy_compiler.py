@@ -975,7 +975,6 @@ class IvyDomainSetup(IvyDeclInterp):
             if lhs in interp or lhs in self.domain.native_types :
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             self.domain.native_types[lhs] = thing.formula.args[1]
-            print self.domain.sig
             return
         rhs = thing.formula.args[1].rep
         self.domain.interps[lhs].append(thing)
@@ -1352,17 +1351,19 @@ def reorder_props(mod,props):
         if iu.compose_names(prop.name,'spec') in mod.attributes:
             p,c = parent_child_name(prop.name)
             specprops[p].append(prop)
+            iprops.append((prop,))  # a placeholder
         else:
             iprops.append(prop)
     rprops = []
     for prop in reversed(iprops):
-        name = prop.name
+        name = prop[0].name if isinstance(prop,tuple) else prop.name
         while name != 'this':
             name,c = parent_child_name(name)
             if name in specprops:
                 rprops.extend(reversed(specprops[name]))
                 del specprops[name]
-        rprops.append(prop)
+        if not isinstance(prop,tuple):
+            rprops.append(prop)
     rprops.reverse()
     return rprops
         
@@ -1370,6 +1371,8 @@ def reorder_props(mod,props):
 def check_properties(mod):
     props = reorder_props(mod,mod.labeled_props)
     
+    
+
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)

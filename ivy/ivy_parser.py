@@ -330,12 +330,16 @@ else:
         'gprop : schdefnrhs'
         p[0] = p[1]
 
+    def p_lgprop(p):
+        'lgprop : optlabel gprop'
+        lf = LabeledFormula(p[1],p[2])
+        lf.lineno = get_lineno(p,2)
+        p[0] = lf
+
     def p_top_axiom_optlabel_gprop(p):
-        'top : top opttemporal AXIOM optlabel gprop'
+        'top : top opttemporal AXIOM lgprop'
         p[0] = check_non_temporal(p[1])
-        lf = LabeledFormula(p[4],p[5])
-        lf.lineno = get_lineno(p,3)
-        lf = addlabel(lf,'axiom')
+        lf = addlabel(p[4],'axiom')
         d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
         d.lineno = get_lineno(p,3)
         p[0].declare(d)
@@ -483,17 +487,38 @@ def p_schdecl_typedecl(p):
     tdfn.lineno = get_lineno(p,1)
     p[0] = [tdfn]
 
-def p_schdecl_propdecl(p):
-    'schdecl : PROPERTY labeledfmla'
-    p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+if iu.get_numeric_version() <= [1,6]:
+
+    def p_schdecl_propdecl(p):
+        'schdecl : PROPERTY lgprop'
+        p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+
+else:
+
+    def p_schdecl_propdecl(p):
+        'schdecl : PROPERTY lgprop'
+        p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
     p[0] = p[2]
 
-def p_schconc_propdecl(p):
-    'schconc : PROPERTY fmla'
-    p[0] = check_non_temporal(p[2])
+if iu.get_numeric_version() <= [1,6]:
+
+    def p_schconc_propdecl(p):
+        'schconc : PROPERTY fmla'
+        p[0] = check_non_temporal(p[2])
+
+else:
+
+    def p_schconc_propdecl(p):
+        'schconc : PROPERTY lgprop'
+        fmla = p[2].formula
+        if isinstance(fmla,SchemaBody):
+            report_error(IvyError(fmla,"formula expected"))
+        p[0] = check_non_temporal(fmla)
+
 
 def p_schdecl_theorem(p):
     'schdecl :  schdefnrhs'
