@@ -183,19 +183,19 @@ def create_strat_map(assumes,asserts,macros):
     all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
     all_fmlas.extend(il.Not(pair[0]) for pair in asserts)
     all_fmlas.extend(pair[0] for pair in macros)
-    for f in all_fmlas:
-        print f
+#    for f in all_fmlas:
+#        print f
     symbols_over_universals = set(il.symbols_over_universals(all_fmlas))
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
-    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+#    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
+#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts+macros:
         map_fmla(pair[0],strat_map)
 
-    show_strat_map(strat_map)
+#    show_strat_map(strat_map)
 #    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
     return strat_map
 
@@ -216,7 +216,7 @@ def create_macro_var_map(assumes,asserts,macros):
         if il.is_variable(x) and x in universally_quantified_variables:
             find(y).univ_variables.add(x)
 
-    show_strat_map(macro_var_map)
+#    show_strat_map(macro_var_map)
     return macro_var_map
 
 def get_unstratified_funs(assumes,asserts,macros):
@@ -276,10 +276,7 @@ def get_unstratified_funs(assumes,asserts,macros):
     bad_interpreted = set()
     for x,y in strat_map.iteritems():
         if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
-            iu.dbg('x')
-            iu.dbg('y')
             for w in y.variables:
-                iu.dbg('w')
                 for v in list(find(macro_var_map[w]).univ_variables) + [w]:
                     if v in universally_quantified_variables:
                         if v.sort == x[0].sort.dom[x[1]]:
@@ -324,20 +321,20 @@ def get_assumes_and_asserts(preconds_only):
     for ldf in im.module.definitions:
         if not isinstance(ldf.formula,il.DefinitionSchema):
             if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-                print 'macro : {}'.format(ldf.formula)
+#                print 'macro : {}'.format(ldf.formula)
                 macros.append((ldf.formula.to_constraint(),ldf))
             else: # can't treat recursive definition as macro
-                print 'axiom : {}'.format(ldf.formula)
+#                print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-            print 'axiom : {}'.format(ldf.formula)
+#            print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+#            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:

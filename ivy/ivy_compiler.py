@@ -1291,12 +1291,12 @@ def check_definitions(mod):
                     continue
             stale.add(prop.formula.defines())
         mod.labeled_props.append(prop)
-    print "definitions:"
-    for prop in mod.definitions:
-        print prop
-    print "props:"
-    for prop in mod.labeled_props:
-        print prop
+    # print "definitions:"
+    # for prop in mod.definitions:
+    #     print prop
+    # print "props:"
+    # for prop in mod.labeled_props:
+    #     print prop
 
 
     defs = dict()
@@ -1454,14 +1454,17 @@ def check_properties(mod):
             # if isinstance(prop.formula,ivy_ast.SchemaBody):
             #     prover.schemata[prop.label.relname] = prop.formula
             #     prop = theorem_to_property(prop)
-            mod.labeled_props.append(prop)
-            if prop.id in nmap:
-                nprop = named_trans(prop)
-                mod.labeled_props.append(nprop)
-                mod.subgoals.append((nprop,[prop]))
-                prover.admit_proposition(nprop,ivy_ast.ComposeTactics())
+            if isinstance(prop.formula,ivy_logic.Definition):
+                mod.definitions.append(prop)
             else:
-                prover.admit_proposition(prop,ivy_ast.ComposeTactics())
+                mod.labeled_props.append(prop)
+                if prop.id in nmap:
+                    nprop = named_trans(prop)
+                    mod.labeled_props.append(nprop)
+                    mod.subgoals.append((nprop,[prop]))
+                    prover.admit_proposition(nprop,ivy_ast.ComposeTactics())
+                else:
+                    prover.admit_proposition(prop,ivy_ast.ComposeTactics())
 
 
 
