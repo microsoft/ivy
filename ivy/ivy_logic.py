@@ -1213,6 +1213,7 @@ lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
 lg.Ite.ugly = lambda self:  '({} if {} else {})'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
+Definition.ugly = lambda self: nary_ugly('=',self.args,parens=False)
 
 lg.Apply.ugly = app_ugly
 
@@ -1299,7 +1300,7 @@ lg.NamedBinder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.N
 def default_drop_annotations(self,inferred_sort,annotated_vars):
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 
-for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff,]: # should binder be here?
+for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, Definition]: # should binder be here?
     cls.drop_annotations = default_drop_annotations
 
 def pretty_fmla(self):

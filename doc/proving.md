@@ -1,6 +1,7 @@
-
-IVy as a theorem prover
-=======================
+---
+layout: page
+title: IVy as a theorem prover
+---
 
 In the development of systems, we sometimes have to reason about
 mathematical functions and relations in ways that automated theorem
@@ -183,8 +184,7 @@ premises to infer its conclusion.
 ```
     property [prop_n] Z = n -> Z + 1 = n + 1
     proof 
-        apply congruence;
-        showgoals
+        apply congruence
 
 ```
 The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
@@ -559,7 +559,7 @@ an example of such a schema, that works for the non-negative integers:
 ```
 Like the recursion schema `rec[u]`, the induction schema `ind[u]` is
 part of the integer theory, and becomes available when we interpret
-type `t` as `int`.
+type `u` as `int`.
 
 Suppose we want to prove that `sum(Y)` is always greater than or equal
 to *Y*, that is:
@@ -616,7 +616,7 @@ Naming
 
 If we can prove that something exists, we can give it a name.  For
 example, suppose that we can prove that, for every *X*, there exists a
-*Y* such that `succ(X,Y)`. The there exists a function that, given an
+*Y* such that `succ(X,Y)`. Then there exists a function that, given an
 *X*, produces such a *Y*. We can define such a function called `next`
 in the following way:
 
@@ -630,7 +630,7 @@ in the following way:
 Provided we can prove the property, and that `next` is fresh, we can
 infer that, for all *X*, `succ(X,next(X))` holds. Defining a function
 in this way, (that is, as a Skolem function) can be quite useful in
-constructibg a proof.  However, since proofs in Ivy are not generally
+constructing a proof.  However, since proofs in Ivy are not generally
 constructive, we have no way to *compute* the function `next`, so we
 can't use it in extracted code.
 
@@ -681,7 +681,7 @@ The isolate contains four declarations. The first, says the type `t`
 is to be interpreted as the integers. This instantiates the theory
 of the integers for type `t`, giving the usual meaning to operators
 like `+` and `<`. The second defines *f* to be the integer successor
-function.  These two declarations are contained an *implemenation*
+function.  These two declarations are contained an *implementation*
 section. This means that the `auto` tactic will use them only within
 the isolate and not outside.
 
@@ -706,7 +706,7 @@ Now suppose we want to prove an extra property using `t_theory`:
 The 'with' clause says that the properties in `t_theory` should be
 used by the `auto` tactic within the isolate. In this case, the `transitivy` 
 property will be used by default. This pattern is particularly useful when
-we have a collection of propties of an abstract datatype that we wish to
+we have a collection of properties of an abstract datatype that we wish to
 use widely without explicitly instantiating them. 
 
 Notice that `auto` will not use the interpretation of *t* as the
@@ -720,14 +720,9 @@ We used two typical techniques here to keep the verification
 conditions decidable.  First, we hid the integer theory and the
 definition of *f* inside an isolate, replacing them with some
 abstract properties. Second, we eliminated a potential cycle in the
-function graph by instantiating the quantifier implicit in theorm
-`expanding`, resulting in a quantifier-free proof goal.
+function graph by instantiating the quantifier implicit in theorem
+`expanding`, resulting in a stratified proof goal.
 
-The `with` clause of an isolate can also refer to specific
-properties, definitions and types. For example, if we wish the
-`auto` tactic to use the definition of *f* in spite of its being
-hidden, we can say `with f` and similarly, if we wish to use the
-interpretation of `t` as the integers, we can say `with t`.
 
 
 Hierarchies of isolates
@@ -736,7 +731,6 @@ Hierarchies of isolates
 An isolate can in turn contain isolates. This allows us to structure a
 proof hierarchically. For example, the above proof could have been
 structured like this:
-
 
 ```
     isolate extra2 = {
@@ -819,3 +813,4 @@ visible properties of the isolates occur textually at the beginning:
             }
         }
     }
+```

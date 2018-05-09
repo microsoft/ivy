@@ -51,6 +51,7 @@ class ProofChecker(object):
         for goal in schemata.values():
             vocab = goal_vocab(goal)
             self.stale.update(vocab.symbols)
+        iu.dbg('[str(s) for s in self.stale]')
 
     def admit_definition(self,defn,proof=None):
         """ Admits a definition if it is non-recursive or match a definition schema. 

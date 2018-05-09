@@ -850,7 +850,7 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
     def add_definition(self,ldf):
-        defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.definitions
+        defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.labeled_props
         lhsvs = list(lu.variables_ast(ldf.formula.args[0]))
         for idx,v in enumerate(lhsvs):
             if v in lhsvs[idx+1:]:
@@ -893,11 +893,11 @@ class IvyDomainSetup(IvyDeclInterp):
         global last_fmla
         last_fmla = self.last_fact.formula
         # tricky: if proof is of a definition, move the definition to labeled_props
-        if isinstance(last_fmla,ivy_logic.Definition):
-            defs = self.domain.definitions
-            assert len(defs) >= 1 and defs[-1].id == self.last_fact.id
-            self.domain.labeled_props.append(self.last_fact)
-            defs.pop()
+        # if isinstance(last_fmla,ivy_logic.Definition):
+        #     defs = self.domain.definitions
+        #     assert len(defs) >= 1 and defs[-1].id == self.last_fact.id
+        #     self.domain.labeled_props.append(self.last_fact)
+        #     defs.pop()
         self.domain.proofs.append((self.last_fact,pf.compile()))
 
     def progress(self,df):
@@ -1274,6 +1274,30 @@ def get_symbol_dependencies(mp,res,t):
                 get_symbol_dependencies(mp,res,mp[s])
 
 def check_definitions(mod):
+
+    # get the definitions that have no dependence on proofs
+
+    stale = set()
+    props = mod.labeled_props
+    mod.labeled_props = []
+    with_proofs = set()
+    for lf,pf in mod.proofs:
+        with_proofs.add(lf.id)
+    for prop in props:
+        if isinstance(prop.formula,ivy_logic.Definition):
+            if prop.id not in with_proofs:
+                if not any(s in stale for s in lu.used_symbols_ast(prop.formula)):
+                    mod.definitions.append(prop)
+                    continue
+            stale.add(prop.formula.defines())
+        mod.labeled_props.append(prop)
+    print "definitions:"
+    for prop in mod.definitions:
+        print prop
+    print "props:"
+    for prop in mod.labeled_props:
+        print prop
+
 
     defs = dict()
     def checkdef(sym,lf):

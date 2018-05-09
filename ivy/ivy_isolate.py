@@ -716,7 +716,11 @@ def check_with_parameters(mod,isolate_name):
     present = set(a.relname for a in isolate.present())
     present.update(verified)
 
-    derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
+    else:
+        derived = set(ldf.name for ldf in mod.definitions)
+        
     propnames = set(x.label.rep for x in (mod.labeled_props+mod.labeled_axioms+mod.labeled_conjs) if x.label is not None)
     for name in present:
         if (name != 'this' and name not in mod.hierarchy

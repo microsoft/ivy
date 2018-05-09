@@ -490,7 +490,7 @@ def p_schdecl_typedecl(p):
 if iu.get_numeric_version() <= [1,6]:
 
     def p_schdecl_propdecl(p):
-        'schdecl : PROPERTY lgprop'
+        'schdecl : PROPERTY labeledfmla'
         p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
 
 else:

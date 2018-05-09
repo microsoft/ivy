@@ -24,6 +24,7 @@ class UFNode(object):
         self.id = ufidctr
         ufidctr += 1
         self.variables = set()
+        self.univ_variables = set()
     def __str__(self):
         return str(self.id) + '[' + ','.join(str(x) for x in self.variables) + ']'
     def __repr__(self):
@@ -60,11 +61,11 @@ def unify(s1, s2):
 def show_strat_map(m):
     print 'strat_map = {'
     for x,y in m.iteritems():
-        y = find(y)
+        z = find(y)
         if isinstance(x,tuple):
-            print '({},{}) : {}'.format(x[0],x[1],y)
+            print '({},{}) : {} -> {}'.format(x[0],x[1],y,z)
         else:
-            print '{} : {}'.format(x,y)
+            print '{} : {} -> {}'.format(x,y,z)
     print '}'
         
 
@@ -119,7 +120,8 @@ def get_sort_arcs(assumes,asserts,strat_map):
 
 #    show_strat_map(strat_map)
     for func,node in list(strat_map.iteritems()):
-        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]) and func[0] in symbols_over_universals:
+#        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]) and func[0] in symbols_over_universals:
+        if isinstance(func,tuple) and not il.is_interpreted_symbol(func[0]):
             yield (find(node),find(strat_map[func[0]]),func[0])
 
     for fmla,ast in assumes + asserts:
@@ -167,7 +169,11 @@ def map_fmla(fmla,strat_map):
         if func in symbols_over_universals or True:
             for idx,node in enumerate(nodes):
                 if node is not None:
-                    unify(strat_map[(func,idx)],node)
+                    anode = strat_map[(func,idx)]
+                    unify(anode,node)
+                    arg = fmla.args[idx]
+                    if il.is_variable(arg):
+                        anode.variables.add(arg)
             return strat_map[func]
     return None
                 
@@ -177,21 +183,41 @@ def create_strat_map(assumes,asserts,macros):
     all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
     all_fmlas.extend(il.Not(pair[0]) for pair in asserts)
     all_fmlas.extend(pair[0] for pair in macros)
-#    for f in all_fmlas:
-#        print f
+    for f in all_fmlas:
+        print f
     symbols_over_universals = set(il.symbols_over_universals(all_fmlas))
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-#    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
-#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+    print 'symbols_over_universals : {}'.format([str(v) for v in symbols_over_universals])
+    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     strat_map = defaultdict(UFNode)
     for pair in assumes+asserts+macros:
         map_fmla(pair[0],strat_map)
 
-#    show_strat_map(strat_map)
+    show_strat_map(strat_map)
 #    print 'universally_quantified_variables:{}'.format(universally_quantified_variables)
     return strat_map
+
+def create_macro_var_map(assumes,asserts,macros):
+    global universally_quantified_variables
+    macro_map = dict()
+    for _,lf in macros:
+        macro_map[lf.formula.defines()] = lf
+    macro_var_map = defaultdict(UFNode)
+    for fmla,_ in assumes+asserts+macros:
+        for app in ilu.apps_ast(fmla):
+            if app.rep in macro_map:
+                mvs = macro_map[app.rep].formula.args[0].args
+                for v,w in zip(app.args,mvs):
+                    if il.is_variable(v):
+                        unify(macro_var_map[v],macro_var_map[w])
+    for x,y in macro_var_map.iteritems():
+        if il.is_variable(x) and x in universally_quantified_variables:
+            find(y).univ_variables.add(x)
+
+    show_strat_map(macro_var_map)
+    return macro_var_map
 
 def get_unstratified_funs(assumes,asserts,macros):
 
@@ -223,38 +249,43 @@ def get_unstratified_funs(assumes,asserts,macros):
             
     for x,y in strat_map.iteritems():
         if il.is_variable(x) and x in universally_quantified_variables:
-            find(y).variables.add(x)
-
+            find(y).univ_variables.add(x)
 #    show_strat_map(strat_map)
 
     fun_sccs = [(x,y) for x,y in zip(sccs,scc_arcs)
-                if y and any(len(n.variables) > 0 for n in x)]
+                if y and any(len(n.univ_variables) > 0 for n in x)]
 
-    arc_map = defaultdict(list)
-    for x,y,z in arcs:
-        arc_map[x].append(y)
-    for scc in sccs:
-        for n in scc:
-            for m in arc_map[n]:
-                m.variables.update(n.variables)
+    # arc_map = defaultdict(list)
+    # for x,y,z in arcs:
+    #     arc_map[x].append(y)
+    # for scc in sccs:
+    #     for n in scc:
+    #         for m in arc_map[n]:
+    #             m.merged_variables.update(n.merged_variables)
     
     # print 'sccs:'
     # for scc in sccs:
     #     print [str(x) for x in scc]
 
 
+    macro_var_map = create_macro_var_map(assumes,asserts,macros)
+    
+
 #    show_strat_map(strat_map)
 
     bad_interpreted = set()
     for x,y in strat_map.iteritems():
-        y = find(y)
         if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
-            for v in y.variables:
-                if v in universally_quantified_variables:
-                    if v.sort == x[0].sort.dom[x[1]]:
-                        if il.has_infinite_interpretation(v.sort):
-                            bad_interpreted.add(x[0])
-                            break
+            iu.dbg('x')
+            iu.dbg('y')
+            for w in y.variables:
+                iu.dbg('w')
+                for v in list(find(macro_var_map[w]).univ_variables) + [w]:
+                    if v in universally_quantified_variables:
+                        if v.sort == x[0].sort.dom[x[1]]:
+                            if il.has_infinite_interpretation(v.sort):
+                                bad_interpreted.add(x[0])
+                                break
 
     return fun_sccs, bad_interpreted
 
@@ -293,20 +324,20 @@ def get_assumes_and_asserts(preconds_only):
     for ldf in im.module.definitions:
         if not isinstance(ldf.formula,il.DefinitionSchema):
             if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-#                print 'macro : {}'.format(ldf.formula)
+                print 'macro : {}'.format(ldf.formula)
                 macros.append((ldf.formula.to_constraint(),ldf))
             else: # can't treat recursive definition as macro
-#                print 'axiom : {}'.format(ldf.formula)
+                print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-#            print 'axiom : {}'.format(ldf.formula)
+            print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-#            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
@@ -459,7 +490,7 @@ def parse_theory(name):
 
 def get_theory_schemata(name):
     if iu.version_le("1.6",iu.get_string_version()):
-        if name.startswith('bv['):
+        if name.startswith('bv[') or name == 'nat':
             return theories['int']
         return theories.get(name,None)
     return None
