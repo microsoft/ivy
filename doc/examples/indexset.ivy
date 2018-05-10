@@ -16,16 +16,16 @@
 # Our datatype takes two types as parameters:
 #
 # - A *index* type that is an unbounded sequence type
-# - A *basis* type that is a sequence type equipped with an index `max` 
-#   representing the cardinality of the sequence.
+# - A *basis* type that is a sequence type equipped with a value `max` 
+#   representing the maximum value of the sequence.
 #
-# Sequence types provide a total order, a zero element schemata for
-# induction and recursion. The index type is used for counting
-# elements of the basis type. The index type is needed because the
-# basis type does not generally contain the value `n` representing its
-# own cardinality. Typically, the basis type will be an instance of
-# `iterable` meaning it is a finite sequence with a maximum value
-# `max`. 
+# Sequence types provide a total order, a zero element, schemata for
+# induction and recursion, and an arithmetic theory in `impl`. The
+# index type is used for counting elements of the basis type. This
+# type is needed because the basis type does not generally contain a
+# value representing the cardinality of `[0,max]`. Typically, the
+# basis type will be an instance of `iterable` meaning it is a finite
+# sequence with a maximum value `max`.
 
 # The module provides the following interface:
 
@@ -62,19 +62,9 @@ include deduction
 #
 #  - basis: the basis object (instance of unbounded_sequence)
 #  - index: the index object (instance of unbounded_sequence)
-#  - upper: object giving upper bound of the set S in basis
 
-# The structure 'upper' must contain a value `n` of type `basis`
-# that gives the upper bound on ordinals. That is, this defines the
-# set S as the set of ordinals N such that 0 <= N <= n-1. It must also
-# contain a proof that n-1 >= 0. 
 
-# Notice this is set up so that for modular types you can give the
-# modulus for `n`. For example, for bv[4], you can let `n` be 16
-# (thus, n = 0 mod 16). This gives n-1 = 15, so the range is
-# effectively [0..15] which is the complete universe of bv[4].
-
-module indexset(basis,index,upper) = {
+module indexset(basis,index) = {
 
     type set 
     
@@ -129,7 +119,7 @@ module indexset(basis,index,upper) = {
 
 	    definition cnt(x:basis) = 1 if x <= 0 else cnt(x-1) + 1
 	    proof
-                apply rec[basis]
+                apply basis.rec
 
 	    # We define cardinality in terms of a recursive function
 	    # cardUpTo that counts the number of elements in a set
@@ -145,16 +135,16 @@ module indexset(basis,index,upper) = {
 		(1 if member(b,s) else 0) if b <= 0
                 else (cardUpTo(s,b-1) + (1 if member(b,s) else 0))
 	    proof
-               apply rec[basis]
+               apply basis.rec
 
 	    # The cardinality function is then defined in terms of cardUpTo.
 
-	    definition card(S) = cardUpTo(S,(upper.n) - 1)
+	    definition card(S) = cardUpTo(S,basis.max)
 
 	    # A majority is a set whose cardinality is greater than 1/2 of
 	    # the basis set.
 
-	    definition majority(X) = 2 * card(X) > cnt((upper.n) - 1)
+	    definition majority(X) = 2 * card(X) > cnt(basis.max)
 	    
 	    object spec = {
 		# This is the definition of dijoint sets in terms of
@@ -181,7 +171,7 @@ module indexset(basis,index,upper) = {
 
 		property disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
 		proof
-                    apply ind[basis] with X = B;
+                    apply basis.ind with X = B;
                     showgoals
 	    }
 
@@ -192,10 +182,10 @@ module indexset(basis,index,upper) = {
 	    # With the above lemma, Z3 can prove the "majorities intersect"
             # property. The idea is that the lemma can be specialized to this:
             #
-            #      # property disjoint(X,Y) -> card(X) + card(Y) <= cnt(upper.n)
+            #      # property disjoint(X,Y) -> card(X) + card(Y) <= cnt(basis.max)
             # 
             # Since both majorities have cardinality greater than
-            # `cnt(upper.n)/2`, it follows that majorities cannot be
+            # `cnt(basis.max)/2`, it follows that majorities cannot be
             # disjoint, so they must have an element in common.
 
             property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
@@ -203,11 +193,11 @@ module indexset(basis,index,upper) = {
 	
 	attribute test = impl
     }
-    with upper,basis.impl,index.impl
+    with basis,index.impl
 
-    # Note: we need the object `upper` to get the fact that `n` is positive. Also,
-    # we use the *implementations* of the basis and index types. That means both
-    # are interpreted. Fortunately, we don't run afoul of the fragment checker.
+    # Note: we use the *implementations* of the basis and index
+    # types. That means both are interpreted. Fortunately, we don't
+    # run afoul of the fragment checker.
 
     isolate api = {
 	
@@ -254,15 +244,10 @@ module indexset(basis,index,upper) = {
 }
 
 
-instance basis : unbounded_sequence
+instance basis : iterable
 instance index : unbounded_sequence
 
-object upper = {
-    var n : basis
-    axiom n > 0
-}
-
-instance nset : indexset(basis,index,upper)
+instance nset : indexset(basis,index)
 
 export nset.empty
 export nset.add

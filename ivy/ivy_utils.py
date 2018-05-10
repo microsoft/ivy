@@ -86,11 +86,25 @@ def unzip_append(tups):
     """ turn a list of tuples of lists into a tuple of lists """
     return (concat(x) for x in zip(*tups))
 
+def unzip_pairs(tups):
+    """ turn a list of pairs into a pair of lists """
+    return zip(*tups) if tups else ([],[])
+
 def flatten(l):
     """ flatten a generator """
     if isinstance(l,list) or isinstance(l,tuple):
         return functools.reduce(operator.add, (flatten(x) for x in l), [])
     return [l]
+
+def union_of_list(sets):
+    if len(sets) == 1:
+        return sets[0]
+    res = set()
+    for s in sets:
+        dbg('s')
+        res.update(s)
+    return res
+    
 
 def union_to_list(to_list,from_list):
     used = set(to_list)
@@ -436,6 +450,40 @@ def reachable(items,iter_succ,key=lambda x:x):
                 d.add(k)
                 l.append(i)
     return list(reversed(l))
+
+
+def cycle(arcs,first=lambda x:x[0],second=lambda x:x[1]):
+    """ finds a cycle of arcs in a graph. first maps arcs to
+    hashable tails, second maps arcs to hashable heads.
+    returns a list of arcs forming a cycle, or None. """
+    m = collections.defaultdict(set)
+    for arc in arcs:
+        m[first(arc)].add(arc)
+    heap = set()
+    stack = set()
+    path = []
+    def dfs(node):
+        if node not in heap:
+            if node in stack:
+                return True
+            stack.add(node)
+            for arc in m[node]:
+                if dfs(second(arc)):
+                    path.append(arc)
+                    return True
+            stack.remove(node)
+            heap.add(node)
+            return False
+    for arc in arcs:
+        if dfs(first(arc)):
+            end = second(path[0])
+            fpath = []
+            for arc in reversed(path):
+                fpath.append(arc)
+                if first(arc) == end:
+                    return fpath
+            assert False
+    return None
 
 
 class ErrorPrinter(object):

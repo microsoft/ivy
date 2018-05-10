@@ -18,6 +18,7 @@ import ivy_ast
 import ivy_theory as ith
 import ivy_transrel as itr
 import ivy_solver as islv
+import ivy_fragment as ifc
 
 import sys
 from collections import defaultdict
@@ -513,7 +514,7 @@ def check_isolate():
         l2s(mod, temporals[0])
         mod.concept_spaces = []
         mod.update_conjs()
-    ith.check_theory()
+    ifc.check_fragment()
     with im.module.theory_context():
         summarize_isolate(mod)
         return

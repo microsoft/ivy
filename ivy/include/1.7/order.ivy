@@ -314,10 +314,36 @@ module iterable = {
         property 0 <= X:t & X <= max
     }
 
+    schema rec = {
+         type q
+         function base(X:t) : q
+         function step(X:q,Y:t) : q
+         function fun(X:t) : q
+         #---------------------------------------------------------
+         definition fun(X:t) = base(X) if X <= 0 else step(fun(X-1),X)
+     }
+
+     schema ind = {
+         relation p(X:t)
+         property X <= 0 -> p(X)
+         property p(X) -> p(X+1)
+         #--------------------------
+         property p(X)    
+     }
+
+     schema lep = {
+         function n : t
+         function p(X:t) : bool
+         #---------------------------------------------------------
+         property exists L. (L >= n & forall B. (B >= n & p(B)-> p(L) & L <= B))
+     }
+
+
     implementation {
         parameter size : t
         interpret t -> <<< int >>>
         definition (x:t < y:t) = <<< x < y >>>
+        definition (x:t - y:t) = <<< x - y >>>
         definition 0:t = <<< 0 >>>
         definition max = <<< `size` - 1 >>>
         

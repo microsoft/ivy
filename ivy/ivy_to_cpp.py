@@ -19,7 +19,8 @@ import ivy_ast
 import itertools
 import ivy_cpp
 import ivy_cpp_types
-import ivy_theory as ith
+import ivy_fragment as ifc
+
 
 from collections import defaultdict
 from operator import mul
@@ -4368,7 +4369,7 @@ def main():
                     im.module.labeled_axioms.extend(im.module.labeled_props)
                     im.module.labeled_props = []
                     if target.get() != 'repl':
-                        ith.check_theory(True)
+                        ifc.check_fragment(True)
                     with im.module.theory_context():
                         basename = opt_classname.get() or im.module.name
                         if len(isolates) > 1:
