@@ -44,7 +44,8 @@ class ProofChecker(object):
         self.definitions = dict((d.formula.defines().name,normalize_goal(d)) for d in definitions)
         self.schemata = dict((x,normalize_goal(y)) for x,y in schemata.iteritems()) if schemata is not None else dict()
         for ax in axioms:
-            self.schemata[ax.name] = ax
+            if ax.label is not None:
+                self.schemata[ax.name] = ax
         self.stale = set() # set of symbols that are not fresh
         for lf in axioms + definitions:
             self.stale.update(lu.used_symbols_ast(lf.formula))
