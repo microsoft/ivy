@@ -13,33 +13,33 @@
 # building subsets and a computable majority prediate satisfying the
 # the majority intersection property.
 
-# Our datatype takes two types as parameters:
-#
-# - A *index* type that is an unbounded sequence type
-# - A *basis* type that is a sequence type equipped with a value `max` 
-#   representing the maximum value of the sequence.
-#
-# Sequence types provide a total order, a zero element, schemata for
-# induction and recursion, and an arithmetic theory in `impl`. The
-# index type is used for counting elements of the basis type. This
-# type is needed because the basis type does not generally contain a
-# value representing the cardinality of `[0,max]`. Typically, the
-# basis type will be an instance of `iterable` meaning it is a finite
-# sequence with a maximum value `max`.
+# Our datatype takes a type *basis* as a parameter. This must be a
+# sequence type equipped with a value `max` representing the maximum
+# value of the sequence.  Sequence types provide a total order, a zero
+# element, schemata for induction and recursion, and an arithmetic
+# theory.
 
 # The module provides the following interface:
 
 # 1) a type *this* representing subsets of the basis type in the range [0,max-1]
 # 2) a *member* relation
-# 3) a relation *disjoint* beteween sets
-# 4) a function *card* giving the cardinality of a set as an index
-# 5) a function *cnt* gives the cardinality of the set of the set [0,x]
-# 6) a predicate `majority` on sets that is true if the cardinality is > n/2.
-# 6) an action `empty` returning the empty set
-# 7) an action `add` that adds an element to a set
-# 8) an action `is_empty` returning true if a set is empty
+# 3) a predicate `majority` on sets that is true if the cardinality is > n/2.
+# 4) an action `empty` returning the empty set
+# 5) an action `add` that adds an element to a set
+# 6) an action `is_empty` returning true if a set is empty
 
-# The provided functions are stratified in this order: `set -> basis
+# Internally, the following are also used:
+
+# 1) An unbounded sequence type `index` used for counting elements of `basis`
+# 2) a relation *disjoint* beteween sets
+# 3) a function *card* giving the cardinality of a set as an index
+# 5) a function *cnt* gives the cardinality of the set of the set [0,x]
+
+# The index type is needed in order to represent the cardinality of
+# the set `[0,max]`, which is `max+1` and thus cannot be represented
+# by `basis`.
+
+# Note the functions above are stratified in this order: `set -> basis
 # -> index.t`.
 
 # The implementation gives computable definitions of card, cnt and majority.
@@ -64,9 +64,10 @@ include deduction
 #  - index: the index object (instance of unbounded_sequence)
 
 
-module indexset(basis,index) = {
+module indexset(basis) = {
 
     type set 
+    instance index : unbounded_sequence
     
     relation member(E:basis,S:set)
     function card(S:set) : index.t
@@ -119,7 +120,7 @@ module indexset(basis,index) = {
 
 	    definition cnt(x:basis) = 1 if x <= 0 else cnt(x-1) + 1
 	    proof
-                apply basis.rec
+                apply rec[basis]
 
 	    # We define cardinality in terms of a recursive function
 	    # cardUpTo that counts the number of elements in a set
@@ -135,7 +136,7 @@ module indexset(basis,index) = {
 		(1 if member(b,s) else 0) if b <= 0
                 else (cardUpTo(s,b-1) + (1 if member(b,s) else 0))
 	    proof
-               apply basis.rec
+               apply rec[basis]
 
 	    # The cardinality function is then defined in terms of cardUpTo.
 
@@ -171,7 +172,7 @@ module indexset(basis,index) = {
 
 		property disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
 		proof
-                    apply basis.ind with X = B;
+                    apply ind[basis] with X = B;
                     showgoals
 	    }
 
@@ -193,7 +194,7 @@ module indexset(basis,index) = {
 	
 	attribute test = impl
     }
-    with basis,index.impl
+    with basis.impl,index.impl
 
     # Note: we use the *implementations* of the basis and index
     # types. That means both are interpreted. Fortunately, we don't
@@ -244,10 +245,17 @@ module indexset(basis,index) = {
 }
 
 
-instance basis : iterable
-instance index : unbounded_sequence
+# 
+# The following is a test instantiation of `indexset`, to check that the
+# verification goes through.
+#
 
-instance nset : indexset(basis,index)
+instance basis : unbounded_sequence
+object basis = { ...
+    var max : basis
+}
+
+instance nset : indexset(basis)
 
 export nset.empty
 export nset.add

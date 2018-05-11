@@ -97,11 +97,8 @@ def flatten(l):
     return [l]
 
 def union_of_list(sets):
-    if len(sets) == 1:
-        return sets[0]
     res = set()
     for s in sets:
-        dbg('s')
         res.update(s)
     return res
     

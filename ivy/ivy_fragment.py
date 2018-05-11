@@ -51,7 +51,21 @@ from ivy_union_find import *
 # We treat quantifier alternations as if the were skolemized. That is, if
 # we have `exists w. t[v,w]` we treat it as `t<f(v)/w>`. 
 
-# The globals macro_var_map and macro_dep_map are explained below.
+# The return value of `map_fmla` is a pair `(v,uvs)` where:
+#
+# -  `v` is `S_v` if the fmla is a universal variable, else None
+# -  `uvs` is the set of `S_w` for universal variables `w` occurring *under* the
+#    formula, that is, not at top level.
+
+# Each macro is evaluated only once and memoized. The evaluation is an
+# over-approximation, since its return value includes *all* of the
+# universal variables that are be substituted into the macro
+# parameters, and not just those substituted at any particular call
+# site. This over-approximation is made to avoid expanding all the
+# macros, which would be exponential.
+
+# Macro expansion uses global maps macro_map, macro_value_map,
+# macro_var_map and macro_dep_map.  These are explained below.
 
 def map_fmla(lineno,fmla,strat_map,arcs):
     """ Add all of the subterms of `fmla` to the stratification graph. """
@@ -59,6 +73,8 @@ def map_fmla(lineno,fmla,strat_map,arcs):
     global universally_quantified_variables
     global macro_var_map
     global macro_dep_map
+    global macro_map
+    global macro_val_map
 
     if il.is_binder(fmla):
         return map_fmla(lineno,fmla.body,strat_map,arcs)
@@ -68,45 +84,51 @@ def map_fmla(lineno,fmla,strat_map,arcs):
                 res = UFNode()
                 strat_map[fmla] = res
             return strat_map[fmla],set()
-        return macro_var_map.get(fmla,None), macro_dep_map.get(fmla,set())
+        node,vs = macro_var_map.get(fmla,None), macro_dep_map.get(fmla,set())
+        return node,vs
     nodes,uvs = iu.unzip_pairs([map_fmla(lineno,f,strat_map,arcs) for f in fmla.args])
-    iu.dbg('uvs')
     all_uvs = iu.union_of_list(uvs)
-    iu.dbg('nodes')
-    iu.dbg('type(all_uvs)')
-    all_uvs.update(nodes)
+    all_uvs.update(n for n in nodes if n is not None)
     if il.is_eq(fmla):
-        unify(*nodes)
         if all(x is not None for x in nodes):
             unify(*nodes)
         elif nodes[0] is not None:
-            arcs.extend((strat_map[v],nodes[0],fmla,lineno) for v in uvs[1])
+            arcs.extend((v,nodes[0],fmla,lineno) for v in uvs[1])
         elif nodes[1] is not None:
-            arcs.extend((strat_map[v],nodes[1],fmla,lineno) for v in uvs[0])
+            arcs.extend((v,nodes[1],fmla,lineno) for v in uvs[0])
         return None,all_uvs 
     if il.is_ite(fmla):
         if all(x is not None for x in nodes[1:]):
             unify(*nodes[1:])
         elif nodes[1] is not None:
-            arcs.extend((strat_map[v],nodes[1],fmla,lineno) for v in uvs[2])
+            arcs.extend((v,nodes[1],fmla,lineno) for v in uvs[2])
         elif nodes[2] is not None:
-            arcs.extend((strat_map[v],nodes[2],fmla,lineno) for v in uvs[1])
-        return None,all_uvs
+            arcs.extend((v,nodes[2],fmla,lineno) for v in uvs[1])
+        return nodes[1] or nodes[2],all_uvs
     if il.is_app(fmla):
         func = fmla.rep
         if not il.is_interpreted_symbol(func):
+            if func in macro_value_map:
+                return macro_value_map[func]
+            if func in macro_map:
+                defn = macro_map[func]
+                res = map_fmla(defn.lineno,defn.formula.rhs(),strat_map,arcs)
+                macro_value_map[func] = res
+                return res
             for idx,node in enumerate(nodes):
                 anode = strat_map[(func,idx)]
                 if node is not None:
                     unify(anode,node)
-                arcs.extend((v,anode,fmla,idx) for v in uvs[idx])
+                arcs.extend((v,anode,fmla,lineno) for v in uvs[idx])
         return None,all_uvs
-    return None
+    return None,all_uvs
                 
 # We treat macros (non-recursive definitions) as if they were
-# syntactically expanded. However, since actually expanding them
-# would be exponential, we instead compute the set of universally quantified
-# variables that can be substituted under each macro parameter.
+# syntactically expanded. However, since actually expanding them would
+# be exponential, we instead compute the set of universally quantified
+# variables that can be substituted under each macro parameter. This
+# gives us an over-approximaiton of the variables dependencies of all
+# call sites.
 #
 # There are two maps that store this information:
 #
@@ -122,17 +144,27 @@ def map_fmla(lineno,fmla,strat_map,arcs):
 # These sets have to be propagated downward from calling to called
 # macros, so we travese the list of macros in reverse order.
 #
+# In addition, we set up two maps for evaluating macros:
+#
+# - macro_map maps each symbol defined by a macro to its definition
+#
+# - macro_value_map is the memo table that maps each symbol defined by
+#   a macro to the result of map_fmla for its right-hand-side.
+
 # TODO: make sure macros are really listed in dependency order.
 
 def create_macro_maps(assumes,asserts,macros,strat_map):
     global universally_quantified_variables
     global macro_var_map
     global macro_dep_map
+    global macro_map
+    global macro_value_map
     macro_map = dict()
     for _,lf in macros:
         macro_map[lf.formula.defines()] = lf
     macro_dep_map = defaultdict(set)
     macro_var_map = dict()
+    macro_value_map = dict()
     def var_map_add(w,vn):
         if w in macro_var_map:
             unify(macro_var_map[w],vn)
@@ -152,17 +184,22 @@ def create_macro_maps(assumes,asserts,macros,strat_map):
                             if v in macro_dep_map:
                                 macro_dep_map[w].update(macro_dep_map[v])
                         else:
-                            for v in ilu.used_variables_ast(v):
-                                if v in universally_quantified_variables:
-                                    macro_dep_map[w].add(v)
-                            if v in macro_var_map:
-                                macro_dep_map[w].add(macro_var_map[v])
-                            if v in macro_dep_map:
-                                macro_dep_map[w].update(macro_var_map[v])
-    print 'macro_var_map: {'
-    for x,y in macro_var_map.iteritems():
-        print '{} -> {}'.format(x,y)
-    print '}'
+                            for u in ilu.used_variables_ast(v):
+                                if u in universally_quantified_variables:
+                                    macro_dep_map[w].add(strat_map[u])
+                                if u in macro_var_map:
+                                    macro_dep_map[w].add(macro_var_map[u])
+                                if u in macro_dep_map:
+                                    macro_dep_map[w].update(macro_var_map[u])
+    # print 'macro_var_map: {'
+    # for x,y in macro_var_map.iteritems():
+    #     print '{} -> {}'.format(x,y)
+    # print '}'
+    # print 'macro_dep_map: {'
+    # for x,y in macro_dep_map.iteritems():
+    #     print '{} -> {}'.format(x,y)
+    # print '}'
+
 #
 # We treat AE quantifier alternations as if the were skolemized. That
 # is, if we have `exists w. t[v,w]` we treat it as `t<f(v)/w>`. In
@@ -223,7 +260,7 @@ def create_strat_map(assumes,asserts,macros):
 
     universally_quantified_variables = il.universal_variables(all_fmlas)
 
-    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     # Create an empty graph.
 
@@ -240,15 +277,16 @@ def create_strat_map(assumes,asserts,macros):
         make_skolems(fmla,ast,True,[])
 
     # Construct the stratification graph by calling `map_fmla` on all
-    # of the formulas in teh VC.
+    # of the formulas in the VC. We don't include the macro definitions
+    # here, because these are 'inlined' by `map_fmla`.
 
-    for pair in assumes+asserts+macros:
+    for pair in assumes+asserts:
         map_fmla(pair[1].lineno,pair[0],strat_map,arcs)
 
-    show_strat_graph(strat_map,arcs)
+#    show_strat_graph(strat_map,arcs)
     return strat_map,arcs
 
-# This is just for debugging
+# Show a stratification graph. This is just for debugging.
 
 def show_strat_graph(m,a):
     print 'nodes = {'
@@ -265,12 +303,22 @@ def show_strat_graph(m,a):
     print '}'
     
         
+def report_feu_error(text):
+    raise iu.IvyError(None,"The verification condition is not in the fragment FEU.\n\n{}".format(text))
 
+def report_cycle(cycle):
+    if cycle is not None:
+        report_feu_error("The following terms may generate an infinite sequence of instantiations:\n"+
+                         '\n'.join('  ' + str(arc[3]) + str(arc[2]) for arc in cycle))
 
+def report_interp_over_var(v,fmla,ast):
+    report_feu_error('An interpreted symbol is applied to a universally quantified variable:\n'+
+                     '{}{}'.format(ast.lineno,fmla))
 
-def get_unstratified_funs(assumes,asserts,macros):
+def check_feu(assumes,asserts,macros):
     """ Take a list of assumes, assert and macros, and determines
-    whether collectively they are in the FEU fragment. """
+    whether collectively they are in the FEU fragment, raising an error
+    exception if not. """
 
     # Alpha convert so that all the variables have unique names,
 
@@ -289,10 +337,19 @@ def get_unstratified_funs(assumes,asserts,macros):
     
     # Check for cycles in the stratification graph.
 
-    cycle = iu.cycle(arcs, first = lambda x: x[0].id, second = lambda x: x[1].id)
+    report_cycle(iu.cycle(arcs, first = lambda x: find(x[0]), second = lambda x: find(x[1])))
 
+    for fmla,lf in assumes+asserts+macros:
+        for app in ilu.apps_ast(fmla):
+            if il.is_interpreted_symbol(app.rep):
+                for v in app.args:
+                    if il.is_variable(v) and il.has_infinite_interpretation(v.sort):
+                        if v in universally_quantified_variables or v in macro_var_map:
+                            report_interp_over_var(v,app,lf)
+                    if il.is_app(v) and v.rep in macro_value_map and macro_value_map[v.rep][0] is not None:
+                        report_interp_over_var(v,app,lf)
+                        
 
-    bad_interpreted = set()
     # for x,y in strat_map.iteritems():
     #     if isinstance(x,tuple) and (il.is_interpreted_symbol(x[0]) or x[0].name == '='):
     #         for w in y.variables:
@@ -303,8 +360,14 @@ def get_unstratified_funs(assumes,asserts,macros):
     #                             bad_interpreted.add(x[0])
     #                             break
 
-    return cycle, bad_interpreted
 
+# Here we try to extract all the assumes, asserts and macros that
+# might wind up in the prover context when checking the current
+# isolate. This is a bit conservative, since not all of these may wind
+# up in the *same* prover context, and also a bit error-prone, since
+# changes to the VC generation procedure by invalidate this code. On
+# the whole it would probably be better to fragment check each prover
+# context separately.
 
 def get_assumes_and_asserts(preconds_only):    
     assumes = []
@@ -369,63 +432,8 @@ def get_assumes_and_asserts(preconds_only):
 #        print 'macro: {}'.format(x[0])
     return assumes,asserts,macros
 
-def report_error(logic,note,ast):
-    msg = "The verification condition is not in logic {}{} because {}.".format(logic,note,il.reason())
-    if il.reason() == "functions are not stratified":
-        for sorts,asts in unstrat:
-            msg += "\n\nNote: the following functions form a cycle:\n"
-            for a in asts:
-                if isinstance(a,il.Symbol):
-                    msg += '  {}\n'.format(il.sym_decl_to_str(a))
-                else:
-                    msg += '  {}\n'.format(iu.IvyError(a,"quantifier alternation"))                
-    raise iu.IvyError(ast,msg)
-
-def report_epr_error(unstrat,bad_interpreted):
-    msg = "The verification condition is not in logic epr."
-    if unstrat:
-        msg += "\n\nNote: the following terms generate an infinite sequence of instantiations:\n"
-        for arc in unstrat:
-            msg += '  ' + str(arc[2]) + '\n'
-    if bad_interpreted:
-        msg += "\n\nNote: the following interpreted functions occur over variables:\n"
-        for sym in bad_interpreted:
-            msg += '  {}\n'.format(il.sym_decl_to_str(sym))
-            
-    raise iu.IvyError(None,msg)
-
-def check_can_assert(logic,fmla,ast):
-    check_can_assume(logic,fmla,ast)
-    if not il.is_in_logic(il.Not(fmla),logic):
-        report_error(logic," when negated",ast)
-
-def check_can_assume(logic,fmla,ast):
-    if not il.is_in_logic(il.close_formula(fmla),logic):
-        report_error(logic,"",ast)
     
 def check_fragment(preconds_only=False):
-    assumes,asserts,macros = get_assumes_and_asserts(preconds_only)
-
-    errs = []
-    for logic in im.logics():
-        try:
-            if logic == 'epr':
-                unstrat,bad_interpreted = get_unstratified_funs(assumes,asserts,macros)
-                if unstrat or bad_interpreted:
-                    report_epr_error(unstrat,bad_interpreted)
-            else:
-                for a in chain(assumes,macros):
-                    check_can_assume(logic,*a)
-
-                for a in asserts:
-                    check_can_assert(logic,*a)
-            return
-        except iu.IvyError as err:
-            errs.append(err)
-
-    # if we got here, all logics had errors
-
-    if len(errs) == 1:
-        raise errs[0]
-
-    raise iu.ErrorList(errs)
+    if 'fo' not in im.logics():
+        assumes,asserts,macros = get_assumes_and_asserts(preconds_only)
+        check_feu(assumes,asserts,macros)
