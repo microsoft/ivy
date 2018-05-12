@@ -1,5 +1,8 @@
 #lang ivy1.7
-
+# ---
+# layout: page
+# title: "Deduction example: majority"
+# ---
 #
 # In consensus protocols such as Paxos and Raft, we typically need a
 # datatype representing a subset of some finite set (the *basis* set)

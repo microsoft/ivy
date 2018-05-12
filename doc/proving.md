@@ -189,7 +189,7 @@ premises to infer its conclusion.
 ```
 The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
 IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
-values for premises, that is, the types *d*,*r* function *f*. It also chooses values for the
+values for premises, that is, the types *d*,*r* and function *f*. It also chooses values for the
 the free variables *X*,*Y* occurring in the schema. In this case, it
 discovers the following assignment:
 
@@ -373,10 +373,10 @@ The auto tactic can't prove this because the presmise contains a
 function cycle with a universally quantified variable. Here's the
 error message it gives:
 
-    # error: The verification condition is not in logic epr.
+    # error: The verification condition is not in the fragment FEU.
     #
-    # Note: the following functions form a cycle:
-    #  function f(V0:t) : t
+    # The following terms may generate an infinite sequence of instantiations:
+    #   proving.ivy: line 331: f(f(X_h))
 
 This means we'll need to apply some other tactic. Here is one possible proof:
 

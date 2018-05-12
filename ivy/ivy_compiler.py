@@ -1381,11 +1381,13 @@ def reorder_props(mod,props):
     rprops = []
     for prop in reversed(iprops):
         name = prop[0].name if isinstance(prop,tuple) else prop.name
+        things = []
         while name != 'this':
             name,c = parent_child_name(name)
             if name in specprops:
-                rprops.extend(reversed(specprops[name]))
+                things.extend(specprops[name])
                 del specprops[name]
+        rprops.extend(reversed(things))
         if not isinstance(prop,tuple):
             rprops.append(prop)
     rprops.reverse()

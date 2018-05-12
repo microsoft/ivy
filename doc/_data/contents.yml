@@ -14,6 +14,7 @@
   - examples/networking
   - examples/values
   - examples/list_reverse
+  - examples/indexset
 - title: Sharded Hash Table
   docs:
   - examples/sht/sharded_hash_table
