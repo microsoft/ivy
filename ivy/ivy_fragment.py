@@ -87,6 +87,7 @@ def map_fmla(lineno,fmla,strat_map,arcs):
     global macro_val_map
 
     if il.is_binder(fmla):
+        assert hasattr(fmla,"body"), fmla
         return map_fmla(lineno,fmla.body,strat_map,arcs)
     if il.is_variable(fmla):
         if fmla in universally_quantified_variables:
@@ -413,11 +414,12 @@ def get_assumes_and_asserts(preconds_only):
         
     for ldf in im.module.definitions:
         if not isinstance(ldf.formula,il.DefinitionSchema):
-            if ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs()):
-#                print 'macro : {}'.format(ldf.formula)
+            if (ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs())
+                and not isinstance(ldf.formula.rhs(),il.Some)):
+                print 'macro : {}'.format(ldf.formula)
                 macros.append((ldf.formula.to_constraint(),ldf))
             else: # can't treat recursive definition as macro
-#                print 'axiom : {}'.format(ldf.formula)
+                print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:

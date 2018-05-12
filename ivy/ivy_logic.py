@@ -1071,6 +1071,7 @@ def is_enumerated(term):
     return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
+    assert hasattr(term,'sort'),term
     return term.sort != lg.Boolean
 #    return isinstance(term,lg.Const) or (isinstance(term,App) and term.sort != lg.Boolean)
 

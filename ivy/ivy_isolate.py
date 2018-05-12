@@ -181,6 +181,7 @@ def startswith_eq_some(s,prefixes,mod):
     return startswith_eq_some_rec(s,prefixes,mod)
 
 def vstartswith_some_rec(s,prefixes,mod):
+    assert False
     if s in mod.privates or s in vprivates:
         return False
     parts = s.rsplit(iu.ivy_compose_character,1)
@@ -691,12 +692,13 @@ def get_props_proved_in_isolate(mod,isolate):
     mod.privates = set()
     set_privates(mod,isolate,'impl')
     verified,present = get_isolate_info(mod,isolate,'impl')
-    for other_iso in mod.isolates.values():
-        if other_iso is not isolate:
-            for other_verified in other_iso.verified():
-                ovn = other_verified.relname
-                if startswith_some(ovn,verified,mod):
-                    mod.privates.add(ovn)
+    if not iu.version_le(iu.get_string_version(),"1.6"):
+        for other_iso in mod.isolates.values():
+            if other_iso is not isolate:
+                for other_verified in other_iso.verified():
+                    ovn = other_verified.relname
+                    if startswith_some(ovn,verified,mod):
+                        mod.privates.add(ovn)
     check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
     not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
     proved = [a for a in mod.labeled_props if check_pr(a.label)]
