@@ -155,7 +155,7 @@ module order_iterator(range) = {
     
     object spec = {
 
-	instantiate totally_ordered(range.t)
+#	instantiate totally_ordered(range.t)
 
 	after create {
 	    assert ~is_end(y);

@@ -688,21 +688,24 @@ def get_props_proved_in_isolate_orig(mod,isolate):
     return proved,not_proved
 
 def get_props_proved_in_isolate(mod,isolate):
-    save_privates = mod.privates
-    mod.privates = set()
-    set_privates(mod,isolate,'impl')
-    verified,present = get_isolate_info(mod,isolate,'impl')
-    if not iu.version_le(iu.get_string_version(),"1.6"):
-        for other_iso in mod.isolates.values():
-            if other_iso is not isolate:
-                for other_verified in other_iso.verified():
-                    ovn = other_verified.relname
-                    if startswith_some(ovn,verified,mod):
-                        mod.privates.add(ovn)
-    check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
-    not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
-    proved = [a for a in mod.labeled_props if check_pr(a.label)]
-    mod.privates = save_privates
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        proved,not_proved = get_props_proved_in_isolate_orig(mod,isolate)
+    else:
+        save_privates = mod.privates
+        mod.privates = set()
+        set_privates(mod,isolate,'impl')
+        verified,present = get_isolate_info(mod,isolate,'impl')
+        if not iu.version_le(iu.get_string_version(),"1.6"):
+            for other_iso in mod.isolates.values():
+                if other_iso is not isolate:
+                    for other_verified in other_iso.verified():
+                        ovn = other_verified.relname
+                        if startswith_some(ovn,verified,mod):
+                            mod.privates.add(ovn)
+        check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
+        not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
+        proved = [a for a in mod.labeled_props if check_pr(a.label)]
+        mod.privates = save_privates
     # remove the subgoals from not_proved
     subs = set(sg.id for p,sgs in mod.subgoals for sg in sgs)
     not_proved = [a for a in not_proved if a.id not in subs]
