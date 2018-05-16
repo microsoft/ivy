@@ -23,8 +23,8 @@ theories = {
 
     schema ind[t] = {
         relation p(X:t)
-        property X <= 0 -> p(X)
-        property p(X) -> p(X+1)
+        property forall X. X <= 0 -> p(X)
+        property forall X. p(X) -> p(X+1)
         #--------------------------
         property p(X)    
     }

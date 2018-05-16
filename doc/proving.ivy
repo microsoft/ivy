@@ -510,8 +510,14 @@
 
     axiom [ind[u]] {
         relation p(X:u)
-        property X <= 0 -> p(X)
-        property p(X) -> p(X+1)
+        {
+            individual x:u
+            property x <= 0 -> p(x)
+        }
+        {
+            individual x:u
+            property p(x) -> p(x+1)
+        }
         #--------------------------
         property p(X)    
     }
@@ -529,15 +535,15 @@
 # 
     proof
         apply ind[u] with X = Y;
-        assume sum with X = Y;
+        assume sum with X = x;
         defergoal;
-        assume sum with X = Y + 1
+        assume sum with X = x + 1
 
 # Applying `ind[u]` produces two sub-goals, a base case and an induction step:
 # 
-#     # property X <= 0 -> sum(X) <= X
+#     # property x <= 0 -> sum(x) <= x
 # 
-#     # property sum(X) <= X -> sum(X+1) <= X + 1
+#     # property sum(x) <= x -> sum(x+1) <= x + 1
 # 
 # The `auto` tactic can't prove these goals because the definition of
 # `sum` is a schema that must explicitly instantiated. Fortunately, it
