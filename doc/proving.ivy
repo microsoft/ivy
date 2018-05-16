@@ -15,51 +15,54 @@
 # reliably.
 # 
 # 
-# Primitives
-# ==========
+# Primitive judgments
+# -------------------
 # 
 # A logical development in IVy is a succession of statements or
 # *judgments*. Each judgment must be justified by a primitive axiom or
 # inference rule.
 # 
 # Type declarations
-# -----------------
+# =================
 # 
 # On such primitive is a type declaration, like this:
 # 
     type t
 # 
-# This can be read as "let `t` be a type". This judgement is admissible
+# This judgment can be read as "let `t` be a type". It is admissible
 # provided `t` is new symbol that has not been used up to this point
 # in the development.
 # 
 # Functions and individuals
-# -------------------------
+# =========================
 # 
 # We can introduce a constant like this:
  
     individual n : t
  
-# where `n` is new. This can be read as "let `n` be of type
-# `t`". Every type has at least one element in it. This judgement gives
-# a name to such an element.
+# where `n` is new. This judgment can be read as "let `n` be a term of type
+# `t`" and is admissible if symbol `n` has not been used up to this point
+# in the development.  
 # 
 # Similarly, we can introduce new function and relation symbols:
  
     function f(X:t) : t
     relation r(X:t,Y:t)
 
-# The first can be read as "for all *X* of type *t*, let *f*(*X*) be of type *t*".
-# The second is a shorthand to declare a function *r* whose range is type `bool`. 
+# The first judgment can be read as "for any term *X* of type *t*, let
+# *f*(*X*) be a term of type *t*".  The second says "for any terms
+# *X,Y* of type *t*, let *r*(*X*,*Y*) be a proposition" (a term of
+# type `bool`).
 # 
 # Axioms
-# ------
+# ======
 # 
-# An *axiom* is a statement that is admitted by fiat. For example:
+# An *axiom* is a proposition whose truth is admitted by fiat. For
+# example:
  
     axiom [symmety_r] r(X,Y) -> r(Y,X)
  
-# The free variable *X* in the formula is taken as universally
+# The free variables *X*,*Y* in the formula are taken as universally
 # quantified. The text `symmetry_r` between brackets is a name for the
 # axiom and is optional. The axiom is simply admitted in the current
 # context without proof. Axioms are dangerous, since they can
@@ -68,10 +71,11 @@
 # to make a temporary assumption that will later be removed.
 # 
 # Properties
-# ----------
+# ==========
 # 
-# A *property* is a statement that can be admitted only if it follows
-# logically from judgments in the current context. For example:
+# A *property* is a proposition that can be admitted as true only if
+# it follows logically from judgments in the current context. For
+# example:
  
     property [myprop] r(n,X) -> r(X,n)
  
@@ -82,7 +86,7 @@
 #
 # The `auto` tactic works by generating a *verification condition* to
 # be checked by Z3. This is a formula whose validity implies that the
-# proeprty is admissible in the current context. In this case, the
+# property is true in the current context. In this case, the
 # verification condition is:
 #
 #     #   (forall X,Y. r(X,Y) -> r(Y,X)) -> (r(n,X) -> r(X,n))
@@ -94,7 +98,7 @@
 # 
 # 
 # Definitions
-# -----------
+# ===========
 # 
 # A definition is a special form of axiom that cannot introduce an
 # inconsistency. As an example:
@@ -103,14 +107,15 @@
 
     definition g(X) = f(X) + 1
 
-# This can be read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
-# definition is admissible if the symbol *g* is "fresh", meaning it does
-# not occur in any existing properties or definitions. Further *g* must
-# not occur on the right-hand side of the equality (that is, a recursive
-# definition is not admissible without proof -- see "Recursion" below).
+# This can be read as "for all *X*, let *g*(*X*) equal *f*(*X*) + 1". The
+# definition is admissible if the symbol *g* is "fresh", meaning it
+# does not occur in any existing properties or definitions in the
+# current context.  Further *g* must not occur on the right-hand side
+# of the equality (that is, a recursive definition is not admissible
+# without proof -- see "Recursion" below).
 # 
 # Theory instantiations
-# ---------------------
+# =====================
 # 
 # IVy has built-in theories that can be instantated with a specific type
 # as their carrier. For example, the theory of integer arithmetic is
@@ -130,7 +135,7 @@
 # have these symbols in their signature).
 # 
 # Schemata
-# ========
+# --------
 # 
 # A *schema* is a compound judgment that takes a collection of judgments
 # as input (the premises) and produces a judgment as output (the
@@ -151,10 +156,12 @@
 # following a conclusion. In this case, it says that, given types *d* and *r* and a function *f* from
 # *d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
 # *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
-# just a comment. The conclusion is always the last judgement in the rule.
+# just a comment. The conclusion is always the last judgement in the schema.
+# Also, notice the declaration of function *f* contains a variable *X*. The scope of this
+# variable is only the function declaration. It has no relation to the variable *X* in the conclusion.
 # 
-# The keyword `axiom` tells IVy that this rule should be taken as a
-# given, without proof. However, as we will see, the default `auto`
+# The keyword `axiom` tells IVy that this schema should be taken as valid
+# without proof. However, as we will see, the default `auto`
 # tactic treats a schema differently from a simple proposition. That is,
 # a schema is never used by default, but instead must be explicitly
 # instantiated.  This allows is to express and use facts that, if they
@@ -172,7 +179,7 @@
 
 # The `proof` declaration tells IVy to apply the axiom schema `congruence` to prove the property. 
 # IVy tries to match the proof goal `prop_n` to the schema's conclusion by picking particular
-# values for premises, that is, the types *d*,*r* and function *f*. It also chooses values for the
+# values for premises, that is, the types *d*,*r* and function *f*. It also chooses terms for the
 # the free variables *X*,*Y* occurring in the schema. In this case, it
 # discovers the following assignment:
 # 
@@ -206,11 +213,12 @@
 # inconsistent.
 # 
 # Proof chaining
-# --------------
+# ==============
 # 
-# When applying a schema, we are not required to provide values for the
-# premises of the schema that are properties. An unsupplied premise
-# becomes a *subgoal* which we must then prove.
+# A premise of a schema can itself be a property.  When applying the
+# schema, we are not required to provide values for the premises that
+# are properties. An unsupplied premise becomes a *subgoal* which we
+# must then prove.
 # 
 # For example, consider the following axiom schema:
 
@@ -223,6 +231,11 @@
         property mortal(X)
     }
 
+# The scope of free variables such as *X* occurring in properties is
+# the entire schema. Thus, this schema says that, for any term *X* of
+# type `t`, if we can prove that `man(X)` is true, we can prove that
+# `mortal(X)` is true.
+#
 # We take as a given that Socrates is a man, and prove he is mortal:
 
     individual socrates : t
@@ -291,7 +304,7 @@
 # is a convenient way to do this. 
 # 
 # Theorems
-# --------
+# ========
 # 
 # Thus far, we have seen schemata used only as axioms. However, we can also
 # prove the validity of a schema as a *theorem*. For example, here is a theorem
@@ -336,11 +349,11 @@
         property f(f(f(X))) = f(X)
     }
 
-# The auto tactic can't prove this because the presmise contains a
+# The auto tactic can't prove this because the premise contains a
 # function cycle with a universally quantified variable. Here's the
 # error message it gives:
 # 
-#     # error: The verification condition is not in the fragment FEU.
+#     # error: The verification condition is not in the fragment FAU.
 #     #
 #     # The following terms may generate an infinite sequence of instantiations:
 #     #   proving.ivy: line 331: f(f(X_h))
@@ -413,7 +426,7 @@
 # 
 #
 # Recursion
-# ---------
+# =========
 # 
 # Recursive definitions are permitted in IVy by instantiating a
 # *definitional schema*. As an example, consider the following axiom schema:
@@ -501,7 +514,7 @@
 # recursive in its *last* parameter.
 # 
 # Induction
-# ---------
+# =========
 # 
 # The `auto` tactic can't generally prove properties by induction. For
 # that IVy needs manual help. To prove a property by induction, we define
@@ -573,7 +586,7 @@
 # 
 # 
 # Naming
-# ------
+# ======
 # 
 # If we can prove that something exists, we can give it a name.  For
 # example, suppose that we can prove that, for every *X*, there exists a
@@ -594,7 +607,7 @@
 # can't use it in extracted code.
 # 
 # Hierarchical proof development
-# ==============================
+# ------------------------------
 # 
 # As the proof context gets larger, it becomes increasingly difficult
 # for the automated prover to handle all of the judgements we have
@@ -605,7 +618,7 @@
 # a collection of localized proofs called *isolates*.
 # 
 # Isolates
-# --------
+# ========
 # 
 # An isolate is a restricted proof context. An isolate can make parts of
 # its proof context available to other isolates and keep other parts
@@ -681,7 +694,7 @@
 
 # 
 # Hierarchies of isolates
-# -----------------------
+# =======================
 # 
 # An isolate can in turn contain isolates. This allows us to structure a
 # proof hierarchically. For example, the above proof could have been
@@ -716,7 +729,7 @@
 # The parent isolate `extra2` uses only the visible parts of the child isolate `t_theory`. 
 # 
 # Proof ordering and refinement
-# -----------------------------
+# =============================
 # 
 # Thus far, proof developments have been presented in order. That is,
 # judgements occur in the file in the order in which they are admitted
