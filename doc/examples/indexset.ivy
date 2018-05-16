@@ -175,7 +175,7 @@ module indexset(basis) = {
 
 		property disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
 		proof
-                    apply ind[basis] with X = B;
+                    apply ind[basis];
                     showgoals
 	    }
 

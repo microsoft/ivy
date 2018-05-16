@@ -21,8 +21,9 @@ class CaptureError(iu.IvyError):
 
 
 class MatchProblem(object):
-    def __init__(self,pat,inst,freesyms,constants):
-        self.pat,self.inst,self.freesyms,self.constants = pat,inst,set(freesyms),constants
+    def __init__(self,schema,pat,inst,freesyms,constants):
+        self.schema,self.pat,self.inst,self.freesyms,self.constants = schema,pat,inst,set(freesyms),constants
+        self.revmap = dict()
     def __str__(self):
         return '{{pat:{},inst:{},freesyms:{}}}'.format(self.pat,self.inst,map(str,self.freesyms))
 
@@ -168,17 +169,19 @@ class ProofChecker(object):
         schema = rename_goal(schema,proof.renaming())
         schema = transform_defn_schema(schema,decl)
         prob = match_problem(schema,decl)
-        prob,schema = transform_defn_match(prob,schema)
-        pmatch = compile_match(proof,prob,schema,decl)
+        prob = transform_defn_match(prob)
+        if prob is None:
+            raise NoMatch(proof,'definition does not match the given schema')
+        pmatch = compile_match(proof,prob,decl)
         if pmatch is None:
             raise ProofError(proof,'Match is inconsistent')
-        return schema, prob, pmatch
+        return prob, pmatch
 
     def assume_tactic(self,decls,proof):
         decl = decls[0]
-        schema, prob, pmatch = self.setup_matching(decl,proof)
+        prob, pmatch = self.setup_matching(decl,proof)
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
-        prem  = apply_match_goal(pmatch,schema,apply_match_alt)
+        prem  = apply_match_goal(pmatch,prob.schema,apply_match_alt)
         return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
 
     def match_schema(self,decl,proof):
@@ -190,22 +193,22 @@ class ProofChecker(object):
         Returns a match or None
         """
         
-        schema, prob, pmatch = self.setup_matching(decl,proof)
-        prob, schema,capmap = avoid_capture_problem(prob,schema,pmatch)
+        prob, pmatch = self.setup_matching(decl,proof)
         apply_match_to_problem(pmatch,prob,apply_match_alt)
         fomatch = fo_match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if fomatch is not None:
             apply_match_to_problem(fomatch,prob,apply_match)
         somatch = match(prob.pat,prob.inst,prob.freesyms,prob.constants)
         if somatch is not None:
-            detect_nonce_symbols(capmap,apply_match_freesyms(somatch,prob.freesyms))
-            schema = apply_match_goal(pmatch,schema,apply_match_alt)
-            schema = apply_match_goal(fomatch,schema,apply_match)
-            schema = apply_match_goal(somatch,schema,apply_match_alt)
+            apply_match_to_problem(somatch,prob,apply_match_alt)
+            detect_nonce_symbols(prob)
+#            schema = apply_match_goal(pmatch,schema,apply_match_alt)
+#            schema = apply_match_goal(fomatch,schema,apply_match)
+#            schema = apply_match_goal(somatch,schema,apply_match_alt)
             # tmatch = apply_match_match(fomatch,pmatch,apply_match)
             # tmatch = apply_match_match(somatch,tmatch,apply_match_alt)
             # schema = apply_match_goal(tmatch,schema,apply_match_alt)
-            return goal_subgoals(schema,decl,proof.lineno)
+            return goal_subgoals(prob.schema,decl,proof.lineno)
         return None
 
 
@@ -261,7 +264,7 @@ def goal_add_prem(goal,prem,lineno):
 def goal_defns(goal):
     res = set()
     for x in goal_prems(goal):
-        if isinstance(x,ia.ConstantDecl):
+        if isinstance(x,ia.ConstantDecl) and isinstance(x.args[0],il.Symbol):
             res.add(x.args[0])
         elif isinstance(x,il.UninterpretedSort):
             res.add(x)
@@ -419,7 +422,8 @@ def rename_goal(goal,renaming):
         goal = apply_match_goal(match,goal,apply_match_alt)
         goal = clone_goal(goal,goal_prems(goal),il.alpha_rename(rmap,goal_conc(goal)))
         return goal
-    return rec_goal(goal)
+    res = rec_goal(goal)
+    return res
                 
             
             
@@ -456,7 +460,7 @@ def show_match(m):
         return 
     print 'match {'
     for x,y in m.iteritems():
-        print '{} : {}'.format(x,y)
+        print '{} : {} |-> {}'.format(x,x.sort if hasattr(x,'sort') else 'type',y)
     print '}'
         
 def match_problem(schema,decl):
@@ -464,14 +468,7 @@ def match_problem(schema,decl):
     vocab = goal_vocab(schema)
     freesyms = set(vocab.symbols + vocab.sorts + vocab.variables)
     constants = set(v for v in goal_free(decl) if il.is_variable(v))
-    return MatchProblem(goal_conc(schema),goal_conc(decl),freesyms,constants)
-
-    prems = goal_prems(schema)
-    conc = goal_conc(schema)
-    freesyms = set(x.args[0] for x in prems if isinstance(x,ia.ConstantDecl))
-    freesyms.update(x for x in prems if isinstance(x,il.UninterpretedSort))
-    freesyms.update(lu.variables_ast(conc))
-    return MatchProblem(conc,goal_conc(decl),freesyms,set(lu.variables_ast(decl)))
+    return MatchProblem(schema,goal_conc(schema),goal_conc(decl),freesyms,constants)
 
 def transform_defn_schema(schema,decl):
     """ Transform definition schema to match a definition. """
@@ -485,13 +482,13 @@ def transform_defn_schema(schema,decl):
         schema = parameterize_schema([x.sort for x in declargs[:len(declargs)-len(concargs)]],schema)
     return schema
 
-def transform_defn_match(prob,schema):
+def transform_defn_match(prob):
     """ Transform a problem of matching definitions to a problem of
     matching the right-hand sides. Requires prob.inst is a definition. """
 
-    conc,decl,freesyms = prob.pat,prob.inst,prob.freesyms
+    schema, conc,decl,freesyms = prob.schema, prob.pat,prob.inst,prob.freesyms
     if not(isinstance(decl,il.Definition) and isinstance(conc,il.Definition)):
-        return prob,schema
+        return prob
     declsym = decl.defines()
     concsym = conc.defines()
     # dmatch = match(conc.lhs(),decl.lhs(),freesyms)
@@ -501,7 +498,7 @@ def transform_defn_match(prob,schema):
     declargs = decl.lhs().args
     concargs = conc.lhs().args
     if len(declargs) < len(concargs):
-        return None,schema
+        return None
     declrhs = decl.rhs()
     concrhs = conc.rhs()
     vmap = dict((x.name,y.resort(x.sort)) for x,y in zip(concargs,declargs))
@@ -511,12 +508,12 @@ def transform_defn_match(prob,schema):
         if x in freesyms:
             if x in dmatch and dmatch[x] != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
-                return None,schema
+                return None
             dmatch[x] = y
         else:
             if x != y:
                 print "lhs sorts didn't match: {}, {}".format(x,y)
-                return None,schema
+                return None
     concrhs = apply_match(dmatch,concrhs)
     freesyms = apply_match_freesyms(dmatch,freesyms)
     freesyms = [x for x in freesyms if x not in concargs]
@@ -524,7 +521,7 @@ def transform_defn_match(prob,schema):
     vvmap = dict((x,y.resort(x.sort)) for x,y in zip(concargs,declargs))
     schema = apply_match_goal(vvmap,schema,apply_match_alt)
     schema = apply_match_goal(dmatch,schema,apply_match_alt)
-    return MatchProblem(concrhs,declrhs,freesyms,constants),schema
+    return MatchProblem(schema,concrhs,declrhs,freesyms,constants)
 
 
 def parameterize_schema(sorts,schema):
@@ -575,15 +572,17 @@ def compile_one_match(lhs,rhs,freesyms,constants):
     if vmatch is None:
         return None
     lhs = apply_match_alt(vmatch,lhs)
-    freesyms = apply_match_freesyms(vmatch,freesyms)
-    somatch = match(lhs,rhs,freesyms,constants)
+    newfreesyms = apply_match_freesyms(vmatch,freesyms)
+    somatch = match(lhs,rhs,newfreesyms,constants)
+    somatch = compose_matches(freesyms,vmatch,somatch,vmatch)
     fmatch = merge_matches(vmatch,somatch)
     return fmatch
 
-def compile_match(proof,prob,schema,decl):
+def compile_match(proof,prob,decl):
     """ Compiles match in a proof. Only the symbols in
     freesyms may be used in the match."""
 
+    schema = prob.schema
     matches = compile_match_list(proof,schema,decl)
     matches = [compile_one_match(m.lhs(),m.rhs(),prob.freesyms,prob.constants) for m in matches]
     res = merge_matches(*matches)
@@ -637,46 +636,45 @@ def apply_match_goal(match,x,apply_match,env = None):
 def apply_match_match(match,orig_match,apply_match):
     """ Apply a match match to match orig_match. Applying the resulting match should
     have the same effect as apply first orig_match, then match. """
-    print 'apply_match_match:'
-    print 'match:'
     orig_match = dict((x,apply_match(match,y)) for x,y in orig_match.iteritems())
     orig_match.update((x,y) for x,y in match.iteritems() if x not in orig_match)
     return orig_match
 
 def apply_match_to_problem(match,prob,apply_match):
+    avoid_capture_problem(prob,match)
+    prob.schema = apply_match_goal(match,prob.schema,apply_match)
     prob.pat = apply_match(match,prob.pat)
     prob.freesyms = apply_match_freesyms(match,prob.freesyms)
+    prob.revmap = dict((x,y) for x,y in prob.revmap.iteritems() if x not in match)
 
 def rename_problem(match,prob):
+    prob.schema = apply_match_goal(match,prob.schema,apply_match_alt)
     prob.pat = apply_match_alt(match,prob.pat)
     prob.freesyms = set(match.get(sym,sym) for sym in prob.freesyms)
+    prob.revmap.update((y,x) for x,y in match.iteritems())
 
-def avoid_capture_problem(prob,schema,match):
+def avoid_capture_problem(prob,match):
     """ Rename a match problem to avoid capture when applying a
     match"""
-    matchvars = list(x for x in match_rhs_vars(match) if x not in match)
-    boundvocab = set(goal_defns(schema))
-    freevocab = goal_free(schema)
-    boundvocab.update(v for v in freevocab if il.is_variable(v))
-    rn = iu.UniqueRenamer(used=[v.name for v in boundvocab])
-    cmatch = dict((v,v.rename(rn)) for v in matchvars if v in boundvocab)
+    mrv = match_rhs_vars(match)
+    matchnames = set(x.name for x in match_rhs_vars(match))
+    used = set(matchnames)
+    used.update(x.name for x in goal_defns(prob.schema))
+    used.update(v.name for v in goal_free(prob.schema) if il.is_variable(v))
+    rn = iu.UniqueRenamer(used=used)
+    cmatch = dict((v,v.rename(rn)) for v in prob.freesyms
+                  if v.name in matchnames and v not in match)
     rename_problem(cmatch,prob)
-    schema = apply_match_goal(cmatch,schema,apply_match)
-    return prob,schema,cmatch
 
-def detect_nonce_symbols(cmatch,freesyms):
-    """ Make sure no nonce symbols produced by avoid_capture_problem
-    appear free after matching. This is done to avoid nonce symbols
-    becoming visible to the user. If one of these symbols occurs in
-    freesyms, we report the original symbol captured, since it would
-    have been captured had the renaming not occurred. """
+def detect_nonce_symbols(prob):
+    """ Make sure that no nonce symbols produced by
+    avoid_capture_problem appear free after matching. This is done to
+    avoid nonce symbols becoming visible to the user. If one of these
+    remains after matching, we report the original symbol
+    as clashing with the corresponding symbol in the goal."""
 
-    rev = dict((y.name,x) for x,y in cmatch.iteritems())
-    for sym in freesyms:
-        if sym.name in rev:
-            raise CaptureError(None,'symbol {} is captured in substitution'.format(rev[sym.name]))
-
-
+    for sym in prob.revmap.values():
+        raise CaptureError(None,'Symbol {} in schema clashes with {} in goal.\nSuggest renaming or instantiating it.'.format(sym,sym))
 
 def trivial_goal(goal):
     """ A goal is trivial if the conclusion is equal to one of the premises modulo
@@ -912,6 +910,7 @@ def match_quants(pat,inst,freesyms,constants):
             mbody = apply_match(mat,pat.body)
             bodyfreesyms = apply_match_freesyms(mat,freesyms)
             bodymat = match(mbody,inst.body,bodyfreesyms,constants)
+            bodymat = compose_matches(freesyms,mat,bodymat,pat.variables)
         mat = merge_matches(mat,bodymat)
 #        matches.append(match(pat.body,inst.body,freesyms,constants))
 #        mat = merge_matches(*matches)
@@ -921,6 +920,14 @@ def match_quants(pat,inst,freesyms,constants):
                     del mat[x]
         return mat
 
+def compose_matches(freesyms,mat1,mat2,quants):
+    res = dict()
+    for sym in freesyms:
+        if sym not in quants:
+            sym1 = apply_match_sym(mat1,sym)
+            if sym1 in mat2:
+                res[sym] = mat2[sym1]
+    return res
 
 def match_sort(pat,inst,freesyms):
     if pat in freesyms:

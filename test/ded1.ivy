@@ -392,7 +392,7 @@ theorem [thm15] {
     property exists X. q(X)
 }
 proof 
-    apply elimE;
+    apply elimE with p(X) = p(X);
     apply introE with witness = x;
     apply elimImp with p = p(x);
     apply elimA with X = x
@@ -407,7 +407,7 @@ theorem [thm16] {
 }
 proof
     apply introA<y/x>;
-    apply elimE;
+    apply elimE with p(X) = p(X);
     apply elimImp with p = p(x);
     apply elimA with X = y;
     apply elimA<Z/Y> with X = x
@@ -522,7 +522,8 @@ proof
     apply introA;
     apply elimAndL with q = q;
     apply elimA with X=x;
-    apply nonce<t/u>;
+    showgoals;
+    apply nonce<u/t>;
     apply elimAndR with p = p(x);
     apply elimA with X=x
 

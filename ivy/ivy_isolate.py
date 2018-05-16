@@ -181,7 +181,6 @@ def startswith_eq_some(s,prefixes,mod):
     return startswith_eq_some_rec(s,prefixes,mod)
 
 def vstartswith_some_rec(s,prefixes,mod):
-    assert False
     if s in mod.privates or s in vprivates:
         return False
     parts = s.rsplit(iu.ivy_compose_character,1)

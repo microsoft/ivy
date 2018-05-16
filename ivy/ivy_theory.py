@@ -100,3 +100,10 @@ def get_sort_theory(sort):
     else:
         interp = sort
     return interp
+
+def has_integer_interp(sort):
+    name = sort.name
+    if name in il.sig.interp:
+        interp = il.sig.interp[name]
+        return interp in ['int','nat']
+    return False

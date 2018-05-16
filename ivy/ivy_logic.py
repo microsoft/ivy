@@ -1035,6 +1035,16 @@ def is_macro(term):
 def expand_macro(term):
     return macros_expansions[term.func.name](term)
 
+def is_inequality_symbol(sym):
+    return sym.name in ['<','<=','>','>=']
+
+def is_strict_inequality_symbol(sym,pol=0):
+    """ Determine whether an inequality symbol is strict under a given
+    number of negations, where pol == 0 indicates an even number, pol
+    == 1 an odd number and None indicates neither even nor odd."""
+
+    return sym.name in ['<','>'] if pol == 0 else sym.name in ['<=','>='] if pol == 1 else False
+
 def default_sort():
     ds = sig._default_sort
     if ds != None: return ds
@@ -1586,5 +1596,24 @@ def normalize_ops(fmla):
         return mkquant(type(fmla),list(fmla.variables),args[0])
     return fmla.clone(args)
 
-    
+def negate_polarity(pol):
+    return 1 - pol if pol is not None else None
+
+def polar(fmla,pos,pol):
+    """ Return the polarity of the `pos` argument of `fmla` assuming the
+    polarity of `fmla` is `pol`. The polarity indicates the
+    number of negations under which the formula occurs. It is 0 for an
+    even number, one for an odd number and None if the formula occurs
+    under both an even number and an odd number of negations. """
+    if isinstance(fmla,Not):
+        return negate_polarity(pol)
+    if isinstance(fmla,Implies):
+        return pol if pos == 1 else negate_polarity(pol) 
+    if is_quantifier(fmla) or isinstance(fmla,And) or isinstance(fmla,Or):
+        return pol
+    if isinstance(fmla,Ite):
+        return None if pos == 0 else pol
+    return None
+
+
             
