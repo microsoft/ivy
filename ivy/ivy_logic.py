@@ -244,7 +244,11 @@ class Definition(AST):
     @property
     def sort(self):
         return lg.Boolean
+    def __eq__(self,other):
+        return type(self) is type(other) and all(x == y for (x,y) in zip(self.args,other.args))
 
+class DefinitionSchema(Definition):
+    pass
 
 
 lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]
@@ -511,6 +515,10 @@ def universal_variables_rec(fmla,pos,univs):
         if pos == isinstance(fmla,lg.ForAll):
             univs.update(fmla.variables)
             return
+    if isinstance(fmla,Implies):
+        universal_variables_rec(fmla.args[0],not pos,univs),
+        universal_variables_rec(fmla.args[1],pos,univs)
+        return
     if isinstance(fmla,Not):
         pos = not pos
     for a in fmla.args:
@@ -579,7 +587,7 @@ def is_exists(term):
     return isinstance(term,lg.Exists)
 
 def is_lambda(term):
-    return isinstance(term,lg.ForAll)
+    return isinstance(term,lg.Lambda)
 
 def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
@@ -674,7 +682,7 @@ Variable.args = property(lambda self: [])
 Variable.clone = lambda self,args: self
 Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
-Variable.rename = lambda self,name: Variable(name,self.sort)
+Variable.rename = lambda self,name: Variable(name if isinstance(name,str) else name(self.name),self.sort)
 Variable.resort = lambda self,sort : Variable(self.name,sort)
 
 
@@ -735,6 +743,7 @@ ConstantSort.rep = property(lambda self: self.name)
 
 UninterpretedSort = ConstantSort
 UninterpretedSort.is_relational = lambda self: False
+UninterpretedSort.rename = lambda self,rn: UninterpretedSort(rn(self.name))
 
 EnumeratedSort = lg.EnumeratedSort
 
@@ -893,6 +902,11 @@ class Sig(object):
             return symbol.sort in sort.sorts
         return True
 
+    def contains(self,sort_or_symbol):
+        if isinstance(sort_or_symbol,Symbol):
+            return self.contains_symbol(sort_or_symbol)
+        return self.sorts.get(sort_or_symbol.name,None) == sort_or_symbol
+
     def __str__(self):
         return sig_to_str(self)
 
@@ -905,17 +919,17 @@ class WithSymbols(object):
         global sig
         self.saved = []
         for sym in self.symbols:
-            if sig.contains_symbol(sym):
-                self.saved.append(sym)
-                sig.remove_symbol(sym)
-            sig.add_symbol(sym.name,sym.sort)
+            if sym.name in sig.symbols:
+                self.saved.append((sym.name,sig.symbols[sym.name]))
+                del sig.symbols[sym.name]
+            sig.symbols[sym.name] = sym
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
         for sym in self.symbols:
-            sig.remove_symbol(sym)
-        for sym in self.saved:
-            sig.add_symbol(sym.name,sym.sort)
+            del sig.symbols[sym.name]
+        for name,sym in self.saved:
+            sig.symbols[name] = sym
         return False # don't block any exceptions
 
 class WithSorts(object):
@@ -935,6 +949,42 @@ class WithSorts(object):
             del sig.sorts[sym.name]
         for sym in self.saved:
             sig.sorts[sym.name] = sym
+        return False # don't block any exceptions
+
+class BindSymbols(object):
+    def __init__(self,env,symbols):
+        self.env, self.symbols = env, list(symbols)
+    def __enter__(self):
+        self.saved = []
+        for sym in self.symbols:
+            if sym in self.env:
+                self.saved.append(sym)
+                self.env.remove(sym)
+            self.env.add(sym)
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        for sym in self.symbols:
+            self.env.remove(sym)
+        for sym in self.saved:
+            self.env.add(sym)
+        return False # don't block any exceptions
+
+class BindSymbolValues(object):
+    def __init__(self,env,bindings):
+        self.env, self.bindings = env, list(bindings)
+    def __enter__(self):
+        self.saved = []
+        for sym,val in self.bindings:
+            if sym in self.env:
+                self.saved.append((sym,env[sym]))
+                del self.env[sym]
+            self.env[sym] = val
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        for sym,val in self.bindings:
+            del self.env[sym]
+        for sym,val in self.saved:
+            self.env[sym] = val
         return False # don't block any exceptions
 
 
@@ -985,6 +1035,16 @@ def is_macro(term):
 def expand_macro(term):
     return macros_expansions[term.func.name](term)
 
+def is_inequality_symbol(sym):
+    return sym.name in ['<','<=','>','>=']
+
+def is_strict_inequality_symbol(sym,pol=0):
+    """ Determine whether an inequality symbol is strict under a given
+    number of negations, where pol == 0 indicates an even number, pol
+    == 1 an odd number and None indicates neither even nor odd."""
+
+    return sym.name in ['<','>'] if pol == 0 else sym.name in ['<=','>='] if pol == 1 else False
+
 def default_sort():
     ds = sig._default_sort
     if ds != None: return ds
@@ -1021,6 +1081,7 @@ def is_enumerated(term):
     return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
+    assert hasattr(term,'sort'),term
     return term.sort != lg.Boolean
 #    return isinstance(term,lg.Const) or (isinstance(term,App) and term.sort != lg.Boolean)
 
@@ -1163,6 +1224,7 @@ lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
 lg.Ite.ugly = lambda self:  '({} if {} else {})'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
+Definition.ugly = lambda self: nary_ugly('=',self.args,parens=False)
 
 lg.Apply.ugly = app_ugly
 
@@ -1249,7 +1311,7 @@ lg.NamedBinder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.N
 def default_drop_annotations(self,inferred_sort,annotated_vars):
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 
-for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff,]: # should binder be here?
+for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, Definition]: # should binder be here?
     cls.drop_annotations = default_drop_annotations
 
 def pretty_fmla(self):
@@ -1305,7 +1367,7 @@ def is_uninterpreted_sort(s):
 # For now, int is the only infinite interpreted sort
 def has_infinite_interpretation(s):
     s = canonize_sort(s)
-    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(s.name)
+    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(sig.interp[s.name])
 
 def is_interpreted_sort(s):
     s = canonize_sort(s)
@@ -1429,6 +1491,8 @@ def simp_ite(i,t,e):
 def pto(*asorts):
     return Symbol('*>',RelationSort(asorts))
 
+CaptureError = lu.CaptureError
+
 def lambda_apply(self,args):
     assert len(args) == len(self.variables)
     return lu.substitute(self.body,dict(zip(self.variables,args)))
@@ -1441,10 +1505,13 @@ def rename_vars_no_clash(fmlas1,fmlas2):
     """ Rename the free variables in formula list fmlas1
     so they occur nowhere in fmlas2, avoiding capture """
     uvs = lu.used_variables(*fmlas2)
+    iu.dbg('uvs')
     uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
+    iu.dbg('uvs')
     rn = iu.UniqueRenamer('',(v.name for v in uvs))
     vs = lu.free_variables(*fmlas1)
     vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
+    iu.dbg('vmap')
     return [lu.substitute(f,vmap) for f in fmlas1]
 
 class VariableUniqifier(object):
@@ -1473,3 +1540,80 @@ class VariableUniqifier(object):
             return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
+
+def alpha_avoid(fmla,vs):
+    """ Alpha-convert a formula so that bound variable names do not clash with vs. """
+    vu = VariableUniqifier()
+    freevars = set(vs)
+    freevars.update(lu.free_variables(fmla))  # avoid capturing free variables
+    vmap = dict()
+    for v in freevars:
+        vu.rn(v.name)  # reserve the name
+        vmap[v] = v    # preserve the variable in formula
+    res = vu.rec(fmla,vmap)
+    return res
+        
+def equal_mod_alpha(t,u):
+    if isinstance(t,Definition):
+        return isinstance(t,Definition) and all(equal_mod_alpha(x,y) for (x,y) in zip(t.args,u.args))
+    return lu.equal_mod_alpha(t,u)
+
+
+def alpha_rename(nmap,fmla):
+    """ alpha-rename a formula using a map from variable names to
+    variable names.  assumes the map is one-one.
+    """
+    vmap = dict()
+    def rec(fmla):
+        if is_binder(fmla):
+            newvars = tuple(v.rename(nmap.get(v.name,v.name)) for v in fmla.variables)
+            forbidden = frozenset(vmap.get(v,v) for v in lu.free_variables(fmla))
+            if not forbidden.isdisjoint(newvars):
+                raise CaptureError(forbidden.intersection(newvars))
+            bndgs = [(v,v.rename(nmap[v.name])) for v in fmla.variables if v.name in nmap]
+            with BindSymbolValues(vmap,bndgs):
+                return fmla.clone_binder(newvars,rec(fmla.body))
+        if is_variable(fmla):
+            return vmap.get(fmla,fmla)
+        return fmla.clone([rec(f) for f in fmla.args])
+    return rec(fmla)
+
+def normalize_ops(fmla):
+    """Convert conjunctions and disjunctions to binary ops and quantifiers
+    to single-variable quantifiers. """
+    args = map(normalize_ops,fmla.args)
+    def mkbin(op,first,rest):
+        if len(rest) == 0:
+            return first
+        return mkbin(op,op(first,rest[0]),rest[1:])
+    def mkquant(op,vs,body):
+        if len(vs) == 0:
+            return body
+        return op(vs[0:1],mkquant(op,vs[1:],body))
+    if isinstance(fmla,And) or isinstance(fmla,Or):
+        return fmla.clone([]) if len(args) == 0 else mkbin(type(fmla),args[0],args[1:])
+    if is_quantifier(fmla):
+        return mkquant(type(fmla),list(fmla.variables),args[0])
+    return fmla.clone(args)
+
+def negate_polarity(pol):
+    return 1 - pol if pol is not None else None
+
+def polar(fmla,pos,pol):
+    """ Return the polarity of the `pos` argument of `fmla` assuming the
+    polarity of `fmla` is `pol`. The polarity indicates the
+    number of negations under which the formula occurs. It is 0 for an
+    even number, one for an odd number and None if the formula occurs
+    under both an even number and an odd number of negations. """
+    if isinstance(fmla,Not):
+        return negate_polarity(pol)
+    if isinstance(fmla,Implies):
+        return pol if pos == 1 else negate_polarity(pol) 
+    if is_quantifier(fmla) or isinstance(fmla,And) or isinstance(fmla,Or):
+        return pol
+    if isinstance(fmla,Ite):
+        return None if pos == 0 else pol
+    return None
+
+
+            

@@ -1,0 +1,29 @@
+#lang ivy1.7
+
+schema exi = {
+    type t
+    function p(X:t) : bool
+    function witness : t
+    property p(witness)
+    #-------------------
+    property exists Y. p(Y)
+}
+
+theorem refl = {
+    type t
+    property X:t = X
+}
+
+type q
+var z : q
+
+property [foo] z = z
+proof apply refl
+
+type t1
+var v1 : t1
+
+property exists X:t1. X = v1
+proof apply exi<foo/witness,t2/t> with foo = v1; apply refl
+
+

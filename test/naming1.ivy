@@ -1,0 +1,26 @@
+#lang ivy1.7
+
+    schema elimE = {
+        type t
+	relation p(X:t)
+        property exists X. p(X)
+	fresh individual n:t
+	#----------------------
+	property p(n)
+    }
+
+type t
+relation succ(X:t,Y:t)
+
+   axiom exists Y. succ(X,Y)
+
+    function next(X:t):t
+
+    property succ(X,next(X))
+    proof 
+        apply elimE with n = next(X), p(Y) = succ(X,Y)
+
+    property exists Y. succ(X,Y) named next2(X)
+
+# definition next2(X) = 0
+# definition next2(X) = 1

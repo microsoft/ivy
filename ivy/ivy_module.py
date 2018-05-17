@@ -37,6 +37,7 @@ class Module(object):
         self.functions = dict()  # TODO: this is redundant, remove
         self.updates = []
         self.schemata = dict()
+        self.theorems = dict()
         self.instantiations = []
         self.concept_spaces = []
         self.labeled_conjs = []  # conjectures
@@ -98,7 +99,7 @@ class Module(object):
     def get_axioms(self):
         res = self.axioms
         for n,sch in self.schemata.iteritems():
-            res += sch.instances
+            res += sch.formula.instances
         return res
 
     def background_theory(self, symbols=None):
@@ -139,7 +140,13 @@ class Module(object):
         for ldf in self.definitions:
             cnst = ldf.formula.to_constraint()
             if all(isinstance(p,il.Variable) for p in ldf.formula.args[0].args):
-                theory.append(cnst) # TODO: make this a def?
+                if not isinstance(ldf.formula,il.DefinitionSchema):
+#                    theory.append(ldf.formula) # TODO: make this a def?
+                    ax = ldf.formula
+                    ax = ax.to_constraint() if isinstance(ax.rhs(),il.Some) else ax
+                    if ldf.formula.args[0].args:
+                        ax = il.ForAll(ldf.formula.args[0].args,ax)
+                    theory.append(ax) # TODO: make this a def?
         # extensionality axioms for structs
         for sort in sorted(self.sort_destructors):
             destrs = self.sort_destructors[sort]

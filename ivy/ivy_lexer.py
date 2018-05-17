@@ -134,6 +134,10 @@ reserved = all_reserved = {
    'around' : 'AROUND',
    'parameter' : 'PARAMETER',
    'apply' : 'APPLY',
+   'theorem' : 'THEOREM',
+   'showgoals' : 'SHOWGOALS',
+   'defergoal' : 'DEFERGOAL',
+   'spoil' : 'SPOIL',
 }
 
 tokens += tuple(all_reserved.values())
@@ -181,7 +185,7 @@ def t_SYMBOL(t):
     return t
 
 def t_LABEL(t):
-    r'\[[_a-zA-Z0-9]+\]'
+    r'\[[_a-zA-Z0-9\]\[]+\]'
     t.type = reserved.get(t.value,'LABEL')
     return t
 
@@ -241,7 +245,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,6]:
-            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply']:
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply','theorem','showgoals','spoil']:
                 if s in reserved:
                     del reserved[s]
         else:

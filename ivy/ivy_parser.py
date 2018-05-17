@@ -313,13 +313,36 @@ def addlabel(lf,pref):
     res.lineno = lf.lineno
     return res
 
-def p_top_axiom_labeledfmla(p):
-    'top : top opttemporal AXIOM labeledfmla'
-    p[0] = check_non_temporal(p[1])
-    lf = addlabel(p[4],'axiom')
-    d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
-    d.lineno = get_lineno(p,3)
-    p[0].declare(d)
+if iu.get_numeric_version() <= [1,6]:
+    def p_top_axiom_labeledfmla(p):
+        'top : top opttemporal AXIOM labeledfmla'
+        p[0] = check_non_temporal(p[1])
+        lf = addlabel(p[4],'axiom')
+        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,3)
+        p[0].declare(d)
+else:
+    def p_gprop_fmla(p):
+        'gprop : fmla'
+        p[0] = p[1]
+
+    def p_gprop_schdefnrhs(p):
+        'gprop : schdefnrhs'
+        p[0] = p[1]
+
+    def p_lgprop(p):
+        'lgprop : optlabel gprop'
+        lf = LabeledFormula(p[1],p[2])
+        lf.lineno = get_lineno(p,2)
+        p[0] = lf
+
+    def p_top_axiom_optlabel_gprop(p):
+        'top : top opttemporal AXIOM lgprop'
+        p[0] = check_non_temporal(p[1])
+        lf = addlabel(p[4],'axiom')
+        d = AxiomDecl(addtemporal(lf) if p[2] else check_non_temporal(lf))
+        d.lineno = get_lineno(p,3)
+        p[0].declare(d)
 
 def p_optskolem(p):
     'optskolem : '
@@ -440,6 +463,14 @@ def p_schdecl_fresh_funcdecl(p):
     'schdecl : FRESH FUNCTION funs'
     p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
 
+def p_schdecl_indivdecl(p):
+    'schdecl : INDIV funs'
+    p[0] = p[2]
+
+def p_schdecl_fresh_indivdecl(p):
+    'schdecl : FRESH INDIV funs'
+    p[0] = [FreshConstantDecl(x.args[0]) if isinstance(x,ConstantDecl) else x for x in p[3]]
+
 def p_schdecl_relation_rel(p):
     'schdecl : RELATION rels'
     p[0] = p[2]
@@ -456,17 +487,44 @@ def p_schdecl_typedecl(p):
     tdfn.lineno = get_lineno(p,1)
     p[0] = [tdfn]
 
-def p_schdecl_propdecl(p):
-    'schdecl : PROPERTY labeledfmla'
-    p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+if iu.get_numeric_version() <= [1,6]:
+
+    def p_schdecl_propdecl(p):
+        'schdecl : PROPERTY labeledfmla'
+        p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+
+else:
+
+    def p_schdecl_propdecl(p):
+        'schdecl : PROPERTY lgprop'
+        p[0] = [check_non_temporal(addlabel(p[2],'prop'))]
+
 
 def p_schconc_defdecl(p):
     'schconc : DEFINITION defn'
     p[0] = p[2]
 
-def p_schconc_propdecl(p):
-    'schconc : PROPERTY fmla'
-    p[0] = check_non_temporal(p[2])
+if iu.get_numeric_version() <= [1,6]:
+
+    def p_schconc_propdecl(p):
+        'schconc : PROPERTY fmla'
+        p[0] = check_non_temporal(p[2])
+
+else:
+
+    def p_schconc_propdecl(p):
+        'schconc : PROPERTY lgprop'
+        fmla = p[2].formula
+        if isinstance(fmla,SchemaBody):
+            report_error(IvyError(fmla,"formula expected"))
+        p[0] = check_non_temporal(fmla)
+
+
+def p_schdecl_theorem(p):
+    'schdecl :  schdefnrhs'
+    lf = LabeledFormula(None,p[1])
+    lf.lineno = p[1].lineno
+    p[0] = [addlabel(lf,'sch')]
 
 def p_schdecls(p):
     'schdecls :'
@@ -480,6 +538,7 @@ def p_schdecls_schdecls_schdecl(p):
 def p_schdefnrhs_lcb_schdecls_rcb(p):
     'schdefnrhs : LCB schdecls schconc RCB'
     p[0] = SchemaBody(*(p[2]+[p[3]]))
+    p[0].lineno = get_lineno(p,1)
 
 def p_schdefn_atom_eq_fmla(p):
     'schdefn : defnlhs EQ schdefnrhs'
@@ -489,7 +548,25 @@ def p_schdefn_atom_eq_fmla(p):
 def p_top_schema_defn(p):
     'top : top SCHEMA schdefn'
     p[0] = p[1]
-    p[0].declare(SchemaDecl(Schema(p[3],[])))
+    p[0].declare(SchemaDecl(Schema(p[3])))
+
+def p_top_theorem_defn(p):
+    'top : top THEOREM schdefn optproof'
+    p[0] = p[1]
+    p[0].declare(TheoremDecl(Schema(p[3])))
+    if p[4] is not None:
+        p[0].declare(ProofDecl(p[4]))
+
+def p_top_theorem_label_rhs(p):
+    'top : top THEOREM LABEL schdefnrhs optproof'
+    p[0] = p[1]
+    label = Atom(p[3][1:-1],[])
+    label.lineno = get_lineno(p,3)
+    df = Definition(label,p[4])
+    df.lineno = get_lineno(p,3)
+    p[0].declare(TheoremDecl(Schema(df)))
+    if p[5] is not None:
+        p[0].declare(ProofDecl(p[5]))
 
 def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
@@ -675,16 +752,39 @@ if iu.get_numeric_version() <= [1,6]:
         'proofstep : SYMBOL'
         a = Atom(p[1])
         a.lineno = get_lineno(p,1)
-        p[0] = SchemaInstantiation(a)
+        p[0] = SchemaInstantiation(a,Renaming())
         p[0].lineno = get_lineno(p,1)
 else:
     def p_proofstep_symbol(p):
-        'proofstep : APPLY SYMBOL'
+        'proofstep : APPLY atype optrenaming'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = SchemaInstantiation(a)
+        p[0] = SchemaInstantiation(a,p[3])
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_assume(p):
+        'proofstep : ASSUME atype optrenaming'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(a,p[3])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_showgoals(p):
+        'proofstep : SHOWGOALS'
+        p[0] = ShowGoalsTactic()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_defergoal(p):
+        'proofstep : DEFERGOAL'
+        p[0] = DeferGoalTactic()
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_spoil_atype(p):
+        'proofstep : SPOIL atype'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = SpoilTactic(a)
+        p[0].lineno = get_lineno(p,1)
     
 def p_match_defn(p):
     'match : defn'
@@ -709,14 +809,50 @@ if iu.get_numeric_version() <= [1,6]:
         'proofstep : SYMBOL WITH matches'
         a = Atom(p[1])
         a.lineno = get_lineno(p,1)
-        p[0] = SchemaInstantiation(*([a]+p[3]))
+        p[0] = SchemaInstantiation(*([a,Renaming()]+p[3]))
         p[0].lineno = get_lineno(p,1)
 else:
+
+    def p_renamingitem_variable_div_variable(p):
+        'renamingitem : VARIABLE DIV VARIABLE'
+        p[0] = Definition(Variable(p[3],universe),Variable(p[1],universe))
+        p[0].lineno = get_lineno(p,2)
+
+    def p_renamingitem_symbol_div_symbol(p):
+        'renamingitem : SYMBOL DIV SYMBOL'
+        p[0] = Definition(Atom(p[3],[]),Atom(p[1],[]))
+        p[0].lineno = get_lineno(p,2)
+
+    def p_renaminglist_renamingitem(p):
+        'renaminglist : renamingitem'
+        p[0] = [p[1]]
+
+    def p_renaminglist_renaminglist_comma_renamingitem(p):
+        'renaminglist : renaminglist COMMA renamingitem'
+        p[0] = p[1]
+        p[0].append(p[3])
+
+    def p_renaming(p):
+        'optrenaming : '
+        p[0] = Renaming()
+
+    def p_renaming_lt_renaminglist_gt(p):
+        'optrenaming : LT renaminglist GT'
+        p[0] = Renaming(*p[2])
+        p[0].lineno = get_lineno(p,1)
+
     def p_proofstep_symbol_with_defns(p):
-        'proofstep : APPLY SYMBOL WITH matches'
+        'proofstep : APPLY atype optrenaming WITH matches'
         a = Atom(p[2])
         a.lineno = get_lineno(p,2)
-        p[0] = SchemaInstantiation(*([a]+p[4]))
+        p[0] = SchemaInstantiation(*([a,p[3]]+p[5]))
+        p[0].lineno = get_lineno(p,1)
+
+    def p_proofstep_assume_with_defns(p):
+        'proofstep : ASSUME atype optrenaming WITH matches'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(*([a,p[3]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
     def p_pflet_var_eq_fmla(p):
@@ -750,12 +886,42 @@ def p_optproof_symbol(p):
     'optproof : PROOF proofstep'
     p[0] = p[2]
     
-def p_top_definition_defns(p):
-    'top : top DEFINITION defns optproof'
-    p[0] = p[1]
-    p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
-    if p[4] is not None:
-        p[0].declare(ProofDecl(p[4]))
+if iu.get_numeric_version() <= [1,6]:
+    def p_top_definition_defns(p):
+        'top : top DEFINITION defns optproof'
+        p[0] = p[1]
+        p[0].declare(DefinitionDecl(*[addlabel(mk_lf(x),'def') for x in p[3]]))
+        if p[4] is not None:
+            p[0].declare(ProofDecl(p[4]))
+else:
+
+    def p_optlabel_label(p):
+        'optlabel : LABEL'
+        p[0] = Atom(p[1][1:-1],[])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_optlabel(p):
+        'optlabel : '
+        p[0] = None
+
+    def p_gdefn_defn(p):
+        'gdefn : defn'
+        p[0] = p[1]
+
+    def p_gdefn_lcb_defn_rcb(p):
+        'gdefn : LCB defn RCB'
+        p[0] = DefinitionSchema(*p[2].args)
+        p[0].lineno = p[2].lineno
+
+    def p_top_definition_optlabel_gdefn_optproof(p):
+        'top : top DEFINITION optlabel gdefn optproof'
+        lf = LabeledFormula(p[3],p[4])
+        lf.lineno = get_lineno(p,2)
+        p[0] = p[1]
+        p[0].declare(DefinitionDecl(addlabel(lf,'def')))
+        if p[5] is not None:
+            p[0].declare(ProofDecl(p[5]))
+
 
 def p_top_progress_defns(p):
     'top : top PROGRESS defns'

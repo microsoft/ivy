@@ -24,9 +24,9 @@ checked_assert = iu.Parameter("assert","",check=lambda s: len(s.split(':'))==2,
                               process=p_c_a)
 
 class Schema(AST):
-    def __init__(self,defn,fresh):
-        self.defn,self.fresh = defn,fresh
-        self.args = [defn,fresh]
+    def __init__(self,defn):
+        self.defn,self.fresh = defn,[]
+        self.args = [defn]
         self.instances = []
     def __str__(self):
         res = repr(self.defn)

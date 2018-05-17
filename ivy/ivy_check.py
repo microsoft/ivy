@@ -18,6 +18,7 @@ import ivy_ast
 import ivy_theory as ith
 import ivy_transrel as itr
 import ivy_solver as islv
+import ivy_fragment as ifc
 
 import sys
 from collections import defaultdict
@@ -142,8 +143,10 @@ def print_dots():
     
 
 class Checker(object):
-    def __init__(self,conj,report_pass=True):
-        self.fc = lut.dual_clauses(lut.formula_to_clauses(conj))
+    def __init__(self,conj,report_pass=True,invert=True):
+        self.fc = lut.formula_to_clauses(conj)
+        if invert:
+            self.fc = lut.dual_clauses(self.fc)
         self.report_pass = report_pass
         self.failed = False
     def cond(self):
@@ -184,7 +187,7 @@ class ConjChecker(Checker):
 class ConjAssumer(Checker):
     def __init__(self,lf):
         self.lf = lf
-        Checker.__init__(self,lf.formula)
+        Checker.__init__(self,lf.formula,invert=False)
     def start(self):
         print pretty_lf(self.lf) + "  [proved by tactic]"
     def assume(self):
@@ -243,6 +246,10 @@ class MatchHandler(object):
             return True
         assert False,truth
         
+    def is_skolem(self,sym):
+        res = itr.is_skolem(sym) and not (sym.name.startswith('__') and sym.name[2:3].isupper())
+        return res
+
     def handle(self,action,env):
         
 #        iu.dbg('env')
@@ -251,18 +258,18 @@ class MatchHandler(object):
 #            inv_env = dict((y,x) for x,y in env.iteritems())
             if not self.started:
                 for sym in self.vocab:
-                    if sym not in env and not itr.is_new(sym) and not itr.is_skolem(sym):
+                    if sym not in env and not itr.is_new(sym) and not self.is_skolem(sym):
                         self.show_sym(sym,sym)
                 self.started = True
             for sym,renamed_sym in env.iteritems():
-                if not itr.is_new(sym) and not itr.is_skolem(sym):
+                if not itr.is_new(sym) and not self.is_skolem(sym):
                     self.show_sym(sym,renamed_sym)
 
             print '{}{}'.format(action.lineno,action)
 
     def end(self):
         for sym in self.vocab:
-            if not itr.is_new(sym) and not itr.is_skolem(sym):
+            if not itr.is_new(sym) and not self.is_skolem(sym):
                 self.show_sym(sym,sym)
             
 
@@ -282,11 +289,13 @@ def check_fcs_in_state(mod,ag,post,fcs):
     if opt_trace.get():
         clauses = history.post
         clauses = lut.and_clauses(clauses,axioms)
-        model = itr.small_model_clauses(clauses,filter_fcs(fcs),shrink=True)
+        ffcs = filter_fcs(fcs)
+        model = itr.small_model_clauses(clauses,ffcs,shrink=True)
         if model is not None:
 #            iu.dbg('history.actions')
-            vocab = lut.used_symbols_clauses(clauses) # TODO: include property symbols
-            handler = MatchHandler(clauses,model,vocab)
+            mclauses = lut.and_clauses(*([clauses] + [c.cond() for c in ffcs if c.failed]))
+            vocab = lut.used_symbols_clauses(mclauses)
+            handler = MatchHandler(mclauses,model,vocab)
             assert all(x is not None for x in history.actions)
             # work around a bug in ivy_interp
             actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
@@ -505,7 +514,7 @@ def check_isolate():
         l2s(mod, temporals[0])
         mod.concept_spaces = []
         mod.update_conjs()
-    ith.check_theory()
+    ifc.check_fragment()
     with im.module.theory_context():
         summarize_isolate(mod)
         return

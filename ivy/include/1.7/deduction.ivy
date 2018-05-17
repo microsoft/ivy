@@ -1,0 +1,254 @@
+#lang ivy
+
+# Natural deduction
+#
+# This module gives as system of natural deduction rules for
+# first-order logic.
+#
+#
+
+
+# ### Implication introduction
+#
+# If we can prove `q` from a hypothesis of `p`, then we can prove `p -> q`.
+#
+
+axiom [introImp] {
+    function p : bool
+    function q : bool
+    {
+        property p
+        #----------------------
+        property q
+    }
+    #----------------------
+    property p -> q
+}
+
+# ### Implication elimination
+#
+# If we can prove `p -> q` and `p`, then we can prove `q`.
+#
+
+axiom [elimImp] {
+    function p : bool
+    function q : bool
+    property p
+    property p -> q
+    #----------------------
+    property q
+}
+
+
+# ### And introduction
+#
+# If we can prove `p` and `q`, we can prove `p & q`
+
+axiom [introAnd] {
+    function p : bool
+    function q : bool
+    property p
+    property q
+    #----------------------
+    property p & q
+}
+
+# ### And elimination
+
+# If we can prove `p & q`, we can prove `p`
+
+axiom [elimAndL] {
+    function p : bool
+    function q : bool
+    property p & q
+    #----------------------
+    property p
+}
+
+# If we can prove `p & q`, we can prove `q `
+
+axiom [elimAndR] {
+    function p : bool
+    function q : bool
+    property p & q
+    #----------------------
+    property q
+}
+
+# ### Or introduction
+#
+# If we can prove `p` we can prove `p | q`
+
+axiom [introOrL] {
+    function p : bool
+    function q : bool
+    property p
+    #----------------------
+    property p | q
+}
+
+# If we can prove `q` we can prove `p | q`
+
+axiom [introOrR] {
+    function p : bool
+    function q : bool
+    property q
+    #----------------------
+    property p | q
+}
+
+# ### Or elimination
+#
+# If we can prove `r` from both `p` and `q`, we can prove `r` from `p | q`
+
+axiom [elimOr] {
+    function p : bool
+    function q : bool
+    function r : bool
+    { property p property r }
+    { property q property r }
+    property p | q
+    #----------------------
+    property r
+}
+
+# ### False elimination
+#
+# If we can prove `false`, we can prove `r`
+
+axiom [elimFalse] {
+    function r : bool
+    property false
+    #----------------------
+    property r
+}
+
+# ### Not introduction
+#
+# If we can prove anything from `p`, we can prove `~p`
+
+axiom [introNot] {
+    function p : bool
+    { 
+        function q : bool
+        property p
+        property q
+    }
+    property ~p
+}
+
+# ### Not elimination
+#
+# If we can prove `p` and `~p`, we can prove anything
+
+axiom [elimNot] {
+    function p : bool
+    function q : bool
+    property p
+    property ~p
+    property q
+}
+
+# ### Existential introduction
+#
+# If we can prove `p(witness)`, we can prove `exists X. p(X)`.
+# 
+axiom [introE] {
+    type t
+    function p(X:t) : bool
+    function witness : t
+    property p(witness)
+    #----------------------
+    property exists X. p(X)
+}
+
+# ### Existential introduction
+#
+# If we can prove `exists X. p(X)`, we can prove `q` from `p(x)` for arbitary `x`,
+# we can prove q.
+
+axiom [elimE] {
+    type t
+    function p(X:t) : bool
+    function q : bool
+    property exists X. p(X)
+    {
+        individual x : t
+        property p(x)
+        property q
+    }
+    property q
+}
+
+# ### Universal introduction
+#
+# If we can prove `p(x)` for arbitary `x`, we can prove `forall X. p(X)`.
+
+axiom [introA] {
+    type t
+    function p(X:t) : bool
+    {
+        function x : t
+        property p(x)
+    }
+    #----------------------
+    property forall X. p(X)
+}
+
+# ### Universal elimination
+#
+# If we can prove `forall Y. p(Y)`, we can prove `p(X)` for arbitrary `X`
+
+axiom [elimA] {
+    type t
+    function p(X:t) : bool
+    property forall Y. p(Y)
+    #--------------------------------
+    property p(X)
+}
+
+# ### Equality introduction
+#
+# If we can prove `p(y)` from `p(x)` for an arbitrary predicate `p`,
+# we can prove `x = y`.
+
+axiom [introEq] {
+    type t
+    individual x : t
+    individual y : t
+    { 
+        function p(X:t) : bool
+        property p(x)
+        property p(y)
+    }   
+    #---------------------
+    property x = y
+}
+
+# ### Equality elimination
+#
+# If we can prove `p(x)` and `x = y`, we can prove `p(y)`.
+
+axiom [elimEq] {
+    type t
+    individual x : t
+    individual y : t
+    function p(X:t) : bool
+    property x = y
+    property p(y)
+    #---------------------
+    property p(x)
+}
+
+# ### The classical axiom (excluded middle)
+#
+# If we can prove `p` from `q` and from `~q', we can prove p.
+
+axiom [exmid] {
+    function p : bool
+    function q : bool
+    { property q property p }
+    { property ~q property p }
+    property p
+}
+

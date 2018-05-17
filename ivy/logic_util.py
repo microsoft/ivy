@@ -11,6 +11,11 @@ from logic import (Var, Const, Apply, Eq, Ite, Not, And, Or, Implies,
                    Iff, ForAll, Exists, Lambda, NamedBinder)
 from logic import contains_topsort
 
+import ivy_utils as iu
+
+class CaptureError(Exception):
+    def __init__(self,variables):
+        self.variables = variables
 
 def union(*sets):
     if len(sets) == 0:
@@ -88,13 +93,13 @@ def bound_variables(*terms):
 
     elif type(t) in (tuple, Const, Apply, Eq, Ite, Not, And, Or,
                      Implies, Iff):
-        return union(*(used_variables(x) for x in t))
+        return union(*(bound_variables(x) for x in t))
 
     elif type(t) in (ForAll, Exists, Lambda, NamedBinder):
-        return union(used_variables(t.body), t.variables)
+        return union(bound_variables(t.body), t.variables)
 
     elif hasattr(t,'args'):
-        return union(*(used_variables(x) for x in t.args))
+        return union(*(bound_variables(x) for x in t.args))
 
     else:
         assert False, type(t)
@@ -158,6 +163,7 @@ def substitute(t, subs):
                 if k not in t.variables
             )))
         else:
+            raise CaptureError(forbidden_variables.intersection(t.variables))
             assert False, (t, subs) # capturing would be created
 
     else:
@@ -269,3 +275,33 @@ if __name__ == '__main__':
     assert free_variables(f, by_name=True) == set()
     assert free_variables(f.body) == {X2}
     assert free_variables(f.body, by_name=True) == {'X'}
+
+def equal_mod_alpha(t,u):
+    """ Returns True if t is syntactially equal to u modulo alpha
+    conversion """
+    def rec(t,u,m1,m2,n):
+        if type(t) is Var and type(u) is Var:
+            return m1.get(t,t) == m2.get(u,u)
+        if type(t) in (ForAll, Exists, Lambda, NamedBinder) and type(t) is type(u):
+            if len(t.variables) == len(u.variables):
+                for v1,v2 in zip(t.variables,u.variables):
+                    m1[v1] = n
+                    m2[v2] = n
+                    n += 1
+                res = rec(t.body,u.body,m1,m2,n)
+                for v1,v2 in zip(t.variables,u.variables):
+                    del m1[v1]
+                    del m2[v2]
+                return res
+        if type(t) is Apply and type(u) is Apply and t.func == u.func and len(t.terms) == len(u.terms):
+            return all(rec(v,w,m1,m2,n) for v,w in zip(t.terms,u.terms))
+        if type(t) is Const and type(u) is Const:
+            return t == u
+        if type(t) in (Apply, Eq, Ite, Not, And, Or, Implies, Iff) and type(u) is type(t):
+            return len(t) == len(u) and all(rec(v,w,m1,m2,n) for v,w in zip(tuple(t),tuple(u)))
+        return False
+    return rec(t,u,dict(),dict(),0)
+
+                    
+            
+    

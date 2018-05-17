@@ -283,6 +283,11 @@ def strip_labeled_fmla(lfmla,strip_map):
     return lfmla.clone([lbl,fmla])
     
 def strip_labeled_fmlas(lfmlas,strip_map):
+    if not strip_map:
+        return
+    for f in lfmlas:
+        if isinstance(f.formula,ivy_ast.SchemaBody):
+            raise IvyError(f,'cannot strip parameter from a theorem')
     new_lfmlas = [strip_labeled_fmla(f,strip_map) for f in lfmlas]
     del lfmlas[:]
     lfmlas.extend(new_lfmlas)
@@ -682,20 +687,27 @@ def get_props_proved_in_isolate_orig(mod,isolate):
     return proved,not_proved
 
 def get_props_proved_in_isolate(mod,isolate):
-    save_privates = mod.privates
-    mod.privates = set()
-    set_privates(mod,isolate,'impl')
-    verified,present = get_isolate_info(mod,isolate,'impl')
-    for other_iso in mod.isolates.values():
-        if other_iso is not isolate:
-            for other_verified in other_iso.verified():
-                ovn = other_verified.relname
-                if startswith_some(ovn,verified,mod):
-                    mod.privates.add(ovn)
-    check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
-    not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
-    proved = [a for a in mod.labeled_props if check_pr(a.label)]
-    mod.privates = save_privates
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        proved,not_proved = get_props_proved_in_isolate_orig(mod,isolate)
+    else:
+        save_privates = mod.privates
+        mod.privates = set()
+        set_privates(mod,isolate,'impl')
+        verified,present = get_isolate_info(mod,isolate,'impl')
+        if not iu.version_le(iu.get_string_version(),"1.6"):
+            for other_iso in mod.isolates.values():
+                if other_iso is not isolate:
+                    for other_verified in other_iso.verified():
+                        ovn = other_verified.relname
+                        if startswith_some(ovn,verified,mod):
+                            mod.privates.add(ovn)
+        check_pr = lambda name: (name is None or vstartswith_eq_some(name.rep,verified,mod))
+        not_proved = [a for a in mod.labeled_props if not check_pr(a.label)]
+        proved = [a for a in mod.labeled_props if check_pr(a.label)]
+        mod.privates = save_privates
+    # remove the subgoals from not_proved
+    subs = set(sg.id for p,sgs in mod.subgoals for sg in sgs)
+    not_proved = [a for a in not_proved if a.id not in subs]
     return proved,not_proved
     
 
@@ -708,7 +720,11 @@ def check_with_parameters(mod,isolate_name):
     present = set(a.relname for a in isolate.present())
     present.update(verified)
 
-    derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
+    if iu.version_le(iu.get_string_version(),"1.6"):
+        derived = set(ldf.formula.args[0].rep.name for ldf in mod.definitions)
+    else:
+        derived = set(ldf.name for ldf in mod.definitions)
+        
     propnames = set(x.label.rep for x in (mod.labeled_props+mod.labeled_axioms+mod.labeled_conjs) if x.label is not None)
     for name in present:
         if (name != 'this' and name not in mod.hierarchy
@@ -1060,7 +1076,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs]:
-        asts += [y.formula for y in x]
+        asts += [y.formula for y in x if not isinstance(y.formula,ivy_ast.SchemaBody)]
     asts += [action for action in new_actions.values()]
     for a in mod.actions.values():
         asts.extend(a.formal_params)
@@ -1123,7 +1139,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     asts = []
     for x in [mod.labeled_axioms,mod.labeled_props,mod.labeled_inits,mod.labeled_conjs,mod.definitions]:
-        asts.extend(y.formula for y in x)
+        asts.extend(y.formula for y in x if not isinstance(y.formula,ivy_ast.SchemaBody))
     asts.extend(action for action in mod.actions.values())
     if opt_keep_destructors.get():
         asts.extend(mod.params) # if compiling, keep all of the parameters

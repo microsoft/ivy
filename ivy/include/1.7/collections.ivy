@@ -47,6 +47,7 @@ module array(domain,range) = {
     # Function "end" gives the end value of an array while value(a,x)
     # gives the value that x maps to in a.
 
+    function begin(A:t) : domain
     function end(A:t) : domain
     function value(A:t,X:domain) : range
 
@@ -58,6 +59,9 @@ module array(domain,range) = {
 
 
     object spec = {
+
+        definition begin(X) = 0
+
 	property end(X) >= 0
 
 	after empty {
@@ -95,6 +99,11 @@ module array(domain,range) = {
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert value(a,end(old a)) = v
 	}
+
+        theorem extensionality = {
+            property end(X) = end(Y) & forall I. 0 <= I & I < end(X) -> value(X,I) = value(Y,I)
+            property X:t = Y
+        }
     }
 
     object impl = {

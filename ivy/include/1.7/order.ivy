@@ -155,7 +155,7 @@ module order_iterator(range) = {
     
     object spec = {
 
-	instantiate totally_ordered(range.t)
+#	instantiate totally_ordered(range.t)
 
 	after create {
 	    assert ~is_end(y);
@@ -318,6 +318,7 @@ module iterable = {
         parameter size : t
         interpret t -> <<< int >>>
         definition (x:t < y:t) = <<< x < y >>>
+        definition (x:t - y:t) = <<< x - y >>>
         definition 0:t = <<< 0 >>>
         definition max = <<< `size` - 1 >>>
         

@@ -25,6 +25,6 @@ liaTheory = Theory('int',[intSort],intOps,True)
 
 # Returns true if the theory with quantifiers is decidable
 def quantifiers_decidable(theory_name):
-    return theory_name != 'int'
+    return theory_name not in ['int','nat']
 
     

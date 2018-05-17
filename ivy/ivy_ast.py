@@ -137,6 +137,9 @@ class Definition(Formula):
             return Atom(equals,self.args)
         return Iff(*self.args)
 
+class DefinitionSchema(Definition):
+    pass
+
 class Implies(Formula):
     """
     Implication of formulas
@@ -538,6 +541,9 @@ class LabeledFormula(AST):
     def label(self):
         return self.args[0]
     @property
+    def name(self):
+        return self.args[0].relname
+    @property
     def formula(self):
         return self.args[1]
     def __str__(self):
@@ -588,21 +594,79 @@ class SchemaDecl(Decl):
     
 class SchemaBody(AST):
     def __str__(self):
-        return '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
+        lines = []
+        def indent(ind,s):
+            lines.append(ind * '    ' + s)
+        def sub(thing,ind):
+            indent(0,'{\n')
+            for x in thing.prems():
+                if isinstance(x,LabeledFormula):
+                    fmla = x.formula
+                    if isinstance(fmla,SchemaBody):
+                        indent(ind+1,'property ' + ('[{}] '.format(x.label) if x.label is not None else ''))
+                        sub(fmla,ind+1)
+                    else:
+                        indent(ind+1,'property ' + str(x) + '\n')
+                elif isinstance(x,ivy_logic.UninterpretedSort):
+                    indent(ind+1,'type ' + str(x) + '\n')
+                else:
+                    foob = ivy_logic.sym_decl_to_str(x.args[0]) if isinstance(x.args[0],ivy_logic.Symbol) else str(x.args[0])
+                    indent(ind+1,foob + '\n')
+            indent(ind+1,'property ' + str(thing.conc()) + '\n')
+            indent(ind,'}\n')
+        sub(self,0)
+        return ''.join(lines)
+        return indent * ' ' + '{\n' + '\n'.join(str(arg) for arg in self.args) + '}\n'
     def prems(self):
         return self.args[:-1]
     def conc(self):
         return self.args[-1]
 
-class SchemaInstantiation(AST):
+class TheoremDecl(Decl):
+    def name(self):
+        return 'theorem'
+    def defines(self):
+        return [(c.defines(),lineno(c)) for c in self.args]
+
+class Renaming(AST):
+    def __str__(self):
+        return '<' + ','.join('{}/{}'.format(x.rhs(),x.lhs()) for x in self.args) + '>'
+
+class TacticWithMatch(AST):
+    """ First arg is a schema name, second is a renaming, rest are matches """
     def __init__(self,*args):
         self.args = args
     def schemaname(self):
         return self.args[0].rep
+    def renaming(self):
+        return self.args[1]
     def match(self):
-        return self.args[1:]
+        return self.args[2:]
     def __str__(self):
-        return str(args[0]) + ' with ' + ','.join(str(x) for x in self.args[1:])
+        res = self.tactic_name() + ' ' + str(self.args[0]) 
+        if len(self.args) > 1:
+            res += ' ' + str(self.args[1])
+        if len(self.args) > 2:
+            res += ' with ' + ','.join(str(x) for x in self.args[2:])
+        return res
+
+class SchemaInstantiation(TacticWithMatch):
+    def tactic_name(self):
+        return 'apply'
+
+class AssumeTactic(TacticWithMatch):
+    def tactic_name(self):
+        return 'assume'
+
+class ShowGoalsTactic(AST):
+    def tactic_name(self):
+        return 'showgoals'
+    def __str__(self):
+        return 'showgoals'
+
+class DeferGoalTactic(AST):
+    def tactic_name(self):
+        return 'defergoal'
 
 class LetTactic(AST):
     def __init__(self,*args):
@@ -610,6 +674,11 @@ class LetTactic(AST):
     def __str__(self):
         return 'let' ','.join(str(x) for x in self.args)
     
+class SpoilTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'spoil ' + str(self.args[0])
 
 class ComposeTactics(AST):
     def __str__(self):
@@ -1357,11 +1426,17 @@ class ASTContext(object):
         if isinstance(exc_val,ivy_logic.Error):
 #            assert False
             raise IvyError(self.ast,str(exc_val))
-        if exc_type == IvyError:
+        if isinstance(exc_val,IvyError):
+#        if exc_type == IvyError:
 #            print "no lineno: {}".format(self.ast)
-            needs_lineno = not exc_val.lineno.line
+            needs_lineno = hasattr(exc_val,'lineno') and not exc_val.lineno.line
             if needs_lineno and hasattr(self.ast,'lineno'):
 #                print "lineno: {}".format(self.ast.lineno)
                 exc_val.lineno = self.ast.lineno
         return False # don't block any exceptions
 
+class Labeler(object):
+    def __init__(self):
+        self.rn = iu.UniqueRenamer()
+    def __call__(self):
+        return Atom(self.rn(),[])

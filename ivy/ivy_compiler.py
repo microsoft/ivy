@@ -324,7 +324,10 @@ ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.args[0].compile()
 )
 
-ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,sortify_with_inference(self.formula)])
+ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,
+                                                       self.formula.compile() 
+                                                       if isinstance(self.formula,ivy_ast.SchemaBody)
+                                                       else sortify_with_inference(self.formula)])
 
 # compiling update patterns is complicated because they declare constants internally
 def UpdatePattern_cmpl(self):
@@ -628,6 +631,7 @@ def compile_action_def(a,sig):
 def compile_defn(df):
     has_consts = any(not isinstance(p,ivy_ast.Variable) for p in df.args[0].args)
     sig = ivy_logic.sig.copy() if has_consts else ivy_logic.sig
+    is_schema = isinstance(df,ivy_ast.DefinitionSchema)
     with ivy_ast.ASTContext(df):
         with sig:
             for p in df.args[0].args:
@@ -653,6 +657,8 @@ def compile_defn(df):
                     eqn = ivy_ast.Atom('=',(df.args[0],df.args[1]))
                     eqn = sortify_with_inference(eqn)
                     df = ivy_logic.Definition(eqn.args[0],eqn.args[1])
+            if is_schema:
+                df = ivy_logic.DefinitionSchema(*df.args)
             return df
     
 def compile_schema_prem(self,sig):
@@ -668,13 +674,19 @@ def compile_schema_prem(self,sig):
         return t
     elif isinstance(self,ivy_ast.LabeledFormula):
         with ivy_logic.WithSymbols(sig.all_symbols()):
-            return self.compile()
+            with ivy_logic.WithSorts(sig.sorts.values()):
+                return self.compile()
+    # elif isinstance(self,ivy_ast.SchemaBody):
+    #     with ivy_logic.WithSymbols(sig.all_symbols()):
+    #         with ivy_logic.WithSorts(sig.sorts.values()):
+    #             return compile_schema_body(self)
     
 def compile_schema_conc(self,sig):
     with ivy_logic.WithSymbols(sig.all_symbols()):
-        if isinstance(self,ivy_ast.Definition):
-            return compile_defn(self)
-        return sortify_with_inference(self)
+        with ivy_logic.WithSorts(sig.sorts.values()):
+            if isinstance(self,ivy_ast.Definition):
+                return compile_defn(self)
+            return sortify_with_inference(self)
 
 def compile_schema_body(self):
     sig = ivy_logic.Sig()
@@ -685,10 +697,16 @@ def compile_schema_body(self):
 
 ivy_ast.SchemaBody.compile = compile_schema_body    
 
+def lookup_schema(name,proof):
+    if name in im.module.schemata:
+        return im.module.schemata[name]
+    if name in im.module.theorems:
+        return im.module.theorems[name]
+    raise iu.IvyError(proof,'applied schema {} does not exist'.format(name))
+
 def compile_schema_instantiation(self,fmla):
-    if self.schemaname() not in im.module.schemata:
-        raise iu.IvyError(self,'schema {} does not exist'.format(self.schemaname()))
-    schema = im.module.schemata[self.schemaname()]
+    return self
+    schema = lookup_schema(self.schemaname(),self)
     schemasyms = [x.args[0] for x in schema.prems() if isinstance(x,ivy_ast.ConstantDecl)]
     schemasorts = [s for s in schema.prems() if isinstance(s,ivy_logic.UninterpretedSort)]
     sortmap = dict()
@@ -719,7 +737,7 @@ def compile_schema_instantiation(self,fmla):
 
 last_fmla = None
 
-ivy_ast.SchemaInstantiation.compile = lambda self: compile_schema_instantiation(self,last_fmla)
+ivy_ast.TacticWithMatch.compile = lambda self: compile_schema_instantiation(self,last_fmla)
 
 def compile_let_tactic(self):
     fmla = ivy_ast.And(*[ivy_ast.Atom('=',x.args[0],x.args[1]) for x in self.args])
@@ -746,7 +764,11 @@ class IvyDomainSetup(IvyDeclInterp):
     def object(self,atom):
         self.domain.add_object(atom.rep)
     def axiom(self,ax):
-        self.domain.labeled_axioms.append(ax.compile())
+        cax = ax.compile()
+        if isinstance(cax.formula,ivy_ast.SchemaBody):
+            self.domain.schemata[cax.label.relname] = cax
+        else:
+            self.domain.labeled_axioms.append(cax)
     def property(self,ax):
         lf = ax.compile()
         self.domain.labeled_props.append(lf)
@@ -784,9 +806,21 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.named.append((self.last_fact,sym(*targs) if targs else sym))
     def schema(self,sch):
         if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
-            self.domain.schemata[sch.defn.defines()] = sch.defn.args[1].compile()
+            label = ivy_ast.Atom(sch.defn.defines(),[])
+            ldf = ivy_ast.LabeledFormula(label,sch.defn.args[1].compile())
+            ldf.lineno = sch.defn.args[1].lineno
+#            self.domain.labeled_axioms.append(ldf)
+            self.domain.schemata[label.relname] = ldf
         else:
             self.domain.schemata[sch.defn.defines()] = sch
+    def theorem(self,sch):
+        if isinstance(sch.defn.args[1],ivy_ast.SchemaBody):
+            label = ivy_ast.Atom(sch.defn.defines(),[])
+            ldf = ivy_ast.LabeledFormula(label,sch.defn.args[1].compile())
+            ldf.lineno = sch.defn.args[1].lineno
+            self.domain.labeled_props.append(ldf)
+            self.domain.theorems[label.relname] = ldf.formula
+            self.last_fact = ldf
     def instantiate(self,inst):
         try:
             self.domain.schemata[inst.relname].instantiate(inst.args)
@@ -816,7 +850,7 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
     def add_definition(self,ldf):
-        defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.definitions
+        defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.labeled_props
         lhsvs = list(lu.variables_ast(ldf.formula.args[0]))
         for idx,v in enumerate(lhsvs):
             if v in lhsvs[idx+1:]:
@@ -858,6 +892,12 @@ class IvyDomainSetup(IvyDeclInterp):
             return # this is a conjecture
         global last_fmla
         last_fmla = self.last_fact.formula
+        # tricky: if proof is of a definition, move the definition to labeled_props
+        # if isinstance(last_fmla,ivy_logic.Definition):
+        #     defs = self.domain.definitions
+        #     assert len(defs) >= 1 and defs[-1].id == self.last_fact.id
+        #     self.domain.labeled_props.append(self.last_fact)
+        #     defs.pop()
         self.domain.proofs.append((self.last_fact,pf.compile()))
 
     def progress(self,df):
@@ -1234,6 +1274,42 @@ def get_symbol_dependencies(mp,res,t):
 
 def check_definitions(mod):
 
+    # get the definitions that have no dependence on proofs
+
+    stale = set()
+    props = mod.labeled_props
+    mod.labeled_props = []
+    with_proofs = set()
+    for lf,pf in mod.proofs:
+        with_proofs.add(lf.id)
+    for prop in props:
+        if isinstance(prop.formula,ivy_logic.Definition):
+            if prop.id not in with_proofs:
+                if not any(s in stale for s in lu.used_symbols_ast(prop.formula)):
+                    mod.definitions.append(prop)
+                    continue
+            stale.add(prop.formula.defines())
+        mod.labeled_props.append(prop)
+    # print "definitions:"
+    # for prop in mod.definitions:
+    #     print prop
+    # print "props:"
+    # for prop in mod.labeled_props:
+    #     print prop
+
+
+    defs = dict()
+    def checkdef(sym,lf):
+        if sym in defs:
+            raise IvyError(lf,'redefinition of {}\n{} from here'.format(sym,defs[sym].lineno))
+        defs[sym] = lf
+    for ldf in mod.definitions:
+        checkdef(ldf.formula.defines(),ldf)
+    for ldf in mod.native_definitions:
+        checkdef(ldf.formula.defines(),ldf)
+    for ldf,term in mod.named:
+        checkdef(term.rep,ldf)
+
     # check that no actions interfere with axioms or definitions
     
     if iu.version_le("1.7",iu.get_string_version()):
@@ -1265,7 +1341,7 @@ def check_definitions(mod):
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     sccs = tarjan_arcs(arcs)
     import ivy_proof
-    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,[],mod.schemata)
     for scc in sccs:
         if len(scc) > 1:
             raise iu.IvyError(None,'these definitions form a dependency cycle: {}'.format(','.join(scc)))
@@ -1275,13 +1351,63 @@ def check_definitions(mod):
         prover.admit_definition(d,pmap[d.id])
         
 
+# take a goal with premises and convert it to an implication
+def theorem_to_property(prop):
+    if isinstance(prop.formula,ivy_ast.SchemaBody):
+        prems = [theorem_to_property(x).formula for x in prop.formula.prems()
+                 if isinstance(x,ivy_ast.LabeledFormula)]
+        conc = prop.formula.conc()
+        if isinstance(conc,ivy_logic.Definition):
+            raise iu.IvyError(prop,"definitional subgoal must be discharged")
+        fmla = ivy_logic.Implies(ivy_logic.And(*prems),conc) if prems else conc
+        res = ivy_ast.LabeledFormula(prop.label,fmla)
+        res.lineno = prop.lineno
+        return res
+    return prop
 
+# re-order the props so specification props comes afer other props in object
+
+def reorder_props(mod,props):
+    specprops = defaultdict(list)
+    iprops = []
+    for prop in props:
+        if iu.compose_names(prop.name,'spec') in mod.attributes:
+            p,c = parent_child_name(prop.name)
+            specprops[p].append(prop)
+            iprops.append((prop,))  # a placeholder
+        else:
+            iprops.append(prop)
+    rprops = []
+    for prop in reversed(iprops):
+        name = prop[0].name if isinstance(prop,tuple) else prop.name
+        things = []
+        while name != 'this':
+            name,c = parent_child_name(name)
+            if name in specprops:
+                things.extend(specprops[name])
+                del specprops[name]
+        rprops.extend(reversed(things))
+        if not isinstance(prop,tuple):
+            rprops.append(prop)
+    rprops.reverse()
+    return rprops
+        
 
 def check_properties(mod):
-    props = mod.labeled_props
+    props = reorder_props(mod,mod.labeled_props)
+    
+    
+
     mod.labeled_props = []
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     nmap = dict((lf.id,n) for lf,n in mod.named)
+
+    # Give empty proofs to theorems without proofs. 
+    for prop in props:
+        if prop.id not in pmap and isinstance(prop.formula,ivy_ast.SchemaBody):
+            emptypf = ivy_ast.ComposeTactics()
+            emptypf.lineno = prop.lineno
+            pmap[prop.id] = emptypf
 
     def named_trans(prop):
         if prop.id in nmap:
@@ -1294,33 +1420,53 @@ def check_properties(mod):
         return prop
             
     import ivy_proof
-    prover = ivy_proof.ProofChecker([],[],mod.schemata)
+    prover = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
+
     for prop in props:
         if prop.id in pmap:
 #            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
             if len(subgoals) == 0:
-                mod.labeled_axioms.append(prop)
+                if not isinstance(prop.formula,ivy_ast.SchemaBody):
+                    if isinstance(prop.formula,ivy_logic.Definition):
+                        mod.definitions.append(prop)
+                    else: 
+                        mod.labeled_axioms.append(prop)
             else:
+                subgoals = map(theorem_to_property,subgoals)
+                lb = ivy_ast.Labeler()
                 for g in subgoals:
                     if prop.label is None:
                         raise IvyError(prop,'Properties with subgoals must be labeled')
-                    label = ia.compose_atoms(prop.label,g.label)
+                    label = ia.compose_atoms(prop.label,lb())
                     mod.labeled_props.append(g.clone([label,g.formula]))
-                mod.labeled_props.append(prop)
+                if not isinstance(prop.formula,ivy_ast.SchemaBody):
+                    if isinstance(prop.formula,ivy_logic.Definition):
+                        mod.definitions.append(prop)
+                    else:
+                        mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
         # elif prop.temporal:
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10
         #     l2s(mod, prop)
         else:
-            mod.labeled_props.append(prop)
-            if prop.id in nmap:
-                nprop = named_trans(prop)
-                mod.labeled_props.append(nprop)
-                mod.subgoals.append((nprop,[prop]))
-                
+            # if isinstance(prop.formula,ivy_ast.SchemaBody):
+            #     prover.schemata[prop.label.relname] = prop.formula
+            #     prop = theorem_to_property(prop)
+            if isinstance(prop.formula,ivy_logic.Definition):
+                mod.definitions.append(prop)
+            else:
+                mod.labeled_props.append(prop)
+                if prop.id in nmap:
+                    nprop = named_trans(prop)
+                    mod.labeled_props.append(nprop)
+                    mod.subgoals.append((nprop,[prop]))
+                    prover.admit_proposition(nprop,ivy_ast.ComposeTactics())
+                else:
+                    prover.admit_proposition(prop,ivy_ast.ComposeTactics())
+
 
 
 def ivy_compile_theory(mod,decls,**kwargs):

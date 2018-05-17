@@ -1,0 +1,11 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function sumdiv(N:t,X:t) : t
+
+
+definition sumdiv(N,X) = 0 if X <= 0 else (X/N + sumdiv(N,X-1))
+proof
+   apply rec[t]

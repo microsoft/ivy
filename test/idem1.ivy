@@ -1,0 +1,44 @@
+#lang ivy1.7
+
+theorem [congruence] {
+        type d
+	type r
+        function f(X:d) : r
+        property X:d = Y
+        #--------------------------
+        property f(X) = f(Y)
+    }
+
+theorem [trans] {
+    type t
+    property X:t = Y
+    property Y:t = Z
+    property X:t = Z
+}
+
+theorem [elimA] {
+    type t
+    function p(X:t) : bool
+    property forall Y. p(Y)
+    #--------------------------------
+    property p(X)
+}
+    
+
+
+theorem [idem2] {
+    type t
+    function f(X:t) : t
+    property forall X. f(f(X)) = f(X)
+    #--------------------------------
+    property f(f(f(X))) = f(X)
+}
+
+proof
+    apply trans with Y = f(f(X));
+    showgoals;
+    apply elimA with X = f(X);
+    showgoals;
+    apply elimA with X = X;
+    showgoals
+        

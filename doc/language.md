@@ -320,7 +320,7 @@ efficiently compiled and is easier for Ivy to reason about (see the
 
 ### Loops
 
-Loops are discouraged IVy. Often, the effect of a loop can be
+Loops are discouraged in IVy. Often, the effect of a loop can be
 described using an assignment or an `if some` conditional. 
 
 For example, instead of something like this:
@@ -684,39 +684,36 @@ These axioms say, respectively, that `<` is
 [transitive](https://en.wikipedia.org/wiki/Transitive_relation),
 [anti-symmetric](https://en.wikipedia.org/wiki/Antisymmetric_relation)
 and [total](https://en.wikipedia.org/wiki/Total_relation). As in other
-cases, the free variables are universally quantified. You may also
-notice that we annotated the variable *X* with its type.  This has to
-do with the fact that `<` is *polymorphic*, an issue we will deal with
-shortly.
+cases, the free variables are universally quantified. 
 
 Of course, axioms are assumptions and assumptions are dangerous.  We
 want to make sure that our axioms are consistent, that is, that they
 have at least one [model](https://en.wikipedia.org/wiki/Logic_model). The IVy tool can be helpful in
 determining this.
 
-### Polymorphic operators.
+### Overloaded operators.
 
-In IVy the equality operator is *polymorphic* in the sense that it
+In IVy the equality operator is *overloaded* in the sense that it
 applies to any pair of arguments so long as they are of the same
 type. One way to think of this is that there is really a distinct
 equality operator pre-declared for each type, but that we use `=` as a
 short-hand for all of them. It is useful to be able to declare other
-such polymorphic operators to avoid, for example, having to invent a
+such overloaded operators to avoid, for example, having to invent a
 new "less than" symbol for every ordered type, or adding type
 annotations to operators. 
 
 IVy provides for this in a limited way. Certain symbols, such as `<`,
-`+` and `0` are always polymorphic. This allows use the same symbol
+`+` and `0` are always overloaded. This allows use the same symbol
 with different type signatures disambiguate these uses based on type
 inference.
 
-To make type inference stronger, the polymorphic operators also come
+To make type inference stronger, the overloaded operators also come
 with type constraints. In functional language terms, `<` has type
 `alpha * alpha -> bool` and `+` has type `alpha * alpha -> alpha`.
 
 ### Numerals
 
-Numerals are a special case of polymorphic symbols. A numeral is any
+Numerals are a special case of overloaded symbols. A numeral is any
 symbol beginning with a digit, for example `0`, or `0xdeadbeef`. The
 types of numerals are inferred from context. For example, if `x` has
 type `foo`, then in the expression `x+1`, the numeral `1` is inferred
@@ -799,7 +796,7 @@ like this:
 
 Since we didn't give an object name, the members of `po` are created
 within the current object (which in this case is the global
-object). Notice that we passed the polymorphic infix symbol `<` as a
+object). Notice that we passed the overloaded infix symbol `<` as a
 parameter. Any symbol representing a type, function, relation, action
 or object can be passed as a module parameter.
 
@@ -986,7 +983,7 @@ as a shorthand for this:
     }
 
 At present, local variables declared in `stmts1` cannot be referenced
-in `stmts2`, but the intention os to make this possible, to reduce the
+in `stmts2`, but the intention is to make this possible, to reduce the
 need to use `old` in after monitors.
 
 
@@ -1479,7 +1476,7 @@ the integers. If we also interpret type `num` with `int`, we still
 cannot compare values of type `idx` and type `num`. In effect, these
 two types are treated as distinct copies of the integers.
 
-When we declare `idx` as `int`, certain polymorphic functions and
+When we declare `idx` as `int`, certain overloaded functions and
 relations on `idx` are also automatically interpreted by the
 corresponding operators on integers, as are numerals of that
 type. So, for example, `+` is interpreted as addition and `<` as
@@ -1495,7 +1492,7 @@ are:
 - bv[*N*]: bit vectors of length *N*, where *N* > 0
 
 An arbitrary function or relation symbol can be interpreted. This is useful
-for symbols of the theory that have no pre-defined polymorphic symbol in IVy.
+for symbols of the theory that have no pre-defined overloaded symbol in IVy.
 For example:
 
     type t
