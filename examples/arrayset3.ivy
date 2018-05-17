@@ -80,5 +80,4 @@ export s.add
 export s.remove
 
 isolate iso_s = s with index
-isolate iso_index = index
 extract iso_impl = s,index

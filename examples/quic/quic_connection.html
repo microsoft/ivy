@@ -1,0 +1,397 @@
+<hr />
+
+<p>layout: page</p>
+
+<h2>title: QUIC connection protocol</h2>
+
+<p>This document describes the wire specification of QUIC. The protocol
+is modeled in terms of a sequence of <em>packet events</em> corresponding
+to transmission of a UDP packet from a QUIC source endpoint to a
+QUIC destination endpoint.</p>
+
+<h1>References</h1>
+
+<p>```
+include quic<em>types
+include quic</em>frame
+include quic_packet</p>
+
+<p>```</p>
+
+<h1>Connections</h1>
+
+<p>This section gives the wire specification of the QUIC protocol.  It
+tracks the state of connections resulting from a sequence of packet
+events.</p>
+
+<h2>History variables</h2>
+
+<p>These history variables are referenced in the specification of QUIC
+packet events.</p>
+
+<ul>
+<li><p>For each endpoint E, and cid C, <code>conn_seen(C,E)</code> is true if C has
+been sent by E.</p></li>
+<li><p>The predicate <code>initializing(C,S)</code> holds if client endpoint C has sent an
+Initial packet to server endpoint S, but the server has not replied.</p></li>
+<li><p>The packet number of the initial packet from client endpoint C to
+server endpoint S is represented by <code>initial_pkt_num(C,S)</code>.</p></li>
+<li><p>For each endpoint E and cid C, last<em>pkt</em>num(E,C) represents the
+number of the latest packet sent by E on C.</p></li>
+<li><p>For each endpoint E and cid C, sent_pkt(E,C,N) is true if
+a packet numbered N has been sent by E on C.</p></li>
+<li><p>For each endpoint E and cid C, acked_pkt(E,C,N) is true if
+a packet numbered N sent by E on connection C has been
+acknowledged. </p></li>
+<li><p>For each endpoint E and cid C, max<em>acked(E,C) is the greatest
+packet number N such that acked</em>pkt(E,C,N), or zero if
+forall N. ~acked(E,C,N).</p></li>
+<li><p>For each endpoint E and cid C, ack_credit(E,C) is the number
+of non-ack-only packets sent to E on C, less the number of
+ack-only packets sent from E on C.</p></li>
+</ul>
+
+<p>```
+relation conn<em>seen(E:ip.endpoint,C:cid)
+relation initializing(C:ip.endpoint,S:ip.endpoint)
+function initial</em>pkt<em>num(C:ip.endpoint,S:ip.endpoint) : pkt</em>num
+function last<em>pkt</em>num(E:ip.endpoint,C:cid) : pkt<em>num
+relation sent</em>pkt(E:ip.endpoint,C:cid,N:pkt<em>num)
+relation acked</em>pkt(E:ip.endpoint,C:cid,N:pkt<em>num)
+function max</em>acked(E:ip.endpoint,C:cid) : pkt<em>num
+function ack</em>credit(E:ip.endpoint,C:cid) : pkt_num</p>
+
+<p>```</p>
+
+<h2>Initial state</h2>
+
+<p>The history variables are initialized as follows.  Initially, no
+connections have been seen and no packets have been sent or
+acknowledged.</p>
+
+<p>```
+after init {
+    conn<em>seen(E,C) := false;
+    sent</em>pkt(E,C,N) := false;
+    acked<em>pkt(E,C,N) := false;
+    max</em>acked(E,C) := 0;
+    ack_credit(E,C) := 0;
+}</p>
+
+<p>```</p>
+
+<h2>Packet events</h2>
+
+<p>A packet event represents the transmision of a UDP packet <code>pkt</code> from
+QUIC source endpoint <code>src</code> to a QUIC destination endpoint <code>dst</code>.</p>
+
+<p>The packet <em>kind</em> depends on the field <code>hdr_type</code> according to
+the following table:</p>
+
+<p>| hdr_type  | kind      |
+  |-----------|-----------|
+  | 0x7f      | Initial   |
+  | 0x7d      | Handshake |</p>
+
+<h3>Requirements</h3>
+
+<ul>
+<li><p>An Initial packet represents an attempt by a client to establish a
+connection. The cid is arbitary, but must not have been previously
+seen. The initial packet must consist (apart from padding) of a
+single stream frame for stream zero, containing the initial security
+handshake information [1].</p></li>
+<li><p>A Handshake packet is sent in response to an Initial packet or
+a previous Handshake. In the latter case, the cid must match
+the original cid.</p></li>
+<li><p>TEMPORARY: We require that only one connection be initializing for
+a given client endpoint at a given time [2]. This seems unreasonable,
+but otherwise there is no way to match Handshake packets to Initial
+packets, at least without looking at the security information.</p></li>
+<li><p>A packet number may not be re-sent on a given connection. </p></li>
+</ul>
+
+<h3>Effects</h3>
+
+<ul>
+<li>The <code>conn_seen</code> and <code>sent_pkt</code> relations are updated to reflect
+the observed packet [1].</li>
+<li>The <code>last_pkt_num</code> functiona is updated to indicate the observed
+packets as most recent for the packet's source and cid.</li>
+<li>For Initial packets, <code>initializing</code> is set to true for the packet's
+source and destination. The packet number is recorded in
+<code>initial_pkt_num</code> [3]. </li>
+<li>For Handshake packets, <code>initializing</code> is set to false for the
+source and destination of the Initial packet (the reverse of the
+handshake packet). The initial packet is transfered to the cid</li>
+<li>A sender may not re-use a packet number on a given cid [4].</li>
+<li>A packet containing only ack frames and padding is <em>ack-only</em>.
+For a given cid, the number of ack-only packets sent from src to dst
+must not be greater than the number of non-ack-only packets sent
+from dst to src [5].</li>
+</ul>
+
+<h3>Notes</h3>
+
+<ul>
+<li><p>The effective packet number is computed according to the procedure
+<code>decode_packet_number</code> defined below.</p></li>
+<li><p>It isn't clear whether a packet that is multiply-delivered packet
+can be responded to by multple ack-only packets. Here, we assume it
+cannot. That is, only a new distinct packet number allows an ack-only
+packet to be sent in response.</p></li>
+</ul>
+
+<p>```
+before packet<em>event(src:ip.endpoint,dst:ip.endpoint,pkt:quic</em>packet) {</p>
+
+<p>```
+Extract the cid and packet number from the packet.</p>
+
+<p>```
+    var pcid := pkt.hdr<em>cid;
+    var pnum := decode</em>packet_number(src,dst,pkt);</p>
+
+<pre><code>require ~sent_pkt(src,pcid,pnum);  # [4]
+</code></pre>
+
+<p>```
+Record that the connection has been seen from this source, and
+the packet has been sent.</p>
+
+<p>```
+    conn<em>seen(src,pcid) := true;  # [1]
+    sent</em>pkt(src,pcid,pnum) := true;  # [1]</p>
+
+<p>```
+Record the packet number as latest seen</p>
+
+<p>```
+    last<em>pkt</em>num(src,pcid) := pnum;</p>
+
+<p>```
+An ack-only packet must be in response to a non-ack-only packet</p>
+
+<p>```
+    var ack<em>only := forall (I:frame.idx) 0 &lt;= I &amp; I &lt; pkt.payload.end ->
+                                 (pkt.payload.value(I) isa frame.ack);
+    if ack</em>only {
+    require ack<em>credit(src,pcid) > 0;  # [5]
+    ack</em>credit(src,pcid) := ack<em>credit(src,pcid) - 1;
+    } else {
+    ack</em>credit(dst,pcid) := ack_credit(dst,pcid) + 1;
+    };</p>
+
+<p>```
+An Initial packet has hdr_type 0x7f</p>
+
+<p>```
+    if pkt.hdr_type = 0x7f {
+        require pkt.payload.end = 1;  # [1]
+    require pkt.payload.value(0) isa frame.stream;
+        require ~initializing(src,dst);  # [2]</p>
+
+<pre><code>    initializing(src,dst) := true;  # [3]
+    initial_pkt_num(src,dst) := pnum;  # [3]
+}
+</code></pre>
+
+<p>```
+A Handshake packet has hdr_type 0x7d</p>
+
+<p>```
+    else if pkt.hdr_type = 0x7d {</p>
+
+<p><code>``
+Match the Handshake to the cid</code>icid` of an Initial packet sent
+by the destination. We mark this connection as no longer
+initializing and transfer the Initial packet to the new cid.</p>
+
+<p>```
+        if initializing(dst,src) {
+            initializing(dst,src) := false;
+            var ipnum := initial<em>pkt</em>num(dst,src);
+            sent<em>pkt(dst,pcid,ipnum) := true;
+            last</em>pkt<em>num(dst,pcid) := ipnum;
+        ack</em>credit(src,pcid) := 1;  # one credit for initial packet
+        }
+    };</p>
+
+<p>```
+Handle all of the frames</p>
+
+<p>```
+    var idx : frame.idx := 0;
+    while idx &lt; pkt.payload.end {
+        call pkt.payload.value(idx).handle(src,dst,pcid);
+        idx := idx + 1
+    }</p>
+
+<p>}</p>
+
+<p>```</p>
+
+<h3>Frame handlers</h3>
+
+<p>Extend <code>frame</code> with an action <code>handle</code> that handles a frame on the
+wire.</p>
+
+<p>```
+object frame = {
+   ...
+   action handle(f:this,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {}
+}</p>
+
+<p>```</p>
+
+<h4>Ack handler</h4>
+
+<p>The set of packet numbers acknowledged by an Ack frame is determined
+by the <code>largest_ack</code> field and the <code>ack_blocks</code> field. Each Ack
+block acknowledges packet numbers in the inclusive range <code>[last - gap, last -
+gap - blocks]</code> where <code>gap</code> and <code>blocks</code> are the fields of the Ack
+block and <code>last</code> is <code>largest_ack</code> minus the sum of <code>gap + blocks</code>
+for all the previous ack blocks.</p>
+
+<p>Requirements:</p>
+
+<ul>
+<li>Every acknowledged packet must have been sent by the destination endpoint [1].</li>
+</ul>
+
+<p>Effects:</p>
+
+<ul>
+<li>The acknowledged packets are recorded in the relation <code>acked_pkts(S,C,N)</code>
+where <code>S</code> is the <em>source</em> of the acknowledged packet (not of the Ack) <code>C</code> is
+the cid and <code>N</code> is the packet number [2].</li>
+<li>The greatest acked packet is also tracked in <code>max_act(S,C)</code> [3]</li>
+</ul>
+
+<p>```
+object frame = {
+    ...
+    object ack = {
+        ...
+        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            var idx : frame.ack.block.idx := 0;
+            var last := f.largest<em>acked;
+            if max</em>acked(dst,pcid) &lt; last {
+                max<em>acked(dst,pcid) := last;  # [3]
+            };
+            while idx &lt; f.ack</em>blocks.end {
+                var ack<em>block := f.ack</em>blocks.value(idx);
+                var upper := last - ack<em>block.gap;
+                last := upper - ack</em>block.blocks;
+                require (last &lt;= N &amp; N &lt;= upper) -> sent<em>pkt(dst,pcid,N);  # [1]
+                acked</em>pkt(dst,pcid,N) := (last &lt;= N &amp; N &lt;= upper) | acked_pkt(dst,pcid,N);  # [2]
+                idx := idx.next;
+            }
+        }
+    }
+}</p>
+
+<p>```</p>
+
+<h3>Packet number decoding</h3>
+
+<p>The packet number is decoded from the packet header fields as follows.</p>
+
+<p>If the connection is new, the field <code>hdr_pkt_num</code> gives the
+exact first packet number. Otherwise, it represents only a number
+of low order bits. The high-order bits must be inferred from the
+last packet number seen for this connection.</p>
+
+<p>For short format packets. the number of low order bits present
+in <code>hdr_pkt_num</code> depends on the <code>hdr_type</code> field of the packet,
+according to this table:</p>
+
+<p>| hdr_type | bits |
+  |----------|------|
+  | 0x1d     | 32   |
+  | 0x1e     | 16   | 
+  | 0x1f     |  8   |</p>
+
+<p>For long format packets, the number of bits is always 32.  The
+decoded packet number is the <em>least</em> number greater than the
+last seen whose low-order bits agree with <code>hdr_pkt_num</code>.</p>
+
+<p>Requirements</p>
+
+<ul>
+<li>The sent packet number must be no greater than <code>la + max/2</code> where
+<code>la</code> is the greatest acknowledged packet number (or zero if there
+have been no acks) and <code>max</code> is a largest number that can be
+represented with the number of bits provided [1].</li>
+</ul>
+
+<p>Notes:</p>
+
+<ul>
+<li><p>The IETF draft uses this langauge: "The sender MUST use a packet
+number size able to represent more than twice as large a range
+than the difference between the largest acknowledged packet and
+packet number being sent." The meaning of "more than twice as
+large a range" isn't clear, but here we take it to mean that
+<code>2 * (pnum - la)</code> is representable. It is also not clear how the
+maximum packet number is computed if no acks have been received,
+but we assume here that <code>la</code> is zero in this case.</p>
+
+<p>TODO: this seems inconsistent with the following statement: "The
+initial value for packet number MUST be selected randomly from a
+range between 0 and 2^32 - 1025 (inclusive)." Possibly there is no
+upper limit on the packet number if no acks have been received
+yet, but this seems questionable.</p></li>
+</ul>
+
+<p>```
+action decode<em>packet</em>number(src:ip.endpoint,dst:ip.endpoint,pkt:quic<em>packet) returns (pnum:pkt</em>num) = {</p>
+
+<pre><code>var cid := pkt.hdr_cid;
+var la := max_acked(src,cid);
+pnum := pkt.hdr_pkt_num;
+
+
+if conn_seen(src,cid) {
+</code></pre>
+
+<p>```
+This is a last number transmitted by the source on this connection.</p>
+
+<p>```
+        var last := last<em>pkt</em>num(src,cid);</p>
+
+<p>```
+If long format or type is 0x1d, we match 32 bits</p>
+
+<p>```
+        if pkt.hdr<em>long | pkt.hdr</em>type = 0x1d {
+            require pnum &lt;= la + 0x7ffffffe;
+            if some(n:pkt_num) n > last &amp; bfe[0]<a href="n">31</a> = pnum minimizing n {
+                pnum := n
+            }
+        }</p>
+
+<p>```
+else if long format or type is 0x1e, we match 16 bits</p>
+
+<p>```
+        else if pkt.hdr<em>type = 0x1e {
+            require pnum &lt;= la + 0x7ffe;
+            if some(n:pkt</em>num) n > last &amp; bfe[0]<a href="n">15</a> = pnum minimizing n {
+                pnum := n
+            }
+        }</p>
+
+<p>```
+else (type is 0x1f) we match 8 bits</p>
+
+<p>```
+        else {
+            require pnum &lt;= la + 0x7e;
+            if some(n:pkt_num) n > last &amp; bfe[0]<a href="n">7</a> = pnum minimizing n {
+                pnum := n
+            }
+        }
+    }
+}</p>

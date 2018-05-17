@@ -172,4 +172,4 @@ object id_impl = {
 
 isolate iso_id = id, id_impl
 
-extract iso_impl(me:node.trans) = app(me),trans.impl(me),node_impl,id_impl,asgn
+extract iso_impl(me:node.t) = app(me),trans.impl(me),node_impl,id_impl,asgn

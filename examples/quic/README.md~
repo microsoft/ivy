@@ -1,0 +1,95 @@
+Ivy specification of QUIC
+=========================
+
+This directory contains work on specifying the QUIC protocol in Ivy.
+The currently targeted version is 9, as described in [this
+document](https://tools.ietf.org/html/draft-ietf-quic-transport-09).
+
+The specification is written in a way that allows monitoring of
+packets on the wire, and will eventually allow for modular testing of
+implementations and possibly a fully verified implementation.
+
+The Ivy spec is being developed from the informal IETF draft cited
+above. Ambuiguities are resovled by observing the behavior of existing
+implementations. In particular, we use the evolving specification to
+monitor packet traces captured from implementations.  This allows us
+to check consistency and possibly discover incompatibilities between
+implementations.
+
+Setup for virtual networking and packet capture
+-----------------------------------------------
+
+To monitor implementations of the protocol, it is useful to run then
+in a virtual network environent. For this we use the [CORE virtual
+networking
+environment](https://www.nrl.navy.mil/itd/ncs/products/core), the
+`tcpdump` command and the `pcap` library. To install these on an Ubuntu
+system with version 14.04 or higher, do the following:
+
+    sudo apt-get install core-network tcpdump libpcap-dev
+
+
+
+Implementations of QUIC
+-----------------------
+
+### Google QUIC
+
+The Google implementation of QUIC used in the Chromium browser is not
+compatible with the IETF draft.
+
+### MinQUIC
+
+This implementation of verion 9 in the go language is availabe [on
+github](https://github.com/ekr/minq). However, for Ivy you should use
+the fork [here](https://github.com/kenmcmil/minq) which has been
+modified to disable crypto.
+
+#### Steps to get started with MinQUIC and Ivy
+
+- Install the [go language](https://golang.org/doc/install) on your platform.
+- Follow the instructions [here](https://github.com/kenmcmil/minq) to install MinQUIC.
+
+#### 
+
+
+
+ Here are some instructions on
+installing other versions:
+
+
+
+
+
+
+
+Useful links
+============
+
+Capturing network traffic:
+
+    https://askubuntu.com/questions/11709/how-can-i-capture-network-traffic-of-a-single-process
+
+Running Google QUIC toy client/server
+
+    http://www.chromium.org/quic/playing-with-quic
+
+LibQUIC: just the QUIC API extracted from Chromium
+
+    https://github.com/devsisters/libquic
+
+Linux build instructions for Chromium:
+
+    https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md
+
+Network namespaces:
+
+    http://code.google.com/p/coreemu/wiki/Namespaces
+
+Using CORE to create virtual networks
+
+    https://stackoverflow.com/questions/12671587/isolated-test-network-on-a-linux-server-running-a-web-server-lightttpd-and-cu
+
+Capture packets in pcap dump format
+
+    sudo tcpdump -s 0 -i veth0 -w mycap.pcap

@@ -1,0 +1,2482 @@
+#include "quic_monitor.h"
+
+#include <sstream>
+#include <algorithm>
+
+#include <iostream>
+#include <stdlib.h>
+#include <sys/types.h>          /* See NOTES */
+#include <sys/stat.h>
+#include <fcntl.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <WS2tcpip.h>
+#include <io.h>
+#define isatty _isatty
+#else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> 
+#include <sys/select.h>
+#include <unistd.h>
+#define _open open
+#define _dup2 dup2
+#endif
+#include <string.h>
+#include <stdio.h>
+#include <string>
+typedef quic_monitor ivy_class;
+std::ofstream __ivy_out;
+std::ofstream __ivy_modelfile;
+void __ivy_exit(int code){exit(code);}
+
+class reader {
+public:
+    virtual int fdes() = 0;
+    virtual void read() = 0;
+    virtual void bind() {}
+    virtual ~reader() {}
+};
+
+class timer {
+public:
+    virtual int ms_delay() = 0;
+    virtual void timeout(int) = 0;
+    virtual ~timer() {}
+};
+
+#ifdef _WIN32
+DWORD WINAPI ReaderThreadFunction( LPVOID lpParam ) 
+{
+    reader *cr = (reader *) lpParam;
+    cr->bind();
+    while (true)
+        cr->read();
+    return 0;
+} 
+
+DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
+{
+    timer *cr = (reader *) lpParam;
+    while (true) {
+        int ms = timer->ms_delay();
+        Sleep(ms);
+        timer->timeout(ms);
+    }
+    return 0;
+} 
+#else
+void * _thread_reader(void *rdr_void) {
+    reader *rdr = (reader *) rdr_void;
+    rdr->bind();
+    while(rdr->fdes() >= 0) {
+        rdr->read();
+    }
+    delete rdr;
+    return 0; // just to stop warning
+}
+
+void * _thread_timer( void *tmr_void ) 
+{
+    timer *tmr = (timer *) tmr_void;
+    while (true) {
+        int ms = tmr->ms_delay();
+        struct timespec ts;
+        ts.tv_sec = ms/1000;
+        ts.tv_nsec = (ms % 1000) * 1000000;
+        nanosleep(&ts,NULL);
+        tmr->timeout(ms);
+    }
+    return 0;
+} 
+#endif 
+
+void quic_monitor::install_reader(reader *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            ReaderThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_reader, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+void quic_monitor::install_timer(timer *r) {
+    #ifdef _WIN32
+
+        DWORD dummy;
+        HANDLE h = CreateThread( 
+            NULL,                   // default security attributes
+            0,                      // use default stack size  
+            TimersThreadFunction,   // thread function name
+            r,                      // argument to thread function 
+            0,                      // use default creation flags 
+            &dummy);                // returns the thread identifier 
+        if (h == NULL) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(dummy);
+    #else
+        pthread_t thread;
+        int res = pthread_create(&thread, NULL, _thread_timer, r);
+        if (res) {
+            std::cerr << "failed to create thread" << std::endl;
+            exit(1);
+        }
+        thread_ids.push_back(thread);
+    #endif
+}      
+
+
+#ifdef _WIN32
+    void quic_monitor::__lock() { WaitForSingleObject(mutex,INFINITE); }
+    void quic_monitor::__unlock() { ReleaseMutex(mutex); }
+#else
+    void quic_monitor::__lock() { pthread_mutex_lock(&mutex); }
+    void quic_monitor::__unlock() { pthread_mutex_unlock(&mutex); }
+#endif
+struct thunk__pc__handle{
+    quic_monitor *__ivy;
+    thunk__pc__handle(quic_monitor *__ivy): __ivy(__ivy){}
+    void operator()(quic_monitor::ip__endpoint src, quic_monitor::ip__endpoint dst, quic_monitor::quic_packet p) const {
+        __ivy->pc__handle(src,dst,p);
+    }
+};
+
+/*++
+Copyright (c) Microsoft Corporation
+
+This string hash function is borrowed from Microsoft Z3
+(https://github.com/Z3Prover/z3). 
+
+--*/
+
+
+#define mix(a,b,c)              \
+{                               \
+  a -= b; a -= c; a ^= (c>>13); \
+  b -= c; b -= a; b ^= (a<<8);  \
+  c -= a; c -= b; c ^= (b>>13); \
+  a -= b; a -= c; a ^= (c>>12); \
+  b -= c; b -= a; b ^= (a<<16); \
+  c -= a; c -= b; c ^= (b>>5);  \
+  a -= b; a -= c; a ^= (c>>3);  \
+  b -= c; b -= a; b ^= (a<<10); \
+  c -= a; c -= b; c ^= (b>>15); \
+}
+
+#ifndef __fallthrough
+#define __fallthrough
+#endif
+
+namespace hash_space {
+
+// I'm using Bob Jenkin's hash function.
+// http://burtleburtle.net/bob/hash/doobs.html
+unsigned string_hash(const char * str, unsigned length, unsigned init_value) {
+    register unsigned a, b, c, len;
+
+    /* Set up the internal state */
+    len = length;
+    a = b = 0x9e3779b9;  /* the golden ratio; an arbitrary value */
+    c = init_value;      /* the previous hash value */
+
+    /*---------------------------------------- handle most of the key */
+    while (len >= 12) {
+        a += reinterpret_cast<const unsigned *>(str)[0];
+        b += reinterpret_cast<const unsigned *>(str)[1];
+        c += reinterpret_cast<const unsigned *>(str)[2];
+        mix(a,b,c);
+        str += 12; len -= 12;
+    }
+
+    /*------------------------------------- handle the last 11 bytes */
+    c += length;
+    switch(len) {        /* all the case statements fall through */
+    case 11: 
+        c+=((unsigned)str[10]<<24);
+        __fallthrough;
+    case 10: 
+        c+=((unsigned)str[9]<<16);
+        __fallthrough;
+    case 9 : 
+        c+=((unsigned)str[8]<<8);
+        __fallthrough;
+        /* the first byte of c is reserved for the length */
+    case 8 : 
+        b+=((unsigned)str[7]<<24);
+        __fallthrough;
+    case 7 : 
+        b+=((unsigned)str[6]<<16);
+        __fallthrough;
+    case 6 : 
+        b+=((unsigned)str[5]<<8);
+        __fallthrough;
+    case 5 : 
+        b+=str[4];
+        __fallthrough;
+    case 4 : 
+        a+=((unsigned)str[3]<<24);
+        __fallthrough;
+    case 3 : 
+        a+=((unsigned)str[2]<<16);
+        __fallthrough;
+    case 2 : 
+        a+=((unsigned)str[1]<<8);
+        __fallthrough;
+    case 1 : 
+        a+=str[0];
+        __fallthrough;
+        /* case 0: nothing left to add */
+    }
+    mix(a,b,c);
+    /*-------------------------------------------- report the result */
+    return c;
+}
+
+}
+
+
+
+
+struct ivy_value {
+    int pos;
+    std::string atom;
+    std::vector<ivy_value> fields;
+    bool is_member() const {
+        return atom.size() && fields.size();
+    }
+};
+struct deser_err {
+};
+
+struct ivy_ser {
+    virtual void  set(long long) = 0;
+    virtual void  set(bool) = 0;
+    virtual void  set(const std::string &) = 0;
+    virtual void  open_list(int len) = 0;
+    virtual void  close_list() = 0;
+    virtual void  open_list_elem() = 0;
+    virtual void  close_list_elem() = 0;
+    virtual void  open_struct() = 0;
+    virtual void  close_struct() = 0;
+    virtual void  open_field(const std::string &) = 0;
+    virtual void  close_field() = 0;
+    virtual void  open_tag(int, const std::string &) {throw deser_err();}
+    virtual void  close_tag() {}
+    virtual ~ivy_ser(){}
+};
+struct ivy_binary_ser : public ivy_ser {
+    std::vector<char> res;
+    void set(long long inp) {
+        for (int i = sizeof(long long)-1; i >= 0 ; i--)
+            res.push_back((inp>>(8*i))&0xff);
+    }
+    void set(bool inp) {
+        set((long long)inp);
+    }
+    void set(const std::string &inp) {
+        for (unsigned i = 0; i < inp.size(); i++)
+            res.push_back(inp[i]);
+        res.push_back(0);
+    }
+    void open_list(int len) {
+        set((long long)len);
+    }
+    void close_list() {}
+    void open_list_elem() {}
+    void close_list_elem() {}
+    void open_struct() {}
+    void close_struct() {}
+    virtual void  open_field(const std::string &) {}
+    void close_field() {}
+    virtual void  open_tag(int tag, const std::string &) {
+        set((long long)tag);
+    }
+    virtual void  close_tag() {}
+};
+
+struct ivy_deser {
+    virtual void  get(long long&) = 0;
+    virtual void  get(std::string &) = 0;
+    virtual void  open_list() = 0;
+    virtual void  close_list() = 0;
+    virtual bool  open_list_elem() = 0;
+    virtual void  close_list_elem() = 0;
+    virtual void  open_struct() = 0;
+    virtual void  close_struct() = 0;
+    virtual void  open_field(const std::string &) = 0;
+    virtual void  close_field() = 0;
+    virtual int   open_tag(const std::vector<std::string> &) {throw deser_err();}
+    virtual void  close_tag() {}
+    virtual void  end() = 0;
+    virtual ~ivy_deser(){}
+};
+
+struct ivy_binary_deser : public ivy_deser {
+    std::vector<char> inp;
+    int pos;
+    std::vector<int> lenstack;
+    ivy_binary_deser(const std::vector<char> &inp) : inp(inp),pos(0) {}
+    virtual bool more(unsigned bytes) {return inp.size() >= pos + bytes;}
+    virtual bool can_end() {return pos == inp.size();}
+    void get(long long &res) {
+       getn(res,8);
+    }
+    void getn(long long &res, int bytes) {
+        if (!more(bytes))
+            throw deser_err();
+        res = 0;
+        for (int i = 0; i < bytes; i++)
+            res = (res << 8) | (((long long)inp[pos++]) & 0xff);
+    }
+    void get(std::string &res) {
+        while (more(1) && inp[pos]) {
+//            if (inp[pos] == '"')
+//                throw deser_err();
+            res.push_back(inp[pos++]);
+        }
+        if(!(more(1) && inp[pos] == 0))
+            throw deser_err();
+        pos++;
+    }
+    void open_list() {
+        long long len;
+        get(len);
+        lenstack.push_back(len);
+    }
+    void close_list() {
+        lenstack.pop_back();
+    }
+    bool open_list_elem() {
+        return lenstack.back();
+    }
+    void close_list_elem() {
+        lenstack.back()--;
+    }
+    void open_struct() {}
+    void close_struct() {}
+    virtual void  open_field(const std::string &) {}
+    void close_field() {}
+    int open_tag(const std::vector<std::string> &tags) {
+        long long res;
+        get(res);
+        if (res >= tags.size())
+            throw deser_err();
+        return res;
+    }
+    void end() {
+        if (!can_end())
+            throw deser_err();
+    }
+};
+struct ivy_socket_deser : public ivy_binary_deser {
+      int sock;
+    public:
+      ivy_socket_deser(int sock, const std::vector<char> &inp)
+          : ivy_binary_deser(inp), sock(sock) {}
+    virtual bool more(unsigned bytes) {
+        while (inp.size() < pos + bytes) {
+            int get = pos + bytes - inp.size();
+            get = (get < 1024) ? 1024 : get;
+            inp.resize(pos + get);
+            int bytes;
+//	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
+	    if ((bytes = read(sock,&inp[pos],get)) < 0)
+		 { std::cerr << "recvfrom failed\n"; exit(1); }
+            inp.resize(pos + bytes);
+            if (bytes == 0)
+                 return false;
+        }
+        return true;
+    }
+    virtual bool can_end() {return true;}
+};
+
+struct out_of_bounds {
+    std::string txt;
+    int pos;
+    out_of_bounds(int _idx, int pos = 0) : pos(pos){
+        std::ostringstream os;
+        os << "argument " << _idx+1;
+        txt = os.str();
+    }
+    out_of_bounds(const std::string &s, int pos = 0) : txt(s), pos(pos) {}
+};
+
+template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+
+template <>
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return args[idx].atom == "true";
+}
+
+template <>
+int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    int res = atoi(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return res;
+}
+
+std::ostream &operator <<(std::ostream &s, const __strlit &t){
+    s << "\"" << t.c_str() << "\"";
+    return s;
+}
+
+template <>
+__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return args[idx].atom;
+}
+
+template <class T> void __ser(ivy_ser &res, const T &inp);
+
+template <>
+void __ser<int>(ivy_ser &res, const int &inp) {
+    res.set((long long)inp);
+}
+
+template <>
+void __ser<bool>(ivy_ser &res, const bool &inp) {
+    res.set(inp);
+}
+
+template <>
+void __ser<__strlit>(ivy_ser &res, const __strlit &inp) {
+    res.set(inp);
+}
+
+template <class T> void __deser(ivy_deser &inp, T &res);
+
+template <>
+void __deser<int>(ivy_deser &inp, int &res) {
+    long long temp;
+    inp.get(temp);
+    res = temp;
+}
+
+template <>
+void __deser<__strlit>(ivy_deser &inp, __strlit &res) {
+    inp.get(res);
+}
+
+template <>
+void __deser<bool>(ivy_deser &inp, bool &res) {
+    long long thing;
+    inp.get(thing);
+    res = thing;
+}
+
+class gen;
+
+std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__protocol &t);
+template <>
+quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::ip__protocol>(ivy_ser &res, const quic_monitor::ip__protocol&);
+template <>
+void  __deser<quic_monitor::ip__protocol>(ivy_deser &inp, quic_monitor::ip__protocol &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack &t);
+template <>
+quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::frame__ack>(ivy_ser &res, const quic_monitor::frame__ack&);
+template <>
+void  __deser<quic_monitor::frame__ack>(ivy_deser &inp, quic_monitor::frame__ack &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack__block &t);
+template <>
+quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::frame__ack__block>(ivy_ser &res, const quic_monitor::frame__ack__block&);
+template <>
+void  __deser<quic_monitor::frame__ack__block>(ivy_deser &inp, quic_monitor::frame__ack__block &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__stream &t);
+template <>
+quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::frame__stream>(ivy_ser &res, const quic_monitor::frame__stream&);
+template <>
+void  __deser<quic_monitor::frame__stream>(ivy_deser &inp, quic_monitor::frame__stream &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__endpoint &t);
+template <>
+quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::ip__endpoint>(ivy_ser &res, const quic_monitor::ip__endpoint&);
+template <>
+void  __deser<quic_monitor::ip__endpoint>(ivy_deser &inp, quic_monitor::ip__endpoint &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::quic_packet &t);
+template <>
+quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <>
+void  __ser<quic_monitor::quic_packet>(ivy_ser &res, const quic_monitor::quic_packet&);
+template <>
+void  __deser<quic_monitor::quic_packet>(ivy_deser &inp, quic_monitor::quic_packet &res);
+bool operator==(const quic_monitor::__tup__ip__endpoint__int &x, const quic_monitor::__tup__ip__endpoint__int &y){
+    return x.arg0 == y.arg0 && x.arg1 == y.arg1;
+}
+
+int quic_monitor::frame::temp_counter = 0;
+
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame &t){
+    s << "{";
+    switch (t.tag) {
+        case 0: s << "frame.stream:" << (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__stream> *>((t).ptr)->item); break;
+        case 1: s << "frame.ack:" << (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__ack> *>((t).ptr)->item); break;
+
+    }
+    s << "}";
+    return s;
+}
+template <>
+quic_monitor::frame _arg<quic_monitor::frame>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+    if (args[idx].atom.size())
+        throw out_of_bounds("unexpected value for sort frame: " + args[idx].atom,args[idx].pos);
+    if (args[idx].fields.size() == 0)
+        return quic_monitor::frame();
+    if (args[idx].fields.size() != 1)
+        throw out_of_bounds("too many fields for sort frame (expected one)",args[idx].pos);
+    if (args[idx].fields[0].atom == "frame.stream") return quic_monitor::frame(0, new quic_monitor::frame::twrap<quic_monitor::frame__stream>(_arg<quic_monitor::frame__stream>(args[idx].fields[0].fields,0,0)));
+    if (args[idx].fields[0].atom == "frame.ack") return quic_monitor::frame(1, new quic_monitor::frame::twrap<quic_monitor::frame__ack>(_arg<quic_monitor::frame__ack>(args[idx].fields[0].fields,0,0)));
+
+        throw out_of_bounds("unexpected field sort SORTNAME: " + args[idx].fields[0].atom, args[idx].pos);
+}
+template <>
+void __ser<quic_monitor::frame>(ivy_ser &res, const quic_monitor::frame &inp) {
+    if (inp.tag == 0) {res.open_tag(0,"frame.stream"); __ser(res,(static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__stream> *>((inp).ptr)->item)); res.close_tag();}
+    if (inp.tag == 1) {res.open_tag(1,"frame.ack"); __ser(res,(static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__ack> *>((inp).ptr)->item)); res.close_tag();}
+
+}
+template <>
+void __deser<quic_monitor::frame>(ivy_deser &res, quic_monitor::frame &inp) {
+    std::vector<std::string> tags;
+    tags.push_back("frame.stream");
+    tags.push_back("frame.ack");
+
+    int tag = res.open_tag(tags);
+    switch (tag) {
+    case 0: {quic_monitor::frame__stream tmp; __deser(res,tmp); inp = quic_monitor::frame(0, new quic_monitor::frame::twrap<quic_monitor::frame__stream>(tmp)); break;} 
+    case 1: {quic_monitor::frame__ack tmp; __deser(res,tmp); inp = quic_monitor::frame(1, new quic_monitor::frame::twrap<quic_monitor::frame__ack>(tmp)); break;} 
+
+    }
+    res.close_tag();
+}
+#ifdef Z3PP_H_
+template <>
+void __from_solver<quic_monitor::frame>( gen &g, const  z3::expr &v, quic_monitor::frame &res) {
+    {
+        z3::sort sort = g.sort("frame.stream");
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.stream"),g.ctx.bool_sort());
+        std::cout <<  g.model << std::endl;
+        Z3_ast_vector av = Z3_model_get_sort_universe(g.ctx, g.model, sort);
+        if (av) {
+            z3::expr_vector univ(g.ctx,av);
+            for (unsigned i = 0; i < univ.size(); i++){
+                if (eq(g.model.eval(pto(v,univ[i]),true),g.ctx.bool_val(true))){
+                    quic_monitor::frame__stream tmp;
+                    __from_solver(g,univ[i],tmp);                    res = quic_monitor::frame(0, new quic_monitor::frame::twrap<quic_monitor::frame__stream>(tmp));
+                }
+            }
+        }
+    }
+    {
+        z3::sort sort = g.sort("frame.ack");
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.ack"),g.ctx.bool_sort());
+        std::cout <<  g.model << std::endl;
+        Z3_ast_vector av = Z3_model_get_sort_universe(g.ctx, g.model, sort);
+        if (av) {
+            z3::expr_vector univ(g.ctx,av);
+            for (unsigned i = 0; i < univ.size(); i++){
+                if (eq(g.model.eval(pto(v,univ[i]),true),g.ctx.bool_val(true))){
+                    quic_monitor::frame__ack tmp;
+                    __from_solver(g,univ[i],tmp);                    res = quic_monitor::frame(1, new quic_monitor::frame::twrap<quic_monitor::frame__ack>(tmp));
+                }
+            }
+        }
+    }
+
+}
+template <>
+z3::expr __to_solver<quic_monitor::frame>( gen &g, const  z3::expr &v, quic_monitor::frame &val) {
+//    std::cout << v << ":" << v.get_sort() << std::endl;
+    if (val.tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.stream"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant("X",g.sort("frame.stream"));
+        quic_monitor::frame__stream tmp = (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__stream> *>((val).ptr)->item);
+        return exists(X,pto(v,X) && __to_solver(g,X,tmp));
+    }
+    if (val.tag == 1) {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.ack"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant("X",g.sort("frame.ack"));
+        quic_monitor::frame__ack tmp = (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__ack> *>((val).ptr)->item);
+        return exists(X,pto(v,X) && __to_solver(g,X,tmp));
+    }
+
+    z3::expr conj = g.ctx.bool_val(false);
+    {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.stream"),g.ctx.bool_sort());
+        z3::expr Y = g.ctx.constant("Y",g.sort("frame.stream"));
+        conj = conj && forall(Y,!pto(v,Y));
+    }
+    {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.ack"),g.ctx.bool_sort());
+        z3::expr Y = g.ctx.constant("Y",g.sort("frame.ack"));
+        conj = conj && forall(Y,!pto(v,Y));
+    }
+
+    return conj;
+}
+template <>
+void __randomize<quic_monitor::frame>( gen &g, const  z3::expr &apply_expr) {
+    std::ostringstream os;
+    os << "__frame__tmp" << quic_monitor::frame::temp_counter++;
+    std::string temp = os.str();
+    z3::sort range = apply_expr.get_sort();
+    z3::expr disj = g.ctx.bool_val(false);
+int tag = rand() % 2;
+    if (tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.stream"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant(temp.c_str(),g.sort("frame.stream"));
+        z3::expr pred = pto(apply_expr,X);
+        g.add_alit(pred);
+        __randomize<quic_monitor::frame__stream>(g,X);
+    }
+    if (tag == 1) {
+        z3::func_decl pto = g.ctx.function("*>:frame",g.sort("frame"),g.sort("frame.ack"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant(temp.c_str(),g.sort("frame.ack"));
+        z3::expr pred = pto(apply_expr,X);
+        g.add_alit(pred);
+        __randomize<quic_monitor::frame__ack>(g,X);
+    }
+
+}
+#endif
+	    std::ostream &operator <<(std::ostream &s, const quic_monitor::stream_data &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::stream_data _arg<quic_monitor::stream_data>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::stream_data a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<int>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::stream_data>(ivy_deser &inp, quic_monitor::stream_data &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::stream_data>(ivy_ser &res, const quic_monitor::stream_data &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::stream_data& val) {
+	        z3::expr z3end = g.apply("stream_data.end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("stream_data.value",z3val,g.int_to_z3(g.sort("stream_pos"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::stream_data>( gen &g, const  z3::expr &v,quic_monitor::stream_data &res){
+	        int __end;
+	        __from_solver(g,g.apply("stream_data.end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("stream_data.value",v,g.int_to_z3(g.sort("stream_pos"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::stream_data>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("stream_pos"),__sz);
+                z3::expr pred =  g.apply("stream_data.end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<int>(g,g.apply("stream_data.value",v,g.int_to_z3(g.sort("stream_pos"),__i)));
+	    }
+	    #endif
+
+		    std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack__block__arr &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::frame__ack__block__arr _arg<quic_monitor::frame__ack__block__arr>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::frame__ack__block__arr a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<quic_monitor::frame__ack__block>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::frame__ack__block__arr>(ivy_deser &inp, quic_monitor::frame__ack__block__arr &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::frame__ack__block__arr>(ivy_ser &res, const quic_monitor::frame__ack__block__arr &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::frame__ack__block__arr& val) {
+	        z3::expr z3end = g.apply("frame.ack.block.arr.end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("frame.ack.block.arr.value",z3val,g.int_to_z3(g.sort("frame.ack.block.idx"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::frame__ack__block__arr>( gen &g, const  z3::expr &v,quic_monitor::frame__ack__block__arr &res){
+	        int __end;
+	        __from_solver(g,g.apply("frame.ack.block.arr.end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("frame.ack.block.arr.value",v,g.int_to_z3(g.sort("frame.ack.block.idx"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::frame__ack__block__arr>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("frame.ack.block.idx"),__sz);
+                z3::expr pred =  g.apply("frame.ack.block.arr.end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<quic_monitor::frame__ack__block>(g,g.apply("frame.ack.block.arr.value",v,g.int_to_z3(g.sort("frame.ack.block.idx"),__i)));
+	    }
+	    #endif
+
+		    std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__arr &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::frame__arr _arg<quic_monitor::frame__arr>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::frame__arr a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<quic_monitor::frame>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::frame__arr>(ivy_deser &inp, quic_monitor::frame__arr &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::frame__arr>(ivy_ser &res, const quic_monitor::frame__arr &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::frame__arr& val) {
+	        z3::expr z3end = g.apply("frame.arr.end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("frame.arr.value",z3val,g.int_to_z3(g.sort("frame.idx"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::frame__arr>( gen &g, const  z3::expr &v,quic_monitor::frame__arr &res){
+	        int __end;
+	        __from_solver(g,g.apply("frame.arr.end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("frame.arr.value",v,g.int_to_z3(g.sort("frame.idx"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::frame__arr>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("frame.idx"),__sz);
+                z3::expr pred =  g.apply("frame.arr.end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<quic_monitor::frame>(g,g.apply("frame.arr.value",v,g.int_to_z3(g.sort("frame.idx"),__i)));
+	    }
+	    #endif
+
+	
+    class quic_monitor::quic_deser : public ivy_binary_deser {
+        enum {quic_s_init,
+              quic_s_type,
+              quic_s_cid,
+              quic_s_version,
+              quic_s_pkt_num,
+              quic_s_payload,
+              quic_stream_id,
+              quic_stream_off,
+              quic_stream_len,
+              quic_stream_fin,
+              quic_stream_offset,
+              quic_stream_length,
+              quic_stream_data,
+              quic_ack_largest,
+              quic_ack_delay,
+              quic_ack_block_count,
+              quic_ack_gap,
+              quic_ack_block,
+              quic_s_done} state;
+        bool long_format;
+        char hdr_type;
+        char frame_type;
+        int data_remaining;
+        long long ack_blocks_expected;
+        long long ack_block_count;
+
+    public:
+        quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
+            pos = 42; // skip 42 bytes of IP and UDP header
+        }
+        virtual void  get(long long &res) {
+            switch (state) {
+            case quic_s_init:
+            {
+                getn(res,1);
+                long_format = (res & 0x80) ? true : false;
+                hdr_type = res & 0x7f;
+                res = long_format;
+                state = quic_s_type;
+            }
+            break;
+            case quic_s_type:
+            {
+                res = hdr_type;
+                state = quic_s_cid;
+            }
+            break;
+            case quic_s_cid):
+            {
+                ivy_binary_deser::get(res);
+                state = quic_s_version;
+            }
+            break;
+            case quic_s_version:
+            {
+                if (long_format)
+                    ivy_binary_deser::getn(res,4);
+                else
+                    res = 0;
+                state = quic_s_pkt_num;
+            }
+            break;
+            case quic_s_pkt_num:
+            {
+                ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+                state = quic_s_payload;
+            }
+            break;
+            case quic_stream_off:
+            {
+                res = (0x04 & frame_type) ? 1 : 0;
+                state = quic_stream_len;
+            }
+            break;
+            case quic_stream_len:
+            {
+                res = (0x02 & frame_type) ? 1 : 0;
+                state = quic_stream_fin;
+            }
+            break;
+            case quic_stream_fin:
+            {
+                res = (0x01 & frame_type) ? 1 : 0;
+                state = quic_stream_id;
+            }
+            break;
+            case quic_stream_id:
+            {
+                get_var_int(res);
+                state = quic_stream_offset;
+            }
+            break;
+            case quic_stream_offset:
+            {
+                if (0x04 & frame_type)
+                    get_var_int(res);
+                else res = 0;
+                state = quic_stream_length;
+            }
+            break;
+            case quic_stream_length:
+            {
+                if (0x02 & frame_type)
+                    get_var_int(res);
+                else res = 0;
+                data_remaining = res;
+                state = quic_stream_data;
+            }
+            break;
+            case quic_stream_data:
+            {
+                ivy_binary_deser::getn(res,1);
+            }
+            break;
+            case quic_ack_largest:
+            {
+                get_var_int(res);
+                state = quic_ack_delay;
+            }
+            case quic_ack_delay:
+            {
+                get_var_int(res);
+                state = quic_ack_block_count;
+            }
+            case quic_ack_gap:
+            {
+                if (ack_block_count == 0)
+                    res = 0; // first ack block has no gap
+                else:
+                    get_var_int(res);
+                state = quic_ack_block;
+            }
+            case quic_ack_block:
+            {
+                get_var_int(res);
+                state = quic_ack_gap;
+                ack_block_count++;
+            }
+            default:
+            throw deser_err();
+            }
+        }
+
+        void get_var_int(long long &res) {
+            static int lens[4] = {0,1,3,7};
+            long long lobyte;
+            ivy_binary_deser::getn(lobyte,1);
+            int bytes = lens[(lobyte & 0xc0) >> 6];
+            ivy_binary_deser::getn(res,bytes);
+            res |= (lobyte & 0x3f) << (bytes << 3);
+        }
+
+        virtual int open_tag(const std::vector<std::string> &tags) {
+            if (state == quic_s_payload) {
+                long long ft;
+                ivy_binary_deser::getn(ft,1);
+                frame_type = ft;
+                if (frame_type >= 0x10 && frame_type <= 0x17) {
+                    state = quic_stream_off;
+                    return 0;
+                }
+                if (frame_type == 0x0e) {
+                    state = quic_ack_largest;
+                    return 1;
+                }
+            }
+            throw deser_err();
+        }
+
+        virtual bool open_list_elem() {
+            if (state == quic_s_payload) {
+               while (more(1) && inp[pos] == 0)
+                   pos++;  // skip padding frames
+               return more(1);
+            }
+            if (state == quic_ack_gap) {
+                return ack_block_count < ack_blocks_expected;
+            }
+            if (state == quic_stream_data)
+                return (0x02 & frame_type) ? (data_remaining-- > 0) : more(1);
+            throw deser_err();
+        }
+
+        void open_list() {
+            if (state == quic_ack_block_count) {
+                get_var_int(ack_blocks_expected);
+                ack_blocks_expected++;  // block count doesn't include first
+                ack_block_count = 0;
+                state = quic_ack_gap;
+            }
+        }
+        void close_list() {
+            if (state == quic_ack_gap)
+                state = quic_payload;
+        }
+        void close_list_elem() {}
+
+        virtual void close_tag() {
+            state = quic_s_payload;
+        }
+
+        ~quic_deser(){}
+    };
+
+
+            #include <stdint.h>
+
+            // This struct holds the pcap global header
+
+            typedef struct pcap_hdr_s {
+                    uint32_t magic_number;   /* magic number */
+                    uint16_t version_major;  /* major version number */
+                    uint16_t version_minor;  /* minor version number */
+                    int32_t  thiszone;       /* GMT to local correction */
+                    uint32_t sigfigs;        /* accuracy of timestamps */
+                    uint32_t snaplen;        /* max length of captured packets, in octets */
+                    uint32_t network;        /* data link type */
+            } pcap_hdr_t;
+
+            // This struct holds the pcap packet header
+
+            typedef struct pcaprec_hdr_s {
+                    uint32_t ts_sec;         /* timestamp seconds */
+                    uint32_t ts_usec;        /* timestamp microseconds */
+                    uint32_t incl_len;       /* number of octets of packet saved in file */
+                    uint32_t orig_len;       /* actual length of packet */
+            } pcaprec_hdr_t;
+
+            // This template is the reader object
+
+            template <typename pkt, typename deser>
+            class pcap_reader : public reader {
+
+                int fd;                // The file descriptor
+                pcap_hdr_t pcap_hdr;   // The global header
+                thunk__pc__handle cb;          // The packet handler callback
+
+            public:
+
+                // In the constructor, we open the file and 
+                // read the global header.
+
+                pcap_reader(const std::string &name, thunk__pc__handle cb) : cb(cb) {
+                    fd = ::open(name.c_str(),O_RDONLY,0666);
+                    if (fd < 0) {
+                        perror("cannot open pcap file to read");
+                    }
+                    if (::read(fd,&pcap_hdr,sizeof(pcap_hdr)) < sizeof(pcap_hdr)) {
+                        perror("cannot read header of pcap file");
+                    }
+                }
+            
+                int fdes() { return fd; }
+
+                void read() {
+                    pcaprec_hdr_t rh;
+                    int bytes = ::read(fd,&rh,sizeof(rh));
+                    if (bytes == 0) {
+                        fd = -1;   // indicate we are done if end-of-file
+                        return;
+                    }
+                    if (bytes < sizeof(rh)) {
+                        perror("cannot read record header from pcap file");
+                    }
+
+                    // Get the packet size from header. If truncated, exit.
+
+                    unsigned size = rh.incl_len; // packet bytes actually stored
+                    if (size < rh.orig_len) {
+                        perror("packet was truncated in pcap file");
+                    }
+
+                    // Read the packet into a vector.
+
+                    std::vector<char> buf;
+                    buf.resize(size);
+                    if (::read(fd,&buf[0],size) < size) {
+                        perror("cannot read record body from pcap file");
+                    }
+
+                    // We handle only UDP packets for now. This is protocol 17.
+
+                    if (!(size >= 24 && buf[23] == 17))
+                        return;
+
+                    // Get the source and destination addresses from the IP header and UDP headers
+
+                    quic_monitor::ip__endpoint src;
+                    src.protocol = quic_monitor::ip__udp;
+                    src.addr = ntohl(*(uint32_t *)(&buf[26]));
+                    src.port = ntohs(*(uint16_t *)(&buf[34]));
+
+                    quic_monitor::ip__endpoint dst;
+                    dst.protocol = quic_monitor::ip__udp;
+                    dst.addr = ntohl(*(uint32_t *)(&buf[30]));
+                    dst.port = ntohs(*(uint16_t *)(&buf[36]));
+
+                    // Create a deserializer and deserialize the packet.
+
+                    deser ds(buf);
+                    pkt packet;
+                
+                    try {
+                       __deser(ds,packet);
+                    }
+
+                    // If deserialization failure, print out the packet for
+                    // debugging purposes.
+
+                    catch(deser_err &err) {
+                        std::cerr << "error: failed to deserialize packet in pcap file." << std::endl;
+                        std::cerr << "hex dump of packet follows." << std::endl;
+                        for (unsigned i = 0; i < buf.size(); i++) {
+                            if (i > 0 && i % 16 == 0) 
+                                std::cerr << std::endl;
+                            if (i == ds.pos)
+                                fprintf(stderr,"*");
+                            fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+                        }
+                    }
+
+                    // Finally, if we got a good packet, hit the callback.
+
+                    cb(src,dst,packet);
+                }
+            };
+
+        int quic_monitor::___ivy_choose(int rng,const char *name,int id) {
+        return 0;
+    }
+int quic_monitor::stream_data__value(const stream_data& a, int i){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::stream_data__end(const stream_data& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+quic_monitor::frame__ack__block quic_monitor::frame__ack__block__arr__value(const frame__ack__block__arr& a, int i){
+    frame__ack__block val;
+    val.gap = (int)___ivy_choose(0,"ret:val",0);
+    val.blocks = (int)___ivy_choose(0,"ret:val",0);
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::frame__ack__block__arr__end(const frame__ack__block__arr& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+quic_monitor::frame quic_monitor::frame__arr__value(const frame__arr& a, int i){
+    quic_monitor::frame val;
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::frame__arr__end(const frame__arr& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+void quic_monitor::pc__handle(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& p){
+    {
+        ext__show_packet(src, dst, p);
+        {
+            int loc__cid;
+    loc__cid = (int)___ivy_choose(0,"loc:cid",65);
+            {
+                loc__cid = p.hdr_cid;
+                {
+                    int loc__pnum;
+    loc__pnum = (int)___ivy_choose(0,"loc:pnum",64);
+                    {
+                        loc__pnum = p.hdr_pkt_num;
+                        if(!conn_seen[__tup__ip__endpoint__int(src,loc__cid)]){
+                            {
+                                conn_seen[__tup__ip__endpoint__int(src,loc__cid)] = true;
+                            }
+                        }
+                        else {
+                            {
+                                int loc__last;
+    loc__last = (int)___ivy_choose(0,"loc:last",63);
+                                {
+                                    loc__last = last_pkt_num[__tup__ip__endpoint__int(src,loc__cid)];
+                                    if((p.hdr_long || (p.hdr_type == (0x1d & 127)))){
+                                        {
+                                            int loc__n;
+                                            int __tmp0;
+                                            __tmp0 = 0;
+                                            int __tmp1;
+                                            for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
+                                                if(((loc__last < X__0) && (((X__0 >> 0) & 4294967295) == loc__pnum))){
+                                                    int __tmp2;
+                                                    __tmp2 = X__0;
+                                                    if(__tmp0){
+                                                        if(!(__tmp2 < __tmp1)){
+                                                            continue;
+                                                        }
+                                                    }
+                                                    __tmp1 = __tmp2;
+                                                    loc__n = X__0;
+                                                    __tmp0= 1;
+                                                    break;
+                                                }
+                                            }
+                                            if(__tmp0){
+                                                loc__pnum = loc__n;
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        if((p.hdr_type == (0x1e & 127))){
+                                            {
+                                                int loc__n;
+                                                int __tmp3;
+                                                __tmp3 = 0;
+                                                int __tmp4;
+                                                for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
+                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 65535) == loc__pnum))){
+                                                        int __tmp5;
+                                                        __tmp5 = X__0;
+                                                        if(__tmp3){
+                                                            if(!(__tmp5 < __tmp4)){
+                                                                continue;
+                                                            }
+                                                        }
+                                                        __tmp4 = __tmp5;
+                                                        loc__n = X__0;
+                                                        __tmp3= 1;
+                                                        break;
+                                                    }
+                                                }
+                                                if(__tmp3){
+                                                    loc__pnum = loc__n;
+                                                }
+                                            }
+                                        }
+                                        else {
+                                            {
+                                                int loc__n;
+                                                int __tmp6;
+                                                __tmp6 = 0;
+                                                int __tmp7;
+                                                for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
+                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 255) == loc__pnum))){
+                                                        int __tmp8;
+                                                        __tmp8 = X__0;
+                                                        if(__tmp6){
+                                                            if(!(__tmp8 < __tmp7)){
+                                                                continue;
+                                                            }
+                                                        }
+                                                        __tmp7 = __tmp8;
+                                                        loc__n = X__0;
+                                                        __tmp6= 1;
+                                                        break;
+                                                    }
+                                                }
+                                                if(__tmp6){
+                                                    loc__pnum = loc__n;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        last_pkt_num[__tup__ip__endpoint__int(src,loc__cid)] = loc__pnum;
+                    }
+                }
+            }
+        }
+    }
+}
+void quic_monitor::ext__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    imp__show_packet(src, dst, pkt);
+}
+void quic_monitor::imp__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    {
+    }
+}
+            struct __thunk__0 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
+                __thunk__0()  {
+                }
+                bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
+                    return false;
+                }
+            };
+void quic_monitor::__init(){
+    {
+        {
+            conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__0());
+        }
+    }
+}
+void quic_monitor::__tick(int __timeout){
+}
+quic_monitor::quic_monitor(__strlit pc__name){
+#ifdef _WIN32
+mutex = CreateMutex(NULL,FALSE,NULL);
+#else
+pthread_mutex_init(&mutex,NULL);
+#endif
+__lock();
+    __CARD__stream_pos = 0;
+    __CARD__frame__ack__block__idx = 0;
+    __CARD__pkt_num = 4294967296;
+    __CARD__cid = 18446744073709551616;
+    __CARD__ip__port = 65536;
+    __CARD__version = 4294967296;
+    __CARD__type_bits = 128;
+    __CARD__ip__addr = 4294967296;
+    __CARD__byte = 256;
+    __CARD__pc__pathname = 0;
+    __CARD__frame__idx = 0;
+  
+    install_reader(new pcap_reader<quic_packet,quic_deser>(pc__name,thunk__pc__handle(this)));
+    this->pc__name = pc__name;
+struct __thunk__1 : thunk<quic_monitor::__tup__ip__endpoint__int,int>{
+    __thunk__1()  {
+    }
+    int operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
+        int __tmp9;
+    __tmp9 = (int)___ivy_choose(0,"init",0);
+        return __tmp9;
+    }
+};
+last_pkt_num = hash_thunk<quic_monitor::__tup__ip__endpoint__int,int>(new __thunk__1());
+struct __thunk__2 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
+    __thunk__2()  {
+    }
+    bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
+        bool __tmp10;
+    __tmp10 = (bool)___ivy_choose(0,"init",0);
+        return __tmp10;
+    }
+};
+conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__2());
+{
+    {
+        struct __thunk__3 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
+            __thunk__3()  {
+            }
+            bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
+                return false;
+            }
+        };
+        conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__3());
+    }
+}
+}
+quic_monitor::~quic_monitor(){
+    __lock(); // otherwise, thread may die holding lock!
+    for (unsigned i = 0; i < thread_ids.size(); i++){
+        pthread_cancel(thread_ids[i]);
+        pthread_join(thread_ids[i],NULL);
+    }
+    __unlock();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__endpoint &t){
+    s<<"{";
+    s<< "protocol:";
+    s << t.protocol;
+    s<<",";
+    s<< "addr:";
+    s << t.addr;
+    s<<",";
+    s<< "port:";
+    s << t.port;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::ip__endpoint>(ivy_ser &res, const quic_monitor::ip__endpoint&t){
+    res.open_struct();
+    res.open_field("protocol");
+    __ser<quic_monitor::ip__protocol>(res,t.protocol);
+    res.close_field();
+    res.open_field("addr");
+    __ser<int>(res,t.addr);
+    res.close_field();
+    res.open_field("port");
+    __ser<int>(res,t.port);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__stream &t){
+    s<<"{";
+    s<< "off:";
+    s << t.off;
+    s<<",";
+    s<< "len:";
+    s << t.len;
+    s<<",";
+    s<< "fin:";
+    s << t.fin;
+    s<<",";
+    s<< "id:";
+    s << t.id;
+    s<<",";
+    s<< "offset:";
+    s << t.offset;
+    s<<",";
+    s<< "length:";
+    s << t.length;
+    s<<",";
+    s<< "data:";
+    s << t.data;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::frame__stream>(ivy_ser &res, const quic_monitor::frame__stream&t){
+    res.open_struct();
+    res.open_field("off");
+    __ser<bool>(res,t.off);
+    res.close_field();
+    res.open_field("len");
+    __ser<bool>(res,t.len);
+    res.close_field();
+    res.open_field("fin");
+    __ser<bool>(res,t.fin);
+    res.close_field();
+    res.open_field("id");
+    __ser<int>(res,t.id);
+    res.close_field();
+    res.open_field("offset");
+    __ser<int>(res,t.offset);
+    res.close_field();
+    res.open_field("length");
+    __ser<int>(res,t.length);
+    res.close_field();
+    res.open_field("data");
+    __ser<quic_monitor::stream_data>(res,t.data);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack__block &t){
+    s<<"{";
+    s<< "gap:";
+    s << t.gap;
+    s<<",";
+    s<< "blocks:";
+    s << t.blocks;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::frame__ack__block>(ivy_ser &res, const quic_monitor::frame__ack__block&t){
+    res.open_struct();
+    res.open_field("gap");
+    __ser<int>(res,t.gap);
+    res.close_field();
+    res.open_field("blocks");
+    __ser<int>(res,t.blocks);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack &t){
+    s<<"{";
+    s<< "largest_acked:";
+    s << t.largest_acked;
+    s<<",";
+    s<< "ack_delay:";
+    s << t.ack_delay;
+    s<<",";
+    s<< "ack_blocks:";
+    s << t.ack_blocks;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::frame__ack>(ivy_ser &res, const quic_monitor::frame__ack&t){
+    res.open_struct();
+    res.open_field("largest_acked");
+    __ser<int>(res,t.largest_acked);
+    res.close_field();
+    res.open_field("ack_delay");
+    __ser<int>(res,t.ack_delay);
+    res.close_field();
+    res.open_field("ack_blocks");
+    __ser<quic_monitor::frame__ack__block__arr>(res,t.ack_blocks);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::quic_packet &t){
+    s<<"{";
+    s<< "hdr_long:";
+    s << t.hdr_long;
+    s<<",";
+    s<< "hdr_type:";
+    s << t.hdr_type;
+    s<<",";
+    s<< "hdr_cid:";
+    s << t.hdr_cid;
+    s<<",";
+    s<< "hdr_version:";
+    s << t.hdr_version;
+    s<<",";
+    s<< "hdr_pkt_num:";
+    s << t.hdr_pkt_num;
+    s<<",";
+    s<< "payload:";
+    s << t.payload;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::quic_packet>(ivy_ser &res, const quic_monitor::quic_packet&t){
+    res.open_struct();
+    res.open_field("hdr_long");
+    __ser<bool>(res,t.hdr_long);
+    res.close_field();
+    res.open_field("hdr_type");
+    __ser<int>(res,t.hdr_type);
+    res.close_field();
+    res.open_field("hdr_cid");
+    __ser<int>(res,t.hdr_cid);
+    res.close_field();
+    res.open_field("hdr_version");
+    __ser<int>(res,t.hdr_version);
+    res.close_field();
+    res.open_field("hdr_pkt_num");
+    __ser<int>(res,t.hdr_pkt_num);
+    res.close_field();
+    res.open_field("payload");
+    __ser<quic_monitor::frame__arr>(res,t.payload);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__protocol &t){
+    if (t == quic_monitor::ip__udp) s<<"udp";
+    if (t == quic_monitor::ip__tcp) s<<"tcp";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::ip__protocol>(ivy_ser &res, const quic_monitor::ip__protocol&t){
+    __ser(res,(int)t);
+}
+
+
+int ask_ret(int bound) {
+    int res;
+    while(true) {
+        __ivy_out << "? ";
+        std::cin >> res;
+        if (res >= 0 && res < bound) 
+            return res;
+        std::cerr << "value out of range" << std::endl;
+    }
+}
+
+
+
+    class quic_monitor_repl : public quic_monitor {
+
+    public:
+
+    virtual void ivy_assert(bool truth,const char *msg){
+        if (!truth) {
+            __ivy_out << "assertion_failed(\"" << msg << "\")" << std::endl;
+            std::cerr << msg << ": error: assertion failed\n";
+            
+            __ivy_exit(1);
+        }
+    }
+    virtual void ivy_assume(bool truth,const char *msg){
+        if (!truth) {
+            __ivy_out << "assumption_failed(\"" << msg << "\")" << std::endl;
+            std::cerr << msg << ": error: assumption failed\n";
+            
+            __ivy_exit(1);
+        }
+    }
+    quic_monitor_repl(__strlit pc__name) : quic_monitor(pc__name){}
+    virtual void imp__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    __ivy_out  << std::hex << std::showbase  << "< show_packet" << "(" << src << "," << dst << "," << pkt << ")" << std::endl;
+}
+
+    };
+
+// Override methods to implement low-level network service
+
+bool is_white(int c) {
+    return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
+}
+
+bool is_ident(int c) {
+    return c == '_' || c == '.' || (c >= 'A' &&  c <= 'Z')
+        || (c >= 'a' &&  c <= 'z')
+        || (c >= '0' &&  c <= '9');
+}
+
+void skip_white(const std::string& str, int &pos){
+    while (pos < str.size() && is_white(str[pos]))
+        pos++;
+}
+
+struct syntax_error {
+    int pos;
+    syntax_error(int pos) : pos(pos) {}
+};
+
+void throw_syntax(int pos){
+    throw syntax_error(pos);
+}
+
+std::string get_ident(const std::string& str, int &pos) {
+    std::string res = "";
+    while (pos < str.size() && is_ident(str[pos])) {
+        res.push_back(str[pos]);
+        pos++;
+    }
+    if (res.size() == 0)
+        throw_syntax(pos);
+    return res;
+}
+
+ivy_value parse_value(const std::string& cmd, int &pos) {
+    ivy_value res;
+    res.pos = pos;
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '[') {
+        while (true) {
+            pos++;
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == ']')
+                break;
+            res.fields.push_back(parse_value(cmd,pos));
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == ']')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw_syntax(pos);
+        }
+        pos++;
+    }
+    else if (pos < cmd.size() && cmd[pos] == '{') {
+        while (true) {
+            ivy_value field;
+            pos++;
+            skip_white(cmd,pos);
+            field.atom = get_ident(cmd,pos);
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ':'))
+                 throw_syntax(pos);
+            pos++;
+            skip_white(cmd,pos);
+            field.fields.push_back(parse_value(cmd,pos));
+            res.fields.push_back(field);
+            skip_white(cmd,pos);
+            if (pos < cmd.size() && cmd[pos] == '}')
+                break;
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                throw_syntax(pos);
+        }
+        pos++;
+    }
+    else if (pos < cmd.size() && cmd[pos] == '"') {
+        pos++;
+        res.atom = "";
+        while (pos < cmd.size() && cmd[pos] != '"')
+            res.atom.push_back(cmd[pos++]);
+        if(pos == cmd.size())
+            throw_syntax(pos);
+        pos++;
+    }
+    else 
+        res.atom = get_ident(cmd,pos);
+    return res;
+}
+
+void parse_command(const std::string &cmd, std::string &action, std::vector<ivy_value> &args) {
+    int pos = 0;
+    skip_white(cmd,pos);
+    action = get_ident(cmd,pos);
+    skip_white(cmd,pos);
+    if (pos < cmd.size() && cmd[pos] == '(') {
+        pos++;
+        skip_white(cmd,pos);
+        args.push_back(parse_value(cmd,pos));
+        while(true) {
+            skip_white(cmd,pos);
+            if (!(pos < cmd.size() && cmd[pos] == ','))
+                break;
+            pos++;
+            args.push_back(parse_value(cmd,pos));
+        }
+        if (!(pos < cmd.size() && cmd[pos] == ')'))
+            throw_syntax(pos);
+        pos++;
+    }
+    skip_white(cmd,pos);
+    if (pos != cmd.size())
+        throw_syntax(pos);
+}
+
+struct bad_arity {
+    std::string action;
+    int num;
+    bad_arity(std::string &_action, unsigned _num) : action(_action), num(_num) {}
+};
+
+void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action) {
+    if (args.size() != num)
+        throw bad_arity(action,num);
+}
+
+template <>
+quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    quic_monitor::frame__ack res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 3) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "largest_acked") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.largest_acked = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field largest_acked: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "ack_delay") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.ack_delay = _arg<int>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field ack_delay: " + err.txt,err.pos);
+    }
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "ack_blocks") throw out_of_bounds("unexpected field: " + arg.fields[2].atom,arg.fields[2].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    try{
+        res.ack_blocks = _arg<quic_monitor::frame__ack__block__arr>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field ack_blocks: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::frame__ack>(ivy_deser &inp, quic_monitor::frame__ack &res){
+    inp.open_struct();
+    inp.open_field("largest_acked");
+    __deser(inp,res.largest_acked);
+    inp.close_field();
+    inp.open_field("ack_delay");
+    __deser(inp,res.ack_delay);
+    inp.close_field();
+    inp.open_field("ack_blocks");
+    __deser(inp,res.ack_blocks);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    quic_monitor::frame__ack__block res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "gap") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.gap = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field gap: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "blocks") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.blocks = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field blocks: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::frame__ack__block>(ivy_deser &inp, quic_monitor::frame__ack__block &res){
+    inp.open_struct();
+    inp.open_field("gap");
+    __deser(inp,res.gap);
+    inp.close_field();
+    inp.open_field("blocks");
+    __deser(inp,res.blocks);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    quic_monitor::frame__stream res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 7) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "off") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.off = _arg<bool>(tmp_args,0,2);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field off: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "len") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.len = _arg<bool>(tmp_args,0,2);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field len: " + err.txt,err.pos);
+    }
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "fin") throw out_of_bounds("unexpected field: " + arg.fields[2].atom,arg.fields[2].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    try{
+        res.fin = _arg<bool>(tmp_args,0,2);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field fin: " + err.txt,err.pos);
+    }
+    if (arg.fields[3].is_member()){
+        tmp_args[0] = arg.fields[3].fields[0];
+        if (arg.fields[3].atom != "id") throw out_of_bounds("unexpected field: " + arg.fields[3].atom,arg.fields[3].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[3];
+    }
+    try{
+        res.id = _arg<int>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field id: " + err.txt,err.pos);
+    }
+    if (arg.fields[4].is_member()){
+        tmp_args[0] = arg.fields[4].fields[0];
+        if (arg.fields[4].atom != "offset") throw out_of_bounds("unexpected field: " + arg.fields[4].atom,arg.fields[4].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[4];
+    }
+    try{
+        res.offset = _arg<int>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field offset: " + err.txt,err.pos);
+    }
+    if (arg.fields[5].is_member()){
+        tmp_args[0] = arg.fields[5].fields[0];
+        if (arg.fields[5].atom != "length") throw out_of_bounds("unexpected field: " + arg.fields[5].atom,arg.fields[5].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[5];
+    }
+    try{
+        res.length = _arg<int>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field length: " + err.txt,err.pos);
+    }
+    if (arg.fields[6].is_member()){
+        tmp_args[0] = arg.fields[6].fields[0];
+        if (arg.fields[6].atom != "data") throw out_of_bounds("unexpected field: " + arg.fields[6].atom,arg.fields[6].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[6];
+    }
+    try{
+        res.data = _arg<quic_monitor::stream_data>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field data: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::frame__stream>(ivy_deser &inp, quic_monitor::frame__stream &res){
+    inp.open_struct();
+    inp.open_field("off");
+    __deser(inp,res.off);
+    inp.close_field();
+    inp.open_field("len");
+    __deser(inp,res.len);
+    inp.close_field();
+    inp.open_field("fin");
+    __deser(inp,res.fin);
+    inp.close_field();
+    inp.open_field("id");
+    __deser(inp,res.id);
+    inp.close_field();
+    inp.open_field("offset");
+    __deser(inp,res.offset);
+    inp.close_field();
+    inp.open_field("length");
+    __deser(inp,res.length);
+    inp.close_field();
+    inp.open_field("data");
+    __deser(inp,res.data);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    quic_monitor::ip__endpoint res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 3) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "protocol") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.protocol = _arg<quic_monitor::ip__protocol>(tmp_args,0,2);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field protocol: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "addr") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.addr = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field addr: " + err.txt,err.pos);
+    }
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "port") throw out_of_bounds("unexpected field: " + arg.fields[2].atom,arg.fields[2].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    try{
+        res.port = _arg<int>(tmp_args,0,65536);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field port: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::ip__endpoint>(ivy_deser &inp, quic_monitor::ip__endpoint &res){
+    inp.open_struct();
+    inp.open_field("protocol");
+    __deser(inp,res.protocol);
+    inp.close_field();
+    inp.open_field("addr");
+    __deser(inp,res.addr);
+    inp.close_field();
+    inp.open_field("port");
+    __deser(inp,res.port);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    quic_monitor::quic_packet res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 6) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "hdr_long") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.hdr_long = _arg<bool>(tmp_args,0,2);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field hdr_long: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "hdr_type") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.hdr_type = _arg<int>(tmp_args,0,128);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field hdr_type: " + err.txt,err.pos);
+    }
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "hdr_cid") throw out_of_bounds("unexpected field: " + arg.fields[2].atom,arg.fields[2].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    try{
+        res.hdr_cid = _arg<int>(tmp_args,0,18446744073709551616);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field hdr_cid: " + err.txt,err.pos);
+    }
+    if (arg.fields[3].is_member()){
+        tmp_args[0] = arg.fields[3].fields[0];
+        if (arg.fields[3].atom != "hdr_version") throw out_of_bounds("unexpected field: " + arg.fields[3].atom,arg.fields[3].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[3];
+    }
+    try{
+        res.hdr_version = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field hdr_version: " + err.txt,err.pos);
+    }
+    if (arg.fields[4].is_member()){
+        tmp_args[0] = arg.fields[4].fields[0];
+        if (arg.fields[4].atom != "hdr_pkt_num") throw out_of_bounds("unexpected field: " + arg.fields[4].atom,arg.fields[4].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[4];
+    }
+    try{
+        res.hdr_pkt_num = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field hdr_pkt_num: " + err.txt,err.pos);
+    }
+    if (arg.fields[5].is_member()){
+        tmp_args[0] = arg.fields[5].fields[0];
+        if (arg.fields[5].atom != "payload") throw out_of_bounds("unexpected field: " + arg.fields[5].atom,arg.fields[5].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[5];
+    }
+    try{
+        res.payload = _arg<quic_monitor::frame__arr>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field payload: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::quic_packet>(ivy_deser &inp, quic_monitor::quic_packet &res){
+    inp.open_struct();
+    inp.open_field("hdr_long");
+    __deser(inp,res.hdr_long);
+    inp.close_field();
+    inp.open_field("hdr_type");
+    __deser(inp,res.hdr_type);
+    inp.close_field();
+    inp.open_field("hdr_cid");
+    __deser(inp,res.hdr_cid);
+    inp.close_field();
+    inp.open_field("hdr_version");
+    __deser(inp,res.hdr_version);
+    inp.close_field();
+    inp.open_field("hdr_pkt_num");
+    __deser(inp,res.hdr_pkt_num);
+    inp.close_field();
+    inp.open_field("payload");
+    __deser(inp,res.payload);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, int bound){
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos);
+    if(arg.atom == "udp") return quic_monitor::ip__udp;
+    if(arg.atom == "tcp") return quic_monitor::ip__tcp;
+    throw out_of_bounds("bad value: " + arg.atom,arg.pos);
+}
+template <>
+void __deser<quic_monitor::ip__protocol>(ivy_deser &inp, quic_monitor::ip__protocol &res){
+    int __res;
+    __deser(inp,__res);
+    res = (quic_monitor::ip__protocol)__res;
+}
+
+
+class stdin_reader: public reader {
+    std::string buf;
+    std::string eof_flag;
+
+public:
+    bool eof(){
+      return eof_flag.size();
+    }
+    virtual int fdes(){
+        return 0;
+    }
+    virtual void read() {
+        char tmp[257];
+        int chars = ::read(0,tmp,256);
+        if (chars == 0) {  // EOF
+            if (buf.size())
+                process(buf);
+            eof_flag = "eof";
+        }
+        tmp[chars] = 0;
+        buf += std::string(tmp);
+        size_t pos;
+        while ((pos = buf.find('\n')) != std::string::npos) {
+            std::string line = buf.substr(0,pos+1);
+            buf.erase(0,pos+1);
+            process(line);
+        }
+    }
+    virtual void process(const std::string &line) {
+        __ivy_out << line;
+    }
+};
+
+class cmd_reader: public stdin_reader {
+    int lineno;
+public:
+    quic_monitor_repl &ivy;    
+
+    cmd_reader(quic_monitor_repl &_ivy) : ivy(_ivy) {
+        lineno = 1;
+        if (isatty(fdes()))
+            __ivy_out << "> "; __ivy_out.flush();
+    }
+
+    virtual void process(const std::string &cmd) {
+        std::string action;
+        std::vector<ivy_value> args;
+        try {
+            parse_command(cmd,action,args);
+            ivy.__lock();
+
+            {
+                std::cerr << "undefined action: " << action << std::endl;
+            }
+            ivy.__unlock();
+        }
+        catch (syntax_error& err) {
+            std::cerr << "line " << lineno << ":" << err.pos << ": syntax error" << std::endl;
+        }
+        catch (out_of_bounds &err) {
+            std::cerr << "line " << lineno << ":" << err.pos << ": " << err.txt << " bad value" << std::endl;
+        }
+        catch (bad_arity &err) {
+            std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
+        }
+        if (isatty(fdes()))
+            __ivy_out << "> "; __ivy_out.flush();
+        lineno++;
+    }
+};
+
+
+
+int main(int argc, char **argv){
+        int test_iters = 100;
+
+    int runs = 1;
+    int seed = 1;
+    int sleep_ms = 10;
+    int final_ms = 0; 
+    std::vector<char *> pargs; // positional args
+    pargs.push_back(argv[0]);
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        size_t p = arg.find('=');
+        if (p == std::string::npos)
+            pargs.push_back(argv[i]);
+        else {
+            std::string param = arg.substr(0,p);
+            std::string value = arg.substr(p+1);
+            if (param == "out") {
+                __ivy_out.open(value.c_str());
+                if (!__ivy_out) {
+                    std::cerr << "cannot open to write: " << value << std::endl;
+                    return 1;
+                }
+            }
+            else if (param == "iters") {
+                test_iters = atoi(value.c_str());
+            }
+            else if (param == "runs") {
+                runs = atoi(value.c_str());
+            }
+            else if (param == "seed") {
+                seed = atoi(value.c_str());
+            }
+            else if (param == "delay") {
+                sleep_ms = atoi(value.c_str());
+            }
+            else if (param == "wait") {
+                final_ms = atoi(value.c_str());
+            }
+            else if (param == "modelfile") {
+                __ivy_modelfile.open(value.c_str());
+                if (!__ivy_modelfile) {
+                    std::cerr << "cannot open to write: " << value << std::endl;
+                    return 1;
+                }
+            }
+            else {
+                std::cerr << "unknown option: " << param << std::endl;
+                return 1;
+            }
+        }
+    }
+    srand(seed);
+    if (!__ivy_out.is_open())
+        __ivy_out.basic_ios<char>::rdbuf(std::cout.rdbuf());
+    argc = pargs.size();
+    argv = &pargs[0];
+    if (argc == 3){
+        argc--;
+        int fd = _open(argv[argc],0);
+        if (fd < 0){
+            std::cerr << "cannot open to read: " << argv[argc] << "\n";
+            __ivy_exit(1);
+        }
+        _dup2(fd, 0);
+    }
+    if (argc != 2){
+        std::cerr << "usage: quic_monitor pc__name\n";
+        __ivy_exit(1);
+    }
+    std::vector<std::string> args;
+    std::vector<ivy_value> arg_values(1);
+    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}
+    __strlit p__pc__name;
+    try {
+        int pos = 0;
+        arg_values[0] = parse_value(args[0],pos);
+        p__pc__name =  _arg<__strlit>(arg_values,0,0);
+    }
+    catch(out_of_bounds &) {
+        std::cerr << "parameter pc__name out of bounds\n";
+        __ivy_exit(1);
+    }
+    catch(syntax_error &) {
+        std::cerr << "syntax error in command argument\n";
+        __ivy_exit(1);
+    }
+
+#ifdef _WIN32
+    // Boilerplate from windows docs
+
+    {
+        WORD wVersionRequested;
+        WSADATA wsaData;
+        int err;
+
+    /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
+        wVersionRequested = MAKEWORD(2, 2);
+
+        err = WSAStartup(wVersionRequested, &wsaData);
+        if (err != 0) {
+            /* Tell the user that we could not find a usable */
+            /* Winsock DLL.                                  */
+            printf("WSAStartup failed with error: %d\n", err);
+            return 1;
+        }
+
+    /* Confirm that the WinSock DLL supports 2.2.*/
+    /* Note that if the DLL supports versions greater    */
+    /* than 2.2 in addition to 2.2, it will still return */
+    /* 2.2 in wVersion since that is the version we      */
+    /* requested.                                        */
+
+        if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) {
+            /* Tell the user that we could not find a usable */
+            /* WinSock DLL.                                  */
+            printf("Could not find a usable version of Winsock.dll\n");
+            WSACleanup();
+            return 1;
+        }
+    }
+#endif
+    quic_monitor_repl ivy(p__pc__name);
+
+
+    
+    ivy.__unlock();
+
+    // The main thread waits for all reader threads to die
+
+    for(unsigned i = 0; true ; i++) {
+        ivy.__lock();
+        if (i >= ivy.thread_ids.size()){
+            ivy.__unlock();
+            break;
+        }
+        pthread_t tid = ivy.thread_ids[i];
+        ivy.__unlock();
+        pthread_join(tid,NULL);
+    }
+    return 0;
+
+    return 0;
+}

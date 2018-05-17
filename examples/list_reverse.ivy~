@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+include order
+
+instance idx : unbounded_sequence
+
+relation rev(U : idx, X : idx, Y : idx)
+
+# inductive definition of rev relation
+
+axiom idx.succ(T,Y) -> rev(U,0,Y)
+axiom rev(X,Y) & idx.succ(X,X1) & idx.succ(Y1,Y) -> rev(X1,Y1)
+
+type t
+
+instance arr : array(idx,t)
+
+function arr_rev(A1:arr,A2:arr) =
+    forall X,Y. rev(X,Y) -> arr.value(A1,X) = arr.value(A2,Y)
+
+property arr_rev(A1,A2) -> arr_rev(A2,A1)
+
+

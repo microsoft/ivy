@@ -1,0 +1,32 @@
+#lang ivy1.7
+
+include collections
+
+object frame = 
+
+    # The base type for frames
+
+    type this
+
+    # Stream frames
+
+    object stream = {
+
+        instance stream_pos : unbounded_sequence    # stream position values
+        instance arr : array(stream_pos,byte)       # stream data
+
+        # Stream frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            off : bool,        # is there an offset field
+            len : bool,        # is there a length field
+            fin : bool,        # is this the final offset
+
+            id : stream_id,            # the stream ID
+            offset : stream_pos,       # the stream offset (zero if ~off)
+            length : stream_pos,       # length of the data
+            data : arr                 # the stream data
+        }
+    }
+        

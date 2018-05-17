@@ -1,0 +1,96 @@
+#lang ivy1.7
+
+include quic_types
+include quic_frame
+include quic_packet
+
+# Connections
+# ===========
+
+# This section describes the evolution of QUIC connections.
+
+# Connection state
+# ----------------
+
+# For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has been sent by E.
+
+relation conn_seen(E:ip.endpoint,C:cid)
+
+# For each endpoint E and cid C, last_pkt_num(E,C) is the last packet
+# number sent by endpoint E on connection C.
+
+function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
+
+# The relation `initializing(E,C)` holds if endpoint E has sent
+# an Initial packet for connection C, but the server has not replied.
+
+relation initializing(E:ip.endpoint,C:cid)
+
+
+
+
+# Initial state
+# -------------
+
+# Initially, no connections have bee seen.
+
+after init {
+    conn_seen(E,C) := false;
+}
+
+
+
+# State transitions
+# -----------------
+
+# This action monitors packets as the are transmitted, updating the
+# protocol state.
+
+implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    call show_packet(src,dst,pkt);
+    
+    var cid := pkt.hdr_cid;
+    var pnum := pkt.hdr_pkt_num;
+
+    # If the connection is new, the packet number is exact. Just
+    # record we have seen this cid.
+
+    if ~conn_seen(src,cid) {
+        conn_seen(src,cid) := true;
+    }
+
+    # Else, we have to figure the current packet number based on the last.
+    # It should be the least packet number greater than the last whose
+    # low order bits match the number given in the packet. To compute
+    # this, we have to take into account the actual number of bits.
+
+    else {
+        var last := last_pkt_num(src,cid);
+
+        # If long format or type is 0x1d, we match 32 bits
+
+        if pkt.hdr_long | pkt.hdr_type = 0x1d {
+            if some(n:pkt_num) n > last & bfe[0][31](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else if long format or type is 0x1e, we match 16 bits
+
+        else if pkt.hdr_type = 0x1e {
+            if some(n:pkt_num) n > last & bfe[0][15](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+
+        # else (type is 0x1f) we match 8 bits
+
+        else {
+            if some(n:pkt_num) n > last & bfe[0][7](n) = pnum minimizing n {
+                pnum := n
+            }
+        }
+    };
+
+    last_pkt_num(src,cid) := pnum
+}

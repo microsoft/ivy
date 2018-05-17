@@ -1,0 +1,50 @@
+
+instantiations:
+axiom [cong2b] (link(X1,X2) = link(__Z,__Y) | __Z ~= X1 | __Y ~= X2)
+axiom [cong2b] (link(X1,X2) = link(__X,__Y) | __X ~= X1 | __Y ~= X2)
+axiom [trans1] (__Y = X & __Y = X) -> __Y = __Y
+axiom [trans1] (__Z = X & __Z = X) -> __Z = __Z
+axiom [trans1] (__X = X & __Z = X) -> __X = __Z
+axiom [trans1] (__Z = X & __X = X) -> __Z = __X
+axiom [trans1] (__X = X & __X = X) -> __X = __X
+axiom [contra] Y:server ~= X -> ~(__Y = X & __Y = Y)
+axiom [contra] Y:client ~= X -> ~(__Z = X & __Z = Y)
+axiom [contra] Y:client ~= X -> ~(__X = X & __X = Y)
+axiom [trans2] Y:server = X -> __Y = X <-> __Y = Y
+axiom [trans2] Y:client = X -> __Z = X <-> __Z = Y
+axiom [trans2] Y:client = X -> __X = X <-> __X = Y
+axiom [cong1b] (semaphore(X) = semaphore(__Y) | __Y ~= X)
+    (semaphore(__Y) = semaphore(__fml:y) | __Y ~= __fml:y)
+    (link(__Z,__Y) = link(__fml:x,__fml:y) | __Z ~= __fml:x | __Y ~= __fml:y)
+    (link(__X,__Y) = link(__fml:x,__fml:y) | __X ~= __fml:x | __Y ~= __fml:y)
+    (__Y = __fml:y & __Y = __fml:y) -> true
+    __Y ~= __fml:y -> ~(__Y = __fml:y & true)
+    __Y = __fml:y -> __Y = __fml:y <-> true
+    (true | ~true)
+    (__Z = __fml:x & __Z = __fml:x) -> true
+    (__Z = __fml:x & __X = __fml:x) -> __X = __Z
+    __Z ~= __fml:x -> ~(__Z = __fml:x & true)
+    __Z ~= __fml:x -> ~(__X = __fml:x & __X = __Z)
+    __Z = __fml:x -> __Z = __fml:x <-> true
+    __Z = __fml:x -> __X = __fml:x <-> __X = __Z
+    (true | ~true | ~true)
+    (link(__X,__Y) = link(__Z,__Y) | __X ~= __Z | ~true)
+    (__X = __fml:x & __Z = __fml:x) -> __X = __Z
+    (__X = __fml:x & __X = __fml:x) -> true
+    __X ~= __fml:x -> ~(__Z = __fml:x & __X = __Z)
+    __X ~= __fml:x -> ~(__X = __fml:x & true)
+    __X = __fml:x -> __Z = __fml:x <-> __X = __Z
+    __X = __fml:x -> __X = __fml:x <-> true
+    (link(__X,__fml:y) = link(__Z,__Y) | __X ~= __Z | __Y ~= __fml:y)
+    (link(__X,__Y) = link(__X,__fml:y) | ~true | __Y ~= __fml:y)
+    (link(__Z,__Y) = link(__Z,__fml:y) | ~true | __Y ~= __fml:y)
+    (link(__X,__Y) = link(__Z,__fml:y) | __X ~= __Z | __Y ~= __fml:y)
+    (__X = __Z & __X = __Z) -> true
+    (__X = __Z & true) -> __X = __Z
+    __X ~= __Z -> ~(true & __X = __Z)
+    __X ~= __Z -> ~(__X = __Z & true)
+    __X = __Z -> true <-> __X = __Z
+    __X = __Z -> __X = __Z <-> true
+    (link(__Z,__Y) = link(__fml:x,__Y) | __Z ~= __fml:x | ~true)
+    (link(__X,__Y) = link(__fml:x,__Y) | __X ~= __fml:x | ~true)
+new state: __X = __Z
