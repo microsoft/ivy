@@ -8,7 +8,7 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*.ivy','include/*.h']},
+      package_data={'ivy':['include/*/*.ivy','include/*/*.h']},
       install_requires=[
           'ply',
           'tarjan'

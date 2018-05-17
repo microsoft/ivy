@@ -4324,7 +4324,6 @@ emit_main = True
 def main():
     ia.set_determinize(True)
     slv.set_use_native_enums(True)
-    iso.set_interpret_all_sorts(True)
     ivy_init.read_params()
     iu.set_parameters({'coi':'false',"create_imports":'true',"enforce_axioms":'true','ui':'none','isolate_mode':'test','assume_invariants':'false'})
     if target.get() == "gen":
@@ -4341,9 +4340,12 @@ def main():
     with im.Module():
         ivy_init.ivy_init(create_isolate=False)
 
+        if iu.version_le(iu.get_string_version(),"1.6"):
+            iso.set_interpret_all_sorts(True)
+
         isolate = ic.isolate.get()
-        if isolate != None:
-            isolates = [isolate]
+        if isolate == None:
+            isolates = []
         else:
             if isolate == 'all':
                 if target.get() == 'repl':
@@ -4353,10 +4355,13 @@ def main():
             else:
                 isolates = [isolate]
                 
-            if len(isolates) == 0:
+        if len(isolates) == 0:
+            if iu.version_le(iu.get_string_version(),"1.6"):
                 isolates = [None]
+            else:
+                isolates = ['this']
 
-        for the_isolate in isolates:
+        for isolate in isolates:
             with im.module.copy():
                 with iu.ErrorPrinter():
 
@@ -4364,6 +4369,14 @@ def main():
                         if len(isolates) > 1:
                             print "Compiling isolate {}...".format(isolate)
 
+                    if (not iu.version_le(iu.get_string_version(),"1.6") and
+                        target.get() == 'repl' and isolate in im.modules.isolates):
+                        the_iso = im.modules.isolates[isolate]
+                        if not isinstance(the_iso,ivy_ast.ExtractDef):
+                            the_iso = ivy_ast.ExtractDef(*the_iso.args)
+                            the_iso.with_args = len(the_iso.args)
+                            im.modules.isolates[isolate] = the_iso
+                        
                     iso.create_isolate(isolate) # ,ext='ext'
 
                     im.module.labeled_axioms.extend(im.module.labeled_props)

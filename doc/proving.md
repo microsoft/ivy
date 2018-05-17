@@ -69,7 +69,7 @@ example:
     axiom [symmety_r] r(X,Y) -> r(Y,X)
 
 ```
-The free variable *X* in the formula is taken as universally
+The free variables *X*,*Y* in the formula are taken as universally
 quantified. The text `symmetry_r` between brackets is a name for the
 axiom and is optional. The axiom is simply admitted in the current
 context without proof. Axioms are dangerous, since they can
@@ -118,7 +118,7 @@ inconsistency. As an example:
     definition g(X) = f(X) + 1
 
 ```
-This can be read as "for all *X*, let *g*(*X*) be *f*(*X*) + 1". The
+This can be read as "for all *X*, let *g*(*X*) equal *f*(*X*) + 1". The
 definition is admissible if the symbol *g* is "fresh", meaning it
 does not occur in any existing properties or definitions in the
 current context.  Further *g* must not occur on the right-hand side
@@ -172,7 +172,7 @@ following a conclusion. In this case, it says that, given types *d* and *r* and 
 *d* to *r* and any values *X*,*Y* of type *d*,  we can infer that *X*=*Y* implies
 *f*(*X*) = *f*(*Y*). The dashes separating the premises from the conclusion are
 just a comment. The conclusion is always the last judgement in the schema.
-Also, notice the declaration of funciton *f* contains a variable *X*. The scope of this
+Also, notice the declaration of function *f* contains a variable *X*. The scope of this
 variable is only the function declaration. It has no relation to the variable *X* in the conclusion.
 
 The keyword `axiom` tells IVy that this schema should be taken as valid
@@ -382,7 +382,7 @@ once:
     }
 
 ```
-The auto tactic can't prove this because the presmise contains a
+The auto tactic can't prove this because the premise contains a
 function cycle with a universally quantified variable. Here's the
 error message it gives:
 

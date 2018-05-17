@@ -1383,7 +1383,7 @@ def is_interpreted_symbol(s):
     return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and is_interpreted_sort(s.sort.dom[0])
 
 def is_deterministic_fmla(f):
-    if isinstance(f,Some) and len(s.args) < 4:
+    if isinstance(f,Some) and len(f.args) < 4:
         return False
     return all(is_deterministic_fmla(a) for a in f.args)
 

@@ -1560,6 +1560,7 @@ def create_isolate(iso,mod = None,**kwargs):
                 for a in mod.actions:
                     mod.public_actions.add(a)
 
+
         # Create one big external action if requested
 
 
@@ -1616,7 +1617,6 @@ def create_isolate(iso,mod = None,**kwargs):
 
         if show_compiled.get():
             ivy_printer.print_module(mod)
-
 
 
 def has_assertions(mod,callee):
