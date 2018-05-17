@@ -332,7 +332,9 @@ def create_strat_map(assumes,asserts,macros):
     # Get the universally quantified variables. The free variables of
     # asserts and macros won't count as universal.
 
-    universally_quantified_variables = il.universal_variables(all_fmlas)
+    universally_quantified_variables = set(v for v in il.universal_variables(all_fmlas) if
+                                           il.is_uninterpreted_sort(v.sort) or
+                                           il.has_infinite_interpretation(v.sort))
 
 #    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     

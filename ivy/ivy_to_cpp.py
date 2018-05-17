@@ -703,6 +703,7 @@ public:
     for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
         constraints.append(fix_definition(ldf.formula).to_constraint())
     for c in constraints:
+        print slv.formula_to_z3(c).sexpr()
         fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' "\n"')
         indent(impl)
         impl.append("  {}\\\n".format(fmla))
