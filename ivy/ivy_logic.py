@@ -1367,7 +1367,7 @@ def is_uninterpreted_sort(s):
 # For now, int is the only infinite interpreted sort
 def has_infinite_interpretation(s):
     s = canonize_sort(s)
-    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(s.name)
+    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(sig.interp[s.name])
 
 def is_interpreted_sort(s):
     s = canonize_sort(s)
