@@ -371,7 +371,7 @@ thunk_counter = 0
 
 
 def expr_to_z3(expr):
-    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\n',' "\n"') + ')'
+    fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"') + ')'
     return 'z3::expr(g.ctx,Z3_parse_smtlib2_string(ctx, "{}", sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]))'.format(fmla)
 
 
@@ -702,7 +702,7 @@ public:
     for ldf in im.relevant_definitions(ilu.symbols_asts(constraints)):
         constraints.append(fix_definition(ldf.formula).to_constraint())
     for c in constraints:
-        fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\n',' "\n"')
+        fmla = slv.formula_to_z3(c).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')
         indent(impl)
         impl.append("  {}\\\n".format(fmla))
     indent(impl)
@@ -835,7 +835,7 @@ def emit_action_gen(header,impl,name,action,classname):
         emit_decl(impl,sym)
     
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"')))
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')))
 #    impl.append('__ivy_modelfile << slvr << std::endl;\n')
     indent_level -= 1
     impl.append("}\n");
