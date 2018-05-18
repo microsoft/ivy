@@ -9,7 +9,7 @@ verification. Technically, this means that important verification
 problems like invariant checking and bounded model checking fall
 within a [decidable fragment][df] of first-order logic.
 
-[df]: https://en.wikipedia.org/wiki/Bernays%E2%80%93Sch%C3%B6nfinkel_class
+[df]: decidiability.html
 
 For this reason, the IVy language has certain unusual features. IVy
 divides the world into three categories of things:
