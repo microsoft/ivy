@@ -350,8 +350,8 @@ of it as just the "next" value of *r*, after the assignment.
 We can see that the precondition and the constraint defining the
 semantics of assignment both occur positively. These formulas are in
 EPR, and so the corresponding conjuncts of the negated VC also are.
-The guarantee formula occurs negatively as `exists X,Y. ~(r'(X,Y) -> X
-> Y)`.  That is, when we see `~forall X. p(X)`, we convert it to the
+The guarantee formula occurs negatively as `exists X,Y. ~(r'(X,Y) -> X > Y)`.
+That is, when we see `~forall X. p(X)`, we convert it to the
 equivalent `exists X. ~p(X)` in prenex form. This formula is also in
 EPR. In fact, IVy will convert it to `~(r'(a,b) -> a > b)`, where *a*
 and *b* are fresh constant symbols.
