@@ -3,7 +3,16 @@ layout: page
 title: Installing IVy
 ---
 
-# Installing a release
+There are three ways to install ivy:
+
+1. [Install a binary release](#release)
+2. [Install from source in a virtual environment with Vagrant](#vagrant)
+3. [Install from source](#source)
+
+The last two are preferred, since releases are infrequent.
+
+<a name="release"></a> Installing a release
+--------------------
 
 Binary releases of IVy are available 
 on [IVy's Github release page](https://github.com/Microsoft/ivy/releases).
@@ -38,9 +47,10 @@ There currently is no binary distribution for Mac. Use instead the
 virtual machine approach or an installation from source, as described
 below.
 
-# Installing in a virtual environment with Vagrant
+<a name="vagrant"></a> Installing in a virtual environment with Vagrant
+------------------------------------------------
 
-IVy users and contributors may also deploy IVy within an container
+IVy users and contributors may also deploy IVy within a container
 using [Vagrant](https://www.vagrantup.com/).
 
 ### Windows
@@ -74,16 +84,18 @@ Linux users also have the option of directly executing the provisioning scripts 
 - MacOS installation instructions should be similar to the Windows instructions, with the exception that [an X11 server for MacOS](https://www.xquartz.org/) should be used.
 - Docker support may work in MacOS as it does in Linux with little-or-no modification but whether this is indeed the case remains unconfirmed at the time of this writing.
 
-# Installing from source
+
+<a name="source"></a> Installing from source
+--------------------------------------------
 
 This document describes the steps need to install IVy from the Github
 repository. The specific commands given apply to Ubuntu Linux version
-14.04. Windows and Mac users should also refer to the Windows and Mac
+14.04. Windows and Mac users should also refer to the [Windows](#windowsnotes) and [Mac](#macnotes)
 notes below.
  
-## Prerequisites
+### Prerequisites
 
-### Python 2.7
+#### Python 2.7
 
 Get it from [here](https://www.python.org/downloads) or as part of
 your Linux distribution. You should make sure to get the `pip`
@@ -99,7 +111,7 @@ installation instructions:
     $ cd ivy_env
     $ . bin/activate
 
-### Z3
+#### Z3
 
 Follow the instructions [here](https://github.com/Z3Prover/z3) to
 install Z3. You can test whether Z3 is correctly installed running this:
@@ -112,7 +124,7 @@ like this:
 
     $ make install PREFIX=/path/to/ivy_env
 
-### Python packages
+#### Python packages
 
 Install the python packages `ply`, `pygraphviz` and `tarjan`. On Ubuntu, install them
 like this:
@@ -131,7 +143,7 @@ the dependencies on system packages are met:
 
 This latter is the option if you are making a virtual environment.
 
-### Tcl/Tk/Tix
+#### Tcl/Tk/Tix
 
 To use the Tk-based user interface, you need to install the python
 package tk, and the tix widget set. On Ubuntu, install them like
@@ -142,7 +154,8 @@ this:
 This step is not necessary if using the IVy command line tools only.
 
 
-## Install IVy
+### Install IVy
+
 
 Get the source like this:
 
@@ -167,14 +180,14 @@ directory. For example:
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
 
-## Run
+### Run
 
 Run Ivy on an example, like this:
 
     $ cd doc/examples
     $ ivy client_server_example.ivy
 
-## Emacs mode
+### Emacs mode
 
 An emacs major mode for Ivy is available in `lib/emacs/ivy-mode.el`. Put this file
 somewhere in your emacs load path and add the following code to your
@@ -183,7 +196,8 @@ somewhere in your emacs load path and add the following code to your
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
     (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
 
-## Windows notes
+<a name="windowsnotes"></a> Windows notes
+-------------
 
 Installing on Windows can be a bit challenging, but here are a few
 suggestions that may get you through it.
@@ -196,12 +210,12 @@ need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
 ### Installing Z3
 
 After installing Z3, you need to make sure Python can find it. You can try setting
-the `PYTHONPATH` environment variable to point to the Z3 `bin` directory. It might
+the `PYTHONPATH` environment variable to point to the Z3 `python` directory. It might
 help to make sure Z3 is installed in a directory without spaces in the name. As a
-last resort, you can just copy the `.py` and `.dll` files into your Python installation.
-If you installed Python in `c:/Python27`, then copy the files into:
+last resort, you can just copy the `python/z3` directory into your Python installation.
+If you installed Python in `c:/Python27`, then copy it into:
 
-    c:/Python27/lib/site-packages/
+    c:/Python27/lib/site-packages/z3
 
 If things are installed correctly, the following should produce no errors:
 
@@ -257,7 +271,8 @@ If you have put `c:/Python27/Scripts` in your `PATH`, you should now be able to 
 
     > ivy ui=cti doc/examples/client_server_example.ivy
 
-## Mac notes
+<a name="macnotes"></a> Mac notes
+--------------------------------
 
 There are two options for Mac users: using the native Aqua interface
 or X11. Here we will describe the X11 approach.
