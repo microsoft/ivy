@@ -1518,14 +1518,18 @@ class VariableUniqifier(object):
     """ An object that alpha-converts formulas so that all variables are unique. """
     def __init__(self):
         self.rn = iu.UniqueRenamer()
+        self.invmap = dict()
     def __call__(self,fmla):
-        return self.rec(fmla,dict())
+        vmap = dict()
+        res = self.rec(fmla,vmap)
+        return res
     def rec(self,fmla,vmap):
         if is_binder(fmla):
             # save the old bindings
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
             newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
+            self.invmap.update(zip(newvars,fmla.variables))
             try:
                 res = fmla.clone_binder(newvars,self.rec(fmla.body,vmap))
             except TypeError:
@@ -1536,10 +1540,14 @@ class VariableUniqifier(object):
             return res
         if is_variable(fmla):
             if fmla not in vmap:
-                vmap[fmla] = Variable(self.rn(fmla.name),fmla.sort)
+                newv = Variable(self.rn(fmla.name),fmla.sort)
+                vmap[fmla] = newv
+                self.invmap[newv] = fmla
             return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
+    def undo(self,fmla):
+        return lu.substitute(fmla,self.invmap)
 
 def alpha_avoid(fmla,vs):
     """ Alpha-convert a formula so that bound variable names do not clash with vs. """

@@ -135,8 +135,8 @@ def map_fmla(lineno,fmla,pol):
             if func in macro_value_map:
                 return macro_value_map[func]
             if func in macro_map:
-                defn = macro_map[func]
-                res = map_fmla(defn.lineno,defn.formula.rhs(),None)
+                defn,lf = macro_map[func]
+                res = map_fmla(lf.lineno,defn.rhs(),None)
                 macro_value_map[func] = res
                 return res
             for idx,node in enumerate(nodes):
@@ -162,7 +162,7 @@ def check_interpreted(app,nodes,uvs,lineno,pol):
     for idx,(node,uv) in enumerate(zip(nodes,uvs)):
         if node is not None:
             if not is_arithmetic_literal(app,idx,nodes,uvs,pol):
-                report_interp_over_var(app,lineno)
+                report_interp_over_var(app,lineno,node)
 
 
 # Here, we determine whether a term is an arithmetic literal. To
@@ -231,8 +231,8 @@ def create_macro_maps(assumes,asserts,macros):
     global macro_value_map
     global strat_map
     macro_map = dict()
-    for _,lf in macros:
-        macro_map[lf.formula.defines()] = lf
+    for df,lf in macros:
+        macro_map[df.defines()] = (df,lf)
     macro_dep_map = defaultdict(set)
     macro_var_map = dict()
     macro_value_map = dict()
@@ -244,7 +244,7 @@ def create_macro_maps(assumes,asserts,macros):
     for fmla,_ in assumes+asserts+list(reversed(macros)):
         for app in ilu.apps_ast(fmla):
             if app.rep in macro_map:
-                mvs = macro_map[app.rep].formula.args[0].args
+                mvs = macro_map[app.rep][0].args[0].args
                 for v,w in zip(app.args,mvs):
                     if il.is_variable(w):
                         if il.is_variable(v):
@@ -268,6 +268,10 @@ def create_macro_maps(assumes,asserts,macros):
     # print '}'
     # print 'macro_dep_map: {'
     # for x,y in macro_dep_map.iteritems():
+    #     print '{} -> {}'.format(x,y)
+    # print '}'
+    # print 'macro_map: {'
+    # for x,y in macro_map.iteritems():
     #     print '{} -> {}'.format(x,y)
     # print '}'
 
@@ -325,18 +329,22 @@ def create_strat_map(assumes,asserts,macros):
 
     # Gather all the formulas in the VC.
 
-    all_fmlas = [il.close_formula(pair[0]) for pair in assumes]
-    all_fmlas.extend(il.Not(pair[0]) for pair in asserts)
-    all_fmlas.extend(pair[0] for pair in macros)
+    all_fmlas = [(il.close_formula(x),y) for x,y in assumes]
+    all_fmlas.extend((il.Not(x),y) for x,y in asserts)
+    all_fmlas.extend(macros)
 
     # Get the universally quantified variables. The free variables of
-    # asserts and macros won't count as universal.
+    # asserts and macros won't count as universal. We keep track of the
+    # line numbers of these variables for error messages.
 
-    universally_quantified_variables = set(v for v in il.universal_variables(all_fmlas) if
-                                           il.is_uninterpreted_sort(v.sort) or
-                                           il.has_infinite_interpretation(v.sort))
+    universally_quantified_variables = dict()
+    for fmla,lf in all_fmlas:
+        for v in il.universal_variables([fmla]):
+            if (il.is_uninterpreted_sort(v.sort) or
+                il.has_infinite_interpretation(v.sort)):
+                universally_quantified_variables[v] = lf
 
-#    print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
+    # print 'universally_quantified_variables : {}'.format([str(v) for v in universally_quantified_variables])
     
     # Create an empty graph.
 
@@ -379,19 +387,28 @@ def show_strat_graph(m,a):
     
         
 def report_feu_error(text):
-    raise iu.IvyError(None,"The verification condition is not in the fragment FEU.\n\n{}".format(text))
+    raise iu.IvyError(None,"The verification condition is not in the fragment FAU.\n\n{}".format(text))
 
 def report_cycle(cycle):
     if cycle is not None:
         report_feu_error("The following terms may generate an infinite sequence of instantiations:\n"+
                          '\n'.join('  ' + str(arc[3]) + str(arc[2]) for arc in cycle))
 
-def report_interp_over_var(fmla,lineno):
+def report_interp_over_var(fmla,lineno,node):
     """ Report a violation of FAU due to a universal variable
     occurring as an argument position of an interpreted symbol, but
     not in an arithmetic literal. """
+
+    # First, try to fibd the offending variable in the strat map
+
+    var_msg = ''
+    for v,n in strat_map.iteritems():
+        if n is node:
+            if v in universally_quantified_variables:
+                lf = universally_quantified_variables[v]
+                var_msg = '\n{}The quantified variable is {}'.format(lf.lineno,var_uniq.undo(v))
     report_feu_error('An interpreted symbol is applied to a universally quantified variable:\n'+
-                     '{}{}'.format(lineno,fmla))
+                     '{}{}'.format(lineno,var_uniq.undo(fmla))+var_msg)
 
 def check_feu(assumes,asserts,macros):
     """ Take a list of assumes, assert and macros, and determines
@@ -400,10 +417,11 @@ def check_feu(assumes,asserts,macros):
 
     # Alpha convert so that all the variables have unique names,
 
-    vu = il.VariableUniqifier()
+    global var_uniq
+    var_uniq = il.VariableUniqifier()
     
     def vupair(p):
-        return (vu(p[0]),p[1])
+        return (var_uniq(p[0]),p[1])
 
     assumes = map(vupair,assumes)
     asserts = map(vupair,asserts)
@@ -482,20 +500,20 @@ def get_assumes_and_asserts(preconds_only):
         if not isinstance(ldf.formula,il.DefinitionSchema):
             if (ldf.formula.defines() not in ilu.symbols_ast(ldf.formula.rhs())
                 and not isinstance(ldf.formula.rhs(),il.Some)):
-#                print 'macro : {}'.format(ldf.formula)
-                macros.append((ldf.formula.to_constraint(),ldf))
+                # print 'macro : {}'.format(ldf.formula)
+                macros.append((ldf.formula,ldf))
             else: # can't treat recursive definition as macro
-#                print 'axiom : {}'.format(ldf.formula)
+                # print 'axiom : {}'.format(ldf.formula)
                 assumes.append((ldf.formula.to_constraint(),ldf))
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-#            print 'axiom : {}'.format(ldf.formula)
+            # print 'axiom : {}'.format(ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:
         if not ldf.temporal:
-#            print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
+            # print 'prop : {}{} {}'.format(ldf.lineno,ldf.label,ldf.formula)
             asserts.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_conjs:
@@ -503,12 +521,12 @@ def get_assumes_and_asserts(preconds_only):
         assumes.append((ldf.formula,ldf))
     # TODO: check axioms, inits, conjectures
 
-#    for x in assumes:
-#        print 'assume: {}'.format(x[0])
-#    for x in asserts:
-#        print 'assert: {}'.format(x[0])
-#    for x in macros:
-#        print 'macro: {}'.format(x[0])
+    # for x in assumes:
+    #     print 'assume: {}'.format(x[0])
+    # for x in asserts:
+    #     print 'assert: {}'.format(x[0])
+    # for x in macros:
+    #     print 'macro: {}'.format(x[0])
     return assumes,asserts,macros
 
     
