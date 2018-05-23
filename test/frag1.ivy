@@ -1,0 +1,18 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function f(X:t) : t
+
+function foo(X:t) = f(X) = X
+
+# definition f(X) = X
+
+function g(X:t) : t
+var p : t
+
+
+axiom foo(g(Y))
+
+# result: OK

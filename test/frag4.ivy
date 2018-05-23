@@ -1,0 +1,21 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function f(X:t) : t
+
+function foo(X:t) = f(X) = X
+
+# definition f(X) = X
+
+function g(X:t) : t
+var p : t
+
+function h(X:t) : t
+definition h(Z) =  Z
+function bar(X:t) = f(X) = h(X)
+
+axiom bar(Y)
+
+# result: An interpreted symbol is applied to a universally quantified variable

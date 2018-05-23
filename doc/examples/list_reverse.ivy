@@ -7,9 +7,9 @@
 # This is an example of using tactics in Ivy to keep verification conditions
 # decidable.
 #
-# The problem we will tackle is reversel of an array. The difficulty
-# from point of view of decidability is that, to specify an arrary
-# reversal procedure, we need use arithmetic in some form. For example,
+# The problem we will tackle is reversal of an array. The difficulty
+# from the point of view of decidability is that, to specify an array
+# reversal procedure, we need arithmetic in some form. For example,
 # we might say that array `a` is the reverse of array `b` if they have
 # the same length `n`, and if, for all `0 <= i < n`, we have `b[i] = a[n-i-1]`. 
 #
@@ -17,7 +17,7 @@
 # arithmetic operator `+` to the universally quantifier variable `n`,
 # which means it is not in the `almost uninterpreted` fragment.
 #
-# We can see this if we try to verify thet following program:
+# We can see this if we try to verify the following program:
 #
 #     # include collections
 #     # 
@@ -44,32 +44,32 @@
 #     # 
 #     # export rev
 #
-# Because the loop invariant is outside the decidably fragment, Ivy gives
+# Because the loop invariant is outside the decidable fragment, Ivy gives
 # this error message:
 #
-#     # error: The verification condition is not in the fragment FEU.
+#     # error: The verification condition is not in the fragment FAU.
 #     #
 #     # An interpreted symbol is applied to a universally quantified variable:
 #     # array_rev1.ivy: arr.end(__fml:a) - I
 #
 # If we try to force Ivy to verify the program with the `complete=fo` option,
-# it gets stuck producing a conter-model for the `ensure` condition (notice
+# it gets stuck producing a counter-model for the `ensure` condition (notice
 # there is an error there!). 
 #
 # To avoid the use of arithmetic in defining array reversal, we can
 # define *relationally* what it means for one array to be the
 # reverse of another. That is, we will define a relation `rev(n,i,j)` that
 # holds for two indices `i,j` of an array of length `n`, provide `i` is
-# the revese position of `j`, that is, `i + j + 1 = n`. 
+# the reverse position of `j`, that is, `i + j + 1 = n`. 
 #
-# We will then prove some useful properties of `rev` in a isolate, and
+# We will then prove some useful properties of `rev` in an isolate, and
 # also provide a procedure that, given `n` and `i`, returns the `j`
 # such that `rev(n,i,j)`. The proof of this isolate can be done in the
 # decidable fragment.  For one property, however, we will need to
 # apply a bit of tactical theorem proving to achieve this.
 #
 # The isolate hides the theory of arithmetic, allowing us to do the
-# remainder of our reasoning wihout any theories. We will implement a
+# remainder of our reasoning without any theories. We will implement a
 # simple array reversal procedure and prove it is correct. Then we
 # will show that applying reversal twice to an array yields the
 # original array.
@@ -94,7 +94,7 @@ include deduction
 # permutation on the range `[0,U)`. That is, `rev(U,X,Y)` holds when
 # `X + Y + 1 = U `.
 #
-# The definitoin of `rev` and its associated properties are provided
+# The definition of `rev` and its associated properties are provided
 # by an isolate `rt` (for "reversal theory"). This isolate hides the
 # definition of `rev` but gives us some useful properties that will
 # allow us to reason about array reversal without using arithmetic.
@@ -103,11 +103,11 @@ instance idx : unbounded_sequence
 
 isolate rt = {
 
-    # The reversal permuation as a relation
+    # The reversal permutation as a relation
 
     relation rev(U : idx, X : idx, Y : idx)
 
-    # An action that computes the reverse if on index position.
+    # An action that computes the reverse of an index position.
 
     action reverse(x:idx,u:idx) returns (y:idx)
     
@@ -116,9 +116,9 @@ isolate rt = {
         # We need the following properties of the `rev` relation:
         #
         # 1. It is a partial function (for a given bound `U`)
-        # 2. It is monotinically decreasing over the range `[0,U)`
+        # 2. It is monotonically decreasing over the range `[0,U)`
         # 3. It maps `[0..)` onto `[0..U)`
-        # 4. It is symmetric over `[0..U)`
+        # 4. It is symmetric
 
 	property rev(U,X,Y) & rev(U,X,Y1) -> Y = Y1
 	property rev(U,X,X1) & rev(U,Y,Y1) & X < Y -> Y1 < X1
@@ -133,7 +133,7 @@ isolate rt = {
 	   ensure rev(u,x,y)
 	}
 
-        # Later, when reason about double reversal, we will need one
+        # Later, when we reason about double reversal, we will need one
         # further property, to guarantee the relation is a
         # permutation. We need to know that every number in the range
         # `[0,U)` is related to *some* number in that range (in other
@@ -161,7 +161,7 @@ isolate rt = {
         #     # list_reverse2.ivy: line 149: The quantified variable is Y:idx
         #
         # In the negated VC, a property to prove occurs
-        # negatively. Thus, the existntial quantifier above becosmes a
+        # negatively. Thus, the existential quantifier above becomes a
         # universal. When unfolding the definition of `rev` below, we
         # get the interpreted arithmetic operator `+` applied to the
         # universal variable `Y` which puts us outside the decidable
@@ -177,13 +177,13 @@ isolate rt = {
         # The first step is to apply the "implication introduction" rule,
         # which is defined in the deduction library. This is a standard rule
         # of the natural deduction system which says, to prove `p -> q`,
-        # you need to prove `q` from the assumtion of `p`. This converts
+        # you need to prove `q` from the assumption of `p`. This converts
         # the proof goal `0 <= X & X < U -> exists Y. rev(U,X,Y)` to:
         #
         #     # {
         #     #     property 0 <= X & X < U
         #     #     #----------------------
-        #     #     exists Y. rev(U,X,Y)
+        #     #     property exists Y. rev(U,X,Y)
         #     # }
         #
         # To prove the existentially quantified goal, we apply the "existential
@@ -192,11 +192,11 @@ isolate rt = {
         # by solving for `Y` in the definition of `rev` below. This gives us the
         # following goal:
         #
-        #     {
-        #         property 0 <= X & X < U
-        #         #-----------------------
-        #         property rev(U,X,U - X - 1)
-        #     }
+        #     # {
+        #     #     property 0 <= X & X < U
+        #     #     #-----------------------
+        #     #     property rev(U,X,U - X - 1)
+        #     # }
         #
         # With the quantifier removed, expanding the definition of
         # `rev` no longer gives us arithmetic over quantified
@@ -220,11 +220,12 @@ isolate rt = {
         }
     }
 
-    # We say `with idx.impl` to expose the definition of `idx.succ`, which is needed to
-    # prove the above properties. Note it's very important *not* to say `with idx` here,
-    # since the specification of `idx` (see order.ivy) contains various universally 
-    # quantified properties that, when mixed with arithmetic, would put us outside the
-    # decidable fragment.
+    # We say `with idx.impl` to use the implementation of `idx` using
+    # the natural number theory, which is needed to prove the above
+    # properties. Note it's very important *not* to say `with idx`
+    # here, since the specification of `idx` (see order.ivy) contains
+    # various universally quantified properties that, when mixed with
+    # arithmetic, would put us outside the decidable fragment.
 
 } with idx.impl
 
@@ -262,13 +263,13 @@ property [arr_rev_symm] arr_rev(A1,A2) -> arr_rev(A2,A1)
 # ---------------------------
 #
 # Now that we have defined the notion of array reversal, let's write a procedure that
-# reverses an array a pro9ve that it returns the correct result.
+# reverses an array a and prove that it returns the correct result.
 #
 
 isolate my_rev = {
 
     # The interface of our array reversal isolate has just one action
-    # `rev` that returns the reverse of the array.
+    # `reverse` that returns the reverse of the array.
 
     action reverse(a:arr) returns (b:arr)
 
@@ -297,12 +298,14 @@ isolate my_rev = {
 
     # The isolate needs to uses the properties of the index type and
     # arrays, as well as the reversal permutation theory and the
-    # definiton of array reversal. Probably it would have been better
+    # definition of array reversal. Probably it would have been better
     # to organize all of these in a single object for easy reference.
 
 } with idx, rt, arr, def_arr_rev
 
+#
 # Double array reversal
+# ---------------------
 #
 # Now we would like to show that reversing an array twice gives the
 # original array. By symmetry, this is the same as saying the two
@@ -314,14 +317,14 @@ isolate my_rev = {
 
 isolate double_reverse1 = {
 
-    # Our lemma says that corresponding elements of `A` and `B` are equal.
+    # Our lemma says that corresponding elements of `B` and `C` are equal.
 
     property arr_rev(A,B) & arr_rev(A,C) & 0 <= X & X < arr.end(B)
                    -> arr.value(B,X) = arr.value(C,X)
 
     # To show this, we need theorem `into`, which tells us that every
-    # index in `B` and `C` corresponds to *some* index in `A`. Since
-    # the elements of `B` and `C` are both equal by definition to this
+    # index in `B` and `C` corresponds to *some* index in `A`. 
+    # The elements of `B` and `C` are both equal by definition to this
     # element of `A`, so by transitivity they are equal to each
     # other. We use the `assume` tactic to bring in theorem `into` as
     # an assumption in our proof goal, plugging in the specific value
@@ -362,17 +365,17 @@ isolate double_reverse1 = {
 
     # Here is the proof goal we get:
     #
-    #    {
-    #        {
-    #            property arr.end(B) = arr.end(C)
-    #                     & forall I. (0:idx <= I & I < arr.end(B)) -> arr.value(B,I) = arr.value(C,I))
-    #            property B:arr = C
-    #        }
-    #        property (arr_rev(A,B) & arr_rev(A,C)) -> B = C
-    #    }
+    #     # {
+    #     #     {
+    #     #         property arr.end(B) = arr.end(C)
+    #     #                  & forall I. (0:idx <= I & I < arr.end(B)) -> arr.value(B,I) = arr.value(C,I))
+    #     #         property B:arr = C
+    #     #     }
+    #     #     property (arr_rev(A,B) & arr_rev(A,C)) -> B = C
+    #     # }
     #
-    # Our lemma says the corresponding elments of `B` and `C` are
-    # equal, so by extensionality, `B` and `C` are equal. Theres a
+    # Our lemma says the corresponding elements of `B` and `C` are
+    # equal, so by extensionality, `B` and `C` are equal. There is a
     # quantifier alternation from `arr` to `idx` in the extensionality
     # property, but it doesn't break stratification, so the default
     # tactic can handle this goal.
@@ -384,6 +387,9 @@ isolate double_reverse1 = {
 
 } with this
 
+#
+# ### A different proof
+#
 # Now we will prove the same property a second time, but using more
 # tactics and less Z3.
 
@@ -394,7 +400,7 @@ isolate double_reverse2 = {
     # `arr_rev(A,B) & arr_rev(A,C)` into the assumptions [1]. Then we can
     # apply array extensionality, since its conclusion `X=Y` matches our
     # conclusion `B = C`. Ivy finds this match automatically, so we don't
-    # need a `with` claues [2]. 
+    # need a `with` clause [2]. 
 
     proof
         apply introImp;  # [1]
@@ -402,11 +408,11 @@ isolate double_reverse2 = {
 
     # We now have the following proof goal:
     #
-    #    theorem [arr.spec.prop64] {
-    #        property [prop183] (arr_rev(A,B) & arr_rev(A,C))
-    #        property arr.end(B) = arr.end(C)
-    #                 & forall I. (0:idx <= I & I < arr.end(B)) -> arr.value(B,I) = arr.value(C,I)
-    #    }
+    #     # theorem [arr.spec.prop64] {
+    #     #     property [prop183] (arr_rev(A,B) & arr_rev(A,C))
+    #     #     property arr.end(B) = arr.end(C)
+    #     #              & forall I. (0:idx <= I & I < arr.end(B)) -> arr.value(B,I) = arr.value(C,I)
+    #     # }
     #
     # That is, we need to prove a conjunction of two facts: the array lengths are equal and
     # the array contents are equal. We apply the "and introduction" rule to break this into
@@ -417,7 +423,7 @@ isolate double_reverse2 = {
         defergoal;   # [4]
 
     # Now we need to hand the universal quantifier. We apply the "forall introduction" rule,
-    # which require us to prove the quantified fact for a generic `x` [5]. This particular index
+    # which requires us to prove the quantified fact for a generic `x` [5]. This particular index
     # `x` in `B` and `C` corresponds to some index in `A`, which we can establish by assuming 
     # the `into` theorem for `x` [6].
 
@@ -426,17 +432,17 @@ isolate double_reverse2 = {
 
     # This leaves us with the following goals (the second being the one we deferred):
     #
-    #    {
-    #        property arr_rev(A,B) & arr_rev(A,C)
-    #        individual x : idx
-    #        property (0:idx <= x & x < arr.end(B)) -> exists Y. rev(arr.end(B),x,Y)
-    #        property (0:idx <= x & x < arr.end(B)) -> arr.value(B,x) = arr.value(C,x)
-    #    }
+    #     # {
+    #     #     property arr_rev(A,B) & arr_rev(A,C)
+    #     #     individual x : idx
+    #     #     property (0:idx <= x & x < arr.end(B)) -> exists Y. rev(arr.end(B),x,Y)
+    #     #     property (0:idx <= x & x < arr.end(B)) -> arr.value(B,x) = arr.value(C,x)
+    #     # }
     #
-    #    {
-    #        property [prop183] (arr_rev(A,B) & arr_rev(A,C))
-    #        property arr.end(B) = arr.end(C)
-    #    }
+    #     # {
+    #     #     property [prop183] (arr_rev(A,B) & arr_rev(A,C))
+    #     #     property arr.end(B) = arr.end(C)
+    #     # }
     # 
     # The default tactic can handle these, since there are no
     # unstratified quantifier alternations.
@@ -502,7 +508,7 @@ isolate my_rev2 = {
         }
     }
     
-    # We swap coresponding elements until the lower index is >= the upper index.
+    # We swap elements until we reach the middle of the array.
     # The variables `i` and `j` hold the indices that we are about to swap.
     # The invariant of the loop says that the elements in the range `[i,j]`
     # are unchanged, while the elements outside this range are reversed.
@@ -530,7 +536,7 @@ isolate my_rev2 = {
 
 
 # Finally, to actually verify the executable code, we export actions
-# to the environment. A program without exports has nothing to prove.
+# to the environment. 
 
 export my_rev.reverse
 export my_double_rev.reverse2

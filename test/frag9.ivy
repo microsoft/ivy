@@ -1,0 +1,25 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function f(X:t) : t
+
+function foo(X:t) = f(X) = X
+
+# definition f(X) = X
+
+function g(X:t) : t
+var p : t
+
+function h(X:t) : t
+definition h(Z) =  Z
+function bar(X:t) = f(X) = h(X)
+
+var q : bool
+
+function ite(X:t) : t
+axiom q -> ite(X) = p
+axiom ~q -> ite(X) = X
+axiom g(X) = ite(X)
+

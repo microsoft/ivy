@@ -12,6 +12,34 @@ else:
     spawn = pexpect.spawn
 
 checks = [
+    ['.',
+      [
+          ['fundef1','error: Variable Y:t occurs free on right-hand side of definition'],
+          ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
+          ['strat1','error: The verification condition is not in'],
+          ['skolem1','error: failed checks: 1'],
+          ['ifstar1','OK'],
+          ['frag1','OK'],
+          ['frag2','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag3','OK'],
+          ['frag4','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag5','OK'],
+          ['frag6','OK'],
+          ['frag7','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag8','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag9','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag10','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag11','OK'],
+          ['frag12','OK'],
+          ['frag13','OK'],
+          ['frag14','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag15','An interpreted symbol is applied to a universally quantified variable'],
+          ['frag16','OK'],
+          ['frag17','OK'],
+          ['frag18','OK'],
+          ['frag19','OK'],
+      ]
+    ],
     ['../doc/examples/testing',
       [
           ['pingpong','trusted=true','OK'],
@@ -55,17 +83,10 @@ checks = [
       ['trivnet','OK'],
       ['udp_test2','OK'],
       ['udp_test','OK'],
+      ['list_reverse','OK'],
+      ['indexset','OK'],
       ]
      ],
-    ['.',
-      [
-          ['fundef1','error: Variable Y:t occurs free on right-hand side of definition'],
-          ['fundef2','error: Variable X:t occurs twice on left-hand side of definition'],
-          ['strat1','error: The verification condition is not in'],
-          ['skolem1','error: failed checks: 1'],
-          ['ifstar1','OK'],
-      ]
-    ],
 ]
 
 tests = [
