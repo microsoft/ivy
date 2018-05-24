@@ -48,6 +48,8 @@ module array(domain,range) = {
     # Function "end" gives the end value of an array while value(a,x)
     # gives the value that x maps to in a.
 
+    function begin(A:t) : domain
+    definition begin(A) = 0
     function end(A:t) : domain
     function value(A:t,X:domain) : range
 

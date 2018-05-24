@@ -299,6 +299,12 @@ class App(Term):
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
+    def rename(self,s):
+        res = self.clone(self.args)
+        res.rep = s
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        return res
 
 
 Constant = App  # compat
@@ -1195,7 +1201,16 @@ class AstRewriteSubstPrefix(object):
         self.subst,self.pref,self.to_pref,self.static = subst,pref,to_pref,static
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
+    def prefix_str(self,name,always):
+        if not (self.pref and (always or self.to_pref == None or split_name(name)[0] in self.to_pref)):
+            return name
+        return iu.compose_names(self.pref.rep,name)
     def rewrite_atom(self,atom,always=False):
+        if not(isinstance(atom.rep,This)):
+            g = name_parser.findall(atom.rep)
+            if len(g) > 1:
+                n = g[0] + ''.join(('[' + self.prefix_str(x[1:-1],always) + ']' if x.startswith('[') else x) for x in g[1:])
+                atom = atom.rename(n)
         if not (self.pref and (always or self.to_pref == None or isinstance(atom.rep,This) or 
                 split_name(atom.rep)[0] in self.to_pref)):
             return atom

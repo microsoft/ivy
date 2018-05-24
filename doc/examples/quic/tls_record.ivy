@@ -27,40 +27,10 @@ object tls = {
     type protocol_version
     interpret protocol_version -> bv[16]
 
-    # ### Records
-
-    # A record encapsulates TLS messages. Its fields are:
-    #
-    # - `ctype` a one-byte content type descriptor, encoded as follows:
-    #
-    #     | ctype | content type       |
-    #     |-------|--------------------|
-    #     | 20    | change cipher spec |
-    #     | 21    | alert              |
-    #     | 22    | handshake          |
-    #     | 23    | application data   |
-    #
-    # - `version` the protocol version
-    #
-    # - `fragment` the record content
-    #
-    # The fragment content is preceded by a two-byte length field.
-    # In general, messages may span fragment boundaries, but we do not
-    # allow that here. The content type field indicates the type of messages
-    # occurring in the fragment, as detailed below. 
-    
-    type record = struct {
-        ctype : byte,
-        version : protocol_version,
-        fragment : stream_data
-    }
-
-    # attribute fragment.format = length[2]
-    
     # ### Content types
     # 
     # This section details the various content types that may appear
-    # in serialized form in a record.
+    # in serialized form in a TLS record.
    
     # #### Handshake
     #
@@ -74,6 +44,7 @@ object tls = {
     # | variant      | description  | tag |
     # |--------------|--------------|-----|
     # | client_hello | Client Hello | 1   |
+    # | server_hello | Client Hello | 2   |
     #
     # The serialized form of `handshake` has the following four-byte prefix:
     #
@@ -93,9 +64,17 @@ object tls = {
     # - `content` The extension content as a byte stream. In serialized form,
     #   this is prefixed by a two-byte length field.
 
-    type extension
+    type extension_type
+    interpret extension_type -> bv[16]
 
-    # ##### Client Hello
+    object extension = {
+        type this = struct {
+            etype : extension_type,
+            content : stream_data
+        }
+    }
+
+    # ##### Client and Server Hello
     #
     # The time in milliseconds since Jan 1, 1970 GMT is encoded as a 32-bit field.
 
@@ -116,12 +95,10 @@ object tls = {
     type cipher_suite 
     interpret cipher_suite -> bv[16]
 
-    # A `cipher_suite_seq` is a sequence of cipher suite descriptors in
-    # order of preference. In serialized form it is prefixed by a two-byte
-    # length field.
+    # A compression method is a one-byte descriptor.
 
-    instance cipher_suite_idx : unbounded_sequence
-    instance cipher_suite_seq : array(cipher_suite_idx,cipher_suite)
+    type compression_method
+    interpret compression_method -> bv[1]
 
     # The Client Hello message has the following fields:
     # 
@@ -134,18 +111,99 @@ object tls = {
     #   field contains zero bytes. In serialized form it is prefixed by a one-byte
     #   length field.
     #
-    # - `cipher_suites` is a sequence of cipher suite descriptors
+    # - `cipher_suites` is a sequence of cipher suite descriptors. In
+    #   serialized form it is prefixed by a two-byte length field.
     #
     # - `compression_methods` is a sequence of one-byte compression method descriptors.
-    #   In serialized for it is prfixes by a one-byte length field.
+    #   In serialized form it is prefixed by a one-byte length field.
+    # 
+    # - `extensions` is a sequence of extensions. In serialized form it is prefixed by a two-byte
+    #   length field.
     
-    variant client_hello of handshake = struct {
-        client_version : protocol_version,
-        rand_info : random,
-        session_id : stream_data,
-        cipher_suites : cipher_suite_seq,
-        extensions : vector[extension]
+    object client_hello = {
+        variant this  of handshake = struct {
+            client_version : protocol_version,
+            rand_info : random,
+            session_id : stream_data,
+            cipher_suites : vector[cipher_suite],
+            compression_methods : vector[compression_method],
+            extensions : vector[extension]
+        }
     }
+
+    # The server Hello message has the following fields:
+    # 
+    # - `client_version` The protocol version in use by the client
+    #
+    # - `rand_info` The random information
+    #
+    # - `session_id`  a token that is transmitted by the client to refer
+    #   to a previously established session. If there is no prior session, this
+    #   field contains zero bytes. In serialized form it is prefixed by a one-byte
+    #   length field.
+    #
+    # - `cipher_suites` is a sequence of cipher suite descriptors. In
+    #   serialized form it is prefixed by a two-byte length field.
+    #
+    # - `compression_methods` is a sequence of one-byte compression method descriptors.
+    #   In serialized form it is prefixed by a one-byte length field.
+    # 
+    # - `extensions` is a sequence of extensions. In serialized form it is prefixed by a two-byte
+    #   length field.
+    
+    object server_hello = {
+        variant this of handshake = struct {
+            server_version : protocol_version,
+            rand_info : random,
+            session_id : stream_data,
+            the_cipher_suite : cipher_suite,
+            the_compression_method : compression_method,
+            extensions : vector[extension]
+        }
+    }
+
+    # ### Records
+
+    # A record encapsulates TLS messages. It is prefixed by a one-byte
+    # tag indicating the content type. The tag values are:
+    #
+    #
+    #     | tag   | content type       |
+    #     |-------|--------------------|
+    #     | 20    | change cipher spec |
+    #     | 21    | alert              |
+    #     | 22    | handshake          |
+    #     | 23    | application data   |
+    #
+    # The fields of all content types are:
+    #
+    # - `version` the protocol version
+    # 
+    # - `fragment` the record content
+    #
+    # The fragment content is preceded by a two-byte length field.
+    # In general, messages may span fragment boundaries, but we do not
+    # allow that here. The content type field indicates the type of messages
+    # occurring in the fragment, as detailed below. 
+    
+    type record
+
+    object handshake_record = {
+        variant this of record = struct {
+            version : protocol_version,
+            fragment : vector[handshake]
+        }
+    }
+
+    object application_data_record = {
+        variant this of record = struct {
+            version : protocol_version,
+            content : stream_data
+        }
+    }
+
+    # attribute fragment.format = length[2]
+    
 
 
 }

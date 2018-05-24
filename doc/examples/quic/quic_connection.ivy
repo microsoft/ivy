@@ -5,10 +5,18 @@
 # title: QUIC connection protocol
 # ---
 
-# This document describes the wire specification of QUIC. The protocol
-# is viewed as a sequence of *packet events* corresponding
-# to transmission of a UDP packet from a QUIC source endpoint to a
-# QUIC destination endpoint.
+# This document describes the wire specification of QUIC.  It is based
+# on the following IETF drafts:
+#
+# 1.[QUIC: A UDP-Based Multiplexed and Secure Transport
+# draft-ietf-quic-transport-09](https://tools.ietf.org/html/draft-ietf-quic-transport-09).
+#
+# 2. [Using Transport Layer Security (TLS) to Secure QUIC
+# draft-ietf-quic-tls-09](https://tools.ietf.org/html/draft-ietf-quic-tls-09).
+#
+# The protocol is viewed as a sequence of *packet events*
+# corresponding to transmission of a UDP packet from a QUIC source
+# endpoint to a QUIC destination endpoint.
 
 # References
 # ==========
@@ -16,6 +24,7 @@
 include quic_types
 include quic_frame
 include quic_packet
+include tls_protocol
 
 # Connections
 # ===========
@@ -169,7 +178,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
     if ack_only {
-	require ack_credit(src,pcid) > 0;  # [5]
+#	require ack_credit(src,pcid) > 0;  # [5]
 	ack_credit(src,pcid) := ack_credit(src,pcid) - 1;
     } else {
 	ack_credit(dst,pcid) := ack_credit(dst,pcid) + 1;
@@ -272,6 +281,24 @@ object frame = {
     }
 }
 
+# Stream frames with stream id 0 carry TLS records.
+
+object frame = {
+    ...
+    object stream = {
+        ...
+        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            if f.id = 0 {
+                var tr := tls.parser.deserialize(f.data);
+                var idx := tr.begin;
+                while idx < tr.end {
+                    call tls.event(src,dst,tr.value(idx));
+                    idx := idx.next
+                }
+            }
+        }
+    }
+}
 
 # ### Packet number decoding
 
