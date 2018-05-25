@@ -342,8 +342,8 @@ def sort_dependencies(mod,sortname):
     if sortname in mod.sort_destructors:
         return [s.name for destr in mod.sort_destructors[sortname]
                 for s in destr.sort.dom[1:] + (destr.sort.rng,)]
-    if sortname in mod.interps:
-        t = mod.interps[sortname]
+    if sortname in mod.native_types:
+        t = mod.native_types[sortname]
         if isinstance(t,ivy_ast.NativeType):
             return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
     if sortname in mod.variants:

@@ -164,7 +164,7 @@ def field_eq(s,t,field):
 def memname(sym):
     if not(isinstance(sym,str)):
         sym = sym.name
-    return sym.split('.')[-1]
+    return field_names.get(sym,sym.split('.')[-1])
 
 
 
@@ -1367,6 +1367,14 @@ def module_to_cpp_class(classname,basename):
     cpptypes = []
     global sort_to_cpptype
     sort_to_cpptype = {}
+    global field_names
+    field_names = dict()
+    for destrs in im.module.sort_destructors.values():
+        if destrs: # paranoia
+            dest_base,_ = iu.parent_child_name(destrs[0].name)
+            if not all(iu.parent_child_name(d.name)[0] == dest_base for d in destrs):
+                for d in destrs:
+                    field_names[d.name] = varname(d.name)
 
     global number_format
     number_format = ''

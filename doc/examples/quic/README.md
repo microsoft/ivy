@@ -1,5 +1,5 @@
 Ivy specification of QUIC
-=========================
+-------------------------
 
 This directory contains work on specifying the QUIC protocol in Ivy.
 The currently targeted version is 9, as described in [this
@@ -16,8 +16,12 @@ monitor packet traces captured from implementations.  This allows us
 to check consistency and possibly discover incompatibilities between
 implementations.
 
-Setup for virtual networking and packet capture
------------------------------------------------
+Installation steps
+==================
+
+Do these stpes just once on a given machine.
+
+### Virtual networking and packet capture
 
 To monitor implementations of the protocol, it is useful to run them
 in a virtual network environment. For this we use the [CORE virtual
@@ -27,11 +31,6 @@ environment](https://www.nrl.navy.mil/itd/ncs/products/core), the
 system with version 14.04 or higher, do the following:
 
     sudo apt-get install core-network tcpdump libpcap-dev
-
-Use the following command in this directory to set up a suitable
-virtual network on your system:
-
-    sudo ./vnet_setup.sh
 
 Implementations of QUIC
 -----------------------
@@ -71,13 +70,30 @@ To get MinQUIC running, this command may be helpful:
     cd $GOPATH/src
     go get github.com/cloudflare/cfssl/helpers
 
+Virtual network startup
+=======================
+
+This step should be performed once, and then redone after each reboot
+of the machine (or after you shut down the virtual network
+configuration).
+
+Use the following command in this directory (the one containing this
+file!) to set up a suitable virtual network on your system:
+
+    sudo ./vnet_setup.sh
 
 
-#### Running MinQUIC and capturing packets
+
+
+Running MinQUIC and capturing packets
+=====================================
+
+If you haven't done the above virtual network startup step since the
+last reboot of your machine, do it now.
 
 Change to the directory containing MinQUIC:
 
-    cd $GOPATH/src/githuib.com/kenmcmil/minq
+    cd $GOPATH/src/github.com/kenmcmil/minq
 
 Create three terminals, A, B and C.
 
@@ -93,12 +109,14 @@ Terminal C: run a client in node `n1`:
 
     sudo vcmd -c /tmp/n1.ctl -- `which go` run `pwd`/bin/client/main.go --addr=10.0.0.1:4433
 
-Text typed into terminal C should appear on terminal A. When finishes,
-kill the `tcpdump` process in terminal B. You should now have a file
-`mycap.pcap` containing captured packets.
+Text typed into terminal C should appear on terminal A. The connection
+will time out after five seconds of inactivity. When the client
+finishes, kill the `tcpdump` process in terminal B with SIGINT
+(control-C). You should now have a file `mycap.pcap` containing
+captured packets.
 
 Build and run the Ivy monitor
------------------------------
+=============================
 
 To build the Ivy monitor, change to this directory and compile `quic_monitor.ivy` like this:
 
@@ -121,14 +139,14 @@ end with an error message indicating the requirement that was
 violated. 
 
 View the log
-------------
+============
 
 View the log with the following command:
 
     ivy_ev_viewer log.iev
 
 Useful links
-------------
+============
 
 Capturing network traffic:
 

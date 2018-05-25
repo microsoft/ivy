@@ -25,6 +25,7 @@ include quic_types
 include quic_frame
 include quic_packet
 include tls_protocol
+include quic_transport_parameters
 
 # Connections
 # ===========
@@ -48,6 +49,9 @@ include tls_protocol
 # - The packet number of the initial packet from client endpoint C to
 #   server endpoint S is represented by `initial_pkt_num(C,S)`.
 #
+# - The cid of the initial packet from client endpoint C to
+#   server endpoint S is represented by `initial_pkt_cid(C,S)`.
+#
 # - For each endpoint E and cid C, last_pkt_num(E,C) represents the
 #   number of the latest packet sent by E on C.
 #
@@ -66,15 +70,33 @@ include tls_protocol
 #   of non-ack-only packets sent to E on C, less the number of
 #   ack-only packets sent from E on C.
 #
+# - For each endpoint E and cid C, `trans_params_set(E,C)`
+#   is true if endpoint E has declared transport parameters for
+#   connection E.
+#
+# - For each endpoint E, cid C,and stream id S, `stream_seen(E,C,S)`
+#   indicates that a stream frame for stream id S on connection C
+#   has been sent to destination endpoint E.
+#
+# - For each endpoint E, cid C,and stream id S, `stream_seen(E,C,S)`
+#   indicates the maximum number of bytes that may be sent on stream
+#   id S on connection C to destination endpoint E.
+#
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
 function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
+function initial_pkt_cid(C:ip.endpoint,S:ip.endpoint) : cid
 function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
 relation sent_pkt(E:ip.endpoint,C:cid,N:pkt_num)
 relation acked_pkt(E:ip.endpoint,C:cid,N:pkt_num)
 function max_acked(E:ip.endpoint,C:cid) : pkt_num
 function ack_credit(E:ip.endpoint,C:cid) : pkt_num
+relation trans_params_set(E:ip.endpoint,C:cid)
+function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
+relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
+function max_stream_data(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
+
 
 # Initial state
 # -------------
@@ -89,6 +111,8 @@ after init {
     acked_pkt(E,C,N) := false;
     max_acked(E,C) := 0;
     ack_credit(E,C) := 0;
+    trans_params_set(E:ip.endpoint,C:cid) := false;
+    stream_seen(E,C,S) := false;
 }
 
 # Packet events
@@ -133,7 +157,7 @@ after init {
 #   packets as most recent for the packet's source and cid.
 # - For Initial packets, `initializing` is set to true for the packet's
 #   source and destination. The packet number is recorded in
-#   `initial_pkt_num` [3]. 
+#   `initial_pkt_num` and the cid in `initial_pkt_cid` [3]. 
 # - For Handshake packets, `initializing` is set to false for the
 #   source and destination of the Initial packet (the reverse of the
 #   handshake packet). The initial packet is transfered to the cid
@@ -193,6 +217,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
         initializing(src,dst) := true;  # [3]
         initial_pkt_num(src,dst) := pnum;  # [3]
+        initial_pkt_cid(src,dst) := pcid;  # [3]
     }
 
     # A Handshake packet has hdr_type 0x7d
@@ -208,6 +233,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
             var ipnum := initial_pkt_num(dst,src);
             sent_pkt(dst,pcid,ipnum) := true;
             last_pkt_num(dst,pcid) := ipnum;
+            trans_params(dst,pcid) := trans_params(dst,initial_pkt_cid(dst,src));
 	    ack_credit(src,pcid) := 1;  # one credit for initial packet
         }
     };
@@ -281,7 +307,29 @@ object frame = {
     }
 }
 
-# Stream frames with stream id 0 carry TLS records.
+# Stream frames carry stream data. Stream id 0 is special, in that it
+# carries only TLS handshake data in the form of TLS records. 
+#
+# Requirements:
+#
+# - Stream frames with id 0 must consist of a sequence of well-formed
+#   TLS records [1].
+#
+# - The upper bound of the stream frame may not exceed the current
+#   value of `max_stream_data` for the given
+#   destination and cid [2].
+#
+# Effects:
+#
+# - If the stream has not been seen before, its `max_stream_data`
+#   value is set to the value of the `initial_max_stream_data`
+#   transport parameter [3].
+#
+# - The QUIC-specific information in each TLS record in stream zero is
+#    handled [4].
+#
+# Question: what is the value of `initial_max_stream_data` for stream
+# zero? Here we assume there is no back-pressure on stream zero.
 
 object frame = {
     ...
@@ -289,12 +337,21 @@ object frame = {
         ...
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
             if f.id = 0 {
-                var tr := tls.parser.deserialize(f.data);
+                var tr := tls.parser.deserialize(f.data);  # [1]
                 var idx := tr.begin;
                 while idx < tr.end {
-                    call tls.event(src,dst,tr.value(idx));
+                    var tls_rec := tr.value(idx);
+                    call tls.event(src,dst,tls_rec);
+                    call handle_tls_record(src,dst,pcid,tls_rec);  #[4]
                     idx := idx.next
                 }
+            }
+            else {
+                if ~stream_seen(dst,pcid,f.id) {
+                    max_stream_data(dst,pcid,f.id) :=
+                         initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32  # [3]
+                };
+                require ((f.offset) + (f.length)) <= max_stream_data(dst,pcid,f.id)  # [2]
             }
         }
     }
@@ -388,3 +445,103 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         }
     }
 }
+
+# TLS extensions are used in the client hello and server hello
+# messages to carry the QUIC transport parameters, via special TLS
+# extension type `quic_transport_parameters`. This type is define in
+# the reference `quic_transport_parameters`. Here we define the
+# protocol rules associated with `quic_transport_parameters`.
+#
+# The rules in `handle_tls_client_extensions` apply to each
+# `client_hello` message, in order of occurrence in a handshake record.
+
+action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,pcid:cid,tls_rec:tls.record) = {
+
+    if some(hr:tls.handshake_record) tls_rec *> hr {
+        var idx := hr.fragment.begin;
+        while idx < hr.fragment.end {
+            var hs := hr.fragment.value(idx);
+            if some(ch:tls.client_hello) hs *> ch {
+                call handle_tls_client_extensions(src,dst,pcid,ch.extensions);
+            };
+            idx := idx.next
+        }
+    }
+}
+
+# Requirements:
+#
+# 1. Transport parameters must be declared in the client hello
+#    message [1] and may be declared only once [2].
+#
+# The rules in `handle_client_transport_parameters` apply to each
+# `quic_transport_parameters` extension instance in order of
+# occurrence.
+
+action handle_tls_client_extensions
+    (src:ip.endpoint,
+     dst:ip.endpoint,
+     pcid:cid,
+     exts:vector[tls.extension]) =
+{
+
+    # We process the extensions in a message in order.
+
+    var idx := exts.begin;
+    while idx < exts.end {
+        var ext := exts.value(idx);
+            
+        # For every `quic_transport_parameters` extension...
+
+        if some (tps:quic_transport_parameters) ext *> tps {
+            call handle_client_transport_parameters(src,dst,pcid,tps);
+            require ~trans_params_set(src,pcid);  # [2]
+            trans_params_set(src,pcid) := true;
+            
+        };
+        idx := idx.next
+    };
+    require trans_params_set(src,pcid);
+}
+
+
+# The rules in `handle_client_transport_parameter` apply to each
+# `transport_parameter` instance a `quic_transport_parameters`, in
+# order of occurrence.
+
+# Requirements:
+#
+# - The client must issue an `initial_max_stream_data` value [1].
+# - The client must issue an `initial_max_data` value [2].
+# - The client must issue an `idle_timeout` value [3].
+# - The client must not issue an `stateless_reset_token` value [4].
+#
+# Note:
+#
+# - Setting a transport parameter requires that the parameter is not
+#   previously set.
+
+action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,pcid:cid,
+                                          tps:quic_transport_parameters) =
+{
+    call client_transport_parameters_event(src,dst,pcid,tps);
+    var idx := tps.transport_parameters.begin;
+    while idx < tps.transport_parameters.end {
+        trans_params(src,pcid) := tps.transport_parameters.value(idx).set(trans_params(src,pcid));
+        idx := idx.next
+    };
+    require initial_max_stream_data.is_set(trans_params(src,pcid));  # [1]
+    require initial_max_data.is_set(trans_params(src,pcid));  # [2]
+    require idle_timeout.is_set(trans_params(src,pcid));  # [3]
+    require ~stateless_reset_token.is_set(trans_params(src,pcid));  # [3]
+}
+
+
+
+
+
+
+action client_transport_parameters_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,
+                                         tps:quic_transport_parameters)
+
+import client_transport_parameters_event

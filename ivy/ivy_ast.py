@@ -929,7 +929,7 @@ class NativeCode(AST):
 class NativeType(AST):
     """ Quote native type """
     def __str__(self):
-        return ivy_ast.native_to_string(self.args)
+        return native_to_string(self.args)
 
 class NativeExpr(AST):
     """ Quote native expr """

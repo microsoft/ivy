@@ -1,0 +1,39 @@
+#lang ivy1.7
+#
+# TLS protocol
+# ------------
+#
+# This document describes the TLS protocol version 1.2.
+#
+# References
+# ==========
+#
+
+include tls_record
+include tls_deser
+include deserializer
+include ip
+
+# TLS object
+# ==========
+
+object tls = { ...
+
+# Record parser
+# =============
+
+    instance records : vector(record)
+    instance parser : deserializer(stream_data,records,tls_deser)
+
+# Protocol event
+# ==============
+
+    action event(src : ip.endpoint, dst : ip.endpoint, rec : tls.record)
+
+}
+
+# For the moment, we don't monitor TLS, just output the records.
+
+import tls.event
+
+    

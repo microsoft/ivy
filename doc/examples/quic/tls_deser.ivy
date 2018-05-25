@@ -21,7 +21,7 @@ object tls_deser = {}
 
     struct tls_name_map : hash_space::hash_map<std::string,int> {};
 
-    struct tls_name_struct tls_field_length_bytes[9] = {
+    struct tls_name_struct tls_field_length_bytes[20] = {
         {"fragment",2},
         {"content",2},
         {"tls.client_hello",3},
@@ -30,11 +30,22 @@ object tls_deser = {}
         {"cipher_suites",2},
         {"compression_methods",1},
         {"extensions",2},
+        {"quic_transport_parameters",2},
+        {"transport_parameters",2},
+        {"initial_max_stream_data",2},
+        {"initial_max_data",2},
+        {"initial_max_stream_id_bidi",2},
+        {"idle_timeout",2},
+        {"omit_connection_id",2},
+        {"max_packet_size",2},
+        {"stateless_reset_token",2},
+        {"ack_delay_exponent",2},
+        {"initial_max_stream_id_uni",2},
         {0,0}
     };
     tls_name_map tls_field_length_bytes_map;
 
-    struct tls_name_struct tls_field_bytes[12] = {
+    struct tls_name_struct tls_field_bytes[18] = {
         {"version",2},
         {"client_version",2},
         {"server_version",2},
@@ -46,18 +57,42 @@ object tls_deser = {}
         {"the_compression_method",1},
         {"session_id",1},
         {"content",1},
+        {"initial_version",4},
+        {"stream_pos_32",4},
+        {"stream_id_32",4},
+        {"seconds_16",2},
+        {"stream_pos_16",2},
+        {"exponent_8",1},
         {0,0}
     };
     tls_name_map tls_field_bytes_map;
 
-    struct tls_name_struct tls_tags[5] = {
+    struct tls_name_struct tls_tags[16] = {
         {"tls.handshake_record",22},
         {"tls.application_data_record",23},
         {"tls.client_hello",1},
         {"tls.server_hello",2},
+        {"tls.unknown_extension",-1},
+        {"quic_transport_parameters",0x1a},
+        {"initial_max_stream_data",0},
+        {"initial_max_data",1},
+        {"initial_max_stream_id_bidi",2},
+        {"idle_timeout",3},
+        {"omit_connection_id",4},
+        {"max_packet_size",5},
+        {"stateless_reset_token",6},
+        {"ack_delay_exponent",7},
+        {"initial_max_stream_id_uni",8},
         {0,0}
     };
     tls_name_map tls_tags_map;
+
+    struct tls_name_struct tls_tag_bytes[3] = {
+        {"tls.unknown_extension",2},
+        {"initial_max_stream_data",2},
+        {0,0}
+    };
+    tls_name_map tls_tag_bytes_map;
 
     void tls_make_name_map(tls_name_struct *vals, tls_name_map &map) {
         while (vals->name) {
@@ -106,12 +141,22 @@ object tls_deser = {}
         }
 
         virtual int open_tag(const std::vector<std::string> &tags) {
+            int bytes = 1;
+            if (tls_tag_bytes_map.find(tags[0]) != tls_tag_bytes_map.end())
+                bytes = tls_tag_bytes_map[tags[0]];
             long long tag;
-            getn(tag,1);
+            getn(tag,bytes);
             for (int i = 0; i < tags.size(); i++) {
                 if (tag == tls_tags_map[tags[i]]) {
                    open_field(tags[i]);
                    return i;
+                }
+            }
+            for (int i = 0; i < tags.size(); i++) {
+                if (-1 == tls_tags_map[tags[i]]) {
+                    pos -= bytes; // leave the unknown tag to parse again
+                    open_field(tags[i]);
+                    return i;
                 }
             }
             throw deser_err();
@@ -143,6 +188,7 @@ object tls_deser = {}
     tls_make_name_map(tls_field_length_bytes,tls_field_length_bytes_map);
     tls_make_name_map(tls_field_bytes,tls_field_bytes_map);
     tls_make_name_map(tls_tags,tls_tags_map);
+    tls_make_name_map(tls_tag_bytes,tls_tag_bytes_map);
 
 
 >>>

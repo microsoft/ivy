@@ -64,11 +64,13 @@ object tls = {
     # - `content` The extension content as a byte stream. In serialized form,
     #   this is prefixed by a two-byte length field.
 
+    type extension
+
     type extension_type
     interpret extension_type -> bv[16]
 
-    object extension = {
-        type this = struct {
+    object unknown_extension = {
+        variant this of extension = struct {
             etype : extension_type,
             content : stream_data
         }

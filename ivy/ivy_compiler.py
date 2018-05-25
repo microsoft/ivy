@@ -1372,6 +1372,7 @@ def create_sort_order(mod):
         raise iu.IvyError(None,'these sorts form a dependency cycle: {}.'.format(','.join(sccs[0])))
     mod.sort_order = iu.topological_sort(mod.sort_order,arcs)
 
+
 def tarjan_arcs(arcs,notriv=True):
     m = defaultdict(set)
     for x,y in arcs:
