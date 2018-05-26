@@ -78,9 +78,13 @@ include quic_transport_parameters
 #   indicates that a stream frame for stream id S on connection C
 #   has been sent to destination endpoint E.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_seen(E,C,S)`
+# - For each endpoint E, cid C,and stream id S, `max_stream_data(E,C,S)`
 #   indicates the maximum number of bytes that may be sent on stream
 #   id S on connection C to destination endpoint E.
+#
+# - For each endpoint E, cid C,and stream id S, `max_stream_data_set(E,C,S)`
+#   indicates the maximum number of bytes that may be sent on stream
+#   id S on connection C to destination endpoint E ha been set.
 #
 
 relation conn_seen(E:ip.endpoint,C:cid)
@@ -96,6 +100,7 @@ relation trans_params_set(E:ip.endpoint,C:cid)
 function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
 relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
+relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 
 
 # Initial state
@@ -316,14 +321,15 @@ object frame = {
 #   TLS records [1].
 #
 # - The upper bound of the stream frame may not exceed the current
-#   value of `max_stream_data` for the given
-#   destination and cid [2].
+#   value of `max_stream_data` for the given destination and cid, if
+#   it has been set [2].
 #
 # Effects:
 #
-# - If the stream has not been seen before, its `max_stream_data`
-#   value is set to the value of the `initial_max_stream_data`
-#   transport parameter [3].
+# - If the stream has not been seen before, and if the
+#   `initial_max_stream_data` transport parameter has been set, then
+#   the `max_stream_data` value is set to the value of the
+#   `initial_max_stream_data` transport parameter [3].
 #
 # - The QUIC-specific information in each TLS record in stream zero is
 #    handled [4].
@@ -347,11 +353,17 @@ object frame = {
                 }
             }
             else {
-                if ~stream_seen(dst,pcid,f.id) {
+                if ~stream_seen(dst,pcid,f.id) &
+                    initial_max_stream_data.is_set(trans_params(dst,pcid))
+                {
                     max_stream_data(dst,pcid,f.id) :=
-                         initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32  # [3]
+                         initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32;  # [3]
+                    max_stream_data_set(dst,pcid,f.id) := true
                 };
-                require ((f.offset) + (f.length)) <= max_stream_data(dst,pcid,f.id)  # [2]
+                if max_stream_data_set(dst,pcid,f.id) {
+                    require ((f.offset) + (f.length)) <= max_stream_data(dst,pcid,f.id)  # [2]
+                };
+                stream_seen(dst,pcid,f.id) := true;
             }
         }
     }
@@ -452,8 +464,10 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
 # the reference `quic_transport_parameters`. Here we define the
 # protocol rules associated with `quic_transport_parameters`.
 #
-# The rules in `handle_tls_client_extensions` apply to each
-# `client_hello` message, in order of occurrence in a handshake record.
+# The `handle_tls_extensions` rules apply to each `client_hello` or
+# `server_hello` message, in order of occurrence in a handshake
+# record. The last parameter, `is_client_hello`, is true for a `client_hello`
+# message (see below).
 
 action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,pcid:cid,tls_rec:tls.record) = {
 
@@ -462,7 +476,10 @@ action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,pcid:cid,tls_rec:tls.re
         while idx < hr.fragment.end {
             var hs := hr.fragment.value(idx);
             if some(ch:tls.client_hello) hs *> ch {
-                call handle_tls_client_extensions(src,dst,pcid,ch.extensions);
+                call handle_tls_extensions(src,dst,pcid,ch.extensions,true);
+            };
+            if some(sh:tls.server_hello) hs *> sh {
+                call handle_tls_extensions(src,dst,pcid,sh.extensions,false);
             };
             idx := idx.next
         }
@@ -472,17 +489,19 @@ action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,pcid:cid,tls_rec:tls.re
 # Requirements:
 #
 # 1. Transport parameters must be declared in the client hello
-#    message [1] and may be declared only once [2].
+#    and server hello message [1] and may be declared only once [2].
 #
 # The rules in `handle_client_transport_parameters` apply to each
 # `quic_transport_parameters` extension instance in order of
 # occurrence.
+#
 
-action handle_tls_client_extensions
+action handle_tls_extensions
     (src:ip.endpoint,
      dst:ip.endpoint,
      pcid:cid,
-     exts:vector[tls.extension]) =
+     exts:vector[tls.extension],
+     is_client_hello:bool) =
 {
 
     # We process the extensions in a message in order.
@@ -494,27 +513,31 @@ action handle_tls_client_extensions
         # For every `quic_transport_parameters` extension...
 
         if some (tps:quic_transport_parameters) ext *> tps {
-            call handle_client_transport_parameters(src,dst,pcid,tps);
+            call handle_client_transport_parameters(src,dst,pcid,tps,is_client_hello);
             require ~trans_params_set(src,pcid);  # [2]
             trans_params_set(src,pcid) := true;
             
         };
         idx := idx.next
     };
-    require trans_params_set(src,pcid);
+    # TEMPORARY: exempt server from sending transport parameters, since
+    # minq doesn't implement this.
+    if is_client_hello {
+        require trans_params_set(src,pcid);
+    }
 }
 
 
-# The rules in `handle_client_transport_parameter` apply to each
-# `transport_parameter` instance a `quic_transport_parameters`, in
-# order of occurrence.
+# The rules in `handle_transport_parameter` apply to each
+# `transport_parameter` instance a `quic_transport_parameters`
+# extension, in order of occurrence.
 
 # Requirements:
 #
-# - The client must issue an `initial_max_stream_data` value [1].
-# - The client must issue an `initial_max_data` value [2].
-# - The client must issue an `idle_timeout` value [3].
-# - The client must not issue an `stateless_reset_token` value [4].
+# - The endpoint must issue an `initial_max_stream_data` value [1].
+# - The endpoint must issue an `initial_max_data` value [2].
+# - The endpoint must issue an `idle_timeout` value [3].
+# - A client must not issue an `stateless_reset_token` value [4].
 #
 # Note:
 #
@@ -522,7 +545,8 @@ action handle_tls_client_extensions
 #   previously set.
 
 action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,pcid:cid,
-                                          tps:quic_transport_parameters) =
+                                          tps:quic_transport_parameters,
+                                          is_client_hello : bool) =
 {
     call client_transport_parameters_event(src,dst,pcid,tps);
     var idx := tps.transport_parameters.begin;
@@ -533,7 +557,9 @@ action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,pcid:c
     require initial_max_stream_data.is_set(trans_params(src,pcid));  # [1]
     require initial_max_data.is_set(trans_params(src,pcid));  # [2]
     require idle_timeout.is_set(trans_params(src,pcid));  # [3]
-    require ~stateless_reset_token.is_set(trans_params(src,pcid));  # [3]
+    if is_client_hello {
+        require ~stateless_reset_token.is_set(trans_params(src,pcid));  # [4]
+    }
 }
 
 
