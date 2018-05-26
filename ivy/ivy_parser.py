@@ -19,20 +19,21 @@ if not (iu.get_numeric_version() <= [1,2]):
         precedence = (
             ('left', 'SEMI'),
             ('left', 'GLOBALLY', 'EVENTUALLY'),
-            ('left', 'IF'),
-            ('left', 'ELSE'),
             ('left', 'ARROW', 'IFF'),
             ('left', 'OR'),
             ('left', 'AND'),
             ('left', 'TILDA'),
             ('left', 'EQ','LE','LT','GE','GT','PTO'),
             ('left', 'TILDAEQ'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
             ('left', 'COLON'),
             ('left', 'PLUS'),
             ('left', 'MINUS'),
             ('left', 'TIMES'),
             ('left', 'DIV'),
             ('left', 'DOLLAR'),
+            ('left', 'OLD'),
             ('left', 'DOT')
         )
 
