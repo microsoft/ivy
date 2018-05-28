@@ -86,6 +86,15 @@ include quic_transport_parameters
 #   indicates the maximum number of bytes that may be sent on stream
 #   id S on connection C to destination endpoint E ha been set.
 #
+# - For each endpoint E, cid C,and stream id S, `stream_length(E,C,S)`
+#   indicates the length of the stream data transmitted to endpoint E
+#   on stread id S of cid C. The length is the least stream position greater
+#   than the position of all bytes transmitted.
+#
+# - For each endpoint E, cid C,and stream id S, `stream_finished(E,C,S)`
+#   indicates that the stream transmitted to endpoint E
+#   on stread id S of cid C is finished (that is, a FIN frame has been sent). 
+#
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
@@ -101,6 +110,8 @@ function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
 relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
+function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
+relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
 
 
 # Initial state
@@ -118,6 +129,8 @@ after init {
     ack_credit(E,C) := 0;
     trans_params_set(E:ip.endpoint,C:cid) := false;
     stream_seen(E,C,S) := false;
+    max_stream_data_set(E,C,S) := false;
+    stream_finished(E,C,S) := false;
 }
 
 # Packet events
@@ -324,6 +337,9 @@ object frame = {
 #   value of `max_stream_data` for the given destination and cid, if
 #   it has been set [2].
 #
+# - If the stream is finished, the the frame offset plus length must
+#   not exceed the stream length [5].
+#
 # Effects:
 #
 # - If the stream has not been seen before, and if the
@@ -333,6 +349,10 @@ object frame = {
 #
 # - The QUIC-specific information in each TLS record in stream zero is
 #    handled [4].
+#
+# - The length of the stream is updated. 
+#
+# - If the fin bit is set, the stream is marked as finished.
 #
 # Question: what is the value of `initial_max_stream_data` for stream
 # zero? Here we assume there is no back-pressure on stream zero.
@@ -353,15 +373,24 @@ object frame = {
                 }
             }
             else {
-                if ~stream_seen(dst,pcid,f.id) &
-                    initial_max_stream_data.is_set(trans_params(dst,pcid))
-                {
-                    max_stream_data(dst,pcid,f.id) :=
-                         initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32;  # [3]
-                    max_stream_data_set(dst,pcid,f.id) := true
+                if ~stream_seen(dst,pcid,f.id) {
+                    if initial_max_stream_data.is_set(trans_params(dst,pcid)) {
+                        max_stream_data(dst,pcid,f.id) :=
+                            initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32;  # [3]
+                        max_stream_data_set(dst,pcid,f.id) := true
+                    };
+                    stream_length(dst,pcid,f.id) := 0;
                 };
                 if max_stream_data_set(dst,pcid,f.id) {
                     require ((f.offset) + (f.length)) <= max_stream_data(dst,pcid,f.id)  # [2]
+                };
+                var length := f.offset + f.length;
+                require stream_finished(dst,pcid,f.id) -> length <= stream_length(dst,pcid,f.id);  # [5]
+                if stream_length(dst,pcid,f.id) < length {
+                    stream_length(dst,pcid,f.id) := length
+                };
+                if f.fin {
+                    stream_finished(dst,pcid,f.id) := true;
                 };
                 stream_seen(dst,pcid,f.id) := true;
             }
