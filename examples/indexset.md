@@ -231,7 +231,7 @@ Here is the implementation of the set type using an unsorted array.
 
 ```
 	    instance arridx : unbounded_sequence
-	    instance arr:array(arridx.t,basis)
+	    instance arr:array(arridx,basis)
 
 ```
 Tricky: this is a bit of aspect-orientation. It turns the type `set` into a struct

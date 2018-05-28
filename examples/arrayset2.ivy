@@ -38,7 +38,7 @@ module set(elem) = {
     object impl = {
 
         instance index : unbounded_sequence
-        instance arr : array(index.t,elem)
+        instance arr : array(index,elem)
         destructor repr(X:t) : arr
         
         definition contains(X:t,y:elem) =
