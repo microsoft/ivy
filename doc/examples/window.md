@@ -1,0 +1,338 @@
+---
+layout: page
+title: "Example: sliding window"
+---
+
+
+In this example, we implement a "sliding window". This is an array
+that stores a range of values from an unbounded sequence. The window
+provides an operation `trim` that moves the window offset forward,
+forgetting the values between the old and new offsets. This
+structure might be useful for keeping a log of events that is
+occasionally truncated at the beginning, or for maintaining a window
+of packets in an ordered transport protocol.
+
+From the point of view of decidability, the main problem that we
+need to solve is hiding the arithmetic needed to express the
+representation invariant. That is, if `s` is our sequence, `w` is
+the window and `T` is the offset of the window, then we want to say
+"for all positions `I` in the sequence, if `I >= T` then `s[I] =
+w[I-T]`". Unfortunately, this use of arithmetic would put us outside
+the decidable fragment, since we are applying subtraction to
+universally quantified variables. Thus, we will hide the function
+`I-T` in an isolate, using an uninterpreted relation to represent it
+and proving just the properties of this relation needed to implement
+our window operations.
+
+
+References
+----------
+
+We will need the `order` and `collections` libraries for arrays.
+
+```
+include order
+include collections
+
+```
+
+Shift relation
+--------------
+
+In order to "slide" the window, we need a relation that describes a
+"shift" in the sequence. The module `shift_theory` below provides a
+relation `r(T,X,Y)` that holds when X = Y + T. The idea is that `T`
+is the amount of left-shift, `X` is an element of the original
+sequence, and `Y` is the corresponding element of the shifted
+sequence.
+
+The module provides an action `f` that, given `T,X`, returns Y. This
+action can be used to find an element in the shifted sequence. By hiding
+the arithmetic in this action, we can avoid using arithmetic in the
+sliding window implementation.
+
+The module takes a parameter `idx` which must be is an ordered
+sequence type.
+
+```
+module shift_theory(idx) = {
+
+```
+The interface provides the shift relation `r` an an action `f`
+that computes the shift (that is, subtracts t from x, to get the
+position of `x` relative to offset `t`).
+
+```
+    relation r(T : idx, X : idx, Y : idx)
+    action f(t:idx,x:idx) returns (y:idx)
+
+    specification {
+
+```
+We need the following properties of the `r` relation:
+
+1. It is a partial function from `X` to `Y`
+2. It is a partial function from `Y` to `X`
+3. It is increasing in `X`
+4. It is decreasing in `T`
+5. It is preserved by successor
+6. For `T = 0`, it is the identity relation
+7. Indices are non-negative, so `Y <= X` and `T <= X`.
+
+Property 2 isn't actually needed, but it might be helpful in
+other uses of this module. Several of these properties were
+added in response to counterexamples in verifying the
+sliding window implementation below.
+
+```
+	property r(T,X,Y) & r(T,X,Y1) -> Y = Y1
+	property r(T,X,Y) & r(T,X1,Y) -> X = X1
+	property r(T,X1,Y1) & r(T,X2,Y2) & X1 < X2 -> Y1 < Y2
+	property r(T1,X,Y1) & r(T2,X,Y2) & T1 < T2 -> Y2 < Y1
+        property r(T,X1,Y1) & idx.succ(X1,X2) & idx.succ(Y1,Y2) -> r(T,X2,Y2)
+        property r(0,X,X)
+        property r(T,X,Y) -> Y <= X & T <= X
+
+```
+The action `f` returns a `y` such that `r(t,x,y)`, assuming
+`t <= x`.  Note that for positions less than the offset,
+there is no index in the shifted sequence (that is, positions
+less than the offset are not in the window,
+
+```
+	around f {
+           require t <= x;
+            ...
+	   ensure r(t,x,y)
+	}
+
+    } # end specification section
+
+```
+In the implementation section, we give the definition of `r`
+(which is needed to prove the properties above) and give the
+implementation of `f`.
+
+```
+    implementation {
+        definition r(T,X,Y) = (X = Y + T)
+        implement f {
+            y := x - t
+        }
+    }
+
+```
+We make this module an isolate, and say `with idx.impl` to use
+the implementation of `idx`. This gives us the natural number
+theory, which is needed to prove the above properties. Note it's
+very important *not* to say `with idx` here, since the
+specification of `ordered_sequence` (see order.ivy) contains
+various universally quantified properties that, when mixed with
+arithmetic, would put us outside the decidable fragment.
+
+```
+    isolate iso = this with idx.impl
+}
+
+
+```
+Now we define our sliding window module. It takes as parameters an
+ordered sequence type for indices and a data type for the sequence
+elements.
+
+```
+module window(idx,data) = {
+
+```
+The interface provides a relation `value(I,D)`, indicating the
+data value `D` occurs at position `I` in the original
+sequence. The window contains the range of values in the index
+interval `[begin,end)`.
+
+```
+    relation value(I:idx,D:data)
+    individual begin : idx
+    individual end : idx
+
+```
+Three operations are provided:
+
+1. `append` adds one element to the original sequence, increasing
+   `end` by one.
+2. `read` gets an element of the original sequence
+3. `trim` increases the value of `begin`
+
+```
+    action append(d:data)
+    action read(i:idx) returns (d:data)
+    action trim(i:idx)
+
+    specification {
+
+```
+Initially, the sequence is empty, so `begin = end = 0`.
+
+```
+        after init {
+            begin := 0;
+            end := 0;
+            value(I,D) := false
+        }
+
+```
+Appending a value adds it to the end of the sequence.
+
+```
+        after append {
+            value(end,d) := true;
+            end := end.next
+        }
+
+```
+Reading the value of an index in the interval `[begin,end)`
+returns the sequence value at that index.
+
+```
+        around read {
+            require begin <= i & i < end;
+            ...
+            ensure value(i,d)
+        }
+
+```
+Trim can be called with any index in the range `[begin,end)`.
+It has the effect of setting `begin` to this index.
+
+```
+        around trim {
+            require begin <= i & i <= end;
+            ...
+            begin := i;
+        }
+
+```
+The specification maintains a few useful invariants.
+
+```
+        invariant begin <= end
+        invariant value(I,D1) & value(I,D2) -> D1 = D2
+        invariant value(I,D) -> 0 <= I & I < end
+    }
+
+    implementation {
+
+```
+The implementation uses an instance of `shift_theory`
+and arrays over the index type.
+
+```
+        instance shift : shift_theory(idx)
+        instance arr : array(idx,data)
+
+```
+The implementation state consists of an array `content` of
+values beginning at `offset` and ending at `bound`. Notice
+the `bound` is redundant, since it can be computed from
+`offset` and `content.end`. Using it makes the invariants a
+bit simpler, however.
+
+```
+        var offset : idx
+        var bound : idx
+        var content : arr
+
+```
+Initially the offset is zero and the array is empty.
+
+```
+        after init {
+            offset := 0;
+            bound := 0;
+            content := arr.empty
+        }
+
+```
+Append is implemented using a simple array append, adding
+on element to the end of the array.
+
+```
+        implement append {
+            content := content.append(d);
+            bound := bound.next;
+        }
+
+```
+Read is implement using the `shift.f` function to compute
+the position within the window of the requested sequence
+element.
+
+```
+        implement read {
+            d := content.value(shift.f(offset,i))
+        }
+
+```
+Trim is implemented by shifting the array down in place. The
+loop index `j` runs from the new offset `i` up to
+`bound`. The `shift.f` action is used to compute the
+corresponding positions in the new and old windows. The
+invariant says that above the loop index the array values
+are correct for the old window, and below it they are
+correct for the new window. After shifting the data, the
+array is resized to reflect the new window size, and the
+offset is updated to the requested value.
+
+```
+        implement trim {
+            var j := i;
+            while j < bound
+            invariant i <= j & j <= bound & shift.r(offset,bound,content.end)
+            invariant j <= X & X < bound & shift.r(offset,X,Y) -> value(X,content.value(Y))
+            invariant X < j & shift.r(i,X,Y) -> value(X,content.value(Y))
+            {
+                content := content.set(shift.f(i,j),content.value(shift.f(offset,j)));
+                j := j.next;
+            };
+            content := content.resize(shift.f(i,bound),0);
+            offset := i
+        }
+
+    }
+
+```
+These invariants relate the implementation and specification state.
+They are private to this module. 
+
+```
+    private {
+        invariant offset = begin & bound = end
+        invariant shift.r(offset,end,content.end)
+        invariant shift.r(offset,X,Y) & X < end -> value(X,content.value(Y))
+    }
+
+```
+Notice that in this isolate we use the public properties of the
+index type, and not its implementation as the natural numbers.
+
+```
+    isolate iso = this with idx
+}
+
+```
+Now we instantiate the module just to check the proof.
+
+```
+instance idx : unbounded_sequence
+type data
+instance w : window(idx,data)
+
+```
+As always, we have to export actions we want to verify.
+
+```
+export w.append
+export w.read
+export w.trim
+
+
+```

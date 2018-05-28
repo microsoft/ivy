@@ -4370,12 +4370,12 @@ def main():
                             print "Compiling isolate {}...".format(isolate)
 
                     if (not iu.version_le(iu.get_string_version(),"1.6") and
-                        target.get() == 'repl' and isolate in im.modules.isolates):
-                        the_iso = im.modules.isolates[isolate]
+                        target.get() == 'repl' and isolate in im.module.isolates):
+                        the_iso = im.module.isolates[isolate]
                         if not isinstance(the_iso,ivy_ast.ExtractDef):
                             the_iso = ivy_ast.ExtractDef(*the_iso.args)
                             the_iso.with_args = len(the_iso.args)
-                            im.modules.isolates[isolate] = the_iso
+                            im.module.isolates[isolate] = the_iso
                         
                     iso.create_isolate(isolate) # ,ext='ext'
 

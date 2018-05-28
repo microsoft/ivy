@@ -95,7 +95,8 @@ module array(domain,range) = {
 	    assert end(old a) <= X & X < s -> value(a,X) = v
 	}
 	after append {
-	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+#	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+            assert domain.succ(end(old a),end(a));
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert value(a,end(old a)) = v
 	}
