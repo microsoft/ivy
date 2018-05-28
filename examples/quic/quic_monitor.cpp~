@@ -35,6 +35,7 @@ public:
     virtual int fdes() = 0;
     virtual void read() = 0;
     virtual void bind() {}
+    virtual bool running() {return fdes() >= 0;}
     virtual ~reader() {}
 };
 
@@ -69,7 +70,7 @@ DWORD WINAPI TimerThreadFunction( LPVOID lpParam )
 void * _thread_reader(void *rdr_void) {
     reader *rdr = (reader *) rdr_void;
     rdr->bind();
-    while(rdr->fdes() >= 0) {
+    while(rdr->running()) {
         rdr->read();
     }
     delete rdr;
@@ -117,6 +118,10 @@ void quic_monitor::install_reader(reader *r) {
         thread_ids.push_back(thread);
     #endif
 }      
+
+void quic_monitor::install_thread(reader *r) {
+    install_reader(r);
+}
 
 void quic_monitor::install_timer(timer *r) {
     #ifdef _WIN32
@@ -395,15 +400,15 @@ struct ivy_socket_deser : public ivy_binary_deser {
           : ivy_binary_deser(inp), sock(sock) {}
     virtual bool more(unsigned bytes) {
         while (inp.size() < pos + bytes) {
-            int get = pos + bytes - inp.size();
+            int oldsize = inp.size();
+            int get = pos + bytes - oldsize;
             get = (get < 1024) ? 1024 : get;
-            inp.resize(pos + get);
-            int bytes;
-//	    if ((bytes = recvfrom(sock,&inp[pos],get,0,0,0)) < 0)
-	    if ((bytes = read(sock,&inp[pos],get)) < 0)
+            inp.resize(oldsize + get);
+            int newbytes;
+	    if ((newbytes = read(sock,&inp[oldsize],get)) < 0)
 		 { std::cerr << "recvfrom failed\n"; exit(1); }
-            inp.resize(pos + bytes);
-            if (bytes == 0)
+            inp.resize(oldsize + newbytes);
+            if (newbytes == 0)
                  return false;
         }
         return true;
@@ -422,18 +427,26 @@ struct out_of_bounds {
     out_of_bounds(const std::string &s, int pos = 0) : txt(s), pos(pos) {}
 };
 
-template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, int bound);
+template <class T> T _arg(std::vector<ivy_value> &args, unsigned idx, long long bound);
 
 template <>
-bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (!(args[idx].atom == "true" || args[idx].atom == "false") || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom == "true";
 }
 
 template <>
-int _arg<int>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+int _arg<int>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     int res = atoi(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return res;
+}
+
+template <>
+long long _arg<long long>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    long long res = atoll(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return res;
@@ -445,7 +458,7 @@ std::ostream &operator <<(std::ostream &s, const __strlit &t){
 }
 
 template <>
-__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+__strlit _arg<__strlit>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return args[idx].atom;
@@ -456,6 +469,11 @@ template <class T> void __ser(ivy_ser &res, const T &inp);
 template <>
 void __ser<int>(ivy_ser &res, const int &inp) {
     res.set((long long)inp);
+}
+
+template <>
+void __ser<long long>(ivy_ser &res, const long long &inp) {
+    res.set(inp);
 }
 
 template <>
@@ -478,6 +496,11 @@ void __deser<int>(ivy_deser &inp, int &res) {
 }
 
 template <>
+void __deser<long long>(ivy_deser &inp, long long &res) {
+    inp.get(res);
+}
+
+template <>
 void __deser<__strlit>(ivy_deser &inp, __strlit &res) {
     inp.get(res);
 }
@@ -493,47 +516,81 @@ class gen;
 
 std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__protocol &t);
 template <>
-quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::ip__protocol>(ivy_ser &res, const quic_monitor::ip__protocol&);
 template <>
 void  __deser<quic_monitor::ip__protocol>(ivy_deser &inp, quic_monitor::ip__protocol &res);
 std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack &t);
 template <>
-quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::frame__ack>(ivy_ser &res, const quic_monitor::frame__ack&);
 template <>
 void  __deser<quic_monitor::frame__ack>(ivy_deser &inp, quic_monitor::frame__ack &res);
 std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__ack__block &t);
 template <>
-quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::frame__ack__block>(ivy_ser &res, const quic_monitor::frame__ack__block&);
 template <>
 void  __deser<quic_monitor::frame__ack__block>(ivy_deser &inp, quic_monitor::frame__ack__block &res);
 std::ostream &operator <<(std::ostream &s, const quic_monitor::frame__stream &t);
 template <>
-quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::frame__stream>(ivy_ser &res, const quic_monitor::frame__stream&);
 template <>
 void  __deser<quic_monitor::frame__stream>(ivy_deser &inp, quic_monitor::frame__stream &res);
 std::ostream &operator <<(std::ostream &s, const quic_monitor::ip__endpoint &t);
 template <>
-quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::ip__endpoint>(ivy_ser &res, const quic_monitor::ip__endpoint&);
 template <>
 void  __deser<quic_monitor::ip__endpoint>(ivy_deser &inp, quic_monitor::ip__endpoint &res);
 std::ostream &operator <<(std::ostream &s, const quic_monitor::quic_packet &t);
 template <>
-quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, int bound);
+quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, long long bound);
 template <>
 void  __ser<quic_monitor::quic_packet>(ivy_ser &res, const quic_monitor::quic_packet&);
 template <>
 void  __deser<quic_monitor::quic_packet>(ivy_deser &inp, quic_monitor::quic_packet &res);
-bool operator==(const quic_monitor::__tup__ip__endpoint__int &x, const quic_monitor::__tup__ip__endpoint__int &y){
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__client_hello &t);
+template <>
+quic_monitor::tls__client_hello _arg<quic_monitor::tls__client_hello>(std::vector<ivy_value> &args, unsigned idx, long long bound);
+template <>
+void  __ser<quic_monitor::tls__client_hello>(ivy_ser &res, const quic_monitor::tls__client_hello&);
+template <>
+void  __deser<quic_monitor::tls__client_hello>(ivy_deser &inp, quic_monitor::tls__client_hello &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__extension &t);
+template <>
+quic_monitor::tls__extension _arg<quic_monitor::tls__extension>(std::vector<ivy_value> &args, unsigned idx, long long bound);
+template <>
+void  __ser<quic_monitor::tls__extension>(ivy_ser &res, const quic_monitor::tls__extension&);
+template <>
+void  __deser<quic_monitor::tls__extension>(ivy_deser &inp, quic_monitor::tls__extension &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__handshake_record &t);
+template <>
+quic_monitor::tls__handshake_record _arg<quic_monitor::tls__handshake_record>(std::vector<ivy_value> &args, unsigned idx, long long bound);
+template <>
+void  __ser<quic_monitor::tls__handshake_record>(ivy_ser &res, const quic_monitor::tls__handshake_record&);
+template <>
+void  __deser<quic_monitor::tls__handshake_record>(ivy_deser &inp, quic_monitor::tls__handshake_record &res);
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__random &t);
+template <>
+quic_monitor::tls__random _arg<quic_monitor::tls__random>(std::vector<ivy_value> &args, unsigned idx, long long bound);
+template <>
+void  __ser<quic_monitor::tls__random>(ivy_ser &res, const quic_monitor::tls__random&);
+template <>
+void  __deser<quic_monitor::tls__random>(ivy_deser &inp, quic_monitor::tls__random &res);
+bool operator==(const quic_monitor::__tup__ip__endpoint__long_long__long_long &x, const quic_monitor::__tup__ip__endpoint__long_long__long_long &y){
+    return x.arg0 == y.arg0 && x.arg1 == y.arg1 && x.arg2 == y.arg2;
+}
+bool operator==(const quic_monitor::__tup__ip__endpoint__long_long &x, const quic_monitor::__tup__ip__endpoint__long_long &y){
+    return x.arg0 == y.arg0 && x.arg1 == y.arg1;
+}
+bool operator==(const quic_monitor::__tup__ip__endpoint__ip__endpoint &x, const quic_monitor::__tup__ip__endpoint__ip__endpoint &y){
     return x.arg0 == y.arg0 && x.arg1 == y.arg1;
 }
 
@@ -550,7 +607,7 @@ std::ostream &operator <<(std::ostream &s, const quic_monitor::frame &t){
     return s;
 }
 template <>
-quic_monitor::frame _arg<quic_monitor::frame>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+quic_monitor::frame _arg<quic_monitor::frame>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
     if (args[idx].atom.size())
         throw out_of_bounds("unexpected value for sort frame: " + args[idx].atom,args[idx].pos);
     if (args[idx].fields.size() == 0)
@@ -672,6 +729,202 @@ int tag = rand() % 2;
 
 }
 #endif
+
+int quic_monitor::tls__handshake::temp_counter = 0;
+
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__handshake &t){
+    s << "{";
+    switch (t.tag) {
+        case 0: s << "tls.client_hello:" << (static_cast<const quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello> *>((t).ptr)->item); break;
+
+    }
+    s << "}";
+    return s;
+}
+template <>
+quic_monitor::tls__handshake _arg<quic_monitor::tls__handshake>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    if (args[idx].atom.size())
+        throw out_of_bounds("unexpected value for sort tls.handshake: " + args[idx].atom,args[idx].pos);
+    if (args[idx].fields.size() == 0)
+        return quic_monitor::tls__handshake();
+    if (args[idx].fields.size() != 1)
+        throw out_of_bounds("too many fields for sort tls.handshake (expected one)",args[idx].pos);
+    if (args[idx].fields[0].atom == "tls.client_hello") return quic_monitor::tls__handshake(0, new quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello>(_arg<quic_monitor::tls__client_hello>(args[idx].fields[0].fields,0,0)));
+
+        throw out_of_bounds("unexpected field sort SORTNAME: " + args[idx].fields[0].atom, args[idx].pos);
+}
+template <>
+void __ser<quic_monitor::tls__handshake>(ivy_ser &res, const quic_monitor::tls__handshake &inp) {
+    if (inp.tag == 0) {res.open_tag(0,"tls.client_hello"); __ser(res,(static_cast<const quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello> *>((inp).ptr)->item)); res.close_tag();}
+
+}
+template <>
+void __deser<quic_monitor::tls__handshake>(ivy_deser &res, quic_monitor::tls__handshake &inp) {
+    std::vector<std::string> tags;
+    tags.push_back("tls.client_hello");
+
+    int tag = res.open_tag(tags);
+    switch (tag) {
+    case 0: {quic_monitor::tls__client_hello tmp; __deser(res,tmp); inp = quic_monitor::tls__handshake(0, new quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello>(tmp)); break;} 
+
+    }
+    res.close_tag();
+}
+#ifdef Z3PP_H_
+template <>
+void __from_solver<quic_monitor::tls__handshake>( gen &g, const  z3::expr &v, quic_monitor::tls__handshake &res) {
+    {
+        z3::sort sort = g.sort("tls.client_hello");
+        z3::func_decl pto = g.ctx.function("*>:tls.handshake",g.sort("tls.handshake"),g.sort("tls.client_hello"),g.ctx.bool_sort());
+        std::cout <<  g.model << std::endl;
+        Z3_ast_vector av = Z3_model_get_sort_universe(g.ctx, g.model, sort);
+        if (av) {
+            z3::expr_vector univ(g.ctx,av);
+            for (unsigned i = 0; i < univ.size(); i++){
+                if (eq(g.model.eval(pto(v,univ[i]),true),g.ctx.bool_val(true))){
+                    quic_monitor::tls__client_hello tmp;
+                    __from_solver(g,univ[i],tmp);                    res = quic_monitor::tls__handshake(0, new quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello>(tmp));
+                }
+            }
+        }
+    }
+
+}
+template <>
+z3::expr __to_solver<quic_monitor::tls__handshake>( gen &g, const  z3::expr &v, quic_monitor::tls__handshake &val) {
+//    std::cout << v << ":" << v.get_sort() << std::endl;
+    if (val.tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:tls.handshake",g.sort("tls.handshake"),g.sort("tls.client_hello"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant("X",g.sort("tls.client_hello"));
+        quic_monitor::tls__client_hello tmp = (static_cast<const quic_monitor::tls__handshake::twrap<quic_monitor::tls__client_hello> *>((val).ptr)->item);
+        return exists(X,pto(v,X) && __to_solver(g,X,tmp));
+    }
+
+    z3::expr conj = g.ctx.bool_val(false);
+    {
+        z3::func_decl pto = g.ctx.function("*>:tls.handshake",g.sort("tls.handshake"),g.sort("tls.client_hello"),g.ctx.bool_sort());
+        z3::expr Y = g.ctx.constant("Y",g.sort("tls.client_hello"));
+        conj = conj && forall(Y,!pto(v,Y));
+    }
+
+    return conj;
+}
+template <>
+void __randomize<quic_monitor::tls__handshake>( gen &g, const  z3::expr &apply_expr) {
+    std::ostringstream os;
+    os << "__tls.handshake__tmp" << quic_monitor::tls__handshake::temp_counter++;
+    std::string temp = os.str();
+    z3::sort range = apply_expr.get_sort();
+    z3::expr disj = g.ctx.bool_val(false);
+int tag = rand() % 1;
+    if (tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:tls.handshake",g.sort("tls.handshake"),g.sort("tls.client_hello"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant(temp.c_str(),g.sort("tls.client_hello"));
+        z3::expr pred = pto(apply_expr,X);
+        g.add_alit(pred);
+        __randomize<quic_monitor::tls__client_hello>(g,X);
+    }
+
+}
+#endif
+
+int quic_monitor::tls__record::temp_counter = 0;
+
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__record &t){
+    s << "{";
+    switch (t.tag) {
+        case 0: s << "tls.handshake_record:" << (static_cast<const quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record> *>((t).ptr)->item); break;
+
+    }
+    s << "}";
+    return s;
+}
+template <>
+quic_monitor::tls__record _arg<quic_monitor::tls__record>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    if (args[idx].atom.size())
+        throw out_of_bounds("unexpected value for sort tls.record: " + args[idx].atom,args[idx].pos);
+    if (args[idx].fields.size() == 0)
+        return quic_monitor::tls__record();
+    if (args[idx].fields.size() != 1)
+        throw out_of_bounds("too many fields for sort tls.record (expected one)",args[idx].pos);
+    if (args[idx].fields[0].atom == "tls.handshake_record") return quic_monitor::tls__record(0, new quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record>(_arg<quic_monitor::tls__handshake_record>(args[idx].fields[0].fields,0,0)));
+
+        throw out_of_bounds("unexpected field sort SORTNAME: " + args[idx].fields[0].atom, args[idx].pos);
+}
+template <>
+void __ser<quic_monitor::tls__record>(ivy_ser &res, const quic_monitor::tls__record &inp) {
+    if (inp.tag == 0) {res.open_tag(0,"tls.handshake_record"); __ser(res,(static_cast<const quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record> *>((inp).ptr)->item)); res.close_tag();}
+
+}
+template <>
+void __deser<quic_monitor::tls__record>(ivy_deser &res, quic_monitor::tls__record &inp) {
+    std::vector<std::string> tags;
+    tags.push_back("tls.handshake_record");
+
+    int tag = res.open_tag(tags);
+    switch (tag) {
+    case 0: {quic_monitor::tls__handshake_record tmp; __deser(res,tmp); inp = quic_monitor::tls__record(0, new quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record>(tmp)); break;} 
+
+    }
+    res.close_tag();
+}
+#ifdef Z3PP_H_
+template <>
+void __from_solver<quic_monitor::tls__record>( gen &g, const  z3::expr &v, quic_monitor::tls__record &res) {
+    {
+        z3::sort sort = g.sort("tls.handshake_record");
+        z3::func_decl pto = g.ctx.function("*>:tls.record",g.sort("tls.record"),g.sort("tls.handshake_record"),g.ctx.bool_sort());
+        std::cout <<  g.model << std::endl;
+        Z3_ast_vector av = Z3_model_get_sort_universe(g.ctx, g.model, sort);
+        if (av) {
+            z3::expr_vector univ(g.ctx,av);
+            for (unsigned i = 0; i < univ.size(); i++){
+                if (eq(g.model.eval(pto(v,univ[i]),true),g.ctx.bool_val(true))){
+                    quic_monitor::tls__handshake_record tmp;
+                    __from_solver(g,univ[i],tmp);                    res = quic_monitor::tls__record(0, new quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record>(tmp));
+                }
+            }
+        }
+    }
+
+}
+template <>
+z3::expr __to_solver<quic_monitor::tls__record>( gen &g, const  z3::expr &v, quic_monitor::tls__record &val) {
+//    std::cout << v << ":" << v.get_sort() << std::endl;
+    if (val.tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:tls.record",g.sort("tls.record"),g.sort("tls.handshake_record"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant("X",g.sort("tls.handshake_record"));
+        quic_monitor::tls__handshake_record tmp = (static_cast<const quic_monitor::tls__record::twrap<quic_monitor::tls__handshake_record> *>((val).ptr)->item);
+        return exists(X,pto(v,X) && __to_solver(g,X,tmp));
+    }
+
+    z3::expr conj = g.ctx.bool_val(false);
+    {
+        z3::func_decl pto = g.ctx.function("*>:tls.record",g.sort("tls.record"),g.sort("tls.handshake_record"),g.ctx.bool_sort());
+        z3::expr Y = g.ctx.constant("Y",g.sort("tls.handshake_record"));
+        conj = conj && forall(Y,!pto(v,Y));
+    }
+
+    return conj;
+}
+template <>
+void __randomize<quic_monitor::tls__record>( gen &g, const  z3::expr &apply_expr) {
+    std::ostringstream os;
+    os << "__tls.record__tmp" << quic_monitor::tls__record::temp_counter++;
+    std::string temp = os.str();
+    z3::sort range = apply_expr.get_sort();
+    z3::expr disj = g.ctx.bool_val(false);
+int tag = rand() % 1;
+    if (tag == 0) {
+        z3::func_decl pto = g.ctx.function("*>:tls.record",g.sort("tls.record"),g.sort("tls.handshake_record"),g.ctx.bool_sort());
+        z3::expr X = g.ctx.constant(temp.c_str(),g.sort("tls.handshake_record"));
+        z3::expr pred = pto(apply_expr,X);
+        g.add_alit(pred);
+        __randomize<quic_monitor::tls__handshake_record>(g,X);
+    }
+
+}
+#endif
 	    std::ostream &operator <<(std::ostream &s, const quic_monitor::stream_data &a) {
 	        s << '[';
 		for (unsigned i = 0; i < a.size(); i++) {
@@ -684,7 +937,7 @@ int tag = rand() % 2;
             }
 
 	    template <>
-	    quic_monitor::stream_data _arg<quic_monitor::stream_data>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    quic_monitor::stream_data _arg<quic_monitor::stream_data>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.atom.size()) 
 	            throw out_of_bounds(idx);
@@ -763,7 +1016,7 @@ int tag = rand() % 2;
             }
 
 	    template <>
-	    quic_monitor::frame__ack__block__arr _arg<quic_monitor::frame__ack__block__arr>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    quic_monitor::frame__ack__block__arr _arg<quic_monitor::frame__ack__block__arr>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.atom.size()) 
 	            throw out_of_bounds(idx);
@@ -842,7 +1095,7 @@ int tag = rand() % 2;
             }
 
 	    template <>
-	    quic_monitor::frame__arr _arg<quic_monitor::frame__arr>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    quic_monitor::frame__arr _arg<quic_monitor::frame__arr>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.atom.size()) 
 	            throw out_of_bounds(idx);
@@ -909,7 +1162,353 @@ int tag = rand() % 2;
 	    }
 	    #endif
 
+		    std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__cipher_suite_seq &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::tls__cipher_suite_seq _arg<quic_monitor::tls__cipher_suite_seq>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::tls__cipher_suite_seq a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<int>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::tls__cipher_suite_seq>(ivy_deser &inp, quic_monitor::tls__cipher_suite_seq &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::tls__cipher_suite_seq>(ivy_ser &res, const quic_monitor::tls__cipher_suite_seq &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::tls__cipher_suite_seq& val) {
+	        z3::expr z3end = g.apply("tls.cipher_suite_seq.end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("tls.cipher_suite_seq.value",z3val,g.int_to_z3(g.sort("tls.cipher_suite_idx"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::tls__cipher_suite_seq>( gen &g, const  z3::expr &v,quic_monitor::tls__cipher_suite_seq &res){
+	        int __end;
+	        __from_solver(g,g.apply("tls.cipher_suite_seq.end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("tls.cipher_suite_seq.value",v,g.int_to_z3(g.sort("tls.cipher_suite_idx"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::tls__cipher_suite_seq>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("tls.cipher_suite_idx"),__sz);
+                z3::expr pred =  g.apply("tls.cipher_suite_seq.end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<int>(g,g.apply("tls.cipher_suite_seq.value",v,g.int_to_z3(g.sort("tls.cipher_suite_idx"),__i)));
+	    }
+	    #endif
+
+		    std::ostream &operator <<(std::ostream &s, const quic_monitor::vector__tls__extension__ &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::vector__tls__extension__ _arg<quic_monitor::vector__tls__extension__>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::vector__tls__extension__ a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<quic_monitor::tls__extension>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::vector__tls__extension__>(ivy_deser &inp, quic_monitor::vector__tls__extension__ &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::vector__tls__extension__>(ivy_ser &res, const quic_monitor::vector__tls__extension__ &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::vector__tls__extension__& val) {
+	        z3::expr z3end = g.apply("vector[tls.extension].end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("vector[tls.extension].value",z3val,g.int_to_z3(g.sort("vector[tls.extension].domain"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::vector__tls__extension__>( gen &g, const  z3::expr &v,quic_monitor::vector__tls__extension__ &res){
+	        int __end;
+	        __from_solver(g,g.apply("vector[tls.extension].end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("vector[tls.extension].value",v,g.int_to_z3(g.sort("vector[tls.extension].domain"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::vector__tls__extension__>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("vector[tls.extension].domain"),__sz);
+                z3::expr pred =  g.apply("vector[tls.extension].end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<quic_monitor::tls__extension>(g,g.apply("vector[tls.extension].value",v,g.int_to_z3(g.sort("vector[tls.extension].domain"),__i)));
+	    }
+	    #endif
+
+		    std::ostream &operator <<(std::ostream &s, const quic_monitor::vector__tls__handshake__ &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    quic_monitor::vector__tls__handshake__ _arg<quic_monitor::vector__tls__handshake__>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        quic_monitor::vector__tls__handshake__ a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<quic_monitor::tls__handshake>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<quic_monitor::vector__tls__handshake__>(ivy_deser &inp, quic_monitor::vector__tls__handshake__ &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<quic_monitor::vector__tls__handshake__>(ivy_ser &res, const quic_monitor::vector__tls__handshake__ &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, quic_monitor::vector__tls__handshake__& val) {
+	        z3::expr z3end = g.apply("vector[tls.handshake].end",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("vector[tls.handshake].value",z3val,g.int_to_z3(g.sort("vector[tls.handshake].domain"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<quic_monitor::vector__tls__handshake__>( gen &g, const  z3::expr &v,quic_monitor::vector__tls__handshake__ &res){
+	        int __end;
+	        __from_solver(g,g.apply("vector[tls.handshake].end",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("vector[tls.handshake].value",v,g.int_to_z3(g.sort("vector[tls.handshake].domain"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<quic_monitor::vector__tls__handshake__>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("vector[tls.handshake].domain"),__sz);
+                z3::expr pred =  g.apply("vector[tls.handshake].end",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<quic_monitor::tls__handshake>(g,g.apply("vector[tls.handshake].value",v,g.int_to_z3(g.sort("vector[tls.handshake].domain"),__i)));
+	    }
+	    #endif
+
 	
+    typedef struct tls_name_struct {
+        const char *name;
+        int value;
+    } *tls_name_struct_ptr;
+
+    struct tls_name_map : hash_space::hash_map<std::string,int> {};
+
+    struct tls_name_struct tls_field_length_bytes[5] = {
+        {"tls.handshake_record.fragment",2},
+        {"tls.extension.content",2},
+        {"tls.client_hello",3},
+        {"tls.compression_method",1},
+        {0,0}
+    };
+    tls_name_map tls_field_length_bytes_map;
+
+    struct tls_name_struct *tls_field_bytes[6] = {
+        {"tls.handshake_record.version",2},
+        {"tls.extension_type",2},
+        {"tls.gmt_unix_time",2},
+        {"tls.cipher_suites",2},
+        {"tls.compression_method",1},
+        0
+    };
+    tls_name_map tls_field_bytes_map;
+
+    struct tls_name_struct *tls_tags[3] = {
+        {"tls.handshake_record",22},
+        {"tls.client_hello",1},
+        0        
+    }
+    tls_name_map tls_tags_map;
+
+    void tls_make_name_map(tls_name_struct **vals, tls_name_map &map) {
+        while (*vals) {
+            map[(*vals)->name] = (*vals)->value;
+            vals++;
+        }
+    }
+
+    class quic_monitor::tls_deser_class : public ivy_binary_deser {
+        int field_bytes;
+        std:vector<unsigned> fence;
+
+    public:
+
+        tls_deser_class(const std::vector<char> &inp) : ivy_binary_deser(inp) {
+            field_bytes = 2;
+        }
+
+        virtual bool more(unsigned bytes) {
+            if (fence.size() > 0 && pos + bytes > fence.back())
+                return false;
+            return ivy_binary_deser::more(bytes);
+        }
+    
+        virtual void open_field(const std::string &name) {
+            if (tls_field_length_bytes.find(name) != tls_field_length_bytes.end()) {
+                int length_field_bytes = tls_field_length_bytes[name];
+                long long bytes;
+                getn(bytes,length_field_bytes);
+                fence.push_back(pos+bytes);
+            }
+            else if (fence.size() > 0)
+                fence.push_back(fence.back());
+            if (tls_field_bytes.find(name) != tls_field_bytes.end()) {
+                field_bytes = tls_field_bytes[name]
+            }
+        }
+
+        virtual void close_field() {
+            if (tls_field_length_bytes.find(name) != tls_field_length_bytes.end()) {
+                fence.pop_back();
+            }
+            else if (fence.size() > 0)
+                fence.pop_back();
+        }
+
+        virtual int open_tag(const std::vector<std::string> &tags) {
+            long long tag;
+            getn(tag,1);
+            for (int i = 0; i < tags.size(); i++) {
+                if (tag == tls_tags_map[tags[i]])
+                   open_field(tags[i]);
+                   return i;
+            }
+            throw deser_err();
+        }
+
+        virtual void close_tag() {
+            close_field();
+        }
+
+        virtual void get(long long &res) {
+            getn(res,field_bytes);
+        }
+
+        virtual bool open_list_elem() {
+            return more(1);
+        }
+        void close_list_elem() {}
+
+        void open_list() {}
+        void close_list() {}
+
+        ~tls_deser_class(){}
+    };
+
+
     class quic_monitor::quic_deser : public ivy_binary_deser {
         enum {quic_s_init,
               quic_s_type,
@@ -958,7 +1557,7 @@ int tag = rand() % 2;
                 state = quic_s_cid;
             }
             break;
-            case quic_s_cid):
+            case quic_s_cid:
             {
                 ivy_binary_deser::get(res);
                 state = quic_s_version;
@@ -1030,25 +1629,29 @@ int tag = rand() % 2;
                 get_var_int(res);
                 state = quic_ack_delay;
             }
+            break;
             case quic_ack_delay:
             {
                 get_var_int(res);
                 state = quic_ack_block_count;
             }
+            break;
             case quic_ack_gap:
             {
                 if (ack_block_count == 0)
                     res = 0; // first ack block has no gap
-                else:
+                else
                     get_var_int(res);
                 state = quic_ack_block;
             }
+            break;
             case quic_ack_block:
             {
                 get_var_int(res);
                 state = quic_ack_gap;
                 ack_block_count++;
             }
+            break;
             default:
             throw deser_err();
             }
@@ -1102,10 +1705,7 @@ int tag = rand() % 2;
                 state = quic_ack_gap;
             }
         }
-        void close_list() {
-            if (state == quic_ack_gap)
-                state = quic_payload;
-        }
+        void close_list() {}
         void close_list_elem() {}
 
         virtual void close_tag() {
@@ -1255,8 +1855,8 @@ int quic_monitor::stream_data__end(const stream_data& a){
 }
 quic_monitor::frame__ack__block quic_monitor::frame__ack__block__arr__value(const frame__ack__block__arr& a, int i){
     frame__ack__block val;
-    val.gap = (int)___ivy_choose(0,"ret:val",0);
-    val.blocks = (int)___ivy_choose(0,"ret:val",0);
+    val.gap = (long long)___ivy_choose(0,"ret:val",0);
+    val.blocks = (long long)___ivy_choose(0,"ret:val",0);
     val =  (0 <= i && i < a.size()) ? a[i] : val ;
     return val;
 }
@@ -1277,106 +1877,292 @@ int quic_monitor::frame__arr__end(const frame__arr& a){
     val =  a.size() ;
     return val;
 }
-void quic_monitor::pc__handle(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& p){
+int quic_monitor::tls__cipher_suite_seq__value(const tls__cipher_suite_seq& a, int i){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::tls__cipher_suite_seq__end(const tls__cipher_suite_seq& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+quic_monitor::tls__extension quic_monitor::vector__tls__extension____value(const vector__tls__extension__& a, int i){
+    tls__extension val;
+    val.etype = (int)___ivy_choose(0,"ret:val",0);
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::vector__tls__extension____end(const vector__tls__extension__& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+quic_monitor::tls__handshake quic_monitor::vector__tls__handshake____value(const vector__tls__handshake__& a, int i){
+    quic_monitor::tls__handshake val;
+    val =  (0 <= i && i < a.size()) ? a[i] : val ;
+    return val;
+}
+int quic_monitor::vector__tls__handshake____end(const vector__tls__handshake__& a){
+    int val;
+    val = (int)___ivy_choose(0,"ret:val",0);
+    val =  a.size() ;
+    return val;
+}
+void quic_monitor::imp__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
     {
-        ext__show_packet(src, dst, p);
+    }
+}
+            struct __thunk__0 : thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>{
+                __thunk__0()  {
+                }
+                bool operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+                    return false;
+                }
+            };
+            struct __thunk__1 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+                __thunk__1()  {
+                }
+                bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+                    return false;
+                }
+            };
+            struct __thunk__2 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+                __thunk__2()  {
+                }
+                bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+                    return false;
+                }
+            };
+            struct __thunk__3 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+                __thunk__3()  {
+                }
+                long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+                    return (0 & 4611686018427387903);
+                }
+            };
+            struct __thunk__4 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+                __thunk__4()  {
+                }
+                long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+                    return (0 & 4611686018427387903);
+                }
+            };
+void quic_monitor::__init(){
+    {
         {
-            int loc__cid;
-    loc__cid = (int)___ivy_choose(0,"loc:cid",65);
-            {
-                loc__cid = p.hdr_cid;
-                {
-                    int loc__pnum;
-    loc__pnum = (int)___ivy_choose(0,"loc:pnum",64);
-                    {
-                        loc__pnum = p.hdr_pkt_num;
-                        if(!conn_seen[__tup__ip__endpoint__int(src,loc__cid)]){
-                            {
-                                conn_seen[__tup__ip__endpoint__int(src,loc__cid)] = true;
-                            }
-                        }
-                        else {
-                            {
-                                int loc__last;
-    loc__last = (int)___ivy_choose(0,"loc:last",63);
-                                {
-                                    loc__last = last_pkt_num[__tup__ip__endpoint__int(src,loc__cid)];
-                                    if((p.hdr_long || (p.hdr_type == (0x1d & 127)))){
-                                        {
-                                            int loc__n;
-                                            int __tmp0;
-                                            __tmp0 = 0;
-                                            int __tmp1;
-                                            for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
-                                                if(((loc__last < X__0) && (((X__0 >> 0) & 4294967295) == loc__pnum))){
-                                                    int __tmp2;
-                                                    __tmp2 = X__0;
-                                                    if(__tmp0){
-                                                        if(!(__tmp2 < __tmp1)){
-                                                            continue;
-                                                        }
-                                                    }
-                                                    __tmp1 = __tmp2;
-                                                    loc__n = X__0;
-                                                    __tmp0= 1;
-                                                    break;
+            conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>(new __thunk__0());
+            sent_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__1());
+            acked_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__2());
+            max_acked = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__3());
+            ack_credit = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__4());
+        }
+    }
+}
+quic_monitor::tls__record quic_monitor::ext__tls__parser__deserialize(const stream_data& x){
+    quic_monitor::tls__record y;
+    {
+
+        deser ds(x);
+
+        try {
+           __deser(ds,y);
+        }
+
+        // If deserialization failure, print out the packet for
+        // debugging purposes.
+
+        catch(deser_err &err) {
+            std::cerr << "error: failed to deserialize data" << std::endl;
+            std::cerr << "hex dump of data follows." << std::endl;
+            for (unsigned i = 0; i < buf.size(); i++) {
+                if (i > 0 && i % 16 == 0)
+                    std::cerr << std::endl;
+                if (i == ds.pos)
+                    fprintf(stderr,"*");
+                fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+            }
+        }
+    }
+    return y;
+}
+int quic_monitor::ext__frame__ack__block__idx__next(int x){
+    int y;
+    y = (int)___ivy_choose(0,"fml:y",0);
+    {
+        y = (x + 1);
+    }
+    return y;
+}
+void quic_monitor::ext__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    imp__show_packet(src, dst, pkt);
+}
+                                            struct __thunk__5 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+    quic_monitor::ip__endpoint dst;
+    long long loc__upper;
+    long long loc__last;
+    hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool> acked_pkt;
+    long long pcid;
+                                                __thunk__5(quic_monitor::ip__endpoint dst,long long loc__upper,long long loc__last,hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool> acked_pkt,long long pcid) : dst(dst),loc__upper(loc__upper),loc__last(loc__last),acked_pkt(acked_pkt),pcid(pcid){
                                                 }
+                                                bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+                                                    return (((dst == arg.arg0) && (pcid == arg.arg1)) ? ((((loc__last < arg.arg2) || (loc__last == arg.arg2)) && ((arg.arg2 < loc__upper) || (arg.arg2 == loc__upper))) || acked_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(dst,pcid,arg.arg2)]) : acked_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(arg.arg0,arg.arg1,arg.arg2)]);
+                                                }
+                                            };
+void quic_monitor::ext__frame__ack__handle(const frame__ack& f, const ip__endpoint& src, const ip__endpoint& dst, long long pcid){
+    {
+        int loc__idx;
+    loc__idx = (int)___ivy_choose(0,"loc:idx",206);
+        {
+            loc__idx = 0;
+            {
+                long long loc__last;
+    loc__last = (long long)___ivy_choose(0,"loc:last",205);
+                {
+                    loc__last = f.largest_acked;
+                    if((max_acked[quic_monitor::__tup__ip__endpoint__long_long(dst,pcid)] < loc__last)){
+                        {
+                            max_acked[quic_monitor::__tup__ip__endpoint__long_long(dst,pcid)] = loc__last;
+                        }
+                    }
+                    while((loc__idx < frame__ack__block__arr__end(f.ack_blocks))){
+                        {
+                            {
+                                frame__ack__block loc__ack_block;
+    loc__ack_block.gap = (long long)___ivy_choose(0,"loc:ack_block",204);
+    loc__ack_block.blocks = (long long)___ivy_choose(0,"loc:ack_block",204);
+                                {
+                                    loc__ack_block = frame__ack__block__arr__value(f.ack_blocks,loc__idx);
+                                    {
+                                        long long loc__upper;
+    loc__upper = (long long)___ivy_choose(0,"loc:upper",203);
+                                        {
+                                            loc__upper = ((loc__last - loc__ack_block.gap) & 4611686018427387903);
+                                            loc__last = ((loc__upper - loc__ack_block.blocks) & 4611686018427387903);
+                                            int __tmp0;
+                                            __tmp0 = 1;
+                                            for (long long N = loc__last; N < (loc__upper)+1; N++) {
+                                                if (!(!(((loc__last < N) || (loc__last == N)) && ((N < loc__upper) || (N == loc__upper))) || sent_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(dst,pcid,N)])) __tmp0 = 0;
                                             }
-                                            if(__tmp0){
-                                                loc__pnum = loc__n;
-                                            }
+                                            ivy_assume(__tmp0, "quic_connection.ivy: line 268");
+                                            acked_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__5(dst,loc__upper,loc__last,acked_pkt,pcid));
+                                            loc__idx = ext__frame__ack__block__idx__next(loc__idx);
                                         }
                                     }
-                                    else {
-                                        if((p.hdr_type == (0x1e & 127))){
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+void quic_monitor::imp__tls__event(const ip__endpoint& src, const ip__endpoint& dst, quic_monitor::tls__record rec){
+    {
+    }
+}
+void quic_monitor::ext__packet_event(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    {
+        {
+            long long loc__pcid;
+    loc__pcid = (long long)___ivy_choose(0,"loc:pcid",212);
+            {
+                loc__pcid = pkt.hdr_cid;
+                {
+                    long long loc__0;
+    loc__0 = (long long)___ivy_choose(0,"loc:0",211);
+                    {
+                        loc__0 = ext__decode_packet_number(src, dst, pkt);
+                        {
+                            long long loc__pnum;
+    loc__pnum = (long long)___ivy_choose(0,"loc:pnum",210);
+                            {
+                                loc__pnum = loc__0;
+                                ivy_assume(!sent_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(src,loc__pcid,loc__pnum)], "quic_connection.ivy: line 156");
+                                conn_seen[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)] = true;
+                                sent_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(src,loc__pcid,loc__pnum)] = true;
+                                last_pkt_num[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)] = loc__pnum;
+                                {
+                                    bool loc__ack_only;
+    loc__ack_only = (bool)___ivy_choose(0,"loc:ack_only",209);
+                                    {
+                                        int __tmp1;
+                                        __tmp1 = 1;
+                                        for (int I = 0; I < frame__arr__end(pkt.payload); I++) {
+                                            if (!(!(((0 < I) || (0 == I)) && (I < frame__arr__end(pkt.payload))) || (frame__arr__value(pkt.payload,I)).tag == 1)) __tmp1 = 0;
+                                        }
+                                        loc__ack_only = __tmp1;
+                                        if(loc__ack_only){
                                             {
-                                                int loc__n;
-                                                int __tmp3;
-                                                __tmp3 = 0;
-                                                int __tmp4;
-                                                for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
-                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 65535) == loc__pnum))){
-                                                        int __tmp5;
-                                                        __tmp5 = X__0;
-                                                        if(__tmp3){
-                                                            if(!(__tmp5 < __tmp4)){
-                                                                continue;
-                                                            }
-                                                        }
-                                                        __tmp4 = __tmp5;
-                                                        loc__n = X__0;
-                                                        __tmp3= 1;
-                                                        break;
-                                                    }
-                                                }
-                                                if(__tmp3){
-                                                    loc__pnum = loc__n;
-                                                }
+                                                ivy_assume(((0 & 4611686018427387903) < ack_credit[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)]), "quic_connection.ivy: line 173");
+                                                ack_credit[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)] = ((ack_credit[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)] - (1 & 4611686018427387903)) & 4611686018427387903);
                                             }
                                         }
                                         else {
                                             {
-                                                int loc__n;
-                                                int __tmp6;
-                                                __tmp6 = 0;
-                                                int __tmp7;
-                                                for (int X__0 = (loc__last)+1; X__0 < 4294967296; X__0++) {
-                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 255) == loc__pnum))){
-                                                        int __tmp8;
-                                                        __tmp8 = X__0;
-                                                        if(__tmp6){
-                                                            if(!(__tmp8 < __tmp7)){
-                                                                continue;
+                                                ack_credit[quic_monitor::__tup__ip__endpoint__long_long(dst,loc__pcid)] = ((ack_credit[quic_monitor::__tup__ip__endpoint__long_long(dst,loc__pcid)] + (1 & 4611686018427387903)) & 4611686018427387903);
+                                            }
+                                        }
+                                        if((pkt.hdr_type == (0x7f & 127))){
+                                            {
+                                                ivy_assume((frame__arr__end(pkt.payload) == 1), "quic_connection.ivy: line 182");
+                                                ivy_assume((frame__arr__value(pkt.payload,0)).tag == 0, "quic_connection.ivy: line 183");
+                                                ivy_assume(!initializing[quic_monitor::__tup__ip__endpoint__ip__endpoint(src,dst)], "quic_connection.ivy: line 184");
+                                                initializing[quic_monitor::__tup__ip__endpoint__ip__endpoint(src,dst)] = true;
+                                                initial_pkt_num[quic_monitor::__tup__ip__endpoint__ip__endpoint(src,dst)] = loc__pnum;
+                                            }
+                                        }
+                                        else {
+                                            if((pkt.hdr_type == (0x7d & 127))){
+                                                if(initializing[quic_monitor::__tup__ip__endpoint__ip__endpoint(dst,src)]){
+                                                    {
+                                                        initializing[quic_monitor::__tup__ip__endpoint__ip__endpoint(dst,src)] = false;
+                                                        {
+                                                            long long loc__ipnum;
+    loc__ipnum = (long long)___ivy_choose(0,"loc:ipnum",207);
+                                                            {
+                                                                loc__ipnum = initial_pkt_num[quic_monitor::__tup__ip__endpoint__ip__endpoint(dst,src)];
+                                                                sent_pkt[quic_monitor::__tup__ip__endpoint__long_long__long_long(dst,loc__pcid,loc__ipnum)] = true;
+                                                                last_pkt_num[quic_monitor::__tup__ip__endpoint__long_long(dst,loc__pcid)] = loc__ipnum;
+                                                                ack_credit[quic_monitor::__tup__ip__endpoint__long_long(src,loc__pcid)] = (1 & 4611686018427387903);
                                                             }
                                                         }
-                                                        __tmp7 = __tmp8;
-                                                        loc__n = X__0;
-                                                        __tmp6= 1;
-                                                        break;
                                                     }
                                                 }
-                                                if(__tmp6){
-                                                    loc__pnum = loc__n;
+                                            }
+                                        }
+                                        {
+                                            int loc__idx;
+    loc__idx = (int)___ivy_choose(0,"loc:idx",208);
+                                            {
+                                                loc__idx = 0;
+                                                while((loc__idx < frame__arr__end(pkt.payload))){
+                                                    {
+                                                        {
+                                                            frame__ack frame__ack;
+                                                            if ((frame__arr__value(pkt.payload,loc__idx)).tag == 1) frame__ack = (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__ack> *>((frame__arr__value(pkt.payload,loc__idx)).ptr)->item);
+                                                            if((frame__arr__value(pkt.payload,loc__idx)).tag == 1){
+                                                                ext__frame__ack__handle(frame__ack, src, dst, loc__pcid);
+                                                            }
+                                                            else {
+                                                                {
+                                                                    frame__stream frame__stream;
+                                                                    if ((frame__arr__value(pkt.payload,loc__idx)).tag == 0) frame__stream = (static_cast<const quic_monitor::frame::twrap<quic_monitor::frame__stream> *>((frame__arr__value(pkt.payload,loc__idx)).ptr)->item);
+                                                                    if((frame__arr__value(pkt.payload,loc__idx)).tag == 0){
+                                                                        ext__frame__stream__handle(frame__stream, src, dst, loc__pcid);
+                                                                    }
+                                                                    else {
+                                                                        ext__frame__handle(frame__arr__value(pkt.payload,loc__idx), src, dst, loc__pcid);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        loc__idx = (loc__idx + 1);
+                                                    }
                                                 }
                                             }
                                         }
@@ -1384,33 +2170,161 @@ void quic_monitor::pc__handle(const ip__endpoint& src, const ip__endpoint& dst, 
                                 }
                             }
                         }
-                        last_pkt_num[__tup__ip__endpoint__int(src,loc__cid)] = loc__pnum;
                     }
                 }
             }
         }
     }
 }
-void quic_monitor::ext__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
-    imp__show_packet(src, dst, pkt);
-}
-void quic_monitor::imp__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+void quic_monitor::pc__handle(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& p){
     {
+        ext__show_packet(src, dst, p);
+        ext__packet_event(src, dst, p);
     }
 }
-            struct __thunk__0 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
-                __thunk__0()  {
-                }
-                bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
-                    return false;
-                }
-            };
-void quic_monitor::__init(){
-    {
+void quic_monitor::ext__frame__stream__handle(const frame__stream& f, const ip__endpoint& src, const ip__endpoint& dst, long long pcid){
+    if((f.id == 0)){
         {
-            conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__0());
+            {
+                quic_monitor::tls__record loc__0;
+                {
+                    loc__0 = ext__tls__parser__deserialize(f.data);
+                    {
+                        quic_monitor::tls__record loc__tr;
+                        {
+                            loc__tr = loc__0;
+                            ext__tls__event(src, dst, loc__tr);
+                        }
+                    }
+                }
+            }
         }
     }
+}
+void quic_monitor::ext__frame__handle(quic_monitor::frame f, const ip__endpoint& src, const ip__endpoint& dst, long long pcid){
+    {
+    }
+}
+long long quic_monitor::ext__decode_packet_number(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
+    long long pnum;
+    pnum = (long long)___ivy_choose(0,"fml:pnum",0);
+    {
+        long long loc__cid;
+    loc__cid = (long long)___ivy_choose(0,"loc:cid",217);
+        {
+            loc__cid = pkt.hdr_cid;
+            {
+                long long loc__la;
+    loc__la = (long long)___ivy_choose(0,"loc:la",216);
+                {
+                    loc__la = max_acked[quic_monitor::__tup__ip__endpoint__long_long(src,loc__cid)];
+                    pnum = pkt.hdr_pkt_num;
+                    if(conn_seen[quic_monitor::__tup__ip__endpoint__long_long(src,loc__cid)]){
+                        {
+                            long long loc__last;
+    loc__last = (long long)___ivy_choose(0,"loc:last",215);
+                            {
+                                loc__last = last_pkt_num[quic_monitor::__tup__ip__endpoint__long_long(src,loc__cid)];
+                                if((pkt.hdr_long || (pkt.hdr_type == (0x1d & 127)))){
+                                    {
+                                        ivy_assume(((pnum < ((loc__la + (0x7ffffffe & 4611686018427387903)) & 4611686018427387903)) || (pnum == ((loc__la + (0x7ffffffe & 4611686018427387903)) & 4611686018427387903))), "quic_connection.ivy: line 354");
+                                        {
+                                            long long loc__n;
+                                            int __tmp2;
+                                            __tmp2 = 0;
+                                            int __tmp3;
+                                            for (long long X__0 = (loc__last)+1; X__0 < 4611686018427387904; X__0++) {
+                                                if(((loc__last < X__0) && (((X__0 >> 0) & 4294967295) == pnum))){
+                                                    int __tmp4;
+                                                    __tmp4 = X__0;
+                                                    if(__tmp2){
+                                                        if(!(__tmp4 < __tmp3)){
+                                                            continue;
+                                                        }
+                                                    }
+                                                    __tmp3 = __tmp4;
+                                                    loc__n = X__0;
+                                                    __tmp2= 1;
+                                                    break;
+                                                }
+                                            }
+                                            if(__tmp2){
+                                                pnum = loc__n;
+                                            }
+                                        }
+                                    }
+                                }
+                                else {
+                                    if((pkt.hdr_type == (0x1e & 127))){
+                                        {
+                                            ivy_assume(((pnum < ((loc__la + (0x7ffe & 4611686018427387903)) & 4611686018427387903)) || (pnum == ((loc__la + (0x7ffe & 4611686018427387903)) & 4611686018427387903))), "quic_connection.ivy: line 363");
+                                            {
+                                                long long loc__n;
+                                                int __tmp5;
+                                                __tmp5 = 0;
+                                                int __tmp6;
+                                                for (long long X__0 = (loc__last)+1; X__0 < 4611686018427387904; X__0++) {
+                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 65535) == pnum))){
+                                                        int __tmp7;
+                                                        __tmp7 = X__0;
+                                                        if(__tmp5){
+                                                            if(!(__tmp7 < __tmp6)){
+                                                                continue;
+                                                            }
+                                                        }
+                                                        __tmp6 = __tmp7;
+                                                        loc__n = X__0;
+                                                        __tmp5= 1;
+                                                        break;
+                                                    }
+                                                }
+                                                if(__tmp5){
+                                                    pnum = loc__n;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        {
+                                            ivy_assume(((pnum < ((loc__la + (0x7e & 4611686018427387903)) & 4611686018427387903)) || (pnum == ((loc__la + (0x7e & 4611686018427387903)) & 4611686018427387903))), "quic_connection.ivy: line 372");
+                                            {
+                                                long long loc__n;
+                                                int __tmp8;
+                                                __tmp8 = 0;
+                                                int __tmp9;
+                                                for (long long X__0 = (loc__last)+1; X__0 < 4611686018427387904; X__0++) {
+                                                    if(((loc__last < X__0) && (((X__0 >> 0) & 255) == pnum))){
+                                                        int __tmp10;
+                                                        __tmp10 = X__0;
+                                                        if(__tmp8){
+                                                            if(!(__tmp10 < __tmp9)){
+                                                                continue;
+                                                            }
+                                                        }
+                                                        __tmp9 = __tmp10;
+                                                        loc__n = X__0;
+                                                        __tmp8= 1;
+                                                        break;
+                                                    }
+                                                }
+                                                if(__tmp8){
+                                                    pnum = loc__n;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return pnum;
+}
+void quic_monitor::ext__tls__event(const ip__endpoint& src, const ip__endpoint& dst, quic_monitor::tls__record rec){
+    imp__tls__event(src, dst, rec);
 }
 void quic_monitor::__tick(int __timeout){
 }
@@ -1422,49 +2336,152 @@ pthread_mutex_init(&mutex,NULL);
 #endif
 __lock();
     __CARD__stream_pos = 0;
+    __CARD__tls__gmt = 4294967296;
     __CARD__frame__ack__block__idx = 0;
-    __CARD__pkt_num = 4294967296;
-    __CARD__cid = 18446744073709551616;
-    __CARD__ip__port = 65536;
-    __CARD__version = 4294967296;
-    __CARD__type_bits = 128;
+    __CARD__vector__tls__extension____domain = 0;
+    __CARD__tls__protocol_version = 65536;
+    __CARD__vector__tls__handshake____domain = 0;
     __CARD__ip__addr = 4294967296;
     __CARD__byte = 256;
+    __CARD__ip__port = 65536;
+    __CARD__tls__cipher_suite = 65536;
+    __CARD__pkt_num = 4611686018427387904;
+    __CARD__cid = 4611686018427387904;
+    __CARD__tls__extension_type = 65536;
+    __CARD__version = 4294967296;
+    __CARD__type_bits = 128;
+    __CARD__tls__cipher_suite_idx = 0;
     __CARD__pc__pathname = 0;
     __CARD__frame__idx = 0;
+    
+    tls_make_name_map(tls_field_length_bytes,tls_field_length_bytes_map)
+    tls_make_name_map(tls_field_bytes,tls_field_bytes_map)
+    tls_make_name_map(tls_tags,tls_tags_map)
   
     install_reader(new pcap_reader<quic_packet,quic_deser>(pc__name,thunk__pc__handle(this)));
+struct __thunk__6 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+    __thunk__6()  {
+    }
+    bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+        bool __tmp11;
+    __tmp11 = (bool)___ivy_choose(0,"init",0);
+        return __tmp11;
+    }
+};
+acked_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__6());
+struct __thunk__7 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+    __thunk__7()  {
+    }
+    long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+        long long __tmp12;
+    __tmp12 = (long long)___ivy_choose(0,"init",0);
+        return __tmp12;
+    }
+};
+last_pkt_num = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__7());
+struct __thunk__8 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+    __thunk__8()  {
+    }
+    long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+        long long __tmp13;
+    __tmp13 = (long long)___ivy_choose(0,"init",0);
+        return __tmp13;
+    }
+};
+max_acked = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__8());
+struct __thunk__9 : thunk<quic_monitor::__tup__ip__endpoint__ip__endpoint,bool>{
+    __thunk__9()  {
+    }
+    bool operator()(const quic_monitor::__tup__ip__endpoint__ip__endpoint &arg){
+        bool __tmp14;
+    __tmp14 = (bool)___ivy_choose(0,"init",0);
+        return __tmp14;
+    }
+};
+initializing = hash_thunk<quic_monitor::__tup__ip__endpoint__ip__endpoint,bool>(new __thunk__9());
+struct __thunk__10 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+    __thunk__10()  {
+    }
+    long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+        long long __tmp15;
+    __tmp15 = (long long)___ivy_choose(0,"init",0);
+        return __tmp15;
+    }
+};
+ack_credit = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__10());
     this->pc__name = pc__name;
-struct __thunk__1 : thunk<quic_monitor::__tup__ip__endpoint__int,int>{
-    __thunk__1()  {
+struct __thunk__11 : thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>{
+    __thunk__11()  {
     }
-    int operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
-        int __tmp9;
-    __tmp9 = (int)___ivy_choose(0,"init",0);
-        return __tmp9;
-    }
-};
-last_pkt_num = hash_thunk<quic_monitor::__tup__ip__endpoint__int,int>(new __thunk__1());
-struct __thunk__2 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
-    __thunk__2()  {
-    }
-    bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
-        bool __tmp10;
-    __tmp10 = (bool)___ivy_choose(0,"init",0);
-        return __tmp10;
+    bool operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+        bool __tmp16;
+    __tmp16 = (bool)___ivy_choose(0,"init",0);
+        return __tmp16;
     }
 };
-conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__2());
+conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>(new __thunk__11());
+struct __thunk__12 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+    __thunk__12()  {
+    }
+    bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+        bool __tmp17;
+    __tmp17 = (bool)___ivy_choose(0,"init",0);
+        return __tmp17;
+    }
+};
+sent_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__12());
+struct __thunk__13 : thunk<quic_monitor::__tup__ip__endpoint__ip__endpoint,long long>{
+    __thunk__13()  {
+    }
+    long long operator()(const quic_monitor::__tup__ip__endpoint__ip__endpoint &arg){
+        long long __tmp18;
+    __tmp18 = (long long)___ivy_choose(0,"init",0);
+        return __tmp18;
+    }
+};
+initial_pkt_num = hash_thunk<quic_monitor::__tup__ip__endpoint__ip__endpoint,long long>(new __thunk__13());
 {
     {
-        struct __thunk__3 : thunk<quic_monitor::__tup__ip__endpoint__int,bool>{
-            __thunk__3()  {
+        struct __thunk__14 : thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>{
+            __thunk__14()  {
             }
-            bool operator()(const quic_monitor::__tup__ip__endpoint__int &arg){
+            bool operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
                 return false;
             }
         };
-        conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__int,bool>(new __thunk__3());
+        conn_seen = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,bool>(new __thunk__14());
+        struct __thunk__15 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+            __thunk__15()  {
+            }
+            bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+                return false;
+            }
+        };
+        sent_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__15());
+        struct __thunk__16 : thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>{
+            __thunk__16()  {
+            }
+            bool operator()(const quic_monitor::__tup__ip__endpoint__long_long__long_long &arg){
+                return false;
+            }
+        };
+        acked_pkt = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long__long_long,bool>(new __thunk__16());
+        struct __thunk__17 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+            __thunk__17()  {
+            }
+            long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+                return (0 & 4611686018427387903);
+            }
+        };
+        max_acked = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__17());
+        struct __thunk__18 : thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>{
+            __thunk__18()  {
+            }
+            long long operator()(const quic_monitor::__tup__ip__endpoint__long_long &arg){
+                return (0 & 4611686018427387903);
+            }
+        };
+        ack_credit = hash_thunk<quic_monitor::__tup__ip__endpoint__long_long,long long>(new __thunk__18());
     }
 }
 }
@@ -1568,10 +2585,10 @@ template <>
 void  __ser<quic_monitor::frame__ack__block>(ivy_ser &res, const quic_monitor::frame__ack__block&t){
     res.open_struct();
     res.open_field("gap");
-    __ser<int>(res,t.gap);
+    __ser<long long>(res,t.gap);
     res.close_field();
     res.open_field("blocks");
-    __ser<int>(res,t.blocks);
+    __ser<long long>(res,t.blocks);
     res.close_field();
     res.close_struct();
 }
@@ -1592,7 +2609,7 @@ template <>
 void  __ser<quic_monitor::frame__ack>(ivy_ser &res, const quic_monitor::frame__ack&t){
     res.open_struct();
     res.open_field("largest_acked");
-    __ser<int>(res,t.largest_acked);
+    __ser<long long>(res,t.largest_acked);
     res.close_field();
     res.open_field("ack_delay");
     __ser<int>(res,t.ack_delay);
@@ -1634,16 +2651,118 @@ void  __ser<quic_monitor::quic_packet>(ivy_ser &res, const quic_monitor::quic_pa
     __ser<int>(res,t.hdr_type);
     res.close_field();
     res.open_field("hdr_cid");
-    __ser<int>(res,t.hdr_cid);
+    __ser<long long>(res,t.hdr_cid);
     res.close_field();
     res.open_field("hdr_version");
     __ser<int>(res,t.hdr_version);
     res.close_field();
     res.open_field("hdr_pkt_num");
-    __ser<int>(res,t.hdr_pkt_num);
+    __ser<long long>(res,t.hdr_pkt_num);
     res.close_field();
     res.open_field("payload");
     __ser<quic_monitor::frame__arr>(res,t.payload);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__extension &t){
+    s<<"{";
+    s<< "etype:";
+    s << t.etype;
+    s<<",";
+    s<< "content:";
+    s << t.content;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::tls__extension>(ivy_ser &res, const quic_monitor::tls__extension&t){
+    res.open_struct();
+    res.open_field("etype");
+    __ser<int>(res,t.etype);
+    res.close_field();
+    res.open_field("content");
+    __ser<quic_monitor::stream_data>(res,t.content);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__random &t){
+    s<<"{";
+    s<< "gmt_unix_time:";
+    s << t.gmt_unix_time;
+    s<<",";
+    s<< "random_bytes:";
+    s << t.random_bytes;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::tls__random>(ivy_ser &res, const quic_monitor::tls__random&t){
+    res.open_struct();
+    res.open_field("gmt_unix_time");
+    __ser<int>(res,t.gmt_unix_time);
+    res.close_field();
+    res.open_field("random_bytes");
+    __ser<quic_monitor::stream_data>(res,t.random_bytes);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__client_hello &t){
+    s<<"{";
+    s<< "client_version:";
+    s << t.client_version;
+    s<<",";
+    s<< "rand_info:";
+    s << t.rand_info;
+    s<<",";
+    s<< "session_id:";
+    s << t.session_id;
+    s<<",";
+    s<< "cipher_suites:";
+    s << t.cipher_suites;
+    s<<",";
+    s<< "extensions:";
+    s << t.extensions;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::tls__client_hello>(ivy_ser &res, const quic_monitor::tls__client_hello&t){
+    res.open_struct();
+    res.open_field("client_version");
+    __ser<int>(res,t.client_version);
+    res.close_field();
+    res.open_field("rand_info");
+    __ser<quic_monitor::tls__random>(res,t.rand_info);
+    res.close_field();
+    res.open_field("session_id");
+    __ser<quic_monitor::stream_data>(res,t.session_id);
+    res.close_field();
+    res.open_field("cipher_suites");
+    __ser<quic_monitor::tls__cipher_suite_seq>(res,t.cipher_suites);
+    res.close_field();
+    res.open_field("extensions");
+    __ser<quic_monitor::vector__tls__extension__>(res,t.extensions);
+    res.close_field();
+    res.close_struct();
+}
+std::ostream &operator <<(std::ostream &s, const quic_monitor::tls__handshake_record &t){
+    s<<"{";
+    s<< "version:";
+    s << t.version;
+    s<<",";
+    s<< "fragment:";
+    s << t.fragment;
+    s<<"}";
+    return s;
+}
+template <>
+void  __ser<quic_monitor::tls__handshake_record>(ivy_ser &res, const quic_monitor::tls__handshake_record&t){
+    res.open_struct();
+    res.open_field("version");
+    __ser<int>(res,t.version);
+    res.close_field();
+    res.open_field("fragment");
+    __ser<quic_monitor::vector__tls__handshake__>(res,t.fragment);
     res.close_field();
     res.close_struct();
 }
@@ -1658,7 +2777,7 @@ void  __ser<quic_monitor::ip__protocol>(ivy_ser &res, const quic_monitor::ip__pr
 }
 
 
-int ask_ret(int bound) {
+int ask_ret(long long bound) {
     int res;
     while(true) {
         __ivy_out << "? ";
@@ -1692,6 +2811,9 @@ int ask_ret(int bound) {
         }
     }
     quic_monitor_repl(__strlit pc__name) : quic_monitor(pc__name){}
+    virtual void imp__tls__event(const ip__endpoint& src, const ip__endpoint& dst, quic_monitor::tls__record rec){
+    __ivy_out  << std::hex << std::showbase  << "< tls.event" << "(" << src << "," << dst << "," << rec << ")" << std::endl;
+}
     virtual void imp__show_packet(const ip__endpoint& src, const ip__endpoint& dst, const quic_packet& pkt){
     __ivy_out  << std::hex << std::showbase  << "< show_packet" << "(" << src << "," << dst << "," << pkt << ")" << std::endl;
 }
@@ -1826,7 +2948,7 @@ void check_arity(std::vector<ivy_value> &args, unsigned num, std::string &action
 }
 
 template <>
-quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     quic_monitor::frame__ack res;
     ivy_value &arg = args[idx];
     if (arg.atom.size() || arg.fields.size() != 3) throw out_of_bounds("wrong number of fields",args[idx].pos);
@@ -1839,7 +2961,7 @@ quic_monitor::frame__ack _arg<quic_monitor::frame__ack>(std::vector<ivy_value> &
         tmp_args[0] = arg.fields[0];
     }
     try{
-        res.largest_acked = _arg<int>(tmp_args,0,4294967296);
+        res.largest_acked = _arg<long long>(tmp_args,0,4611686018427387904);
 ;
     }
     catch(const out_of_bounds &err){
@@ -1890,7 +3012,7 @@ void __deser<quic_monitor::frame__ack>(ivy_deser &inp, quic_monitor::frame__ack 
     inp.close_struct();
 }
 template <>
-quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     quic_monitor::frame__ack__block res;
     ivy_value &arg = args[idx];
     if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds("wrong number of fields",args[idx].pos);
@@ -1903,7 +3025,7 @@ quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vecto
         tmp_args[0] = arg.fields[0];
     }
     try{
-        res.gap = _arg<int>(tmp_args,0,4294967296);
+        res.gap = _arg<long long>(tmp_args,0,4611686018427387904);
 ;
     }
     catch(const out_of_bounds &err){
@@ -1917,7 +3039,7 @@ quic_monitor::frame__ack__block _arg<quic_monitor::frame__ack__block>(std::vecto
         tmp_args[0] = arg.fields[1];
     }
     try{
-        res.blocks = _arg<int>(tmp_args,0,4294967296);
+        res.blocks = _arg<long long>(tmp_args,0,4611686018427387904);
 ;
     }
     catch(const out_of_bounds &err){
@@ -1937,7 +3059,7 @@ void __deser<quic_monitor::frame__ack__block>(ivy_deser &inp, quic_monitor::fram
     inp.close_struct();
 }
 template <>
-quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::frame__stream _arg<quic_monitor::frame__stream>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     quic_monitor::frame__stream res;
     ivy_value &arg = args[idx];
     if (arg.atom.size() || arg.fields.size() != 7) throw out_of_bounds("wrong number of fields",args[idx].pos);
@@ -2069,7 +3191,7 @@ void __deser<quic_monitor::frame__stream>(ivy_deser &inp, quic_monitor::frame__s
     inp.close_struct();
 }
 template <>
-quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::ip__endpoint _arg<quic_monitor::ip__endpoint>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     quic_monitor::ip__endpoint res;
     ivy_value &arg = args[idx];
     if (arg.atom.size() || arg.fields.size() != 3) throw out_of_bounds("wrong number of fields",args[idx].pos);
@@ -2133,7 +3255,7 @@ void __deser<quic_monitor::ip__endpoint>(ivy_deser &inp, quic_monitor::ip__endpo
     inp.close_struct();
 }
 template <>
-quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     quic_monitor::quic_packet res;
     ivy_value &arg = args[idx];
     if (arg.atom.size() || arg.fields.size() != 6) throw out_of_bounds("wrong number of fields",args[idx].pos);
@@ -2174,7 +3296,7 @@ quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value>
         tmp_args[0] = arg.fields[2];
     }
     try{
-        res.hdr_cid = _arg<int>(tmp_args,0,18446744073709551616);
+        res.hdr_cid = _arg<long long>(tmp_args,0,4611686018427387904);
 ;
     }
     catch(const out_of_bounds &err){
@@ -2202,7 +3324,7 @@ quic_monitor::quic_packet _arg<quic_monitor::quic_packet>(std::vector<ivy_value>
         tmp_args[0] = arg.fields[4];
     }
     try{
-        res.hdr_pkt_num = _arg<int>(tmp_args,0,4294967296);
+        res.hdr_pkt_num = _arg<long long>(tmp_args,0,4611686018427387904);
 ;
     }
     catch(const out_of_bounds &err){
@@ -2248,7 +3370,246 @@ void __deser<quic_monitor::quic_packet>(ivy_deser &inp, quic_monitor::quic_packe
     inp.close_struct();
 }
 template <>
-quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, int bound){
+quic_monitor::tls__client_hello _arg<quic_monitor::tls__client_hello>(std::vector<ivy_value> &args, unsigned idx, long long bound){
+    quic_monitor::tls__client_hello res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 5) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "client_version") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.client_version = _arg<int>(tmp_args,0,65536);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field client_version: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "rand_info") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.rand_info = _arg<quic_monitor::tls__random>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field rand_info: " + err.txt,err.pos);
+    }
+    if (arg.fields[2].is_member()){
+        tmp_args[0] = arg.fields[2].fields[0];
+        if (arg.fields[2].atom != "session_id") throw out_of_bounds("unexpected field: " + arg.fields[2].atom,arg.fields[2].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[2];
+    }
+    try{
+        res.session_id = _arg<quic_monitor::stream_data>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field session_id: " + err.txt,err.pos);
+    }
+    if (arg.fields[3].is_member()){
+        tmp_args[0] = arg.fields[3].fields[0];
+        if (arg.fields[3].atom != "cipher_suites") throw out_of_bounds("unexpected field: " + arg.fields[3].atom,arg.fields[3].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[3];
+    }
+    try{
+        res.cipher_suites = _arg<quic_monitor::tls__cipher_suite_seq>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field cipher_suites: " + err.txt,err.pos);
+    }
+    if (arg.fields[4].is_member()){
+        tmp_args[0] = arg.fields[4].fields[0];
+        if (arg.fields[4].atom != "extensions") throw out_of_bounds("unexpected field: " + arg.fields[4].atom,arg.fields[4].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[4];
+    }
+    try{
+        res.extensions = _arg<quic_monitor::vector__tls__extension__>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field extensions: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::tls__client_hello>(ivy_deser &inp, quic_monitor::tls__client_hello &res){
+    inp.open_struct();
+    inp.open_field("client_version");
+    __deser(inp,res.client_version);
+    inp.close_field();
+    inp.open_field("rand_info");
+    __deser(inp,res.rand_info);
+    inp.close_field();
+    inp.open_field("session_id");
+    __deser(inp,res.session_id);
+    inp.close_field();
+    inp.open_field("cipher_suites");
+    __deser(inp,res.cipher_suites);
+    inp.close_field();
+    inp.open_field("extensions");
+    __deser(inp,res.extensions);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::tls__extension _arg<quic_monitor::tls__extension>(std::vector<ivy_value> &args, unsigned idx, long long bound){
+    quic_monitor::tls__extension res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "etype") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.etype = _arg<int>(tmp_args,0,65536);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field etype: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "content") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.content = _arg<quic_monitor::stream_data>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field content: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::tls__extension>(ivy_deser &inp, quic_monitor::tls__extension &res){
+    inp.open_struct();
+    inp.open_field("etype");
+    __deser(inp,res.etype);
+    inp.close_field();
+    inp.open_field("content");
+    __deser(inp,res.content);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::tls__handshake_record _arg<quic_monitor::tls__handshake_record>(std::vector<ivy_value> &args, unsigned idx, long long bound){
+    quic_monitor::tls__handshake_record res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "version") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.version = _arg<int>(tmp_args,0,65536);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field version: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "fragment") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.fragment = _arg<quic_monitor::vector__tls__handshake__>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field fragment: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::tls__handshake_record>(ivy_deser &inp, quic_monitor::tls__handshake_record &res){
+    inp.open_struct();
+    inp.open_field("version");
+    __deser(inp,res.version);
+    inp.close_field();
+    inp.open_field("fragment");
+    __deser(inp,res.fragment);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::tls__random _arg<quic_monitor::tls__random>(std::vector<ivy_value> &args, unsigned idx, long long bound){
+    quic_monitor::tls__random res;
+    ivy_value &arg = args[idx];
+    if (arg.atom.size() || arg.fields.size() != 2) throw out_of_bounds("wrong number of fields",args[idx].pos);
+    std::vector<ivy_value> tmp_args(1);
+    if (arg.fields[0].is_member()){
+        tmp_args[0] = arg.fields[0].fields[0];
+        if (arg.fields[0].atom != "gmt_unix_time") throw out_of_bounds("unexpected field: " + arg.fields[0].atom,arg.fields[0].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[0];
+    }
+    try{
+        res.gmt_unix_time = _arg<int>(tmp_args,0,4294967296);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field gmt_unix_time: " + err.txt,err.pos);
+    }
+    if (arg.fields[1].is_member()){
+        tmp_args[0] = arg.fields[1].fields[0];
+        if (arg.fields[1].atom != "random_bytes") throw out_of_bounds("unexpected field: " + arg.fields[1].atom,arg.fields[1].pos);
+    }
+    else{
+        tmp_args[0] = arg.fields[1];
+    }
+    try{
+        res.random_bytes = _arg<quic_monitor::stream_data>(tmp_args,0,0);
+;
+    }
+    catch(const out_of_bounds &err){
+        throw out_of_bounds("in field random_bytes: " + err.txt,err.pos);
+    }
+    return res;
+}
+template <>
+void __deser<quic_monitor::tls__random>(ivy_deser &inp, quic_monitor::tls__random &res){
+    inp.open_struct();
+    inp.open_field("gmt_unix_time");
+    __deser(inp,res.gmt_unix_time);
+    inp.close_field();
+    inp.open_field("random_bytes");
+    __deser(inp,res.random_bytes);
+    inp.close_field();
+    inp.close_struct();
+}
+template <>
+quic_monitor::ip__protocol _arg<quic_monitor::ip__protocol>(std::vector<ivy_value> &args, unsigned idx, long long bound){
     ivy_value &arg = args[idx];
     if (arg.atom.size() == 0 || arg.fields.size() != 0) throw out_of_bounds(idx,arg.pos);
     if(arg.atom == "udp") return quic_monitor::ip__udp;

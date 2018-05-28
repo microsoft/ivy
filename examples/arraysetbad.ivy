@@ -1,0 +1,52 @@
+#lang ivy1.7
+
+include collections
+include order
+
+module set(elem) = {
+
+    type this
+    alias t = this
+
+    relation contains(X:t,Y:elem)
+    action emptyset returns(s:t)
+    action add(s:t,e:elem) returns (s:t)
+    
+    object spec = {
+	after emptyset {
+	    assert ~contains(s,X)
+	}
+	after add {
+	    assert contains(s,X) <-> (contains(old s,X) | X = e)
+	}
+    }
+
+    object impl = {
+
+        instance index : unbounded_sequence
+        instance arr : array(index.t,elem)
+        destructor repr(X:t) : arr
+        
+        definition contains(X:t,y:elem) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+        
+	implement emptyset {
+	    repr(s) := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                repr(s) := arr.resize(repr(s),index.next(arr.end(repr(s))),e)
+	    }
+        }
+    }
+    isolate iso = this with impl.index.impl
+}
+
+type elem
+
+instance s : set(elem)
+
+export s.emptyset
+export s.add
+
+extract iso_impl = s

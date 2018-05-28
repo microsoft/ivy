@@ -1,0 +1,18 @@
+#include <vector>
+
+template <data>
+struct data_vector {
+    std::vector<int> values;
+
+    data_vector() {
+        static int *thing = data;
+        for (int *p = thing; *p != 0; p++)
+            values.push_back(*p);
+    }
+};
+
+data_vector<{1,2,0}> foo;
+
+int main(){
+    return 0;
+}

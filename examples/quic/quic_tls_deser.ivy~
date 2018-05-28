@@ -1,0 +1,148 @@
+#lang ivy1.7
+
+# Deserializer for TLS records
+
+include tls_record
+
+object tls_deser = {}
+
+<<< member
+
+    class `tls_deser`;
+
+>>>
+
+<<< impl
+
+    typedef struct tls_name_struct {
+        const char *name;
+        int value;
+    } *tls_name_struct_ptr;
+
+    struct tls_name_map : hash_space::hash_map<std::string,int> {};
+
+    struct tls_name_struct tls_field_length_bytes[9] = {
+        {"fragment",2},
+        {"content",2},
+        {"tls.client_hello",3},
+        {"tls.server_hello",3},
+        {"session_id",1},
+        {"cipher_suites",2},
+        {"compression_methods",1},
+        {"extensions",2},
+        {0,0}
+    };
+    tls_name_map tls_field_length_bytes_map;
+
+    struct tls_name_struct tls_field_bytes[12] = {
+        {"version",2},
+        {"client_version",2},
+        {"server_version",2},
+        {"etype",2},
+        {"gmt_unix_time",4},
+        {"cipher_suites",2},
+        {"the_cipher_suite",2},
+        {"compression_methods",1},
+        {"the_compression_method",1},
+        {"session_id",1},
+        {"content",1},
+        {0,0}
+    };
+    tls_name_map tls_field_bytes_map;
+
+    struct tls_name_struct tls_tags[5] = {
+        {"tls.handshake_record",22},
+        {"tls.application_data_record",23},
+        {"tls.client_hello",1},
+        {"tls.server_hello",2},
+        {0,0}
+    };
+    tls_name_map tls_tags_map;
+
+    void tls_make_name_map(tls_name_struct *vals, tls_name_map &map) {
+        while (vals->name) {
+            map[vals->name] = vals->value;
+            vals++;
+        }
+    }
+
+    class `tls_deser` : public ivy_binary_deser {
+        int field_bytes;
+        std::vector<unsigned> fence;
+
+    public:
+
+        tls_deser(const std::vector<char> &inp) : ivy_binary_deser(inp) {
+            field_bytes = 2;
+        }
+
+        virtual bool more(unsigned bytes) {
+            if (fence.size() > 0 && pos + bytes > fence.back())
+                return false;
+            return ivy_binary_deser::more(bytes);
+        }
+    
+        virtual void open_field(const std::string &name) {
+            if (name == "random_bytes") {
+                fence.push_back(pos+28);
+                field_bytes = 1;
+            }
+            else if (tls_field_length_bytes_map.find(name) != tls_field_length_bytes_map.end()) {
+                int length_field_bytes = tls_field_length_bytes_map[name];
+                long long bytes;
+                getn(bytes,length_field_bytes);
+                fence.push_back(pos+bytes);
+            }
+            else if (fence.size() > 0)
+                fence.push_back(fence.back());
+            if (tls_field_bytes_map.find(name) != tls_field_bytes_map.end()) {
+                field_bytes = tls_field_bytes_map[name];
+            }
+        }
+
+        virtual void close_field() {
+            if (fence.size() > 0)
+                fence.pop_back();
+        }
+
+        virtual int open_tag(const std::vector<std::string> &tags) {
+            long long tag;
+            getn(tag,1);
+            for (int i = 0; i < tags.size(); i++) {
+                if (tag == tls_tags_map[tags[i]]) {
+                   open_field(tags[i]);
+                   return i;
+                }
+            }
+            throw deser_err();
+        }
+
+        virtual void close_tag() {
+            close_field();
+        }
+
+        virtual void get(long long &res) {
+            getn(res,field_bytes);
+        }
+
+        virtual bool open_list_elem() {
+            return more(1);
+        }
+        void close_list_elem() {}
+
+        void open_list() {}
+        void close_list() {}
+
+        ~tls_deser(){}
+    };
+
+>>>
+
+<<< init
+    
+    tls_make_name_map(tls_field_length_bytes,tls_field_length_bytes_map);
+    tls_make_name_map(tls_field_bytes,tls_field_bytes_map);
+    tls_make_name_map(tls_tags,tls_tags_map);
+
+
+>>>

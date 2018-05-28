@@ -1,0 +1,35 @@
+#lang ivy1.7
+
+include quic_types
+
+type transport_paramater_id
+
+variant initial_max_stream_data = 
+type transport_paramater_id = {
+    initial_max_stream_data(0),
+    initial_max_data(1),
+    initial_max_stream_id_bidi(2),
+    idle_timeout(3),
+    omit_connection_id(4),
+    max_packet_size(5),
+    stateless_reset_token(6),
+    ack_delay_exponent(7),
+    initial_max_stream_id_uni(8)
+}
+
+      struct {
+         TransportParameterId parameter;
+         opaque value<0..2^16-1>;
+      } TransportParameter;
+
+      struct {
+         select (Handshake.msg_type) {
+            case client_hello:
+               QuicVersion initial_version;
+
+            case encrypted_extensions:
+               QuicVersion negotiated_version;
+               QuicVersion supported_versions<4..2^8-4>;
+         };
+         TransportParameter parameters<22..2^16-1>;
+      } TransportParameters;

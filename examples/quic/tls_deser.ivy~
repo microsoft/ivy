@@ -1,37 +1,39 @@
 #lang ivy1.7
 
-# a fake deserializer for quic
+# Deserializer for TLS records
 
-object quic_deser = {}
+include tls_record
+
+object tls_deser = {}
 
 <<< member
 
-    class `quic_deser`;
+    class `tls_deser_class`;
 
 >>>
 
 <<< impl
 
-    class `quic_deser` : public ivy_binary_deser {
-        enum {quic_s_init,
-              quic_s_type,
-              quic_s_cid,
-              quic_s_version,
-              quic_s_pkt_num,
-              quic_s_payload,
-              quic_stream_id,
-              quic_stream_off,
-              quic_stream_len,
-              quic_stream_fin,
-              quic_stream_offset,
-              quic_stream_length,
-              quic_stream_data,
-              quic_ack_largest,
-              quic_ack_delay,
-              quic_ack_block_count,
-              quic_ack_gap,
-              quic_ack_block,
-              quic_s_done} state;
+    class `tls_deser_class` : public ivy_binary_deser {
+        enum {tls_s_init,
+              tls_s_type,
+              tls_s_cid,
+              tls_s_version,
+              tls_s_pkt_num,
+              tls_s_payload,
+              tls_stream_id,
+              tls_stream_off,
+              tls_stream_len,
+              tls_stream_fin,
+              tls_stream_offset,
+              tls_stream_length,
+              tls_stream_data,
+              tls_ack_largest,
+              tls_ack_delay,
+              tls_ack_block_count,
+              tls_ack_gap,
+              tls_ack_block,
+              tls_s_done} state;
         bool long_format;
         char hdr_type;
         char frame_type;
@@ -40,118 +42,118 @@ object quic_deser = {}
         long long ack_block_count;
 
     public:
-        quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
+        tls_deser_class(const std::vector<char> &inp) : ivy_binary_deser(inp),state(tls_s_init) {
             pos = 42; // skip 42 bytes of IP and UDP header
         }
         virtual void  get(long long &res) {
             switch (state) {
-            case quic_s_init:
+            case tls_s_init:
             {
                 getn(res,1);
                 long_format = (res & 0x80) ? true : false;
                 hdr_type = res & 0x7f;
                 res = long_format;
-                state = quic_s_type;
+                state = tls_s_type;
             }
             break;
-            case quic_s_type:
+            case tls_s_type:
             {
                 res = hdr_type;
-                state = quic_s_cid;
+                state = tls_s_cid;
             }
             break;
-            case quic_s_cid:
+            case tls_s_cid:
             {
                 ivy_binary_deser::get(res);
-                state = quic_s_version;
+                state = tls_s_version;
             }
             break;
-            case quic_s_version:
+            case tls_s_version:
             {
                 if (long_format)
                     ivy_binary_deser::getn(res,4);
                 else
                     res = 0;
-                state = quic_s_pkt_num;
+                state = tls_s_pkt_num;
             }
             break;
-            case quic_s_pkt_num:
+            case tls_s_pkt_num:
             {
                 ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
-                state = quic_s_payload;
+                state = tls_s_payload;
             }
             break;
-            case quic_stream_off:
+            case tls_stream_off:
             {
                 res = (0x04 & frame_type) ? 1 : 0;
-                state = quic_stream_len;
+                state = tls_stream_len;
             }
             break;
-            case quic_stream_len:
+            case tls_stream_len:
             {
                 res = (0x02 & frame_type) ? 1 : 0;
-                state = quic_stream_fin;
+                state = tls_stream_fin;
             }
             break;
-            case quic_stream_fin:
+            case tls_stream_fin:
             {
                 res = (0x01 & frame_type) ? 1 : 0;
-                state = quic_stream_id;
+                state = tls_stream_id;
             }
             break;
-            case quic_stream_id:
+            case tls_stream_id:
             {
                 get_var_int(res);
-                state = quic_stream_offset;
+                state = tls_stream_offset;
             }
             break;
-            case quic_stream_offset:
+            case tls_stream_offset:
             {
                 if (0x04 & frame_type)
                     get_var_int(res);
                 else res = 0;
-                state = quic_stream_length;
+                state = tls_stream_length;
             }
             break;
-            case quic_stream_length:
+            case tls_stream_length:
             {
                 if (0x02 & frame_type)
                     get_var_int(res);
                 else res = 0;
                 data_remaining = res;
-                state = quic_stream_data;
+                state = tls_stream_data;
             }
             break;
-            case quic_stream_data:
+            case tls_stream_data:
             {
                 ivy_binary_deser::getn(res,1);
             }
             break;
-            case quic_ack_largest:
+            case tls_ack_largest:
             {
                 get_var_int(res);
-                state = quic_ack_delay;
+                state = tls_ack_delay;
             }
             break;
-            case quic_ack_delay:
+            case tls_ack_delay:
             {
                 get_var_int(res);
-                state = quic_ack_block_count;
+                state = tls_ack_block_count;
             }
             break;
-            case quic_ack_gap:
+            case tls_ack_gap:
             {
                 if (ack_block_count == 0)
                     res = 0; // first ack block has no gap
                 else
                     get_var_int(res);
-                state = quic_ack_block;
+                state = tls_ack_block;
             }
             break;
-            case quic_ack_block:
+            case tls_ack_block:
             {
                 get_var_int(res);
-                state = quic_ack_gap;
+                state = tls_ack_gap;
                 ack_block_count++;
             }
             break;
@@ -170,16 +172,16 @@ object quic_deser = {}
         }
 
         virtual int open_tag(const std::vector<std::string> &tags) {
-            if (state == quic_s_payload) {
+            if (state == tls_s_payload) {
                 long long ft;
                 ivy_binary_deser::getn(ft,1);
                 frame_type = ft;
                 if (frame_type >= 0x10 && frame_type <= 0x17) {
-                    state = quic_stream_off;
+                    state = tls_stream_off;
                     return 0;
                 }
                 if (frame_type == 0x0e) {
-                    state = quic_ack_largest;
+                    state = tls_ack_largest;
                     return 1;
                 }
             }
@@ -187,35 +189,35 @@ object quic_deser = {}
         }
 
         virtual bool open_list_elem() {
-            if (state == quic_s_payload) {
+            if (state == tls_s_payload) {
                while (more(1) && inp[pos] == 0)
                    pos++;  // skip padding frames
                return more(1);
             }
-            if (state == quic_ack_gap) {
+            if (state == tls_ack_gap) {
                 return ack_block_count < ack_blocks_expected;
             }
-            if (state == quic_stream_data)
+            if (state == tls_stream_data)
                 return (0x02 & frame_type) ? (data_remaining-- > 0) : more(1);
             throw deser_err();
         }
 
         void open_list() {
-            if (state == quic_ack_block_count) {
+            if (state == tls_ack_block_count) {
                 get_var_int(ack_blocks_expected);
                 ack_blocks_expected++;  // block count doesn't include first
                 ack_block_count = 0;
-                state = quic_ack_gap;
+                state = tls_ack_gap;
             }
         }
         void close_list() {}
         void close_list_elem() {}
 
         virtual void close_tag() {
-            state = quic_s_payload;
+            state = tls_s_payload;
         }
 
-        ~quic_deser(){}
+        ~tls_deser_class(){}
     };
 
 >>>
