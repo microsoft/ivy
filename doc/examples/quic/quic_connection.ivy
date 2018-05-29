@@ -93,8 +93,14 @@ include quic_transport_parameters
 #
 # - For each endpoint E, cid C,and stream id S, `stream_finished(E,C,S)`
 #   indicates that the stream transmitted to endpoint E
-#   on stread id S of cid C is finished (that is, a FIN frame has been sent). 
+#   with strean id S and cid C is finished (that is, a FIN frame has been sent). 
 #
+# - For each endpoint E, cid C,and stream id S, `stream_reset(E,C,S)`
+#   indicates that the stream transmitted to endpoint E with stream id
+#   S and cid C is reset (that is, a RESET_STREAM frame has been
+#   sent).
+#
+
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
@@ -112,6 +118,7 @@ function max_stream_data(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
+relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 
 
 # Initial state
@@ -131,6 +138,7 @@ after init {
     stream_seen(E,C,S) := false;
     max_stream_data_set(E,C,S) := false;
     stream_finished(E,C,S) := false;
+    stream_reset(E,C,S) := false;
 }
 
 # Packet events
@@ -397,6 +405,34 @@ object frame = {
         }
     }
 }
+
+# Reset stream frames cause an identified stream to be abruptly terminated,
+# meaning the no further transmissions (or retransmissions) will be sent for
+# this stream and the receiver may ignore any data previously transmitted.
+#
+# Requirements:
+#
+# - TODO: Stream id must not exceed maximim stream id.
+# - QUESTION: Can a previously reset stream be reset?
+# - The final stream position may not be lesser than that of any previous
+#   stream frame for the same stream id [1].
+#
+# Effects:
+#
+# - The specified stream id is marked as reset [2].
+# - The stream length is set to the given final offset [3].
+#
+
+object frame = { ...
+    object rst_stream = { ...
+        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            require stream_length(dst,pcid,f.id) <= f.final_offset;  # [1]
+            stream_reset(dst,pcid,f.id) := true;  # [2]
+            stream_length(dst,pcid,f.id) := f.final_offset;  #[3]
+        }
+    }
+}
+
 
 # ### Packet number decoding
 
