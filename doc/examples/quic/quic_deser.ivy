@@ -31,6 +31,9 @@ object quic_deser = {}
               quic_ack_block_count,
               quic_ack_gap,
               quic_ack_block,
+              quic_reset_stream_id,
+              quic_reset_err_code,
+              quic_reset_final_offset,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -155,6 +158,23 @@ object quic_deser = {}
                 ack_block_count++;
             }
             break;
+            case quic_reset_stream_id:
+            {
+                get_var_int(res);
+                state = quic_reset_err_code;
+            }
+            break;
+            case quic_reset_err_code:
+            {
+                getn(res,2);
+                state = quic_reset_final_offset;
+            }
+            break;
+            case quic_reset_final_offset:
+            {
+                get_var_int(res);
+            }
+            break;
             default:
             throw deser_err();
             }
@@ -182,6 +202,15 @@ object quic_deser = {}
                     state = quic_ack_largest;
                     return 1;
                 }
+                if (frame_type == 0x01) {
+                    state = quic_reset_stream_id;
+                    return 2;
+                }
+                if (frame_type == 0x06) {
+                    state = quic_reset_stream_id; // parser state equivalent to this
+                    return 3;
+                }
+                std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();
         }

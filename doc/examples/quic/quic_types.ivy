@@ -50,3 +50,8 @@ interpret pkt_num -> bv[62]
 # microseconds. Currently this type is uninterpreted.
 
 type microsecs
+
+# The type error code is a two-byte code for an error
+
+type error_code
+interpret error_code -> bv[16]

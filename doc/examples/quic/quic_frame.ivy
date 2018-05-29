@@ -51,6 +51,30 @@ object frame = {
         }
     }
 
+    object rst_stream = {
+
+        # Rst_stream frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            id              : stream_id,  # id of stream being reset
+            err_code        : error_code, # the error code
+            final_offset    : stream_pos  # position of the end of the stream
+            
+        }
+    }
+
+    object max_stream_id = {
+
+        # Max_stream_id frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            id              : stream_id  # maximum stream id
+            
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
