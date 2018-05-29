@@ -1,0 +1,48 @@
+#lang ivy
+
+# This module provides access to packet deserializers. 
+#
+# The module takes three parameters:
+#
+# 1. The byte array type `bytes` representing the serialized data.
+# 2. The datatype `datatype` representing the deserialied data.
+# 3. The low-level deserializer method `deser`.
+#
+# The type `bytes` must be an instance of `array` or `vector` for
+# which the range type is interpreted as `bv[8]`.
+#
+
+module deserializer(bytes,datatype,deser) = {
+
+    action deserialize(x:bytes) returns (y:datatype)
+
+    implementation {
+        implement deserialize { <<<
+            std::vector<char> buf(x.size());
+            std::copy(x.begin(),x.end(),buf.begin());
+            `deser` ds(buf);
+
+            try {
+               __deser(ds,y);
+            }
+
+            // If deserialization failure, print out the packet for
+            // debugging purposes.
+
+            catch(deser_err &err) {
+                std::cerr << "error: failed to deserialize data" << std::endl;
+                std::cerr << "hex dump of data follows." << std::endl;
+                for (unsigned i = 0; i < buf.size(); i++) {
+                    if (i > 0 && i % 16 == 0) 
+                        std::cerr << std::endl;
+                    if (i == ds.pos)
+                        fprintf(stderr,"*");
+                    fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+                }
+                std::cerr << std::endl;
+                exit(1);
+            }
+
+        >>> }
+    }
+}
