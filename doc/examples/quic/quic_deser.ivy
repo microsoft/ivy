@@ -34,6 +34,9 @@ object quic_deser = {}
               quic_reset_stream_id,
               quic_reset_err_code,
               quic_reset_final_offset,
+              quic_connection_close_err_code,
+              quic_connection_close_reason_length,
+              quic_connection_close_reason,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -126,6 +129,7 @@ object quic_deser = {}
             }
             break;
             case quic_stream_data:
+            case quic_connection_close_reason:
             {
                 ivy_binary_deser::getn(res,1);
             }
@@ -175,6 +179,19 @@ object quic_deser = {}
                 get_var_int(res);
             }
             break;
+            case quic_connection_close_err_code:
+            {
+                getn(res,2);
+                state = quic_connection_close_reason_length;
+            }
+            break;
+            case quic_connection_close_reason_length:
+            {
+                get_var_int(res);
+                data_remaining = res;
+                state = quic_connection_close_reason;
+            }
+            break;
             default:
             throw deser_err();
             }
@@ -210,6 +227,10 @@ object quic_deser = {}
                     state = quic_reset_stream_id; // parser state equivalent to this
                     return 3;
                 }
+                if (frame_type == 0x02) {
+                    state = quic_connection_close_err_code;
+                    return 4;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();
@@ -226,6 +247,8 @@ object quic_deser = {}
             }
             if (state == quic_stream_data)
                 return (0x02 & frame_type) ? (data_remaining-- > 0) : more(1);
+            if (state == quic_connection_close_reason)
+                return data_remaining-- > 0;
             throw deser_err();
         }
 

@@ -66,12 +66,23 @@ object frame = {
 
     object max_stream_id = {
 
-        # Max_stream_id frames are a variant of frame
+        # Max_stream_id frames are a variant of frame.
 
         variant this of frame = struct {
         
             id              : stream_id  # maximum stream id
             
+        }
+    }
+
+    object connection_close = {
+        
+        # Connection close frames are a variant of frame.
+
+        variant this of frame = struct {
+            err_code               : error_code, # the error code
+            reason_phrase_length   : stream_pos, # number of bytes in reason phrase
+            reason_phrase          : stream_data # bytes of reason phrase
         }
     }
 

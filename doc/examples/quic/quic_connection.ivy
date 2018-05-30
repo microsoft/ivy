@@ -100,6 +100,11 @@ include quic_transport_parameters
 #   S and cid C is reset (that is, a RESET_STREAM frame has been
 #   sent).
 #
+# - For each destination endpoint E, cid C,and stream kind K, `max_stream_set(E,C,K)`
+#   indicates that the maximum stream id is set.
+#
+# - For each destination endpoint E, cid C,and stream kind K, `max_stream(E,C,K)`
+#   indicates the maximum stream id.
 
 
 relation conn_seen(E:ip.endpoint,C:cid)
@@ -119,6 +124,8 @@ relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
+relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
+function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 
 
 # Initial state
@@ -348,6 +355,11 @@ object frame = {
 # - If the stream is finished, the the frame offset plus length must
 #   not exceed the stream length [5].
 #
+# - Except on stream 0, the stream id must be less than or equal to
+#   the max stream id for the kind of the stream [6].
+#
+# - Except on stream 0, the stream must not have been reset [7].
+#
 # Effects:
 #
 # - If the stream has not been seen before, and if the
@@ -381,11 +393,24 @@ object frame = {
                 }
             }
             else {
+                var kind := get_stream_kind(f.id);
+                require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [6]
+                require ~stream_reset(dst,pcid,f.id);  # [7]
                 if ~stream_seen(dst,pcid,f.id) {
                     if initial_max_stream_data.is_set(trans_params(dst,pcid)) {
                         max_stream_data(dst,pcid,f.id) :=
                             initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32;  # [3]
                         max_stream_data_set(dst,pcid,f.id) := true
+                    };
+                    if initial_max_stream_id_bidi.is_set(trans_params(dst,pcid)) {
+                        max_stream(dst,pcid,bidir) :=
+                            initial_max_stream_id_bidi.value(trans_params(dst,pcid)).stream_id_32;  # [3]
+                        max_stream_set(dst,pcid,bidir) := true
+                    };
+                    if initial_max_stream_id_uni.is_set(trans_params(dst,pcid)) {
+                        max_stream(dst,pcid,unidir) :=
+                            initial_max_stream_id_uni.value(trans_params(dst,pcid)).stream_id_32;  # [3]
+                        max_stream_set(dst,pcid,unidir) := true
                     };
                     stream_length(dst,pcid,f.id) := 0;
                 };
@@ -412,7 +437,7 @@ object frame = {
 #
 # Requirements:
 #
-# - TODO: Stream id must not exceed maximim stream id.
+# - Stream id must not exceed maximim stream id for the stream kind [4].
 # - QUESTION: Can a previously reset stream be reset?
 # - The final stream position may not be lesser than that of any previous
 #   stream frame for the same stream id [1].
@@ -427,8 +452,37 @@ object frame = { ...
     object rst_stream = { ...
         action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
             require stream_length(dst,pcid,f.id) <= f.final_offset;  # [1]
+            var kind := get_stream_kind(f.id);
+            require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [4]
             stream_reset(dst,pcid,f.id) := true;  # [2]
             stream_length(dst,pcid,f.id) := f.final_offset;  #[3]
+        }
+    }
+}
+
+# Max stream id frames cause the maximum stream id to be set. 
+# The receiver of the max stream id may use stream ids up to and including
+# the given maximum. Bit 1 of the stream id (the next-to-least significant)
+# determines whether the limit is set for unidirectional or bidirectional
+# streams. A max stream id containing a stream id lower than the current
+# maximum is allowed and ignored.
+#
+# Requirements:
+#
+#
+# Effects:
+#
+# - The maximum stream id is set [1].
+#
+
+object frame = { ...
+    object max_stream_id = { ...
+        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            var kind := get_stream_kind(f.id);
+            if ~ (max_stream_set(dst,pcid,kind) & f.id < max_stream(dst,pcid,kind)) {
+                max_stream_set(dst,pcid,kind) := true;
+                max_stream(dst,pcid,kind) := f.id; #  [1]
+            }
         }
     }
 }
@@ -497,28 +551,22 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         # If long format or type is 0x1d, we match 32 bits
 
         if pkt.hdr_long | pkt.hdr_type = 0x1d {
+            pnum := last + bfe[0][31](pnum - last);
             require pnum <= la + 0x7ffffffe;
-            if some(n:pkt_num) n > last & bfe[0][31](n) = pnum minimizing n {
-                pnum := n
-            }
         }
 
         # else if long format or type is 0x1e, we match 16 bits
 
         else if pkt.hdr_type = 0x1e {
+            pnum := last + bfe[0][15](pnum - last);
             require pnum <= la + 0x7ffe;
-            if some(n:pkt_num) n > last & bfe[0][15](n) = pnum minimizing n {
-                pnum := n
-            }
         }
 
         # else (type is 0x1f) we match 8 bits
 
         else {
+            pnum := last + bfe[0][7](pnum - last);
             require pnum <= la + 0x7e;
-            if some(n:pkt_num) n > last & bfe[0][7](n) = pnum minimizing n {
-                pnum := n
-            }
         }
     }
 }

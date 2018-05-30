@@ -1,13 +1,19 @@
 #lang ivy1.7
 
 include byte_stream
+include quic_types
 
 # QUIC Streams
 # ------------
 
 # A connection is associated with a collection of streams, each of
 # which has a associated stream identifier, or `stream_id` that is
-# unique within the connection.
+# unique within the connection. A stream id is a 32-bit unsigned
+# number.
 
 type stream_id                                   # stream identifier
+interpret stream_id -> bv[32]
+
+function get_stream_kind(S:stream_id) =
+    unidir if bfe[1][1](S) = bit1 else bidir
 
