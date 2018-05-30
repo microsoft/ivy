@@ -43,6 +43,9 @@ include quic_transport_parameters
 # - For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has
 #   been sent by E.
 #
+# - For each endpoint E, and cid C, `conn_closed(C,E)` is true if C has
+#   been closed by E.
+#
 # - The predicate `initializing(C,S)` holds if client endpoint C has sent an
 #   Initial packet to server endpoint S, but the server has not replied.
 #
@@ -78,7 +81,11 @@ include quic_transport_parameters
 #   indicates that a stream frame for stream id S on connection C
 #   has been sent to destination endpoint E.
 #
-# - For each endpoint E, cid C,and stream id S, `max_stream_data(E,C,S)`
+# - For each endpoint E, cid C,and stream id S, `stream_open(E,C,S)`
+#   indicates that a stream frame for stream id *greater than or equal
+#   to* S on connection C has been sent to destination endpoint E.
+#
+# - For each endpoint E, cid C,and stream id S, `max_stream_data_val(E,C,S)`
 #   indicates the maximum number of bytes that may be sent on stream
 #   id S on connection C to destination endpoint E.
 #
@@ -108,6 +115,7 @@ include quic_transport_parameters
 
 
 relation conn_seen(E:ip.endpoint,C:cid)
+relation conn_closed(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
 function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
 function initial_pkt_cid(C:ip.endpoint,S:ip.endpoint) : cid
@@ -119,7 +127,8 @@ function ack_credit(E:ip.endpoint,C:cid) : pkt_num
 relation trans_params_set(E:ip.endpoint,C:cid)
 function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
 relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
-function max_stream_data(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
+relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
+function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
@@ -137,12 +146,14 @@ function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 
 after init {
     conn_seen(E,C) := false;
+    conn_closed(E,C) := false;
     sent_pkt(E,C,N) := false;
     acked_pkt(E,C,N) := false;
     max_acked(E,C) := 0;
     ack_credit(E,C) := 0;
     trans_params_set(E:ip.endpoint,C:cid) := false;
     stream_seen(E,C,S) := false;
+    stream_open(E,C,S) := false;
     max_stream_data_set(E,C,S) := false;
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
@@ -181,7 +192,10 @@ after init {
 #   packets, at least without looking at the security information.
 #
 # - A packet number may not be re-sent on a given connection. 
-
+#
+# - Initial packets may not be sent on a cid that has
+#   been closed by the sender [6].
+#
 # ### Effects
 #
 # - The `conn_seen` and `sent_pkt` relations are updated to reflect
@@ -247,6 +261,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require pkt.payload.end = 1;  # [1]
 	require pkt.payload.value(0) isa frame.stream;
         require ~initializing(src,dst);  # [2]
+        require ~conn_closed(src,pcid);  # [6]
 
         initializing(src,dst) := true;  # [3]
         initial_pkt_num(src,dst) := pnum;  # [3]
@@ -349,7 +364,7 @@ object frame = {
 #   TLS records [1].
 #
 # - The upper bound of the stream frame may not exceed the current
-#   value of `max_stream_data` for the given destination and cid, if
+#   value of `max_stream_data_val` for the given destination and cid, if
 #   it has been set [2].
 #
 # - If the stream is finished, the the frame offset plus length must
@@ -360,11 +375,13 @@ object frame = {
 #
 # - Except on stream 0, the stream must not have been reset [7].
 #
+# - The connection must not have bee closed by the source endpoint [8].
+#
 # Effects:
 #
 # - If the stream has not been seen before, and if the
 #   `initial_max_stream_data` transport parameter has been set, then
-#   the `max_stream_data` value is set to the value of the
+#   the `max_stream_data_val` value is set to the value of the
 #   `initial_max_stream_data` transport parameter [3].
 #
 # - The QUIC-specific information in each TLS record in stream zero is
@@ -382,6 +399,9 @@ object frame = {
     object stream = {
         ...
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+
+            require ~conn_closed(src,pcid);  # [8]
+
             if f.id = 0 {
                 var tr := tls.parser.deserialize(f.data);  # [1]
                 var idx := tr.begin;
@@ -398,7 +418,7 @@ object frame = {
                 require ~stream_reset(dst,pcid,f.id);  # [7]
                 if ~stream_seen(dst,pcid,f.id) {
                     if initial_max_stream_data.is_set(trans_params(dst,pcid)) {
-                        max_stream_data(dst,pcid,f.id) :=
+                        max_stream_data_val(dst,pcid,f.id) :=
                             initial_max_stream_data.value(trans_params(dst,pcid)).stream_pos_32;  # [3]
                         max_stream_data_set(dst,pcid,f.id) := true
                     };
@@ -415,7 +435,7 @@ object frame = {
                     stream_length(dst,pcid,f.id) := 0;
                 };
                 if max_stream_data_set(dst,pcid,f.id) {
-                    require ((f.offset) + (f.length)) <= max_stream_data(dst,pcid,f.id)  # [2]
+                    require ((f.offset) + (f.length)) <= max_stream_data_val(dst,pcid,f.id)  # [2]
                 };
                 var length := f.offset + f.length;
                 require stream_finished(dst,pcid,f.id) -> length <= stream_length(dst,pcid,f.id);  # [5]
@@ -426,6 +446,7 @@ object frame = {
                     stream_finished(dst,pcid,f.id) := true;
                 };
                 stream_seen(dst,pcid,f.id) := true;
+                stream_open(dst,pcid,S) := true if S <= f.id else stream_open(dst,pcid,S);
             }
         }
     }
@@ -441,6 +462,7 @@ object frame = {
 # - QUESTION: Can a previously reset stream be reset?
 # - The final stream position may not be lesser than that of any previous
 #   stream frame for the same stream id [1].
+# - The connection must not have been closed by the source endpoint [5].
 #
 # Effects:
 #
@@ -451,6 +473,9 @@ object frame = {
 object frame = { ...
     object rst_stream = { ...
         action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+
+            require ~conn_closed(src,pcid);  # [5]
+
             require stream_length(dst,pcid,f.id) <= f.final_offset;  # [1]
             var kind := get_stream_kind(f.id);
             require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [4]
@@ -469,6 +494,7 @@ object frame = { ...
 #
 # Requirements:
 #
+# - The connection must not have been closed by the source endpoint [2].
 #
 # Effects:
 #
@@ -478,6 +504,9 @@ object frame = { ...
 object frame = { ...
     object max_stream_id = { ...
         action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+
+            require ~conn_closed(src,pcid);  # [2]
+
             var kind := get_stream_kind(f.id);
             if ~ (max_stream_set(dst,pcid,kind) & f.id < max_stream(dst,pcid,kind)) {
                 max_stream_set(dst,pcid,kind) := true;
@@ -487,6 +516,59 @@ object frame = { ...
     }
 }
 
+# Connection close frames indicate to the peer that the connection is being closed.
+# It is unclear what this means operationally, but it seems reasonable to assume that the
+# endpoint closing the connection will not send or receive any further data on the connection,
+# so it is as if all the open streams are reset by this operation.
+#
+# A connection close frame can occur at any time. 
+#
+# Questions:
+#
+# - Are Ack frames still allowed after connection close?
+# - Are retransmissions allowed after connection close?
+# - When is a connection close allowed?
+#
+# Requirements:
+#
+# (None)
+#
+# Effects:
+#
+# - The connection state is set to closed for the source endpoint.
+#
+
+object frame = { ...
+    object connection_close = { ...
+        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            conn_closed(src,pcid) := true;
+        }
+    }
+}
+
+# Max stream data frames set the limit on data bytes that the source endpoint is willing
+# to receive for a given stream.
+#
+# Requirements
+#
+# - The stream must be open for receiving at the source endpoint [1].
+#
+# Effects
+# - If the given limit is greater than any previously set limit, then
+#   the max stream data limit for the given stream is updated [2].
+#
+
+object frame = { ...
+    object max_stream_data = { ...
+        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+            require stream_open(src,pcid,f.id);  # [1]
+            if ~(max_stream_data_set(dst,pcid,f.id) & f.pos < max_stream_data_val(dst,pcid,f.id)) {
+                max_stream_data_set(dst,pcid,f.id) := true;
+                max_stream_data_val(dst,pcid,f.id) := f.pos;  # [2]
+            }
+        }
+    }
+}
 
 # ### Packet number decoding
 
@@ -508,8 +590,12 @@ object frame = { ...
 #   | 0x1f     |  8   |
 #
 # For long format packets, the number of bits is always 32.  The
-# decoded packet number is the *least* number greater than the
-# last seen whose low-order bits agree with `hdr_pkt_num`.
+# decoded packet number is the nearest number to the last packet number seen
+# whose whose low-order bits agree with `hdr_pkt_num`. Note this is ambiguous
+# in the case that `hdr_pkt_num - last_pkt_num = 2^(n-1) mod 2^n` where `n`
+# is the number of bits, since `last_pkt_num + 2^(n-1)` and `last_pkt_num - 2^(n-1)`
+# both equal `hdr_pkt_num` modulo `2^n` and are equidistant from `last_pkt_num`.
+# This case is forbidden.
 #
 # Requirements
 #
@@ -551,7 +637,11 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
         # If long format or type is 0x1d, we match 32 bits
 
         if pkt.hdr_long | pkt.hdr_type = 0x1d {
-            pnum := last + bfe[0][31](pnum - last);
+            var diff : pkt_num := bfe[0][31](pnum - last);
+            pnum := last + diff;
+            if diff >= 0x80000000 {
+                pnum := pnum - 0x100000000
+            };
             require pnum <= la + 0x7ffffffe;
         }
 

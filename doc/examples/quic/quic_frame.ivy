@@ -86,6 +86,16 @@ object frame = {
         }
     }
 
+    object max_stream_data = {
+        
+        # Max stream data frames are a variant of frame.
+
+        variant this of frame = struct {
+            id                : stream_id,  # the stream id
+            pos               : stream_pos  # max number of bytes
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
