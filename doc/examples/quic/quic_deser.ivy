@@ -242,6 +242,10 @@ object quic_deser = {}
                     state = quic_max_stream_data_id;
                     return 5;
                 }
+                if (frame_type == 0x0a) {
+                    state = quic_reset_final_offset;
+                    return 6;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();

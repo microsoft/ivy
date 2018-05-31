@@ -96,6 +96,15 @@ object frame = {
         }
     }
 
+    object stream_id_blocked = {
+        
+        # Stream id blocked frames are a variant of frame.
+
+        variant this of frame = struct {
+            id                : stream_id  # the stream id
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
