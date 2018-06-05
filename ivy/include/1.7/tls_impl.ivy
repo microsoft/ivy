@@ -1,0 +1,279 @@
+#lang ivy1.7
+
+# This is an implementation of the generic TLS interface based on the Botan library.
+# The parameters are:
+#
+#     cid : the type of connection ids
+#     index : an unbounded sequence type
+#     bytes : a type of byte arrays indexed by `index`
+#     lower : the lower interface
+#     upper : the upper interface
+#
+
+module tls_impl(cid,index,bytes,lower,upper) = {
+
+# These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+    object cid_map = {}     # map from cid's to connections
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    #include <botan-2/botan/tls_client.h>
+    #include <botan-2/botan/tls_server.h>
+    #include <botan-2/botan/tls_callbacks.h>
+    #include <botan-2/botan/tls_session_manager.h>
+    #include <botan-2/botan/tls_policy.h>
+    #include <botan-2/botan/auto_rng.h>
+    #include <botan-2/botan/certstor.h>
+
+    // TODO: put any forward class definitions here
+
+    class tls_callbacks;
+    class tls_connection;
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+
+    // This structure holds all the callbacks. These are function objects
+    // that are called synchronously.
+
+    struct tls_callbacks {
+        %`lower.send` ls;
+        %`upper.recv` ur;
+        %`upper.alert` ua;
+        %`upper.session_established` use;
+    tls_callbacks(
+        const %`lower.send` ls,
+        const %`upper.recv` ur,
+        const %`upper.alert` ua,
+        const %`upper.session_established` use
+    )
+    : ls(ls), ur(ur), ua(ua), use(use) {}
+    };
+
+    // This object is the callback interface for Botan
+
+    class botan_tls_callbacks : public Botan::TLS::Callbacks {
+	public:
+	`cid` the_cid;
+	tls_callbacks cb;
+
+        botan_tls_callbacks(const `cid` &the_cid, const tls_callbacks &cb)
+        : the_cid(the_cid), cb(cb) {}
+
+	void tls_emit_data(const uint8_t data[], size_t size) override
+	{
+	    `bytes` vdata;
+	    for (size_t i = 0; i < size; i++)
+	    vdata.push_back(data[i]);
+	    cb.ls(the_cid,vdata);
+	}
+
+	void tls_record_received(uint64_t seq_no, const uint8_t data[], size_t size) override
+	{
+	    `bytes` vdata;
+	    for (size_t i = 0; i < size; i++)
+	    vdata.push_back(data[i]);
+	    cb.ur(the_cid,vdata);
+	}
+
+	void tls_alert(Botan::TLS::Alert alert) override
+	{
+	    std::string astr = alert.type_string();
+	    `bytes` vdata;
+	    for (size_t i = 0; i < astr.size(); i++)
+	    vdata.push_back(astr[i]);
+	    cb.ua(the_cid,vdata);
+	    // handle a tls alert received from the tls server
+	}
+
+	bool tls_session_established(const Botan::TLS::Session& session) override
+	{
+	    // the session with the tls server was established
+	    cb.use(the_cid);
+	    // return false to prevent the session from being cached, true to
+	    // cache the session in the configured session manager
+	    return false;
+	}
+    };
+
+    // This is a credentials manager for Botan that provdes no credentials
+
+    class tls_null_credentials : public Botan::Credentials_Manager
+    {
+       public:
+	  std::vector<Botan::Certificate_Store*> trusted_certificate_authorities(
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // return a list of certificates of CAs we trust for tls server certificates,
+	     // e.g., all the certificates in the local directory "cas"
+	     return std::vector<Botan::Certificate_Store*>();
+	     }
+
+	  std::vector<Botan::X509_Certificate> cert_chain(
+	     const std::vector<std::string>& cert_key_types,
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // when using tls client authentication (optional), return
+	     // a certificate chain being sent to the tls server,
+	     // else an empty list
+	     return std::vector<Botan::X509_Certificate>();
+	     }
+
+	  Botan::Private_Key* private_key_for(const Botan::X509_Certificate& cert,
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // when returning a chain in cert_chain(), return the private key
+	     // associated with the leaf certificate here
+	     return nullptr;
+	     }
+    };
+
+
+    class tls_connection {
+	public:
+	Botan::RandomNumberGenerator *rng;
+	Botan::TLS::Session_Manager *session_mgr;
+	Botan::TLS::Callbacks *btcs;
+	Botan::Credentials_Manager *creds;
+        Botan::TLS::Policy *policy;
+	Botan::TLS::Channel *chan;
+    };
+
+    class tls_policy : public Botan::TLS::Policy {
+	public:
+	std::vector<std::string> allowed_signature_methods() const override {
+	    std::vector<std::string> res;
+	    res.push_back("ECDSA");
+	    res.push_back("RSA");
+	    res.push_back("");
+	    return res;
+	}
+    };
+
+
+>>>
+
+# Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+# object, we declared it here anti-quoted. The plugs in the actual member name, which may
+# be any array if this is a parameterized instance.
+
+<<< member
+
+    hash_space::hash_map<`cid`,tls_connection *> `cid_map`; // maps cid's to connections
+    tls_callbacks *`cb`;             // the callbacks to ivy
+
+>>>
+
+
+# Here, we put code to go in the initializer. If this is a
+# parameterized instance, then this code will be run in a loop, so we
+# have to be careful that any initialization of common objects is
+# idempotent.
+
+<<< init
+
+    // Create the callbacks. When you put an
+    // action in anti-quotes it creates a function object (a "thunk")
+    // that captures the instance environment, in this case including
+    // the instance's endpoint id "me".
+
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.session_established`);
+
+>>>
+
+
+    object impl = {
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    implement create(is_server:bool) returns(c:cid) {
+        <<< impure
+            
+	// We allocate an unused cid, and create an entry in the cid_map
+	// for it.
+
+	c = 0;
+	while (`cid_map`.find(c) != `cid_map`.end()) {
+	    c++;
+	}
+	tls_connection tc;
+	tc.rng = new Botan::AutoSeeded_RNG; 
+	tc.session_mgr = new Botan::TLS::Session_Manager_In_Memory(*tc.rng);
+	tc.btcs = new botan_tls_callbacks(c,*`cb`);
+	tc.creds = new tls_null_credentials;
+	tc.policy = new tls_policy; // Botan::TLS::Strict_Policy;
+	if (is_server) {
+	    tc.chan = new Botan::TLS::Server(*tc.btcs,*tc.session_mgr,*tc.creds,*tc.policy,*tc.rng);
+	} else {
+	    tc.chan = new Botan::TLS::Client(*tc.btcs,*tc.session_mgr,*tc.creds,*tc.policy,*tc.rng);
+        }	
+	`cid_map`[c] = new tls_connection(tc);
+	
+        >>>
+    }
+
+
+    # Destroy frees a cid
+    
+    implement destroy(c:cid) {
+	<<< impure
+
+	// TODO: actually delete everything here
+	`cid_map`.erase(c);
+
+	>>>
+
+    }
+
+    # upper.send is called with application data to be transmitted to the peer.
+
+    implement upper.send(c:cid,data:bytes) {
+        <<< impure
+	tls_connection *tc = `cid_map`[c];
+	std::vector<uint8_t> vec;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    vec.push_back(data[i]);
+	}
+	tc->chan->send(vec);
+        >>>
+    }
+
+    # lower.recv is called with data received from the peer on the lower interface.
+
+    implement lower.recv(c:cid,data:bytes) {
+        <<< impure
+	tls_connection *tc = `cid_map`[c];
+	std::vector<uint8_t> vec;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    vec.push_back(data[i]);
+	}
+	tc->chan->received_data(vec);
+        >>>
+    }
+
+    
+    trusted isolate iso = this
+
+    attribute test = impl
+}
+}
