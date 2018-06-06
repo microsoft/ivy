@@ -5,6 +5,7 @@ include order
 include quic_packet
 include quic_connection
 include quic_deser
+include quic_interp
 
 # This is a monitor that reads a file of QUIC packets in pcap format
 # and tracks the protocol, checking that the packet sequence satisfies

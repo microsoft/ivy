@@ -806,7 +806,13 @@ def emit_action_gen(header,impl,name,action,classname):
     if name in im.module.before_export:
         action = im.module.before_export[name]
     def card(sort):
-        return sort_card(sort)
+        res = sort_card(sort)
+        if res is not None:
+            return res
+        if hasattr(sort,'name') and iu.compose_names(sort.name,'cardinality') in im.module.attributes:
+            return int(im.module.attributes[iu.compose_names(sort.name,'cardinality')].rep)
+        return None
+        
 #    action = action.unroll_loops(card)
     if name in im.module.ext_preconds:
         orig_action = action
@@ -4528,8 +4534,8 @@ def main_int(is_ivyc):
 
                     im.module.labeled_axioms.extend(im.module.labeled_props)
                     im.module.labeled_props = []
-                    if target.get() != 'repl':
-                        ith.check_theory(True)
+#                    if target.get() != 'repl':
+#                        ith.check_theory(True)
                     with im.module.theory_context():
                         basename = opt_classname.get() or im.module.name
                         if len(isolates) > 1:

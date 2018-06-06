@@ -12,7 +12,6 @@ include quic_types
 # number.
 
 type stream_id                                   # stream identifier
-interpret stream_id -> bv[32]
 
 function get_stream_kind(S:stream_id) =
     unidir if bfe[1][1](S) = bit1 else bidir

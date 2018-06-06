@@ -28,21 +28,18 @@
 # The type `cid` represents a cid as a 64-bit unsigned integer.
 
 type cid
-interpret cid -> bv[62]
 
 # ### Protocol verion numbers
 
 # The type `version` represents a protocol version as a 32-bit unsigned number.
 
 type version 
-interpret version -> bv[32]
 
 # ### Packet numbers
 
 # The type `pkt_num` represents a packet number as a 64-bit unsigned number.
 
 type pkt_num
-interpret pkt_num -> bv[62]
 
 # ### Time values
 
@@ -54,7 +51,6 @@ type microsecs
 # The type error code is a two-byte code for an error
 
 type error_code
-interpret error_code -> bv[16]
 
 # A stream kind is either unidirectional (`unidir`) or bidirectional (`bidir`)
 
