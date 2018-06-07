@@ -132,6 +132,7 @@ def mk_nondet(code,v,rng,name,unique_id):
     code.append(varname(v) + ' = ('+ct+')___ivy_choose(' + str(0) + ',"' + name + '",' + str(unique_id) + ');\n')
 
 def is_native_sym(sym):
+    assert hasattr(sym.sort,'rng'),sym
     return il.is_uninterpreted_sort(sym.sort.rng) and sym.sort.rng.name in im.module.native_types    
 
 

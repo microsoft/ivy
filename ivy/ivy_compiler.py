@@ -181,7 +181,9 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         sym = ivy_logic.find_polymorphic_symbol(destr_name)
         args.insert(0,base)
     if hasattr(sym.sort,'dom') and len(sym.sort.dom) > 0:
-        res = sym(*pull_args(args,len(sym.sort.dom),sym,top))
+        args = pull_args(args,len(sym.sort.dom),sym,top)
+        args = [ivy_logic.sort_infer(arg,sort) for arg,sort in zip(args,sym.sort.dom)]
+        res = sym(*args)
         return res
     return sym
                            
@@ -203,6 +205,15 @@ def compile_field_reference(symbol_name,args,lineno):
         raise IvyError(None,"unknown symbol: {}".format(err.symbol_name))
 
     
+def sort_infer_covariant(term,sort):
+    try:
+        return sort_infer(term,sort,True)
+    except ivy_logic.Error:
+        res = sort_infer(term)
+        if not(res.sort == sort or im.module.is_variant(res.sort,sort)):
+            raise IvyError(None,"cannot convert argument of type {} to {}".format(sort,res.sort))
+        return res
+
 def sort_infer_contravariant(term,sort):
     try:
         return sort_infer(term,sort,True)
@@ -234,6 +245,7 @@ def compile_inline_call(self,args,methodcall=False):
         return_values = return_context.values
         if len(returns) != len(return_values):
             raise IvyError(self,"wrong number of return values")
+        return_values = [sort_infer_covariant(a,cmpl_sort(p.sort)) for a,p in zip(return_values,returns)]
     with ASTContext(self):
         if len(params) != len(args):
             raise iu.IvyError(self,"wrong number of input parameters (got {}, expecting {})".format(len(args),len(params)))

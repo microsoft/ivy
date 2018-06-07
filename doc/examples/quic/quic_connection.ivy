@@ -32,7 +32,8 @@ include quic_transport_parameters
 
 # This section gives the wire specification of the QUIC protocol.  It
 # tracks the state of connections resulting from a sequence of packet
-# events.
+# events, along with a some 'ghost' events that represent hidden
+# processes inside the endpoints.
 
 # History variables
 # -----------------
@@ -94,9 +95,16 @@ include quic_transport_parameters
 #   id S on connection C to destination endpoint E ha been set.
 #
 # - For each endpoint E, cid C,and stream id S, `stream_length(E,C,S)`
-#   indicates the length of the stream data transmitted to endpoint E
-#   on stread id S of cid C. The length is the least stream position greater
-#   than the position of all bytes transmitted.
+#   indicates the length of the stream data transmitted in QUIC
+#   packets to endpoint E on stread id S of cid C. The length is the
+#   least stream position greater than the position of all bytes
+#   transmitted. Note this may be less than the length of the application
+#   data, but may not be greater.
+#
+# - For each endpoint E, cid C,and stream id S, `stream_app_data(E,C,S)`
+#   represents the stream data transmitted by the application to endpoint E
+#   on stread id S of cid C. This data may or may not have been transmitted in
+#   any QUIC packet.
 #
 # - For each endpoint E, cid C,and stream id S, `stream_finished(E,C,S)`
 #   indicates that the stream transmitted to endpoint E
@@ -130,6 +138,7 @@ relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
+function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
@@ -158,6 +167,102 @@ after init {
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
 }
+
+# Ghost events
+# ------------
+#
+# A ghost event is an internal event of the system under test that may
+# not be directly observable by the tester. These events may
+# correspond to communication between an application and a protocol
+# imlemenation, or an action within the application. In this case the
+# ghost event typically represents in some way the semantics of a
+# service being provided. Ghost evenst also sometimes correspond to
+# non-deterministic events within the implementation of a service, for
+# example the ordering of requests.
+#
+# During testing, inference of unobservable ghost events may be
+# computationally intractable. In these cases, the system under test
+# may need to be instrumented to record these events. In other cases,
+# it may be feasible to infer the events from the observable
+# communication. This is usually done by instrumenting the
+# communication monitors with additional code the generates the ghost
+# events. Incorrect inference of ghost events may result in a false
+# alarm in testing.
+#
+#
+# Open event
+# ==========
+#
+# The first event in the life of a connection at a given is an `open_event`.
+# At this point, the endpoint chooses its default transport parameters. Once
+# the `open_event` has occurred, the security handshake can begin.
+#
+# Requirements:
+#
+# - The connection must not already be open at the endpoint
+# - The transport parameters have not already been set
+#
+
+# before open_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, tp:trans_params_struct) {
+#     require conn_open(src,pcid);
+#     require ~trans_params_set(dst,pcid)
+#     conn_open(src,pcid) := true;
+#     trans_params_set(dst,pcid) := true;
+#     trans_params(dst,pcid) := tp;
+# }    
+
+# TLS send event
+# ==============
+#
+# This event corresponds to transmission of data between from a TLS
+# endpoint to its peer on a given connection. In concept it occurs at
+# the moment when the implmentation of TLS passes data to QUIC to be
+# transmitted to the peer. This is a ghost event, since it is not
+# visible on the wire. However, it can easily be inferred by examine
+# the QUIC steamm frames on stream id 0.
+#
+# Requirements
+#
+# - The connection must be open [3].
+# - The data must consist of a sequence of whole TLS records [1]
+#
+# Effects
+#
+# - The TLS data is appended to stream 0 [4].
+#
+# - The effect of each transmitted TLS record on the QUIC connection
+#   state is defined by `handle_tls_record`, below [2]. A TLS
+#   extension to client and server hello messages carries the
+#   connection's initial transport parameters and is required.
+#
+
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
+    # require conn_open(src,pcid);  # [3]
+    var tr := tls.parser.deserialize(data);  # [1]
+    var idx := tr.begin;
+    while idx < tr.end {
+        var tls_rec := tr.value(idx);
+        call tls.event(src,dst,tls_rec);
+        call handle_tls_record(src,dst,pcid,tls_rec);  #[2]
+        idx := idx.next
+    };
+    var jdx := data.begin;
+    while jdx < data.end {
+	stream_app_data(dst,pcid,0) :=
+	    stream_app_data(dst,pcid,0).append(data.value(jdx));  # [4]
+	jdx := jdx.next
+    }
+}
+
+#
+# TLS receive event
+# =================
+#
+# This event corresponds to transfer of data from QUIC to the TLS
+# implementation. 
+
+#before tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
+#}
 
 # Packet events
 # -------------
@@ -360,9 +465,6 @@ object frame = {
 #
 # Requirements:
 #
-# - Stream frames with id 0 must consist of a sequence of well-formed
-#   TLS records [1].
-#
 # - The upper bound of the stream frame may not exceed the current
 #   value of `max_stream_data_val` for the given destination and cid, if
 #   it has been set [2].
@@ -384,9 +486,6 @@ object frame = {
 #   the `max_stream_data_val` value is set to the value of the
 #   `initial_max_stream_data` transport parameter [3].
 #
-# - The QUIC-specific information in each TLS record in stream zero is
-#    handled [4].
-#
 # - The length of the stream is updated. 
 #
 # - If the fin bit is set, the stream is marked as finished.
@@ -403,14 +502,6 @@ object frame = {
             require ~conn_closed(src,pcid);  # [8]
 
             if f.id = 0 {
-                var tr := tls.parser.deserialize(f.data);  # [1]
-                var idx := tr.begin;
-                while idx < tr.end {
-                    var tls_rec := tr.value(idx);
-                    call tls.event(src,dst,tls_rec);
-                    call handle_tls_record(src,dst,pcid,tls_rec);  #[4]
-                    idx := idx.next
-                }
             }
             else {
                 var kind := get_stream_kind(f.id);

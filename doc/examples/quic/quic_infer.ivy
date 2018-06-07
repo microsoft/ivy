@@ -1,0 +1,29 @@
+#lang ivy1.7
+
+#
+# Ghost event inference
+# ---------------------
+#
+# As an aid in monitoring UIC packet streams, this section provides
+# actions for inferring unobserved ghost events from QUIC packet
+# events.
+
+# From a QUIC packet event, infer unobserved TLS events
+
+action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
+
+    # Stream frames on id 0 indicate that a `tls_send_event` has occurred.
+    # TODO: ignore duplicate frames.
+
+    var pcid := pkt.hdr_cid;
+    var idx := pkt.payload.begin;
+    while idx < pkt.payload.end {
+	if some(sf:frame.stream) pkt.payload.value(idx) *> sf {
+	    if sf.id = 0 {
+		call tls_send_event(src,dst,pcid,sf.data)
+	    }
+	};
+        idx := idx.next
+    }
+}
+
