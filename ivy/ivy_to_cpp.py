@@ -1385,6 +1385,13 @@ def module_to_cpp_class(classname,basename):
                 for d in destrs:
                     field_names[d.name] = varname(d.name)
 
+    if target.get() in ["gen","test"]:
+        for t in list(il.sig.interp):
+            attr = iu.compose_names(t,'override')
+            if attr in im.module.attributes:
+                print 'override: interpreting {} as {}'.format(t,im.module.attributes[attr].rep)
+                il.sig.interp[t] = im.module.attributes[attr].rep
+
     global number_format
     number_format = ''
     if 'radix' in im.module.attributes and im.module.attributes['radix'].rep == '16':
