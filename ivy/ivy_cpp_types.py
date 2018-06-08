@@ -318,7 +318,7 @@ void __from_solver<CLASSNAME>( gen &g, const  z3::expr &v, CLASSNAME &res) {
            add_impl('    {\n')
            add_impl('        z3::sort sort = g.sort("{}");\n'.format(sort.name))
            add_impl('        z3::func_decl pto = g.ctx.function("{}",g.sort("{}"),g.sort("{}"),g.ctx.bool_sort());\n'.format(pto,self.sort.name,sort.name))
-           add_impl('        std::cout <<  g.model << std::endl;\n')
+           add_impl('        // std::cout <<  g.model << std::endl;\n')
            add_impl('        Z3_ast_vector av = Z3_model_get_sort_universe(g.ctx, g.model, sort);\n')
            add_impl('        if (av) {\n')
            add_impl('            z3::expr_vector univ(g.ctx,av);\n')

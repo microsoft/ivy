@@ -106,7 +106,7 @@ def varname(name):
         return special_names[name]
     if name.startswith('"'):
         return name
-
+    
     name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__')
     name = re.sub(puncs,'__',name).replace('@@','.')
     return name.split(':')[-1]
@@ -429,13 +429,13 @@ def make_thunk(impl,vs,expr):
     close_scope(impl)
     if target.get() in ["gen","test"]:
         open_scope(impl,line = 'z3::expr to_z3(gen &g, const z3::expr &v)')
-        if isinstance(expr,HavocSymbol):
+        if False and isinstance(expr,HavocSymbol):
             code_line(impl,'return g.ctx.bool_val(true)')
         else:
             if lu.free_variables(expr):
                 raise iu.IvyError(None,"cannot compile {}".format(expr))
             if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
-                if expr.sort in sort_to_cpptype:
+                if expr.sort in sort_to_cpptype or hasattr(expr.sort,'name') and expr.sort.name in im.module.sort_destructors:
                     code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
                 else:
                     cty = '__strlit' if has_string_interp(expr.sort) else 'int'
@@ -493,7 +493,8 @@ def emit_cpp_sorts(header):
                 cpptype = ivy_cpp_types.get_cpptype_constructor(itp)(varname(name))
                 cpptypes.append(cpptype)
                 sort_to_cpptype[il.sig.sorts[name]] = cpptype
-                
+        else:
+            il.sig.interp[name] = 'int'
 
 
 def emit_sorts(header):
@@ -532,7 +533,7 @@ def emit_sorts(header):
         cname = varname(name)
         indent(header)
         header.append("const char *{}_values[{}]".format(cname,card) +
-                      " = {" + ','.join('"{}"'.format(x) for x in sort.extension) + "};\n");
+                      " = {" + ','.join('"{}"'.format(slv.solver_name(il.Symbol(x,sort))) for x in sort.extension) + "};\n");
         indent(header)
         header.append('mk_enum("{}",{},{}_values);\n'.format(name,card,cname))
 
@@ -541,7 +542,7 @@ def emit_decl(header,symbol):
     sname = slv.solver_name(symbol)
     if sname == None:  # this means the symbol is interpreted in some theory
         return 
-    cname = varname(name)
+    cname = '__pto__' + varname(symbol.sort.dom[0].name) + '__' + varname(symbol.sort.dom[1].name)  if symbol.name == '*>' else varname(name)
     sort = symbol.sort
     rng_name = "Bool" if sort.is_relational() else sort.rng.name
     domain = sort_domain(sort)
@@ -585,7 +586,7 @@ def emit_eval(header,symbol,obj=None,classname=None):
         indent_level += 1
     indent(header)
     if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types or sort.rng in sort_to_cpptype:
-        code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
+        code_line(header,'__from_solver<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+sname+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'),'+varname(symbol)+''.join('[X{}]'.format(idx) for idx in range(len(domain)))+')')
     else:
         header.append((obj + '.' if obj else '')
                       + cname + ''.join("[X{}]".format(idx) for idx in range(len(domain)))
@@ -607,7 +608,7 @@ def emit_set_field(header,symbol,lhs,rhs,nvars=0):
     domain = sort.dom[1:]
     vs = variables(domain,start=nvars)
     open_loop(header,vs)
-    lhs1 = 'apply("'+symbol.name+'"'+''.join(','+s for s in ([lhs]+map(var_to_z3_val,vs))) + ')'
+    lhs1 = 'apply("'+sname+'"'+''.join(','+s for s in ([lhs]+map(var_to_z3_val,vs))) + ')'
     rhs1 = rhs + ''.join('[{}]'.format(varname(v)) for v in vs) + '.' + memname(symbol)
     if sort.rng.name in im.module.sort_destructors:
         destrs = im.module.sort_destructors[sort.rng.name]
@@ -631,7 +632,7 @@ def emit_set(header,symbol):
         for destr in destrs:
             vs = variables(domain)
             open_loop(header,vs)
-            lhs = 'apply("'+symbol.name+'"'+''.join(','+s for s in map(var_to_z3_val,vs)) + ')'
+            lhs = 'apply("'+sname+'"'+''.join(','+s for s in map(var_to_z3_val,vs)) + ')'
             rhs = 'obj.' + varname(symbol) + ''.join('[{}]'.format(varname(v)) for v in vs)
             emit_set_field(header,destr,lhs,rhs,len(vs))
             close_loop(header,vs)
@@ -774,7 +775,7 @@ def emit_randomize(header,symbol,classname=None):
         header.append("for (int X{} = 0; X{} < {}; X{}++)\n".format(idx,idx,dcard,idx))
         indent_level += 1
     if sort.rng.name in im.module.sort_destructors or sort.rng.name in im.module.native_types or sort.rng in sort_to_cpptype:
-        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+symbol.name+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
+        code_line(header,'__randomize<'+classname+'::'+varname(sort.rng.name)+'>(*this,apply("'+sname+'"'+''.join(','+int_to_z3(s,'X{}'.format(idx)) for idx,s in enumerate(domain))+'))')
     else:
         indent(header)
         if il.is_uninterpreted_sort(sort.rng):
@@ -828,6 +829,7 @@ def emit_action_gen(header,impl,name,action,classname):
     pre_clauses = ilu.trim_clauses(pre)
     rdefs = im.relevant_definitions(ilu.symbols_clauses(pre_clauses))
     pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([fix_definition(ldf.formula).to_constraint() for ldf in rdefs]))
+    pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses(im.module.variant_axioms()))
     pre = pre_clauses.to_formula()
     used = set(ilu.used_symbols_ast(pre))
     used_names = set(varname(s) for s in used)
@@ -840,7 +842,7 @@ def emit_action_gen(header,impl,name,action,classname):
     syms = [x for x in used if is_local_sym(x) and not x.is_numeral()]
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
     for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx and sym.name != '*>':
             declare_symbol(header,sym,classname=classname)
     header.append("    {}_gen();\n".format(caname))
     header.append("    bool generate(" + classname + "&);\n");
@@ -868,7 +870,7 @@ def emit_action_gen(header,impl,name,action,classname):
                     emit_set(impl,sym)
     code_line(impl,'alits.clear()')
     for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx  and sym.name != '*>':
             emit_randomize(impl,sym,classname=classname)
     impl.append("""
     // std::cout << slvr << std::endl;
@@ -877,7 +879,7 @@ def emit_action_gen(header,impl,name,action,classname):
 """)
     indent_level += 1
     for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx:
+        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx and sym.name != '*>':
             emit_eval(impl,sym,classname=classname)
     indent_level -= 2
     impl.append("""
@@ -1640,7 +1642,7 @@ bool initializing = false;
 
 void CLASSNAME::install_reader(reader *r) {
     readers.push_back(r);
-    if (!initializing)
+    if (!::initializing)
         r->bind();
 }
 
@@ -2394,7 +2396,8 @@ class z3_thunk : public thunk<D,R> {
                         vs = variables(sym.sort.dom[1:])
                         for v in vs:
                             open_loop(impl,[v])
-                        code_line(impl,'__from_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                        sname = slv.solver_name(sym)
+                        code_line(impl,'__from_solver(g,g.apply("'+sname+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),res.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
                         for v in vs:
                             close_loop(impl,[v])
                     close_scope(impl)
@@ -2406,7 +2409,8 @@ class z3_thunk : public thunk<D,R> {
                         vs = variables(sym.sort.dom[1:])
                         for v in vs:
                             open_loop(impl,[v])
-                        code_line(impl,'res = res && __to_solver(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),val.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
+                        sname = slv.solver_name(sym)
+                        code_line(impl,'res = res && __to_solver(g,g.apply("'+sname+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'),val.'+fname+''.join('[{}]'.format(varname(v)) for v in vs) + ')')
                         for v in vs:
                             close_loop(impl,[v])
                     code_line(impl,'return res')
@@ -2425,7 +2429,8 @@ class z3_thunk : public thunk<D,R> {
                         vs = variables(sym.sort.dom[1:])
                         for v in vs:
                             open_loop(impl,[v])
-                        code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sym.name+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
+                        sname = slv.solver_name(sym)
+                        code_line(impl,'__randomize<'+ctypefull(sym.sort.rng,classname=classname)+'>(g,g.apply("'+sname+'",v'+ ''.join(',g.int_to_z3(g.sort("'+v.sort.name+'"),'+varname(v)+')' for v in vs)+'))')
                         for v in vs:
                             close_loop(impl,[v])
                     close_scope(impl)
@@ -4106,11 +4111,22 @@ public:
         try {
             z3::expr foo = model.eval(apply_expr,true);
             // std::cout << apply_expr << " = " << foo << std::endl;
-            if (foo.is_bv() || foo.is_int()) {
+            if (foo.is_int()) {
                 assert(foo.is_numeral());
                 int v;
-                if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
-                    assert(false && "bit vector value too large for machine int");
+                if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE) {
+                    std::cerr << "integer value from Z3 too large for machine int: " << foo << std::endl;
+                    assert(false);
+                }
+                return v;
+            }
+            if (foo.is_bv()) {
+                assert(foo.is_numeral());
+                unsigned v;
+                if (Z3_get_numeral_uint(ctx,foo,&v) != Z3_TRUE) {
+                    std::cerr << "bit vector value from Z3 too large for machine int: " << foo << std::endl;
+                    assert(false);
+                }
                 return v;
             }
             assert(foo.is_app());

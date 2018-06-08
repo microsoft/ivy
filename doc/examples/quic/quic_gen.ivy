@@ -1,0 +1,45 @@
+#lang ivy1.7
+
+include order
+include quic_packet
+include quic_connection
+include quic_deser
+
+# This is a generator for sequences of QUIC packet events. It produces random QUIC executions that are
+# consistent with the spcification. The main purpose of this is to test the efficiency of the
+# randomized symbolic execution process.
+
+# Compile the generator like this:
+#
+#     ivyc target=test quic_gen.ivy
+#
+# Run it like this:
+#
+#     ./quic_gen
+#
+# 
+#
+
+
+# The wire specification monitors this action.
+
+action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
+
+# This is a ghost action representing a TLS send event.
+
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,data:stream_data) = {}
+
+# We export `packet_event` so the generator will produce random events.
+
+export packet_event
+
+attribute radix=16       # print in hex
+
+interpret cid -> bv[2]
+interpret version -> bv[2]
+interpret pkt_num -> bv[3]
+interpret error_code -> bv[16]
+interpret stream_id -> bv[3]
+attribute frame.idx.cardinality = 1
+attribute frame.ack.block.idx.cardinality = 1
+

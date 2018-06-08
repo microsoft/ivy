@@ -151,12 +151,17 @@ class Module(object):
                 if il.is_epr(ea):
                     theory.append(ea)
         # exclusivity axioms for variants
+        theory.extend(self.variant_axioms())
+        self.theory = lu.Clauses(theory)
+
+    def variant_axioms(self):
+        theory = []
         for sort in sorted(self.variants):
             sort_variants = self.variants[sort]
             if any(v.name in self.sig.sorts for v in sort_variants) and sort in self.sig.sorts:
                 ea = il.exclusivity(self.sig.sorts[sort],sort_variants)
                 theory.append(ea) # these are always in EPR
-        self.theory = lu.Clauses(theory)
+        return theory
 
 
     def theory_context(self):

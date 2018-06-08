@@ -58,9 +58,11 @@ type stream_kind = {unidir,bidir}
 
 # Single bit values
 
-type bit 
-interpret bit -> bv[1]
-individual bit0:bit
-individual bit1:bit
-definition bit0 = 0
-definition bit1 = 1
+object bit = {
+    type this
+    interpret bit -> bv[1]
+    individual zero:bit
+    individual one:bit
+    definition zero = 0
+    definition one = 1
+}

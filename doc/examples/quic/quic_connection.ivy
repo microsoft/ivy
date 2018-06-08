@@ -281,6 +281,10 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
 
 # ### Requirements
 #
+# - The packet payload may not be empty [7].
+#
+# - The header type must be one of the above [8].
+#
 # - An Initial packet represents an attempt by a client to establish a
 #   connection. The cid is arbitary, but must not have been previously
 #   seen. The initial packet must consist (apart from padding) of a
@@ -331,6 +335,14 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
 #   packet to be sent in response.
 
 before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    
+    # The payload may not be empty
+
+    assert pkt.payload.end > 0;  # [7]
+
+    # Allowed header types
+
+    assert pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f;
     
     # Extract the cid and packet number from the packet.
 
@@ -412,7 +424,9 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
 object frame = {
    ...
-   action handle(f:this,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {}
+    action handle(f:this,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+	assume false;
+    }
 }
 
 # #### Ack handler
