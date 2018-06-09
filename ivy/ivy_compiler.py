@@ -235,7 +235,9 @@ def compile_inline_call(self,args,methodcall=False):
                 res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)
                 expr_context.local_syms.append(res)
                 ress.append(res())
-            expr_context.code.append(CallAction(*([ivy_ast.Atom(self.rep,args)]+ress)))
+            act = CallAction(*([ivy_ast.Atom(self.rep,args)]+ress))
+            act.lineno = self.lineno
+            expr_context.code.append(act)
             return ivy_ast.Tuple(*ress)
         sort = cmpl_sort(returns[0].sort)
         res = ivy_logic.Symbol('loc:'+str(len(expr_context.local_syms)),sort)

@@ -1104,7 +1104,7 @@ class CallAction(Action):
         return res
     def prefix_calls(self,pref):
         res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
-        if hasattr(res,'lineno'):
+        if hasattr(self,'lineno'):
             res.lineno = self.lineno
         else: 
             pass
@@ -1179,6 +1179,9 @@ def concat_actions(*actions):
     return Sequence(*(a for al in als for a in al))
 
 def apply_mixin(decl,action1,action2):
+    if not hasattr(action1,'lineno'):
+        print action1
+        print type(action1)
     assert hasattr(action1,'lineno')
     if not hasattr(action2,'lineno'):
         print action2

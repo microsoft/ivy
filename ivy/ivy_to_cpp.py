@@ -3387,8 +3387,8 @@ def emit_call(self,header):
     indent(code)
     retval = None
     args = self.args[0].args
+    action = im.module.actions[self.args[0].rep]
     if len(self.args) == 2:
-        action = im.module.actions[self.args[0].rep]
         pt,rt = get_param_types(action)
         pos = rt[0].pos if isinstance(rt[0],ReturnRefType) else None
         if pos is not None:
@@ -3405,10 +3405,14 @@ def emit_call(self,header):
             code.append(' = ')
     code.append(varname(str(self.args[0].rep)) + '(')
     first = True
-    for p in args:
+    for p,fml in zip(args,action.formal_params):
         if not first:
             code.append(', ')
-        p.emit(header,code)
+        lsort,rsort = fml.sort,p.sort
+        if im.module.is_variant(lsort,rsort):
+            code.append(sort_to_cpptype[lsort].upcast(im.module.variant_index(lsort,rsort),code_eval(header,p)))
+        else:
+            p.emit(header,code)
         first = False
     code.append(');\n')    
     if retval is not None:

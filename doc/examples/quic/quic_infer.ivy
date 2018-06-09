@@ -16,14 +16,23 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     # TODO: ignore duplicate frames.
 
     var pcid := pkt.hdr_cid;
+    if initializing(dst,src) {
+	call rename_connection(src,dst,initial_pkt_cid(dst,src),pcid)
+    };
     var idx := pkt.payload.begin;
     while idx < pkt.payload.end {
-	if some(sf:frame.stream) pkt.payload.value(idx) *> sf {
+	var f := pkt.payload.value(idx);
+	if some(sf:frame.stream) f *> sf {
 	    if sf.id = 0 {
 		call tls_send_event(src,dst,pcid,sf.data)
 	    }
 	};
+	call show_frame(src,dst,pcid,f);
+	call f.handle(src,dst,pcid);
         idx := idx.next
     }
 }
 
+action show_frame(src:ip.endpoint,dst:ip.endpoint,pcid:cid,f:frame)
+
+import show_frame

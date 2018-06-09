@@ -120,7 +120,10 @@ include quic_transport_parameters
 #
 # - For each destination endpoint E, cid C,and stream kind K, `max_stream(E,C,K)`
 #   indicates the maximum stream id.
-
+#
+# - The queued frames at source endpoint `E` for connection `C` are
+#   represented by `queued_frames(E,C)` and are initially empty.
+#
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
@@ -144,6 +147,10 @@ relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
+function queued_frames(E:ip.endpoint,C:cid) : frame.arr
+
+
+
 
 
 # Initial state
@@ -264,11 +271,43 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
 #before tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
 #}
 
+
+#
+# Connection rename event
+#
+# On receipt of an initial packet, the server may give the connection a new cid.
+#
+# Requirements:
+#
+# - The connection must be initializing
+#   
+# Effects
+#
+# - The state of the old cid is transferred to the new cid
+# - The connection is no longer initializing
+#
+
+action rename_connection(src:ip.endpoint,dst:ip.endpoint,oldcid:cid,newcid:cid)
+
+around rename_connection {
+    require initializing(dst,src);
+    require oldcid = initial_pkt_cid(dst,src)
+    ...
+    initializing(dst,src) := false;
+    var ipnum := initial_pkt_num(dst,src);
+    sent_pkt(dst,newcid,ipnum) := true;
+    last_pkt_num(dst,newcid) := ipnum;
+    trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
+    ack_credit(src,newcid) := 1;  # one credit for initial packet
+}
+
+
 # Packet events
 # -------------
 
 # A packet event represents the transmision of a UDP packet `pkt` from
-# QUIC source endpoint `src` to a QUIC destination endpoint `dst`.
+# QUIC source endpoint `src` to a QUIC destination endpoint `dst`
+# containing a sequence of queued frames.
 
 # The packet *kind* depends on the field `hdr_type` according to
 # the following table:
@@ -334,7 +373,7 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
 #   cannot. That is, only a new distinct packet number allows an ack-only
 #   packet to be sent in response.
 
-before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
     # The payload may not be empty
 
@@ -342,7 +381,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # Allowed header types
 
-    assert pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f;
+    assert pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
     
     # Extract the cid and packet number from the packet.
 
@@ -383,49 +422,48 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         initializing(src,dst) := true;  # [3]
         initial_pkt_num(src,dst) := pnum;  # [3]
         initial_pkt_cid(src,dst) := pcid;  # [3]
-    }
-
-    # A Handshake packet has hdr_type 0x7d
-
-    else if pkt.hdr_type = 0x7d {
-   
-        # The Handshake is matched to the cid `icid` of an Initial packet sent
-        # by the destination. This connection is marked as no longer
-        # initializing. The state of the Initial packet is transferred to the new cid.
-        
-        if initializing(dst,src) {
-            initializing(dst,src) := false;
-            var ipnum := initial_pkt_num(dst,src);
-            sent_pkt(dst,pcid,ipnum) := true;
-            last_pkt_num(dst,pcid) := ipnum;
-            trans_params(dst,pcid) := trans_params(dst,initial_pkt_cid(dst,src));
-	    ack_credit(src,pcid) := 1;  # one credit for initial packet
-        }
     };
 
-    # The frames are handled in order of occurrence in the packet. The frame
-    # handlers are defined below.
 
-    var idx : frame.idx := 0;
-    while idx < pkt.payload.end {
-        call pkt.payload.value(idx).handle(src,dst,pcid);
-        idx := idx + 1
-    }
+    # The payload must exactly match the queued frames.
 
+    require pkt.payload = queued_frames(src,pcid)
+
+    # var idx : frame.idx := 0;
+    # while idx < pkt.payload.end {
+    #     call pkt.payload.value(idx).handle(src,dst,pcid);
+    #     idx := idx + 1
+    # }
+
+    ...
+
+    # The queued frames are deleted
+    
+    queued_frames(src, pkt.hdr_cid) := frame.arr.empty
 }
 
+# The frame protocol
+# ==================
+#
+# A connection consists of a sequence of frames transmitted from
+# client to server and server to client. The frames are encapsulated
+# in packets, described below.
+#
+# For each frame type, we define a ghost event `handle` corresponding
+# to the generation of a frame and its transfer to the packet protocol
+# for transmission. Generation of frames effects the protocol state.
+# In particular, each frame handler has the effect of queueing the frame
+# for transmission by the packet protocol
+#
 
-# ### Frame handlers
-
-# The `handle` action of a frame provides a monitor for the
-# frame. This action takes as arguments the frame, the source and
-# desitnation endpoints, and the cid of the connection. Each frame
-# variant has an implementation of `handle` defined below.
+# The generic `handle` action for frames is specialized for each variant
+# of `frame`. This action takes as arguments the frame, the source and
+# destination endpoints, and the cid of the connection. 
 
 object frame = {
    ...
     action handle(f:this,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
-	assume false;
+	require false; # this generic action should never be called
     }
 }
 
@@ -456,7 +494,9 @@ object frame = {
     ...
     object ack = {
         ...
-        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
+
+	around handle {
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
             if max_acked(dst,pcid) < last {
@@ -470,6 +510,8 @@ object frame = {
                 acked_pkt(dst,pcid,N) := (last <= N & N <= upper) | acked_pkt(dst,pcid,N);  # [2]
                 idx := idx.next;
             }
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
@@ -511,7 +553,9 @@ object frame = {
     ...
     object stream = {
         ...
-        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
+
+	around handle {
 
             require ~conn_closed(src,pcid);  # [8]
 
@@ -553,6 +597,8 @@ object frame = {
                 stream_seen(dst,pcid,f.id) := true;
                 stream_open(dst,pcid,S) := true if S <= f.id else stream_open(dst,pcid,S);
             }
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
@@ -577,8 +623,9 @@ object frame = {
 
 object frame = { ...
     object rst_stream = { ...
-        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
 
+	around handle {
             require ~conn_closed(src,pcid);  # [5]
 
             require stream_length(dst,pcid,f.id) <= f.final_offset;  # [1]
@@ -586,6 +633,8 @@ object frame = { ...
             require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [4]
             stream_reset(dst,pcid,f.id) := true;  # [2]
             stream_length(dst,pcid,f.id) := f.final_offset;  #[3]
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
@@ -608,7 +657,9 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_id = { ...
-        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
+
+	around handle {
 
             require ~conn_closed(src,pcid);  # [2]
 
@@ -617,6 +668,8 @@ object frame = { ...
                 max_stream_set(dst,pcid,kind) := true;
                 max_stream(dst,pcid,kind) := f.id; #  [1]
             }
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
@@ -645,8 +698,11 @@ object frame = { ...
 
 object frame = { ...
     object connection_close = { ...
-        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
+	around handle{
             conn_closed(src,pcid) := true;
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
@@ -665,12 +721,15 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_data = { ...
-        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,pcid:cid) = {
+        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,pcid:cid)
+	around handle {
             require stream_open(src,pcid,f.id);  # [1]
             if ~(max_stream_data_set(dst,pcid,f.id) & f.pos < max_stream_data_val(dst,pcid,f.id)) {
                 max_stream_data_set(dst,pcid,f.id) := true;
                 max_stream_data_val(dst,pcid,f.id) := f.pos;  # [2]
             }
+	    ...
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
     }
 }
