@@ -31,7 +31,10 @@ action tls_send_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,data:stream_data)
 
 # We export `packet_event` so the generator will produce random events.
 
+export frame.ack.handle
+export frame.stream.handle
 export packet_event
+
 
 attribute radix=16       # print in hex
 

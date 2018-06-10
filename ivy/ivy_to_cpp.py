@@ -435,7 +435,8 @@ def make_thunk(impl,vs,expr):
             if lu.free_variables(expr):
                 raise iu.IvyError(None,"cannot compile {}".format(expr))
             if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
-                if expr.sort in sort_to_cpptype or hasattr(expr.sort,'name') and expr.sort.name in im.module.sort_destructors:
+                if expr.sort in sort_to_cpptype or hasattr(expr.sort,'name') and (expr.sort.name in im.module.sort_destructors or
+                                                                                  expr.sort.name in im.module.native_types):
                     code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
                 else:
                     cty = '__strlit' if has_string_interp(expr.sort) else 'int'
