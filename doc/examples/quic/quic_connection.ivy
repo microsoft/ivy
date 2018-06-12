@@ -507,7 +507,12 @@ object frame = {
                 var upper := last - ack_block.gap;
                 last := upper - ack_block.blocks;
                 require (last <= N & N <= upper) -> sent_pkt(dst,pcid,N);  # [1]
-                acked_pkt(dst,pcid,N) := (last <= N & N <= upper) | acked_pkt(dst,pcid,N);  # [2]
+		var jdx := last;
+		while jdx <= upper {
+		    acked_pkt(dst,pcid,jdx) := true;
+		    jdx := jdx + 1
+		};
+#                acked_pkt(dst,pcid,N) := (last <= N & N <= upper) | acked_pkt(dst,pcid,N);  # [2]
                 idx := idx.next;
             }
 	    ...

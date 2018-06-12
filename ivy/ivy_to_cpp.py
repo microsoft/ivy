@@ -809,12 +809,13 @@ def emit_action_gen(header,impl,name,action,classname):
     if name in im.module.before_export:
         action = im.module.before_export[name]
     def card(sort):
-        res = sort_card(sort)
-        if res is not None:
-            return res
+        print 'sort: {}'.format(sort)
+#        res = sort_card(sort)
+#        if res is not None:
+#            return res
         if hasattr(sort,'name') and iu.compose_names(sort.name,'cardinality') in im.module.attributes:
             return int(im.module.attributes[iu.compose_names(sort.name,'cardinality')].rep)
-        return None
+        return sort_card(sort)
         
 #    action = action.unroll_loops(card)
     if name in im.module.ext_preconds:
@@ -1023,8 +1024,17 @@ def emit_native(header,impl,native,classname):
 # reference, except if the parameter is assigned on the action body,
 # in which case it is passed by value. Other output parameters are
 # returned by value.
+#
+# Notwithstanding the above, all exported actions use call and return
+# by value so as not to confused external callers.
 
-def annotate_action(action):
+def annotate_action(name,action):
+
+    if name in im.module.public_actions:
+        action.param_types = [ValueType() for p in action.formal_params]
+        action.return_types = [ValueType() for p in action.formal_returns]
+        return
+
     def action_assigns(p):
         return any(p in sub.modifies() for sub in action.iter_subactions())
 
@@ -1042,9 +1052,9 @@ def annotate_action(action):
         return ValueType()
     action.return_types = [return_type(p) for p in action.formal_returns]
 
-def get_param_types(action):
+def get_param_types(name,action):
     if not hasattr(action,"param_types"):
-        annotate_action(action)
+        annotate_action(name,action)
     return (action.param_types, action.return_types)
 
 # Estimate if two expressions may alias. We say conservatively that expressions may alias
@@ -1072,7 +1082,7 @@ def emit_method_decl(header,name,action,body=False,classname=None,inline=False):
         print "bad name: {}".format(name)
         print "bad action: {}".format(action)
     rs = action.formal_returns
-    ptypes,rtypes = get_param_types(action)
+    ptypes,rtypes = get_param_types(name,action)
     if not body:
         header.append('    ')
     if not body and target.get() != "gen" and not inline:
@@ -1132,7 +1142,7 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
     if name in import_callers:
         if opt_trace.get():
             code_line(code,'__ivy_out ' + number_format + ' << "}" << std::endl')
-    pt,rt = get_param_types(action)
+    pt,rt = get_param_types(name,action)
     if len(action.formal_returns) == 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
@@ -1406,6 +1416,7 @@ def module_to_cpp_class(classname,basename):
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = ivy_cpp.context.globals.code
+    print header
     header.append("#define _HAS_ITERATOR_DEBUGGING 0\n")
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
@@ -1444,6 +1455,8 @@ def module_to_cpp_class(classname,basename):
 
 """)
 
+    ivy_cpp.context.members = ivy_cpp.CppText()
+    header = ivy_cpp.context.members.code
     header.append('class ' + classname + ' {\n  public:\n')
     header.append("    typedef {} ivy_class;\n".format(classname))
     header.append("""
@@ -2243,6 +2256,10 @@ class z3_thunk : public thunk<D,R> {
     __unlock();
 }
 """.replace('CLASSNAME',classname))
+
+    ivy_cpp.context.globals.code.extend(header)
+    ivy_cpp.context.members.code = []
+    header = ivy_cpp.context.globals.code
 
     if target.get() in ["gen","test"]:
         sf = header if target.get() == "gen" else impl
@@ -3388,9 +3405,10 @@ def emit_call(self,header):
     indent(code)
     retval = None
     args = self.args[0].args
-    action = im.module.actions[self.args[0].rep]
+    name = self.args[0].rep
+    action = im.module.actions[name]
     if len(self.args) == 2:
-        pt,rt = get_param_types(action)
+        pt,rt = get_param_types(name,action)
         pos = rt[0].pos if isinstance(rt[0],ReturnRefType) else None
         if pos is not None:
             iparg = self.args[0].args[pos]

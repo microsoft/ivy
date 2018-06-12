@@ -38,12 +38,13 @@ export packet_event
 
 attribute radix=16       # print in hex
 
-interpret cid -> bv[2]
+interpret cid -> intbv[1][13][2]
 interpret version -> bv[2]
-interpret pkt_num -> bv[3]
+interpret pkt_num -> bv[32]
 interpret error_code -> bv[16]
 interpret stream_id -> bv[3]
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
+attribute pkt_num.cardinality = 1
 attribute ip.addr.override = bv[1]
 attribute ip.port.override = bv[1]

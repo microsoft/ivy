@@ -898,8 +898,12 @@ class WhileAction(Action):
         else:
             raise IvyError(self,'cannot determine an index sort for loop')
         cardsort = card(idx_sort)
+        print 'sort: {}, card: {}'.format(idx_sort,cardsort)
         if cardsort is None:
             raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
+        if cardsort > 100:
+            assert False
+            raise IvyError(self,'cowardly refusing to unroll loop over {} {} times'.format(idx_sort,cardsort))
         res = AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
             res = IfAction(self.args[0],Sequence(body or self.args[1],res))
