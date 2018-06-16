@@ -12,6 +12,10 @@
 
 module tls_impl(cid,index,bytes,lower,upper) = {
 
+    # The Botan header requires C++11
+
+    attribute cppstd = cpp11
+
 # These empty objects are used to hold C++ values.
 
     object cb = {}          # struct holding the callbacks

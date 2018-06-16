@@ -756,6 +756,7 @@ public:
     for cpptype in cpptypes:
         code_line(impl,cpptype.short_name()+'::cleanup()')
     impl.append("""
+    obj.___ivy_gen = this;
     obj.__init();
     return __res;
 }
@@ -4601,6 +4602,8 @@ def main_int(is_ivyc):
                 if opt_build.get():
                     import platform
                     import os
+                    cpp11 = any(x.endswith('.cppstd') and y.rep=='cpp11' for x,y in im.module.attributes.iteritems())
+                    gpp11_spec = ' -std=c++11 ' if cpp11 else '' 
                     if platform.system() == 'Windows':
                         if 'Z3DIR' in os.environ:
                             z3incspec = '/I %Z3DIR%\\include'
@@ -4616,7 +4619,7 @@ def main_int(is_ivyc):
                             if target.get() in ['gen','test']:
                                 cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,z3incspec,basename,z3libspec)
                         else:
-                            cmd = "g++ -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(basename,basename)
+                            cmd = "g++ {} -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(gpp11_spec,basename,basename)
                             if target.get() in ['gen','test']:
                                 cmd = cmd + ' -lz3'
                         if opt_outdir.get():
@@ -4631,9 +4634,9 @@ def main_int(is_ivyc):
                         else:
                             paths = ''
                         if emit_main:
-                            cmd = "g++ {} -g -o {} {}.cpp".format(paths,basename,basename)
+                            cmd = "g++ {} {} -g -o {} {}.cpp".format(gpp11_spec,paths,basename,basename)
                         else:
-                            cmd = "g++ {} -g -c {}.cpp".format(paths,basename)
+                            cmd = "g++ {} {} -g -c {}.cpp".format(gpp11_spec,paths,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
                         cmd += ' -pthread'

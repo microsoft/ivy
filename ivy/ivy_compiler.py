@@ -869,7 +869,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight","test","iterable","cardinality","radix","override"])
+defined_attributes = set(["weight","test","iterable","cardinality","radix","override","cppstd"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):

@@ -106,6 +106,11 @@ include quic_transport_parameters
 #   on stread id S of cid C. This data may or may not have been transmitted in
 #   any QUIC packet.
 #
+# - For each endpoint E, cid C,and stream id S, `stream_app_pos(E,C,S)`
+#   represents the read position of the stream data transmitted by the application to endpoint E
+#   on stread id S of cid C. This is th number of bytes in the stream that have
+#   been read by the application.
+#
 # - For each endpoint E, cid C,and stream id S, `stream_finished(E,C,S)`
 #   indicates that the stream transmitted to endpoint E
 #   with strean id S and cid C is finished (that is, a FIN frame has been sent). 
@@ -142,6 +147,7 @@ relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
+function stream_app_pos(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
@@ -173,6 +179,7 @@ after init {
     max_stream_data_set(E,C,S) := false;
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
+    stream_app_pos(E,C,S) := 0;
 }
 
 # Ghost events
@@ -217,6 +224,33 @@ after init {
 #     trans_params_set(dst,pcid) := true;
 #     trans_params(dst,pcid) := tp;
 # }    
+
+# Application send event
+# ======================
+#
+# This event corresponds to transfer of application data to QUIC to
+# be transmitted.
+#
+# Requirements
+#
+# - None
+#
+# Effects
+#
+# - The data bytes are appended to `stream_app_data(E,C,S)` where
+#   `E` is the destination endpoint, `C` is the cid and
+#   `S` is the stream id.
+#
+
+action app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id, data : stream_data)
+
+after app_send_event {
+    var idx := data.begin;
+    while idx < data.end {
+	stream_app_data(dst,pcid,s) := stream_app_data(dst,pcid,s).append(data.value(idx));
+	idx := idx.next
+    }
+}
 
 # TLS send event
 # ==============
@@ -268,8 +302,18 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
 # This event corresponds to transfer of data from QUIC to the TLS
 # implementation. 
 
-#before tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
-#}
+action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo: stream_pos, hi : stream_pos)
+    
+around tls_recv_event {
+
+    require lo < hi & lo = stream_app_pos(dst,pcid,0) & hi <= stream_length(dst,pcid,0);
+    #    require (data.end) + stream_app_pos(dst,pcid,0) <= stream_length(dst,pcid,0);
+#    require 0 <= N & N < data.end -> data.value(N) = stream_app_data(dst,pcid,0).value(N + stream_app_pos(dst,pcid,0));
+    ...
+    
+    stream_app_pos(dst,pcid,0) := hi;
+    #    stream_app_pos(dst,pcid,0) := stream_app_pos(dst,pcid,0) + data.end 
+}
 
 
 #
@@ -563,6 +607,10 @@ object frame = {
 	around handle {
 
             require ~conn_closed(src,pcid);  # [8]
+
+	    require f.length = f.data.end;
+#	    require ((f.offset) + (f.length)) <= stream_app_data(dst,pcid,f.id).end;
+#	    require 0 <= N & N < f.length -> f.data.value(N) = stream_app_data(dst,pcid,f.id).value(N+f.offset); 
 
             if f.id = 0 {
             }
@@ -894,9 +942,10 @@ action handle_tls_extensions
     };
     # TEMPORARY: exempt server from sending transport parameters, since
     # minq doesn't implement this.
-    if is_client_hello {
-        require trans_params_set(src,pcid);
-    }
+# TEMPORARY: skip this until Botan supports it
+#    if is_client_hello {
+#        require trans_params_set(src,pcid);
+#    }
 }
 
 

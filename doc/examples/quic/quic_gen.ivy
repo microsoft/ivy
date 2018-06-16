@@ -4,6 +4,7 @@ include order
 include quic_packet
 include quic_connection
 include quic_deser
+include tls
 
 # This is a generator for sequences of QUIC packet events. It produces random QUIC executions that are
 # consistent with the spcification. The main purpose of this is to test the efficiency of the
@@ -29,12 +30,82 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 action tls_send_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,data:stream_data) = {}
 
+# fix a single connection id
+
+var the_cid : cid
+
+after init {
+    the_cid := 13;
+}
+
+object botan = {
+    instance id : unbounded_sequence
+    instance lower : tls_lower_intf(id,stream_data)
+    instance upper : tls_intf(id,stream_pos,stream_data,lower)
+}    
+
+module quic_endpoint(addr,the_role) = {
+    var ep : ip.endpoint
+    var tls_id : botan.id
+    after init {
+	ep.protocol := ip.udp;
+	ep.addr := addr;
+	ep.port := 0;
+    }
+}
+    
+# create a client and a server endpoint, each with an instance of TLS
+
+instance client : quic_endpoint(0,role.client)
+instance server : quic_endpoint(1,role.server)
+
+after init {
+    client.tls_id := botan.upper.create(false);
+    server.tls_id := botan.upper.create(true);
+}
+
+# Hook up tls to quic
+
+implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
+    if tls_id = client.tls_id {
+	call tls_send_event(client.ep, server.ep, the_cid, bytes)
+    };
+    if tls_id = server.tls_id {
+	call tls_send_event(server.ep, client.ep, the_cid, bytes)
+    }
+}
+
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
+    call show_tls_send_event(src,dst,pcid,data);
+}
+
+around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo : stream_pos, hi : stream_pos ) {
+    require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep;
+    require pcid = the_cid
+    ...
+    var tls_id := client.tls_id if src = client.ep else server.tls_id;
+    var data := stream_data.empty;
+    var idx := lo;
+    while idx < hi {
+	data := data.append(stream_app_data(dst,pcid,0).value(idx));
+	idx := idx.next
+    };
+    call botan.lower.recv(tls_id,data)
+}
+    
+before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) {
+    require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
+    require pcid = the_cid;
+    require f.length > 0;
+}
+
 # We export `packet_event` so the generator will produce random events.
 
-export frame.ack.handle
+#export frame.ack.handle
 export frame.stream.handle
-export packet_event
-
+#export packet_event
+#export app_send_event
+#export tls_recv_event
 
 attribute radix=16       # print in hex
 
@@ -48,3 +119,7 @@ attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1
 attribute ip.addr.override = bv[1]
 attribute ip.port.override = bv[1]
+
+action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) = {}
+
+import show_tls_send_event

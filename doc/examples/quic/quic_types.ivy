@@ -66,3 +66,10 @@ object bit = {
     definition zero = 0
     definition one = 1
 }
+
+# roles
+
+object role = {
+    type this = {client,server}
+}
+
