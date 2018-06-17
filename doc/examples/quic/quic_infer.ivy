@@ -10,29 +10,36 @@
 
 # From a QUIC packet event, infer unobserved TLS events
 
+#
+# TODO: as of version 11, each role has its own cid, so connections
+# are not renamed at the clinet side on a server hello. This code
+# is commented and should be removed [1].
+#
+
 action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
 
     # Stream frames on id 0 indicate that a `tls_send_event` has occurred.
     # TODO: ignore duplicate frames.
 
-    var pcid := pkt.hdr_cid;
-    if initializing(dst,src) {
-	call rename_connection(src,dst,initial_pkt_cid(dst,src),pcid)
-    };
+    var scid := pkt.hdr_cid;
+    var dcid := pkt.dst_cid;
+#    if initializing(dst,src) {  [1]
+#	call rename_connection(src,dst,initial_pkt_cid(dst,src),pcid)
+#    };
     var idx := pkt.payload.begin;
     while idx < pkt.payload.end {
 	var f := pkt.payload.value(idx);
 	if some(sf:frame.stream) f *> sf {
 	    if sf.id = 0 {
-		call tls_send_event(src,dst,pcid,sf.data)
+		call tls_send_event(src,dst,scid,dcid,sf.data)
 	    }
 	};
-	call show_frame(src,dst,pcid,f);
-	call f.handle(src,dst,pcid);
+	call show_frame(src,dst,scid,dcid,f);
+	call f.handle(src,dst,scid,dcid);
         idx := idx.next
     }
 }
 
-action show_frame(src:ip.endpoint,dst:ip.endpoint,pcid:cid,f:frame)
+action show_frame(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,f:frame)
 
 import show_frame

@@ -15,8 +15,12 @@ object quic_deser = {}
     class `quic_deser` : public ivy_binary_deser {
         enum {quic_s_init,
               quic_s_type,
-              quic_s_cid,
               quic_s_version,
+	      quic_s_dcil,
+	      quic_s_scil,
+              quic_s_dcid,
+              quic_s_scid,
+	      quic_s_payload_length,
               quic_s_pkt_num,
               quic_s_payload,
               quic_stream_id,
@@ -41,6 +45,8 @@ object quic_deser = {}
               quic_s_done} state;
         bool long_format;
         char hdr_type;
+        int dcil;
+        int scil;
         char frame_type;
         int data_remaining;
         long long ack_blocks_expected;
@@ -64,12 +70,6 @@ object quic_deser = {}
             case quic_s_type:
             {
                 res = hdr_type;
-                state = quic_s_cid;
-            }
-            break;
-            case quic_s_cid:
-            {
-                ivy_binary_deser::get(res);
                 state = quic_s_version;
             }
             break;
@@ -79,6 +79,39 @@ object quic_deser = {}
                     ivy_binary_deser::getn(res,4);
                 else
                     res = 0;
+                state = quic_s_dcil;
+            }
+            break;
+            case quic_s_dcil:
+            {
+                getn(res,1);
+		scil = res & 0xf;
+                dcil = (res & 0xf0) >> 4;
+		res = dcil;
+                state = quic_s_scil;
+            }
+            break;
+            case quic_s_scil:
+            {
+		res = scil;
+                state = quic_s_dcid;
+            }
+            break;
+            case quic_s_dcid:
+            {
+		getn(res,(dcil ? (dcil+3) : 0));
+                state = quic_s_scid;
+            }
+            break;
+            case quic_s_scid:
+            {
+		getn(res,(scil ? (scil+3) : 0));
+                state = quic_s_payload_length;
+            }
+            break;
+            case quic_s_payload_length:
+            {
+                get_var_int(res);
                 state = quic_s_pkt_num;
             }
             break;

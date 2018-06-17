@@ -59,7 +59,7 @@ object tls_deser = {}
         {"content",1},
         {"initial_version",4},
         {"stream_pos_32",4},
-        {"stream_id_32",4},
+        {"stream_id_16",2},
         {"seconds_16",2},
         {"stream_pos_16",2},
         {"exponent_8",1},
