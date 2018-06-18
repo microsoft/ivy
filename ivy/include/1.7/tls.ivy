@@ -51,7 +51,7 @@ module tls_intf(cid,index,bytes,lower) = {
     
     # Create a new connection with a fresh cid
 
-    action create(is_server : bool) returns (c:cid)
+    action create(c:cid, is_server : bool)
 
     # Destroy an existing connection
 
@@ -67,8 +67,9 @@ module tls_intf(cid,index,bytes,lower) = {
 	    established(C) := false;
 	}
 
-	after create {
-	    ensure ~open(c);
+	around create {
+	    require ~open(c);
+	    ...
 	    open(c) := true;
 	}
 

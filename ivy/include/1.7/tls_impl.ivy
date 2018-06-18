@@ -210,16 +210,12 @@ module tls_impl(cid,index,bytes,lower,upper) = {
 
     # close the socket
 
-    implement create(is_server:bool) returns(c:cid) {
+    implement create(c:cid, is_server:bool) {
         <<< impure
             
 	// We allocate an unused cid, and create an entry in the cid_map
 	// for it.
 
-	c = 0;
-	while (`cid_map`.find(c) != `cid_map`.end()) {
-	    c++;
-	}
 	tls_connection tc;
 	tc.rng = new Botan::AutoSeeded_RNG; 
 	tc.session_mgr = new Botan::TLS::Session_Manager_In_Memory(*tc.rng);

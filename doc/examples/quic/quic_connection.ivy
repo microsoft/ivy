@@ -609,12 +609,10 @@ object frame = {
             require ~conn_closed(src,pcid);  # [8]
 
 	    require f.length = f.data.end;
-#	    require ((f.offset) + (f.length)) <= stream_app_data(dst,pcid,f.id).end;
-#	    require 0 <= N & N < f.length -> f.data.value(N) = stream_app_data(dst,pcid,f.id).value(N+f.offset); 
+	    require ((f.offset) + (f.length)) <= stream_app_data(dst,pcid,f.id).end;
+	    require 0 <= N & N < f.length -> f.data.value(N) = stream_app_data(dst,pcid,f.id).value(N+f.offset); 
 
-            if f.id = 0 {
-            }
-            else {
+            if f.id ~= 0 {
                 var kind := get_stream_kind(f.id);
                 require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [6]
                 require ~stream_reset(dst,pcid,f.id);  # [7]
@@ -639,17 +637,17 @@ object frame = {
                 if max_stream_data_set(dst,pcid,f.id) {
                     require ((f.offset) + (f.length)) <= max_stream_data_val(dst,pcid,f.id)  # [2]
                 };
-                var length := f.offset + f.length;
-                require stream_finished(dst,pcid,f.id) -> length <= stream_length(dst,pcid,f.id);  # [5]
-                if stream_length(dst,pcid,f.id) < length {
-                    stream_length(dst,pcid,f.id) := length
-                };
-                if f.fin {
-                    stream_finished(dst,pcid,f.id) := true;
-                };
-                stream_seen(dst,pcid,f.id) := true;
-                stream_open(dst,pcid,S) := true if S <= f.id else stream_open(dst,pcid,S);
-            }
+	    };
+	    var length := f.offset + f.length;
+	    require stream_finished(dst,pcid,f.id) -> length <= stream_length(dst,pcid,f.id);  # [5]
+	    if stream_length(dst,pcid,f.id) < length {
+		stream_length(dst,pcid,f.id) := length
+	    };
+	    if f.fin {
+		stream_finished(dst,pcid,f.id) := true;
+	    };
+	    stream_seen(dst,pcid,f.id) := true;
+	    stream_open(dst,pcid,S) := true if S <= f.id else stream_open(dst,pcid,S);
 	    ...
 	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
         }
