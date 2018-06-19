@@ -597,6 +597,8 @@ object frame = {
 #
 # Question: what is the value of `initial_max_stream_data` for stream
 # zero? Here we assume there is no back-pressure on stream zero.
+#
+# Question: is the FIN bit allowed on stream zero?
 
 object frame = {
     ...
@@ -671,6 +673,7 @@ object frame = {
 # - The specified stream id is marked as reset [2].
 # - The stream length is set to the given final offset [3].
 #
+# Question: is rst_stream allowed on stream zero?
 
 object frame = { ...
     object rst_stream = { ...

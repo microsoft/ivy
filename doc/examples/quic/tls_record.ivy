@@ -164,6 +164,20 @@ object tls = {
         }
     }
 
+    # The unknown message is used here to cover all the messgae types that have
+    # not yet been implemented.
+
+    type message_type
+    interpret message_type -> bv[8]
+
+    object unknown_message = {
+        variant this of handshake = struct {
+            mtype : message_type,
+            unknown_message_bytes : stream_data
+        }
+    }
+
+
     # ### Records
 
     # A record encapsulates TLS messages. It is prefixed by a one-byte
@@ -198,6 +212,13 @@ object tls = {
     }
 
     object application_data_record = {
+        variant this of record = struct {
+            version : protocol_version,
+            content : stream_data
+        }
+    }
+
+    object change_cipher_spec = {
         variant this of record = struct {
             version : protocol_version,
             content : stream_data

@@ -114,6 +114,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:c
     require f.length > 0;
     require f.offset = stream_length(dst,pcid,f.id);
     require f.length = (stream_app_data(dst,pcid,f.id).end) - f.offset;
+    require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
 }
 
 # We export `packet_event` so the generator will produce random events.
