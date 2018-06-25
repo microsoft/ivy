@@ -143,7 +143,6 @@ def inst_mod(ivy,module,pref,subst,vsubst):
             vpref = substitute_ast(pref,map1)
             vvsubst = dict((x,map1[y.rep]) for x,y in vsubst.iteritems())
             idecl = subst_prefix_atoms_ast(decl,subst,vpref,module.defined,static=module.static)
-            iu.dbg('idecl')
             idecl = substitute_constants_ast(idecl,vvsubst)
         else:
             idecl = subst_prefix_atoms_ast(decl,subst,pref,module.defined,static=module.static)
