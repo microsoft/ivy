@@ -1,0 +1,27 @@
+#lang ivy
+
+# Standard serializers and deserializers
+# --------------------------------------
+#
+# Ivy provides standard binary serializers and deserializers that can be used,
+# for example, to transfer data structures over a network, read and write files,
+# and so on.
+#
+
+object std_serializer = {}
+
+object std_deserializer = {}
+
+<<< header
+
+    class ivy_binary_ser;
+    class ivy_binary_deser;
+
+>>>
+
+<<< member
+
+    typedef ivy_binary_ser `std_serializer`;
+    typedef ivy_binary_deser `std_deserializer`;
+
+>>>

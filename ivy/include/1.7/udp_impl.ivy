@@ -8,11 +8,11 @@ include ip
 #
 #     host : the type of host ids
 #     pkt  : the type of messages
-#     me   : the host id of this endpoint
+#     ser  : the packet serializer
+#     des  : the packet deserializer
 #
-# The `pkt` type must be an array of bytes.
 
-module udp_impl(host,pkt) = {
+module udp_impl(host,pkt,ser,des) = {
 
 # The type of socket descriptors
 
@@ -131,7 +131,7 @@ module udp_impl(host,pkt) = {
    	    buf.resize(bytes);
 	    `pkt` pkt;
 	    try {
-		ivy_binary_deser ds(buf);
+		`des` ds(buf);
 		__deser(ds,pkt);
 		if (ds.pos < buf.size())
 		    throw deser_err();
@@ -252,7 +252,7 @@ object impl(me:host) = {
 	dstaddr.sin_addr.s_addr = htonl(dst.addr);
 	dstaddr.sin_port = htons(dst.port);
 	std::cout << "sending id: " << me << " port: " << ntohs(dstaddr.sin_port) << std::endl;
-	ivy_binary_ser sr;
+	`ser` sr;
 	__ser(sr,x);
 	if (sendto(s,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
 #ifdef _WIN32
