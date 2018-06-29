@@ -100,7 +100,7 @@ module udp_impl(host,pkt,ser,des) = {
     class udp_reader : public udp_task {
         std::vector<char> buf;
       public:
-        udp_reader(int my_id, int sock, const udp_callbacks &cb, ivy_class *ivy)
+        udp_reader(`host` my_id, int sock, const udp_callbacks &cb, ivy_class *ivy)
             : udp_task(my_id, sock, cb, ivy) {
         }
 

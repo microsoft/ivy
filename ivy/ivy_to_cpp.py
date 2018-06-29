@@ -974,7 +974,7 @@ def create_thunk(impl,actname,action,classname):
     params = [p for p in action.formal_params if p.name.startswith('prm:')]
     inputs = [p for p in action.formal_params if not p.name.startswith('prm:')]
     for p in params:
-        declare_symbol(impl,p)
+        declare_symbol(impl,p,classname=classname)
     impl.append('    ')
     emit_param_decls(impl,tc,params,extra = [ classname + ' *__ivy'],classname=classname)
     impl.append(': __ivy(__ivy)' + ''.join(',' + varname(p) + '(' + varname(p) + ')' for p in params) + '{}\n')
@@ -1178,6 +1178,8 @@ def check_iterable_sort(sort):
             nt = native_type_full(im.module.native_types[sort.name]).strip()
             if nt in ['int','bool','long long']:
                 return
+        if isinstance(sort,il.EnumeratedSort):
+            return
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
 
@@ -1189,7 +1191,11 @@ def open_loop(impl,vs,declare=True,bounds=None):
         bds = bounds[num] if bounds else ["0",str(sort_card(idx.sort))]
         vn = varname(idx.name)
         ct = 'long long ' if ctype(idx.sort) == 'long long' else 'int '
-        impl.append('for ('+ (ct if declare else '') + vn + ' = ' + bds[0] + '; ' + vn + ' < ' + bds[1] + '; ' + vn + '++) {\n')
+        if isinstance(idx.sort,il.EnumeratedSort):
+            ct = ctype(idx.sort)
+            impl.append('for ('+ ((ct + ' ') if declare else '') + vn + ' = (' + ct + ')' +  bds[0] + '; (int) ' + vn + ' < ' + bds[1] + '; ' + vn + ' = (' + ct + ')(((int)' + vn + ') + 1)) {\n')
+        else:
+            impl.append('for ('+ (ct if declare else '') + vn + ' = ' + bds[0] + '; ' + vn + ' < ' + bds[1] + '; ' + vn + '++) {\n')
         indent_level += 1
 
 def close_loop(impl,vs):
