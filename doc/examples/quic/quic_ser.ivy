@@ -1,18 +1,18 @@
 #lang ivy1.7
 
-# a fake deserializer for quic
+# a fake serializer for quic
 
-object quic_deser = {}
+object quic_ser = {}
 
 <<< member
 
-    class `quic_deser`;
+    class `quic_ser`;
 
 >>>
 
 <<< impl
 
-    class `quic_deser` : public ivy_binary_deser {
+    class `quic_ser` : public ivy_binary_ser {
         enum {quic_s_init,
               quic_s_type,
               quic_s_cid,
@@ -47,84 +47,78 @@ object quic_deser = {}
         long long ack_block_count;
 
     public:
-        quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
-            // pos = 42; // skip 42 bytes of IP and UDP header
+        quic_ser() : state(quic_s_init) {
         }
-        virtual void  get(long long &res) {
+        virtual void  set(long long res) {
             switch (state) {
             case quic_s_init:
             {
-                getn(res,1);
-                long_format = (res & 0x80) ? true : false;
-                hdr_type = res & 0x7f;
-                res = long_format;
+                long_format = res & 1;
                 state = quic_s_type;
             }
             break;
             case quic_s_type:
             {
-                res = hdr_type;
+                hdr_type = res;
+		setn(hdr_type | (long_format ? 0x80 : 0), 1);
                 state = quic_s_cid;
             }
             break;
             case quic_s_cid:
             {
-                ivy_binary_deser::get(res);
+                setn(res,8);
                 state = quic_s_version;
             }
             break;
             case quic_s_version:
             {
                 if (long_format)
-                    ivy_binary_deser::getn(res,4);
-                else
-                    res = 0;
+                    setn(res,4);
                 state = quic_s_pkt_num;
             }
             break;
             case quic_s_pkt_num:
             {
-                ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+		setn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
                 state = quic_s_payload;
             }
             break;
             case quic_stream_off:
             {
-                res = (0x04 & frame_type) ? 1 : 0;
+                frame_type |= res ? 0x04 : 0;
                 state = quic_stream_len;
             }
             break;
             case quic_stream_len:
             {
-                res = (0x02 & frame_type) ? 1 : 0;
+                frame_type |= res ? 0x02 : 0;
                 state = quic_stream_fin;
             }
             break;
             case quic_stream_fin:
             {
-                res = (0x01 & frame_type) ? 1 : 0;
+                frame_type |= res ? 0x01 : 0;
+		setn(frame_type,1);
                 state = quic_stream_id;
             }
             break;
             case quic_stream_id:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_stream_offset;
             }
             break;
             case quic_stream_offset:
             {
                 if (0x04 & frame_type)
-                    get_var_int(res);
-                else res = 0;
+                    set_var_int(res);
                 state = quic_stream_length;
             }
             break;
             case quic_stream_length:
             {
                 if (0x02 & frame_type)
-                    get_var_int(res);
-                else res = 0;
+                    set_var_int(res);
                 data_remaining = res;
                 state = quic_stream_data;
             }
@@ -132,70 +126,70 @@ object quic_deser = {}
             case quic_stream_data:
             case quic_connection_close_reason:
             {
-                ivy_binary_deser::getn(res,1);
+                setn(res,1);
             }
             break;
             case quic_ack_largest:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_ack_delay;
             }
             break;
             case quic_ack_delay:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_ack_block_count;
             }
             break;
             case quic_ack_gap:
             {
                 if (ack_block_count == 0)
-                    res = 0; // first ack block has no gap
+                    {} // first ack block has no gap
                 else
-                    get_var_int(res);
+                    set_var_int(res);
                 state = quic_ack_block;
             }
             break;
             case quic_ack_block:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_ack_gap;
                 ack_block_count++;
             }
             break;
             case quic_reset_stream_id:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_reset_err_code;
             }
             break;
             case quic_reset_err_code:
             {
-                getn(res,2);
+                setn(res,2);
                 state = quic_reset_final_offset;
             }
             break;
             case quic_reset_final_offset:
             {
-                get_var_int(res);
+                set_var_int(res);
             }
             break;
             case quic_connection_close_err_code:
             {
-                getn(res,2);
+                setn(res,2);
                 state = quic_connection_close_reason_length;
             }
             break;
             case quic_connection_close_reason_length:
             {
-                get_var_int(res);
+                set_var_int(res);
                 data_remaining = res;
                 state = quic_connection_close_reason;
             }
             break;
             case quic_max_stream_data_id:
             {
-                get_var_int(res);
+                set_var_int(res);
                 state = quic_reset_final_offset;
             }
             break;
@@ -204,85 +198,78 @@ object quic_deser = {}
             }
         }
 
-        void get_var_int(long long &res) {
-            static int lens[4] = {0,1,3,7};
-            long long lobyte;
-            ivy_binary_deser::getn(lobyte,1);
-            int bytes = lens[(lobyte & 0xc0) >> 6];
-            ivy_binary_deser::getn(res,bytes);
-            res |= (lobyte & 0x3f) << (bytes << 3);
+        void set_var_int(long long res) {
+	    long long val = res & 0x3fffffffffffffff;
+	    int bytecode = res <= 0xff ? 0 : res <= 0xffff ? 1 : res <= 0xffffffff ? 2 : 3;
+	    int bytes = 1 << bytecode;
+            val |= bytecode << ((bytes << 3) - 2);
+	    setn(val,bytes);
         }
 
-        virtual int open_tag(const std::vector<std::string> &tags) {
+        virtual void open_tag(int tag, const std::string &) {
             if (state == quic_s_payload) {
-                long long ft;
-                ivy_binary_deser::getn(ft,1);
-                frame_type = ft;
-                if (frame_type >= 0x10 && frame_type <= 0x17) {
+                if (tag == 0) {
+		    frame_type = 0x10;
                     state = quic_stream_off;
-                    return 0;
+                    return;
                 }
-                if (frame_type == 0x0e) {
+                if (tag == 1) {
                     state = quic_ack_largest;
-                    return 1;
+                    frame_type = 0x0e;
                 }
-                if (frame_type == 0x01) {
+                else if (tag == 2) {
                     state = quic_reset_stream_id;
-                    return 2;
+                    frame_type = 0x01;
                 }
-                if (frame_type == 0x06) {
+                else if (tag == 3) {
                     state = quic_reset_stream_id; // parser state equivalent to this
-                    return 3;
+                    frame_type = 0x06;
                 }
-                if (frame_type == 0x02) {
+                else if (tag == 4) {
                     state = quic_connection_close_err_code;
-                    return 4;
+                    frame_type = 0x02;
                 }
-                if (frame_type == 0x05) {
+                else if (tag == 5) {
                     state = quic_max_stream_data_id;
-                    return 5;
+                    frame_type = 0x05;
                 }
-                if (frame_type == 0x0a) {
+                else if (tag == 6) {
                     state = quic_reset_final_offset;
-                    return 6;
+                    frame_type = 0x0a;
                 }
-                std::cerr << "saw tag " << ft << std::endl;  
+	        else {
+                    std::cerr << "saw frame tag " << tag << std::endl;  
+                    throw deser_err();
+	        }
+	        setn(frame_type,1);
+	        return;
             }
             throw deser_err();
         }
 
-        virtual bool open_list_elem() {
-            if (state == quic_s_payload) {
-               while (more(1) && inp[pos] == 0)
-                   pos++;  // skip padding frames
-               return more(1);
-            }
-            if (state == quic_ack_gap) {
-                return ack_block_count < ack_blocks_expected;
-            }
-            if (state == quic_stream_data)
-                return (0x02 & frame_type) ? (data_remaining-- > 0) : more(1);
-            if (state == quic_connection_close_reason)
-                return data_remaining-- > 0;
-            throw deser_err();
+        virtual void open_list_elem() {
         }
 
-        void open_list() {
+        void open_list(int len) {
+	    ack_blocks_expected = len;
             if (state == quic_ack_block_count) {
-                get_var_int(ack_blocks_expected);
-                ack_blocks_expected++;  // block count doesn't include first
+                set_var_int(ack_blocks_expected - 1); // block count doesn't include first
                 ack_block_count = 0;
                 state = quic_ack_gap;
             }
         }
-        void close_list() {}
+        void close_list() {
+	    if (state == quic_s_payload && hdr_type == 0x7f)
+	        while (res.size() < 1200)
+	            res.push_back(0);  // pad initial packet to 1200 bytes
+        }
         void close_list_elem() {}
 
         virtual void close_tag() {
             state = quic_s_payload;
         }
 
-        ~quic_deser(){}
+        ~quic_ser(){}
     };
 
 >>>

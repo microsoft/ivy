@@ -1762,9 +1762,12 @@ struct ivy_ser {
 };
 struct ivy_binary_ser : public ivy_ser {
     std::vector<char> res;
-    void set(long long inp) {
-        for (int i = sizeof(long long)-1; i >= 0 ; i--)
+    void setn(long long inp, int len) {
+        for (int i = len-1; i >= 0 ; i--)
             res.push_back((inp>>(8*i))&0xff);
+    }
+    void set(long long inp) {
+        setn(inp,sizeof(long long));
     }
     void set(bool inp) {
         set((long long)inp);
@@ -1909,7 +1912,13 @@ bool _arg<bool>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 
 template <>
 int _arg<int>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
-    int res = atoi(args[idx].atom.c_str());
+    std::istringstream s(args[idx].atom.c_str());
+    s.unsetf(std::ios::dec);
+    s.unsetf(std::ios::hex);
+    s.unsetf(std::ios::oct);
+    long long res;
+    s  >> res;
+    // int res = atoi(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return res;
@@ -1917,7 +1926,13 @@ int _arg<int>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 
 template <>
 long long _arg<long long>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
-    long long res = atoll(args[idx].atom.c_str());
+    std::istringstream s(args[idx].atom.c_str());
+    s.unsetf(std::ios::dec);
+    s.unsetf(std::ios::hex);
+    s.unsetf(std::ios::oct);
+    long long res;
+    s  >> res;
+//    long long res = atoll(args[idx].atom.c_str());
     if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
         throw out_of_bounds(idx,args[idx].pos);
     return res;
