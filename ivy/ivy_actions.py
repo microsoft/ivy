@@ -694,7 +694,7 @@ class ChoiceAction(Action):
         result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
         for a in self.args:
             foo = a.int_update(domain, pvars)
-            result = join_action(result, foo, domain.relations)
+            result = join_action(result, foo, domain.defined_symbols)
         return result
     def __repr__(self):
         if hasattr(self, 'label'):
@@ -719,7 +719,7 @@ class EnvAction(ChoiceAction):
         result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
         for a in self.args:
             foo = a.update(domain, pvars)
-            result = join_action(result, foo, domain.relations)
+            result = join_action(result, foo, domain.defined_symbols)
         return result
     def __str__(self):
         if all(hasattr(a,'label') for a in self.args):
@@ -786,10 +786,10 @@ class IfAction(Action):
                 raise IvyError(self,'condition must be boolean') 
             branches = [self.args[1],self.args[2] if len(self.args) >= 3 else Sequence()]
             upds = [a.int_update(domain,pvars) for a in branches]
-            res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
+            res =  ite_action(self.args[0],upds[0],upds[1],domain.defined_symbols)
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+        return join_action(if_part,else_part,domain.defined_symbols)
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
     def get_cond(self):

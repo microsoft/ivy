@@ -129,22 +129,6 @@ def action_to_state(update):
             renaming[s] = new_of(s)
     return (updated,rename_clauses(tr,renaming),pre)
 
-def update_frame_constraint(update,relations):
-    """ Return a clause list constraining all updated symbols
-    to keep their previous values """
-    clauses = []
-    for sym in update[0]:
-        if sym in relations:
-            arity = relations[sym]
-            vs = [Variable("V{}".format(i)) for i in range(0,arity)]
-            lit1 = Literal(1,Atom(sym,vs))
-            lit2 = Literal(1,Atom(new(sym),vs))
-            clauses += [[~lit1,lit2],[lit1,~lit2]]
-        else:
-            clauses.append([eq_lit(Constant(sym),Constant(new(sym)))])
-    return Clauses(clauses)
-
-
 def frame_def(sym,op):
     """ Add the condition that sym remains unchanged to a
     transition relation (using op = {new,old})"""
@@ -156,7 +140,7 @@ def frame_def(sym,op):
 def frame(updated,relations,op):
     """ Return a clause list constraining all updated symbols
     to keep their op values, for op = new,old """
-    return Clauses([],[frame_def(sym,op) for sym in updated])
+    return Clauses([],[frame_def(sym,op) for sym in updated if sym not in relations])
 
 def symbol_frame_cond(sym,sig):
     """ Return transition relation implying that sym remains unchanged """
@@ -327,8 +311,7 @@ def compose_updates(update1,axioms,update2):
     new_updated = list(us1.union(us2))
 #    print "pre1 before = {}".format(pre1)
 #    iu.dbg('pre1.annot')
-#    iu.dbg('pre1')
-    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
+    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,set(x.defines() for x in axioms.defs),new))  # keep track of post-state of assertion failure
 #    print "pre1 = {}".format(pre1)
     temp = and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=my_annot_op)
 #    iu.dbg('temp.annot')

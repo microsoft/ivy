@@ -882,7 +882,7 @@ def subst_both_clauses(clauses,subst):
 
 def clauses_using_symbols(syms,clauses):
     return Clauses([f for f in clauses.fmlas if uses_symbols_ast(syms,f)],
-                   clauses.defs)
+                   [f for f in clauses.defs if uses_symbols_ast(syms,f)])
 
 def canonize_clause(cl):
     """ rewrite clause so that variables occur in order V0, V1, ..."""

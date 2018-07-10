@@ -65,7 +65,7 @@ def module_new_state_with_value(self, value):
 def module_order(self,state1, state2):
     """True if state1 is a subset of state2 """
     axioms = self.background_theory(state1.in_scope) 
-    return implies_state(state1.value,state2.value,axioms,self.relations)
+    return implies_state(state1.value,state2.value,axioms,self.defined_symbols)
 
 def module_skolemizer(self):
     rn = UniqueRenamer('',self.functions)
@@ -210,7 +210,7 @@ def concrete_join(state1,state2):
     that are implicitly existentially quantified and are prefixed with "__old".
     """
  
-    relations = state1.domain.relations
+    relations = state1.domain.defined_symbols
     value = join_state(state1.value,state2.value,relations)
     res = new_state(value,domain = state1.domain,expr=state_join(state1,state2))
     res.join_of = [state1,state2]
