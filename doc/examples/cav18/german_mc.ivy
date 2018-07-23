@@ -108,9 +108,11 @@ action grantexclusiveRule = {
     owner := s.homeCurrentclient; 
 }
 
-
+# The property to prove
 
 invariant forall C1, C2. C1 ~= C2 & s.cache(C1) = exclusive -> s.cache(C2) = invalid
+
+# The auxiliary invariant
 
 invariant s.homeexclusiveGranted & s.homeCurrentCommand ~= empty1 & s.channel3(C1) = invalidateAck -> C1 = owner
 

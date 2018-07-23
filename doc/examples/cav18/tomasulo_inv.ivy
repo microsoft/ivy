@@ -155,6 +155,10 @@ object toma = {
         };
 
 
+	# The property to be proved
+
+        assert pout.tag = I & pout.valid -> pout.val = aux(I).res;
+
         # stall if station is busy or read of reserved register
 
         stallout := opin = op_alu & st(st_choice).valid 
@@ -268,7 +272,7 @@ object toma = {
     }
    
 
-    # the refinement maps 
+    # The auxiliary invariant
     
     invariant st(K).valid & st(K).opra.valid -> st(K).opra.val = aux(K).opra
 
@@ -285,14 +289,6 @@ object toma = {
     invariant st(K).valid & ~st(K).oprb.valid & st(K).oprb.tag(T) -> st(T).valid & aux(T).res = aux(K).oprb
 
     invariant st(T).valid -> f(aux(T).opra,aux(T).oprb,aux(T).res)
-
-    # invariant pout.tag = I & pout.valid -> pout.val = aux(I).res;
-    # proof let A = aux(i).opra, B = aux(i).oprb, C = f(a,b), J = complete_eu
-   
-    # # noninterference lemma
-
-    # invariant pout.valid -> complete_eu = aux(pout.tag).eu;
-    # proof I = pout.tag, J = complete_eu
 
 
 }

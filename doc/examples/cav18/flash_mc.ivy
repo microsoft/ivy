@@ -108,7 +108,6 @@ action pi_Local_Get = {
     cache(home).state := shared
 }
 
-# TODO: can this ever happen?
 
 action pi_Local_Get_im = {
     assume cache(home).state = invalid;
@@ -136,23 +135,6 @@ action ni_Local_Get_nak = {
     assume dir.pending | (dir.dirty & dir.local_ & cache(home).state~=exclusive) | (dir.dirty & ~dir.local_ & src = dir.hptr);
     net(src).mtype := uNAK;
 }
-
-# action ni_Local_Get_fwd = {
-#     assume net(src).mtype = uGet & net(src).proc = home;
-#     assume home ~= src;
-#     assume ~dir.pending & ~dir.dirty & ~ rp_net(src) & ~cache(src).invmarked;
-#     net.get(src,home) := false;
-#     net.put(home,src) := true;
-#     if (dir.head) {
-#         dir.list := true;
-# 	dir.shlist(src) := true;
-# 	dir.real := dir.shlist # what is this?
-#     }
-#     else { 
-# 	dir.head := true;
-# 	dir.hptr := src
-#     }
-# }
 
 action ni_Local_Get = {
     assume net(src).mtype = uGet & net(src).proc = home;
@@ -202,7 +184,6 @@ action ni_Replace_list = {
     assume dir.hptr ~= src;
     rp_net(src) := false;
     dir.shlist(src) := false;
-#    dir.real(src) := false;
     src := *
 }
 
@@ -283,8 +264,6 @@ action ni_localGetX_inv = {
     net(src).mtype := uPutX;
     invnet(X) := X ~= home & X ~= src & dir.shlist(X);
     collecting := true;
-    #   m1 := m;
-    #   last_other_invack := (dir.hptr ~= src) ? dir.hptr . {i  . i in Proc, dir.shlist(i) & i~=src}; 
     cache(home).invmarked := (cache(home).wait = get & dir.local_) | cache(home).invmarked;
     dir.local_ := false;
     dir.dirty := true;
@@ -312,7 +291,7 @@ action ni_Remote_PutX = {
 }
 
 action pi_Remote_PutX = {
-    assume cache(src).state = exclusive & src ~= home; # cache(src).wait=none ???
+    assume cache(src).state = exclusive & src ~= home; 
     cache(src).state := invalid;
     wbnet.proc := src;
     wbnet.wb := true;
@@ -335,8 +314,6 @@ action ni_InvAck = {
       assume dir.real(src) & dir.real(dst) & dst ~= src;
       invack(src) := false;
       dir.real(src) := false;
-      # last_invack := src;
-      # last_other_invack := {i : i in Proc, dir.real(i) & i ~= src};
       src := *;
       dst := *
 }
@@ -346,10 +323,8 @@ action ni_InvAck_last = {
     assume ~dir.real(X) | X = src;
     dir.pending := false;
     collecting := false;
-    #	m1 := undefined; ???
     invack(src) := false;
     dir.real(src) := false;
-    #	last_invack := src;
     if ( dir.local_ & ~ dir.dirty)  {
        dir.local_ := false
     }
@@ -418,7 +393,6 @@ action ni_Remote_Get_fwd = {
   assume net(src).mtype = uGet & net(src).proc = dst;
   assume dst ~=src & dst ~= home & cache(dst).state = exclusive;
   net(src).mtype := uPut;
-#  assume ~cache(src).invmarked; TODO: ???
   cache(dst).state := shared;
   fwd_get := none;
   fwd_src := src;
@@ -428,7 +402,6 @@ action ni_Remote_Get_fwd = {
     shwbnet.mtype := shwb;
     shwbnet.proc := src;
   };
-# shwb_src := dst;
   src := *;
   dst := *
 }
@@ -440,7 +413,6 @@ action ni_ShWB = {
   dir.dirty := false;
   dir.shlist(shwbnet.proc) := true;
   dir.real(X) := dir.shlist(X);
-#  last_WB := shwb_src;
 }
 
 action ni_NAK_Clear = {
@@ -454,7 +426,6 @@ export pi_Local_Get
 export pi_Local_Get_im
 export pi_Remote_Get
 export ni_Local_Get_nak
-#export  ni_Local_Get
 export ni_Local_Get
 export ni_Local_Get_fwd
 export ni_Remote_Put
@@ -471,13 +442,15 @@ export ni_Inv
 export ni_InvAck
 export ni_InvAck_last
 export ni_WB
-#export ni_Remote_GetX_nak
+export ni_Remote_GetX_nak
 export ni_Remote_GetX_fwd
 export ni_FAck
-#export ni_Remote_Get_nak
+export ni_Remote_Get_nak
 export ni_Remote_Get_fwd
 export ni_ShWB
 export ni_NAK_Clear
+
+# The properties to prove
 
 invariant [coherent]
   cache(X).state = exclusive -> X = real_owner
@@ -487,22 +460,11 @@ invariant [coherent2]
   cache(X).state = shared & ~cache.invmarked(X) & ~dir.pending -> real_owner = home & cache.state(home) ~= exclusive
 proof let H = home, Y = last_owner
 
+# The auxiliary invariant, with prophecy variables
+
 invariant [nodups]
   cache(X).state = exclusive -> dir.dirty & ~wbnet.wb & shwbnet.mtype ~= shwb
 proof let H = home
-
-# invariant [nonint1]
-#   net.shwb(X,home) -> dir.pending & dir.dirty & X = dir.hptr
-# proof let H = home
-
-
-
-# invariant [l4]
-#    cache(dst).state = exclusive ->
-#                 dir.dirty & ~wbnet.wb & ~net.shwb(X,home)
-#                 & ~net.put(X,home)
-#        	        & ((cache(X).state = exclusive | net.putX(Y,X)) -> dst = X)
-# proof let H = home, Y = dst
 
 invariant [l5]
   net.proc(X) ~= home -> (net.mtype(X) = uGet -> fwd_get = get) & (net.mtype(X) = uGetX -> fwd_get = getX)

@@ -147,8 +147,12 @@ object toma = {
         };
 
 
+	# An auxiliary invariant
+
         assert pout.valid -> complete_eu = aux(pout.tag).eu
         proof let E=complete_eu, I = pout.tag;
+
+	# The property to be proved
 
         assert pout.tag = I & pout.valid -> pout.val = aux(I).res
         proof let E = complete_eu, A = aux(I).opra, B = aux(I).oprb, C = f(A,B);
@@ -262,7 +266,7 @@ object toma = {
     }
    
 
-    # the refinement maps 
+    # The auxiliary invariants and associated prophecy variables
     
     invariant st(K).valid & st(K).opra.valid -> st(K).opra.val = aux(K).opra
     proof let I = st(K).opra.tag, J = aux(K).srca, C = aux(K).opra
@@ -270,14 +274,6 @@ object toma = {
     invariant st(K).valid & st(K).oprb.valid -> st(K).oprb.val = aux(K).oprb
     proof let I = st(K).oprb.tag, J = aux(K).srcb, C = aux(K).oprb
 
-
-    # invariant pout.tag = I & pout.valid -> pout.val = aux(I).res;
-    # proof let A = aux(i).opra, B = aux(i).oprb, C = f(a,b), J = complete_eu
-   
-    # # noninterference lemma
-
-    # invariant pout.valid -> complete_eu = aux(pout.tag).eu;
-    # proof I = pout.tag, J = complete_eu
 
 
 }

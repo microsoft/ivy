@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-# This is a model of the FLASH cache coherenec protocol.  The network
+# This is a model of the FLASH cache coherence protocol.  The network
 # is modeled in a relation way that is convenient for decidable
 # invariant checking.
 
@@ -113,7 +113,6 @@ action pi_Local_Get = {
     cache(home).state := shared
 }
 
-# TODO: can this ever happen?
 
 action pi_Local_Get_im = {
     assume cache(home).state = invalid;
@@ -141,23 +140,6 @@ action ni_Local_Get_nak = {
     net.get(src,home) := false;
     net.nak(home,src) := true
 }
-
-# action ni_Local_Get = {
-#     assume net.get(src,home);
-#     assume home ~= src;
-#     assume ~dir.pending & ~dir.dirty & ~ rp_net(src) & ~cache(src).invmarked;
-#     net.get(src,home) := false;
-#     net.put(home,src) := true;
-#     if (dir.head) {
-#         dir.list := true;
-# 	dir.shlist(src) := true;
-# 	dir.real := dir.shlist # what is this?
-#     }
-#     else { 
-# 	dir.head := true;
-# 	dir.hptr := src
-#     }
-# }
 
 action ni_Local_Get = {
     assume net.get(src,home);
@@ -208,7 +190,6 @@ action ni_Replace_list = {
     assume dir.hptr ~= src;
     rp_net(src) := false;
     dir.shlist(src) := false;
-#    dir.real(src) := false;
     src := *
 }
 
@@ -291,8 +272,6 @@ action ni_localGetX_inv = {
     net.getX(src,home) := false;
     invnet(X) := X ~= home & X ~= src & dir.shlist(X);
     collecting := true;
-    #   m1 := m;
-    #   last_other_invack := (dir.hptr ~= src) ? dir.hptr . {i  . i in Proc, dir.shlist(i) & i~=src}; 
     cache(home).invmarked := (cache(home).wait = get & dir.local_) | cache(home).invmarked;
     dir.local_ := false;
     dir.dirty := true;
@@ -320,7 +299,7 @@ action ni_Remote_PutX = {
 }
 
 action pi_Remote_PutX = {
-    assume cache(src).state = exclusive & src ~= home; # cache(src).wait=none ???
+    assume cache(src).state = exclusive & src ~= home; 
     cache(src).state := invalid;
     wbnet.proc := src;
     wbnet.wb := true;
@@ -341,8 +320,6 @@ action ni_InvAck = {
       assume dir.real(dst) & dst ~= src;
       invack(src) := false;
       dir.real(src) := false;
-      # last_invack := src;
-      # last_other_invack := {i : i in Proc, dir.real(i) & i ~= src};
       src := *;
       dst := *
 }
@@ -352,10 +329,8 @@ action ni_InvAck_last = {
     assume ~dir.real(X) | X = src;
     dir.pending := false;
     collecting := false;
-    #	m1 := undefined; ???
     invack(src) := false;
     dir.real(src) := false;
-    #	last_invack := src;
     if ( dir.local_ & ~ dir.dirty)  {
        dir.local_ := false
     }
@@ -376,7 +351,6 @@ action ni_Remote_GetX_nak = {
   assume dst ~=src & dst ~= home & cache(dst).state ~= exclusive;
   net.getX(src,dst) := false;
   fwd_get := none;
-#  fwd_src := src;
   nakc := true;
   net.nak(dst,src) := true;
   src := *;
@@ -389,7 +363,6 @@ action ni_Remote_GetX_fwd = {
   net.getX(src,dst) := false;
   cache(dst).state := invalid;
   fwd_get := none;
-#  fwd_src := src;
   net.putX(dst,src) := true;
   real_owner := src;
   if src~=home {
@@ -415,7 +388,6 @@ action ni_Remote_Get_nak = {
   assume dst ~=src & dst ~= home & cache(dst).state ~= exclusive;
   net.get(src,dst) := false;
   fwd_get := none;
-#  fwd_src := src;
   nakc := true;
   net.nak(dst,src) := true;
   src := *;
@@ -426,16 +398,13 @@ action ni_Remote_Get_fwd = {
   assume net.get(src,dst);
   assume dst ~=src & dst ~= home & cache(dst).state = exclusive;
   net.get(src,dst) := false;
-#  assume ~cache(src).invmarked; TODO: ???
   cache(dst).state := shared;
   fwd_get := none;
-#  fwd_src := src;
   net.put(dst,src) := true;
   if src~=home {
     real_owner := home;
     net.shwb(src,home) := true
   };
-# shwb_src := dst;
   src := *;
   dst := *
 }
@@ -447,7 +416,6 @@ action ni_ShWB = {
   dir.dirty := false;
   dir.shlist(src) := true;
   dir.real(X) := dir.shlist(X);
-# last_WB := shwb_src;
   src := *
 }
 
@@ -486,11 +454,15 @@ export ni_Remote_Get_fwd
 export ni_ShWB
 export ni_NAK_Clear
 
+# The properties to prove
+
 invariant [coherent1]
   cache(X).state = exclusive -> X = real_owner
 
 invariant [coherent2]
   cache(X).state = exclusive & ~cache.invmarked(Y) & ~dir.pending -> cache(Y).state ~= shared
+
+# The auxiliary invariant
 
 invariant [nodups]
   cache(X).state = exclusive -> dir.dirty & ~wbnet.wb & ~net.shwb(Y,home)
