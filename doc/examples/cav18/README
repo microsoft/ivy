@@ -1,0 +1,24 @@
+These are the source files for the 8 proofs described in the paper:
+
+K. L. McMillan, "Eager Abstraction for Symbolic Model Checking", CAV 2018.
+
+To run these examples, in addition to Ivy, you need to install the ABC
+model checker, which is available here:
+
+https://people.eecs.berkeley.edu/~alanmi/abc/abc.htm
+
+The version of ABC used in the paper is b119cf5edf63. The command abc
+must be in your executable path.
+
+File names of the form *_mc.ivy are the model checking proofs and file
+names of the form *_inv.ivy are the corresponding invariant checking
+proofs.
+
+Run the files with the command ivy_check, like this:
+
+ivy_check filename.ivy
+
+
+
+ 
+

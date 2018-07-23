@@ -1,0 +1,143 @@
+#lang ivy1.7
+
+type client
+
+type message1 = { empty1 , reqshared , reqexclusive }
+
+type message2_4 = { empty2_4 , invalidate , grantshared , grantexclusive }
+
+type message3 = { empty3 , invalidateAck }
+
+type cachestate = { invalid , shared , exclusive }
+
+object s = {
+    var channel1(C:client) : message1
+    var channel2_4(C:client) : message2_4
+    var channel3(C:client) : message3
+    var cache(C:client) : cachestate
+    var homeSharerList(C:client) : bool
+    var homeinvalidateList(C:client) : bool
+    var homeexclusiveGranted : bool
+    var homeCurrentCommand : message1
+    var homeCurrentclient : client
+}
+
+var owner : client
+
+after init {
+    s.channel1(C) := empty1;
+    s.channel2_4(C) := empty2_4;
+    s.channel3(C) := empty3;
+    s.cache(C) := invalid;
+    s.homeSharerList(C) := false;
+    s.homeinvalidateList(C) := false;
+    s.homeexclusiveGranted := false;
+    s.homeCurrentCommand := empty1;
+}
+
+action reqsharedRule(cl:client) = {
+    require s.cache(cl) = invalid & s.channel1(cl) = empty1;
+    s.channel1(cl) := reqshared;
+}
+
+action reqexclusiveRule(cl:client) = {
+    require (s.cache(cl) = invalid | s.cache(cl) = shared) & s.channel1(cl) = empty1;
+    s.channel1(cl) := reqexclusive;
+}
+
+action pickNewRequestRule(cl:client) = {
+    require s.homeCurrentCommand = empty1 & s.channel1(cl) ~= empty1;
+    s.homeCurrentCommand := s.channel1(cl);
+    s.channel1(cl) := empty1;
+    s.homeCurrentclient := cl;
+    s.homeinvalidateList(C) := s.homeSharerList(C);
+}
+
+action sendinvalidateRule(cl:client) = {
+    require s.channel2_4(cl) = empty2_4 & s.homeinvalidateList(cl)
+    & (s.homeCurrentCommand = reqexclusive
+    | (s.homeCurrentCommand = reqshared & s.homeexclusiveGranted));
+    s.channel2_4(cl) := invalidate;
+    s.homeinvalidateList(cl) := false;
+}
+
+
+action receiveinvalidateAckRule(cl:client) = {
+    require s.homeCurrentCommand ~= empty1 & s.channel3(cl) = invalidateAck;
+    s.homeSharerList(cl) := false;
+    s.homeexclusiveGranted := false;
+    s.channel3(cl) := empty3;
+}
+
+action sharerinvalidatescacheRule(cl:client) = {
+    require s.channel2_4(cl) = invalidate & s.channel3(cl) = empty3;
+    s.channel2_4(cl) := empty2_4;
+    s.channel3(cl) := invalidateAck;
+    s.cache(cl) := invalid;
+}
+
+action receivesharedGrantRule(cl:client) = {
+    require s.channel2_4(cl) = grantshared;
+    s.cache(cl) := shared;
+    s.channel2_4(cl) := empty2_4;
+}
+
+action receiveexclusiveGrantRule(cl:client) = {
+    require s.channel2_4(cl) = grantexclusive;
+    s.cache(cl) := exclusive;
+    s.channel2_4(cl) := empty2_4;
+}
+
+action grantsharedRule = {
+    require s.homeCurrentCommand = reqshared
+    & ~ s.homeexclusiveGranted
+    & s.channel2_4(s.homeCurrentclient) = empty2_4;
+    s.homeSharerList(s.homeCurrentclient) := true;
+    s.homeCurrentCommand := empty1;
+    s.channel2_4(s.homeCurrentclient) := grantshared;
+}
+
+action grantexclusiveRule = {
+    require s.homeCurrentCommand = reqexclusive
+    & s.channel2_4(s.homeCurrentclient) = empty2_4 &
+    forall I. ~s.homeSharerList(I);
+    s.homeSharerList(s.homeCurrentclient) := true;
+    s.homeCurrentCommand := empty1;
+    s.homeexclusiveGranted := true;
+    s.channel2_4(s.homeCurrentclient) := grantexclusive;
+    owner := s.homeCurrentclient; 
+}
+
+
+
+invariant forall C1, C2. C1 ~= C2 & s.cache(C1) = exclusive -> s.cache(C2) = invalid
+
+invariant s.homeexclusiveGranted & s.homeCurrentCommand ~= empty1 & s.channel3(C1) = invalidateAck -> C1 = owner
+
+invariant (s.cache(C) = shared | s.channel2_4(C) = grantshared) -> s.homeSharerList(C) & ~s.homeexclusiveGranted
+
+invariant (s.cache(C) = exclusive | s.channel2_4(C) = grantexclusive) -> s.homeSharerList(C) & s.homeexclusiveGranted & C = owner
+
+invariant s.homeexclusiveGranted & s.homeSharerList(C) -> C = owner
+
+invariant s.channel2_4(C) = invalidate ->  (s.homeCurrentCommand = reqexclusive
+       | (s.homeCurrentCommand = reqshared & s.homeexclusiveGranted)) & s.homeSharerList(C) & ~s.homeinvalidateList(C)
+
+invariant s.channel3(C) = invalidateAck -> s.cache(C) = invalid & (s.homeCurrentCommand = reqexclusive
+       | (s.homeCurrentCommand = reqshared & s.homeexclusiveGranted)) & s.homeSharerList(C) & ~s.homeinvalidateList(C)
+
+invariant s.channel2_4(C) ~= empty2_4 -> s.channel3(C) ~= invalidateAck
+
+invariant  s.homeinvalidateList(C) -> s.homeSharerList(C)
+
+
+export reqsharedRule
+export reqexclusiveRule
+export pickNewRequestRule
+export receiveexclusiveGrantRule
+export sendinvalidateRule
+export sharerinvalidatescacheRule
+export receiveinvalidateAckRule
+export grantexclusiveRule
+export receivesharedGrantRule
+export grantsharedRule

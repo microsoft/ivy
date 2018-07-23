@@ -1,0 +1,284 @@
+#lang ivy1.7
+
+# Some datatypes and their axioms
+
+include order
+
+type node
+
+instance epochobj : unbounded_sequence
+alias epoch = epochobj.t
+
+instance stakeord : unbounded_sequence
+alias stake = stakeord.t
+
+axiom 0 <= X:epoch
+axiom X:stake >= 0
+axiom ~(X:stake < 0)
+axiom X:stake < Y -> Y ~= 0
+axiom X:stake = Y -> (X = 0 <-> Y = 0)
+axiom X:stake < Y | X ~= 0 | Y = 0
+
+instance inst_object : unbounded_sequence
+alias inst = inst_object.t
+
+axiom ~(T:epoch < T)
+axiom X:epoch < Y -> Y ~= 0
+axiom X:epoch = Y -> (X = 0 <-> Y = 0)
+axiom X:epoch < Y | X ~= 0 | Y = 0
+axiom 0 <= E:epoch
+
+type value
+
+type config
+relation val_at(C:config, I:inst, V:value)
+
+object nodeset = {
+    type set
+    relation member(N:node,S:set)
+    relation majority(S:set)
+    axiom majority(S) & majority(T) -> exists N. (member(N,S) & member(N,T))
+}
+
+function leader_fun(E:epoch) : node
+relation leader_of(N:node,E:epoch)
+definition leader_of(N,E) = (N = leader_fun(E))
+
+object vsp = {
+
+relation wedge_msg(E:epoch, S:stake)
+relation wedge_ack_msg(E:epoch, N:node, S1:stake, S2:stake, C:config)
+relation accept_msg(E:epoch, S:stake, C:config)
+relation accepted_msg(E:epoch, N:node, S:stake, C:config)
+relation wedged(E:epoch, N:node)
+relation started(E:epoch, N:node) # TODO: add nodes and nodesets
+relation proposal(E:epoch, I:inst, V:value)
+relation vote(E:epoch, N:node, I:inst, V:value)
+relation decision(E:epoch, N:node, I:inst, V:value)
+relation transferral(E:epoch, N:node, I:inst, V:value)
+
+# History variables
+    
+relation left_stake(E:epoch, N:node, S:stake)
+relation joined_stake(E:epoch, N:node, S:stake)
+relation any_decision(I:inst, V:value) # records past decisions of any epoch or node
+relation config_decided(E:epoch,C:config) 
+
+# Initialization
+    
+after init {
+    wedge_msg(E,S) := false;
+    wedge_ack_msg(E,N,S1,S2,C2) := false;
+    accept_msg(E,S,C2) := false;
+    accepted_msg(E,N,S,C) := false;
+    proposal(E,I,V) := false;
+    vote(E,N,I,V) := false;
+    decision(E,N,I,V) := false;
+    any_decision(I,V) := false;
+    transferral(E,N,I,V) := false;
+    left_stake(E,N,S) := false;
+    joined_stake(E,N, S) := false;
+    wedged(E,N) := false;
+    started(E,N) := E = 0;
+    config_decided(E,C) := false;
+}
+
+# Protocol actions
+
+action send_wedge (e:epoch,s:stake) = { 
+    wedge_msg(e,s) := true
+}
+
+before send_wedge {
+    assert s ~= 0;
+}
+
+action join_stake (e:epoch, n:node, s:stake) = {
+    wedged(e,n) := true;
+    left_stake(e,n,S) := left_stake(e,n,S) | ~(s<=S);
+    joined_stake(e,n,s) := true
+}
+
+before join_stake {
+    assert s ~= 0;
+    assert started(e,n);
+    assert wedge_msg(e,s);
+    assert ~left_stake(e,n,s);
+}
+
+action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, n: node, c : config) = {
+    accept_msg(e, s, c) := true;
+}
+
+before receive_wedge_ack_msgs {
+    assert s ~= 0;
+    assume ~accept_msg(e,s,C);
+    assert forall N. nodeset.member(N,nset) -> joined_stake(e,N,s);
+    assert nodeset.majority(nset);
+
+    if maxs = 0 {
+	# if no stake, n must have the exact configuration and it must be maximal
+	assert nodeset.member(n,nset) & forall I,V . val_at(c,I,V) <-> (vote(e,n,I,V) | transferral(e,n,I,V));
+	assert nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+	assert 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C)
+    } else {
+	# if stake, n must have accepted at the stake and stake must be maximal
+	assert s > maxs & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
+	assert (s > MAXS & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
+    }
+}
+
+
+action send_accepted_msg(e:epoch, n:node, s:stake, c:config) = {
+    accepted_msg(e, n, s, c) := true
+}
+
+before send_accepted_msg {
+    assert s ~= 0;
+    assert started(e,n);
+    assert ~left_stake(e,n,s);
+    assert accept_msg(e,s,c);
+}
+
+action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config) = {
+    config_decided(e_prev, c) := true;
+    transferral(e,n,I,V) := val_at(c,I,V);
+    decision(e,n,I,V) := val_at(c,I,V);
+    started(e,n) := true
+}
+
+before start {
+    assert s ~= 0;
+    assert ~started(e,n);
+    assert nodeset.majority(nset);
+
+    # make sure e_prev is the previous epoch deterministically
+    assert epochobj.succ(e_prev, e);
+
+    assert nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
+}
+
+action propose(e:epoch, i:inst, v:value) = {
+    proposal(e,i,v) := true
+}
+
+before propose {
+    assert leader_of(N,e) -> started(e,N);
+    assert leader_of(N,e) & i <= BIG_I -> ~transferral(e,N,BIG_I,V);
+    assert i <= BIG_I -> ~proposal(e,BIG_I,V);
+}
+
+action do_vote(e:epoch, n:node, i:inst, v:value) = {
+    vote(e, n, i, v) := true
+}
+
+before do_vote {
+    assert started(e, n);
+    assert ~wedged(e,n);
+    assert proposal(e,i,v);
+}
+
+action decide(e:epoch, n:node, v:value, nset:nodeset.set, i:inst) = {
+    decision(e, n, i, v) := true;
+    any_decision(i,v) := true
+}
+
+before decide {
+    assert started(e, n);
+    assert nodeset.majority(nset);
+    assert nodeset.member(N, nset) -> vote(e, N, i, v);
+}
+
+after decide {
+    assert any_decision(I,V1) & any_decision(I,V2) -> V1 = V2
+}
+
+
+} # end of object vsp
+
+# The inductive invariant
+
+object vsp_proof = {
+
+# properties of stake 0
+conjecture ~vsp.wedge_msg(E,0)
+conjecture ~vsp.accept_msg(E,0,C)
+conjecture ~vsp.accepted_msg(E,N,0,C)
+
+# Paxos invariants:
+
+conjecture vsp.accept_msg(E,S,C1) & vsp.accept_msg(E,S,C2) -> C1 = C2
+conjecture vsp.accepted_msg(E,N,S,C) -> vsp.accept_msg(E,S,C)
+conjecture vsp.joined_stake(E,N,S2) & ~(S2<=S1) -> vsp.left_stake(E,N,S1)
+
+# the choosable invariant:
+
+conjecture ~(S2<=S1) & vsp.accept_msg(E,S2,C2) & C1 ~= C2 & nodeset.majority(NSET) ->
+    exists N. nodeset.member(N,NSET) & vsp.left_stake(E,N,S1) & ~vsp.accepted_msg(E,N,S1,C1)
+
+conjecture vsp.config_decided(E,C)
+    -> exists S,NSET. nodeset.majority(NSET) & 
+              forall N. nodeset.member(N,NSET) -> vsp.accepted_msg(E,N,S,C)
+
+conjecture vsp.config_decided(E,C1) & vsp.config_decided(E,C2) -> C1 = C2
+
+
+conjecture vsp.joined_stake(E,N,S) -> vsp.started(E,N)
+conjecture vsp.wedged(E,N) -> vsp.started(E,N)
+conjecture leader_of(N,E) & vsp.proposal(E,I,V1) -> vsp.started(E,N)
+conjecture vsp.vote(E,N,I,V) -> vsp.started(E,N)
+conjecture vsp.decision(E,N,I,V) -> vsp.started(E,N)
+conjecture vsp.transferral(E,N,I,V) -> vsp.started(E,N)
+
+# basic wedging, proposing and voting conjectures
+conjecture vsp.proposal(E,I,V1) & vsp.proposal(E,I,V2) -> V1 = V2
+conjecture vsp.vote(E,N,I,V) -> vsp.proposal(E,I,V)
+conjecture vsp.joined_stake(E,N,S) -> vsp.wedged(E,N)
+conjecture vsp.transferral(E,N,I,V) -> vsp.decision(E,N,I,V)
+conjecture vsp.decision(E,N1,I,V) & nodeset.majority(NSET) -> vsp.transferral(E,N1,I,V) 
+               | (exists N2. nodeset.member(N2,NSET) & vsp.vote(E,N2,I,V))
+
+# a history in an accept message includes not too much
+conjecture vsp.accept_msg(E,S,C) & val_at(C,I,V) -> exists N. vsp.vote(E,N,I,V) | vsp.transferral(E,N,I,V)
+
+# a history in an accept message includes everything "vsp.vote-choosable"
+conjecture vsp.decision(E,N,I,V) & vsp.accept_msg(E,S,C) -> val_at(C,I,V)
+conjecture vsp.accept_msg(E,S,C) & nodeset.majority(NSET)
+    -> exists N. nodeset.member(N,NSET) & (vsp.wedged(E,N)
+               & ((vsp.vote(E,N,I,V) | vsp.transferral(E,N,I,V)) -> val_at(C,I,V)))
+
+# properties of vsp.transferral
+conjecture vsp.started(E,N1) & vsp.started(E,N2) -> (vsp.transferral(E,N1,I,V) <-> vsp.transferral(E,N2,I,V))
+conjecture (exists E2,N2. epochobj.succ(E1,E2) & vsp.started(E2,N2)) -> exists C. vsp.config_decided(E1,C)
+conjecture epochobj.succ(E1,E2) & vsp.started(E2,N) & vsp.config_decided(E1,C) -> (
+    vsp.transferral(E2,N,I,V) <-> val_at(C,I,V)
+)
+
+# connection between vsp.transferral and vsp.proposal
+conjecture vsp.transferral(E,N,I1,V1) & vsp.proposal(E,I2,V2) -> ~(I2 <= I1)
+
+conjecture (exists E2,N2. ~(E2<=E1) & vsp.started(E2,N2)) -> exists C. vsp.config_decided(E1,C)
+
+# connection between different epochs
+conjecture vsp.config_decided(E1,C1) & ~(E2<=E1) & val_at(C1,I,V) & vsp.started(E2,N2)
+               -> vsp.transferral(E2,N2,I,V)
+
+conjecture(
+    vsp.decision(E1,N1,I,V1) &
+    vsp.decision(E2,N2,I,V2)
+) -> V1 = V2
+
+conjecture vsp.any_decision(I,V) -> exists E,N. vsp.decision(E,N,I,V)
+
+
+} #end of object vsp proof
+
+
+export vsp.send_wedge
+export vsp.join_stake
+export vsp.receive_wedge_ack_msgs
+export vsp.send_accepted_msg
+export vsp.start
+export vsp.propose
+export vsp.do_vote
+export vsp.decide
