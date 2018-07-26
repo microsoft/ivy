@@ -308,9 +308,9 @@ def ctype_remaining_cases(sort,classname):
     if card is None:
         return 'int'   # for uninterpreted sorts, can be anything
     if card <= 2**32:
-        return 'int'
+        return 'unsigned'
     if card <= 2**64:
-       return 'long long'
+       return 'unsigned long long'
     raise iu.IvyError(None,'sort {} is too large to represent with a machine integer'.format(sort))
 
 
@@ -857,7 +857,7 @@ def emit_action_gen(header,impl,name,action,classname):
         emit_decl(impl,sym)
     
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"')))
+    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"').replace('\\|','')))
 #    impl.append('__ivy_modelfile << slvr << std::endl;\n')
     indent_level -= 1
     impl.append("}\n");
@@ -1166,17 +1166,20 @@ def init_method():
     res.formal_returns = []
     return res
 
+int_ctypes = ["bool","int","long long","unsigned","unsigned long long"]
+
 def is_iterable_sort(sort):
-    return ctype(sort) in ["bool","int"]
+    return ctype(sort) in int_ctypes
 
 def is_finite_iterable_sort(sort):
     return is_iterable_sort(sort) and sort_card(sort) is not None
 
+
 def check_iterable_sort(sort):
-    if ctype(sort) not in ["bool","int","long long"]:
+    if ctype(sort) not in int_ctypes:
         if il.is_uninterpreted_sort(sort) and sort.name in im.module.native_types:
             nt = native_type_full(im.module.native_types[sort.name]).strip()
-            if nt in ['int','bool','long long']:
+            if nt in int_ctypes:
                 return
         if isinstance(sort,il.EnumeratedSort):
             return
@@ -1190,7 +1193,8 @@ def open_loop(impl,vs,declare=True,bounds=None):
         indent(impl)
         bds = bounds[num] if bounds else ["0",str(sort_card(idx.sort))]
         vn = varname(idx.name)
-        ct = 'long long ' if ctype(idx.sort) == 'long long' else 'int '
+        ct = ctype(idx.sort)
+        ct = 'int' if ct == 'bool' else ct if ct in int_ctypes else 'int'
         if isinstance(idx.sort,il.EnumeratedSort):
             ct = ctype(idx.sort)
             impl.append('for ('+ ((ct + ' ') if declare else '') + vn + ' = (' + ct + ')' +  bds[0] + '; (int) ' + vn + ' < ' + bds[1] + '; ' + vn + ' = (' + ct + ')(((int)' + vn + ') + 1)) {\n')
@@ -1944,6 +1948,35 @@ long long _arg<long long>(std::vector<ivy_value> &args, unsigned idx, long long 
     return res;
 }
 
+template <>
+unsigned long long _arg<unsigned long long>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    std::istringstream s(args[idx].atom.c_str());
+    s.unsetf(std::ios::dec);
+    s.unsetf(std::ios::hex);
+    s.unsetf(std::ios::oct);
+    unsigned long long res;
+    s  >> res;
+//    unsigned long long res = atoll(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return res;
+}
+
+template <>
+unsigned _arg<unsigned>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+    std::istringstream s(args[idx].atom.c_str());
+    s.unsetf(std::ios::dec);
+    s.unsetf(std::ios::hex);
+    s.unsetf(std::ios::oct);
+    unsigned res;
+    s  >> res;
+//    unsigned res = atoll(args[idx].atom.c_str());
+    if (bound && (res < 0 || res >= bound) || args[idx].fields.size())
+        throw out_of_bounds(idx,args[idx].pos);
+    return res;
+}
+
+
 std::ostream &operator <<(std::ostream &s, const __strlit &t){
     s << "\\"" << t.c_str() << "\\"";
     return s;
@@ -1969,6 +2002,16 @@ void __ser<long long>(ivy_ser &res, const long long &inp) {
 }
 
 template <>
+void __ser<unsigned long long>(ivy_ser &res, const unsigned long long &inp) {
+    res.set((long long)inp);
+}
+
+template <>
+void __ser<unsigned>(ivy_ser &res, const unsigned &inp) {
+    res.set((long long)inp);
+}
+
+template <>
 void __ser<bool>(ivy_ser &res, const bool &inp) {
     res.set(inp);
 }
@@ -1990,6 +2033,20 @@ void __deser<int>(ivy_deser &inp, int &res) {
 template <>
 void __deser<long long>(ivy_deser &inp, long long &res) {
     inp.get(res);
+}
+
+template <>
+void __deser<unsigned long long>(ivy_deser &inp, unsigned long long &res) {
+    long long temp;
+    inp.get(temp);
+    res = temp;
+}
+
+template <>
+void __deser<unsigned>(ivy_deser &inp, unsigned &res) {
+    long long temp;
+    inp.get(temp);
+    res = temp;
 }
 
 template <>
@@ -2022,6 +2079,16 @@ void __from_solver<long long>( gen &g, const  z3::expr &v, long long &res) {
 }
 
 template <>
+void __from_solver<unsigned long long>( gen &g, const  z3::expr &v, unsigned long long &res) {
+    res = g.eval(v);
+}
+
+template <>
+void __from_solver<unsigned>( gen &g, const  z3::expr &v, unsigned &res) {
+    res = g.eval(v);
+}
+
+template <>
 void __from_solver<bool>( gen &g, const  z3::expr &v, bool &res) {
     res = g.eval(v);
 }
@@ -2047,6 +2114,16 @@ z3::expr __to_solver<int>( gen &g, const  z3::expr &v, int &val) {
 
 template <>
 z3::expr __to_solver<long long>( gen &g, const  z3::expr &v, long long &val) {
+    return v == g.int_to_z3(v.get_sort(),val);
+}
+
+template <>
+z3::expr __to_solver<unsigned long long>( gen &g, const  z3::expr &v, unsigned long long &val) {
+    return v == g.int_to_z3(v.get_sort(),val);
+}
+
+template <>
+z3::expr __to_solver<unsigned>( gen &g, const  z3::expr &v, unsigned &val) {
     return v == g.int_to_z3(v.get_sort(),val);
 }
 
@@ -2086,6 +2163,16 @@ void __randomize<int>( gen &g, const  z3::expr &v) {
 
 template <>
 void __randomize<long long>( gen &g, const  z3::expr &v) {
+    g.randomize(v);
+}
+
+template <>
+void __randomize<unsigned long long>( gen &g, const  z3::expr &v) {
+    g.randomize(v);
+}
+
+template <>
+void __randomize<unsigned>( gen &g, const  z3::expr &v) {
     g.randomize(v);
 }
 
@@ -3101,7 +3188,8 @@ def emit_quant(variables,body,header,code,exists=False):
                        + idx + '=' + varname(iu.compose_names(iter,'next')) + '(' + idx + ')) {\n')
     else:
         lo,hi = get_bounds(header,v0,variables,body,exists)
-        ct = 'long long' if ctype(v0.sort) == 'long long' else 'int'
+        ct = ctype(v0.sort)
+        ct = 'int' if ct == 'bool' else ct if ct in int_ctypes else 'int'
         header.append('for (' + ct + ' ' + idx + ' = ' + lo + '; ' + idx + ' < ' + hi + '; ' + idx + '++) {\n')
     indent_level += 1
     subcode = []
@@ -4625,6 +4713,11 @@ def main_int(is_ivyc):
                     import os
                     cpp11 = any(x.endswith('.cppstd') and y.rep=='cpp11' for x,y in im.module.attributes.iteritems())
                     gpp11_spec = ' -std=c++11 ' if cpp11 else '' 
+                    libspec = ''
+                    for x,y in im.module.attributes.iteritems():
+                        p,c = iu.parent_child_name(x)
+                        if c == 'libspec':
+                            libspec += ' -l' + y.rep
                     if platform.system() == 'Windows':
                         if 'Z3DIR' in os.environ:
                             z3incspec = '/I %Z3DIR%\\include'
@@ -4660,6 +4753,7 @@ def main_int(is_ivyc):
                             cmd = "g++ {} {} -g -c {}.cpp".format(gpp11_spec,paths,basename)
                         if target.get() in ['gen','test']:
                             cmd = cmd + ' -lz3'
+                        cmd += libspec
                         cmd += ' -pthread'
                     print cmd
                     import sys
@@ -4742,6 +4836,22 @@ namespace hash_space {
         class hash<long long> {
     public:
         size_t operator()(const long long &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<unsigned> {
+    public:
+        size_t operator()(const unsigned &s) const {
+            return s;
+        }
+    };
+
+    template <>
+        class hash<unsigned long long> {
+    public:
+        size_t operator()(const unsigned long long &s) const {
             return s;
         }
     };

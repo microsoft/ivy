@@ -32,6 +32,25 @@ system with version 14.04 or higher, do the following:
 
     sudo apt-get install core-network tcpdump libpcap-dev
 
+### Botan
+
+For test generation, the Botan implementation of TLS is used. Install
+version 2.6.0 from [here](https://botan.randombit.net/releases/). Instructions
+are [here](https://botan.randombit.net/).
+
+Install Botan like this (from the Botan source directory):
+
+    ./configure.py
+    make
+    sudo make install
+    sudo ln -s /usr/local/include/botan-2/botan /usr/local/include/botan
+    cp src/lib/tls/tls_reader.h /usr/local/include/botan
+
+The last two commands are needed because Botan installs itself in a
+way that it can't find its own header files, and it forgets a header
+file (at least in 2.6.0).
+
+
 Implementations of QUIC
 -----------------------
 
@@ -137,6 +156,12 @@ described in [quic_packet.ivy](quic_packet.md).
 If the specification is violated by the packet trace, the file will
 end with an error message indicating the requirement that was
 violated. 
+
+Build and run the server tester
+===============================
+
+    ivyc target=test quic_server_test.ivy
+
 
 View the log
 ============

@@ -427,12 +427,21 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     assert pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
     
+    # TEMPORARY: only support long packet format
+
+    assert pkt.hdr_long;
+
     # Extract the cid and packet number from the packet.
 
     var pcid := pkt.hdr_cid;
     var pnum := decode_packet_number(src,dst,pkt);
 
     require ~sent_pkt(src,pcid,pnum);  # [4]
+
+    # First packet of any connection must be initial packet
+    # TODO: retransmission of initial packet must be initial packet type?
+
+    assert ~conn_seen(src,pcid) & ~initializing(dst,src) -> pkt.hdr_type = 0x7f;
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.

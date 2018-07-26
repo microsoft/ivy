@@ -17,5 +17,13 @@ Issue:
    ... Implementations MUST NOT send more than one ACK frame per received
    packet that contains frames other than ACK frames. ...
 
+Capture file: none
+Implementation:
+  minquic, commit ???????
+Issue:
+   Server treats the case of off bit being false in stream frame of
+   initial packet as an error, but it isn't clear that this violates the
+   specification. Need to check this.
+
 
 

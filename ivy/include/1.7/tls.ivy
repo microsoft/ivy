@@ -22,8 +22,9 @@ module tls_lower_intf(cid,bytes) = {
 # `cid` : the type of connection identifiers
 # `bytes` : the type of byte arrays
 # `lower` : the interface to the underlying transport
+# `extens` : the type of lists of extensions
 
-module tls_intf(cid,index,bytes,lower) = {
+module tls_intf(cid,index,bytes,lower,extens) = {
 
     # The upper interface is between TLS and the application
 
@@ -49,9 +50,9 @@ module tls_intf(cid,index,bytes,lower) = {
     action key_material_export(c:cid,label:bytes,context:bytes,length:index)
     returns (key:bytes)
     
-    # Create a new connection with a fresh cid
+    # Create a new connection with a fresh cid, and list of extensions
 
-    action create(c:cid, is_server : bool)
+    action create(c:cid, is_server : bool, e : extens)
 
     # Destroy an existing connection
 
@@ -101,7 +102,7 @@ module tls_intf(cid,index,bytes,lower) = {
     }
     
     implementation {
-        instance impl : tls_impl(cid,index,bytes,lower,this)
+        instance impl : tls_impl(cid,index,bytes,extens,lower,this)
     }
 
 }

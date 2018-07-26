@@ -6,17 +6,20 @@
 #     cid : the type of connection ids
 #     index : an unbounded sequence type
 #     bytes : a type of byte arrays indexed by `index`
+#     extens : a type of lists of extensions
 #     lower : the lower interface
 #     upper : the upper interface
 #
 
-module tls_impl(cid,index,bytes,lower,upper) = {
+module tls_impl(cid,index,bytes,extens,lower,upper) = {
 
-    # The Botan header requires C++11
+    # The Botan header requires C++11 and the libbotan-2 library
 
     attribute cppstd = cpp11
+    attribute libspec = "botan-2"
+    
 
-# These empty objects are used to hold C++ values.
+    # These empty objects are used to hold C++ values.
 
     object cb = {}          # struct holding the callbacks
     object cid_map = {}     # map from cid's to connections
@@ -33,6 +36,8 @@ module tls_impl(cid,index,bytes,lower,upper) = {
     #include <botan-2/botan/tls_server.h>
     #include <botan-2/botan/tls_callbacks.h>
     #include <botan-2/botan/tls_session_manager.h>
+    #include <botan-2/botan/tls_extensions.h>
+    #include <botan-2/botan/tls_reader.h>
     #include <botan-2/botan/tls_policy.h>
     #include <botan-2/botan/auto_rng.h>
     #include <botan-2/botan/certstor.h>
@@ -74,9 +79,10 @@ module tls_impl(cid,index,bytes,lower,upper) = {
 	public:
 	`cid` the_cid;
 	tls_callbacks cb;
+        `extens` extns;
 
-        botan_tls_callbacks(const `cid` &the_cid, const tls_callbacks &cb)
-        : the_cid(the_cid), cb(cb) {}
+        botan_tls_callbacks(const `cid` &the_cid, const tls_callbacks &cb, `extens` extns)
+        : the_cid(the_cid), cb(cb), extns(extns) {}
 
 	void tls_emit_data(const uint8_t data[], size_t size) override
 	{
@@ -112,6 +118,20 @@ module tls_impl(cid,index,bytes,lower,upper) = {
 	    // cache the session in the configured session manager
 	    return false;
 	}
+
+        void tls_modify_extensions(Botan::TLS::Extensions &extn, Botan::TLS::Connection_Side which_side) override
+        {
+            `extens` &e = extns;
+            for (size_t i = 0; i < e.size(); i++) {
+                std::vector< uint8_t > data;
+                data.resize(e[i].content.size());
+                std::copy(e[i].content.begin(),e[i].content.end(),data.begin());
+                Botan::TLS::TLS_Data_Reader rdr("unknown",data);
+                auto etype = static_cast<Botan::TLS::Handshake_Extension_Type>(e[i].etype);
+                auto the_extn = new Botan::TLS::Unknown_Extension(etype,rdr,data.size());
+                extn.add(the_extn);
+            }
+        }	
     };
 
     // This is a credentials manager for Botan that provdes no credentials
@@ -210,7 +230,7 @@ module tls_impl(cid,index,bytes,lower,upper) = {
 
     # close the socket
 
-    implement create(c:cid, is_server:bool) {
+    implement create(c:cid, is_server:bool, e:extens) {
         <<< impure
             
 	// We allocate an unused cid, and create an entry in the cid_map
@@ -219,7 +239,7 @@ module tls_impl(cid,index,bytes,lower,upper) = {
 	tls_connection tc;
 	tc.rng = new Botan::AutoSeeded_RNG; 
 	tc.session_mgr = new Botan::TLS::Session_Manager_In_Memory(*tc.rng);
-	tc.btcs = new botan_tls_callbacks(c,*`cb`);
+	tc.btcs = new botan_tls_callbacks(c,*`cb`,e);
 	tc.creds = new tls_null_credentials;
 	tc.policy = new tls_policy; // Botan::TLS::Strict_Policy;
 	if (is_server) {

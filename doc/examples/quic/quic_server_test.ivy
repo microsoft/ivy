@@ -42,16 +42,18 @@ after init {
     the_cid := 13;
 }
 
+instance tls_extensions : vector(tls.unknown_extension)
+
 object botan = {
     instance id : unbounded_sequence
     instance lower : tls_lower_intf(id,stream_data)
-    instance upper : tls_intf(id,stream_pos,stream_data,lower)
+    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions)
 }    
 
 action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
     ep.addr := 0xff000001;   # the loop-back addr
-    ep.port := 0x869b if the_role = role.client else 0x1151;
+    ep.port := 4987 if the_role = role.client else 0x1151;
 }    
 
 module quic_endpoint(addr,the_role) = {
@@ -75,7 +77,8 @@ after init {
     sock := net.open(role.client,client.ep);
     client.tls_id := 0;
     server.tls_id := 1;
-    call botan.upper.create(0,false);  # false means this instance of tls is not a server
+    var extns := tls_extensions.empty();
+    call botan.upper.create(0,false,extns);  # false means this instance of tls is not a server
 }
 
 # Hook up tls to quic
@@ -91,6 +94,15 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
 
 after tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
     call show_tls_send_event(src,dst,pcid,data);
+}
+
+# Assume that initial packets are sent only to the server under test
+
+before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    if pkt.hdr_type = 0x7f {
+        require dst = server.ep
+    };
+    require pkt.hdr_version = 0xff000009
 }
 
 # Hook up to the remote server
@@ -147,6 +159,7 @@ action frame_stream_wrapper(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:
 before frame_stream_wrapper(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) {
     require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
     require pcid = the_cid;
+    require f.len & f.off; # TODO: when can f.off be false?
     require f.length > 0;
     require f.offset = stream_length(dst,pcid,f.id);
     require f.length = (stream_app_data(dst,pcid,f.id).end) - f.offset;
@@ -166,15 +179,15 @@ export tls_recv_event
 attribute radix=16       # print in hex
 
 interpret cid -> intbv[1][13][2]
-interpret version -> bv[2]
+interpret version -> bv[32]
 interpret pkt_num -> bv[32]
 interpret error_code -> bv[16]
 interpret stream_id -> bv[3]
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1
-attribute ip.addr.override = bv[1]
-attribute ip.port.override = bv[1]
+#attribute ip.addr.override = bv[1]
+#attribute ip.port.override = bv[1]
 
 action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) = {}
 
