@@ -56,8 +56,29 @@ Implementations of QUIC
 
 ### Google QUIC
 
-The Google implementation of QUIC used in the Chromium browser is not
-compatible with the IETF draft.
+The Google implementation of QUIC is supposed to be IEFT compatible if
+you used version 99. It is part of Chromium code base.
+
+Some instructions to install it are here:
+
+    http://www.chromium.org/quic/playing-with-quic
+
+Before, compiling, you need to patch it to disable packet protection.
+A patch against commit `1720d2a` can be found in `chromium_diffs.txt`.
+
+After compiling and certificate creation, to run the test server, from
+the `src` directory of Chromium:
+
+    ./out/Debug/quic_server \
+      --quic_response_cache_dir=/tmp/quic-data/www.example.org \
+      --certificate_file=net/tools/quic/certs/out/leaf_cert.pem \
+      --key_file=net/tools/quic/certs/out/leaf_cert.pkcs8 --quic-enable-version-99
+
+To run the test client:
+
+    out/Default/quick_client --host=127.0.0.1 --port=6121 --disable-certificate-verification https://www.example.org/ --quic-enable-version-99
+
+
 
 ### MinQUIC
 

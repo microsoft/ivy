@@ -26,8 +26,8 @@ object std_deserializer = {}
 #
 # - `data`: the type of data to be serialized/deserialized
 # - `bytes`: a byte array type
-# - `serialiazer`: the serializer (e.g., `std_serializer`)
-# - `
+# - `serializer`: the serializer (e.g., `std_serializer`)
+# - `deserializer`: the deserializer (e.g., `std_deserializer`)
 
 module serdes(data,bytes,serializer,deserializer) = {
     action to_bytes(x:data) returns(y:bytes)

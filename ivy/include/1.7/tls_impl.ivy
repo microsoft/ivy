@@ -11,7 +11,7 @@
 #     upper : the upper interface
 #
 
-module tls_impl(cid,index,bytes,extens,lower,upper) = {
+module tls_impl(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
     # The Botan header requires C++11 and the libbotan-2 library
 
@@ -73,6 +73,33 @@ module tls_impl(cid,index,bytes,extens,lower,upper) = {
     : ls(ls), ur(ur), ua(ua), use(use) {}
     };
 
+    // A class for arbitrary TLS extensions
+
+    class tls_any_extension : public Botan::TLS::Extension
+       {
+       public:
+          tls_any_extension(Botan::TLS::Handshake_Extension_Type type,
+                            Botan::TLS::TLS_Data_Reader& reader,
+                            uint16_t extension_size)  :
+           m_type(type),
+           m_value(reader.get_fixed<uint8_t>(extension_size))
+           {
+           }
+
+          std::vector<uint8_t> serialize() const override {return m_value;} 
+
+          const std::vector<uint8_t>& value() { return m_value; }
+
+          bool empty() const override { return false; }
+
+          Botan::TLS::Handshake_Extension_Type type() const override { return m_type; }
+
+       private:
+          Botan::TLS::Handshake_Extension_Type m_type;
+          std::vector<uint8_t> m_value;
+
+       };
+
     // This object is the callback interface for Botan
 
     class botan_tls_callbacks : public Botan::TLS::Callbacks {
@@ -123,12 +150,16 @@ module tls_impl(cid,index,bytes,extens,lower,upper) = {
         {
             `extens` &e = extns;
             for (size_t i = 0; i < e.size(); i++) {
+                `exten_ser` ser;
+                __ser(ser,e[i]);
+                unsigned etype = (((unsigned char)(ser.res[0])) << 8) + ((unsigned char)(ser.res[1]));
+                unsigned len = (((unsigned char)(ser.res[2])) << 8) + ((unsigned char)(ser.res[3]));
                 std::vector< uint8_t > data;
-                data.resize(e[i].content.size());
-                std::copy(e[i].content.begin(),e[i].content.end(),data.begin());
+                data.resize(ser.res.size()-4);
+                std::copy(ser.res.begin()+4,ser.res.end(),data.begin());
                 Botan::TLS::TLS_Data_Reader rdr("unknown",data);
-                auto etype = static_cast<Botan::TLS::Handshake_Extension_Type>(e[i].etype);
-                auto the_extn = new Botan::TLS::Unknown_Extension(etype,rdr,data.size());
+                auto betype = static_cast<Botan::TLS::Handshake_Extension_Type>(etype);
+                auto the_extn = new tls_any_extension(betype,rdr,len);
                 extn.add(the_extn);
             }
         }	
@@ -189,7 +220,13 @@ module tls_impl(cid,index,bytes,extens,lower,upper) = {
 	    res.push_back("");
 	    return res;
 	}
-    };
+        bool allow_tls10() const override {
+            return false;
+        }
+        bool allow_tls11() const override {
+            return false;
+        }
+};
 
 
 >>>

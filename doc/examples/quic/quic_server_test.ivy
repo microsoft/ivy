@@ -8,6 +8,7 @@ include quic_ser
 include quic_infer
 include tls
 include udp_impl
+include serdes
 
 # This is a simple tester for quic servers. We assume the server is located on localhost at port 4433.
 # The tester plays the role of a single client.
@@ -42,12 +43,27 @@ after init {
     the_cid := 13;
 }
 
-instance tls_extensions : vector(tls.unknown_extension)
+instance tls_extensions : vector(tls.extension)
+
+# HACK: we fix the initial client transport parameters here
+
+action make_transport_parameters returns (tp:quic_transport_parameters) = {
+    tp.initial_version := 0xff000009;
+    var imsd : initial_max_stream_data;
+    imsd.stream_pos_32 := 0x2000;
+    var imd : initial_max_data;
+    imd.stream_pos_32 := 0x4000;
+    var it : idle_timeout;
+    it.seconds_16 := 60;
+    tp.transport_parameters := tp.transport_parameters.append(imsd);
+    tp.transport_parameters := tp.transport_parameters.append(imd);
+    tp.transport_parameters := tp.transport_parameters.append(it);
+}
 
 object botan = {
     instance id : unbounded_sequence
     instance lower : tls_lower_intf(id,stream_data)
-    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions)
+    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser)
 }    
 
 action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
@@ -77,7 +93,8 @@ after init {
     sock := net.open(role.client,client.ep);
     client.tls_id := 0;
     server.tls_id := 1;
-    var extns := tls_extensions.empty();
+    var extns := tls_extensions.empty;
+    extns := extns.append(make_transport_parameters);
     call botan.upper.create(0,false,extns);  # false means this instance of tls is not a server
 }
 

@@ -1104,6 +1104,8 @@ def emit_action(header,impl,name,classname):
 
 def trace_action(impl,name,action):
     indent(impl)
+    if name.startswith('ext:'):
+        name = name[4:]
     impl.append('__ivy_out ' + number_format + ' << "< ' + name + '"')
     if action.formal_params:
         impl.append(' << "("')
@@ -1382,7 +1384,7 @@ def find_import_callers():
     for imp in im.module.imports:
         name = imp.imported()
         if not imp.scope() and name in im.module.actions:
-            import_callers.add(name[5:])
+            import_callers.add('ext:' + name[5:])
             
 def module_to_cpp_class(classname,basename):
     global the_classname

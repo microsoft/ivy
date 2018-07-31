@@ -23,8 +23,9 @@ module tls_lower_intf(cid,bytes) = {
 # `bytes` : the type of byte arrays
 # `lower` : the interface to the underlying transport
 # `extens` : the type of lists of extensions
+# `exten_ser` : serializer for extensions
 
-module tls_intf(cid,index,bytes,lower,extens) = {
+module tls_intf(cid,index,bytes,lower,extens,exten_ser) = {
 
     # The upper interface is between TLS and the application
 
@@ -102,7 +103,7 @@ module tls_intf(cid,index,bytes,lower,extens) = {
     }
     
     implementation {
-        instance impl : tls_impl(cid,index,bytes,extens,lower,this)
+        instance impl : tls_impl(cid,index,bytes,extens,exten_ser,lower,this)
     }
 
 }
