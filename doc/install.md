@@ -138,7 +138,7 @@ Make sure you get version 3.4 of python-ply as some later versions are broken.
 As an alternative, `pip` can install all the packages, but you need to make sure
 the dependencies on system packages are met:
 
-    $ sudo apt-get install graphviz graphviz-dev python-dev
+    $ sudo apt-get install graphviz graphviz-dev python-dev pkg-config
     $ pip install ply pygraphviz tarjan
 
 This latter is the option if you are making a virtual environment.
