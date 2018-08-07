@@ -3948,12 +3948,15 @@ def emit_repl_boilerplate2(header,impl,classname):
             ivy.__unlock();
         }
         catch (syntax_error& err) {
+            ivy.__unlock();
             std::cerr << "line " << lineno << ":" << err.pos << ": syntax error" << std::endl;
         }
         catch (out_of_bounds &err) {
+            ivy.__unlock();
             std::cerr << "line " << lineno << ":" << err.pos << ": " << err.txt << " bad value" << std::endl;
         }
         catch (bad_arity &err) {
+            ivy.__unlock();
             std::cerr << "action " << err.action << " takes " << err.num  << " input parameters" << std::endl;
         }
         if (isatty(fdes()))

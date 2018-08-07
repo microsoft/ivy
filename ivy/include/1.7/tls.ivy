@@ -1,6 +1,6 @@
 #lang ivy
 
-include tls_impl
+include tls_gnutls
 
 # This module defines the interface TLS and the underlying transport.
 
@@ -103,7 +103,7 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser) = {
     }
     
     implementation {
-        instance impl : tls_impl(cid,index,bytes,extens,exten_ser,lower,this)
+        instance impl : tls_gnutls(cid,index,bytes,extens,exten_ser,lower,this)
     }
 
 }

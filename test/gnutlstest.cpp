@@ -17,11 +17,27 @@ ssize_t client_push_func(gnutls_transport_ptr_t ptr, const void* data, size_t le
 }
 
 ssize_t client_pull_func(gnutls_transport_ptr_t ptr, void* data, size_t len){
-    errno = EAGAIN;
-    return -1;
+    size_t res;
+    res = client_input.size();
+    if (len < res)
+        res = len;
+    if (res == 0) {
+        errno = EAGAIN;
+        return -1;
+    }
+    char *d = (char *)data;
+    for (size_t i = 0; i < res; i++) {
+        d[i] = client_input[i];
+    }
+    client_input.erase(client_input.begin(),client_input.begin()+res);
+    return res;
 }
 
 ssize_t server_push_func(gnutls_transport_ptr_t ptr, const void* data, size_t len) {
+    char *d = (char *)data;
+    for (size_t i = 0; i < len; i++) {
+        client_input.push_back(d[i]);
+    }
     return len;
 }
 
@@ -112,6 +128,40 @@ int main () {
             exit(1);
         }
     }
+
+    res = gnutls_handshake (client);
+    if (res != GNUTLS_E_SUCCESS) {
+        if (res == GNUTLS_E_AGAIN) {
+            std::cerr << "gnutls_handshake returned EAGAIN\n";
+        } else {
+            std::cerr << "gnutls_handshake returned error\n";
+            exit(1);
+        }
+    }
+
+    res = gnutls_handshake (server);
+    if (res != GNUTLS_E_SUCCESS) {
+        if (res == GNUTLS_E_AGAIN) {
+            std::cerr << "gnutls_handshake(server) returned EAGAIN\n";
+        } else {
+            std::cerr << "gnutls_handshake(server) returned error\n";
+            exit(1);
+        }
+    } else {
+            std::cerr << "gnutls_handshake(server) returned SUCCESS\n";
+    }        
+
+    res = gnutls_handshake (client);
+    if (res != GNUTLS_E_SUCCESS) {
+        if (res == GNUTLS_E_AGAIN) {
+            std::cerr << "gnutls_handshake(client) returned EAGAIN\n";
+        } else {
+            std::cerr << "gnutls_handshake(client) returned error\n";
+            exit(1);
+        }
+    } else {
+            std::cerr << "gnutls_handshake(client) returned SUCCESS\n";
+    }        
 
     return 0;
 }
