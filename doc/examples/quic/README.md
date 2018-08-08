@@ -19,7 +19,7 @@ implementations.
 Installation steps
 ==================
 
-Do these stpes just once on a given machine.
+Do these steps just once on a given machine.
 
 ### Virtual networking and packet capture
 
@@ -154,6 +154,10 @@ will time out after five seconds of inactivity. When the client
 finishes, kill the `tcpdump` process in terminal B with SIGINT
 (control-C). You should now have a file `mycap.pcap` containing
 captured packets.
+
+To run the server with logging, do this:
+
+    MINQ_LOG='*' MINT_LOG='*' go run bin/server/main.go
 
 Build and run the Ivy monitor
 =============================
