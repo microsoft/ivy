@@ -242,6 +242,28 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
                 std::cerr << "gnutls_credentials_set returned error\n";
                 exit(1);
             }
+            gnutls_certificate_credentials_t cred2;
+            crres = gnutls_certificate_allocate_credentials(&cred2);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_certificate_allocate_credentials returned error\n";
+                exit(1);
+            }
+            crres = gnutls_certificate_set_x509_key_file2 (cred2, "leaf_cert.pem", "leaf_cert.key", GNUTLS_X509_FMT_PEM, 0, 0);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_certificate_set_x509_key_file2 returned error\n";
+                exit(1);
+            }
+            cres = gnutls_credentials_set (session, GNUTLS_CRD_CERTIFICATE, cred2);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_credentials_set returned error\n";
+                exit(1);
+            }
+            cres = gnutls_server_name_set (session, GNUTLS_NAME_DNS, "localhost", 9);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_server_name_set returned error\n";
+                exit(1);
+            }
+            
         }
 
         // Register the extensions

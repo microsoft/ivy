@@ -129,6 +129,8 @@ include quic_transport_parameters
 # - The queued frames at source endpoint `E` for connection `C` are
 #   represented by `queued_frames(E,C)` and are initially empty.
 #
+# - The relation `queued_client_hello(E,C)` indicates that one of the queued
+#   frames at endpoint `E` for connection `C` contains a TLS client hello record.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
@@ -154,6 +156,7 @@ relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
+relation queued_client_hello(E:ip.endpoint,C:cid)
 
 
 
@@ -180,6 +183,7 @@ after init {
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
     stream_app_pos(E,C,S) := 0;
+    queued_client_hello(E,C) := false;
 }
 
 # Ghost events
@@ -438,10 +442,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require ~sent_pkt(src,pcid,pnum);  # [4]
 
-    # First packet of any connection must be initial packet
-    # TODO: retransmission of initial packet must be initial packet type?
+    # A packet is in initial packet iff it contains a client hello.
 
-    assert ~conn_seen(src,pcid) & ~initializing(dst,src) -> pkt.hdr_type = 0x7f;
+    assert pkt.hdr_type = 0x7f <-> queued_client_hello(src,pcid);
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.
@@ -492,7 +495,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # The queued frames are deleted
     
-    queued_frames(src, pkt.hdr_cid) := frame.arr.empty
+    queued_frames(src, pkt.hdr_cid) := frame.arr.empty;
+    queued_client_hello(src, pkt.hdr_cid) := false;
 }
 
 # The frame protocol
@@ -593,6 +597,9 @@ object frame = {
 #
 # - The connection must not have bee closed by the source endpoint [8].
 #
+# - For stream ids other than zero, the connection id must have been seen at the source [9]
+#   and the connection between source and destination must no be initializing [10].
+
 # Effects:
 #
 # - If the stream has not been seen before, and if the
@@ -627,6 +634,8 @@ object frame = {
                 var kind := get_stream_kind(f.id);
                 require max_stream_set(dst,pcid,kind) -> f.id <= max_stream(dst,pcid,kind);  # [6]
                 require ~stream_reset(dst,pcid,f.id);  # [7]
+                require conn_seen(src,pcid);  # [9]
+                require ~initializing(src,dst);  # [10]
                 if ~stream_seen(dst,pcid,f.id) {
                     if initial_max_stream_data.is_set(trans_params(dst,pcid)) {
                         max_stream_data_val(dst,pcid,f.id) :=
@@ -906,6 +915,7 @@ action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,pcid:cid,tls_rec:tls.re
         while idx < hr.fragment.end {
             var hs := hr.fragment.value(idx);
             if some(ch:tls.client_hello) hs *> ch {
+                queued_client_hello(src,pcid) := true;
                 call handle_tls_extensions(src,dst,pcid,ch.extensions,true);
             };
             if some(sh:tls.server_hello) hs *> sh {

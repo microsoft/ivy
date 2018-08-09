@@ -19,10 +19,6 @@ module udp_impl(host,pkt,ser,des) = {
     type socket
 
 
-# These empty objects are used to hold C++ values.
-
-    object rdr = {}         # the listener object
-    object cb = {}          # struct holding the callbacks
     
 # This code goes in the C++ header file, ahead of the ivy object declaration.
 # Here, we put declarations (perhaps forward) of any auxiliary classes we need).
@@ -158,6 +154,10 @@ object impl(me:host) = {
     # Here we put any new members of the ivy C++ class. If we have allocated a per-instance
     # object, we declared it here anti-quoted. The plugs in the actual member name, which may
     # be any array if this is a parameterized instance.
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
 
     <<< member
 

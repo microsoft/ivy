@@ -68,7 +68,7 @@ object botan = {
 
 action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
-    ep.addr := 0xff000001;   # the loop-back addr
+    ep.addr := 0x7f000001;   # the loop-back addr
     ep.port := 4987 if the_role = role.client else 0x1151;
 }    
 
@@ -163,7 +163,7 @@ around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo : stream_po
 	data := data.append(stream_app_data(dst,pcid,0).value(idx));
 	idx := idx.next
     };
-    call botan.lower.recv(tls_id,data)
+#    call botan.lower.recv(tls_id,data)
 }
     
 # We only want the tester to generate frame protocol events on behalf of the
@@ -184,13 +184,28 @@ before frame_stream_wrapper(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:
     call frame.stream.handle(f,src,dst,pcid);
 }
 
+# We allow generating application data at the client end only if the previous data have
+# not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
+# for stream id 0x4.
+
+action app_send_wrapper(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id, data : stream_data)
+
+before app_send_wrapper {
+    require s = 0x4;
+    require src = client.ep;
+    require dst = server.ep;
+    require pcid = the_cid;
+    require stream_length(dst,pcid,s) = stream_app_data(dst,pcid,s).end;
+    call app_send_event(src, dst, pcid, s, data)    
+}
+
 # Note, we don't have the above problem with packet events, since the frame
 # queue for the server end will always be empty.
 
 #export frame.ack.handle
 export frame_stream_wrapper
 export packet_event
-#export app_send_event
+export app_send_wrapper
 export tls_recv_event
 
 attribute radix=16       # print in hex
@@ -203,6 +218,7 @@ interpret stream_id -> bv[3]
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1
+attribute stream_pos.cardinality = 4
 #attribute ip.addr.override = bv[1]
 #attribute ip.port.override = bv[1]
 
