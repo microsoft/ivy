@@ -920,12 +920,15 @@ def minimal_field_siblings(inputs,mrefs):
                     destrs = im.module.sort_destructors[sort.name]
                     for d in destrs:
                         res[inp].add(d(f.args[0]))
+                else:
+                    res[inp].add(inp)
         else:
             res[inp].add(inp)
     return res
 
 def extract_input_fields(pre_clauses,inputs):
     mrefs = minimal_field_references(pre_clauses.to_formula(),inputs)
+    iu.dbg('[(str(x),map(str,y)) for x,y in mrefs.iteritems()]')
     mrefs = minimal_field_siblings(inputs,mrefs)
     iu.dbg('[(str(x),map(str,y)) for x,y in mrefs.iteritems()]')
     def field_symbol_name(f):
@@ -943,6 +946,20 @@ def extract_input_fields(pre_clauses,inputs):
     pre_clauses = ilu.Clauses(map(recur,pre_clauses.fmlas),map(recur,pre_clauses.defs))
     inputs = list(fsyms.keys())
     return pre_clauses,inputs,fsyms
+
+def expand_field_references(pre_clauses):
+    defmap = dict((x.args[0].rep,x.args[1]) for x in pre_clauses.defs
+                  if len(x.args[0].args) == 0 and il.is_app(x.args[1])
+                      and  (len(x.args[1].args) == 0 or
+                            len(x.args[1].args) == 1 and
+                                x.args[1].rep.name in im.module.destructor_sorts))
+    def recur(f):
+        if il.is_app(f) and f.rep in defmap:
+            return recur(defmap[f.rep])
+        return f.clone(map(recur,f.args))
+    def recur_def(d):
+        return d.clone([d.args[0],recur(d.args[1])])
+    return ilu.Clauses(map(recur,pre_clauses.fmlas),map(recur,pre_clauses.defs))
 
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
@@ -979,8 +996,14 @@ def emit_action_gen(header,impl,name,action,classname):
         p = p.prefix('__')
         if p not in inputset:
             inputs.append(p)
+    iu.dbg('[str(x) for x in inputs]')
+    iu.dbg('pre_clauses')
+    pre_clauses = expand_field_references(pre_clauses)
+    iu.dbg('pre_clauses')
     pre_clauses, inputs, fsyms = extract_input_fields(pre_clauses,inputs)
-    iu.dbg('[str(pre_clauses),[str(x) for x in inputs],str(fsyms)]')
+    iu.dbg('pre_clauses')
+    iu.dbg('[str(x) for x in inputs]')
+    iu.dbg('fsyms')
     pre_clauses, param_defs = extract_defined_parameters(pre_clauses,inputs)
     iu.dbg('pre_clauses')
     iu.dbg('param_defs')

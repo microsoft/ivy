@@ -42,6 +42,9 @@ module array(domain,range) = {
     # add one element to the array
     action append(a:t,v:range) returns (a:t)
 
+    # extract a segment of the array
+    action segment(a:t, lo:domain, hi:domain) returns (res:t)
+
     ########################################
     # Representation
     #
@@ -98,6 +101,9 @@ module array(domain,range) = {
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert value(a,end(old a)) = v
 	}
+        before segment {
+            assert 0 <= lo & lo <= hi & hi <= end(a)
+        }
     }
 
     object impl = {
@@ -161,6 +167,13 @@ module array(domain,range) = {
 	implement append {
 	    <<<
 	        `a`.push_back(`v`);
+            >>>
+        }
+
+	implement segment {
+	    <<<
+            `res`.resize(`hi`-`lo`);
+            std::copy(`a`.begin()+`lo`,`a`.begin()+`hi`,`res`.begin());
             >>>
         }
 
