@@ -249,7 +249,7 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         else:
-            for s in ['requires','ensures']:
+            for s in ['requires','ensures','method']:
                 if s in reserved:
                     del reserved[s]
 

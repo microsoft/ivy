@@ -262,7 +262,7 @@ class AssumeAction(Action):
 
 class AssertAction(Action):
     def __init__(self,*args):
-        assert len(args) == 1
+        assert len(args) <= 2
         self.args = args
     sort_infer_root = True
     def name(self):
@@ -298,6 +298,9 @@ class EnsuresAction(AssertAction):
         return AssertAction.assert_to_assume(self,kinds)
 
 class RequiresAction(AssertAction):
+    pass
+
+class SubgoalAction(AssertAction):
     pass
 
 def equiv_ast(ast1,ast2):

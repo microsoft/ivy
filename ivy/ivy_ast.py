@@ -668,17 +668,29 @@ class DeferGoalTactic(AST):
     def tactic_name(self):
         return 'defergoal'
 
+class NullTactic(AST):
+    def __init__(self,*args):
+        self.args = []
+    def __str__(self):
+        return '{}'
+    
 class LetTactic(AST):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
-        return 'let' ','.join(str(x) for x in self.args)
+        return 'let ' + ','.join(str(x) for x in self.args)
     
 class SpoilTactic(AST):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
         return 'spoil ' + str(self.args[0])
+
+class IfTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        return 'if ' + str(self.args[0]) + ' { ' + str(self.args[1]) + ' } else { ' + str(self.args[2]) + ' }'
 
 class ComposeTactics(AST):
     def __str__(self):

@@ -549,7 +549,19 @@ def compile_assert_action(self):
     ctx = ExprContext(lineno = self.lineno)
     with ctx:
         cond = sortify_with_inference(self.args[0])
-    ctx.code.append(self.clone([cond]))
+    if len(self.args) > 1:
+        prover = ip.ProofChecker([],[],im.module.schemata)
+        pf = self.args[1].compile()
+        subgoals = prover.admit_proposition(ivy_ast.LabeledFormula(None,cond),pf)
+        assm = AssumeAction(ivy_logic.close_formula(cond))
+        assm.lineno = self.lineno
+        asrt = Sequence(*([ia.SubgoalAction(sg.formula) for sg in subgoals] + [assm]))
+        for x,y in zip(asrt.args,subgoals):
+            if hasattr(y,'lineno'):
+                x.lineno = y.lineno
+    else:
+        asrt = self.clone([cond])
+    ctx.code.append(asrt)
     res = ctx.extract()
     return res
 
@@ -746,6 +758,12 @@ def compile_let_tactic(self):
     
 ivy_ast.LetTactic.compile = compile_let_tactic
 
+def compile_if_tactic(self):
+    cond = sortify_with_inference(self.args[0])
+    return self.clone([cond,self.args[1].compile(),self.args[2].compile()])
+    
+ivy_ast.IfTactic.compile = compile_if_tactic
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
@@ -754,7 +772,7 @@ def resolve_alias(name):
         return resolve_alias(parts[0]) + iu.ivy_compose_character + parts[1]
     return name
 
-defined_attributes = set(["weight","test","iterable","cardinality"])
+defined_attributes = set(["weight","test","method","separate","iterable","cardinality"])
 
 class IvyDomainSetup(IvyDeclInterp):
     def __init__(self,domain):
@@ -985,7 +1003,8 @@ class IvyDomainSetup(IvyDeclInterp):
                 raise IvyError(thing,"{} is already interpreted".format(lhs))
             return
         if isinstance(rhs,ivy_ast.Range):
-            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+#            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
+            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}".format(i) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.is_solver_sort,slv.is_solver_op],
@@ -1083,7 +1102,7 @@ class IvyARGSetup(IvyDeclInterp):
         oname = iu.ivy_compose_character.join(fields[:-1])
         oname = 'this' if oname == '' else oname
         aname = fields[-1]
-        if oname not in self.mod.actions and oname not in self.mod.hierarchy:
+        if oname != 'this' and oname not in self.mod.actions and oname not in self.mod.hierarchy:
             raise IvyError(a,'"{}" does not name an action or object'.format(oname))
         if aname not in defined_attributes:
             raise IvyError(a,'"{}" does not name a defined attribute'.format(aname))

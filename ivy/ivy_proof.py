@@ -27,6 +27,12 @@ class MatchProblem(object):
     def __str__(self):
         return '{{pat:{},inst:{},freesyms:{}}}'.format(self.pat,self.inst,map(str,self.freesyms))
 
+def attrib_goals(proof,goals):
+    if hasattr(proof,'lineno'):
+        for g in goals:
+            g.lineno = proof.lineno
+    return goals
+
 class ProofChecker(object):
     """ This is IVY's built-in proof checker """
 
@@ -126,6 +132,12 @@ class ProofChecker(object):
                 return self.defer_goal_tactic(decls,proof)
             elif isinstance(proof,ia.DeferGoalTactic):
                 return self.defer_goal_tactic(decls,proof)
+            elif isinstance(proof,ia.LetTactic):
+                return self.let_tactic(decls,proof)
+            elif isinstance(proof,ia.IfTactic):
+                return self.if_tactic(decls,proof)
+            elif isinstance(proof,ia.NullTactic):
+                return decls
             assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
@@ -149,9 +161,10 @@ class ProofChecker(object):
 
     def let_tactic(self,decls,proof):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
+<<<<<<< HEAD
         subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
         subgoal.lineno = decls[0].lineno
-        return [subgoal] + decls[1:]
+        return attrib_goals([subgoal]) + decls[1:]
 
     def setup_matching(self,decl,proof):
         schemaname = proof.schemaname()
@@ -183,6 +196,14 @@ class ProofChecker(object):
 #        prem = make_goal(proof.lineno,fresh_label(goal_prems(decl)),[],schema)
         prem  = apply_match_goal(pmatch,prob.schema,apply_match_alt)
         return [goal_add_prem(decls[0],prem,proof.lineno)] + decls[1:]
+
+    def if_tactic(self,decls,proof):
+        cond = proof.args[0]
+        true_goal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
+        false_goal = ia.LabeledFormula(decls[0].label,il.Implies(il.Not(cond),decls[0].formula))
+        return (attrib_goals(proof.args[1],self.apply_proof([true_goal],proof.args[1])) +
+                attrib_goals(proof.args[2],self.apply_proof([false_goal],proof.args[2])) +
+                decls[1:])
 
     def match_schema(self,decl,proof):
         """ attempt to match a definition or property decl to a schema
