@@ -119,8 +119,8 @@ module mysegment(domain,range,none) = {
         #           | x < offset(w) & v = none
 
         definition value(w:this,x:domain,v:range) =
-                  (exists Y. shift.r(offset(w),x,Y) & Y < elems(w).end & v = elems(w).value(Y))
-                  | (exists Y. shift.r(offset(w),Y,elems(w).end) &  Y <= x & v = none)
+                  (exists Y. shift.r(offset(w),x,Y) &
+                        (v = elems(w).value(Y) if Y < elems(w).end else none))
                   | x < offset(w) & v = none
 
         definition begin(W,I) = (I = offset(W))
