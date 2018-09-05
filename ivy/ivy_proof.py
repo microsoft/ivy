@@ -161,7 +161,6 @@ class ProofChecker(object):
 
     def let_tactic(self,decls,proof):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
-<<<<<<< HEAD
         subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
         subgoal.lineno = decls[0].lineno
         return attrib_goals([subgoal]) + decls[1:]
