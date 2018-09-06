@@ -109,13 +109,18 @@ module mysegment(domain,range,none) = {
 
         property X < offset(W) -> value(W,X,none)
         property shift.r(offset(W),X,Y) & Y < elems(W).end -> value(W,X,elems(W).value(Y))
-        property shift.r(offset(W),X,Y) & Y >= elems(W).end -> value(W,X,none)
+#        property shift.r(offset(W),X,Y) & Y >= elems(W).end -> value(W,X,none)
         property value(W, I, V1) & value(W, I, V2) -> V1 = V2
         property value(W, I, V) -> 0 <= I
             
+        # definition value(w:this,x:domain,v:range) =
+        #           (exists Y. shift.r(offset(w),x,Y) &
+        #               (v = elems(w).value(Y) if Y < elems(w).end else none))
+        #           | x < offset(w) & v = none
+
         definition value(w:this,x:domain,v:range) =
                   (exists Y. shift.r(offset(w),x,Y) &
-                      (v = elems(w).value(Y) if Y < elems(w).end else none))
+                        (v = elems(w).value(Y) if Y < elems(w).end else none))
                   | x < offset(w) & v = none
 
         definition begin(W,I) = (I = offset(W))
@@ -141,11 +146,12 @@ module mysegment(domain,range,none) = {
             if j < bound {
                 while j < bound
                 invariant i <= j & j <= bound
-                invariant shift.r(w.offset,bound,w.elems.end)
-                invariant j <= X & X < bound & shift.r(w.offset,X,Y) -> value(w,X,w.elems.value(Y))
-                invariant X < j & shift.r(i,X,Y) -> value(w,X,w.elems.value(Y))
-                invariant w.offset <= j
-                invariant shift.r(i,j,X) -> X < w.elems.end
+                invariant shift.r(offset(old w),bound,old w.elems.end)
+                invariant j <= X & X < bound & shift.r(offset(old w),X,Y) -> value(old w,X,w.elems.value(Y))
+                invariant X < j & shift.r(i,X,Y) -> value(old w,X,w.elems.value(Y))
+                invariant w.offset <= j & w.offset = offset(old w)
+                invariant w.elems.end = elems(old w).end
+#		invariant shift.r(i,j,X) -> X < w.elems.end
                 {
                     w.elems := w.elems.set(shift.f(i,j),w.elems.value(shift.f(w.offset,j)));
                     j := j.next;
@@ -154,9 +160,11 @@ module mysegment(domain,range,none) = {
                 w.offset := i
             }
             else {
+		assume false;
                 w.elems := arr.empty;
                 w.offset := i;
-	    }
+	    };
+	    bound := shift.b(offset(w),w.elems.end)  # just for a witness
         }
 
 
