@@ -110,6 +110,20 @@ class ProofChecker(object):
         self.stale.update(vocab.symbols)
         return subgoals
 
+    def get_subgoals(self,prop,proof):
+        """Return the subgoals that result from applying proof to property
+            prop, but do not admit prop in the context. Note, prop may not
+            be a definition.
+
+        """
+        assert not isinstance(prop.formula,il.Definition)
+        prop = normalize_goal(prop)
+        subgoals = self.apply_proof([prop],proof)
+        if subgoals is None:
+            raise NoMatch(proof,"goal does not match the given schema")
+        return subgoals
+        
+
     def apply_proof(self,decls,proof):
         """ Apply a proof to a list of goals, producing subgoals, or None if
         the proof fails. """
@@ -163,7 +177,7 @@ class ProofChecker(object):
         cond = il.And(*[il.Equals(x,y) for x,y in proof.args])
         subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
         subgoal.lineno = decls[0].lineno
-        return attrib_goals([subgoal]) + decls[1:]
+        return attrib_goals(proof,[subgoal]) + decls[1:]
 
     def setup_matching(self,decl,proof):
         schemaname = proof.schemaname()

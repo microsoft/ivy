@@ -197,6 +197,12 @@ class Action(AST):
         if to_hide:
              update = hide(to_hide,update)
         return update
+    def copy_formals(self,res):
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
     def assert_to_assume(self,kinds):
         args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)

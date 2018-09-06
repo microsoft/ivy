@@ -550,15 +550,8 @@ def compile_assert_action(self):
     with ctx:
         cond = sortify_with_inference(self.args[0])
     if len(self.args) > 1:
-        prover = ip.ProofChecker([],[],im.module.schemata)
         pf = self.args[1].compile()
-        subgoals = prover.admit_proposition(ivy_ast.LabeledFormula(None,cond),pf)
-        assm = AssumeAction(ivy_logic.close_formula(cond))
-        assm.lineno = self.lineno
-        asrt = Sequence(*([ia.SubgoalAction(sg.formula) for sg in subgoals] + [assm]))
-        for x,y in zip(asrt.args,subgoals):
-            if hasattr(y,'lineno'):
-                x.lineno = y.lineno
+        asrt = self.clone([cond,pf])
     else:
         asrt = self.clone([cond])
     ctx.code.append(asrt)
@@ -1412,6 +1405,38 @@ def reorder_props(mod,props):
     return rprops
         
 
+    
+    
+def apply_assert_proofs(mod,prover):
+    def recur(self):
+        if not isinstance(self,Action):
+            return self
+        if isinstance(self,AssertAction):
+            if len(self.args) > 1:
+                cond = self.args[0]
+                pf = self.args[1]
+                goal = ivy_ast.LabeledFormula(None,cond)
+                goal.lineno = self.lineno
+                subgoals = prover.get_subgoals(goal,pf)
+                subgoals = map(theorem_to_property,subgoals)
+                assm = AssumeAction(ivy_logic.close_formula(cond))
+                assm.lineno = self.lineno
+                asrt = Sequence(*([ia.SubgoalAction(sg.formula) for sg in subgoals] + [assm]))
+                asrt.lineno = self.lineno
+                for x,y in zip(asrt.args,subgoals):
+                    if hasattr(y,'lineno'):
+                        x.lineno = y.lineno
+                return asrt
+            return self
+        if isinstance(self,LocalAction):
+            with ivy_logic.WithSymbols(self.args[0:-1]):
+                return self.clone(map(recur,self.args))
+        return self.clone(map(recur,self.args))
+    for actname in list(mod.actions.keys()):
+        action = mod.actions[actname]
+        with ivy_logic.WithSymbols(list(set(action.formal_params+action.formal_returns))):
+            mod.actions[actname] = action.copy_formals(recur(action))
+    
 def check_properties(mod):
     props = reorder_props(mod,mod.labeled_props)
     
@@ -1485,7 +1510,7 @@ def check_properties(mod):
                     prover.admit_proposition(nprop,ivy_ast.ComposeTactics())
                 else:
                     prover.admit_proposition(prop,ivy_ast.ComposeTactics())
-
+    apply_assert_proofs(mod,prover)
 
 
 def ivy_compile_theory(mod,decls,**kwargs):
@@ -1563,8 +1588,6 @@ def create_conj_actions(mod):
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
     
-    
-
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
     with mod.sig:

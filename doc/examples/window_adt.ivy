@@ -183,7 +183,7 @@ module window(domain,range,none) = {
     relation begin(S:this,D:domain)
     relation end(S:this,D:domain)
 
-    # Action `empty` returns an empty window (with offset zero)
+    # Action `empty` returns an empty window (with offset `i`)
 
     action empty(i:domain) returns (w:this)
 
@@ -232,15 +232,15 @@ module window(domain,range,none) = {
             ensure I < i -> (value(w, I, V) <-> V = none);
         }
 
-        # after empty {
-        #     ensure value(w, I, V, O) <-> V = none;
-        #     ensure begin(w, I) <-> I = i;
-        # }
+        after empty {
+            ensure value(w, I, V) <-> V = none
+            proof assume shift.total with T = i, X = I;
+            ensure begin(w, I) <-> I = i;
+        }
 
-        # around getBegin {
-        #     ...
-        #     ensure begin(w, i); 
-        # }
+        after getBegin {
+            ensure begin(w, i); 
+        }
 
         # around getEnd {
         #     ...
@@ -368,6 +368,19 @@ module window(domain,range,none) = {
 	    bound := shift.b(offset(w),w.elems.end)  # just for a witness
         }
 
+        implement empty {
+            w.offset := i;
+            w.elems := arr.empty
+        }
+        
+        implement getBegin {
+            i := w.offset
+        }
+
+        implement getEnd {
+            i := shift.b(w.offset,w.elems.end)
+        }
+
     }
 
     isolate iso = this with domain
@@ -385,3 +398,6 @@ instance foo : window(slot,data,none)
 export foo.set
 export foo.read
 export foo.trim
+export foo.empty
+export foo.getBegin
+export foo.getEnd
