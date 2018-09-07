@@ -285,7 +285,8 @@ class AssertAction(Action):
         cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
         return ([],true_clauses(annot = EmptyAnnotation()),cl)
     def assert_to_assume(self,kinds):
-        if type(self) not in kinds:
+        mykind = self.kind if hasattr(self,'kind') else type(self)
+        if mykind not in kinds:
             return Action.assert_to_assume(self,kinds)
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
@@ -307,7 +308,11 @@ class RequiresAction(AssertAction):
     pass
 
 class SubgoalAction(AssertAction):
-    pass
+    def clone(self,args):
+        res = AssertAction.clone(self,args)
+        if hasattr(self,'kind'):
+            res.kind = self.kind
+        return res
 
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!

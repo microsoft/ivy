@@ -1978,20 +1978,20 @@ def p_callatoms_callatoms_callatom(p):
     p[0] = p[1]
     p[0].append(p[3])
 
-# def p_action_call_optreturns_callatom(p):
-#     'action : CALL optactualreturns callatom'
-#     p[0] = CallAction(*([p[3]] + p[2]))
-#     p[0].lineno = get_lineno(p,1)
+def p_action_call_optreturns_callatom(p):
+    'action : CALL optactualreturns callatom'
+    p[0] = CallAction(*([p[3]] + p[2]))
+    p[0].lineno = get_lineno(p,1)
 
 def p_action_call_callatom(p):
     'action : CALL callatom'
     p[0] = CallAction(p[2])
     p[0].lineno = get_lineno(p,1)
 
-def p_action_call_callatom_assign_callatom(p):
-    'action : CALL callatom ASSIGN callatom'
-    p[0] = CallAction(p[4],p[2])
-    p[0].lineno = get_lineno(p,1)
+# def p_action_call_callatom_assign_callatom(p):
+#     'action : CALL callatom ASSIGN callatom'
+#     p[0] = CallAction(p[4],p[2])
+#     p[0].lineno = get_lineno(p,1)
 
 
 def p_lparam_variable_colon_symbol(p):

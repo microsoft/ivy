@@ -1405,8 +1405,23 @@ def reorder_props(mod,props):
     return rprops
         
 
-    
-    
+def create_constructor_schemata(mod):
+    import ivy_proof
+    for sortname,destrs in mod.sort_destructors.iteritems():
+        if any(len(f.sort.dom) > 1 for f in destrs):
+            continue # TODO: higher-order constructors!
+        sort = destrs[0].sort.dom[0]
+        Y = ivy_logic.Variable('Y',sort)
+        eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
+        fmla = ivy_logic.Exists([Y],ivy_logic.And(*eqs))
+        name = ivy_ast.Atom(iu.compose_names(sortname,'constructor'),[])
+        sch = ivy_ast.SchemaBody(fmla)
+        sch.lineno = None
+        sch.instances = []
+        goal = ivy_ast.LabeledFormula(name,sch)
+        goal.lineno = None
+        mod.schemata[name.relname] = goal
+        
 def apply_assert_proofs(mod,prover):
     def recur(self):
         if not isinstance(self,Action):
@@ -1421,7 +1436,10 @@ def apply_assert_proofs(mod,prover):
                 subgoals = map(theorem_to_property,subgoals)
                 assm = AssumeAction(ivy_logic.close_formula(cond))
                 assm.lineno = self.lineno
-                asrt = Sequence(*([ia.SubgoalAction(sg.formula) for sg in subgoals] + [assm]))
+                sgas = [ia.SubgoalAction(sg.formula) for sg in subgoals]
+                for sga in sgas:
+                    sga.kind = type(self)
+                asrt = Sequence(*(sgas + [assm]))
                 asrt.lineno = self.lineno
                 for x,y in zip(asrt.args,subgoals):
                     if hasattr(y,'lineno'):
@@ -1628,6 +1646,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
             #     print iu.pretty("action {} = {}".format(x,y))
 
         create_sort_order(mod)
+        create_constructor_schemata(mod)
         check_definitions(mod)
         check_properties(mod)
         create_conj_actions(mod)
