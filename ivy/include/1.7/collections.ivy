@@ -42,8 +42,6 @@ module array(domain,range) = {
     # add one element to the array
     action append(a:t,v:range) returns (a:t)
 
-    # extract a segment of the array
-    action segment(a:t, lo:domain, hi:domain) returns (res:t)
 
     ########################################
     # Representation
@@ -55,6 +53,10 @@ module array(domain,range) = {
     definition begin(A) = 0
     function end(A:t) : domain
     function value(A:t,X:domain) : range
+
+    # Extract an array segment
+
+    function segment(A:t, LO:domain, HI:domain) : t
 
     ########################################
     # Specification
@@ -101,9 +103,6 @@ module array(domain,range) = {
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert value(a,end(old a)) = v
 	}
-        before segment {
-            assert 0 <= lo & lo <= hi & hi <= end(a)
-        }
     }
 
     object impl = {
@@ -170,12 +169,18 @@ module array(domain,range) = {
             >>>
         }
 
-	implement segment {
-	    <<<
-            `res`.resize(`hi`-`lo`);
-            std::copy(`a`.begin()+`lo`,`a`.begin()+`hi`,`res`.begin());
-            >>>
+        <<< impl
+        template <typename T>
+        T __array_segment(const T &a, long long lo, long long hi) {
+            T res;
+            res.resize(hi-lo);
+            std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            return res;
         }
+        >>>
+
+	definition segment(a:t,lo:domain,hi:domain) = 
+	<<< __array_segment(a,lo,hi) >>>
 
 	<<< impl
 	    std::ostream &operator <<(std::ostream &s, const `t` &a) {

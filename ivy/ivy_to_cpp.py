@@ -818,12 +818,9 @@ def extract_defined_parameters(pre_clauses,inputs):
     change = True
     inputset = set(inputs)
     defmap = {}
-    iu.dbg('inputs')
     for fmla in pre_clauses.fmlas:
-        iu.dbg('fmla')
         if il.is_eq(fmla) and fmla.args[0] in inputset:
             defmap[fmla.args[0]] = fmla
-    iu.dbg('defmap')
     inpdefs = []
     while change:
         change = False
@@ -860,10 +857,10 @@ def collect_used_definitions(pre,inpdefs,ssyms):
 
 def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
     udefs,usyms = collect_used_definitions(pre,inpdefs,ssyms)
-    iu.dbg('usyms')
+    global is_derived
     for sym in usyms:
-        declare_symbol(code,sym,classname=classname,isref=True,ival='obj.'+code_eval(code,sym))
-    iu.dbg('udefs')
+        if sym not in is_derived:
+            declare_symbol(code,sym,classname=classname,isref=True,ival='obj.'+code_eval(code,sym))
     global skip_z3
     skip_z3 = True
     for dfn in udefs:
@@ -871,10 +868,14 @@ def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
         declare_symbol(code,sym,classname=classname)
         emit_assign(dfn,code)
     skip_z3 = False
+    global delegate_methods_to
     for param_def in inpdefs:
         lhs = param_def.args[0]
         lhs = fsyms.get(lhs,lhs)
-        code_line(code,code_eval(code,lhs) + ' = ' + code_eval(code,param_def.args[1]))
+        rhs = ilu.substitute_constants_ast(param_def.args[1],fsyms)
+        delegate_methods_to = 'obj.'
+        code_line(code,code_eval(code,lhs) + ' = ' + code_eval(code,rhs))
+        delegate_methods_to = ''
     
 def minimal_field_references(fmla,inputs):
     inpset = set(inputs)
@@ -907,7 +908,6 @@ def minimal_field_references(fmla,inputs):
             
     recur(fmla)
     res = dict((inp,get_minima(refs)) for inp,refs in res.iteritems())
-    iu.dbg('dict((str(inp),list(str(ref) for ref in refs)) for inp,refs in res.iteritems())')
     return res
                 
 def minimal_field_siblings(inputs,mrefs):
@@ -928,9 +928,7 @@ def minimal_field_siblings(inputs,mrefs):
 
 def extract_input_fields(pre_clauses,inputs):
     mrefs = minimal_field_references(pre_clauses.to_formula(),inputs)
-    iu.dbg('[(str(x),map(str,y)) for x,y in mrefs.iteritems()]')
     mrefs = minimal_field_siblings(inputs,mrefs)
-    iu.dbg('[(str(x),map(str,y)) for x,y in mrefs.iteritems()]')
     def field_symbol_name(f):
         if len(f.args) == 1:
             return field_symbol_name(f.args[0]) + '__' + f.rep.name
@@ -959,7 +957,9 @@ def expand_field_references(pre_clauses):
         return f.clone(map(recur,f.args))
     def recur_def(d):
         return d.clone([d.args[0],recur(d.args[1])])
-    return ilu.Clauses(map(recur,pre_clauses.fmlas),map(recur,pre_clauses.defs))
+    dfs = map(recur,pre_clauses.defs)
+    dfs = [df for df in dfs if df.args[0] != df.args[1]]
+    return ilu.Clauses(map(recur,pre_clauses.fmlas),dfs)
 
 def emit_action_gen(header,impl,name,action,classname):
     global indent_level
@@ -990,46 +990,37 @@ def emit_action_gen(header,impl,name,action,classname):
     pre = tr.reverse_image(ilu.true_clauses(),ilu.true_clauses(),upd)
     orig_pre = pre
     pre_clauses = ilu.trim_clauses(pre)
+    pre_clauses = expand_field_references(pre_clauses)
     inputs = [x for x in ilu.used_symbols_clauses(pre_clauses) if is_local_sym(x) and not x.is_numeral()]
     inputset = set(inputs)
     for p in action.formal_params:
         p = p.prefix('__')
         if p not in inputset:
             inputs.append(p)
-    iu.dbg('[str(x) for x in inputs]')
-    iu.dbg('pre_clauses')
-    pre_clauses = expand_field_references(pre_clauses)
-    iu.dbg('pre_clauses')
     pre_clauses, inputs, fsyms = extract_input_fields(pre_clauses,inputs)
-    iu.dbg('pre_clauses')
-    iu.dbg('[str(x) for x in inputs]')
-    iu.dbg('fsyms')
+    old_pre_clauses = pre_clauses
     pre_clauses, param_defs = extract_defined_parameters(pre_clauses,inputs)
-    iu.dbg('pre_clauses')
-    iu.dbg('param_defs')
     rdefs = im.relevant_definitions(ilu.symbols_clauses(pre_clauses))
     pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses([fix_definition(ldf.formula).to_constraint() for ldf in rdefs]))
     pre_clauses = ilu.and_clauses(pre_clauses,ilu.Clauses(im.module.variant_axioms()))
     pre = pre_clauses.to_formula()
     used = set(ilu.used_symbols_ast(pre))
-    iu.dbg('used')
     used_names = set(varname(s) for s in used)
     defed_params = set(f.args[0] for f in param_defs)
     for x in used:
         if x.is_numeral() and il.is_uninterpreted_sort(x.sort):
             raise iu.IvyError(None,'Cannot compile numeral {} of uninterpreted sort {}'.format(x,x.sort))
     syms = inputs
-    iu.dbg('syms')
     header.append("class " + caname + "_gen : public gen {\n  public:\n")
-    iu.dbg('[str(s) for s in defed_params]')
     decld = set()
     def get_root(f):
         return get_root(f.args[0]) if len(f.args) == 1 else f
     for sym in syms:
+        print sym
         if sym in fsyms:
             sym = get_root(fsyms[sym])
         if sym not in decld:
-            if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx and sym.name != '*>':
+            if not sym.name.startswith('__ts') and sym not in old_pre_clauses.defidx and sym.name != '*>':
                 declare_symbol(header,sym,classname=classname)
             decld.add(sym)
     header.append("    {}_gen();\n".format(caname))
@@ -1038,9 +1029,10 @@ def emit_action_gen(header,impl,name,action,classname):
     impl.append(caname + "_gen::" + caname + "_gen(){\n");
     indent_level += 1
     emit_sig(impl)
-    for sym in syms:
+    to_decl = set(syms)
+    to_decl.update(s for s in used if s.name == '*>')
+    for sym in to_decl:
         emit_decl(impl,sym)
-    
     indent(impl)
     impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\n',' "\n"').replace('\\|','')))
 #    impl.append('__ivy_modelfile << slvr << std::endl;\n')
@@ -1052,13 +1044,13 @@ def emit_action_gen(header,impl,name,action,classname):
         code_line(impl,cpptype.short_name()+'::prepare()')
     pre_used = ilu.used_symbols_ast(pre)
     for sym in all_state_symbols():
-        if sym in pre_used and sym not in pre_clauses.defidx: # skip symbols not used in constraint
+        if sym in pre_used and sym not in old_pre_clauses.defidx: # skip symbols not used in constraint
             if slv.solver_name(il.normalize_symbol(sym)) != None: # skip interpreted symbols
                 if sym_is_member(sym):
                     emit_set(impl,sym)
     code_line(impl,'alits.clear()')
     for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx  and sym.name != '*>':
+        if not sym.name.startswith('__ts') and sym not in old_pre_clauses.defidx  and sym.name != '*>':
             emit_randomize(impl,sym,classname=classname)
     impl.append("""
     // std::cout << slvr << std::endl;
@@ -1067,12 +1059,13 @@ def emit_action_gen(header,impl,name,action,classname):
 """)
     indent_level += 1
     for sym in syms:
-        if not sym.name.startswith('__ts') and sym not in pre_clauses.defidx and sym.name != '*>':
+        if not sym.name.startswith('__ts') and sym not in old_pre_clauses.defidx and sym.name != '*>':
             if sym not in defed_params:
                 emit_eval(impl,sym,classname=classname,lhs=fsyms.get(sym,sym))
     ssyms = set()
     for sym in all_state_symbols():
-        if sym_is_member(sym):
+#        if sym_is_member(sym):
+        if sym.name not in im.module.destructor_sorts:
             ssyms.add(sym)
     emit_defined_inputs(orig_pre,param_defs,impl,classname,ssyms,fsyms)
     indent_level -= 2
@@ -2925,6 +2918,7 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
                 if target.get() == "test":
+                    impl.append('    ivy.__generating = false;\n')
                     emit_repl_boilerplate3test(header,impl,classname)
                 else:
                     if im.module.public_actions:
@@ -3153,6 +3147,8 @@ def capture_emit(a,header,code,capture_args):
     else:
         a.emit(header,code)
 
+delegate_methods_to = ''
+
 def emit_app(self,header,code,capture_args=None):
     # handle macros
     if il.is_macro(self):
@@ -3195,6 +3191,8 @@ def emit_app(self,header,code,capture_args=None):
         skip_params = 1
     # handle uninterpreted ops
     else:
+        if self.func in is_derived:
+            code.append(delegate_methods_to)
         code.append(funname(self.func.name))
     if self.func in is_derived:
         code.append('(')
@@ -4296,6 +4294,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             LARGE_INTEGER before;
             QueryPerformanceCounter(&before);
 #endif
+            ivy.__generating = true;
             bool sat = g.generate(ivy);
 #ifdef _WIN32
             LARGE_INTEGER after;
@@ -4304,12 +4303,14 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #endif
             if (sat){
                 g.execute(ivy);
+                ivy.__generating = false;
                 ivy.__unlock();
 #ifdef _WIN32
                 Sleep(sleep_ms);
 #endif
             }
             else {
+                ivy.__generating = false;
                 ivy.__unlock();
                 cycle--;
             }
@@ -4842,6 +4843,8 @@ def main_int(is_ivyc):
         
 
     with im.Module():
+        if target.get() == 'test':
+            im.module.sig.add_symbol('__generating',il.BooleanSort())
         ivy_init.ivy_init(create_isolate=False)
 
         isolate = ic.isolate.get()

@@ -131,6 +131,9 @@ include quic_transport_parameters
 #
 # - The relation `queued_client_hello(E,C)` indicates that one of the queued
 #   frames at endpoint `E` for connection `C` contains a TLS client hello record.
+#
+# - The function num_queued_frames(E:ip.endpoint,C:cid) gives the number of frames
+#   queue at endpoint `E` for connection `C`.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
@@ -157,6 +160,7 @@ relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
 relation queued_client_hello(E:ip.endpoint,C:cid)
+function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
 
 
 
@@ -423,10 +427,6 @@ around rename_connection {
 
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
-    # The payload may not be empty
-
-    assert pkt.payload.end > 0;  # [7]
-
     # Allowed header types
 
     assert pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
@@ -442,6 +442,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require ~sent_pkt(src,pcid,pnum);  # [4]
 
+    # The payload may not be empty
+
+    require num_queued_frames(src,pcid) > 0;  # [7]
+
     # A packet is in initial packet iff it contains a client hello.
 
     assert pkt.hdr_type = 0x7f <-> queued_client_hello(src,pcid);
@@ -456,22 +460,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     last_pkt_num(src,pcid) := pnum;
 
-    # An ack-only packet must be in response to a non-ack-only packet
-
-    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
-                                 (pkt.payload.value(I) isa frame.ack);
-    if ack_only {
-#	require ack_credit(src,pcid) > 0;  # [5]
-	ack_credit(src,pcid) := ack_credit(src,pcid) - 1;
-    } else {
-	ack_credit(dst,pcid) := ack_credit(dst,pcid) + 1;
-    };
     
     # An Initial packet has hdr_type 0x7f
 
     if pkt.hdr_type = 0x7f {
-        require pkt.payload.end = 1;  # [1]
-	require pkt.payload.value(0) isa frame.stream;
         require ~initializing(src,dst);  # [2]
         require ~conn_closed(src,pcid);  # [6]
 
@@ -493,10 +485,28 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     ...
 
+    if pkt.hdr_type = 0x7f {
+        require pkt.payload.end = 1;  # [1]
+	require pkt.payload.value(0) isa frame.stream;
+    };
+
+    # An ack-only packet must be in response to a non-ack-only packet
+
+    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
+                                 (pkt.payload.value(I) isa frame.ack);
+    var pcid := pkt.hdr_cid;
+    if ack_only {
+#	require ack_credit(src,pcid) > 0;  # [5]
+	ack_credit(src,pcid) := ack_credit(src,pcid) - 1;
+    } else {
+	ack_credit(dst,pcid) := ack_credit(dst,pcid) + 1;
+    };
+
     # The queued frames are deleted
     
     queued_frames(src, pkt.hdr_cid) := frame.arr.empty;
     queued_client_hello(src, pkt.hdr_cid) := false;
+    num_queued_frames(src, pkt.hdr_cid) := 0;
 }
 
 # The frame protocol
@@ -573,7 +583,8 @@ object frame = {
                 idx := idx.next;
             }
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
@@ -668,7 +679,8 @@ object frame = {
 	    stream_seen(dst,pcid,f.id) := true;
 	    stream_open(dst,pcid,S) := true if S <= f.id else stream_open(dst,pcid,S);
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
@@ -705,7 +717,8 @@ object frame = { ...
             stream_reset(dst,pcid,f.id) := true;  # [2]
             stream_length(dst,pcid,f.id) := f.final_offset;  #[3]
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
@@ -740,7 +753,8 @@ object frame = { ...
                 max_stream(dst,pcid,kind) := f.id; #  [1]
             }
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
@@ -773,7 +787,8 @@ object frame = { ...
 	around handle{
             conn_closed(src,pcid) := true;
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
@@ -800,7 +815,8 @@ object frame = { ...
                 max_stream_data_val(dst,pcid,f.id) := f.pos;  # [2]
             }
 	    ...
-	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f)
+	    queued_frames(src,pcid) := queued_frames(src,pcid).append(f);
+            num_queued_frames(src, pcid) := queued_frames(src,pcid).end;
         }
     }
 }
