@@ -194,7 +194,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:c
         require f.len & f.off; # TODO: when can f.off be false?
         require f.length > 0;
         require f.offset = stream_length(dst,pcid,f.id);
-        require f.length = (stream_app_data(dst,pcid,f.id).end) - f.offset;
+        require f.length = (stream_app_data_end(dst,pcid,f.id)) - f.offset;
         require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
 }
@@ -209,7 +209,7 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id,
         require src = client.ep;
         require dst = server.ep;
         require pcid = the_cid;
-        require stream_length(dst,pcid,s) = stream_app_data(dst,pcid,s).end;
+        require stream_length(dst,pcid,s) = stream_app_data_end(dst,pcid,s);
     }
 }
 

@@ -152,6 +152,7 @@ relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
+function stream_app_data_end(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_app_pos(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
@@ -256,6 +257,7 @@ after app_send_event {
     var idx := data.begin;
     while idx < data.end {
 	stream_app_data(dst,pcid,s) := stream_app_data(dst,pcid,s).append(data.value(idx));
+        stream_app_data_end(dst,pcid,s) := stream_app_data(dst,pcid,s).end;
 	idx := idx.next
     }
 }
@@ -299,6 +301,7 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_
     while jdx < data.end {
 	stream_app_data(dst,pcid,0) :=
 	    stream_app_data(dst,pcid,0).append(data.value(jdx));  # [4]
+        stream_app_data_end(dst,pcid,0) := stream_app_data(dst,pcid,0).end;
 	jdx := jdx.next
     }
 }
@@ -637,7 +640,7 @@ object frame = {
 
             require ~conn_closed(src,pcid);  # [8]
 
-	    require ((f.offset) + (f.length)) <= stream_app_data(dst,pcid,f.id).end;
+	    require ((f.offset) + (f.length)) <= stream_app_data_end(dst,pcid,f.id);
 	    require f.data = stream_app_data(dst,pcid,f.id).segment(f.offset,f.offset+f.length); 
 
             if f.id ~= 0 {
