@@ -25,5 +25,17 @@ Issue:
    initial packet as an error, but it isn't clear that this violates the
    specification. Need to check this.
 
+Capture file: none
+Implementation:
+  minquic, commit ???????
+Ivy commit:
+  39a6f6f
+Issue:
+  When given a large jump in packet numbers, the minquic server counts down
+  from the received packet number, printing log messages, spending time
+  proportional to the gap in the packet numbers. Minquic seems to assume that
+  the client will simply increment packet numbers.
+
+
 
 
