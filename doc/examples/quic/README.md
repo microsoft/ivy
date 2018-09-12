@@ -110,6 +110,23 @@ To get MinQUIC running, this command may be helpful:
     cd $GOPATH/src
     go get github.com/cloudflare/cfssl/helpers
 
+### picoquic
+
+Source code and build instructions:
+
+    https://github.com/private-octopus/picoquic
+    
+Run a server:
+
+    ./picoquicdemo
+    
+Run a client 
+
+    ./picoquicdemo localhost
+    
+
+
+
 Virtual network startup
 =======================
 

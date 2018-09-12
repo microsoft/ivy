@@ -113,9 +113,10 @@ def varname(name):
     if name.startswith('"'):
         return name
     
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__').replace('__fml:','').replace('fml:','').replace('ret:','')
     name = re.sub(puncs,'__',name).replace('@@','.')
-    return name.split(':')[-1]
+    return name.replace(':','__COLON__')
+#    return name.split(':')[-1]
 
 other_varname = varname
 
@@ -346,7 +347,7 @@ def ctype(sort,classname=None,ptype=None):
     if il.is_uninterpreted_sort(sort):
         if sort.name in im.module.native_types or sort.name in im.module.sort_destructors:
             return ptype.make(((classname+'::') if classname != None else '') + varname(sort.name))
-    return ctype_remaining_cases(sort,classname)
+    return ptype.make(ctype_remaining_cases(sort,classname))
     
 def ctypefull(sort,classname=None):
     classname = classname or global_classname
@@ -366,10 +367,15 @@ def native_type_full(self):
 large_thresh = 1024
 
 def is_large_type(sort):
+    if hasattr(sort,'dom') and any(not is_any_integer_type(s) for s in sort.dom):
+        return True
     cards = map(sort_card,sort.dom if hasattr(sort,'dom') else [])
     return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
 
 def is_large_lhs(term):
+    freevars = lu.free_variables(term)
+    if any(not is_any_integer_type(v.sort) for v in freevars):
+        return True
     cards = [sort_card(v.sort) for v in lu.free_variables(term)]
     return not(all(cards) and reduce(mul,cards,1) <= large_thresh)
     
@@ -378,7 +384,8 @@ def ctype_function(sort,classname=None,skip_params=0):
     cards = map(sort_card,sort.dom[skip_params:] if hasattr(sort,'dom') else [])
     cty = ctypefull(sort.rng,classname)
     if all(cards) and reduce(mul,cards,1) <= large_thresh:
-        return (cty,cards)
+        if not(hasattr(sort,'dom') and any(not is_any_integer_type(s) for s in sort.dom[skip_params:])):
+            return (cty,cards)
     cty = 'hash_thunk<'+ctuple(sort.dom[skip_params:],classname=classname)+','+cty+'>'
     return (cty,[])
     
@@ -1107,7 +1114,7 @@ def emit_derived(header,impl,df,classname,inline=False):
     sort = df.defines().sort.rng
     retval = il.Symbol("ret:val",sort)
     vs = df.args[0].args
-    ps = [ilu.var_to_skolem('p:',v) for v in vs]
+    ps = [ilu.var_to_skolem('fml:',v) for v in vs]
     mp = dict(zip(vs,ps))
     rhs = ilu.substitute_ast(df.args[1],mp)
     action = ia.AssignAction(retval,rhs)
@@ -1360,15 +1367,19 @@ def is_iterable_sort(sort):
 def is_finite_iterable_sort(sort):
     return is_iterable_sort(sort) and sort_card(sort) is not None
 
-
-def check_iterable_sort(sort):
+def is_any_integer_type(sort):
     if ctype(sort) not in int_ctypes:
         if il.is_uninterpreted_sort(sort) and sort.name in im.module.native_types:
             nt = native_type_full(im.module.native_types[sort.name]).strip()
             if nt in int_ctypes:
-                return
+                return True
         if isinstance(sort,il.EnumeratedSort):
-            return
+            return True
+        return False
+    return True
+
+def check_iterable_sort(sort):
+    if not is_any_integer_type(sort):
         raise iu.IvyError(None,"cannot iterate over non-integer sort {}".format(sort))
     
 

@@ -15,10 +15,10 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     # Stream frames on id 0 indicate that a `tls_send_event` has occurred.
     # TODO: ignore duplicate frames.
 
-    var pcid := pkt.hdr_cid;
     if initializing(dst,src) {
-	call rename_connection(src,dst,initial_pkt_cid(dst,src),pcid)
+	call rename_connection(src,dst,initial_pkt_cid(dst,src),pkt.hdr_cid)
     };
+    var pcid := orig_cid(pkt.hdr_cid);
     var idx := pkt.payload.begin;
     while idx < pkt.payload.end {
 	var f := pkt.payload.value(idx);

@@ -162,7 +162,9 @@ function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
 relation queued_client_hello(E:ip.endpoint,C:cid)
 function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
-
+relation cid_renamed(C:cid)
+relation cid_new_name(C:cid)
+function cid_orig_name(C:cid) : cid
 
 
 
@@ -189,6 +191,8 @@ after init {
     stream_reset(E,C,S) := false;
     stream_app_pos(E,C,S) := 0;
     queued_client_hello(E,C) := false;
+    cid_renamed(C) := false;
+    cid_new_name(C) := false;
 }
 
 # Ghost events
@@ -330,7 +334,9 @@ around tls_recv_event {
 #
 # Connection rename event
 #
-# On receipt of an initial packet, the server may give the connection a new cid.
+# On receipt of an initial packet, the server may give the connection a new cid. We
+# record the fact that the old cid has been renamed. On future packet events, the
+# header cid must be the new cid and is translated to the original.
 #
 # Requirements:
 #
@@ -349,13 +355,21 @@ around rename_connection {
     require oldcid = initial_pkt_cid(dst,src)
     ...
     initializing(dst,src) := false;
-    var ipnum := initial_pkt_num(dst,src);
-    sent_pkt(dst,newcid,ipnum) := true;
-    last_pkt_num(dst,newcid) := ipnum;
-    trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
-    ack_credit(src,newcid) := 1;  # one credit for initial packet
+    # var ipnum := initial_pkt_num(dst,src);
+    # sent_pkt(dst,newcid,ipnum) := true;
+    # last_pkt_num(dst,newcid) := ipnum;
+    # trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
+    # ack_credit(src,newcid) := 1;  # one credit for initial packet
+    cid_renamed(oldcid) := true;
+    cid_new_name(newcid) := true;
+    cid_orig_name(newcid) := oldcid;
 }
 
+action orig_cid(pcid:cid) returns(pcid:cid) = {
+    if cid_new_name(pcid) {
+        pcid := cid_orig_name(pcid)
+    }
+}
 
 # Packet events
 # -------------
@@ -399,6 +413,9 @@ around rename_connection {
 # - Initial packets may not be sent on a cid that has
 #   been closed by the sender [6].
 #
+# - Once a cid has been renamed by the server, it may no longer be used in a packet header.
+#   Instead the new cid must be used. [9]
+#
 # ### Effects
 #
 # - The `conn_seen` and `sent_pkt` relations are updated to reflect
@@ -440,7 +457,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # Extract the cid and packet number from the packet.
 
-    var pcid := pkt.hdr_cid;
+    require ~cid_renamed(pkt.hdr_cid); # [9]
+    var pcid := orig_cid(pkt.hdr_cid);
     var pnum := decode_packet_number(src,dst,pkt);
 
     require ~sent_pkt(src,pcid,pnum);  # [4]
@@ -497,7 +515,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
-    var pcid := pkt.hdr_cid;
+    var pcid := orig_cid(pkt.hdr_cid);
     if ack_only {
 #	require ack_credit(src,pcid) > 0;  # [5]
 	ack_credit(src,pcid) := ack_credit(src,pcid) - 1;
@@ -507,9 +525,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # The queued frames are deleted
     
-    queued_frames(src, pkt.hdr_cid) := frame.arr.empty;
-    queued_client_hello(src, pkt.hdr_cid) := false;
-    num_queued_frames(src, pkt.hdr_cid) := 0;
+    queued_frames(src, pcid) := frame.arr.empty;
+    queued_client_hello(src, pcid) := false;
+    num_queued_frames(src, pcid) := 0;
 }
 
 # The frame protocol
@@ -877,7 +895,7 @@ object frame = { ...
 
 action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
 
-    var cid := pkt.hdr_cid;
+    var cid := orig_cid(pkt.hdr_cid);
     var la := max_acked(src,cid);
     pnum := pkt.hdr_pkt_num;
 
@@ -896,7 +914,9 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
             if diff >= 0x80000000 {
                 pnum := pnum - 0x100000000
             };
-            require pnum <= la + 0x7ffffffe;
+            # require pnum <= la + 0x7ffffffe;
+            # TEMPORARY: work around minquic bug
+            require pnum <= la + 0x7;
         }
 
         # else if long format or type is 0x1e, we match 16 bits
