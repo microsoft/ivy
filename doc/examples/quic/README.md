@@ -32,6 +32,9 @@ system with version 14.04 or higher, do the following:
 
     sudo apt-get install core-network tcpdump libpcap-dev
 
+On Ubuntu 18.04 you have to install from source. Get the source from
+the link above and follow the README. 
+
 ### Botan
 
 For test generation, the Botan implementation of TLS is used. Install
