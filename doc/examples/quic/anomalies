@@ -18,4 +18,21 @@ Issue:
    packet that contains frames other than ACK frames. ...
 
 
+Capture file: picoquic.pcap
+Implementation:
+  picoquic
+Endpoints:
+  - 10.0.0.1: server
+  - 10.0.0.2: client
+Issue:
+  Regarding the retry token, The specification, draft 14 states:
+
+    The Initial packet has two additional header fields that follow the
+    normal Long Header.
+
+  However, picoquic is putting these fields in the middle of the long header,
+  before the length and the packet number fields.
+
+
+
 

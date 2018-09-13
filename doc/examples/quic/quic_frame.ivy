@@ -105,6 +105,18 @@ object frame = {
         }
     }
 
+    object crypto = {
+
+        # Crypto frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            offset : stream_pos,       # the stream offset (zero if ~off)
+            length : stream_pos,       # length of the data
+            data : stream_data         # the stream data
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        

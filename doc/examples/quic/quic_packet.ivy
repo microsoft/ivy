@@ -41,6 +41,8 @@ interpret cid_length -> bv[4]
 # - *hdr_cid*: the associated cid [3]
 # - *hdr_version*: the protocol version, or zero for short format
 # - *hdr_pkt_num*: the packet number
+# - *hdr_token_length*: the retry token length (see section 4.4.1)
+# - *hdr_token*: the retry token  (see section 4.4.1)
 # - *payload*: the payload, a sequence of frames
 
 type quic_packet = struct {
@@ -51,6 +53,8 @@ type quic_packet = struct {
     scid : cid_length, 
     dst_cid : cid,
     hdr_cid : cid, # [3]
+    hdr_token_length : stream_pos,
+    hdr_token : stream_data,
     payload_length : stream_pos,
     hdr_pkt_num : pkt_num, # [5]
     payload : frame.arr # [6]

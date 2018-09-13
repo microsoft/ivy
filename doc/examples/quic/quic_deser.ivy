@@ -20,6 +20,8 @@ object quic_deser = {}
 	      quic_s_scil,
               quic_s_dcid,
               quic_s_scid,
+              quic_s_retry_token_length,
+              quic_s_retry_token,
 	      quic_s_payload_length,
               quic_s_pkt_num,
               quic_s_payload,
@@ -106,7 +108,7 @@ object quic_deser = {}
             case quic_s_scid:
             {
 		getn(res,(scil ? (scil+3) : 0));
-                state = quic_s_payload_length;
+                state = quic_s_retry_token_length;
             }
             break;
             case quic_s_payload_length:
@@ -164,6 +166,7 @@ object quic_deser = {}
             break;
             case quic_stream_data:
             case quic_connection_close_reason:
+            case quic_s_retry_token:
             {
                 ivy_binary_deser::getn(res,1);
             }
@@ -232,6 +235,15 @@ object quic_deser = {}
                 state = quic_reset_final_offset;
             }
             break;
+            case quic_s_retry_token_length:
+            {
+                if (long_format & hdr_type == 0x7f)
+                    get_var_int(res);
+                else res = 0;
+                data_remaining = res;
+                state = quic_s_retry_token;
+            }
+            break;
             default:
             throw deser_err();
             }
@@ -297,6 +309,8 @@ object quic_deser = {}
                 return (0x02 & frame_type) ? (data_remaining-- > 0) : more(1);
             if (state == quic_connection_close_reason)
                 return data_remaining-- > 0;
+            if (state == quic_s_retry_token)
+                return data_remaining-- > 0;
             throw deser_err();
         }
 
@@ -308,7 +322,11 @@ object quic_deser = {}
                 state = quic_ack_gap;
             }
         }
-        void close_list() {}
+        void close_list() {
+            if (state == quic_s_retry_token) {
+                state = quic_s_payload_length;
+            }
+        }
         void close_list_elem() {}
 
         virtual void close_tag() {
