@@ -60,8 +60,10 @@ instance client : quic_endpoint(0,role.client)
 instance server : quic_endpoint(1,role.server)
 
 after init {
-    client.tls_id := botan.upper.create(false);
-    server.tls_id := botan.upper.create(true);
+    client.tls_id := 0;
+    server.tls_id := 1;
+    call botan.upper.create(0,false);
+    call botan.upper.create(1,true);
 }
 
 # Hook up tls to quic
@@ -79,11 +81,24 @@ after tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_d
     call show_tls_send_event(src,dst,pcid,data);
 }
 
+# TLS reveive event handling
+#
+# When TLS data is received, we route it to the appropriate instance of TLS (that
+# is, either the server or client TLS, depending on the destination endpoint).
+#
+# To reduce the noise, we restrict TLS messages to be only between our
+# designated client and server and only for our designated cid. Also,
+# we require that all of the received data (from stream_pos up to
+# stream_length) is transferred to TLS, otherwise, the data will be
+# dribbled one byte a a time, which gets boring.
+#
+
 around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo : stream_pos, hi : stream_pos ) {
     require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep;
-    require pcid = the_cid
+    require pcid = the_cid;
+    require hi = stream_length(dst,pcid,0)
     ...
-    var tls_id := client.tls_id if src = client.ep else server.tls_id;
+    var tls_id := client.tls_id if dst = client.ep else server.tls_id;
     var data := stream_data.empty;
     var idx := lo;
     while idx < hi {
@@ -97,15 +112,18 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:c
     require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
     require pcid = the_cid;
     require f.length > 0;
+    require f.offset = stream_length(dst,pcid,f.id);
+    require f.length = (stream_app_data(dst,pcid,f.id).end) - f.offset;
+    require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
 }
 
 # We export `packet_event` so the generator will produce random events.
 
 #export frame.ack.handle
 export frame.stream.handle
-#export packet_event
+export packet_event
 #export app_send_event
-#export tls_recv_event
+export tls_recv_event
 
 attribute radix=16       # print in hex
 

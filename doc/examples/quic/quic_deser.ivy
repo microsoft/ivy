@@ -56,7 +56,7 @@ object quic_deser = {}
 
     public:
         quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
-            pos = 42; // skip 42 bytes of IP and UDP header
+            // pos = 42; // skip 42 bytes of IP and UDP header
         }
         virtual void  get(long long &res) {
             switch (state) {

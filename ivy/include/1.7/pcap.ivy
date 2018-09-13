@@ -132,6 +132,10 @@ module pcap(pkt,deser) = {
                     dst.addr = ntohl(*(uint32_t *)(&buf[30]));
                     dst.port = ntohs(*(uint16_t *)(&buf[36]));
 
+		    // skip 42 bytes of IP and UDP header
+
+		    buf.erase(buf.begin(),buf.begin()+42);
+		
                     // Create a deserializer and deserialize the packet.
 
                     deser ds(buf);

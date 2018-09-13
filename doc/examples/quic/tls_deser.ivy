@@ -5,10 +5,12 @@
 include tls_record
 
 object tls_deser = {}
+object tls_ser = {}
 
 <<< member
 
     class `tls_deser`;
+    class `tls_ser`;
 
 >>>
 
@@ -21,11 +23,12 @@ object tls_deser = {}
 
     struct tls_name_map : hash_space::hash_map<std::string,int> {};
 
-    struct tls_name_struct tls_field_length_bytes[20] = {
+    struct tls_name_struct tls_field_length_bytes[21] = {
         {"fragment",2},
         {"content",2},
         {"tls.client_hello",3},
         {"tls.server_hello",3},
+        {"unknown_message_bytes",3},
         {"session_id",1},
         {"cipher_suites",2},
         {"compression_methods",1},
@@ -45,11 +48,12 @@ object tls_deser = {}
     };
     tls_name_map tls_field_length_bytes_map;
 
-    struct tls_name_struct tls_field_bytes[18] = {
+    struct tls_name_struct tls_field_bytes[19] = {
         {"version",2},
         {"client_version",2},
         {"server_version",2},
         {"etype",2},
+        {"mtype",1},
         {"gmt_unix_time",4},
         {"cipher_suites",2},
         {"the_cipher_suite",2},
@@ -67,11 +71,13 @@ object tls_deser = {}
     };
     tls_name_map tls_field_bytes_map;
 
-    struct tls_name_struct tls_tags[16] = {
+    struct tls_name_struct tls_tags[18] = {
         {"tls.handshake_record",22},
         {"tls.application_data_record",23},
+        {"tls.change_cipher_spec",20},
         {"tls.client_hello",1},
         {"tls.server_hello",2},
+        {"tls.unknown_message",-1},
         {"tls.unknown_extension",-1},
         {"quic_transport_parameters",0x1a},
         {"initial_max_stream_data",0},
@@ -87,9 +93,18 @@ object tls_deser = {}
     };
     tls_name_map tls_tags_map;
 
-    struct tls_name_struct tls_tag_bytes[3] = {
+    struct tls_name_struct tls_tag_bytes[12] = {
         {"tls.unknown_extension",2},
+        {"quic_transport_parameters",2},
         {"initial_max_stream_data",2},
+        {"initial_max_data",2},
+        {"initial_max_stream_id_bidi",2},
+        {"idle_timeout",2},
+        {"omit_connection_id",2},
+        {"max_packet_size",2},
+        {"stateless_reset_token",2},
+        {"ack_delay_exponent",2},
+        {"initial_max_stream_id_uni",2},
         {0,0}
     };
     tls_name_map tls_tag_bytes_map;
@@ -179,6 +194,63 @@ object tls_deser = {}
         void close_list() {}
 
         ~tls_deser(){}
+    };
+
+    struct `tls_ser` : public ivy_binary_ser {
+
+        int field_bytes;
+        std::vector<unsigned> field_start;
+        std::vector<unsigned> field_length_bytes;
+
+        virtual void open_field(const std::string &name) {
+            int flb = 0;
+            if (name == "random_bytes") {
+                field_bytes = 1;
+            }
+            else if (tls_field_length_bytes_map.find(name) != tls_field_length_bytes_map.end()) {
+                flb = tls_field_length_bytes_map[name];
+                res.resize(res.size() + flb);
+            }
+            field_start.push_back(res.size());
+            field_length_bytes.push_back(flb);
+            if (tls_field_bytes_map.find(name) != tls_field_bytes_map.end()) {
+                field_bytes = tls_field_bytes_map[name];
+            }
+        }
+
+        virtual void close_field() {
+            // tricky -- go back and fill in the length bytes after the field is serialized
+            int start = field_start.back();
+            int end = res.size();
+            int flb = field_length_bytes.back();
+            std::vector<char> temp;
+            temp.swap(res);
+            setn(end-start,flb);
+            temp.swap(res);
+            std::copy(temp.begin(),temp.end(),res.begin()+start-flb);
+            field_start.pop_back();
+            field_length_bytes.pop_back();
+        }
+
+        virtual void open_tag(int ivy_tag, const std::string &name) {
+            int bytes = 1;
+            if (tls_tag_bytes_map.find(name) != tls_tag_bytes_map.end())
+                bytes = tls_tag_bytes_map[name];
+            long long tag = tls_tags_map[name];
+            if (tag !=-1) 
+                setn(tag,bytes);
+            open_field(name);
+        }
+
+        virtual void close_tag() {
+            close_field();
+        }
+
+        void set(long long inp) {
+            setn(inp,field_bytes);
+        }
+        void open_list(int len) {
+        }
     };
 
 >>>

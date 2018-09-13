@@ -19,7 +19,7 @@ implementations.
 Installation steps
 ==================
 
-Do these stpes just once on a given machine.
+Do these steps just once on a given machine.
 
 ### Virtual networking and packet capture
 
@@ -32,13 +32,56 @@ system with version 14.04 or higher, do the following:
 
     sudo apt-get install core-network tcpdump libpcap-dev
 
+On Ubuntu 18.04 you have to install from source. Get the source from
+the link above and follow the README. 
+
+### Botan
+
+For test generation, the Botan implementation of TLS is used. Install
+version 2.6.0 from [here](https://botan.randombit.net/releases/). Instructions
+are [here](https://botan.randombit.net/).
+
+Install Botan like this (from the Botan source directory):
+
+    ./configure.py
+    make
+    sudo make install
+    sudo ln -s /usr/local/include/botan-2/botan /usr/local/include/botan
+    cp src/lib/tls/tls_reader.h /usr/local/include/botan
+
+The last two commands are needed because Botan installs itself in a
+way that it can't find its own header files, and it forgets a header
+file (at least in 2.6.0).
+
+
 Implementations of QUIC
 -----------------------
 
 ### Google QUIC
 
-The Google implementation of QUIC used in the Chromium browser is not
-compatible with the IETF draft.
+The Google implementation of QUIC is supposed to be IEFT compatible if
+you used version 99. It is part of Chromium code base.
+
+Some instructions to install it are here:
+
+    http://www.chromium.org/quic/playing-with-quic
+
+Before, compiling, you need to patch it to disable packet protection.
+A patch against commit `1720d2a` can be found in `chromium_diffs.txt`.
+
+After compiling and certificate creation, to run the test server, from
+the `src` directory of Chromium:
+
+    ./out/Debug/quic_server \
+      --quic_response_cache_dir=/tmp/quic-data/www.example.org \
+      --certificate_file=net/tools/quic/certs/out/leaf_cert.pem \
+      --key_file=net/tools/quic/certs/out/leaf_cert.pkcs8 --quic-enable-version-99
+
+To run the test client:
+
+    out/Default/quick_client --host=127.0.0.1 --port=6121 --disable-certificate-verification https://www.example.org/ --quic-enable-version-99
+
+
 
 ### MinQUIC
 
@@ -69,6 +112,23 @@ To get MinQUIC running, this command may be helpful:
 
     cd $GOPATH/src
     go get github.com/cloudflare/cfssl/helpers
+
+### picoquic
+
+Source code and build instructions:
+
+    https://github.com/private-octopus/picoquic
+    
+Run a server:
+
+    ./picoquicdemo
+    
+Run a client 
+
+    ./picoquicdemo localhost
+    
+
+
 
 Virtual network startup
 =======================
@@ -115,6 +175,10 @@ finishes, kill the `tcpdump` process in terminal B with SIGINT
 (control-C). You should now have a file `mycap.pcap` containing
 captured packets.
 
+To run the server with logging, do this:
+
+    MINQ_LOG='*' MINT_LOG='*' go run bin/server/main.go
+
 Build and run the Ivy monitor
 =============================
 
@@ -137,6 +201,12 @@ described in [quic_packet.ivy](quic_packet.md).
 If the specification is violated by the packet trace, the file will
 end with an error message indicating the requirement that was
 violated. 
+
+Build and run the server tester
+===============================
+
+    ivyc target=test quic_server_test.ivy
+
 
 View the log
 ============

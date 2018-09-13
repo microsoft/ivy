@@ -1,6 +1,6 @@
 #lang ivy
 
-include tls_impl
+include tls_gnutls
 
 # This module defines the interface TLS and the underlying transport.
 
@@ -22,8 +22,10 @@ module tls_lower_intf(cid,bytes) = {
 # `cid` : the type of connection identifiers
 # `bytes` : the type of byte arrays
 # `lower` : the interface to the underlying transport
+# `extens` : the type of lists of extensions
+# `exten_ser` : serializer for extensions
 
-module tls_intf(cid,index,bytes,lower) = {
+module tls_intf(cid,index,bytes,lower,extens,exten_ser) = {
 
     # The upper interface is between TLS and the application
 
@@ -49,9 +51,9 @@ module tls_intf(cid,index,bytes,lower) = {
     action key_material_export(c:cid,label:bytes,context:bytes,length:index)
     returns (key:bytes)
     
-    # Create a new connection with a fresh cid
+    # Create a new connection with a fresh cid, and list of extensions
 
-    action create(is_server : bool) returns (c:cid)
+    action create(c:cid, is_server : bool, e : extens)
 
     # Destroy an existing connection
 
@@ -67,8 +69,9 @@ module tls_intf(cid,index,bytes,lower) = {
 	    established(C) := false;
 	}
 
-	after create {
-	    ensure ~open(c);
+	around create {
+	    require ~open(c);
+	    ...
 	    open(c) := true;
 	}
 
@@ -100,7 +103,7 @@ module tls_intf(cid,index,bytes,lower) = {
     }
     
     implementation {
-        instance impl : tls_impl(cid,index,bytes,lower,this)
+        instance impl : tls_gnutls(cid,index,bytes,extens,exten_ser,lower,this)
     }
 
 }

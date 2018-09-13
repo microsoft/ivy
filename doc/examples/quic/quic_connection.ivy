@@ -137,6 +137,11 @@ include quic_transport_parameters
 # - The queued frames at source endpoint `E` for connection `C` are
 #   represented by `queued_frames(E,C)` and are initially empty.
 #
+# - The relation `queued_client_hello(E,C)` indicates that one of the queued
+#   frames at endpoint `E` for connection `C` contains a TLS client hello record.
+#
+# - The function num_queued_frames(E:ip.endpoint,C:cid) gives the number of frames
+#   queue at endpoint `E` for connection `C`.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
@@ -155,6 +160,7 @@ relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
+function stream_app_data_end(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_app_pos(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
@@ -162,7 +168,11 @@ relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
-
+relation queued_client_hello(E:ip.endpoint,C:cid)
+function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
+relation cid_renamed(C:cid)
+relation cid_new_name(C:cid)
+function cid_orig_name(C:cid) : cid
 
 
 
@@ -188,6 +198,9 @@ after init {
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
     stream_app_pos(E,C,S) := 0;
+    queued_client_hello(E,C) := false;
+    cid_renamed(C) := false;
+    cid_new_name(C) := false;
 }
 
 # Ghost events
@@ -256,6 +269,7 @@ after app_send_event {
     var idx := data.begin;
     while idx < data.end {
 	stream_app_data(dst,dcid,s) := stream_app_data(dst,dcid,s).append(data.value(idx));
+        stream_app_data_end(dst,dcid,s) := stream_app_data(dst,dcid,s).end;
 	idx := idx.next
     }
 }
@@ -299,6 +313,7 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
     while jdx < data.end {
 	stream_app_data(dst,dcid,0) :=
 	    stream_app_data(dst,dcid,0).append(data.value(jdx));  # [4]
+        stream_app_data_end(dst,dcid,0) := stream_app_data(dst,dcid,0).end;
 	jdx := jdx.next
     }
 }
@@ -327,7 +342,9 @@ around tls_recv_event {
 #
 # Connection rename event
 #
-# On receipt of an initial packet, the server may give the connection a new cid.
+# On receipt of an initial packet, the server may give the connection a new cid. We
+# record the fact that the old cid has been renamed. On future packet events, the
+# header cid must be the new cid and is translated to the original.
 #
 # Requirements:
 #
@@ -348,13 +365,21 @@ around rename_connection {
     require oldcid = initial_pkt_cid(dst,src)
     ...
     initializing(dst,src) := false;
-    var ipnum := initial_pkt_num(dst,src);
-    sent_pkt(dst,newcid,ipnum) := true;
-    last_pkt_num(dst,newcid) := ipnum;
-    trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
-    ack_credit(src,newcid) := 1;  # one credit for initial packet
+    # var ipnum := initial_pkt_num(dst,src);
+    # sent_pkt(dst,newcid,ipnum) := true;
+    # last_pkt_num(dst,newcid) := ipnum;
+    # trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
+    # ack_credit(src,newcid) := 1;  # one credit for initial packet
+    cid_renamed(oldcid) := true;
+    cid_new_name(newcid) := true;
+    cid_orig_name(newcid) := oldcid;
 }
 
+action orig_cid(pcid:cid) returns(pcid:cid) = {
+    if cid_new_name(pcid) {
+        pcid := cid_orig_name(pcid)
+    }
+}
 
 # Packet events
 # -------------
@@ -398,6 +423,9 @@ around rename_connection {
 # - Initial packets may not be sent on a cid that has
 #   been closed by the sender [6].
 #
+# - Once a cid has been renamed by the server, it may no longer be used in a packet header.
+#   Instead the new cid must be used. [9]
+#
 # ### Effects
 #
 # - The `conn_seen` and `sent_pkt` relations are updated to reflect
@@ -429,10 +457,6 @@ around rename_connection {
 
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
-    # The payload may not be empty
-
-    assert pkt.payload.end > 0;  # [7]
-
     # Allowed header types
 
     assert pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
@@ -441,9 +465,22 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     var dcid := pkt.dst_cid;
     var scid := pkt.hdr_cid;
+
+    # TEMPORARY: only support long packet format
+
+    assert pkt.hdr_long;
+
     var pnum := decode_packet_number(src,dst,pkt);
 
     require ~sent_pkt(src,scid,pnum);  # [4]
+
+    # The payload may not be empty
+
+    require num_queued_frames(src,scid) > 0;  # [7]
+
+    # A packet is in initial packet iff it contains a client hello.
+
+    assert pkt.hdr_type = 0x7f <-> queued_client_hello(src,scid);
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.
@@ -455,26 +492,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     last_pkt_num(src,scid) := pnum;
 
-    # An ack-only packet must be in response to a non-ack-only packet
-
-    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
-                                 (pkt.payload.value(I) isa frame.ack);
-    if ack_only {
-#	require ack_credit(src,scid) > 0;  # [5]
-	ack_credit(src,scid) := ack_credit(src,scid) - 1;
-    } else {
-	ack_credit(dst,dcid) := ack_credit(dst,dcid) + 1;
-    };
-    
-    # An Initial packet has hdr_type 0x7f
-
-    if pkt.hdr_type = 0x7f {
-        require pkt.payload.end = 1;  # [1]
-	require pkt.payload.value(0) isa frame.stream;
-        require ~conn_closed(src,scid);  # [6]
-    };
-
-
+  
     # The payload must exactly match the queued frames.
 
     require pkt.payload = queued_frames(src,scid)
@@ -487,9 +505,31 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     ...
 
+    var dcid := pkt.dst_cid;
+    var scid := pkt.hdr_cid;
+
+    if pkt.hdr_type = 0x7f {
+        require pkt.payload.end = 1;  # [1]
+	require pkt.payload.value(0) isa frame.stream;
+        require ~conn_closed(src,scid);  # [6]
+    };
+
+    # An ack-only packet must be in response to a non-ack-only packet
+
+    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
+                                 (pkt.payload.value(I) isa frame.ack);
+    if ack_only {
+#	require ack_credit(src,scid) > 0;  # [5]
+	ack_credit(src,scid) := ack_credit(src,scid) - 1;
+    } else {
+	ack_credit(dst,dcid) := ack_credit(dst,dcid) + 1;
+    };
+
     # The queued frames are deleted
     
-    queued_frames(src, pkt.hdr_cid) := frame.arr.empty
+    queued_frames(src, scid) := frame.arr.empty;
+    queued_client_hello(src, scid) := false;
+    num_queued_frames(src, scid) := 0;
 }
 
 # The frame protocol
@@ -566,7 +606,8 @@ object frame = {
                 idx := idx.next;
             }
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -590,6 +631,9 @@ object frame = {
 #
 # - The connection must not have bee closed by the source endpoint [8].
 #
+# - For stream ids other than zero, the connection id must have been seen at the source [9]
+#   and the connection between source and destination must no be initializing [10].
+
 # Effects:
 #
 # - If the stream has not been seen before, and if the
@@ -603,6 +647,8 @@ object frame = {
 #
 # Question: what is the value of `initial_max_stream_data` for stream
 # zero? Here we assume there is no back-pressure on stream zero.
+#
+# Question: is the FIN bit allowed on stream zero?
 
 object frame = {
     ...
@@ -614,50 +660,47 @@ object frame = {
 
             require ~conn_closed(src,scid);  # [8]
 
-	    require f.length = f.data.end;
-#	    require ((f.offset) + (f.length)) <= stream_app_data(dst,dcid,f.id).end;
-#	    require 0 <= N & N < f.length -> f.data.value(N) = stream_app_data(dst,dcid,f.id).value(N+f.offset); 
+	    require ((f.offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
+	    require f.data = stream_app_data(dst,dcid,f.id).segment(f.offset,f.offset+f.length); 
 
-            if f.id = 0 {
-            }
-            else {
-                var kind := get_stream_kind(f.id);
-                require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
-                require ~stream_reset(dst,dcid,f.id);  # [7]
-                if ~stream_seen(dst,dcid,f.id) {
-                    if initial_max_stream_data.is_set(trans_params(dst,dcid)) {
-                        max_stream_data_val(dst,dcid,f.id) :=
-                            initial_max_stream_data.value(trans_params(dst,dcid)).stream_pos_32;  # [3]
-                        max_stream_data_set(dst,dcid,f.id) := true
-                    };
-                    if initial_max_stream_id_bidi.is_set(trans_params(dst,dcid)) {
-                        max_stream(dst,dcid,bidir) :=
-                            (initial_max_stream_id_bidi.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-                        max_stream_set(dst,dcid,bidir) := true
-                    };
-                    if initial_max_stream_id_uni.is_set(trans_params(dst,dcid)) {
-                        max_stream(dst,dcid,unidir) :=
-                            (initial_max_stream_id_uni.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-                        max_stream_set(dst,dcid,unidir) := true
-                    };
-                    stream_length(dst,dcid,f.id) := 0;
+            var kind := get_stream_kind(f.id);
+            require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
+            require ~stream_reset(dst,dcid,f.id);  # [7]
+            require conn_seen(src,scid);  # [9]
+            if ~stream_seen(dst,dcid,f.id) {
+                if initial_max_stream_data.is_set(trans_params(dst,dcid)) {
+                    max_stream_data_val(dst,dcid,f.id) :=
+                        initial_max_stream_data.value(trans_params(dst,dcid)).stream_pos_32;  # [3]
+                    max_stream_data_set(dst,dcid,f.id) := true
                 };
-                if max_stream_data_set(dst,dcid,f.id) {
-                    require ((f.offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
+                if initial_max_stream_id_bidi.is_set(trans_params(dst,dcid)) {
+                    max_stream(dst,dcid,bidir) :=
+                        (initial_max_stream_id_bidi.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
+                    max_stream_set(dst,dcid,bidir) := true
                 };
-                var length := f.offset + f.length;
-                require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
-                if stream_length(dst,dcid,f.id) < length {
-                    stream_length(dst,dcid,f.id) := length
+                if initial_max_stream_id_uni.is_set(trans_params(dst,dcid)) {
+                    max_stream(dst,dcid,unidir) :=
+                        (initial_max_stream_id_uni.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
+                    max_stream_set(dst,dcid,unidir) := true
                 };
-                if f.fin {
-                    stream_finished(dst,dcid,f.id) := true;
-                };
-                stream_seen(dst,dcid,f.id) := true;
-                stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
-            }
+                stream_length(dst,dcid,f.id) := 0;
+            };
+            if max_stream_data_set(dst,dcid,f.id) {
+                require ((f.offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
+            };
+            var length := f.offset + f.length;
+            require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
+            if stream_length(dst,dcid,f.id) < length {
+                stream_length(dst,dcid,f.id) := length
+            };
+            if f.fin {
+                stream_finished(dst,dcid,f.id) := true;
+            };
+            stream_seen(dst,dcid,f.id) := true;
+            stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -679,6 +722,7 @@ object frame = {
 # - The specified stream id is marked as reset [2].
 # - The stream length is set to the given final offset [3].
 #
+# Question: is rst_stream allowed on stream zero?
 
 object frame = { ...
     object rst_stream = { ...
@@ -693,7 +737,8 @@ object frame = { ...
             stream_reset(dst,dcid,f.id) := true;  # [2]
             stream_length(dst,dcid,f.id) := f.final_offset;  #[3]
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -728,7 +773,8 @@ object frame = { ...
                 max_stream(dst,dcid,kind) := f.id; #  [1]
             }
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -761,7 +807,8 @@ object frame = { ...
 	around handle{
             conn_closed(src,scid) := true;
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -788,7 +835,8 @@ object frame = { ...
                 max_stream_data_val(dst,dcid,f.id) := f.pos;  # [2]
             }
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f)
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
     }
 }
@@ -865,7 +913,9 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
             if diff >= 0x80000000 {
                 pnum := pnum - 0x100000000
             };
-            require pnum <= la + 0x7ffffffe;
+            # require pnum <= la + 0x7ffffffe;
+            # TEMPORARY: work around minquic bug
+            require pnum <= la + 0x7;
         }
 
         # else if long format or type is 0x1e, we match 16 bits
@@ -902,6 +952,7 @@ action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,scid:cid,tls_rec:tls.re
         while idx < hr.fragment.end {
             var hs := hr.fragment.value(idx);
             if some(ch:tls.client_hello) hs *> ch {
+                queued_client_hello(src,scid) := true;
                 call handle_tls_extensions(src,dst,scid,ch.extensions,true);
             };
             if some(sh:tls.server_hello) hs *> sh {

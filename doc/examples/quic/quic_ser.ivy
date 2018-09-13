@@ -1,0 +1,275 @@
+#lang ivy1.7
+
+# a fake serializer for quic
+
+object quic_ser = {}
+
+<<< member
+
+    class `quic_ser`;
+
+>>>
+
+<<< impl
+
+    class `quic_ser` : public ivy_binary_ser {
+        enum {quic_s_init,
+              quic_s_type,
+              quic_s_cid,
+              quic_s_version,
+              quic_s_pkt_num,
+              quic_s_payload,
+              quic_stream_id,
+              quic_stream_off,
+              quic_stream_len,
+              quic_stream_fin,
+              quic_stream_offset,
+              quic_stream_length,
+              quic_stream_data,
+              quic_ack_largest,
+              quic_ack_delay,
+              quic_ack_block_count,
+              quic_ack_gap,
+              quic_ack_block,
+              quic_reset_stream_id,
+              quic_reset_err_code,
+              quic_reset_final_offset,
+              quic_connection_close_err_code,
+              quic_connection_close_reason_length,
+              quic_connection_close_reason,
+              quic_max_stream_data_id,
+              quic_s_done} state;
+        bool long_format;
+        char hdr_type;
+        char frame_type;
+        int data_remaining;
+        long long ack_blocks_expected;
+        long long ack_block_count;
+
+    public:
+        quic_ser() : state(quic_s_init) {
+        }
+        virtual void  set(long long res) {
+            switch (state) {
+            case quic_s_init:
+            {
+                long_format = res & 1;
+                state = quic_s_type;
+            }
+            break;
+            case quic_s_type:
+            {
+                hdr_type = res;
+		setn(hdr_type | (long_format ? 0x80 : 0), 1);
+                state = quic_s_cid;
+            }
+            break;
+            case quic_s_cid:
+            {
+                setn(res,8);
+                state = quic_s_version;
+            }
+            break;
+            case quic_s_version:
+            {
+                if (long_format)
+                    setn(res,4);
+                state = quic_s_pkt_num;
+            }
+            break;
+            case quic_s_pkt_num:
+            {
+		setn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+                state = quic_s_payload;
+            }
+            break;
+            case quic_stream_off:
+            {
+                frame_type |= res ? 0x04 : 0;
+                state = quic_stream_len;
+            }
+            break;
+            case quic_stream_len:
+            {
+                frame_type |= res ? 0x02 : 0;
+                state = quic_stream_fin;
+            }
+            break;
+            case quic_stream_fin:
+            {
+                frame_type |= res ? 0x01 : 0;
+		setn(frame_type,1);
+                state = quic_stream_id;
+            }
+            break;
+            case quic_stream_id:
+            {
+                set_var_int(res);
+                state = quic_stream_offset;
+            }
+            break;
+            case quic_stream_offset:
+            {
+                if (0x04 & frame_type)
+                    set_var_int(res);
+                state = quic_stream_length;
+            }
+            break;
+            case quic_stream_length:
+            {
+                if (0x02 & frame_type)
+                    set_var_int(res);
+                data_remaining = res;
+                state = quic_stream_data;
+            }
+            break;
+            case quic_stream_data:
+            case quic_connection_close_reason:
+            {
+                setn(res,1);
+            }
+            break;
+            case quic_ack_largest:
+            {
+                set_var_int(res);
+                state = quic_ack_delay;
+            }
+            break;
+            case quic_ack_delay:
+            {
+                set_var_int(res);
+                state = quic_ack_block_count;
+            }
+            break;
+            case quic_ack_gap:
+            {
+                if (ack_block_count == 0)
+                    {} // first ack block has no gap
+                else
+                    set_var_int(res);
+                state = quic_ack_block;
+            }
+            break;
+            case quic_ack_block:
+            {
+                set_var_int(res);
+                state = quic_ack_gap;
+                ack_block_count++;
+            }
+            break;
+            case quic_reset_stream_id:
+            {
+                set_var_int(res);
+                state = quic_reset_err_code;
+            }
+            break;
+            case quic_reset_err_code:
+            {
+                setn(res,2);
+                state = quic_reset_final_offset;
+            }
+            break;
+            case quic_reset_final_offset:
+            {
+                set_var_int(res);
+            }
+            break;
+            case quic_connection_close_err_code:
+            {
+                setn(res,2);
+                state = quic_connection_close_reason_length;
+            }
+            break;
+            case quic_connection_close_reason_length:
+            {
+                set_var_int(res);
+                data_remaining = res;
+                state = quic_connection_close_reason;
+            }
+            break;
+            case quic_max_stream_data_id:
+            {
+                set_var_int(res);
+                state = quic_reset_final_offset;
+            }
+            break;
+            default:
+            throw deser_err();
+            }
+        }
+
+        void set_var_int(long long res) {
+	    long long val = res & 0x3fffffffffffffff;
+	    int bytecode = res <= 0x3f ? 0 : res <= 0x3fff ? 1 : res <= 0x3fffffff ? 2 : 3;
+	    int bytes = 1 << bytecode;
+            val |= bytecode << ((bytes << 3) - 2);
+	    setn(val,bytes);
+        }
+
+        virtual void open_tag(int tag, const std::string &) {
+            if (state == quic_s_payload) {
+                if (tag == 0) {
+		    frame_type = 0x10;
+                    state = quic_stream_off;
+                    return;
+                }
+                if (tag == 1) {
+                    state = quic_ack_largest;
+                    frame_type = 0x0e;
+                }
+                else if (tag == 2) {
+                    state = quic_reset_stream_id;
+                    frame_type = 0x01;
+                }
+                else if (tag == 3) {
+                    state = quic_reset_stream_id; // parser state equivalent to this
+                    frame_type = 0x06;
+                }
+                else if (tag == 4) {
+                    state = quic_connection_close_err_code;
+                    frame_type = 0x02;
+                }
+                else if (tag == 5) {
+                    state = quic_max_stream_data_id;
+                    frame_type = 0x05;
+                }
+                else if (tag == 6) {
+                    state = quic_reset_final_offset;
+                    frame_type = 0x0a;
+                }
+	        else {
+                    std::cerr << "saw frame tag " << tag << std::endl;  
+                    throw deser_err();
+	        }
+	        setn(frame_type,1);
+	        return;
+            }
+            throw deser_err();
+        }
+
+        virtual void open_list_elem() {
+        }
+
+        void open_list(int len) {
+	    ack_blocks_expected = len;
+            if (state == quic_ack_block_count) {
+                set_var_int(ack_blocks_expected - 1); // block count doesn't include first
+                ack_block_count = 0;
+                state = quic_ack_gap;
+            }
+        }
+        void close_list() {
+	    if (state == quic_s_payload && hdr_type == 0x7f)
+	        while (res.size() < 1200)
+	            res.push_back(0);  // pad initial packet to 1200 bytes
+        }
+        void close_list_elem() {}
+
+        virtual void close_tag() {
+            state = quic_s_payload;
+        }
+
+        ~quic_ser(){}
+    };
+
+>>>

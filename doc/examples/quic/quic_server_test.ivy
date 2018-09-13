@@ -1,0 +1,249 @@
+#lang ivy1.7
+
+include order
+include quic_packet
+include quic_connection
+include quic_deser
+include quic_ser
+include quic_infer
+include tls
+include udp_impl
+include serdes
+
+# This is a simple tester for quic servers. We assume the server is located on localhost at port 4433.
+# The tester plays the role of a single client.
+#
+# Compile the tester like this:
+#
+#     ivyc target=test quic_server_test.ivy
+#
+# Run it like this:
+#
+#     ./quic_server_test
+#
+
+
+# The wire specification monitors this action.
+
+action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
+
+# This is a ghost action representing a TLS send event.
+
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,data:stream_data) = {}
+
+# create an UDP network instance to communicate to server with
+
+instance net : udp_impl(role,quic_packet,quic_ser,quic_deser)
+
+# fix a single connection id
+
+var the_cid : cid
+
+after init {
+    the_cid := 13;
+}
+
+instance tls_extensions : vector(tls.extension)
+
+# HACK: we fix the initial client transport parameters here
+
+action make_transport_parameters returns (tp:quic_transport_parameters) = {
+    tp.initial_version := 0xff000009;
+    var imsd : initial_max_stream_data;
+    imsd.stream_pos_32 := 0x2000;
+    var imd : initial_max_data;
+    imd.stream_pos_32 := 0x4000;
+    var it : idle_timeout;
+    it.seconds_16 := 60;
+    tp.transport_parameters := tp.transport_parameters.append(imsd);
+    tp.transport_parameters := tp.transport_parameters.append(imd);
+    tp.transport_parameters := tp.transport_parameters.append(it);
+}
+
+object botan = {
+    instance id : unbounded_sequence
+    instance lower : tls_lower_intf(id,stream_data)
+    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser)
+}    
+
+action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
+    ep.protocol := ip.udp;
+    ep.addr := 0x7f000001;   # the loop-back addr
+    ep.port := 4987 if the_role = role.client else 0x1151;
+}    
+
+module quic_endpoint(addr,the_role) = {
+    var ep : ip.endpoint
+    var tls_id : botan.id
+    after init {
+	ep := role_to_endpoint(the_role);
+    }
+}
+    
+# create a client and server. the client has an instance of TLS
+
+instance client : quic_endpoint(0,role.client)
+instance server : quic_endpoint(0,role.server)
+
+# a socket to talk to server on
+
+var sock : net.socket
+
+after init {
+    sock := net.open(role.client,client.ep);
+    client.tls_id := 0;
+    server.tls_id := 1;
+    var extns := tls_extensions.empty;
+    extns := extns.append(make_transport_parameters);
+    call botan.upper.create(0,false,extns);  # false means this instance of tls is not a server
+}
+
+# Hook up tls to quic
+
+implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
+    if tls_id = client.tls_id {
+	call tls_send_event(client.ep, server.ep, the_cid, bytes)
+    };
+    if tls_id = server.tls_id {
+	call tls_send_event(server.ep, client.ep, the_cid, bytes)
+    }
+}
+
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
+    call show_tls_send_event(src,dst,pcid,data);
+}
+
+# Assume that initial packets are sent only to the server under test
+
+before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+#    if pkt.hdr_type = 0x7f {
+#        require dst = server.ep
+#    };
+    # TEMPORARY: all packets to server!
+    if __generating {
+        require dst = server.ep
+    };
+    require pkt.hdr_version = 0xff000009
+}
+
+# Hook up to the remote server
+
+# When the client sends a packet, route it to the server
+
+after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    if src = client.ep {
+	call net.send(role.client,sock,dst,pkt);
+    }
+}
+
+# When an packet arrives at the client endpoint, generate a `packet_event`
+
+implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkt:quic_packet) {
+    if host = role.client {
+	var dst := client.ep; # the destination must be client, since we have only one socket
+	call show_packet(src,dst,pkt);
+	call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
+	call packet_event(src,dst,pkt);
+    }
+}
+
+# TLS reveice event handling
+#
+# When TLS data is received, at the client, we route it to the client's instance of TLS.
+#
+# Also, we require that all of the received data (from stream_pos up
+# to stream_length) is transferred to TLS, otherwise, the data will be
+# dribbled one byte at a time, which gets boring.
+#
+
+around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo : stream_pos, hi : stream_pos ) {
+    require src = server.ep & dst = client.ep;
+    require hi = stream_length(dst,pcid,0)
+    ...
+    var tls_id := client.tls_id if dst = client.ep else server.tls_id;
+    var data := stream_data.empty;
+    var idx := lo;
+    while idx < hi {
+	data := data.append(stream_app_data(dst,pcid,0).value(idx));
+	idx := idx.next
+    };
+#    call botan.lower.recv(tls_id,data)
+}
+    
+# The protocol specification describes all the events occurring the system
+# at all protocol layers. When we test, however, we need to divide the system
+# into the part simulated by the tester and the part executed by the real code
+# under test. In this case to onyl want the tester to play the role of a client
+# at a particular network address.
+#
+# To accomplish this we add a precondition to the protocol events that
+# restricts the parameter values in case we are running on behalf of
+# the tester. We can determine this using the built-in predicate
+# "__generating".
+
+# This is the tester constraint for the stream frame protocol. We add some requirements
+# to make the tests more interesting. In particular, we don't want the tester to
+# produce lots of tiny frames (or empty ones) so we require that a stream frame
+# send all of the available stream data. We never allow the fin bt to be set, since
+# we don't really have good rules for this yet.
+
+before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) {
+    if __generating {
+        require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
+        require pcid = the_cid;
+        require f.len & f.off; # TODO: when can f.off be false?
+        require f.length > 0;
+        require f.offset = stream_length(dst,pcid,f.id);
+        require f.length = (stream_app_data_end(dst,pcid,f.id)) - f.offset;
+        require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
+    }
+}
+
+# We allow generating application data at the client end only if the previous data have
+# not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
+# for stream id 0x4.
+
+before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id, data : stream_data) {
+    if __generating {
+        require s = 0x4;
+        require src = client.ep;
+        require dst = server.ep;
+        require pcid = the_cid;
+        require stream_length(dst,pcid,s) = stream_app_data_end(dst,pcid,s);
+    }
+}
+
+# Note, we don't need a tester precondition for packet protocol
+# events, since the frame queue for the server end will always be
+# empty. This is because server frames are only inferred in response to
+# a server packet event, which immediately dequeues them.
+
+#export frame.ack.handle
+export frame.stream.handle
+export packet_event
+export app_send_event
+export tls_recv_event
+
+attribute radix=16       # print in hex
+
+interpret cid -> intbv[1][13][2]
+interpret version -> bv[32]
+interpret pkt_num -> bv[32]
+interpret error_code -> bv[16]
+interpret stream_id -> bv[3]
+attribute frame.idx.cardinality = 1
+attribute frame.ack.block.idx.cardinality = 1
+attribute pkt_num.cardinality = 1
+attribute stream_pos.cardinality = 4
+#attribute ip.addr.override = bv[1]
+#attribute ip.port.override = bv[1]
+
+action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) = {}
+
+import show_tls_send_event
+
+# Print a packet on stdout. In the compiled tester importing `show_packet`
+# causes calls to be logged to stdout.
+
+action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
+import show_packet

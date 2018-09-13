@@ -3,6 +3,9 @@
 # Byte streams
 # ============
 #
+
+include collections
+
 # A byte is a vector of eight bits.
 
 type byte
