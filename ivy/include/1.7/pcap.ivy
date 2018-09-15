@@ -139,30 +139,32 @@ module pcap(pkt,deser) = {
                     // Create a deserializer and deserialize the packet.
 
                     deser ds(buf);
-                    pkt packet;
                 
-                    try {
-                       __deser(ds,packet);
-                    }
-
-                    // If deserialization failure, print out the packet for
-                    // debugging purposes.
-
-                    catch(deser_err &err) {
-                        std::cerr << "error: failed to deserialize packet in pcap file." << std::endl;
-                        std::cerr << "hex dump of packet follows." << std::endl;
-                        for (unsigned i = 0; i < buf.size(); i++) {
-                            if (i > 0 && i % 16 == 0) 
-                                std::cerr << std::endl;
-                            if (i == ds.pos)
-                                fprintf(stderr,"*");
-                            fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+                    while (ds.inp.size() > ds.pos) {
+                        pkt packet;
+                        try {
+                           __deser(ds,packet);
                         }
+
+                        // If deserialization failure, print out the packet for
+                        // debugging purposes.
+
+                        catch(deser_err &err) {
+                            std::cerr << "error: failed to deserialize packet in pcap file." << std::endl;
+                            std::cerr << "hex dump of packet follows." << std::endl;
+                            for (unsigned i = 0; i < buf.size(); i++) {
+                                if (i > 0 && i % 16 == 0) 
+                                    std::cerr << std::endl;
+                                if (i == ds.pos)
+                                    fprintf(stderr,"*");
+                                fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+                            }
+                        }
+
+                        // Finally, if we got a good packet, hit the callback.
+
+                        cb(src,dst,packet);
                     }
-
-                    // Finally, if we got a good packet, hit the callback.
-
-                    cb(src,dst,packet);
                 }
             };
 

@@ -73,3 +73,8 @@ object role = {
     type this = {client,server}
 }
 
+# encryption levels
+
+object encryption_level = {
+    type this = {initial,handshake,other}
+}

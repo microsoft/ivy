@@ -81,6 +81,7 @@ object frame = {
 
         variant this of frame = struct {
             err_code               : error_code, # the error code
+            frame_type             : error_code, # TODO: not the real type
             reason_phrase_length   : stream_pos, # number of bytes in reason phrase
             reason_phrase          : stream_data # bytes of reason phrase
         }
@@ -114,6 +115,14 @@ object frame = {
             offset : stream_pos,       # the stream offset (zero if ~off)
             length : stream_pos,       # length of the data
             data : stream_data         # the stream data
+        }
+    }
+
+    object ping = {
+
+        # Ping frames contain no data
+
+        variant this of frame = struct {
         }
     }
 

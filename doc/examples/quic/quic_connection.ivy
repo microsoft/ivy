@@ -64,19 +64,19 @@ include quic_transport_parameters
 #   server endpoint S is represented by `initial_pkt_cid(C,S)`.
 #   TODO: unneeded as of version 11. should be removed
 #
-# - For each endpoint E and cid C, last_pkt_num(E,C) represents the
-#   number of the latest packet sent by E on C.
+# - For each endpoint E and cid C, last_pkt_num(E,C,L) represents the
+#   number of the latest packet sent by E on C in encryption level L.
 #
-# - For each endpoint E and cid C, sent_pkt(E,C,N) is true if
-#   a packet numbered N has been sent by E on C.
+# - For each endpoint E and cid C, sent_pkt(E,C,L,N) is true if
+#   a packet numbered N has been sent by E on C in encryption level L.
 #
-# - For each endpoint E and cid C, acked_pkt(E,C,N) is true if
-#   a packet numbered N sent by E on connection C has been
+# - For each endpoint E and cid C, acked_pkt(E,C,L,N) is true if
+#   a packet numbered N sent by E on connection C in encryption level L has been
 #   acknowledged. 
 #
-# - For each endpoint E and cid C, max_acked(E,C) is the greatest
-#   packet number N such that acked_pkt(E,C,N), or zero if
-#   forall N. ~acked(E,C,N).
+# - For each endpoint E and cid C, max_acked(E,C,L) is the greatest
+#   packet number N such that acked_pkt(E,C,L,N), or zero if
+#   forall N. ~acked(E,C,L,N).
 #
 # - For each endpoint E and cid C, ack_credit(E,C) is the number
 #   of non-ack-only packets sent to E on C, less the number of
@@ -85,6 +85,23 @@ include quic_transport_parameters
 # - For each endpoint E and cid C, `trans_params_set(E,C)`
 #   is true if endpoint E has declared transport parameters for
 #   connection E.
+#
+# - For each endpoint E, and destination cid C, `crypto_data(E,C,L)`
+#   represents the crypto data transmitted by TLS to endpoint E for
+#   cid C at encyption level L. This data may or may not have been
+#   transmitted in any QUIC packet.
+#
+# - For each endpoint E and destination cid C, `crypto_length(E,C,L)`
+#   indicates the length of the stream data transmitted in QUIC
+#   packets to endpoint E for cid C at encyption level L. The length is the
+#   least stream position greater than the position of all bytes
+#   transmitted. Note this may be less than the length of the crypto
+#   data, but may not be greater.
+#
+# - For each endpoint E and destination cid C, `crypto_pos(E,C,L)`
+#   represents the read position of the crypto data transmitted by the application to endpoint E
+#   for cid C at encyption level L. This is the number of bytes in the stream that have
+#   been read by TLS at the destination.
 #
 # - For each endpoint E, cid C,and stream id S, `stream_seen(E,C,S)`
 #   indicates that a stream frame for stream id S on connection C
@@ -137,21 +154,24 @@ include quic_transport_parameters
 # - The queued frames at source endpoint `E` for connection `C` are
 #   represented by `queued_frames(E,C)` and are initially empty.
 #
-# - The relation `queued_client_hello(E,C)` indicates that one of the queued
-#   frames at endpoint `E` for connection `C` contains a TLS client hello record.
+# - The relation `queued_hello(E,C)` indicates that one of the queued
+#   frames at endpoint `E` for connection `C` contains a TLS hello record.
 #
 # - The function num_queued_frames(E:ip.endpoint,C:cid) gives the number of frames
 #   queue at endpoint `E` for connection `C`.
+#
+# - The function `cid_dst_to_src(D,C)` maps the cid `C` at endpoint `D` to the
+#   corresponding cid of the per, if such a cid exists.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
 relation initializing(C:ip.endpoint,S:ip.endpoint)
 function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
 function initial_pkt_cid(C:ip.endpoint,S:ip.endpoint) : cid
-function last_pkt_num(E:ip.endpoint,C:cid) : pkt_num
-relation sent_pkt(E:ip.endpoint,C:cid,N:pkt_num)
-relation acked_pkt(E:ip.endpoint,C:cid,N:pkt_num)
-function max_acked(E:ip.endpoint,C:cid) : pkt_num
+function last_pkt_num(E:ip.endpoint,C:cid,L:encryption_level) : pkt_num
+relation sent_pkt(E:ip.endpoint,C:cid,L:encryption_level,N:pkt_num)
+relation acked_pkt(E:ip.endpoint,C:cid,L:encryption_level,N:pkt_num)
+function max_acked(E:ip.endpoint,C:cid,L:encryption_level) : pkt_num
 function ack_credit(E:ip.endpoint,C:cid) : pkt_num
 relation trans_params_set(E:ip.endpoint,C:cid)
 function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
@@ -159,6 +179,11 @@ relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
 relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
+function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
+function crypto_data(E:ip.endpoint,C:cid,L:encryption_level) : stream_data
+function crypto_data_end(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
+function crypto_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
+function crypto_length(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
 function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
 function stream_app_data_end(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 function stream_app_pos(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
@@ -168,12 +193,12 @@ relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
-relation queued_client_hello(E:ip.endpoint,C:cid)
+relation queued_hello(E:ip.endpoint,C:cid)
 function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
 relation cid_renamed(C:cid)
 relation cid_new_name(C:cid)
 function cid_orig_name(C:cid) : cid
-
+function cid_dst_to_src(D:ip.endpoint,C:cid) : cid
 
 
 
@@ -187,9 +212,9 @@ function cid_orig_name(C:cid) : cid
 after init {
     conn_seen(E,C) := false;
     conn_closed(E,C) := false;
-    sent_pkt(E,C,N) := false;
-    acked_pkt(E,C,N) := false;
-    max_acked(E,C) := 0;
+    sent_pkt(E,C,L,N) := false;
+    acked_pkt(E,C,L,N) := false;
+    max_acked(E,C,L) := 0;
     ack_credit(E,C) := 0;
     trans_params_set(E:ip.endpoint,C:cid) := false;
     stream_seen(E,C,S) := false;
@@ -198,9 +223,10 @@ after init {
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
     stream_app_pos(E,C,S) := 0;
-    queued_client_hello(E,C) := false;
+    queued_hello(E,C) := false;
     cid_renamed(C) := false;
     cid_new_name(C) := false;
+    conn_enc_level(E,C) := encryption_level.initial;
 }
 
 # Ghost events
@@ -274,6 +300,14 @@ after app_send_event {
     }
 }
 
+# Encryption level change
+
+action set_encryption_level(src:ip.endpoint, scid:cid, e:encryption_level)
+
+after set_encryption_level {
+    conn_enc_level(src,scid) := e;
+}
+
 # TLS send event
 # ==============
 #
@@ -281,8 +315,8 @@ after app_send_event {
 # endpoint to its peer on a given connection. In concept it occurs at
 # the moment when the implmentation of TLS passes data to QUIC to be
 # transmitted to the peer. This is a ghost event, since it is not
-# visible on the wire. However, it can easily be inferred by examine
-# the QUIC steamm frames on stream id 0.
+# visible on the wire. However, it can easily be inferred by examining
+# the QUIC crypto frames.
 #
 # Requirements
 #
@@ -291,7 +325,7 @@ after app_send_event {
 #
 # Effects
 #
-# - The TLS data is appended to stream 0 [4].
+# - The TLS data is appended to the crypto data [4].
 #
 # - The effect of each transmitted TLS record on the QUIC connection
 #   state is defined by `handle_tls_record`, below [2]. A TLS
@@ -301,19 +335,20 @@ after app_send_event {
 
 before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
     # require conn_open(src,dcid);  # [3]
-    var tr := tls.parser.deserialize(data);  # [1]
-    var idx := tr.begin;
-    while idx < tr.end {
-        var tls_rec := tr.value(idx);
-        call tls.event(src,dst,tls_rec);
-        call handle_tls_record(src,dst,scid,tls_rec);  #[2]
+    var hs := tls.handshake_parser.deserialize(data);  # [1]
+    var idx := hs.begin;
+    while idx < hs.end {
+        var h := hs.value(idx);
+        call tls.handshake_event(src,dst,h);
+        call handle_tls_handshake(src,dst,scid,h);  #[2]
         idx := idx.next
     };
     var jdx := data.begin;
+    var e := conn_enc_level(src,scid);
     while jdx < data.end {
-	stream_app_data(dst,dcid,0) :=
-	    stream_app_data(dst,dcid,0).append(data.value(jdx));  # [4]
-        stream_app_data_end(dst,dcid,0) := stream_app_data(dst,dcid,0).end;
+	crypto_data(dst,dcid,e) :=
+	    crypto_data(dst,dcid,e).append(data.value(jdx));  # [4]
+        crypto_data_end(dst,dcid,e) := crypto_data(dst,dcid,e).end;
 	jdx := jdx.next
     }
 }
@@ -325,17 +360,17 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
 # This event corresponds to transfer of data from QUIC to the TLS
 # implementation. 
 
-action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, lo: stream_pos, hi : stream_pos)
+action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, e : encryption_level, lo: stream_pos, hi : stream_pos)
     
 around tls_recv_event {
 
-    require lo < hi & lo = stream_app_pos(dst,dcid,0) & hi <= stream_length(dst,dcid,0);
-    #    require (data.end) + stream_app_pos(dst,pcid,0) <= stream_length(dst,pcid,0);
-#    require 0 <= N & N < data.end -> data.value(N) = stream_app_data(dst,pcid,0).value(N + stream_app_pos(dst,pcid,0));
+    require lo < hi & lo = crypto_pos(dst,dcid,e) & hi <= crypto_length(dst,dcid,e);
+    #    require (data.end) + crypto_pos(dst,pcid,0) <= crypto_length(dst,pcid,0);
+#    require 0 <= N & N < data.end -> data.value(N) = crypto_data(dst,pcid,0).value(N + crypto_pos(dst,pcid,0));
     ...
     
-    stream_app_pos(dst,dcid,0) := hi;
-    #    stream_app_pos(dst,pcid,0) := stream_app_pos(dst,pcid,0) + data.end 
+    crypto_pos(dst,dcid,e) := hi;
+    #    crypto_pos(dst,pcid,0) := crypto_pos(dst,pcid,0) + data.end 
 }
 
 
@@ -404,21 +439,14 @@ action orig_cid(pcid:cid) returns(pcid:cid) = {
 # - The header type must be one of the above [8].
 #
 # - An Initial packet represents an attempt by a client to establish a
-#   connection. The cid is arbitary, but must not have been previously
-#   seen. The initial packet must consist (apart from padding) of a
-#   single stream frame for stream zero, containing the initial security
+#   connection. The scid is arbitrary, but must not have been previously
+#   seen. The dcid is unspecified. The initial packet must consist (apart from padding) of a
+#   single crypto, containing the initial security
 #   handshake information [1].
 #
 # - A Handshake packet is sent in response to an Initial packet or
-#   a previous Handshake. In the latter case, the cid must match
-#   the original cid.
-#
-# - TEMPORARY: We require that only one connection be initializing for
-#   a given client endpoint at a given time [2]. This seems unreasonable,
-#   but otherwise there is no way to match Handshake packets to Initial
-#   packets, at least without looking at the security information.
-#
-# - A packet number may not be re-sent on a given connection. 
+#   a previous Handshake. In the latter case, the dcid must match
+#   the scid provided by the peer.
 #
 # - Initial packets may not be sent on a cid that has
 #   been closed by the sender [6].
@@ -426,23 +454,19 @@ action orig_cid(pcid:cid) returns(pcid:cid) = {
 # - Once a cid has been renamed by the server, it may no longer be used in a packet header.
 #   Instead the new cid must be used. [9]
 #
-# ### Effects
+# - A sender may not re-use a packet number on a given scid [4].
 #
-# - The `conn_seen` and `sent_pkt` relations are updated to reflect
-#   the observed packet [1].
-# - The `last_pkt_num` functiona is updated to indicate the observed
-#   packets as most recent for the packet's source and cid.
-# - For Initial packets, `initializing` is set to true for the packet's
-#   source and destination. The packet number is recorded in
-#   `initial_pkt_num` and the cid in `initial_pkt_cid` [3]. 
-# - For Handshake packets, `initializing` is set to false for the
-#   source and destination of the Initial packet (the reverse of the
-#   handshake packet). The initial packet is transfered to the cid
-# - A sender may not re-use a packet number on a given cid [4].
 # - A packet containing only ack frames and padding is *ack-only*.
 #   For a given cid, the number of ack-only packets sent from src to dst
 #   must not be greater than the number of non-ack-only packets sent
 #   from dst to src [5].
+
+# ### Effects
+#
+# - The `conn_seen` and `sent_pkt` relations are updated to reflect
+#   the observed packet [1].
+# - The `last_pkt_num` function is updated to indicate the observed
+#   packets as most recent for the packet's source and cid.
 #   
 #
 # ### Notes
@@ -466,31 +490,50 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var dcid := pkt.dst_cid;
     var scid := pkt.hdr_cid;
 
-    # TEMPORARY: only support long packet format
+    # On long headers, both cids are given. Record the correspondence.
 
-    assert pkt.hdr_long;
+    if pkt.hdr_long {
+        cid_dst_to_src(dst,dcid) := scid
+    }
+
+    # On short headers, the scid is not given, so we use the recorded value
+
+    # TODO: this is not reliable for testing, since a short header might
+    # arrive before a corresping long header due to packet re-ordering. We
+    # need to handle this case. This is a general problem with the test setup:
+    # the specification applies to packets in the actual order of transmission,
+    # while the tester may receive them out-of-order. One fix for this would be
+    # to have the spec also allow re-ordering, but this might introduce some
+    # significant complexity.
+
+    else {
+        scid := cid_dst_to_src(dst,dcid)
+    };
+
+    var e := conn_enc_level(src,scid);
 
     var pnum := decode_packet_number(src,dst,pkt);
 
-    require ~sent_pkt(src,scid,pnum);  # [4]
+    require ~sent_pkt(src,scid,e,pnum);  # [4]
 
     # The payload may not be empty
 
     require num_queued_frames(src,scid) > 0;  # [7]
 
-    # A packet is in initial packet iff it contains a client hello.
+    # A packet is an initial packet iff it contains a client hello.
 
-    assert pkt.hdr_type = 0x7f <-> queued_client_hello(src,scid);
+    # TODO: what to say about this?
+    # assert pkt.hdr_type = 0x7f <-> queued_hello(src,scid);
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.
 
     conn_seen(src,scid) := true;  # [1]
-    sent_pkt(src,scid,pnum) := true;  # [1]
+    sent_pkt(src,scid,e,pnum) := true;  # [1]
 
     # Record the packet number as latest seen
 
-    last_pkt_num(src,scid) := pnum;
+    last_pkt_num(src,scid,e) := pnum;
 
   
     # The payload must exactly match the queued frames.
@@ -505,12 +548,18 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     ...
 
+    # TEMPORARY: The following are repeated because currently locals defined in
+    # the "before" section cannot be accessed in the "after" section.
+
     var dcid := pkt.dst_cid;
     var scid := pkt.hdr_cid;
+    if ~pkt.hdr_long {
+        scid := cid_dst_to_src(dst,dcid)
+    };
 
     if pkt.hdr_type = 0x7f {
-        require pkt.payload.end = 1;  # [1]
-	require pkt.payload.value(0) isa frame.stream;
+        require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
+               ((pkt.payload.value(I) isa frame.ack) | (pkt.payload.value(I) isa frame.crypto));
         require ~conn_closed(src,scid);  # [6]
     };
 
@@ -528,7 +577,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # The queued frames are deleted
     
     queued_frames(src, scid) := frame.arr.empty;
-    queued_client_hello(src, scid) := false;
+    queued_hello(src, scid) := false;
     num_queued_frames(src, scid) := 0;
 }
 
@@ -587,19 +636,20 @@ object frame = {
         action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
 
 	around handle {
+            var e := conn_enc_level(src,scid);
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
-            if max_acked(dst,dcid) < last {
-                max_acked(dst,dcid) := last;  # [3]
+            if max_acked(dst,dcid,e) < last {
+                max_acked(dst,dcid,e) := last;  # [3]
             };
             while idx < f.ack_blocks.end {
                 var ack_block := f.ack_blocks.value(idx);
                 var upper := last - ack_block.gap;
                 last := upper - ack_block.blocks;
-                require (last <= N & N <= upper) -> sent_pkt(dst,dcid,N);  # [1]
+                require (last <= N & N <= upper) -> sent_pkt(dst,dcid,e,N);  # [1]
 		var jdx := last;
 		while jdx <= upper {
-		    acked_pkt(dst,dcid,jdx) := true;
+		    acked_pkt(dst,dcid,e,jdx) := true;
 		    jdx := jdx + 1
 		};
 #                acked_pkt(dst,dcid,N) := (last <= N & N <= upper) | acked_pkt(dst,dcid,N);  # [2]
@@ -612,8 +662,7 @@ object frame = {
     }
 }
 
-# Stream frames carry stream data. Stream id 0 is special, in that it
-# carries only TLS handshake data in the form of TLS records. 
+# Stream frames carry stream data. 
 #
 # Requirements:
 #
@@ -624,15 +673,15 @@ object frame = {
 # - If the stream is finished, the the frame offset plus length must
 #   not exceed the stream length [5].
 #
-# - Except on stream 0, the stream id must be less than or equal to
+# - The stream id must be less than or equal to
 #   the max stream id for the kind of the stream [6].
 #
-# - Except on stream 0, the stream must not have been reset [7].
+# - The stream must not have been reset [7].
 #
-# - The connection must not have bee closed by the source endpoint [8].
+# - The connection must not have been closed by the source endpoint [8].
 #
-# - For stream ids other than zero, the connection id must have been seen at the source [9]
-#   and the connection between source and destination must no be initializing [10].
+# - The connection id must have been seen at the source [9]
+#   and the connection between source and destination must not be initializing [10].
 
 # Effects:
 #
@@ -660,8 +709,9 @@ object frame = {
 
             require ~conn_closed(src,scid);  # [8]
 
-	    require ((f.offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
-	    require f.data = stream_app_data(dst,dcid,f.id).segment(f.offset,f.offset+f.length); 
+            var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
+	    require ((offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
+	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
 
             var kind := get_stream_kind(f.id);
             require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
@@ -686,9 +736,9 @@ object frame = {
                 stream_length(dst,dcid,f.id) := 0;
             };
             if max_stream_data_set(dst,dcid,f.id) {
-                require ((f.offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
+                require ((offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
             };
-            var length := f.offset + f.length;
+            var length := offset + f.length;
             require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
             if stream_length(dst,dcid,f.id) < length {
                 stream_length(dst,dcid,f.id) := length
@@ -698,6 +748,43 @@ object frame = {
             };
             stream_seen(dst,dcid,f.id) := true;
             stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
+	    ...
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+        }
+    }
+}
+
+# Crypto frames carry crypto handshake data, that is, TLS records.
+#
+# Requirements:
+#
+# - The connection must not have bee closed by the source endpoint [1].
+#
+# Effects:
+#
+# - The length of the crypto stream is updated. 
+#
+
+object frame = {
+    ...
+    object crypto = {
+        ...
+        action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+
+	around handle {
+
+            var e := conn_enc_level(src,scid);
+            call show_enc_level(e);
+            require ~conn_closed(src,scid);  # [1]
+
+	    require ((f.offset) + (f.length)) <= crypto_data_end(dst,dcid,e);
+	    require f.data = crypto_data(dst,dcid,e).segment(f.offset,f.offset+f.length); 
+
+            var length := f.offset + f.length;
+            if crypto_length(dst,dcid,e) < length {
+                crypto_length(dst,dcid,e) := length
+            };
 	    ...
 	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
             num_queued_frames(src, scid) := queued_frames(src,scid).end;
@@ -841,6 +928,20 @@ object frame = { ...
     }
 }
 
+# Ping frames contain no data and have no semantics. They can
+# be used to keep a connection alive.
+
+object frame = { ...
+    object ping = { ...
+        action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+	after handle {
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+        }
+    }
+}
+
+
 # ### Packet number decoding
 
 # The packet number is decoded from the packet header fields as follows.
@@ -895,7 +996,13 @@ object frame = { ...
 action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
 
     var scid := pkt.hdr_cid;
-    var la := max_acked(src,scid);
+
+    if ~pkt.hdr_long {
+        scid := cid_dst_to_src(dst,pkt.dst_cid)
+    };
+
+    var e := conn_enc_level(src,scid);
+    var la := max_acked(src,scid,e);
     pnum := pkt.hdr_pkt_num;
 
 
@@ -903,7 +1010,7 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
 
         # This is a last number transmitted by the source on this connection.
 
-        var last := last_pkt_num(src,scid);
+        var last := last_pkt_num(src,scid,e);
 
         # If long format or type is 0x1d, we match 32 bits
 
@@ -940,27 +1047,21 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
 # the reference `quic_transport_parameters`. Here we define the
 # protocol rules associated with `quic_transport_parameters`.
 #
-# The `handle_tls_extensions` rules apply to each `client_hello` or
-# `server_hello` message, in order of occurrence in a handshake
-# record. The last parameter, `is_client_hello`, is true for a `client_hello`
+# The `handle_tls_handshake` rules apply to each `client_hello` or
+# `server_hello` message, in order of occurrence in the crypto data.
+# The last parameter, `is_client_hello`, is true for a `client_hello`
 # message (see below).
 
-action handle_tls_record(src:ip.endpoint,dst:ip.endpoint,scid:cid,tls_rec:tls.record) = {
+action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,hs:tls.handshake) = {
 
-    if some(hr:tls.handshake_record) tls_rec *> hr {
-        var idx := hr.fragment.begin;
-        while idx < hr.fragment.end {
-            var hs := hr.fragment.value(idx);
-            if some(ch:tls.client_hello) hs *> ch {
-                queued_client_hello(src,scid) := true;
-                call handle_tls_extensions(src,dst,scid,ch.extensions,true);
-            };
-            if some(sh:tls.server_hello) hs *> sh {
-                call handle_tls_extensions(src,dst,scid,sh.extensions,false);
-            };
-            idx := idx.next
-        }
-    }
+    if some(ch:tls.client_hello) hs *> ch {
+        queued_hello(src,scid) := true;
+        call handle_tls_extensions(src,dst,scid,ch.extensions,true);
+    };
+    if some(sh:tls.server_hello) hs *> sh {
+        queued_hello(src,scid) := true;
+        call handle_tls_extensions(src,dst,scid,sh.extensions,false);
+    };
 }
 
 # Requirements:
@@ -1049,3 +1150,7 @@ action client_transport_parameters_event(src:ip.endpoint,dst:ip.endpoint,scid:ci
                                          tps:quic_transport_parameters)
 
 import client_transport_parameters_event
+
+action show_enc_level(e:encryption_level)
+
+import show_enc_level

@@ -32,6 +32,9 @@ object quic_deser = {}
               quic_stream_offset,
               quic_stream_length,
               quic_stream_data,
+              quic_crypto_offset,
+              quic_crypto_length,
+              quic_crypto_data,
               quic_ack_largest,
               quic_ack_delay,
               quic_ack_block_count,
@@ -41,6 +44,7 @@ object quic_deser = {}
               quic_reset_err_code,
               quic_reset_final_offset,
               quic_connection_close_err_code,
+              quic_connection_close_frame_type,
               quic_connection_close_reason_length,
               quic_connection_close_reason,
               quic_max_stream_data_id,
@@ -53,10 +57,13 @@ object quic_deser = {}
         int data_remaining;
         long long ack_blocks_expected;
         long long ack_block_count;
-
+        int payload_length;
+        int fence;
+    
     public:
         quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
             // pos = 42; // skip 42 bytes of IP and UDP header
+            fence = 0;
         }
         virtual void  get(long long &res) {
             switch (state) {
@@ -86,10 +93,15 @@ object quic_deser = {}
             break;
             case quic_s_dcil:
             {
-                getn(res,1);
-		scil = res & 0xf;
-                dcil = (res & 0xf0) >> 4;
-		res = dcil;
+                if (long_format) {
+                    getn(res,1);
+                    scil = res & 0xf;
+                    dcil = (res & 0xf0) >> 4;
+                } else {
+                    dcil = 5;
+                    scil = 0; // TODO: how to determine the cid length?
+                }
+                res = dcil;
                 state = quic_s_scil;
             }
             break;
@@ -113,13 +125,24 @@ object quic_deser = {}
             break;
             case quic_s_payload_length:
             {
-                get_var_int(res);
+                if (long_format) {
+                    get_var_int(res);
+                } else {
+                    res = 0;
+                }
+                payload_length = res;
                 state = quic_s_pkt_num;
             }
             break;
             case quic_s_pkt_num:
             {
-                ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+                fence = 0;
+                if (payload_length > 0) {
+                    fence = pos + payload_length - 16;
+                } else {
+                    fence = inp.size() - 16;
+                }
+                get_pkt_num(res);
                 state = quic_s_payload;
             }
             break;
@@ -164,7 +187,21 @@ object quic_deser = {}
                 state = quic_stream_data;
             }
             break;
+            case quic_crypto_offset:
+            {
+                get_var_int(res);
+                state = quic_crypto_length;
+            }
+            break;
+            case quic_crypto_length:
+            {
+                get_var_int(res);
+                data_remaining = res;
+                state = quic_crypto_data;
+            }
+            break;
             case quic_stream_data:
+            case quic_crypto_data:
             case quic_connection_close_reason:
             case quic_s_retry_token:
             {
@@ -219,6 +256,12 @@ object quic_deser = {}
             case quic_connection_close_err_code:
             {
                 getn(res,2);
+                state = quic_connection_close_frame_type;
+            }
+            break;
+            case quic_connection_close_frame_type:
+            {
+                get_var_int(res);
                 state = quic_connection_close_reason_length;
             }
             break;
@@ -258,6 +301,19 @@ object quic_deser = {}
             res |= (lobyte & 0x3f) << (bytes << 3);
         }
 
+        void get_pkt_num(long long &res) {
+            static int lens[4] = {0,0,1,3};
+            long long lobyte;
+            ivy_binary_deser::getn(lobyte,1);
+            int bytes = lens[(lobyte & 0xc0) >> 6];
+            if (bytes == 0) {
+                res = lobyte;
+                return;
+            }
+            ivy_binary_deser::getn(res,bytes);
+            res |= (lobyte & 0x3f) << (bytes << 3);
+        }
+
         virtual int open_tag(const std::vector<std::string> &tags) {
             if (state == quic_s_payload) {
                 long long ft;
@@ -267,7 +323,7 @@ object quic_deser = {}
                     state = quic_stream_off;
                     return 0;
                 }
-                if (frame_type == 0x0e) {
+                if (frame_type == 0x0d) {
                     state = quic_ack_largest;
                     return 1;
                 }
@@ -291,6 +347,13 @@ object quic_deser = {}
                     state = quic_reset_final_offset;
                     return 6;
                 }
+                if (frame_type == 0x18) {
+                    state = quic_crypto_offset;
+                    return 7;
+                }
+                if (frame_type == 0x07) {
+                    return 8;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();
@@ -298,9 +361,9 @@ object quic_deser = {}
 
         virtual bool open_list_elem() {
             if (state == quic_s_payload) {
-               while (more(1) && inp[pos] == 0)
+               while ((fence == 0 || pos < fence) && more(1) && inp[pos] == 0)
                    pos++;  // skip padding frames
-               return more(1);
+               return (fence == 0 || pos < fence) && more(1);
             }
             if (state == quic_ack_gap) {
                 return ack_block_count < ack_blocks_expected;
@@ -310,6 +373,8 @@ object quic_deser = {}
             if (state == quic_connection_close_reason)
                 return data_remaining-- > 0;
             if (state == quic_s_retry_token)
+                return data_remaining-- > 0;
+            if (state == quic_crypto_data)
                 return data_remaining-- > 0;
             throw deser_err();
         }
@@ -323,6 +388,10 @@ object quic_deser = {}
             }
         }
         void close_list() {
+            if (state == quic_s_payload) {
+                state = quic_s_init;
+                pos += 16; // skip the checksum
+            }
             if (state == quic_s_retry_token) {
                 state = quic_s_payload_length;
             }
