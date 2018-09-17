@@ -219,6 +219,7 @@ after init {
     trans_params_set(E:ip.endpoint,C:cid) := false;
     stream_seen(E,C,S) := false;
     stream_open(E,C,S) := false;
+    stream_length(E,C,S) := 0;
     max_stream_data_set(E,C,S) := false;
     stream_finished(E,C,S) := false;
     stream_reset(E,C,S) := false;
@@ -644,7 +645,7 @@ object frame = {
             };
             while idx < f.ack_blocks.end {
                 var ack_block := f.ack_blocks.value(idx);
-                var upper := last - ack_block.gap;
+                var upper := last - ((ack_block.gap+2) if idx > 0 else 0);
                 last := upper - ack_block.blocks;
                 require (last <= N & N <= upper) -> sent_pkt(dst,dcid,e,N);  # [1]
 		var jdx := last;
@@ -711,6 +712,7 @@ object frame = {
 
             var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
 	    require ((offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
+            call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
 
             var kind := get_stream_kind(f.id);
@@ -891,6 +893,40 @@ object frame = { ...
 object frame = { ...
     object connection_close = { ...
         action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+	around handle{
+            conn_closed(src,scid) := true;
+	    ...
+	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+        }
+    }
+}
+
+# Application close frames indicate to the peer that the connection is being closed.
+# It is unclear what this means operationally, but it seems reasonable to assume that the
+# endpoint closing the connection will not send or receive any further data on the connection,
+# so it is as if all the open streams are reset by this operation.
+#
+# An application close frame can occur at any time. 
+#
+# Questions:
+#
+# - Are Ack frames still allowed after application close?
+# - Are retransmissions allowed after application close?
+# - When is a application close allowed?
+#
+# Requirements:
+#
+# (None)
+#
+# Effects:
+#
+# - The connection state is set to closed for the source endpoint.
+#
+
+object frame = { ...
+    object application_close = { ...
+        action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
 	around handle{
             conn_closed(src,scid) := true;
 	    ...
@@ -1154,3 +1190,5 @@ import client_transport_parameters_event
 action show_enc_level(e:encryption_level)
 
 import show_enc_level
+
+import action show_offset_length(offset:stream_pos,length:stream_pos)

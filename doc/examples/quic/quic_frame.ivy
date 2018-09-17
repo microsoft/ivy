@@ -126,6 +126,17 @@ object frame = {
         }
     }
 
+    object application_close = {
+        
+        # Application close frames are a variant of frame.
+
+        variant this of frame = struct {
+            err_code               : error_code, # the error code
+            reason_phrase_length   : stream_pos, # number of bytes in reason phrase
+            reason_phrase          : stream_data # bytes of reason phrase
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        
