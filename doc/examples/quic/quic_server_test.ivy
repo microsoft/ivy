@@ -187,17 +187,32 @@ around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:en
 # send all of the available stream data. We never allow the fin bt to be set, since
 # we don't really have good rules for this yet.
 
-before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,pcid:cid) {
+before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if __generating {
         require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
-        require pcid = the_cid;
+        require scid = the_cid;
         require f.len & f.off; # TODO: when can f.off be false?
         require f.length > 0;
-        require f.offset = stream_length(dst,pcid,f.id);
-        require f.length = (stream_app_data_end(dst,pcid,f.id)) - f.offset;
+        require f.offset = stream_length(dst,dcid,f.id);
+        require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
         require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
 }
+
+# We have something similar for crypto frames
+
+before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if __generating {
+        require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
+        require scid = the_cid;
+        require f.length > 0;
+        var e := conn_enc_level(src,scid);
+        require f.offset = crypto_length(src,scid,e);
+        require f.length = (crypto_data_end(src,scid,e)) - f.offset;
+    }
+}
+
+
 
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
@@ -219,10 +234,11 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id,
 # a server packet event, which immediately dequeues them.
 
 #export frame.ack.handle
-export frame.stream.handle
+#export frame.stream.handle
+export frame.crypto.handle
 export packet_event
-export app_send_event
-export tls_recv_event
+#export app_send_event
+#export tls_recv_event
 
 attribute radix=16       # print in hex
 
