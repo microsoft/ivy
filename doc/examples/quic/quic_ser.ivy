@@ -15,8 +15,14 @@ object quic_ser = {}
     class `quic_ser` : public ivy_binary_ser {
         enum {quic_s_init,
               quic_s_type,
-              quic_s_cid,
               quic_s_version,
+	      quic_s_dcil,
+	      quic_s_scil,
+              quic_s_dcid,
+              quic_s_scid,
+              quic_s_retry_token_length,
+              quic_s_retry_token,
+	      quic_s_payload_length,
               quic_s_pkt_num,
               quic_s_payload,
               quic_stream_id,
@@ -26,6 +32,9 @@ object quic_ser = {}
               quic_stream_offset,
               quic_stream_length,
               quic_stream_data,
+              quic_crypto_offset,
+              quic_crypto_length,
+              quic_crypto_data,
               quic_ack_largest,
               quic_ack_delay,
               quic_ack_block_count,
@@ -35,16 +44,22 @@ object quic_ser = {}
               quic_reset_err_code,
               quic_reset_final_offset,
               quic_connection_close_err_code,
+              quic_connection_close_frame_type,
               quic_connection_close_reason_length,
               quic_connection_close_reason,
+              quic_application_close_err_code,
               quic_max_stream_data_id,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
+        int dcil;
+        int scil;
         char frame_type;
         int data_remaining;
-        long long ack_blocks_expected;
+       long long ack_blocks_expected;
         long long ack_block_count;
+        int payload_length_pos;
+        int fence;
 
     public:
         quic_ser() : state(quic_s_init) {
@@ -61,12 +76,6 @@ object quic_ser = {}
             {
                 hdr_type = res;
 		setn(hdr_type | (long_format ? 0x80 : 0), 1);
-                state = quic_s_cid;
-            }
-            break;
-            case quic_s_cid:
-            {
-                setn(res,8);
                 state = quic_s_version;
             }
             break;
@@ -74,15 +83,50 @@ object quic_ser = {}
             {
                 if (long_format)
                     setn(res,4);
+                state = quic_s_dcil;
+            }
+            break;
+            case quic_s_dcil:
+            {
+                dcil = res;
+                state = quic_s_scil;
+            }
+            break;
+            case quic_s_scil:
+            {
+                scil = res;
+                if (long_format) {
+                    setn(((dcil & 0xf) << 4) | (scil & 0xf),1);
+                }
+                state = quic_s_dcid;
+            }
+            break;
+            case quic_s_dcid:
+            {
+		setn(res,(dcil ? (dcil+3) : 0));
+                state = quic_s_scid;
+            }
+            break;
+            case quic_s_scid:
+            {
+		setn(res,(scil ? (scil+3) : 0));
+                state = quic_s_retry_token_length;
+            }
+            break;
+            case quic_s_payload_length:
+            {
+                payload_length_pos = this->res.size();
+                if (long_format) {
+                    setn(res,2);  // will fill in correct value later
+                }
                 state = quic_s_pkt_num;
             }
             break;
             case quic_s_pkt_num:
             {
-		setn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+                set_pkt_num(res);
                 state = quic_s_payload;
             }
-            break;
             case quic_stream_off:
             {
                 frame_type |= res ? 0x04 : 0;
@@ -123,8 +167,23 @@ object quic_ser = {}
                 state = quic_stream_data;
             }
             break;
+            case quic_crypto_offset:
+            {
+                set_var_int(res);
+                state = quic_crypto_length;
+            }
+            break;
+            case quic_crypto_length:
+            {
+                set_var_int(res);
+                data_remaining = res;
+                state = quic_crypto_data;
+            }
+            break;
             case quic_stream_data:
+            case quic_crypto_data:
             case quic_connection_close_reason:
+            case quic_s_retry_token:
             {
                 setn(res,1);
             }
@@ -177,14 +236,25 @@ object quic_ser = {}
             case quic_connection_close_err_code:
             {
                 setn(res,2);
-                state = quic_connection_close_reason_length;
+                state = quic_connection_close_frame_type;
             }
             break;
+            case quic_connection_close_frame_type:
+            {
+                set_var_int(res);
+                state = quic_connection_close_reason_length;
+            }
             case quic_connection_close_reason_length:
             {
                 set_var_int(res);
                 data_remaining = res;
                 state = quic_connection_close_reason;
+            }
+            break;
+            case quic_application_close_err_code:
+            {
+                setn(res,2);
+                state = quic_connection_close_reason_length;
             }
             break;
             case quic_max_stream_data_id:
@@ -193,6 +263,13 @@ object quic_ser = {}
                 state = quic_reset_final_offset;
             }
             break;
+            case quic_s_retry_token_length:
+            {
+                if (long_format & hdr_type == 0x7f)
+                    set_var_int(res);
+                data_remaining = res;
+                state = quic_s_retry_token;
+            }
             default:
             throw deser_err();
             }
@@ -206,6 +283,11 @@ object quic_ser = {}
 	    setn(val,bytes);
         }
 
+        void set_pkt_num(long long &res) {
+            // TODO: Send packet number in other than four-byte format.
+            setn(0xc0000000 | (0x3fffffff & res),4);
+        }
+
         virtual void open_tag(int tag, const std::string &) {
             if (state == quic_s_payload) {
                 if (tag == 0) {
@@ -215,7 +297,7 @@ object quic_ser = {}
                 }
                 if (tag == 1) {
                     state = quic_ack_largest;
-                    frame_type = 0x0e;
+                    frame_type = 0x0d;
                 }
                 else if (tag == 2) {
                     state = quic_reset_stream_id;
@@ -236,6 +318,17 @@ object quic_ser = {}
                 else if (tag == 6) {
                     state = quic_reset_final_offset;
                     frame_type = 0x0a;
+                }
+                else if (tag == 7) {
+                    frame_type = 0x18;
+                    state = quic_crypto_offset;
+                }
+                else if (tag == 8) {
+                    frame_type = 0x07;
+                }
+                if (tag == 9) {
+                    frame_type = 0x03;
+                    state = quic_application_close_err_code;
                 }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  
@@ -259,9 +352,22 @@ object quic_ser = {}
             }
         }
         void close_list() {
-	    if (state == quic_s_payload && hdr_type == 0x7f)
-	        while (res.size() < 1200)
-	            res.push_back(0);  // pad initial packet to 1200 bytes
+            if (state == quic_s_payload) {
+                if (hdr_type == 0x7f)
+                    while (res.size() < 1200)
+                        res.push_back(0);  // pad initial packet to 1200 bytes
+                for(unsigned i = 0; i < 16; i++)
+                    res.push_back(0);
+                if (long_format) {
+                    int len = res.size() - (payload_length_pos+2) ;
+                    res[payload_length_pos] = 0x40 | ((len >> 8) & 0x3f);
+                    res[payload_length_pos+1] = len & 0xff;
+                    state = quic_s_init;
+                }
+            }
+            else if (state == quic_s_retry_token) {
+                state = quic_s_payload_length;
+            }
         }
         void close_list_elem() {}
 

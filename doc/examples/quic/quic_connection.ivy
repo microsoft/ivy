@@ -334,7 +334,7 @@ after set_encryption_level {
 #   connection's initial transport parameters and is required.
 #
 
-before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) {
     # require conn_open(src,dcid);  # [3]
     var hs := tls.handshake_parser.deserialize(data);  # [1]
     var idx := hs.begin;
@@ -347,9 +347,9 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
     var jdx := data.begin;
     var e := conn_enc_level(src,scid);
     while jdx < data.end {
-	crypto_data(dst,dcid,e) :=
-	    crypto_data(dst,dcid,e).append(data.value(jdx));  # [4]
-        crypto_data_end(dst,dcid,e) := crypto_data(dst,dcid,e).end;
+	crypto_data(src,scid,e) :=
+	    crypto_data(src,scid,e).append(data.value(jdx));  # [4]
+        crypto_data_end(src,scid,e) := crypto_data(src,scid,e).end;
 	jdx := jdx.next
     }
 }
@@ -361,11 +361,11 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
 # This event corresponds to transfer of data from QUIC to the TLS
 # implementation. 
 
-action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, e : encryption_level, lo: stream_pos, hi : stream_pos)
+action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo: stream_pos, hi : stream_pos)
     
 around tls_recv_event {
 
-    require lo < hi & lo = crypto_pos(dst,dcid,e) & hi <= crypto_length(dst,dcid,e);
+    require lo < hi & lo = crypto_pos(dst,dcid,e) & hi <= crypto_length(src,scid,e);
     #    require (data.end) + crypto_pos(dst,pcid,0) <= crypto_length(dst,pcid,0);
 #    require 0 <= N & N < data.end -> data.value(N) = crypto_data(dst,pcid,0).value(N + crypto_pos(dst,pcid,0));
     ...
@@ -780,12 +780,12 @@ object frame = {
             call show_enc_level(e);
             require ~conn_closed(src,scid);  # [1]
 
-	    require ((f.offset) + (f.length)) <= crypto_data_end(dst,dcid,e);
-	    require f.data = crypto_data(dst,dcid,e).segment(f.offset,f.offset+f.length); 
+	    require ((f.offset) + (f.length)) <= crypto_data_end(src,scid,e);
+	    require f.data = crypto_data(src,scid,e).segment(f.offset,f.offset+f.length); 
 
             var length := f.offset + f.length;
-            if crypto_length(dst,dcid,e) < length {
-                crypto_length(dst,dcid,e) := length
+            if crypto_length(src,scid,e) < length {
+                crypto_length(src,scid,e) := length
             };
 	    ...
 	    queued_frames(src,scid) := queued_frames(src,scid).append(f);

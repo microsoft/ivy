@@ -29,7 +29,7 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # This is a ghost action representing a TLS send event.
 
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,pcid:cid,data:stream_data) = {}
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,data:stream_data) = {}
 
 # create an UDP network instance to communicate to server with
 
@@ -109,8 +109,8 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     }
 }
 
-after tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) {
-    call show_tls_send_event(src,dst,pcid,data);
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) {
+    call show_tls_send_event(src,dst,scid,data);
 }
 
 # Assume that initial packets are sent only to the server under test
@@ -156,15 +156,15 @@ implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkt:quic_packet) {
 # dribbled one byte at a time, which gets boring.
 #
 
-around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, lo : stream_pos, hi : stream_pos ) {
+around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
     require src = server.ep & dst = client.ep;
-    require hi = stream_length(dst,pcid,0)
+    require hi = crypto_length(dst,scid,e)
     ...
     var tls_id := client.tls_id if dst = client.ep else server.tls_id;
     var data := stream_data.empty;
     var idx := lo;
     while idx < hi {
-	data := data.append(stream_app_data(dst,pcid,0).value(idx));
+	data := data.append(crypto_data(src,scid,e).value(idx));
 	idx := idx.next
     };
 #    call botan.lower.recv(tls_id,data)
@@ -238,7 +238,7 @@ attribute stream_pos.cardinality = 4
 #attribute ip.addr.override = bv[1]
 #attribute ip.port.override = bv[1]
 
-action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, data : stream_data) = {}
+action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) = {}
 
 import show_tls_send_event
 

@@ -411,6 +411,10 @@ def gather_referenced_symbols(expr,res,ignore=[]):
                 
 skip_z3 = False
 
+def is_numeric_or_enumerated_constant(s):
+    return s.is_numeral() or il.is_constant(s) and il.is_enumerated(s)
+
+
 def make_thunk(impl,vs,expr):
     global the_classname
     dom = [v.sort for v in vs]
@@ -448,7 +452,7 @@ def make_thunk(impl,vs,expr):
         else:
             if lu.free_variables(expr):
                 raise iu.IvyError(None,"cannot compile {}".format(expr))
-            if all(s.is_numeral() for s in ilu.used_symbols_ast(expr)):
+            if all(is_numeric_or_enumerated_constant(s) for s in ilu.used_symbols_ast(expr)):
                 if expr.sort in sort_to_cpptype or hasattr(expr.sort,'name') and (expr.sort.name in im.module.sort_destructors or
                                                                                   expr.sort.name in im.module.native_types):
                     code_line(impl,'z3::expr res = __to_solver(g,v,{})'.format(code_eval(impl,expr)))
@@ -4571,6 +4575,15 @@ public:
         a.push_back(arg0);
         a.push_back(arg1);
         a.push_back(arg2);
+        return apply(decl_name,a);
+    }
+
+    z3::expr apply(const char *decl_name, z3::expr arg0, z3::expr arg1, z3::expr arg2, z3::expr arg3) {
+        std::vector<z3::expr> a;
+        a.push_back(arg0);
+        a.push_back(arg1);
+        a.push_back(arg2);
+        a.push_back(arg3);
         return apply(decl_name,a);
     }
 

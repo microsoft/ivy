@@ -42,7 +42,7 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # This is a ghost action representing a TLS send event.
 
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data) = {}
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,data:stream_data) = {}
 
 # For each packet read, first print out the packet, then infer any TLS
 # events, then verify the packet.
