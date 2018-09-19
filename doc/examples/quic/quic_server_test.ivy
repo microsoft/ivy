@@ -48,7 +48,7 @@ instance tls_extensions : vector(tls.extension)
 # HACK: we fix the initial client transport parameters here
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff000009;
+    tp.initial_version := 0xff00000e;
     var imsd : initial_max_stream_data;
     imsd.stream_pos_32 := 0x2000;
     var imd : initial_max_data;
@@ -69,7 +69,7 @@ object botan = {
 action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
     ep.addr := 0x7f000001;   # the loop-back addr
-    ep.port := 4987 if the_role = role.client else 0x1151;
+    ep.port := 4987 if the_role = role.client else 4443;
 }    
 
 module quic_endpoint(addr,the_role) = {
@@ -121,9 +121,10 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #    };
     # TEMPORARY: all packets to server!
     if __generating {
-        require dst = server.ep
+        require dst = server.ep;
+        require pkt.dcid = 5 & pkt.scid = 5;
     };
-    require pkt.hdr_version = 0xff000009
+    require pkt.hdr_version = 0xff00000e
 }
 
 # Hook up to the remote server
@@ -203,10 +204,11 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
 
 before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if __generating {
-        require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
+        require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.length > 0;
         var e := conn_enc_level(src,scid);
+#        call show_level_offset_length(e,crypto_length(src,scid,e),crypto_data_end(src,scid,e))
         require f.offset = crypto_length(src,scid,e);
         require f.length = (crypto_data_end(src,scid,e)) - f.offset;
     }
@@ -263,3 +265,5 @@ import show_tls_send_event
 
 action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 import show_packet
+
+import action show_level_offset_length(e:encryption_level,offset:stream_pos,length:stream_pos)

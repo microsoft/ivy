@@ -132,6 +132,7 @@ object quic_deser = {}
                     res = 0;
                 }
                 payload_length = res;
+                res = 0; // this is meaningless to ivy
                 state = quic_s_pkt_num;
             }
             break;

@@ -906,7 +906,7 @@ def minimal_field_references(fmla,inputs):
                 if inp is not None:
                     res[inp].add(f)
                     return
-            if f.rep in inpset:
+            if il.is_constant(f) and f.rep in inpset:
                 res[f.rep].add(f.rep)
                 return
         for x in f.args:
@@ -980,7 +980,6 @@ def emit_action_gen(header,impl,name,action,classname):
     if name in im.module.before_export:
         action = im.module.before_export[name]
     def card(sort):
-        print 'sort: {}'.format(sort)
 #        res = sort_card(sort)
 #        if res is not None:
 #            return res
@@ -1027,7 +1026,6 @@ def emit_action_gen(header,impl,name,action,classname):
     def get_root(f):
         return get_root(f.args[0]) if len(f.args) == 1 else f
     for sym in syms:
-        print sym
         if sym in fsyms:
             sym = get_root(fsyms[sym])
         if sym not in decld:
@@ -1628,7 +1626,6 @@ def module_to_cpp_class(classname,basename):
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = ivy_cpp.context.globals.code
-    print header
     header.append("#define _HAS_ITERATOR_DEBUGGING 0\n")
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
@@ -4511,8 +4508,8 @@ public:
             z3::expr foo = model.eval(apply_expr,true);
             if (foo.is_bv() || foo.is_int()) {
                 assert(foo.is_numeral());
-                int v;
-                if (Z3_get_numeral_int(ctx,foo,&v) != Z3_TRUE)
+                unsigned v;
+                if (Z3_get_numeral_uint(ctx,foo,&v) != Z3_TRUE)
                     assert(false && "bit vector value too large for machine int");
                 return v;
             }
@@ -4911,6 +4908,12 @@ def main_int(is_ivyc):
                             print "Compiling isolate {}...".format(isolate)
 
                     iso.create_isolate(isolate) # ,ext='ext'
+
+                    # Tricky: cone of influence may eliminate this symbol, but
+                    # run-time accesses it.
+                    if '__generating' not in im.module.sig.symbols:
+                        im.module.sig.add_symbol('__generating',il.BooleanSort())
+
 
                     im.module.labeled_axioms.extend(im.module.labeled_props)
                     im.module.labeled_props = []

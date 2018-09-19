@@ -127,6 +127,7 @@ object quic_ser = {}
                 set_pkt_num(res);
                 state = quic_s_payload;
             }
+            break;
             case quic_stream_off:
             {
                 frame_type |= res ? 0x04 : 0;
@@ -244,6 +245,7 @@ object quic_ser = {}
                 set_var_int(res);
                 state = quic_connection_close_reason_length;
             }
+            break;
             case quic_connection_close_reason_length:
             {
                 set_var_int(res);
@@ -270,6 +272,7 @@ object quic_ser = {}
                 data_remaining = res;
                 state = quic_s_retry_token;
             }
+            break;
             default:
             throw deser_err();
             }
@@ -326,7 +329,7 @@ object quic_ser = {}
                 else if (tag == 8) {
                     frame_type = 0x07;
                 }
-                if (tag == 9) {
+                else if (tag == 9) {
                     frame_type = 0x03;
                     state = quic_application_close_err_code;
                 }

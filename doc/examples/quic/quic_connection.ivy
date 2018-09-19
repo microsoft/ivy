@@ -482,9 +482,15 @@ action orig_cid(pcid:cid) returns(pcid:cid) = {
 
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
+    # TEMPORARY
+    require ~pkt.hdr_long -> (pkt.dcid = 5 & pkt.scid = 0);
+    require pkt.hdr_long -> (pkt.dcid > 0 & pkt.scid > 0);
+    require pkt.hdr_token_length = pkt.hdr_token.end;
+    require pkt.hdr_token_length ~= 0 -> (pkt.hdr_long & pkt.hdr_type = 0x7f);
+
     # Allowed header types
 
-    assert pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
+    require pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
     
     # Extract the source and destination cid's and packet number from the packet.
 
@@ -513,6 +519,12 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     var e := conn_enc_level(src,scid);
 
+    # The header type depends on the encryption level
+
+    require e = encryption_level.initial -> pkt.hdr_long & pkt.hdr_type = 0x7f;
+    require e = encryption_level.handshake -> pkt.hdr_long & pkt.hdr_type = 0x7d;
+    require e = encryption_level.other -> ~pkt.hdr_long;
+    
     var pnum := decode_packet_number(src,dst,pkt);
 
     require ~sent_pkt(src,scid,e,pnum);  # [4]
@@ -783,11 +795,12 @@ object frame = {
 	    require ((f.offset) + (f.length)) <= crypto_data_end(src,scid,e);
 	    require f.data = crypto_data(src,scid,e).segment(f.offset,f.offset+f.length); 
 
+	    ...
+            var e := conn_enc_level(src,scid);
             var length := f.offset + f.length;
             if crypto_length(src,scid,e) < length {
                 crypto_length(src,scid,e) := length
             };
-	    ...
 	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
             num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }

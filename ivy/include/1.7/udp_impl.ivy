@@ -250,10 +250,10 @@ object impl(me:host) = {
 	<<< impure
 	struct sockaddr_in dstaddr;
 	dstaddr.sin_family = AF_INET;
-	//dstaddr.sin_addr.s_addr = htonl(dst.addr);
+//	dstaddr.sin_addr.s_addr = htonl(dst.addr);
 	dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	dstaddr.sin_port = htons(dst.port);
-	std::cout << "sending id: " << me << " port: " << ntohs(dstaddr.sin_port) << std::endl;
+	std::cout << "sending id: " << me << " addr: " << ntohl(dstaddr.sin_addr.s_addr) << " port: " << ntohs(dstaddr.sin_port) << std::endl;
 	`ser` sr;
 	__ser(sr,x);
 	if (sendto(s,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 

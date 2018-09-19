@@ -898,7 +898,6 @@ class WhileAction(Action):
         else:
             raise IvyError(self,'cannot determine an index sort for loop')
         cardsort = card(idx_sort)
-        print 'sort: {}, card: {}'.format(idx_sort,cardsort)
         if cardsort is None:
             raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
         if cardsort > 100:
