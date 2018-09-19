@@ -390,6 +390,8 @@ object quic_deser = {}
                 return data_remaining-- > 0;
             if (state == quic_crypto_data)
                 return data_remaining-- > 0;
+            if (state == quic_s_init)
+                return more(1);
             throw deser_err();
         }
 

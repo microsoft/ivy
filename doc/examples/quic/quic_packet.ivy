@@ -45,18 +45,22 @@ interpret cid_length -> bv[4]
 # - *hdr_token*: the retry token  (see section 4.4.1)
 # - *payload*: the payload, a sequence of frames
 
-type quic_packet = struct {
-    hdr_long : bool, # [1]
-    hdr_type : type_bits, # [2]
-    hdr_version : version, # [4]
-    dcid : cid_length, 
-    scid : cid_length, 
-    dst_cid : cid,
-    hdr_cid : cid, # [3]
-    hdr_token_length : stream_pos,
-    hdr_token : stream_data,
-    payload_length : stream_pos,
-    hdr_pkt_num : pkt_num, # [5]
-    payload : frame.arr # [6]
-}
+object quic_packet = {
+    type this = struct {
+        hdr_long : bool, # [1]
+        hdr_type : type_bits, # [2]
+        hdr_version : version, # [4]
+        dcid : cid_length, 
+        scid : cid_length, 
+        dst_cid : cid,
+        hdr_cid : cid, # [3]
+        hdr_token_length : stream_pos,
+        hdr_token : stream_data,
+        payload_length : stream_pos,
+        hdr_pkt_num : pkt_num, # [5]
+        payload : frame.arr # [6]
+    }
 
+    instance idx : unbounded_sequence
+    instance arr : array(idx,this)
+}

@@ -32,8 +32,10 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,data:stream_data) = {}
 
 # create an UDP network instance to communicate to server with
+# Note: because of packet coalescing, a single UDP datagram contains
+# an array of UIC packets.
 
-instance net : udp_impl(role,quic_packet,quic_ser,quic_deser)
+instance net : udp_impl(role,quic_packet.arr,quic_ser,quic_deser)
 
 # fix a single connection id
 
@@ -101,11 +103,15 @@ after init {
 # Hook up tls to quic
 
 implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
+    # From draft 13 onward, we don't transmit the record headers.
+    # We peel of the first 5 bytes of record header.
+    # TODO: we also have to decrypt the records here if they are encrypted.
+    var msgs := bytes.segment(5,bytes.end);
     if tls_id = client.tls_id {
-	call tls_send_event(client.ep, server.ep, the_cid, bytes)
+	call tls_send_event(client.ep, server.ep, the_cid, msgs)
     };
     if tls_id = server.tls_id {
-	call tls_send_event(server.ep, client.ep, the_cid, bytes)
+	call tls_send_event(server.ep, client.ep, the_cid, msgs)
     }
 }
 
@@ -124,27 +130,36 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require dst = server.ep;
         require pkt.dcid = 5 & pkt.scid = 5;
     };
-    require pkt.hdr_version = 0xff00000e
+    require pkt.hdr_long -> pkt.hdr_version = 0xff00000e
 }
 
 # Hook up to the remote server
 
 # When the client sends a packet, route it to the server
+# TODO: coalesce packets. As nof now, we send only one QUIC packet
+# per UDP datagram.
 
 after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    var pkts := quic_packet.arr.empty;
+    pkts := pkts.append(pkt);
     if src = client.ep {
-	call net.send(role.client,sock,dst,pkt);
+	call net.send(role.client,sock,dst,pkts);
     }
 }
 
 # When an packet arrives at the client endpoint, generate a `packet_event`
 
-implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkt:quic_packet) {
+implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkts:quic_packet.arr) {
     if host = role.client {
 	var dst := client.ep; # the destination must be client, since we have only one socket
-	call show_packet(src,dst,pkt);
-	call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
-	call packet_event(src,dst,pkt);
+        var idx := pkts.begin;
+        while idx < pkts.end {
+            var pkt := pkts.value(idx);
+	    call show_packet(src,dst,pkt);
+	    call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
+	    call packet_event(src,dst,pkt);
+            idx := idx.next;
+        }
     }
 }
 
@@ -159,7 +174,7 @@ implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkt:quic_packet) {
 
 around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
     require src = server.ep & dst = client.ep;
-    require hi = crypto_length(dst,scid,e)
+    require hi = crypto_length(src,scid,e)
     ...
     var tls_id := client.tls_id if dst = client.ep else server.tls_id;
     var data := stream_data.empty;
@@ -240,7 +255,7 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id,
 export frame.crypto.handle
 export packet_event
 #export app_send_event
-#export tls_recv_event
+export tls_recv_event
 
 attribute radix=16       # print in hex
 
