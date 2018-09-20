@@ -3147,8 +3147,9 @@ def emit_bv_op(self,header,code):
 
 def is_bv_term(self):
     return (il.is_first_order_sort(self.sort)
-            and self.sort.name in il.sig.interp
-            and il.sig.interp[self.sort.name].startswith('bv['))
+            and (self.sort.name in il.sig.interp
+                 and il.sig.interp[self.sort.name].startswith('bv[')
+                 or self.rep.name.startswith('bfe[') and ctype(self.args[0].sort) in int_ctypes))
 
 def capture_emit(a,header,code,capture_args):
     if capture_args != None:
