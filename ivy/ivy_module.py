@@ -301,8 +301,9 @@ def instantiate_non_epr(non_epr,ground_terms):
                 ldf,cnst = non_epr[term.rep]
                 subst = dict((v,t) for v,t in zip(ldf.formula.args[0].args,term.args)
                              if not isinstance(v,il.Variable))
-                inst = lu.substitute_constants_ast(cnst,subst)
-                theory.append(inst)
+                if all(lu.is_ground_ast(x) for x in subst.values()):
+                       inst = lu.substitute_constants_ast(cnst,subst)
+                       theory.append(inst)
 #                iu.dbg('inst')
                 matched.add(term)
     return lu.Clauses(theory)
