@@ -46,6 +46,30 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
 <<< impl
 
+    // HACK HACK HACK HACK HACK
+
+    // Here we have stolen some internal struct definitions from gnutls to allow
+    // us to go in and hack the record encryption. This is needed for QUIC version 13
+    // and later. Eventually it would be good to have gnutls API calls to directly
+    // read and write handshake messages. 
+
+    typedef struct {
+            unsigned int entity;	/* GNUTLS_SERVER or GNUTLS_CLIENT */
+
+            /* The epoch used to read and write */
+            uint16_t epoch_read;
+            uint16_t epoch_write;
+
+            /* The epoch that the next handshake will initialize. */
+            uint16_t epoch_next;
+
+            /* The epoch at index 0 of record_parameters. */
+            uint16_t epoch_min;
+    } security_parameters_st;
+
+    struct gnutls_session_int {
+            security_parameters_st security_parameters;
+    };
 
     // This structure holds all the callbacks. These are functions
     // that are called synchronously.
@@ -114,6 +138,10 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
    // Start or resume handshake
 
    void gnutls_do_handshake(gnutls_connection *s) {
+       // HACK HACK HACK HACK
+       // set the read and write epochs to zero to hopefully disable encryption of records
+       // s->gs->security_parameters.epoch_read = 0;
+       // s->gs->security_parameters.epoch_write = 0;
        s->handshake_status = gnutls_handshake(s->gs);
         if (s->handshake_status != GNUTLS_E_SUCCESS &&
             s->handshake_status != GNUTLS_E_AGAIN) {

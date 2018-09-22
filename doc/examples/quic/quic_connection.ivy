@@ -160,6 +160,10 @@ include quic_transport_parameters
 # - The function num_queued_frames(E:ip.endpoint,C:cid) gives the number of frames
 #   queue at endpoint `E` for connection `C`.
 #
+# - The predicate `cid_dst_to_src_set` indicates that the cid `C` at
+#   endpoint `D` has been mapped to a cid on the peer. This mapping
+#   occurs conceptually when a server produces a server hello frame.
+#
 # - The function `cid_dst_to_src(D,C)` maps the cid `C` at endpoint `D` to the
 #   corresponding cid of the per, if such a cid exists.
 
@@ -198,6 +202,7 @@ function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
 relation cid_renamed(C:cid)
 relation cid_new_name(C:cid)
 function cid_orig_name(C:cid) : cid
+relation cid_dst_to_src_set(D:ip.endpoint,C:cid)
 function cid_dst_to_src(D:ip.endpoint,C:cid) : cid
 
 
@@ -334,14 +339,14 @@ after set_encryption_level {
 #   connection's initial transport parameters and is required.
 #
 
-before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) {
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
     # require conn_open(src,dcid);  # [3]
     var hs := tls.handshake_parser.deserialize(data);  # [1]
     var idx := hs.begin;
     while idx < hs.end {
         var h := hs.value(idx);
         call tls.handshake_event(src,dst,h);
-        call handle_tls_handshake(src,dst,scid,h);  #[2]
+        call handle_tls_handshake(src,dst,scid,dcid,h);  #[2]
         idx := idx.next
     };
     var jdx := data.begin;
@@ -498,9 +503,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var scid := pkt.hdr_cid;
 
     # On long headers, both cids are given. Record the correspondence.
+    # If the scid has been mapped, make sure it maps to the dcid.
 
     if pkt.hdr_long {
-        cid_dst_to_src(dst,dcid) := scid
+        require cid_dst_to_src_set(src,scid) -> cid_dst_to_src(src,scid) = dcid
     }
 
     # On short headers, the scid is not given, so we use the recorded value
@@ -514,6 +520,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # significant complexity.
 
     else {
+        require cid_dst_to_src_set(dst,dcid);
         scid := cid_dst_to_src(dst,dcid)
     };
 
@@ -655,9 +662,12 @@ object frame = {
             if max_acked(dst,dcid,e) < last {
                 max_acked(dst,dcid,e) := last;  # [3]
             };
+            require f.ack_blocks.end > 0;
             while idx < f.ack_blocks.end {
                 var ack_block := f.ack_blocks.value(idx);
+                require idx > 0 -> ack_block.gap < last - 1;
                 var upper := last - ((ack_block.gap+2) if idx > 0 else 0);
+                require ack_block.blocks <= upper;
                 last := upper - ack_block.blocks;
                 require (last <= N & N <= upper) -> sent_pkt(dst,dcid,e,N);  # [1]
 		var jdx := last;
@@ -778,7 +788,6 @@ object frame = {
 # Effects:
 #
 # - The length of the crypto stream is updated. 
-#
 
 object frame = {
     ...
@@ -801,6 +810,7 @@ object frame = {
             if crypto_length(src,scid,e) < length {
                 crypto_length(src,scid,e) := length
             };
+
 	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
             num_queued_frames(src, scid) := queued_frames(src,scid).end;
         }
@@ -1100,17 +1110,40 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
 # `server_hello` message, in order of occurrence in the crypto data.
 # The last parameter, `is_client_hello`, is true for a `client_hello`
 # message (see below).
+#
+# A server hello establishes the connection between the server and the
+# client cids [1]. We have to do it this way because there is no way
+# looking at just the QUIC packet header and frame types to
+# distinguish a client initial message from a server initial message.
+#
+# We also infer changes in encryption level from the handshake message
+# types. In particular, any non-hello message moves us from the initial
+# level to the handshake level. TODO: this might not be reliable if there
+# are changes to TLS. It would be better to get an explicit signal from
+# TLS that the level is changing. TODO: Does the QUIC-TLS specification
+# say explicitly when the encryption level should change?
+#
 
-action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,hs:tls.handshake) = {
+action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs:tls.handshake) = {
 
     if some(ch:tls.client_hello) hs *> ch {
         queued_hello(src,scid) := true;
         call handle_tls_extensions(src,dst,scid,ch.extensions,true);
-    };
-    if some(sh:tls.server_hello) hs *> sh {
+    }
+    else if some(sh:tls.server_hello) hs *> sh {
         queued_hello(src,scid) := true;
+        call map_cids(src,scid,dcid);    # [1]
+        call map_cids(dst,dcid,scid);
         call handle_tls_extensions(src,dst,scid,sh.extensions,false);
-    };
+    }
+    else if conn_enc_level(src,scid) = encryption_level.initial {
+        conn_enc_level(src,scid) := encryption_level.handshake 
+    }
+}
+
+action map_cids(dst:ip.endpoint,dcid:cid,scid:cid) = {
+    cid_dst_to_src_set(dst,dcid) := true;
+    cid_dst_to_src(dst,dcid) := scid
 }
 
 # Requirements:

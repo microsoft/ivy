@@ -29,7 +29,7 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # This is a ghost action representing a TLS send event.
 
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,data:stream_data) = {}
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data) = {}
 
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
@@ -109,16 +109,16 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     if bytes.value(0) ~= 20 {
         var msgs := bytes.segment(5,bytes.end);
         if tls_id = client.tls_id {
-            call tls_send_event(client.ep, server.ep, the_cid, msgs)
+            call tls_send_event(client.ep, server.ep, the_cid, 0, msgs)
         };
         if tls_id = server.tls_id {
-            call tls_send_event(server.ep, client.ep, the_cid, msgs)
+            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs)
         }
     }
 }
 
-after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) {
-    call show_tls_send_event(src,dst,scid,data);
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
+    call show_tls_send_event(src,dst,scid,dcid,data);
 }
 
 # Assume that initial packets are sent only to the server under test
@@ -253,7 +253,14 @@ before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:c
     }
 }
 
+# Generate ack frames only for the client.
 
+before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if __generating {
+        require src = client.ep & dst = server.ep; 
+        require scid = the_cid;
+    }
+}
 
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
@@ -274,7 +281,7 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id,
 # empty. This is because server frames are only inferred in response to
 # a server packet event, which immediately dequeues them.
 
-#export frame.ack.handle
+export frame.ack.handle
 #export frame.stream.handle
 export frame.crypto.handle
 export packet_event
@@ -295,7 +302,7 @@ attribute stream_pos.cardinality = 4
 #attribute ip.addr.override = bv[1]
 #attribute ip.port.override = bv[1]
 
-action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, data : stream_data) = {}
+action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) = {}
 
 import show_tls_send_event
 
