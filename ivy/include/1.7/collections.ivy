@@ -328,6 +328,14 @@ module option(range_t) = {
 }
 
 ################################################################################
+# 
+# Use of the type option[range], where range is a type, implicitly
+# creates an instance of option(range) called option[range].
+#
+
+autoinstance option[range] : option(range)
+
+################################################################################
 #
 # Null number types 
 #

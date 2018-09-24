@@ -50,7 +50,7 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
 	    call app_send_event(src,dst,dcid,sf.id,sf.data)
 	};
 	call show_frame(src,dst,scid,dcid,f);
-	call f.handle(src,dst,scid,dcid);
+	call f.handle(src,dst,scid,dcid,e);
         idx := idx.next
     }
 }

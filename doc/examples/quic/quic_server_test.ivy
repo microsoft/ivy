@@ -130,7 +130,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # TEMPORARY: all packets to server!
     if __generating {
         require dst = server.ep;
-        require pkt.dcid = 5 & pkt.scid = 5;
+        require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
     };
     require pkt.hdr_long -> pkt.hdr_version = 0xff00000e
 }
@@ -259,6 +259,7 @@ before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dci
     if __generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
+        force_new_ack := true;
     }
 }
 

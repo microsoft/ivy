@@ -197,6 +197,7 @@ relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
 relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
 function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
 function queued_frames(E:ip.endpoint,C:cid) : frame.arr
+function queued_level(E:ip.endpoint,C:cid) : encryption_level
 relation queued_hello(E:ip.endpoint,C:cid)
 function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
 relation cid_renamed(C:cid)
@@ -496,6 +497,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Allowed header types
 
     require pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
+    require ~pkt.hdr_long -> pkt.hdr_type = 0x30;
     
     # Extract the source and destination cid's and packet number from the packet.
 
@@ -524,7 +526,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         scid := cid_dst_to_src(dst,dcid)
     };
 
-    var e := conn_enc_level(src,scid);
+    var e := queued_level(src,scid);
 
     # The header type depends on the encryption level
 
@@ -604,26 +606,59 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 # The frame protocol
 # ==================
 #
-# A connection consists of a sequence of frames transmitted from
-# client to server and server to client. The frames are encapsulated
-# in packets, described below.
+# The frame protocol is defined by a sequence of frame events.
+# This protocol is layered on the packet protocol, such that
+# each packet event contains a sub-sequence of the frame events.
 #
+# The frame events are subdivided into variants called frame types.
 # For each frame type, we define a ghost event `handle` corresponding
 # to the generation of a frame and its transfer to the packet protocol
-# for transmission. Generation of frames effects the protocol state.
-# In particular, each frame handler has the effect of queueing the frame
-# for transmission by the packet protocol
+# for transmission. Frame events effect the protocol state by
+# enqueueing frames to be encapsulated into packets. The effect of
+# this is that frame and packet events are interleaved, such that the
+# frames in each packet occur immediately before the packet event in
+# the same order in which they occur in the packet payload. TODO:
+# While this ordering seems sensible from a semantic point of view,
+# implementations might transmit frames out of order. Requiring ghost
+# frame events to be in order might complicate a modular proof of the
+# implementation.
 #
+# Each frame has an encryption level. The enryption level determines
+# the keys used to protect to protect that packet payload. Only frames
+# of the same encryption level may be encapsulated in the same packet
+# (however, multiple packets may be concatenated in a single UDP
+# datagram). This requirement is enforced by requiring that every
+# frame queue contains only frames of the same encryption level. The
+# frame handler for each type enforces this condition.
 
-# The generic `handle` action for frames is specialized for each variant
-# of `frame`. This action takes as arguments the frame, the source and
-# destination endpoints, and the cid of the connection. 
+#
+# This generic `handle` action for frames is specialized for each
+# frame type.  Its arguments are the frame, the source and destination
+# endpoints, the source and destination cids and the encryption level.
 
 object frame = {
    ...
-    action handle(f:this,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) = {
+    action handle(f:this,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) = {
 	require false; # this generic action should never be called
     }
+}
+
+# Frame events cause frames to be enqueued for transmission in a
+# packet. This action enqueues a frame.
+#
+# Effects:
+#
+# - Appends frame to the frame queue for the given source endpoint and cid.
+# - Updates auxiliary functions `num_queued_frames` and `queued_level`.
+#
+# Note: the auxilary functions contain redundant information that is useful for
+# specifying packet events. By encoding history information in this way, we make
+# it easier for constraint solvers to construct tests.
+
+action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level) = {
+    queued_frames(src,scid) := queued_frames(src,scid).append(f);
+    num_queued_frames(src, scid) := queued_frames(src,scid).end;
+    queued_level(src,scid) := e;
 }
 
 # #### Ack handler
@@ -649,20 +684,25 @@ object frame = {
 #   the cid and `N` is the packet number [2].
 # - The greatest acked packet is also tracked in `max_act(S,C)` [3]
 
+# TEMPORARY: use this to enforce new acks in testing
+
+var force_new_ack : bool
+
 object frame = {
     ...
     object ack = {
         ...
-        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            var e := conn_enc_level(src,scid);
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
             if max_acked(dst,dcid,e) < last {
                 max_acked(dst,dcid,e) := last;  # [3]
             };
             require f.ack_blocks.end > 0;
+            var some_new_ack := false;
             while idx < f.ack_blocks.end {
                 var ack_block := f.ack_blocks.value(idx);
                 require idx > 0 -> ack_block.gap < last - 1;
@@ -672,15 +712,19 @@ object frame = {
                 require (last <= N & N <= upper) -> sent_pkt(dst,dcid,e,N);  # [1]
 		var jdx := last;
 		while jdx <= upper {
+                    if ~acked_pkt(dst,dcid,e,jdx) {
+                        some_new_ack := true;
+                    };
 		    acked_pkt(dst,dcid,e,jdx) := true;
 		    jdx := jdx + 1
 		};
 #                acked_pkt(dst,dcid,N) := (last <= N & N <= upper) | acked_pkt(dst,dcid,N);  # [2]
                 idx := idx.next;
-            }
+            };
+            require force_new_ack -> some_new_ack;
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            force_new_ack := false;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -726,10 +770,10 @@ object frame = {
     ...
     object stream = {
         ...
-        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [8]
 
             var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
@@ -773,8 +817,7 @@ object frame = {
             stream_seen(dst,dcid,f.id) := true;
             stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -793,11 +836,10 @@ object frame = {
     ...
     object crypto = {
         ...
-        action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-
-            var e := conn_enc_level(src,scid);
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             call show_enc_level(e);
             require ~conn_closed(src,scid);  # [1]
 
@@ -811,8 +853,7 @@ object frame = {
                 crypto_length(src,scid,e) := length
             };
 
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -838,7 +879,7 @@ object frame = {
 
 object frame = { ...
     object rst_stream = { ...
-        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
             require ~conn_closed(src,scid);  # [5]
@@ -849,8 +890,7 @@ object frame = { ...
             stream_reset(dst,dcid,f.id) := true;  # [2]
             stream_length(dst,dcid,f.id) := f.final_offset;  #[3]
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -873,10 +913,10 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_id = { ...
-        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [2]
 
             var kind := get_stream_kind(f.id);
@@ -885,8 +925,7 @@ object frame = { ...
                 max_stream(dst,dcid,kind) := f.id; #  [1]
             }
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -915,12 +954,12 @@ object frame = { ...
 
 object frame = { ...
     object connection_close = { ...
-        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             conn_closed(src,scid) := true;
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -949,12 +988,12 @@ object frame = { ...
 
 object frame = { ...
     object application_close = { ...
-        action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             conn_closed(src,scid) := true;
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -973,16 +1012,16 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_data = { ...
-        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require stream_open(src,scid,f.id);  # [1]
             if ~(max_stream_data_set(dst,dcid,f.id) & f.pos < max_stream_data_val(dst,dcid,f.id)) {
                 max_stream_data_set(dst,dcid,f.id) := true;
                 max_stream_data_val(dst,dcid,f.id) := f.pos;  # [2]
             }
 	    ...
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
@@ -992,10 +1031,9 @@ object frame = { ...
 
 object frame = { ...
     object ping = { ...
-        action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+        action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	after handle {
-	    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-            num_queued_frames(src, scid) := queued_frames(src,scid).end;
+            call enqueue_frame(src,scid,f,e);
         }
     }
 }
