@@ -227,26 +227,27 @@ action lo_byte_pos(x:stream_pos) returns (res:byte) = {
 # send all of the available stream data. We never allow the fin bt to be set, since
 # we don't really have good rules for this yet.
 
-before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
     if __generating {
-        require src = client.ep & dst = server.ep | src = server.ep & dst = client.ep; 
+        require src = client.ep & dst = server.ep; 
         require scid = the_cid;
-        require f.len & f.off; # TODO: when can f.off be false?
+        require cid_dst_to_src_set(src,the_cid) & dcid = cid_dst_to_src(src,the_cid);
+        # require f.len & f.off; # TODO: when can f.off be false?
+        require ~f.fin; # TEMPORARY
         require f.length > 0;
-        require f.offset = stream_length(dst,dcid,f.id);
-        require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
-        require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
+        # require f.offset = stream_length(dst,dcid,f.id);
+        # require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
+        # require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
 }
 
 # We have something similar for crypto frames
 
-before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
     if __generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.length > 0;
-        var e := conn_enc_level(src,scid);
 #        call show_level_offset_length(e,crypto_length(src,scid,e),crypto_data_end(src,scid,e))
         require f.offset = crypto_length(src,scid,e);
         require f.length = (crypto_data_end(src,scid,e)) - f.offset;
@@ -267,13 +268,13 @@ before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dci
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
 # for stream id 0x4.
 
-before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id, data : stream_data) {
+before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data) {
     if __generating {
         require s = 0x4;
         require src = client.ep;
         require dst = server.ep;
-        require pcid = the_cid;
-        require stream_length(dst,pcid,s) = stream_app_data_end(dst,pcid,s);
+        require cid_dst_to_src_set(src,the_cid) & dcid = cid_dst_to_src(src,the_cid);
+        require stream_length(dst,dcid,s) = stream_app_data_end(dst,dcid,s);
     }
 }
 
@@ -283,10 +284,10 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, pcid:cid, s : stream_id,
 # a server packet event, which immediately dequeues them.
 
 export frame.ack.handle
-#export frame.stream.handle
+export frame.stream.handle
 export frame.crypto.handle
 export packet_event
-#export app_send_event
+export app_send_event
 export tls_recv_event
 
 attribute radix=16       # print in hex

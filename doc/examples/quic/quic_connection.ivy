@@ -773,6 +773,7 @@ object frame = {
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
+            require e = encryption_level.other;
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [8]
 
@@ -781,33 +782,33 @@ object frame = {
             call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
 
-            var kind := get_stream_kind(f.id);
-            require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
-            require ~stream_reset(dst,dcid,f.id);  # [7]
-            require conn_seen(src,scid);  # [9]
-            if ~stream_seen(dst,dcid,f.id) {
-                if initial_max_stream_data.is_set(trans_params(dst,dcid)) {
-                    max_stream_data_val(dst,dcid,f.id) :=
-                        initial_max_stream_data.value(trans_params(dst,dcid)).stream_pos_32;  # [3]
-                    max_stream_data_set(dst,dcid,f.id) := true
-                };
-                if initial_max_stream_id_bidi.is_set(trans_params(dst,dcid)) {
-                    max_stream(dst,dcid,bidir) :=
-                        (initial_max_stream_id_bidi.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-                    max_stream_set(dst,dcid,bidir) := true
-                };
-                if initial_max_stream_id_uni.is_set(trans_params(dst,dcid)) {
-                    max_stream(dst,dcid,unidir) :=
-                        (initial_max_stream_id_uni.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-                    max_stream_set(dst,dcid,unidir) := true
-                };
-                stream_length(dst,dcid,f.id) := 0;
-            };
-            if max_stream_data_set(dst,dcid,f.id) {
-                require ((offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
-            };
+            # var kind := get_stream_kind(f.id);
+            # require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
+            # require ~stream_reset(dst,dcid,f.id);  # [7]
+            # require conn_seen(src,scid);  # [9]
+            # if ~stream_seen(dst,dcid,f.id) {
+            #     if initial_max_stream_data.is_set(trans_params(dst,dcid)) {
+            #         max_stream_data_val(dst,dcid,f.id) :=
+            #             initial_max_stream_data.value(trans_params(dst,dcid)).stream_pos_32;  # [3]
+            #         max_stream_data_set(dst,dcid,f.id) := true
+            #     };
+            #     if initial_max_stream_id_bidi.is_set(trans_params(dst,dcid)) {
+            #         max_stream(dst,dcid,bidir) :=
+            #             (initial_max_stream_id_bidi.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
+            #         max_stream_set(dst,dcid,bidir) := true
+            #     };
+            #     if initial_max_stream_id_uni.is_set(trans_params(dst,dcid)) {
+            #         max_stream(dst,dcid,unidir) :=
+            #             (initial_max_stream_id_uni.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
+            #         max_stream_set(dst,dcid,unidir) := true
+            #     };
+            #     stream_length(dst,dcid,f.id) := 0;
+            # };
+            # if max_stream_data_set(dst,dcid,f.id) {
+            #     require ((offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
+            # };
             var length := offset + f.length;
-            require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
+            # require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
             if stream_length(dst,dcid,f.id) < length {
                 stream_length(dst,dcid,f.id) := length
             };
@@ -847,7 +848,6 @@ object frame = {
 	    require f.data = crypto_data(src,scid,e).segment(f.offset,f.offset+f.length); 
 
 	    ...
-            var e := conn_enc_level(src,scid);
             var length := f.offset + f.length;
             if crypto_length(src,scid,e) < length {
                 crypto_length(src,scid,e) := length
