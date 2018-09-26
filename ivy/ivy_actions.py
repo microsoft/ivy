@@ -1272,7 +1272,8 @@ def match_annotation(action,annot,handler):
             if pos is None:
                 pos = len(action.args)
             if pos == 0:
-                assert isinstance(annot,EmptyAnnotation),annot
+                if not isinstance(annot,EmptyAnnotation):
+                    print 'internal error: expecting empty annotation, got {}'.format(annot)
                 return
             if isinstance(annot,IteAnnotation):
                 # This means a failure may occur here
@@ -1287,12 +1288,16 @@ def match_annotation(action,annot,handler):
                     iu.dbg('len(action.args)')
                     iu.dbg('pos')
                     iu.dbg('annot')
-            assert isinstance(annot,ComposeAnnotation)
+            if not isinstance(annot,ComposeAnnotation):
+                print 'internal error: expecting compose annotation, got {}'.format(annot)
+                return
             recur(action,annot.args[0],env,pos-1)
             recur(action.args[pos-1],annot.args[1],env)
             return
         if isinstance(action,IfAction):
-            assert isinstance(annot,IteAnnotation),annot
+            if not isinstance(annot,IteAnnotation):
+                print 'internal error: expecting ite annotation, got {}'.format(annot)
+                return
             rncond = env.get(annot.cond,annot.cond)
             try:
                 cond = handler.eval(rncond)
@@ -1308,14 +1313,19 @@ def match_annotation(action,annot,handler):
                     recur(action.args[2],annot.elseb,env)
             return
         if isinstance(action,ChoiceAction):
-            assert isinstance(annot,IteAnnotation)
+            if not isinstance(annot,IteAnnotation):
+                print 'internal error: expecting ite annotation, got {}'.format(annot)
+                return
             annots = unite_annot(annot)
-            assert len(annots) == len(action.args)
+            if not (len(annots) == len(action.args)):
+                print 'internal error: wrong number of annotations'
+                return
             for act,(cond,ann) in reversed(zip(action.args,annots)):
                 if handler.eval(cond):
                     recur(act,ann,env)
                     return
-            assert False,'problem in match_annotation'
+            print 'internal error: no choice annotation enabled'
+            return
         if isinstance(action,CallAction):
             handler.handle(action,env)
             callee = ivy_module.module.actions[action.args[0].rep]
