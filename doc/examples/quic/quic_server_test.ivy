@@ -128,7 +128,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #        require dst = server.ep
 #    };
     # TEMPORARY: all packets to server!
-    if __generating {
+    if _generating {
         require dst = server.ep;
         require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
     };
@@ -219,7 +219,7 @@ action lo_byte_pos(x:stream_pos) returns (res:byte) = {
 # To accomplish this we add a precondition to the protocol events that
 # restricts the parameter values in case we are running on behalf of
 # the tester. We can determine this using the built-in predicate
-# "__generating".
+# "_generating".
 
 # This is the tester constraint for the stream frame protocol. We add some requirements
 # to make the tests more interesting. In particular, we don't want the tester to
@@ -228,11 +228,11 @@ action lo_byte_pos(x:stream_pos) returns (res:byte) = {
 # we don't really have good rules for this yet.
 
 before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
-    if __generating {
+    if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require cid_dst_to_src_set(src,the_cid) & dcid = cid_dst_to_src(src,the_cid);
-        # require f.len & f.off; # TODO: when can f.off be false?
+        require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
         require ~f.fin; # TEMPORARY
         require f.length > 0;
         # require f.offset = stream_length(dst,dcid,f.id);
@@ -244,7 +244,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
 # We have something similar for crypto frames
 
 before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
-    if __generating {
+    if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.length > 0;
@@ -257,7 +257,7 @@ before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:c
 # Generate ack frames only for the client.
 
 before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
-    if __generating {
+    if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         force_new_ack := true;
@@ -267,7 +267,7 @@ before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dci
 # Generate rst_stream frames only for the client.
 
 before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
-    if __generating {
+    if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
@@ -279,7 +279,7 @@ before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoin
 # for stream id 0x4.
 
 before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data) {
-    if __generating {
+    if _generating {
         require s = 0x4;
         require src = client.ep;
         require dst = server.ep;

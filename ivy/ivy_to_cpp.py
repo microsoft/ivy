@@ -2930,7 +2930,7 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('    {}_repl ivy{};\n'
                             .format(classname,cp))
                 if target.get() == "test":
-                    impl.append('    ivy.__generating = false;\n')
+                    impl.append('    ivy._generating = false;\n')
                     emit_repl_boilerplate3test(header,impl,classname)
                 else:
                     if im.module.public_actions:
@@ -4307,7 +4307,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             LARGE_INTEGER before;
             QueryPerformanceCounter(&before);
 #endif
-            ivy.__generating = true;
+            ivy._generating = true;
             bool sat = g.generate(ivy);
 #ifdef _WIN32
             LARGE_INTEGER after;
@@ -4316,14 +4316,14 @@ def emit_repl_boilerplate3test(header,impl,classname):
 #endif
             if (sat){
                 g.execute(ivy);
-                ivy.__generating = false;
+                ivy._generating = false;
                 ivy.__unlock();
 #ifdef _WIN32
                 Sleep(sleep_ms);
 #endif
             }
             else {
-                ivy.__generating = false;
+                ivy._generating = false;
                 ivy.__unlock();
                 cycle--;
             }
@@ -4866,7 +4866,7 @@ def main_int(is_ivyc):
 
     with im.Module():
         if target.get() == 'test':
-            im.module.sig.add_symbol('__generating',il.BooleanSort())
+            im.module.sig.add_symbol('_generating',il.BooleanSort())
         ivy_init.ivy_init(create_isolate=False)
 
         isolate = ic.isolate.get()
@@ -4912,8 +4912,8 @@ def main_int(is_ivyc):
 
                     # Tricky: cone of influence may eliminate this symbol, but
                     # run-time accesses it.
-                    if '__generating' not in im.module.sig.symbols:
-                        im.module.sig.add_symbol('__generating',il.BooleanSort())
+                    if '_generating' not in im.module.sig.symbols:
+                        im.module.sig.add_symbol('_generating',il.BooleanSort())
 
 
                     im.module.labeled_axioms.extend(im.module.labeled_props)

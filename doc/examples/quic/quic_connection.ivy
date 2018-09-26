@@ -184,6 +184,7 @@ relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
 function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
 function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
+function establisted_1rtt_keys(E:ip.endpoint,C:cid) : bool
 function crypto_data(E:ip.endpoint,C:cid,L:encryption_level) : stream_data
 function crypto_data_end(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
 function crypto_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
@@ -234,6 +235,7 @@ after init {
     cid_renamed(C) := false;
     cid_new_name(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
+    establisted_1rtt_keys(E:ip.endpoint,C:cid) := false;
 }
 
 # Ghost events
@@ -637,6 +639,16 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 # This generic `handle` action for frames is specialized for each
 # frame type.  Its arguments are the frame, the source and destination
 # endpoints, the source and destination cids and the encryption level.
+#
+
+# TODO: we assume here that a frame can only be sent at a given
+# encryption level if the keys for that level have already been
+# established.  For 1rtt frames this means that a TLS finish message
+# must have bee sent in some prior frame. This is helpful to prevent
+# the peer from dropping packets in tests, but not realistic, since
+# packet re-ordering could cause the 1rtt frame to be received before
+# the required handshake message.  In principle, we should allow this
+# case, but reduce its probability in testing.
 
 object frame = {
    ...
@@ -678,6 +690,7 @@ action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level) = {
 # Requirements:
 #
 # - Every acknowledged packet must have been sent by the destination endpoint [1].
+# - Keys must be established for the given encryption level [4].
 
 # Effects:
 #
@@ -697,6 +710,7 @@ object frame = {
         action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);  # [4]
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
@@ -723,7 +737,9 @@ object frame = {
 #                acked_pkt(dst,dcid,N) := (last <= N & N <= upper) | acked_pkt(dst,dcid,N);  # [2]
                 idx := idx.next;
             };
-            require force_new_ack -> some_new_ack;
+            if _generating {
+                require some_new_ack;
+            }
 	    ...
             force_new_ack := false;
             call enqueue_frame(src,scid,f,e);
@@ -778,7 +794,7 @@ object frame = {
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other;
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [8]
 
@@ -861,6 +877,9 @@ object frame = {
             };
 
             call enqueue_frame(src,scid,f,e);
+            if e = encryption_level.handshake {
+                establisted_1rtt_keys(src,scid) := true;
+            }
         }
     }
 }
@@ -876,25 +895,30 @@ object frame = {
 # - The final stream position may not be lesser than that of any previous
 #   stream frame for the same stream id [1].
 # - The connection must not have been closed by the source endpoint [5].
+# - The encryption level must be 0rtt or 1rtt [6].
+# - If stream was previously reset or finished, final offset must be same [7].
 #
 # Effects:
 #
 # - The specified stream id is marked as reset [2].
 # - The stream length is set to the given final offset [3].
 #
-# Question: is rst_stream allowed on stream zero?
+# Question: Where is it written that reset stream frames cannot occur in
+# initial or handshake packets?
 
 object frame = { ...
     object rst_stream = { ...
         action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [6]
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [5]
             require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
             require stream_length(dst,dcid,f.id) <= f.final_offset;  # [1]
             var kind := get_stream_kind(f.id);
             require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [4]
+            require (stream_reset(dst,dcid,f.id) | stream_finished(dst,dcid,f.id)) -> stream_length(dst,dcid,f.id) = f.final_offset;
             stream_reset(dst,dcid,f.id) := true;  # [2]
             stream_length(dst,dcid,f.id) := f.final_offset;  #[3]
 	    ...
@@ -924,6 +948,7 @@ object frame = { ...
         action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [2]
 
@@ -964,6 +989,7 @@ object frame = { ...
     object connection_close = { ...
         action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             conn_closed(src,scid) := true;
 	    ...
@@ -998,6 +1024,7 @@ object frame = { ...
     object application_close = { ...
         action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             conn_closed(src,scid) := true;
 	    ...
@@ -1022,6 +1049,7 @@ object frame = { ...
     object max_stream_data = { ...
         action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require stream_open(src,scid,f.id);  # [1]
             if ~(max_stream_data_set(dst,dcid,f.id) & f.pos < max_stream_data_val(dst,dcid,f.id)) {
@@ -1041,6 +1069,7 @@ object frame = { ...
     object ping = { ...
         action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
+            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             ...
             call enqueue_frame(src,scid,f,e);
