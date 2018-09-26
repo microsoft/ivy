@@ -581,7 +581,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     if pkt.hdr_type = 0x7f {
         require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
-               ((pkt.payload.value(I) isa frame.ack) | (pkt.payload.value(I) isa frame.crypto));
+        ((pkt.payload.value(I) isa frame.ack)
+        | (pkt.payload.value(I) isa frame.crypto)
+        | (pkt.payload.value(I) isa frame.rst_stream));
         require ~conn_closed(src,scid);  # [6]
     };
 
@@ -887,8 +889,9 @@ object frame = { ...
         action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [5]
-
+            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
             require stream_length(dst,dcid,f.id) <= f.final_offset;  # [1]
             var kind := get_stream_kind(f.id);
             require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [4]
@@ -1037,7 +1040,9 @@ object frame = { ...
 object frame = { ...
     object ping = { ...
         action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
-	after handle {
+	around handle {
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            ...
             call enqueue_frame(src,scid,f,e);
         }
     }

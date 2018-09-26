@@ -264,6 +264,16 @@ before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dci
     }
 }
 
+# Generate rst_stream frames only for the client.
+
+before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if __generating {
+        require src = client.ep & dst = server.ep; 
+        require scid = the_cid;
+        require f.id = 4;
+    }
+}
+
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
 # for stream id 0x4.
@@ -289,6 +299,7 @@ export frame.crypto.handle
 export packet_event
 export app_send_event
 export tls_recv_event
+export frame.rst_stream.handle
 
 attribute radix=16       # print in hex
 
