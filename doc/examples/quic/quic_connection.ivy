@@ -749,6 +749,9 @@ object frame = {
 #
 # - The connection id must have been seen at the source [9]
 #   and the connection between source and destination must not be initializing [10].
+#
+# - The connection encryption level at the source must be at least `handshake`, so
+#   that the 1rtt keys have been established [11].
 
 # Effects:
 #
@@ -781,6 +784,8 @@ object frame = {
 	    require ((offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
             call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
+
+            require conn_enc_level(src,scid) ~= encryption_level.initial;  # [11]
 
             # var kind := get_stream_kind(f.id);
             # require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
@@ -1109,31 +1114,17 @@ action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) ret
 
         var last := last_pkt_num(src,scid,e);
 
-        # If long format or type is 0x1d, we match 32 bits
+        # TODO: for now, assume always 30-bit packet number format
 
-        if pkt.hdr_long | pkt.hdr_type = 0x1d {
-            var diff : pkt_num := bfe[0][31](pnum - last);
+        if true {
+            var diff : pkt_num := bfe[0][29](pnum - last);
             pnum := last + diff;
-            if diff >= 0x80000000 {
-                pnum := pnum - 0x100000000
+            if diff >= 0x20000000 {
+                pnum := pnum - 0x40000000
             };
             # require pnum <= la + 0x7ffffffe;
             # TEMPORARY: work around minquic bug
             require pnum <= la + 0x7;
-        }
-
-        # else if long format or type is 0x1e, we match 16 bits
-
-        else if pkt.hdr_type = 0x1e {
-            pnum := last + bfe[0][15](pnum - last);
-            require pnum <= la + 0x7ffe;
-        }
-
-        # else (type is 0x1f) we match 8 bits
-
-        else {
-            pnum := last + bfe[0][7](pnum - last);
-            require pnum <= la + 0x7e;
         }
     }
 }
