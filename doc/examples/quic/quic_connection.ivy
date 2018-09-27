@@ -188,6 +188,7 @@ function establisted_1rtt_keys(E:ip.endpoint,C:cid) : bool
 function crypto_data(E:ip.endpoint,C:cid,L:encryption_level) : stream_data
 function crypto_data_end(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
 function crypto_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
+function crypto_handler_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
 function crypto_length(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
 function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
 function stream_app_data_end(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
@@ -236,6 +237,7 @@ after init {
     cid_new_name(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
     establisted_1rtt_keys(E:ip.endpoint,C:cid) := false;
+    crypto_handler_pos(E,C,L) := 0;
 }
 
 # Ghost events
@@ -342,9 +344,18 @@ after set_encryption_level {
 #   connection's initial transport parameters and is required.
 #
 
-before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data, e:encryption_level) {
+    var jdx := data.begin;
+    while jdx < data.end {
+	crypto_data(src,scid,e) :=
+	    crypto_data(src,scid,e).append(data.value(jdx));  # [4]
+	jdx := jdx.next
+    }
+    crypto_data_end(src,scid,e) := crypto_data(src,scid,e).end;
     # require conn_open(src,dcid);  # [3]
-    var hs := tls.handshake_parser.deserialize(data);  # [1]
+    var hs : tls.handshakes;
+    var hs,crypto_handler_pos(src,scid,e)
+           := tls.handshake_parser.deserialize(data,crypto_handler_pos(src,scid,e));  # [1]
     var idx := hs.begin;
     while idx < hs.end {
         var h := hs.value(idx);
@@ -352,14 +363,6 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
         call handle_tls_handshake(src,dst,scid,dcid,h);  #[2]
         idx := idx.next
     };
-    var jdx := data.begin;
-    var e := conn_enc_level(src,scid);
-    while jdx < data.end {
-	crypto_data(src,scid,e) :=
-	    crypto_data(src,scid,e).append(data.value(jdx));  # [4]
-        crypto_data_end(src,scid,e) := crypto_data(src,scid,e).end;
-	jdx := jdx.next
-    }
 }
 
 #
@@ -536,7 +539,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     require e = encryption_level.handshake -> pkt.hdr_long & pkt.hdr_type = 0x7d;
     require e = encryption_level.other -> ~pkt.hdr_long;
     
-    var pnum := decode_packet_number(src,dst,pkt);
+    var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
 
     require ~sent_pkt(src,scid,e,pnum);  # [4]
 
@@ -768,8 +771,7 @@ object frame = {
 # - The connection id must have been seen at the source [9]
 #   and the connection between source and destination must not be initializing [10].
 #
-# - The connection encryption level at the source must be at least `handshake`, so
-#   that the 1rtt keys have been established [11].
+# - The 1rtt keys have been established [11].
 
 # Effects:
 #
@@ -794,7 +796,7 @@ object frame = {
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [11]
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require ~conn_closed(src,scid);  # [8]
 
@@ -803,10 +805,8 @@ object frame = {
             call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
 
-            require conn_enc_level(src,scid) ~= encryption_level.initial;  # [11]
-
-            # var kind := get_stream_kind(f.id);
-            # require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [6]
+            var kind := get_stream_kind(f.id);
+            require max_stream_set(dst,dcid,kind) -> f.id < max_stream(dst,dcid,kind);  # [6]
             # require ~stream_reset(dst,dcid,f.id);  # [7]
             # require conn_seen(src,scid);  # [9]
             # if ~stream_seen(dst,dcid,f.id) {
@@ -937,19 +937,23 @@ object frame = { ...
 # Requirements:
 #
 # - The connection must not have been closed by the source endpoint [2].
+# - Max stream id frames may not occur in initial or handshake packets [3].
 #
 # Effects:
 #
 # - The maximum stream id is set [1].
 #
+# QUESTION: must the stream id's be less than the max or less than or equal?
+# Picoquic seems to think less than, but the is not clear in the draft.
 
 object frame = { ...
     object max_stream_id = { ...
         action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [3]
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
             require ~conn_closed(src,scid);  # [2]
 
             var kind := get_stream_kind(f.id);
@@ -1129,22 +1133,13 @@ object frame = { ...
 #   upper limit on the packet number if no acks have been received
 #   yet, but this seems questionable.
 
-action decode_packet_number(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) returns (pnum:pkt_num) = {
+action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt_num) returns (pnum:pkt_num) = {
 
-    var scid := pkt.hdr_cid;
-
-    if ~pkt.hdr_long {
-        scid := cid_dst_to_src(dst,pkt.dst_cid)
-    };
-
-    var e := conn_enc_level(src,scid);
     var la := max_acked(src,scid,e);
-    pnum := pkt.hdr_pkt_num;
-
 
     if conn_seen(src,scid) {
 
-        # This is a last number transmitted by the source on this connection.
+        # This is the last number transmitted by the source on this connection.
 
         var last := last_pkt_num(src,scid,e);
 
@@ -1198,9 +1193,6 @@ action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs
         call map_cids(src,scid,dcid);    # [1]
         call map_cids(dst,dcid,scid);
         call handle_tls_extensions(src,dst,scid,sh.extensions,false);
-    }
-    else if conn_enc_level(src,scid) = encryption_level.initial {
-        conn_enc_level(src,scid) := encryption_level.handshake 
     }
 }
 

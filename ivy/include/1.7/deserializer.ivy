@@ -11,19 +11,23 @@
 # The type `bytes` must be an instance of `array` or `vector` for
 # which the range type is interpreted as `bv[8]`.
 #
+# The action `deserialize` takes a data bufer and a staring posiiton in
+# the buffer and returns a deserialized object of type `datatype` and
+# the ending position of the object in the buffer.
 
-module deserializer(bytes,datatype,deser) = {
+module deserializer(index,bytes,datatype,deser) = {
 
-    action deserialize(x:bytes) returns (y:datatype)
+    action deserialize(x:bytes,pos:index) returns (y:datatype,pos:index)
 
     implementation {
         implement deserialize { <<<
             std::vector<char> buf(x.size());
-            std::copy(x.begin(),x.end(),buf.begin());
+            std::copy(x.begin()+pos,x.end(),buf.begin());
             `deser` ds(buf);
 
             try {
                __deser(ds,y);
+               pos += ds.pos;
             }
 
             // If deserialization failure, print out the packet for

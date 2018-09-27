@@ -29,7 +29,7 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # This is a ghost action representing a TLS send event.
 
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data) = {}
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,e:encryption_level) = {}
 
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
@@ -77,8 +77,10 @@ action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
 module quic_endpoint(addr,the_role) = {
     var ep : ip.endpoint
     var tls_id : botan.id
+    var enc_level : encryption_level
     after init {
 	ep := role_to_endpoint(the_role);
+        enc_level := encryption_level.initial;
     }
 }
     
@@ -109,10 +111,12 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     if bytes.value(0) ~= 20 {
         var msgs := bytes.segment(5,bytes.end);
         if tls_id = client.tls_id {
-            call tls_send_event(client.ep, server.ep, the_cid, 0, msgs)
+            call tls_send_event(client.ep, server.ep, the_cid, 0, msgs, client.enc_level);
+            client.enc_level := client.enc_level.next;
         };
         if tls_id = server.tls_id {
-            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs)
+            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs, server.enc_level)'
+            server.enc_level := server.enc_level.next;
         }
     }
 }
@@ -274,6 +278,15 @@ before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoin
     }
 }
 
+# Generate max_stream_id frames only for the client.
+
+before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require src = client.ep & dst = server.ep; 
+        require scid = the_cid;
+    }
+}
+
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
 # for stream id 0x4.
@@ -300,6 +313,8 @@ export packet_event
 export app_send_event
 export tls_recv_event
 export frame.rst_stream.handle
+export frame.max_stream_id.handle
+
 
 attribute radix=16       # print in hex
 

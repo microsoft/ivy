@@ -77,4 +77,11 @@ object role = {
 
 object encryption_level = {
     type this = {initial,handshake,other}
+    action next(e:this) returns (e:this) {
+        if e = initial {
+            e := handshake;
+        } else {
+            e := other;
+        }
+    }
 }
