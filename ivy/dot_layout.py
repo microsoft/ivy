@@ -11,13 +11,13 @@ from __future__ import division
 
 from collections import deque, defaultdict
 
-from pygraphviz import AGraph
+from ivy_graphviz import AGraph
 
 from ivy_utils import topological_sort
 
 import ivy_utils as iu
 
-import pygraphviz
+# import pygraphviz
 
 def cubic_bezier_point(p0, p1, p2, p3, t):
     """
