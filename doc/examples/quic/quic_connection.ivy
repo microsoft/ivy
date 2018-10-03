@@ -1005,6 +1005,7 @@ object frame = { ...
 	around handle{
             require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
             require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(src,scid) := true;
 	    ...
@@ -1164,7 +1165,7 @@ action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt
             };
             # require pnum <= la + 0x7ffffffe;
             # TEMPORARY: work around minquic bug
-            require pnum <= la + 0x7;
+            require pnum <= last + 0x7;
         }
     }
 }
