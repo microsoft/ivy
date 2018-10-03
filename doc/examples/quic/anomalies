@@ -59,7 +59,7 @@ Picoquic log file: anomaly6.log
 QUIC version: draft 14
 Ivy commit: 7bcdf6a
 Implementation:
-  picoquic
+  picoquic, commit: cb34de2
 Issue:
   Client sends a MAX_STREAM_ID frame with stream id 0, which is a client, not
   a server stream id. Server (picoquicdemo) responds with connection close and
@@ -67,7 +67,19 @@ Issue:
   is an error to send a stream id that is not an id of the peer, and does not
   state that STREAM_ID_ERROR should be returned in this case.
 
-
+Event file:  anomaly7.iev
+Picoquic log file: anomaly7.log
+QUIC version: draft 14
+Ivy commit: 4c8087e
+Implementation:
+  picoquic, commit: cb34de2
+Issue:
+  Seg fault occurs when server receives an initial packet with client
+  hello handshake message followed immediately by an initial packet
+  with a connection close frame. It appears that the server tries to
+  send a 1rtt propected packet as a response before the packet number
+  encoder for this packet type has been initialized. See picoquic issue 340.
+  
 
 
 
