@@ -11,7 +11,12 @@ from __future__ import division
 
 from collections import deque, defaultdict
 
-from ivy_graphviz import AGraph
+import platform
+if platform.system() == 'Windows':
+    from ivy_graphviz import AGraph
+else:
+    from pygraphviz import AGraph
+
 
 from ivy_utils import topological_sort
 
@@ -92,7 +97,7 @@ def get_approximation_points(bspline):
 def _to_position(st):
     global y_origin
     sp = st.split(',')
-    assert len(sp) == 2
+    assert len(sp) == 2, st
     return {
         "x": float(sp[0]),
         "y": y_origin-float(sp[1]),
