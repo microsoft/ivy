@@ -23,7 +23,7 @@ object tls = { ...
 # =============
 
     instance handshakes : vector(handshake)
-    instance handshake_parser : deserializer(stream_data,handshakes,tls_deser)
+    instance handshake_parser : deserializer(stream_idx,stream_data,handshakes,tls_deser)
 
 # Protocol event
 # ==============
