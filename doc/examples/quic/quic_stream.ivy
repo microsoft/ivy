@@ -16,3 +16,5 @@ type stream_id                                   # stream identifier
 function get_stream_kind(S:stream_id) =
     unidir if bfe[1][1](S) = bit.one else bidir
 
+function get_stream_role(S:stream_id) =
+    role.server if bfe[0][0](S) = bit.one else role.client

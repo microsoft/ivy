@@ -53,25 +53,11 @@ Issue:
   However, picoquic is putting these fields in the middle of the long header,
   before the length and the packet number fields.
 
-Capture file: picoquic.pcap
-Implementation:
-  picoquic
-Endpoints:
-  - 10.0.0.1: server
-  - 10.0.0.2: client
-Issue:
-  Packet 2 is an intial packet from the server to the client in repsonse
-  to Packet 1 fropm the cleint. It appears to have junk on the end. That
-  is, the payload length field appears to be correct, but there is additional
-  data after the end of the payload that appears to be garbage and might
-  be an information leak.
-
-  On further inspection, the junk seems to be another QUIC packet. Somehow,
-  picoquic is cramming multiple QUIC packets into a single UDP packet.
 
 Event file:  anomaly6.iev
 Picoquic log file: anomaly6.log
 QUIC version: draft 14
+Ivy commit: 7bcdf6a
 Implementation:
   picoquic
 Issue:

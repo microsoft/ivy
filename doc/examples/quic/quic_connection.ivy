@@ -166,6 +166,9 @@ include quic_transport_parameters
 #
 # - The function `cid_dst_to_src(D,C)` maps the cid `C` at endpoint `D` to the
 #   corresponding cid of the per, if such a cid exists.
+#
+# - The predicate `is_client(D,C)` indicates that endpoint `D` is taking
+#   the client role in the connection with cid `C`.
 
 relation conn_seen(E:ip.endpoint,C:cid)
 relation conn_closed(E:ip.endpoint,C:cid)
@@ -207,6 +210,7 @@ relation cid_new_name(C:cid)
 function cid_orig_name(C:cid) : cid
 relation cid_dst_to_src_set(D:ip.endpoint,C:cid)
 function cid_dst_to_src(D:ip.endpoint,C:cid) : cid
+relation is_client(D:ip.endpoint,C:cid)
 
 
 
@@ -238,6 +242,7 @@ after init {
     conn_enc_level(E,C) := encryption_level.initial;
     establisted_1rtt_keys(E:ip.endpoint,C:cid) := false;
     crypto_handler_pos(E,C,L) := 0;
+    is_client(D,C) := false;
 }
 
 # Ghost events
@@ -938,6 +943,9 @@ object frame = { ...
 #
 # - The connection must not have been closed by the source endpoint [2].
 # - Max stream id frames may not occur in initial or handshake packets [3].
+# - The role of the stream id must equal the role of the peer in the given connection. [4]
+#   QUESTION: this requirement is not stated in the draft spec, but it is enforced
+#   by picoquic (see anomaly6). The spec should state explicitly what happens in this case.
 #
 # Effects:
 #
@@ -955,6 +963,7 @@ object frame = { ...
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
             require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
             require ~conn_closed(src,scid);  # [2]
+            require get_stream_role(f.id) = role.server <-> is_client(src,scid);  # [4]
 
             var kind := get_stream_kind(f.id);
             if ~ (max_stream_set(dst,dcid,kind) & f.id < max_stream(dst,dcid,kind)) {
@@ -1186,6 +1195,7 @@ action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs
 
     if some(ch:tls.client_hello) hs *> ch {
         queued_hello(src,scid) := true;
+        is_client(src,scid) := true;
         call handle_tls_extensions(src,dst,scid,ch.extensions,true);
     }
     else if some(sh:tls.server_hello) hs *> sh {
