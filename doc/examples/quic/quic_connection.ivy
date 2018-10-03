@@ -353,9 +353,9 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
     };
     crypto_data_end(src,scid,e) := crypto_data(src,scid,e).end;
     # require conn_open(src,dcid);  # [3]
-    var hs : tls.handshakes;
-    call hs,crypto_handler_pos(src,scid,e)
-           := tls.handshake_parser.deserialize(data,crypto_handler_pos(src,scid,e));  # [1]
+    var res := tls.handshake_parser.deserialize(crypto_data(src,scid,e),crypto_handler_pos(src,scid,e));
+    var hs := res.value;
+    crypto_handler_pos(src,scid,e) := res.pos;
     var idx := hs.begin;
     while idx < hs.end {
         var h := hs.value(idx);

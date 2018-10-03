@@ -186,6 +186,13 @@ object tls_ser = {}
         }
 
         virtual bool open_list_elem() {
+            if (fence.size() == 0) {  // tricky: see if input contains a full message
+                if (!more(4)) {
+                    return false;
+                }
+                unsigned len = (inp[pos+1] << 16) + (inp[pos+2] << 8) + inp[pos];
+                return inp.size() >= pos + len + 4;
+            }
             return more(1);
         }
         void close_list_elem() {}

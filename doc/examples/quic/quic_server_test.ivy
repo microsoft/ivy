@@ -115,7 +115,7 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
             client.enc_level := client.enc_level.next;
         };
         if tls_id = server.tls_id {
-            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs, server.enc_level)'
+            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs, server.enc_level);
             server.enc_level := server.enc_level.next;
         }
     }

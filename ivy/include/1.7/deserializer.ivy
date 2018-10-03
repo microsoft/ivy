@@ -17,17 +17,22 @@
 
 module deserializer(index,bytes,datatype,deser) = {
 
-    action deserialize(x:bytes,pos:index) returns (y:datatype,pos:index)
+    type result = struct {
+        pos : index,
+        value : datatype
+    }
+    
+    action deserialize(x:bytes,pos:index) returns (res:result)
 
     implementation {
         implement deserialize { <<<
-            std::vector<char> buf(x.size());
+            std::vector<char> buf(x.size() - pos);
             std::copy(x.begin()+pos,x.end(),buf.begin());
             `deser` ds(buf);
 
             try {
-               __deser(ds,y);
-               pos += ds.pos;
+               __deser(ds,res.value);
+               res.pos = pos + ds.pos;
             }
 
             // If deserialization failure, print out the packet for

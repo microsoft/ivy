@@ -69,6 +69,19 @@ Issue:
   On further inspection, the junk seems to be another QUIC packet. Somehow,
   picoquic is cramming multiple QUIC packets into a single UDP packet.
 
+Event file:  anomaly6.iev
+Picoquic log file: anomaly6.log
+QUIC version: draft 14
+Implementation:
+  picoquic
+Issue:
+  Client sends a MAX_STREAM_ID frame with stream id 0, which is a client, not
+  a server stream id. Server (picoquicdemo) responds with connection close and
+  error code of STREAM_ID_ERROR. However, specification does not state that it
+  is an error to send a stream id that is not an id of the peer, and does not
+  state that STREAM_ID_ERROR should be returned in this case.
+
+
 
 
 
