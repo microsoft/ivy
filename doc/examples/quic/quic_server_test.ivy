@@ -287,6 +287,15 @@ before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.e
     }
 }
 
+# Generate connection_close frames only for the client.
+
+before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require src = client.ep & dst = server.ep; 
+        require scid = the_cid;
+    }
+}
+
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
 # for stream id 0x4.
@@ -314,7 +323,7 @@ export app_send_event
 export tls_recv_event
 export frame.rst_stream.handle
 export frame.max_stream_id.handle
-
+export frame.connection_close.handle
 
 attribute radix=16       # print in hex
 

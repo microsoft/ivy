@@ -593,8 +593,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
         ((pkt.payload.value(I) isa frame.ack)
         | (pkt.payload.value(I) isa frame.crypto)
-        | (pkt.payload.value(I) isa frame.rst_stream));
-        require ~conn_closed(src,scid);  # [6]
+        | (pkt.payload.value(I) isa frame.rst_stream)
+        | (pkt.payload.value(I) isa frame.connection_close));
+        # require ~conn_closed(src,scid);  # [6]
     };
 
     # An ack-only packet must be in response to a non-ack-only packet
@@ -1004,6 +1005,7 @@ object frame = { ...
 	around handle{
             require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(src,scid) := true;
 	    ...
             call enqueue_frame(src,scid,f,e);
