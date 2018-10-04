@@ -992,7 +992,15 @@ object frame = { ...
 #
 # Requirements:
 #
-# (None)
+# - The source and destination cid's must be connected. In effect,
+#   this means that a server hello message must have been sent for
+#   this connection Therefore a client cannot send a connection close
+#   before receiving at least one handshake message from the
+#   server. QUESTION: the spec is a bit vague about this, stating
+#   "Handshake packets MAY contain CONNECTION_CLOSE frames if the
+#   handshake is unsuccessful." Does "unsuccessful" necessarily mean that
+#   some handshake has been received? Also, can an initial packet contain
+#   connection close? 
 #
 # Effects:
 #
@@ -1065,9 +1073,10 @@ object frame = { ...
     object max_stream_data = { ...
         action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
             require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            require stream_open(src,scid,f.id);  # [1]
+        #    require stream_open(src,scid,f.id);  # [1]
+
             if ~(max_stream_data_set(dst,dcid,f.id) & f.pos < max_stream_data_val(dst,dcid,f.id)) {
                 max_stream_data_set(dst,dcid,f.id) := true;
                 max_stream_data_val(dst,dcid,f.id) := f.pos;  # [2]
