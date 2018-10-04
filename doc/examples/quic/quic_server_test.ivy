@@ -239,7 +239,8 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
         require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
         require ~f.fin; # TEMPORARY
         require f.length > 0;
-        # require f.offset = stream_length(dst,dcid,f.id);
+        call show_level_offset_length(e,f.offset,stream_length(dst,dcid,f.id));
+        require f.offset = stream_length(dst,dcid,f.id);
         # require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
         # require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
@@ -331,10 +332,10 @@ export frame.crypto.handle
 export packet_event
 export app_send_event
 export tls_recv_event
-export frame.rst_stream.handle
-export frame.max_stream_id.handle
+#export frame.rst_stream.handle
+#export frame.max_stream_id.handle
 # export frame.connection_close.handle
-export frame.max_stream_data.handle
+#export frame.max_stream_data.handle
 
 attribute radix=16       # print in hex
 

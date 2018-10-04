@@ -836,17 +836,18 @@ object frame = {
             # if max_stream_data_set(dst,dcid,f.id) {
             #     require ((offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
             # };
+            stream_seen(dst,dcid,f.id) := true;
+	    ...
+            var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
             var length := offset + f.length;
             # require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
             if stream_length(dst,dcid,f.id) < length {
                 stream_length(dst,dcid,f.id) := length
             };
+            stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
             if f.fin {
                 stream_finished(dst,dcid,f.id) := true;
             };
-            stream_seen(dst,dcid,f.id) := true;
-            stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
-	    ...
             call enqueue_frame(src,scid,f,e);
         }
     }
