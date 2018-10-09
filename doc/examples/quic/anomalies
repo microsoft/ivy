@@ -79,7 +79,31 @@ Issue:
   with a connection close frame. It appears that the server tries to
   send a 1rtt propected packet as a response before the packet number
   encoder for this packet type has been initialized. See picoquic issue 340.
-  
+
+Event file:  anomaly8.iev
+Picoquic log file: anomaly8.log
+QUIC version: draft 14
+Ivy commit: ???????
+Implementation:
+  picoquic, commit: cb34de2
+Issue:
+  Seg fault occurs when server tries to send a packet in the draining
+  state. As in the anomaly above, it appears that the server tries to
+  send a 1rtt propected packet but the packet number encoder is null.
+
+  picoquic stack trace:
+
+#0  0x000055555557a7bd in picoquic_pn_iv_size (pn_enc=0x0) at /home/mcmillan/projects/picoquic/picoquic/tls_api.c:1345
+#1  0x000055555557227f in picoquic_protect_packet (cnx=0x5555557c23e0, ptype=picoquic_packet_1rtt_protected_phi0, bytes=0x5555557c9f0d "", sequence_number=0, length=18, header_length=13, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, aead_context=0x0, pn_enc=0x0) at /home/mcmillan/projects/picoquic/picoquic/sender.c:395
+#2  0x0000555555572c4a in picoquic_finalize_and_protect_packet (cnx=0x5555557c23e0, packet=0x5555557c9ed0, ret=0, length=18, header_length=13, checksum_overhead=16, send_length=0x7fffffffd2f8, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, path_x=0x5555557c2a80, current_time=1539114320087490) at /home/mcmillan/projects/picoquic/picoquic/sender.c:659
+#3  0x000055555557617b in picoquic_prepare_packet_closing (cnx=0x5555557c23e0, path_x=0x5555557c2a80, packet=0x5555557c9ed0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, send_length=0x7fffffffd2f8) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2024
+#4  0x0000555555576d68 in picoquic_prepare_segment (cnx=0x5555557c23e0, path_x=0x5555557c2a80, packet=0x5555557c9ed0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1536, send_length=0x7fffffffd2f8) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2314
+#5  0x0000555555576f0a in picoquic_prepare_packet (cnx=0x5555557c23e0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1536, send_length=0x7fffffffd398) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2367
+#6  0x00005555555610f1 in quic_server (server_name=0x55555559904c "::", server_port=4443, pem_cert=0x555555599028 "certs/cert.pem", pem_key=0x555555599037 "certs/key.pem", just_once=0, do_hrr=0, cnx_id_callback=0x0, cnx_id_callback_ctx=0x0, reset_seed=0x0, mtu_max=0) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:488
+#7  0x000055555556395b in main (argc=1, argv=0x7fffffffe418) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:1305
+
+
+
 
 
 

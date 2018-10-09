@@ -7,6 +7,7 @@ counts = [
     ['frame.stream','frame.stream.handle'],
     ['frame.crypto','frame.crypto.handle'],
     ['frame.rst_stream','frame.rst_stream.handle'],
+    ['frame.connection_close','frame.connection_close.handle'],
     ['packet_event','packet_event'],
     ['app_send_event','app_send_event'],
     ['tls_recv_event','tls_recv_event'],

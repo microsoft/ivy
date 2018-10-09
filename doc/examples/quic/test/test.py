@@ -6,6 +6,7 @@ import sys
 import imp
 import subprocess
 import stats
+import re
 
 spawn = pexpect.spawn
 
@@ -14,20 +15,26 @@ tests = [
       [
           ['quic_server_test_stream','test_completed'],
           ['quic_server_test_reset_stream','test_completed'],
+          ['quic_server_test_connection_close','test_completed'],
       ]
     ],
 ]
 
 import sys
 def usage():
-    print "usage: \n  {} <dir> <iters>".format(sys.argv[0])
+    print "usage: \n  {} <dir> <iters> [pat]".format(sys.argv[0])
     sys.exit(1)
-if len(sys.argv) != 3:
+if len(sys.argv) < 3 or len(sys.argv) > 4 :
     usage()
     exit(1)
 dirpath = sys.argv[1]
 iters = int(sys.argv[2])
-
+pat = sys.argv[3] if len(sys.argv) >= 4 else '*'
+try:
+    patre = re.compile(pat)
+except:
+    sys.stderr.write('bad regular expression\n')
+    exit(1)
 
 try:  
     os.mkdir(dirpath)
@@ -64,6 +71,7 @@ class Test(object):
                                               cwd='/home/mcmillan/projects/picoquic',
                                               stdout=out,
                                               stderr=err)
+                    print 'server pid: {}'.format(server.pid)
                     try:
                         ok = self.expect(seq,iev)
                     except KeyboardInterrupt:
@@ -133,12 +141,17 @@ try:
 
     num_failures = 0
     for test in all_tests:
+        if not patre.match(test.name):
+            continue
         for seq in range(0,iters):
             status = test.run(seq)
             if not status:
                 num_failures += 1
-        with open_out(test.name+'.dat') as out:
-            stats.doit(test.name,out)
+    with open_out(test.name+'.dat') as out:
+        save = os.getcwd()
+        os.chdir(dirpath)
+        stats.doit(test.name,out)
+        os.chdir(save)
     if num_failures:
         print 'error: {} tests(s) failed'.format(num_failures)
     else:
