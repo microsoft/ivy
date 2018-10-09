@@ -1061,6 +1061,7 @@ def emit_action_gen(header,impl,name,action,classname):
     for sym in syms:
         if not sym.name.startswith('__ts') and sym not in old_pre_clauses.defidx  and sym.name != '*>':
             emit_randomize(impl,sym,classname=classname)
+    impl.append('    std::cout << "generating {}" << std::endl;\n'.format(caname))
     impl.append("""
     // std::cout << slvr << std::endl;
     bool __res = solve();

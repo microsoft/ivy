@@ -734,9 +734,9 @@ object frame = {
                 var upper := last - ((ack_block.gap+2) if idx > 0 else 0);
                 require ack_block.blocks <= upper;
                 last := upper - ack_block.blocks;
-                require (last <= N & N <= upper) -> sent_pkt(dst,dcid,e,N);  # [1]
 		var jdx := last;
 		while jdx <= upper {
+                    require sent_pkt(dst,dcid,e,jdx);  # [1]
                     if ~acked_pkt(dst,dcid,e,jdx) {
                         some_new_ack := true;
                     };

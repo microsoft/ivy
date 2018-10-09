@@ -103,7 +103,7 @@ module udp_impl(host,pkt,ser,des) = {
         // This is called in a loop by the task thread.
 
         virtual void read() {
-            std::cout << "RECEIVING\n";
+            // std::cout << "RECEIVING\n";
 
 	    int len=0;
 	    socklen_t lenlen=4;
@@ -195,13 +195,13 @@ object impl(me:host) = {
 	action open(addr:ip.endpoint) returns (s:socket) = {
 	    <<< impure
 		s = make_udp_socket();
-		std::cout << "SOCKET " << s << std::endl;
+		// std::cout << "SOCKET " << s << std::endl;
 		struct sockaddr_in myaddr;
 		myaddr.sin_family = AF_INET;
 		// myaddr.sin_addr.s_addr = htonl(addr.addr);
 		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		myaddr.sin_port = htons(addr.port);
-		std::cout << "binding id: " << `me` << " port: " << ntohs(myaddr.sin_port) << std::endl;
+		// std::cout << "binding id: " << `me` << " port: " << ntohs(myaddr.sin_port) << std::endl;
 		if (::bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
 		    { perror("bind failed"); exit(1); }
 		install_reader(new udp_reader(`me`,s, *`cb`, this));
@@ -253,7 +253,7 @@ object impl(me:host) = {
 //	dstaddr.sin_addr.s_addr = htonl(dst.addr);
 	dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	dstaddr.sin_port = htons(dst.port);
-	std::cout << "sending id: " << me << " addr: " << ntohl(dstaddr.sin_addr.s_addr) << " port: " << ntohs(dstaddr.sin_port) << std::endl;
+	// std::cout << "sending id: " << me << " addr: " << ntohl(dstaddr.sin_addr.s_addr) << " port: " << ntohs(dstaddr.sin_port) << std::endl;
 	`ser` sr;
 	__ser(sr,x);
 	if (sendto(s,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
