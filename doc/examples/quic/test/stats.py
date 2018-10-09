@@ -6,28 +6,27 @@ counts = [
     ['frame.ack','frame.ack.handle'],
     ['frame.stream','frame.stream.handle'],
     ['frame.crypto','frame.crypto.handle'],
+    ['frame.rst_stream','frame.rst_stream.handle'],
     ['packet_event','packet_event'],
     ['app_send_event','app_send_event'],
     ['tls_recv_event','tls_recv_event'],
-    ['max stream offset','frame.stream.handle({offset:$1})','max','%($1)s'],
-    ['max stream data','frame.stream.handle({offset:$1,length:$2})','max','%($1)s + %($2)s'],
+    ['max stream offset','frame.stream.handle({offset:$1})','maxz','%($1)s'],
+    ['max stream data','frame.stream.handle({offset:$1,length:$2})','maxz','%($1)s + %($2)s'],
+    ['ivy error','ivy_return_code'],
+    ['server error','server_return_code'],
 ]
 
 def count(x):
     return len(x)
 
-def main():
-    import sys
-    def usage():
-        print "usage: \n  {} <file>.iev ".format(sys.argv[0])
-        sys.exit(1)
-    if len(sys.argv) != 2:
-        usage()
-        exit(1)
-    fbase = sys.argv[1]
+def maxz(x):
+    return 0 if len(x) == 0 else max(x)
+
+def doit(fbase,out):
+
     import chardet # $ pip install chardet
 
-    print 'file,' + ','.join(l[0] for l in counts)
+    out.write('file,' + ','.join(l[0] for l in counts) + '\n')
 
     files = sorted([n for n in os.listdir('.') if n.startswith(fbase) and n.endswith('.iev')])
     
@@ -56,7 +55,19 @@ def main():
             s =  op + '(' + str(col) + ')'
             sum = eval(s)
             vals.append(sum)
-        print fn + ',' + ','.join(str(v) for v in vals)
+        out.write(fn + ',' + ','.join(str(v) for v in vals) + '\n')
+
+def main():
+    import sys
+    def usage():
+        print "usage: \n  {} <file>.iev ".format(sys.argv[0])
+        sys.exit(1)
+    if len(sys.argv) != 2:
+        usage()
+        exit(1)
+    fbase = sys.argv[1]
+    doit(fbase,sys.stdout)
+    
     
 if __name__ == '__main__':
     main()
