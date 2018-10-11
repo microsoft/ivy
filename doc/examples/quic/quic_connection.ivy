@@ -1103,6 +1103,20 @@ object frame = { ...
     }
 }
 
+# New connection if frames are used to transmit additional cid's to the peer.
+
+object frame = { ...
+    object new_connection_id = { ...
+        action handle(f:frame.new_connection_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
+            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            ...
+            call enqueue_frame(src,scid,f,e);
+        }
+    }
+}
+
 
 # ### Packet number decoding
 

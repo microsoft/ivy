@@ -14,17 +14,6 @@ include quic_frame
 # or *short* format.
 # 
 
-# ### Packet type bits
-
-# The type `type_bits` represents the packet type as a 7-bit unsigned integer.
-
-type type_bits
-interpret type_bits -> bv[7]
-
-type cid_length
-interpret cid_length -> bv[4]
-
-
 # TODO: not needed?
 # object quic_long_type = {
 #    type this = {initial,retry,handshake,zero_rtt_protected}

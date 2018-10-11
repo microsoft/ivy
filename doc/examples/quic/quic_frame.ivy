@@ -137,6 +137,19 @@ object frame = {
         }
     }
 
+    object new_connection_id = {
+        
+        # New connection id frames are a variant of frame.
+
+        variant this of frame = struct {
+            seq_num                : cid_seq,     # the sequence number of the new cid
+            length                 : cid_length,  # the length of the new cid in bytes
+            scid                   : cid,         # the new cid
+            token                  : reset_token  # the stateless reset token
+        }
+        
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        

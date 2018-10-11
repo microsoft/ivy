@@ -85,3 +85,27 @@ object encryption_level = {
         }
     }
 }
+
+# ### Packet type bits
+
+# The type `type_bits` represents the packet type as a 7-bit unsigned integer.
+
+type type_bits
+interpret type_bits -> bv[7]
+
+# This type represents the length of a connection id in bytes
+
+type cid_length
+interpret cid_length -> bv[4]
+
+# Connection id sequence numbers
+
+type cid_seq
+interpret cid_seq -> bv[8]
+
+# Stateless reset tokens
+
+type reset_token
+interpret reset_token -> bv[31]
+
+

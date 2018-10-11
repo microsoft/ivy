@@ -49,6 +49,10 @@ object quic_deser = {}
               quic_connection_close_reason,
               quic_application_close_err_code,
               quic_max_stream_data_id,
+              quic_new_connection_id_length,
+              quic_new_connection_id_seq_num,
+              quic_new_connection_id_scid,
+              quic_new_connection_id_token,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -297,6 +301,30 @@ object quic_deser = {}
                 state = quic_s_retry_token;
             }
             break;
+            case quic_new_connection_id_length:
+            {
+                getn(res,1);
+                scil = res;
+                state = quic_new_connection_id_scid;
+            }
+            break;
+            case quic_new_connection_id_seq_num:
+            {
+                get_var_int(res);
+                state = quic_new_connection_id_length;
+            }
+            break;
+            case quic_new_connection_id_scid:
+            {
+                getn(res,scil);
+                state = quic_new_connection_id_token;
+            }
+            break;
+            case quic_new_connection_id_token:
+            {
+                getn(res,16);
+            }
+            break;
             default:
             throw deser_err();
             }
@@ -367,6 +395,10 @@ object quic_deser = {}
                 if (frame_type == 0x03) {
                     state = quic_application_close_err_code;
                     return 9;
+                }
+                if (frame_type == 0x0b) {
+                    state = quic_new_connection_id_seq_num;
+                    return 10;
                 }
                 std::cerr << "saw tag " << ft << std::endl;  
             }

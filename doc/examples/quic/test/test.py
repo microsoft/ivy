@@ -16,6 +16,7 @@ tests = [
           ['quic_server_test_stream','test_completed'],
           ['quic_server_test_reset_stream','test_completed'],
           ['quic_server_test_connection_close','test_completed'],
+          ['quic_server_test_max','test_completed'],
       ]
     ],
 ]
@@ -95,6 +96,7 @@ class Test(object):
         try:
             retcode = proc.wait()
         except KeyboardInterrupt:
+            print 'terminating client process {}'.format(proc.pid)
             proc.terminate()
             raise KeyboardInterrupt
         if retcode == 124:
