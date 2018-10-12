@@ -102,7 +102,17 @@ Issue:
 #6  0x00005555555610f1 in quic_server (server_name=0x55555559904c "::", server_port=4443, pem_cert=0x555555599028 "certs/cert.pem", pem_key=0x555555599037 "certs/key.pem", just_once=0, do_hrr=0, cnx_id_callback=0x0, cnx_id_callback_ctx=0x0, reset_seed=0x0, mtu_max=0) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:488
 #7  0x000055555556395b in main (argc=1, argv=0x7fffffffe418) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:1305
 
+Event file:  anomaly9.iev
+Picoquic log file: anomaly9.log
+QUIC version: draft 14
+Ivy commit: ???????
+Implementation:
+  picoquic, commit: be5a9b1
+Issue:
 
+If migration of the client occurs during the handshake, strange server behavior follows. That is, it seems that the handshake completes and the server continues to accept stream frames, but it stops sending any ack packets. I'm not sure what the correct server behavior would be in this odd case, but I imagine it should either close the connection or continue to function normally.
+
+The server log output follows. The two received packets marked with *** were sent from a different ip address from the previous client packets. The client is sending random bytes on stream 4, which is why the funny characters appear in the log.
 
 
 

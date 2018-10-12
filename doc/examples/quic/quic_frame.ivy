@@ -150,6 +150,15 @@ object frame = {
         
     }
 
+    object path_challenge = {
+        
+        # Path challenge frames are a variant of frame.
+
+        variant this of frame = struct {
+            data : stream_data                    # 8-byte payload
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        

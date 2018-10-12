@@ -53,6 +53,7 @@ object quic_deser = {}
               quic_new_connection_id_seq_num,
               quic_new_connection_id_scid,
               quic_new_connection_id_token,
+              quic_path_challenge_data,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -210,6 +211,7 @@ object quic_deser = {}
             break;
             case quic_stream_data:
             case quic_crypto_data:
+            case quic_path_challenge_data:
             case quic_connection_close_reason:
             case quic_s_retry_token:
             {
@@ -400,6 +402,11 @@ object quic_deser = {}
                     state = quic_new_connection_id_seq_num;
                     return 10;
                 }
+                if (frame_type == 0x0e) {
+                    data_remaining = 8;
+                    state = quic_path_challenge_data;
+                    return 11;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();
@@ -421,6 +428,8 @@ object quic_deser = {}
             if (state == quic_s_retry_token)
                 return data_remaining-- > 0;
             if (state == quic_crypto_data)
+                return data_remaining-- > 0;
+            if (state == quic_path_challenge_data)
                 return data_remaining-- > 0;
             if (state == quic_s_init)
                 return more(1);
