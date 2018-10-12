@@ -133,6 +133,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #    };
     # TEMPORARY: all packets to server!
     if _generating {
+        require src = client.ep;
         require dst = server.ep;
         require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
     };
@@ -183,10 +184,10 @@ implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkts:quic_packet.ar
 
 around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
     require src = server.ep & dst = client.ep;
-    require hi = crypto_length(src,scid,e);
-    require e = encryption_level.handshake -> crypto_pos(dst,dcid,encryption_level.initial) = crypto_length(src,scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dst,dcid,encryption_level.initial) = crypto_length(src,scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dst,dcid,encryption_level.handshake) = crypto_length(src,scid,encryption_level.handshake);
+    require hi = crypto_length(scid,e);
+    require e = encryption_level.handshake -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
+    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
+    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.handshake) = crypto_length(scid,encryption_level.handshake);
     require dcid = the_cid;
     ...
     var tls_id := client.tls_id if dst = client.ep else server.tls_id;
@@ -200,7 +201,7 @@ around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:en
     # Now fill in the message bytes
     var idx := lo;
     while idx < hi {
-	data := data.append(crypto_data(src,scid,e).value(idx));
+	data := data.append(crypto_data(scid,e).value(idx));
 	idx := idx.next
     };
     call botan.lower.recv(tls_id,data)
@@ -235,12 +236,12 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
     if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
-        require cid_dst_to_src_set(src,the_cid) & dcid = cid_dst_to_src(src,the_cid);
+        require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
         require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
         require ~f.fin; # TEMPORARY
         require f.length > 0;
-        call show_level_offset_length(e,f.offset,stream_length(dst,dcid,f.id));
-        require f.offset = stream_length(dst,dcid,f.id);
+        call show_level_offset_length(e,f.offset,stream_length(dcid,f.id));
+        require f.offset = stream_length(dcid,f.id);
         # require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
         # require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
@@ -253,9 +254,9 @@ before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:c
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
         require f.length > 0;
-#        call show_level_offset_length(e,crypto_length(src,scid,e),crypto_data_end(src,scid,e))
-        require f.offset = crypto_length(src,scid,e);
-        require f.length = (crypto_data_end(src,scid,e)) - f.offset;
+#        call show_level_offset_length(e,crypto_length(scid,e),crypto_data_end(src,scid,e))
+        require f.offset = crypto_length(scid,e);
+        require f.length = (crypto_data_end(scid,e)) - f.offset;
     }
 }
 
@@ -316,8 +317,8 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id,
         require s = 0x4;
         require src = client.ep;
         require dst = server.ep;
-        require cid_dst_to_src_set(src,the_cid) & dcid = cid_dst_to_src(src,the_cid);
-        require stream_length(dst,dcid,s) = stream_app_data_end(dst,dcid,s);
+        require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
+        require stream_length(dcid,s) = stream_app_data_end(dcid,s);
     }
 }
 

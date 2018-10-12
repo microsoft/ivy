@@ -9,15 +9,24 @@
 # on the following IETF drafts:
 #
 # 1.[QUIC: A UDP-Based Multiplexed and Secure Transport
-# draft-ietf-quic-transport-09](https://tools.ietf.org/html/draft-ietf-quic-transport-09).
+# draft-ietf-quic-transport-14](https://tools.ietf.org/html/draft-ietf-quic-transport-14).
 #
 # 2. [Using Transport Layer Security (TLS) to Secure QUIC
-# draft-ietf-quic-tls-09](https://tools.ietf.org/html/draft-ietf-quic-tls-09).
+# draft-ietf-quic-tls-14](https://tools.ietf.org/html/draft-ietf-quic-tls-14).
 #
-# The protocol is viewed as a sequence of *packet events*
-# corresponding to transmission of a UDP packet from a QUIC source
-# endpoint to a QUIC destination endpoint.
-
+# The protocol is modeled as a stack of layers. Each layer
+# is associated with one or more event types. The highest-level
+# events in this stack correspond to the sending and receiving of
+# application data, while the lowest-level events correspond
+# to UDP datagrams. The layers in the stack are, from top to bottom:
+#
+# - The application
+# - The TLS handshake protocol
+# - The QUIC frame protocol
+# - The QUIC packet protocol
+# - QUIC packet protection
+# - UDP
+#
 # References
 # ==========
 
@@ -27,191 +36,197 @@ include quic_packet
 include tls_protocol
 include quic_transport_parameters
 
-# Connections
-# ===========
+# Protocol state
+# ==============
 
-# This section gives the wire specification of the QUIC protocol.  It
-# tracks the state of connections resulting from a sequence of packet
-# events, along with a some 'ghost' events that represent hidden
-# processes inside the endpoints.
+# This section desceibes the history variables that track the state of
+# the various protocol layers. Some of these variables are sharded between
+# protocol layers, so that the allowed interleavings of events at different
+# layers can be specified.
 #
-# Many of the relations below take both an endpoint and a cid as
-# parameters. The cid in question is always the cid used by that
-# endpoint, that is, the one that it sends as the source cid in
-# the long packet format.
 
-# History variables
-# -----------------
+# Packet protocol state
+# ---------------------
 
-# These history variables are referenced in the specification of QUIC
-# packet events.
-
-# - For each endpoint E, and cid C, `conn_seen(C,E)` is true if C has
-#   been sent by E.
+# - For each endpoint E, and aid C, `conn_seen(C,E)` is true if C has
+#   transmitted a packet from endpoint E.
 #
-# - For each endpoint E, and cid C, `conn_closed(C,E)` is true if C has
-#   been closed by E.
+# - For each aid C, `conn_closed(C)` is true if C is in the closed state.
 #
-# - The predicate `initializing(C,S)` holds if client endpoint C has sent an
-#   Initial packet to server endpoint S, but the server has not replied.
-#   TODO: unneeded as of version 11. should be removed
+# - For each endpoint aid C, last_pkt_num(C,L) represents the
+#   number of the latest packet sent by C in encryption level L.
 #
-# - The packet number of the initial packet from client endpoint C to
-#   server endpoint S is represented by `initial_pkt_num(C,S)`.
-#   TODO: unneeded as of version 11. should be removed
+# - For each aid C, sent_pkt(C,L,N) is true if
+#   a packet numbered N has been sent by C in encryption level L.
 #
-# - The cid of the initial packet from client endpoint C to
-#   server endpoint S is represented by `initial_pkt_cid(C,S)`.
-#   TODO: unneeded as of version 11. should be removed
-#
-# - For each endpoint E and cid C, last_pkt_num(E,C,L) represents the
-#   number of the latest packet sent by E on C in encryption level L.
-#
-# - For each endpoint E and cid C, sent_pkt(E,C,L,N) is true if
-#   a packet numbered N has been sent by E on C in encryption level L.
-#
-# - For each endpoint E and cid C, acked_pkt(E,C,L,N) is true if
-#   a packet numbered N sent by E on connection C in encryption level L has been
+# - For each aid C, acked_pkt(C,L,N) is true if
+#   a packet numbered N sent by C in encryption level L has been
 #   acknowledged. 
 #
-# - For each endpoint E and cid C, max_acked(E,C,L) is the greatest
-#   packet number N such that acked_pkt(E,C,L,N), or zero if
-#   forall N. ~acked(E,C,L,N).
+# - For each aid C, max_acked(C,L) is the greatest
+#   packet number N such that acked_pkt(C,L,N), or zero if
+#   forall N. ~acked(C,L,N).
 #
-# - For each endpoint E and cid C, ack_credit(E,C) is the number
-#   of non-ack-only packets sent to E on C, less the number of
-#   ack-only packets sent from E on C.
+# - For each aid C, ack_credit(E,C) is the number
+#   of non-ack-only packets sent to C, less the number of
+#   ack-only packets sent from C.
 #
-# - For each endpoint E and cid C, `trans_params_set(E,C)`
-#   is true if endpoint E has declared transport parameters for
-#   connection E.
+# - For each aid C, `trans_params_set(C)`
+#   is true if C has declared transport parameters.
 #
-# - For each endpoint E, and destination cid C, `crypto_data(E,C,L)`
-#   represents the crypto data transmitted by TLS to endpoint E for
-#   cid C at encyption level L. This data may or may not have been
-#   transmitted in any QUIC packet.
+# - For each aid C, function `trans_params(C)`
+#   gives the transport parameters declared by C.
 #
-# - For each endpoint E and destination cid C, `crypto_length(E,C,L)`
-#   indicates the length of the stream data transmitted in QUIC
-#   packets to endpoint E for cid C at encyption level L. The length is the
-#   least stream position greater than the position of all bytes
-#   transmitted. Note this may be less than the length of the crypto
-#   data, but may not be greater.
+# - The predicate `cid_dst_to_src_set(C)` indicates that the peer of
+#   aid `C` has been determined.  This occurs conceptually when a
+#   server produces a server hello frame.
 #
-# - For each endpoint E and destination cid C, `crypto_pos(E,C,L)`
-#   represents the read position of the crypto data transmitted by the application to endpoint E
-#   for cid C at encyption level L. This is the number of bytes in the stream that have
-#   been read by TLS at the destination.
+# - The function `cid_dst_to_src(C)` maps the aid `C` to its peer, if
+#   the peer has been determined.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_seen(E,C,S)`
-#   indicates that a stream frame for stream id S on connection C
-#   has been sent to destination endpoint E.
+# - The predicate `is_client(C)` indicates that aid 'C' is taking
+#   the client role.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_open(E,C,S)`
-#   indicates that a stream frame for stream id *greater than or equal
-#   to* S on connection C has been sent to destination endpoint E.
+# - The predicate `con_requested(S,D,C)` indicates that a client
+#   and endpoint S has requested to open a connection with a server
+#   at endpoint D, using cid C. 
+
+relation conn_seen(E:ip.endpoint,C:cid)
+relation conn_closed(C:cid)
+function last_pkt_num(C:cid,L:encryption_level) : pkt_num
+relation sent_pkt(C:cid,L:encryption_level,N:pkt_num)
+relation acked_pkt(C:cid,L:encryption_level,N:pkt_num)
+function max_acked(C:cid,L:encryption_level) : pkt_num
+function ack_credit(C:cid) : pkt_num
+relation trans_params_set(C:cid)
+function trans_params(C:cid) : trans_params_struct
+relation cid_dst_to_src_set(C:cid)
+function cid_dst_to_src(C:cid) : cid
+relation is_client(C:cid)
+relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
+
+# TLS handshake protocol state
+# ----------------------------
+
+# - For aid C, `crypto_data(C,L)` represents the crypto handshake data
+#   transmitted by TLS from C in encyption level L. This data may or
+#   may not yet have been transmitted in any QUIC packet.
 #
-# - For each endpoint E, cid C,and stream id S, `max_stream_data_val(E,C,S)`
+# - For aid C, `crypto_data_end(C,L)` represents the length in bytes
+#   of the crypto handshake data transmitted by TLS from C in
+#   encyption level L.
+#
+# - For aid C, `crypto_length(C,L)` indicates the length of the crypto
+#   handshake data transmitted in QUIC frames from C at encyption
+#   level L. The length is the least stream position greater than the
+#   position of all bytes transmitted. Note this may be less than the
+#   length of the crypto data, but may not be greater.
+#
+# - For aid C, `crypto_pos(C,L)` represents the read position of the
+#   crypto data transmitted by C in encyption level L. This is the
+#   number of bytes in the stream that have been read by TLS at the
+#   peer.
+#
+# - For aid C, `crypto_handler_pos(C,L)` represents the position in the
+#   crypto handshake data sent by C of any partial message at end, or
+#   if there is no partial message, the end position.
+#
+# - For each aid C, `conn_enc_level` represents the current encryption
+#   level of TLS at C.
+#
+# - The predicate `established_1rtt_keys(C)` holds if TLS has established
+#   its 1rrt keys at aid C.
+
+function crypto_data(C:cid,L:encryption_level) : stream_data
+function crypto_data_end(C:cid,L:encryption_level) : stream_pos
+function crypto_length(C:cid,L:encryption_level) : stream_pos
+function crypto_pos(C:cid,L:encryption_level) : stream_pos
+function crypto_handler_pos(C:cid,L:encryption_level) : stream_pos
+function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
+relation established_1rtt_keys(C:cid)
+
+# The frame protocol
+# ------------------
+
+# - For each aid C,and stream id S, `stream_seen(C,S)`
+#   indicates that a stream frame for stream id S
+#   has been sent to C. TODO: change this so it uses the source aid,
+#   not the destination cid.
+#
+# - For each aid C,and stream id S, `max_stream_data_val(C,S)`
 #   indicates the maximum number of bytes that may be sent on stream
-#   id S on connection C to destination endpoint E.
+#   id S to C.
 #
-# - For each endpoint E, cid C,and stream id S, `max_stream_data_set(E,C,S)`
+# - For each aid C,and stream id S, `max_stream_data_set(C,S)`
 #   indicates the maximum number of bytes that may be sent on stream
-#   id S on connection C to destination endpoint E ha been set.
+#   id S to C has been set.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_length(E,C,S)`
+# - For each aid C,and stream id S, `stream_length(C,S)`
 #   indicates the length of the stream data transmitted in QUIC
-#   packets to endpoint E on stread id S of cid C. The length is the
+#   packets on stream id S to cid C. The length is the
 #   least stream position greater than the position of all bytes
 #   transmitted. Note this may be less than the length of the application
 #   data, but may not be greater.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_app_data(E,C,S)`
+# - For aid C,and stream id S, `stream_finished(C,S)` indicates that
+#   the stream transmitted to C on stream id S is finished (that is, a
+#   FIN frame has been sent).
+#
+# - For each aid C,and stream id S, `stream_reset(C,S)` indicates that
+#   the stream transmitted to C on stream id S is reset (that is, a
+#   RESET_STREAM frame has been sent).
+#
+# - For each aid C,and stream kind K, `max_stream_set(C,K)`
+#   indicates that the maximum stream id has been declared.
+#
+# - For each aid C,and stream kind K, `max_stream(E,C,K)`
+#   indicates the declared maximum stream id.
+#
+# - The queued frames at aid `C` are
+#   represented by `queued_frames(C)` and are initially empty.
+#
+# - The relation `queued_hello(C)` indicates that one of the queued
+#   frames at aid `C` contains a TLS hello record.
+#
+# - The function num_queued_frames(C:cid) gives the number of frames
+#   queue at aid `C`.
+#
+
+relation stream_seen(C:cid,S:stream_id)
+function max_stream_data_val(C:cid,S:stream_id) : stream_pos
+relation max_stream_data_set(C:cid,S:stream_id)
+function stream_length(C:cid,S:stream_id) : stream_pos
+relation stream_finished(C:cid,S:stream_id)
+relation stream_reset(C:cid,S:stream_id)
+relation max_stream_set(C:cid,K:stream_kind)
+function max_stream(C:cid,K:stream_kind) : stream_id
+function queued_frames(C:cid) : frame.arr
+function queued_level(C:cid) : encryption_level
+relation queued_hello(C:cid)
+function num_queued_frames(C:cid) : frame.idx
+
+#
+# The application protocol
+# ------------------------
+#
+# - For aid C,and stream id S, `stream_app_data(C,S)`
 #   represents the stream data transmitted by the application to endpoint E
 #   on stread id S of cid C. This data may or may not have been transmitted in
 #   any QUIC packet.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_app_pos(E,C,S)`
-#   represents the read position of the stream data transmitted by the application to endpoint E
-#   on stread id S of cid C. This is th number of bytes in the stream that have
+# - For aid C,and stream id S, `stream_app_end(C,S)` represents the
+#   length of stream data transmitted by the application to endpoint E
+#   on stread id S of cid C.
+#
+# - For each aid C,and stream id S, `stream_app_pos(C,S)`
+#   represents the read position of the stream data transmitted by the application
+#   on stream id S to C. This is the number of bytes in the stream that have
 #   been read by the application.
 #
-# - For each endpoint E, cid C,and stream id S, `stream_finished(E,C,S)`
-#   indicates that the stream transmitted to endpoint E
-#   with strean id S and cid C is finished (that is, a FIN frame has been sent). 
-#
-# - For each endpoint E, cid C,and stream id S, `stream_reset(E,C,S)`
-#   indicates that the stream transmitted to endpoint E with stream id
-#   S and cid C is reset (that is, a RESET_STREAM frame has been
-#   sent).
-#
-# - For each destination endpoint E, cid C,and stream kind K, `max_stream_set(E,C,K)`
-#   indicates that the maximum stream id is set.
-#
-# - For each destination endpoint E, cid C,and stream kind K, `max_stream(E,C,K)`
-#   indicates the maximum stream id.
-#
-# - The queued frames at source endpoint `E` for connection `C` are
-#   represented by `queued_frames(E,C)` and are initially empty.
-#
-# - The relation `queued_hello(E,C)` indicates that one of the queued
-#   frames at endpoint `E` for connection `C` contains a TLS hello record.
-#
-# - The function num_queued_frames(E:ip.endpoint,C:cid) gives the number of frames
-#   queue at endpoint `E` for connection `C`.
-#
-# - The predicate `cid_dst_to_src_set` indicates that the cid `C` at
-#   endpoint `D` has been mapped to a cid on the peer. This mapping
-#   occurs conceptually when a server produces a server hello frame.
-#
-# - The function `cid_dst_to_src(D,C)` maps the cid `C` at endpoint `D` to the
-#   corresponding cid of the per, if such a cid exists.
-#
-# - The predicate `is_client(D,C)` indicates that endpoint `D` is taking
-#   the client role in the connection with cid `C`.
 
-relation conn_seen(E:ip.endpoint,C:cid)
-relation conn_closed(E:ip.endpoint,C:cid)
-relation initializing(C:ip.endpoint,S:ip.endpoint)
-function initial_pkt_num(C:ip.endpoint,S:ip.endpoint) : pkt_num
-function initial_pkt_cid(C:ip.endpoint,S:ip.endpoint) : cid
-function last_pkt_num(E:ip.endpoint,C:cid,L:encryption_level) : pkt_num
-relation sent_pkt(E:ip.endpoint,C:cid,L:encryption_level,N:pkt_num)
-relation acked_pkt(E:ip.endpoint,C:cid,L:encryption_level,N:pkt_num)
-function max_acked(E:ip.endpoint,C:cid,L:encryption_level) : pkt_num
-function ack_credit(E:ip.endpoint,C:cid) : pkt_num
-relation trans_params_set(E:ip.endpoint,C:cid)
-function trans_params(E:ip.endpoint,C:cid) : trans_params_struct
-relation stream_seen(E:ip.endpoint,C:cid,S:stream_id)
-relation stream_open(E:ip.endpoint,C:cid,S:stream_id)
-function max_stream_data_val(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
-relation max_stream_data_set(E:ip.endpoint,C:cid,S:stream_id)
-function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
-function establisted_1rtt_keys(E:ip.endpoint,C:cid) : bool
-function crypto_data(E:ip.endpoint,C:cid,L:encryption_level) : stream_data
-function crypto_data_end(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
-function crypto_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
-function crypto_handler_pos(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
-function crypto_length(E:ip.endpoint,C:cid,L:encryption_level) : stream_pos
-function stream_app_data(E:ip.endpoint,C:cid,S:stream_id) : stream_data
-function stream_app_data_end(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
-function stream_app_pos(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
-function stream_length(E:ip.endpoint,C:cid,S:stream_id) : stream_pos
-relation stream_finished(E:ip.endpoint,C:cid,S:stream_id)
-relation stream_reset(E:ip.endpoint,C:cid,S:stream_id)
-relation max_stream_set(E:ip.endpoint,C:cid,K:stream_kind)
-function max_stream(E:ip.endpoint,C:cid,K:stream_kind) : stream_id
-function queued_frames(E:ip.endpoint,C:cid) : frame.arr
-function queued_level(E:ip.endpoint,C:cid) : encryption_level
-relation queued_hello(E:ip.endpoint,C:cid)
-function num_queued_frames(E:ip.endpoint,C:cid) : frame.idx
-relation cid_renamed(C:cid)
-relation cid_new_name(C:cid)
-function cid_orig_name(C:cid) : cid
-relation cid_dst_to_src_set(D:ip.endpoint,C:cid)
-function cid_dst_to_src(D:ip.endpoint,C:cid) : cid
-relation is_client(D:ip.endpoint,C:cid)
-
+function stream_app_data(C:cid,S:stream_id) : stream_data
+function stream_app_data_end(C:cid,S:stream_id) : stream_pos
+function stream_app_pos(C:cid,S:stream_id) : stream_pos
 
 
 # Initial state
@@ -223,26 +238,24 @@ relation is_client(D:ip.endpoint,C:cid)
 
 after init {
     conn_seen(E,C) := false;
-    conn_closed(E,C) := false;
-    sent_pkt(E,C,L,N) := false;
-    acked_pkt(E,C,L,N) := false;
-    max_acked(E,C,L) := 0;
-    ack_credit(E,C) := 0;
-    trans_params_set(E:ip.endpoint,C:cid) := false;
-    stream_seen(E,C,S) := false;
-    stream_open(E,C,S) := false;
-    stream_length(E,C,S) := 0;
-    max_stream_data_set(E,C,S) := false;
-    stream_finished(E,C,S) := false;
-    stream_reset(E,C,S) := false;
-    stream_app_pos(E,C,S) := 0;
-    queued_hello(E,C) := false;
-    cid_renamed(C) := false;
-    cid_new_name(C) := false;
+    conn_closed(C) := false;
+    sent_pkt(C,L,N) := false;
+    acked_pkt(C,L,N) := false;
+    max_acked(C,L) := 0;
+    ack_credit(C) := 0;
+    trans_params_set(C:cid) := false;
+    stream_seen(C,S) := false;
+    stream_length(C,S) := 0;
+    max_stream_data_set(C,S) := false;
+    stream_finished(C,S) := false;
+    stream_reset(C,S) := false;
+    stream_app_pos(C,S) := 0;
+    queued_hello(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
-    establisted_1rtt_keys(E:ip.endpoint,C:cid) := false;
-    crypto_handler_pos(E,C,L) := 0;
-    is_client(D,C) := false;
+    established_1rtt_keys(C:cid) := false;
+    crypto_handler_pos(C,L) := 0;
+    is_client(C) := false;
+    conn_requested(S,D,C) := false;
 }
 
 # Ghost events
@@ -300,9 +313,8 @@ after init {
 #
 # Effects
 #
-# - The data bytes are appended to `stream_app_data(E,C,S)` where
-#   `E` is the destination endpoint, `C` is the cid and
-#   `S` is the stream id.
+# - The data bytes are appended to `stream_app_data(C,S)` where `C` is
+#   the cid and `S` is the stream id.
 #
 
 action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data)
@@ -310,8 +322,8 @@ action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id,
 after app_send_event {
     var idx := data.begin;
     while idx < data.end {
-	stream_app_data(dst,dcid,s) := stream_app_data(dst,dcid,s).append(data.value(idx));
-        stream_app_data_end(dst,dcid,s) := stream_app_data(dst,dcid,s).end;
+	stream_app_data(dcid,s) := stream_app_data(dcid,s).append(data.value(idx));
+        stream_app_data_end(dcid,s) := stream_app_data(dcid,s).end;
 	idx := idx.next
     }
 }
@@ -352,15 +364,15 @@ after set_encryption_level {
 before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data, e:encryption_level) {
     var jdx := data.begin;
     while jdx < data.end {
-	crypto_data(src,scid,e) :=
-	    crypto_data(src,scid,e).append(data.value(jdx));  # [4]
+	crypto_data(scid,e) :=
+	    crypto_data(scid,e).append(data.value(jdx));  # [4]
 	jdx := jdx.next
     };
-    crypto_data_end(src,scid,e) := crypto_data(src,scid,e).end;
+    crypto_data_end(scid,e) := crypto_data(scid,e).end;
     # require conn_open(src,dcid);  # [3]
-    var res := tls.handshake_parser.deserialize(crypto_data(src,scid,e),crypto_handler_pos(src,scid,e));
+    var res := tls.handshake_parser.deserialize(crypto_data(scid,e),crypto_handler_pos(scid,e));
     var hs := res.value;
-    crypto_handler_pos(src,scid,e) := res.pos;
+    crypto_handler_pos(scid,e) := res.pos;
     var idx := hs.begin;
     while idx < hs.end {
         var h := hs.value(idx);
@@ -381,57 +393,17 @@ action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:en
     
 around tls_recv_event {
 
-    require lo < hi & lo = crypto_pos(dst,dcid,e) & hi <= crypto_length(src,scid,e);
-    #    require (data.end) + crypto_pos(dst,pcid,0) <= crypto_length(dst,pcid,0);
-#    require 0 <= N & N < data.end -> data.value(N) = crypto_data(dst,pcid,0).value(N + crypto_pos(dst,pcid,0));
+    require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+    require lo < hi & lo = crypto_pos(dcid,e) & hi <= crypto_length(scid,e);
+    #    require (data.end) + crypto_pos(pcid,0) <= crypto_length(pcid,0);
+#    require 0 <= N & N < data.end -> data.value(N) = crypto_data(pcid,0).value(N + crypto_pos(pcid,0));
     ...
     
-    crypto_pos(dst,dcid,e) := hi;
-    #    crypto_pos(dst,pcid,0) := crypto_pos(dst,pcid,0) + data.end 
+    crypto_pos(dcid,e) := hi;
+    #    crypto_pos(pcid,0) := crypto_pos(pcid,0) + data.end 
 }
 
 
-#
-# Connection rename event
-#
-# On receipt of an initial packet, the server may give the connection a new cid. We
-# record the fact that the old cid has been renamed. On future packet events, the
-# header cid must be the new cid and is translated to the original.
-#
-# Requirements:
-#
-# - The connection must be initializing
-#   
-# Effects
-#
-# - The state of the old cid is transferred to the new cid
-# - The connection is no longer initializing
-#
-# TODO: this event is unneeded as of version 11 and should be removed.
-#
-
-action rename_connection(src:ip.endpoint,dst:ip.endpoint,oldcid:cid,newcid:cid)
-
-around rename_connection {
-    require initializing(dst,src);
-    require oldcid = initial_pkt_cid(dst,src)
-    ...
-    initializing(dst,src) := false;
-    # var ipnum := initial_pkt_num(dst,src);
-    # sent_pkt(dst,newcid,ipnum) := true;
-    # last_pkt_num(dst,newcid) := ipnum;
-    # trans_params(dst,newcid) := trans_params(dst,initial_pkt_cid(dst,src));
-    # ack_credit(src,newcid) := 1;  # one credit for initial packet
-    cid_renamed(oldcid) := true;
-    cid_new_name(newcid) := true;
-    cid_orig_name(newcid) := oldcid;
-}
-
-action orig_cid(pcid:cid) returns(pcid:cid) = {
-    if cid_new_name(pcid) {
-        pcid := cid_orig_name(pcid)
-    }
-}
 
 # Packet events
 # -------------
@@ -518,7 +490,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # If the scid has been mapped, make sure it maps to the dcid.
 
     if pkt.hdr_long {
-        require cid_dst_to_src_set(src,scid) -> cid_dst_to_src(src,scid) = dcid
+        require cid_dst_to_src_set(scid) -> cid_dst_to_src(scid) = dcid
     }
 
     # On short headers, the scid is not given, so we use the recorded value
@@ -532,11 +504,11 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # significant complexity.
 
     else {
-        require cid_dst_to_src_set(dst,dcid);
-        scid := cid_dst_to_src(dst,dcid)
+        require cid_dst_to_src_set(dcid);
+        scid := cid_dst_to_src(dcid)
     };
 
-    var e := queued_level(src,scid);
+    var e := queued_level(scid);
 
     # The header type depends on the encryption level
 
@@ -546,31 +518,30 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
     var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
 
-    require ~sent_pkt(src,scid,e,pnum);  # [4]
+    require ~sent_pkt(scid,e,pnum);  # [4]
 
     # The payload may not be empty
 
-    require num_queued_frames(src,scid) > 0;  # [7]
+    require num_queued_frames(scid) > 0;  # [7]
 
     # A packet is an initial packet iff it contains a client hello.
 
     # TODO: what to say about this?
-    # assert pkt.hdr_type = 0x7f <-> queued_hello(src,scid);
+    # assert pkt.hdr_type = 0x7f <-> queued_hello(scid);
 
     # Record that the connection has been seen from this source, and
     # the packet has been sent.
 
-    conn_seen(src,scid) := true;  # [1]
-    sent_pkt(src,scid,e,pnum) := true;  # [1]
+    sent_pkt(scid,e,pnum) := true;  # [1]
 
     # Record the packet number as latest seen
 
-    last_pkt_num(src,scid,e) := pnum;
+    last_pkt_num(scid,e) := pnum;
 
   
     # The payload must exactly match the queued frames.
 
-    require pkt.payload = queued_frames(src,scid)
+    require pkt.payload = queued_frames(scid)
 
     # var idx : frame.idx := 0;
     # while idx < pkt.payload.end {
@@ -586,7 +557,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var dcid := pkt.dst_cid;
     var scid := pkt.hdr_cid;
     if ~pkt.hdr_long {
-        scid := cid_dst_to_src(dst,dcid)
+        scid := cid_dst_to_src(dcid)
     };
 
     if pkt.hdr_type = 0x7f {
@@ -596,24 +567,32 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         | (pkt.payload.value(I) isa frame.rst_stream)
         | (pkt.payload.value(I) isa frame.connection_close));
         # require ~conn_closed(src,scid);  # [6]
+
+        # An initial packet with an unseen source cid is a connection request.
+        if ~conn_seen(src,scid) {
+            conn_requested(src,dst,scid) := true;
+        }
+    
     };
+
+    conn_seen(src,scid) := true;  # [1]
 
     # An ack-only packet must be in response to a non-ack-only packet
 
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
     if ack_only {
-#	require ack_credit(src,scid) > 0;  # [5]
-	ack_credit(src,scid) := ack_credit(src,scid) - 1;
+#	require ack_credit(scid) > 0;  # [5]
+	ack_credit(scid) := ack_credit(scid) - 1;
     } else {
-	ack_credit(dst,dcid) := ack_credit(dst,dcid) + 1;
+	ack_credit(dcid) := ack_credit(dcid) + 1;
     };
 
     # The queued frames are deleted
     
-    queued_frames(src, scid) := frame.arr.empty;
-    queued_hello(src, scid) := false;
-    num_queued_frames(src, scid) := 0;
+    queued_frames(scid) := frame.arr.empty;
+    queued_hello(scid) := false;
+    num_queued_frames(scid) := 0;
 }
 
 # The frame protocol
@@ -679,9 +658,9 @@ object frame = {
 # it easier for constraint solvers to construct tests.
 
 action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level) = {
-    queued_frames(src,scid) := queued_frames(src,scid).append(f);
-    num_queued_frames(src, scid) := queued_frames(src,scid).end;
-    queued_level(src,scid) := e;
+    queued_frames(scid) := queued_frames(scid).append(f);
+    num_queued_frames(scid) := queued_frames(scid).end;
+    queued_level(scid) := e;
 }
 
 # #### Ack handler
@@ -703,10 +682,10 @@ action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level) = {
 
 # Effects:
 #
-# - The acknowledged packets are recorded in the relation `acked_pkts(S,C,N)`
-#   where `S` is the *source* of the acknowledged packet (not of the Ack) `C` is
-#   the cid and `N` is the packet number [2].
-# - The greatest acked packet is also tracked in `max_act(S,C)` [3]
+# - The acknowledged packets are recorded in the relation `acked_pkt(C,N)`
+#   where `C` is the *source* of the acknowledged packet (not of the Ack)
+#   and `N` is the packet number [2].
+# - The greatest acked packet is also tracked in `max_acked(C,e)` [3]
 
 # TEMPORARY: use this to enforce new acks in testing
 
@@ -719,12 +698,13 @@ object frame = {
         action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);  # [4]
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other -> established_1rtt_keys(scid);  # [4]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
-            if max_acked(dst,dcid,e) < last {
-                max_acked(dst,dcid,e) := last;  # [3]
+            if max_acked(dcid,e) < last {
+                max_acked(dcid,e) := last;  # [3]
             };
             require f.ack_blocks.end > 0;
             var some_new_ack := false;
@@ -736,14 +716,14 @@ object frame = {
                 last := upper - ack_block.blocks;
 		var jdx := last;
 		while jdx <= upper {
-                    require sent_pkt(dst,dcid,e,jdx);  # [1]
-                    if ~acked_pkt(dst,dcid,e,jdx) {
+                    require sent_pkt(dcid,e,jdx);  # [1]
+                    if ~acked_pkt(dcid,e,jdx) {
                         some_new_ack := true;
                     };
-		    acked_pkt(dst,dcid,e,jdx) := true;
+		    acked_pkt(dcid,e,jdx) := true;
 		    jdx := jdx + 1
 		};
-#                acked_pkt(dst,dcid,N) := (last <= N & N <= upper) | acked_pkt(dst,dcid,N);  # [2]
+#                acked_pkt(dcid,N) := (last <= N & N <= upper) | acked_pkt(dcid,N);  # [2]
                 idx := idx.next;
             };
             if _generating {
@@ -802,51 +782,51 @@ object frame = {
         action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [11]
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            require ~conn_closed(src,scid);  # [8]
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);  # [11]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [8]
 
-            var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
-	    require ((offset) + (f.length)) <= stream_app_data_end(dst,dcid,f.id);
+            var offset := f.offset if f.off else stream_length(dcid,f.id);
+	    require ((offset) + (f.length)) <= stream_app_data_end(dcid,f.id);
             call show_offset_length(offset,f.length);
-	    require f.data = stream_app_data(dst,dcid,f.id).segment(offset,offset+f.length); 
+	    require f.data = stream_app_data(dcid,f.id).segment(offset,offset+f.length); 
 
             var kind := get_stream_kind(f.id);
-            require max_stream_set(dst,dcid,kind) -> f.id < max_stream(dst,dcid,kind);  # [6]
-            # require ~stream_reset(dst,dcid,f.id);  # [7]
+            require max_stream_set(dcid,kind) -> f.id < max_stream(dcid,kind);  # [6]
+            # require ~stream_reset(dcid,f.id);  # [7]
             # require conn_seen(src,scid);  # [9]
-            # if ~stream_seen(dst,dcid,f.id) {
-            #     if initial_max_stream_data.is_set(trans_params(dst,dcid)) {
-            #         max_stream_data_val(dst,dcid,f.id) :=
-            #             initial_max_stream_data.value(trans_params(dst,dcid)).stream_pos_32;  # [3]
-            #         max_stream_data_set(dst,dcid,f.id) := true
+            # if ~stream_seen(dcid,f.id) {
+            #     if initial_max_stream_data.is_set(trans_params(dcid)) {
+            #         max_stream_data_val(dcid,f.id) :=
+            #             initial_max_stream_data.value(trans_params(dcid)).stream_pos_32;  # [3]
+            #         max_stream_data_set(dcid,f.id) := true
             #     };
-            #     if initial_max_stream_id_bidi.is_set(trans_params(dst,dcid)) {
-            #         max_stream(dst,dcid,bidir) :=
-            #             (initial_max_stream_id_bidi.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-            #         max_stream_set(dst,dcid,bidir) := true
+            #     if initial_max_stream_id_bidi.is_set(trans_params(dcid)) {
+            #         max_stream(dcid,bidir) :=
+            #             (initial_max_stream_id_bidi.value(trans_params(dcid)).stream_id_16) * 4;  # [3]
+            #         max_stream_set(dcid,bidir) := true
             #     };
-            #     if initial_max_stream_id_uni.is_set(trans_params(dst,dcid)) {
-            #         max_stream(dst,dcid,unidir) :=
-            #             (initial_max_stream_id_uni.value(trans_params(dst,dcid)).stream_id_16) * 4;  # [3]
-            #         max_stream_set(dst,dcid,unidir) := true
+            #     if initial_max_stream_id_uni.is_set(trans_params(dcid)) {
+            #         max_stream(dcid,unidir) :=
+            #             (initial_max_stream_id_uni.value(trans_params(dcid)).stream_id_16) * 4;  # [3]
+            #         max_stream_set(dcid,unidir) := true
             #     };
-            #     stream_length(dst,dcid,f.id) := 0;
+            #     stream_length(dcid,f.id) := 0;
             # };
-            # if max_stream_data_set(dst,dcid,f.id) {
-            #     require ((offset) + (f.length)) <= max_stream_data_val(dst,dcid,f.id)  # [2]
+            # if max_stream_data_set(dcid,f.id) {
+            #     require ((offset) + (f.length)) <= max_stream_data_val(dcid,f.id)  # [2]
             # };
-            stream_seen(dst,dcid,f.id) := true;
+            stream_seen(dcid,f.id) := true;
 	    ...
-            var offset := f.offset if f.off else stream_length(dst,dcid,f.id);
+            var offset := f.offset if f.off else stream_length(dcid,f.id);
             var length := offset + f.length;
-            # require stream_finished(dst,dcid,f.id) -> length <= stream_length(dst,dcid,f.id);  # [5]
-            if stream_length(dst,dcid,f.id) < length {
-                stream_length(dst,dcid,f.id) := length
+            # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
+            if stream_length(dcid,f.id) < length {
+                stream_length(dcid,f.id) := length
             };
-            stream_open(dst,dcid,S) := true if S <= f.id else stream_open(dst,dcid,S);
             if f.fin {
-                stream_finished(dst,dcid,f.id) := true;
+                stream_finished(dcid,f.id) := true;
             };
             call enqueue_frame(src,scid,f,e);
         }
@@ -870,22 +850,22 @@ object frame = {
         action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             call show_enc_level(e);
-            require ~conn_closed(src,scid);  # [1]
+            require ~conn_closed(scid);  # [1]
 
-	    require ((f.offset) + (f.length)) <= crypto_data_end(src,scid,e);
-	    require f.data = crypto_data(src,scid,e).segment(f.offset,f.offset+f.length); 
+	    require ((f.offset) + (f.length)) <= crypto_data_end(scid,e);
+	    require f.data = crypto_data(scid,e).segment(f.offset,f.offset+f.length); 
 
 	    ...
             var length := f.offset + f.length;
-            if crypto_length(src,scid,e) < length {
-                crypto_length(src,scid,e) := length
+            if crypto_length(scid,e) < length {
+                crypto_length(scid,e) := length
             };
 
             call enqueue_frame(src,scid,f,e);
             if e = encryption_level.handshake {
-                establisted_1rtt_keys(src,scid) := true;
+                established_1rtt_keys(scid) := true;
             }
         }
     }
@@ -918,16 +898,17 @@ object frame = { ...
         action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [6]
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            require ~conn_closed(src,scid);  # [5]
-            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
-            require stream_length(dst,dcid,f.id) <= f.final_offset;  # [1]
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);  # [6]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [5]
+            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require stream_length(dcid,f.id) <= f.final_offset;  # [1]
             var kind := get_stream_kind(f.id);
-            require max_stream_set(dst,dcid,kind) -> f.id <= max_stream(dst,dcid,kind);  # [4]
-            require (stream_reset(dst,dcid,f.id) | stream_finished(dst,dcid,f.id)) -> stream_length(dst,dcid,f.id) = f.final_offset;
-            stream_reset(dst,dcid,f.id) := true;  # [2]
-            stream_length(dst,dcid,f.id) := f.final_offset;  #[3]
+            require max_stream_set(dcid,kind) -> f.id <= max_stream(dcid,kind);  # [4]
+            require (stream_reset(dcid,f.id) | stream_finished(dcid,f.id)) -> stream_length(dcid,f.id) = f.final_offset;
+            stream_reset(dcid,f.id) := true;  # [2]
+            stream_length(dcid,f.id) := f.final_offset;  #[3]
 	    ...
             call enqueue_frame(src,scid,f,e);
         }
@@ -961,16 +942,17 @@ object frame = { ...
         action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);  # [3]
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
-            require ~conn_closed(src,scid);  # [2]
-            require get_stream_role(f.id) = role.server <-> is_client(src,scid);  # [4]
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);  # [3]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require ~conn_closed(scid);  # [2]
+            require get_stream_role(f.id) = role.server <-> is_client(scid);  # [4]
 
             var kind := get_stream_kind(f.id);
-            if ~ (max_stream_set(dst,dcid,kind) & f.id < max_stream(dst,dcid,kind)) {
-                max_stream_set(dst,dcid,kind) := true;
-                max_stream(dst,dcid,kind) := f.id; #  [1]
+            if ~ (max_stream_set(dcid,kind) & f.id < max_stream(dcid,kind)) {
+                max_stream_set(dcid,kind) := true;
+                max_stream(dcid,kind) := f.id; #  [1]
             }
 	    ...
             call enqueue_frame(src,scid,f,e);
@@ -1012,11 +994,12 @@ object frame = { ...
     object connection_close = { ...
         action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            require cid_dst_to_src_set(src,scid) & cid_dst_to_src(src,scid) = dcid;
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other -> established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
             require f.reason_phrase_length = f.reason_phrase.end;
-            conn_closed(src,scid) := true;
+            conn_closed(scid) := true;
 	    ...
             call enqueue_frame(src,scid,f,e);
         }
@@ -1049,9 +1032,10 @@ object frame = { ...
     object application_close = { ...
         action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-            conn_closed(src,scid) := true;
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other -> established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            conn_closed(scid) := true;
 	    ...
             call enqueue_frame(src,scid,f,e);
         }
@@ -1074,13 +1058,13 @@ object frame = { ...
     object max_stream_data = { ...
         action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
-        #    require stream_open(src,scid,f.id);  # [1]
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 
-            if ~(max_stream_data_set(dst,dcid,f.id) & f.pos < max_stream_data_val(dst,dcid,f.id)) {
-                max_stream_data_set(dst,dcid,f.id) := true;
-                max_stream_data_val(dst,dcid,f.id) := f.pos;  # [2]
+            if ~(max_stream_data_set(dcid,f.id) & f.pos < max_stream_data_val(dcid,f.id)) {
+                max_stream_data_set(dcid,f.id) := true;
+                max_stream_data_val(dcid,f.id) := f.pos;  # [2]
             }
 	    ...
             call enqueue_frame(src,scid,f,e);
@@ -1095,8 +1079,9 @@ object frame = { ...
     object ping = { ...
         action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
-            require e = encryption_level.other -> establisted_1rtt_keys(src,scid);
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other -> established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
             call enqueue_frame(src,scid,f,e);
         }
@@ -1109,8 +1094,9 @@ object frame = { ...
     object new_connection_id = { ...
         action handle(f:frame.new_connection_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
-            require e = encryption_level.other & establisted_1rtt_keys(src,scid);
-            require num_queued_frames(src,scid) > 0 -> e = queued_level(src,scid);
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
             call enqueue_frame(src,scid,f,e);
         }
@@ -1171,13 +1157,13 @@ object frame = { ...
 
 action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt_num) returns (pnum:pkt_num) = {
 
-    var la := max_acked(src,scid,e);
+    var la := max_acked(scid,e);
 
     if conn_seen(src,scid) {
 
         # This is the last number transmitted by the source on this connection.
 
-        var last := last_pkt_num(src,scid,e);
+        var last := last_pkt_num(scid,e);
 
         # TODO: for now, assume always 30-bit packet number format
 
@@ -1221,21 +1207,40 @@ action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt
 action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs:tls.handshake) = {
 
     if some(ch:tls.client_hello) hs *> ch {
-        queued_hello(src,scid) := true;
-        is_client(src,scid) := true;
+        queued_hello(scid) := true;
+        is_client(scid) := true;
         call handle_tls_extensions(src,dst,scid,ch.extensions,true);
     }
     else if some(sh:tls.server_hello) hs *> sh {
-        queued_hello(src,scid) := true;
-        call map_cids(src,scid,dcid);    # [1]
-        call map_cids(dst,dcid,scid);
+        queued_hello(scid) := true;
+#        call map_cids(src,scid,dcid);    # [1]
+#        call map_cids(dst,dcid,scid);
         call handle_tls_extensions(src,dst,scid,sh.extensions,false);
     }
 }
 
-action map_cids(dst:ip.endpoint,dcid:cid,scid:cid) = {
-    cid_dst_to_src_set(dst,dcid) := true;
-    cid_dst_to_src(dst,dcid) := scid
+action map_cids(dcid:cid,scid:cid) = {
+    cid_dst_to_src_set(dcid) := true;
+    cid_dst_to_src(dcid) := scid
+}
+
+# An open connection event occurs on server src when it recieves a connection
+# request from a client dst, with cid dcid. The server selects its own cid scid,
+# and registers the peer relationship between the two cids.
+#
+# Requirements:
+#
+# - A connection must have been requested [1].
+# - The two cids must not be previously associated to any peer [2]. 
+
+action open_connection(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+
+around open_connection {
+    require conn_requested(dst,src,dcid);  # [1] 
+    require ~cid_dst_to_src_set(dcid) & ~cid_dst_to_src_set(scid);  # [2]
+    ...
+    call map_cids(scid,dcid);
+    call map_cids(dcid,scid);
 }
 
 # Requirements:
@@ -1266,8 +1271,8 @@ action handle_tls_extensions
 
         if some (tps:quic_transport_parameters) ext *> tps {
             call handle_client_transport_parameters(src,dst,scid,tps,is_client_hello);
-            require ~trans_params_set(src,scid);  # [2]
-            trans_params_set(src,scid) := true;
+            require ~trans_params_set(scid);  # [2]
+            trans_params_set(scid) := true;
             
         };
         idx := idx.next
@@ -1276,7 +1281,7 @@ action handle_tls_extensions
     # minq doesn't implement this.
 # TEMPORARY: skip this until Botan supports it
 #    if is_client_hello {
-#        require trans_params_set(src,scid);
+#        require trans_params_set(scid);
 #    }
 }
 
@@ -1304,14 +1309,14 @@ action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,scid:c
     call client_transport_parameters_event(src,dst,scid,tps);
     var idx := tps.transport_parameters.begin;
     while idx < tps.transport_parameters.end {
-        trans_params(src,scid) := tps.transport_parameters.value(idx).set(trans_params(src,scid));
+        trans_params(scid) := tps.transport_parameters.value(idx).set(trans_params(scid));
         idx := idx.next
     };
-    require initial_max_stream_data.is_set(trans_params(src,scid));  # [1]
-    require initial_max_data.is_set(trans_params(src,scid));  # [2]
-    require idle_timeout.is_set(trans_params(src,scid));  # [3]
+    require initial_max_stream_data.is_set(trans_params(scid));  # [1]
+    require initial_max_data.is_set(trans_params(scid));  # [2]
+    require idle_timeout.is_set(trans_params(scid));  # [3]
     if is_client_hello {
-        require ~stateless_reset_token.is_set(trans_params(src,scid));  # [4]
+        require ~stateless_reset_token.is_set(trans_params(scid));  # [4]
     }
 }
 

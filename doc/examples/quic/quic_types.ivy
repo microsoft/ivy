@@ -29,6 +29,19 @@
 
 type cid
 
+# ### Application identifiers
+#
+# An application identifier (aid) is a unique identifier for an
+# application endpoint, that is, one of the two communicating
+# applications in a QUIC connection, either at the server or the
+# client end of the connection. For now we identify an aid with a
+# cid, in particular, the first cid used by the given application
+# endpoint. Thus, the type aid is an alias for cid. TODO: this will
+# have to change for endpoints that use zero-length cid's, since the
+# cid's in this acse are not unique. 
+
+alias aid = cid
+
 # ### Protocol verion numbers
 
 # The type `version` represents a protocol version as a 32-bit unsigned number.

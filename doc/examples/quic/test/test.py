@@ -149,11 +149,11 @@ try:
             status = test.run(seq)
             if not status:
                 num_failures += 1
-    with open_out(test.name+'.dat') as out:
-        save = os.getcwd()
-        os.chdir(dirpath)
-        stats.doit(test.name,out)
-        os.chdir(save)
+        with open_out(test.name+'.dat') as out:
+            save = os.getcwd()
+            os.chdir(dirpath)
+            stats.doit(test.name,out)
+            os.chdir(save)
     if num_failures:
         print 'error: {} tests(s) failed'.format(num_failures)
     else:
