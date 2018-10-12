@@ -35,7 +35,14 @@ action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:str
 # Note: because of packet coalescing, a single UDP datagram contains
 # an array of UIC packets.
 
-instance net : udp_impl(role,quic_packet.arr,quic_ser,quic_deser)
+# Our test network has three endpoints: two belonging to the client (allowing for
+# migration) and one belonging to the server
+
+object endpoint_id = {
+    type this = {client, client_alt, server}
+}
+
+instance net : udp_impl(endpoint_id,quic_packet.arr,quic_ser,quic_deser)
 
 # fix a single connection id
 
@@ -68,33 +75,47 @@ object botan = {
     instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser)
 }    
 
-action role_to_endpoint(the_role : role) returns (ep:ip.endpoint) = {
+# Map test endpoint ids to the ip endpoints
+
+action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
     ep.addr := 0x7f000001;   # the loop-back addr
-    ep.port := 4987 if the_role = role.client else 4443;
+    ep.port := 4987 if ep_id = endpoint_id.client
+               else (4988 if ep_id = endpoint_id.client_alt
+               else 4443);
 }    
 
-module quic_endpoint(addr,the_role) = {
+module quic_endpoint(ep_id) = {
     var ep : ip.endpoint
     var tls_id : botan.id
     var enc_level : encryption_level
     after init {
-	ep := role_to_endpoint(the_role);
+	ep := endpoint_id_addr(ep_id);
         enc_level := encryption_level.initial;
     }
 }
     
 # create a client and server. the client has an instance of TLS
 
-instance client : quic_endpoint(0,role.client)
-instance server : quic_endpoint(0,role.server)
+instance client : quic_endpoint(endpoint_id.client)
+instance server : quic_endpoint(endpoint_id.server)
 
-# a socket to talk to server on
+# An ip endpoint for the client to migrate to.
 
-var sock : net.socket
+var client_alt : ip.endpoint
 
 after init {
-    sock := net.open(role.client,client.ep);
+    client_alt := endpoint_id_addr(endpoint_id.client_alt)
+}
+
+# sockets for the client and client_alt addresses
+
+var sock : net.socket
+var sock_alt : net.socket
+
+after init {
+    sock := net.open(endpoint_id.client,client.ep);
+    sock_alt := net.open(endpoint_id.client_alt,client_alt);
     client.tls_id := 0;
     server.tls_id := 1;
     var extns := tls_extensions.empty;
@@ -133,7 +154,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #    };
     # TEMPORARY: all packets to server!
     if _generating {
-        require src = client.ep;
+        require src = client.ep | src = client_alt;
         require dst = server.ep;
         require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
     };
@@ -142,23 +163,25 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
 # Hook up to the remote server
 
-# When the client sends a packet, route it to the server
-# TODO: coalesce packets. As nof now, we send only one QUIC packet
-# per UDP datagram.
+# When the client sends a packet, route it to the server on the socket
+# corresponding to the ip endpoint. TODO: coalesce packets. As of now,
+# we send only one QUIC packet per UDP datagram.
 
 after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var pkts := quic_packet.arr.empty;
     pkts := pkts.append(pkt);
     if src = client.ep {
-	call net.send(role.client,sock,dst,pkts);
-    }
+	call net.send(endpoint_id.client,sock,dst,pkts);
+    } else if src = client_alt {
+	call net.send(endpoint_id.client_alt,sock_alt,dst,pkts);
+    } 
 }
 
 # When an packet arrives at the client endpoint, generate a `packet_event`
 
-implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkts:quic_packet.arr) {
-    if host = role.client {
-	var dst := client.ep; # the destination must be client, since we have only one socket
+implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:quic_packet.arr) {
+    if host ~= endpoint_id.server {
+	var dst := client.ep if host = endpoint_id.client else client_alt; 
         var idx := pkts.begin;
         while idx < pkts.end {
             var pkt := pkts.value(idx);
@@ -170,7 +193,7 @@ implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkts:quic_packet.ar
     }
 }
 
-# TLS reveice event handling
+# TLS receive event handling
 #
 # When TLS data is received, at the client, we route it to the client's instance of TLS.
 #
@@ -178,7 +201,7 @@ implement net.recv(host:role, s:net.socket, src:ip.endpoint, pkts:quic_packet.ar
 # to stream_length) is transferred to TLS, otherwise, the data will be
 # dribbled one byte at a time, which gets boring.
 #
-# Note: we need to send records to TLS, but as of dratf 13, what we
+# Note: we need to send records to TLS, but as of draft 13, what we
 # have are sequences of messages. We prepend a record header to the messages.
 # 
 
@@ -234,7 +257,7 @@ action lo_byte_pos(x:stream_pos) returns (res:byte) = {
 
 before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
         require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
@@ -264,7 +287,7 @@ before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:c
 
 before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         force_new_ack := true;
     }
@@ -274,7 +297,7 @@ before frame.ack.handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dci
 
 before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
     }
@@ -284,7 +307,7 @@ before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoin
 
 before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     }
 }
@@ -293,7 +316,7 @@ before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.e
 
 before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     }
 }
@@ -302,7 +325,7 @@ before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,ds
 
 before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
-        require src = client.ep & dst = server.ep; 
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
         require f.id = 4;
     }
@@ -315,7 +338,7 @@ before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:
 before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data) {
     if _generating {
         require s = 0x4;
-        require src = client.ep;
+        require (src = client.ep | src = client_alt);
         require dst = server.ep;
         require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
         require stream_length(dcid,s) = stream_app_data_end(dcid,s);
