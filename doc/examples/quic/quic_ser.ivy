@@ -49,6 +49,7 @@ object quic_ser = {}
               quic_connection_close_reason,
               quic_application_close_err_code,
               quic_max_stream_data_id,
+              quic_path_challenge_data,
               quic_s_done} state;
         bool long_format;
         char hdr_type;
@@ -184,6 +185,7 @@ object quic_ser = {}
             case quic_stream_data:
             case quic_crypto_data:
             case quic_connection_close_reason:
+            case quic_path_challenge_data:
             case quic_s_retry_token:
             {
                 setn(res,1);
@@ -332,6 +334,14 @@ object quic_ser = {}
                 else if (tag == 9) {
                     frame_type = 0x03;
                     state = quic_application_close_err_code;
+                }
+                else if (tag == 11) {
+                    frame_type = 0x0e;
+                    state = quic_path_challenge_data;
+                }
+                else if (tag == 12) {
+                    frame_type = 0x0f;
+                    state = quic_path_challenge_data;
                 }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  

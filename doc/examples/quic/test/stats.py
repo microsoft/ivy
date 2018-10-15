@@ -15,6 +15,7 @@ counts = [
     ['max stream data','frame.stream.handle({offset:$1,length:$2})','maxz','%($1)s + %($2)s'],
     ['ivy error','ivy_return_code'],
     ['server error','server_return_code'],
+    ['server_ack','show_frame(*,*,*,*,{frame.ack:*})'],
 ]
 
 def count(x):

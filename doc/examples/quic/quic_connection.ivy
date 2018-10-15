@@ -191,6 +191,10 @@ relation established_1rtt_keys(C:cid)
 # - The function num_queued_frames(C:cid) gives the number of frames
 #   queue at aid `C`.
 #
+# - The predicate `path_challenge_pending(C,D)` that a path challenge
+#   has been sent to aid C with data D, and has not yet been responded
+#   to. QUESTION: should path responses be resent, or should the client
+#   wait for a resent path challenge?
 
 relation stream_seen(C:cid,S:stream_id)
 function max_stream_data_val(C:cid,S:stream_id) : stream_pos
@@ -204,6 +208,7 @@ function queued_frames(C:cid) : frame.arr
 function queued_level(C:cid) : encryption_level
 relation queued_hello(C:cid)
 function num_queued_frames(C:cid) : frame.idx
+relation path_challenge_pending(C:cid,D:stream_data)
 
 #
 # The application protocol
@@ -238,6 +243,7 @@ function stream_app_pos(C:cid,S:stream_id) : stream_pos
 
 after init {
     conn_seen(E,C) := false;
+    last_pkt_num(C,L) := 0;
     conn_closed(C) := false;
     sent_pkt(C,L,N) := false;
     acked_pkt(C,L,N) := false;
@@ -256,6 +262,7 @@ after init {
     crypto_handler_pos(C,L) := 0;
     is_client(C) := false;
     conn_requested(S,D,C) := false;
+    path_challenge_pending(C,D) := false;
 }
 
 # Ghost events
@@ -517,6 +524,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     require e = encryption_level.other -> ~pkt.hdr_long;
     
     var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
+
+    call show_pstats(scid,e,pnum);
 
     require ~sent_pkt(scid,e,pnum);  # [4]
 
@@ -1103,7 +1112,8 @@ object frame = { ...
     }
 }
 
-# New connection if frames are used to transmit additional cid's to the peer.
+# Path challenge frames are used to request verification of ownership
+# of an endpoint by a peer.
 
 object frame = { ...
     object path_challenge = { ...
@@ -1114,6 +1124,26 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require f.data.end = 8;
             ...
+            path_challenge_pending(dcid,f.data) := true;
+            call enqueue_frame(src,scid,f,e);
+        }
+    }
+}
+
+# Path response frames are used to verify ownership of an endpoint in
+# response to a path_challenge frame.
+
+object frame = { ...
+    object path_response = { ...
+        action handle(f:frame.path_response,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require f.data.end = 8;
+            require path_challenge_pending(dcid,f.data);
+            ...
+            path_challenge_pending(dcid,f.data) := false;
             call enqueue_frame(src,scid,f,e);
         }
     }
@@ -1174,24 +1204,21 @@ action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt
 
     var la := max_acked(scid,e);
 
-    if conn_seen(src,scid) {
+    # This is the last number transmitted by the source on this connection.
 
-        # This is the last number transmitted by the source on this connection.
+    var last := last_pkt_num(scid,e);
 
-        var last := last_pkt_num(scid,e);
+    # TODO: for now, assume always 30-bit packet number format
 
-        # TODO: for now, assume always 30-bit packet number format
-
-        if true {
-            var diff : pkt_num := bfe[0][29](pnum - last);
-            pnum := last + diff;
-            if diff >= 0x20000000 {
-                pnum := pnum - 0x40000000
-            };
-            # require pnum <= la + 0x7ffffffe;
-            # TEMPORARY: work around minquic bug
-            require pnum <= last + 0x7;
-        }
+    if true {
+        var diff : pkt_num := bfe[0][29](pnum - last);
+        pnum := last + diff;
+        if diff >= 0x20000000 {
+            pnum := pnum - 0x40000000
+        };
+        # require pnum <= la + 0x7ffffffe;
+        # TEMPORARY: work around minquic bug
+        require pnum <= last + 0x7;
     }
 }
 
@@ -1350,3 +1377,5 @@ action show_enc_level(e:encryption_level)
 import show_enc_level
 
 import action show_offset_length(offset:stream_pos,length:stream_pos)
+
+import action show_pstats(scid:cid,e:encryption_level,pnum:pkt_num)

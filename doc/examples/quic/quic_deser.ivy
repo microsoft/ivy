@@ -407,6 +407,11 @@ object quic_deser = {}
                     state = quic_path_challenge_data;
                     return 11;
                 }
+                if (frame_type == 0x0f) {
+                    data_remaining = 8;
+                    state = quic_path_challenge_data;
+                    return 12;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();

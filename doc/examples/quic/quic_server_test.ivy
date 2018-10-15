@@ -353,6 +353,7 @@ before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id,
 export frame.ack.handle
 export frame.stream.handle
 export frame.crypto.handle
+export frame.path_response.handle
 export packet_event
 export app_send_event
 export tls_recv_event
