@@ -4901,6 +4901,8 @@ def main_int(is_ivyc):
                 if len(isolates) == 0:
                     isolates = [None]
 
+        import sys
+        import json
         for isolate in isolates:
             with im.module.copy():
                 with iu.ErrorPrinter():
@@ -4939,6 +4941,17 @@ def main_int(is_ivyc):
                 if opt_build.get():
                     import platform
                     import os
+                    libpath = os.path.join(os.path.dirname(os.path.dirname(__file__)),'lib')
+                    specfilename = os.path.join(libpath,'specs')
+                    if os.path.isfile(specfilename):
+                        try:
+                            with open(specfilename) as inp:
+                                libs = json.load(inp)
+                        except:
+                            sys.stderr.write('bad format in {}\n'.format(specfilename))
+                            exit(1)
+                    else:
+                        libs = []    
                     cpp11 = any(x.endswith('.cppstd') and y.rep=='cpp11' for x,y in im.module.attributes.iteritems())
                     gpp11_spec = ' -std=c++11 ' if cpp11 else '' 
                     libspec = ''
@@ -4975,6 +4988,9 @@ def main_int(is_ivyc):
                                 paths = '-I {} -L {} -Wl,-rpath={}'.format(_dir,_dir,_dir)
                         else:
                             paths = ''
+                        for lib in libs:
+                            _dir = lib[1]
+                            paths += ' -I {}/include -L {}/lib -Wl,-rpath={}/lib'.format(_dir,_dir,_dir)
                         if emit_main:
                             cmd = "g++ {} {} -g -o {} {}.cpp".format(gpp11_spec,paths,basename,basename)
                         else:
@@ -4984,7 +5000,6 @@ def main_int(is_ivyc):
                         cmd += libspec
                         cmd += ' -pthread'
                     print cmd
-                    import sys
                     sys.stdout.flush()
                     status = os.system(cmd)
                     if status:
