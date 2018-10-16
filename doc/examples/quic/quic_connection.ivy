@@ -48,8 +48,8 @@ include quic_transport_parameters
 # Packet protocol state
 # ---------------------
 
-# - For each endpoint E, and aid C, `conn_seen(C,E)` is true if C has
-#   transmitted a packet from endpoint E.
+# - For each cid C, `conn_seen(C)` is true if a packet with
+#   source cid C has been transmitted.
 #
 # - For each aid C, `conn_closed(C)` is true if C is in the closed state.
 #
@@ -87,11 +87,11 @@ include quic_transport_parameters
 # - The predicate `is_client(C)` indicates that aid 'C' is taking
 #   the client role.
 #
-# - The predicate `con_requested(S,D,C)` indicates that a client
+# - The predicate `conn_requested(S,D,C)` indicates that a client
 #   and endpoint S has requested to open a connection with a server
 #   at endpoint D, using cid C. 
 
-relation conn_seen(E:ip.endpoint,C:cid)
+relation conn_seen(C:cid)
 relation conn_closed(C:cid)
 function last_pkt_num(C:cid,L:encryption_level) : pkt_num
 relation sent_pkt(C:cid,L:encryption_level,N:pkt_num)
@@ -242,7 +242,7 @@ function stream_app_pos(C:cid,S:stream_id) : stream_pos
 # acknowledged.
 
 after init {
-    conn_seen(E,C) := false;
+    conn_seen(C) := false;
     last_pkt_num(C,L) := 0;
     conn_closed(C) := false;
     sent_pkt(C,L,N) := false;
@@ -550,13 +550,17 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
   
     # The payload must exactly match the queued frames.
 
-    require pkt.payload = queued_frames(scid)
+    require pkt.payload = queued_frames(scid);
 
     # var idx : frame.idx := 0;
     # while idx < pkt.payload.end {
     #     call pkt.payload.value(idx).handle(src,dst,dcid);
     #     idx := idx + 1
     # }
+
+    # TEMPORARY: don't allow client migration during handshake
+
+    require conn_seen(scid) & pkt.hdr_long & is_client(scid) -> conn_requested(src,dst,scid);
 
     ...
 
@@ -578,13 +582,13 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         # require ~conn_closed(src,scid);  # [6]
 
         # An initial packet with an unseen source cid is a connection request.
-        if ~conn_seen(src,scid) {
+        if ~conn_seen(scid) {
             conn_requested(src,dst,scid) := true;
-        }
+        };
     
     };
 
-    conn_seen(src,scid) := true;  # [1]
+    conn_seen(scid) := true;  # [1]
 
     # An ack-only packet must be in response to a non-ack-only packet
 
@@ -804,7 +808,7 @@ object frame = {
             var kind := get_stream_kind(f.id);
             require max_stream_set(dcid,kind) -> f.id < max_stream(dcid,kind);  # [6]
             # require ~stream_reset(dcid,f.id);  # [7]
-            # require conn_seen(src,scid);  # [9]
+            # require conn_seen(scid);  # [9]
             # if ~stream_seen(dcid,f.id) {
             #     if initial_max_stream_data.is_set(trans_params(dcid)) {
             #         max_stream_data_val(dcid,f.id) :=

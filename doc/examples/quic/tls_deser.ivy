@@ -79,7 +79,7 @@ object tls_ser = {}
         {"tls.server_hello",2},
         {"tls.unknown_message",-1},
         {"tls.unknown_extension",-1},
-        {"quic_transport_parameters",0x1a},
+        {"quic_transport_parameters",0xffa5},
         {"initial_max_stream_data",0},
         {"initial_max_data",1},
         {"initial_max_stream_id_bidi",2},
