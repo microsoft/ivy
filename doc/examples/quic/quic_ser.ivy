@@ -302,7 +302,7 @@ object quic_ser = {}
                 }
                 if (tag == 1) {
                     state = quic_ack_largest;
-                    frame_type = 0x0d;
+                    frame_type = 0x1a;
                 }
                 else if (tag == 2) {
                     state = quic_reset_stream_id;

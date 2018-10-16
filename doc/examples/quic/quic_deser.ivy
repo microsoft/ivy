@@ -307,13 +307,13 @@ object quic_deser = {}
             {
                 getn(res,1);
                 scil = res;
-                state = quic_new_connection_id_scid;
+                state = quic_new_connection_id_seq_num;
             }
             break;
             case quic_new_connection_id_seq_num:
             {
                 get_var_int(res);
-                state = quic_new_connection_id_length;
+                state = quic_new_connection_id_scid;
             }
             break;
             case quic_new_connection_id_scid:
@@ -363,7 +363,7 @@ object quic_deser = {}
                     state = quic_stream_off;
                     return 0;
                 }
-                if (frame_type == 0x0d) {
+                if (frame_type == 0x1a) {
                     state = quic_ack_largest;
                     return 1;
                 }
@@ -399,7 +399,7 @@ object quic_deser = {}
                     return 9;
                 }
                 if (frame_type == 0x0b) {
-                    state = quic_new_connection_id_seq_num;
+                    state = quic_new_connection_id_length;
                     return 10;
                 }
                 if (frame_type == 0x0e) {
