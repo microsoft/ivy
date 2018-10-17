@@ -22,7 +22,7 @@ module trans_params_ops(ptype) = {
     }
 }
 
-object initial_max_stream_data = {
+object initial_max_stream_data_bidi_local = {
     variant this of transport_parameter = struct {  # tag = 0
         stream_pos_32 : stream_pos
     }
@@ -50,8 +50,9 @@ object idle_timeout = {
     instantiate trans_params_ops(this)
 }
 
-object omit_connection_id = {
+object preferred_address = {
     variant this of transport_parameter = struct {  # tag = 4
+        # TODO: fill this in
     }
     instantiate trans_params_ops(this)
 }
@@ -80,6 +81,33 @@ object ack_delay_exponent = {
 object initial_max_stream_id_uni = {
     variant this of transport_parameter = struct {  # tag = 8
         stream_id_16 : stream_id
+    }
+    instantiate trans_params_ops(this)
+}
+
+object disable_migration = {
+    variant this of transport_parameter = struct {  # tag = 9
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_data_bidi_remote = {
+    variant this of transport_parameter = struct {  # tag = 10
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_data_uni = {
+    variant this of transport_parameter = struct {  # tag = 11
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object max_ack_delay = {
+    variant this of transport_parameter = struct {  # tag = 12
+        exponent_8 : microsecs
     }
     instantiate trans_params_ops(this)
 }

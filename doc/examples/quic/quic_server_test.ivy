@@ -58,15 +58,21 @@ instance tls_extensions : vector(tls.extension)
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
     tp.initial_version := 0xff00000f;
-    var imsd : initial_max_stream_data;
-    imsd.stream_pos_32 := 0x2000;
+    var imsdbl : initial_max_stream_data_bidi_local;
+    imsdbl.stream_pos_32 := 0x2000;
     var imd : initial_max_data;
     imd.stream_pos_32 := 0x4000;
     var it : idle_timeout;
     it.seconds_16 := 60;
-    tp.transport_parameters := tp.transport_parameters.append(imsd);
+    var imsdbr : initial_max_stream_data_bidi_remote;
+    imsdbr.stream_pos_32 := 0x2000;
+    var imsdu : initial_max_stream_data_uni;
+    imsdu.stream_pos_32 := 0x2000;
+    tp.transport_parameters := tp.transport_parameters.append(imsdbl);
     tp.transport_parameters := tp.transport_parameters.append(imd);
     tp.transport_parameters := tp.transport_parameters.append(it);
+    tp.transport_parameters := tp.transport_parameters.append(imsdbr);
+    tp.transport_parameters := tp.transport_parameters.append(imsdu);
 }
 
 object botan = {

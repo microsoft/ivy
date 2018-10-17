@@ -1358,9 +1358,11 @@ action handle_client_transport_parameters(src:ip.endpoint,dst:ip.endpoint,scid:c
         trans_params(scid) := tps.transport_parameters.value(idx).set(trans_params(scid));
         idx := idx.next
     };
-    require initial_max_stream_data.is_set(trans_params(scid));  # [1]
+    require initial_max_stream_data_bidi_local.is_set(trans_params(scid));  # [1]
     require initial_max_data.is_set(trans_params(scid));  # [2]
     require idle_timeout.is_set(trans_params(scid));  # [3]
+    require initial_max_stream_data_bidi_remote.is_set(trans_params(scid));  # [1]
+    require initial_max_stream_data_uni.is_set(trans_params(scid));  # [1]
     if is_client_hello {
         require ~stateless_reset_token.is_set(trans_params(scid));  # [4]
     }

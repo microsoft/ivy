@@ -23,7 +23,7 @@ object tls_ser = {}
 
     struct tls_name_map : hash_space::hash_map<std::string,int> {};
 
-    struct tls_name_struct tls_field_length_bytes[21] = {
+    struct tls_name_struct tls_field_length_bytes[25] = {
         {"fragment",2},
         {"content",2},
         {"tls.client_hello",3},
@@ -35,15 +35,19 @@ object tls_ser = {}
         {"extensions",2},
         {"quic_transport_parameters",2},
         {"transport_parameters",2},
-        {"initial_max_stream_data",2},
+        {"initial_max_stream_data_bidi_local",2},
         {"initial_max_data",2},
         {"initial_max_stream_id_bidi",2},
         {"idle_timeout",2},
-        {"omit_connection_id",2},
+        {"preferred_address",2},
         {"max_packet_size",2},
         {"stateless_reset_token",2},
         {"ack_delay_exponent",2},
         {"initial_max_stream_id_uni",2},
+        {"disable_migration",2},
+        {"initial_max_stream_data_bidi_remote",2},
+        {"initial_max_stream_data_uni",2},
+        {"max_ack_delay",2},
         {0,0}
     };
     tls_name_map tls_field_length_bytes_map;
@@ -71,7 +75,7 @@ object tls_ser = {}
     };
     tls_name_map tls_field_bytes_map;
 
-    struct tls_name_struct tls_tags[18] = {
+    struct tls_name_struct tls_tags[22] = {
         {"tls.handshake_record",22},
         {"tls.application_data_record",23},
         {"tls.change_cipher_spec",20},
@@ -80,31 +84,39 @@ object tls_ser = {}
         {"tls.unknown_message",-1},
         {"tls.unknown_extension",-1},
         {"quic_transport_parameters",0xffa5},
-        {"initial_max_stream_data",0},
+        {"initial_max_stream_data_bidi_local",0},
         {"initial_max_data",1},
         {"initial_max_stream_id_bidi",2},
         {"idle_timeout",3},
-        {"omit_connection_id",4},
+        {"preferred_address",4},
         {"max_packet_size",5},
         {"stateless_reset_token",6},
         {"ack_delay_exponent",7},
         {"initial_max_stream_id_uni",8},
-        {0,0}
+        {"disable_migration",9},
+        {"initial_max_stream_data_bidi_remote",10},
+        {"initial_max_stream_data_uni",11},
+        {"max_ack_delay",12}, 
+       {0,0}
     };
     tls_name_map tls_tags_map;
 
-    struct tls_name_struct tls_tag_bytes[12] = {
+    struct tls_name_struct tls_tag_bytes[16] = {
         {"tls.unknown_extension",2},
         {"quic_transport_parameters",2},
-        {"initial_max_stream_data",2},
+        {"initial_max_stream_data_bidi_local",2},
         {"initial_max_data",2},
         {"initial_max_stream_id_bidi",2},
         {"idle_timeout",2},
-        {"omit_connection_id",2},
+        {"preferred_address",2},
         {"max_packet_size",2},
         {"stateless_reset_token",2},
         {"ack_delay_exponent",2},
         {"initial_max_stream_id_uni",2},
+        {"disable_migration",2},
+        {"initial_max_stream_data_bidi_remote",2},
+        {"initial_max_stream_data_uni",2},
+        {"max_ack_delay",2},
         {0,0}
     };
     tls_name_map tls_tag_bytes_map;
