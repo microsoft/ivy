@@ -114,6 +114,7 @@ If migration of the client occurs during the handshake, strange server behavior 
 
 The server log output follows. The two received packets marked with *** were sent from a different ip address from the previous client packets. The client is sending random bytes on stream 4, which is why the funny characters appear in the log.
 
+Addendum: it appears that the same thing happens even if the first migration is after handshake completion. A possible cause of this seems to be resetting of the path challenge timer each time the ip address changes (packet.c, line 1358). Thus, if the IP address  changes frequently enough, the path_challenge is never set, and the server remains blocked.
 
 
 
