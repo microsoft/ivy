@@ -80,8 +80,12 @@ op_pairs = [
     (ivy_ast.Ite,ivy_logic.Ite),
 ]
 
+def compile_args(self):
+    with ReturnContext(None):
+        return [a.compile() for a in self.args]
+
 for fc,tc in op_pairs:
-    fc.cmpl = lambda self,tc=tc: tc(*[a.compile() for a in self.args])
+    fc.cmpl = lambda self,tc=tc: tc(*compile_args(self))
 
 
 class Context(object):
