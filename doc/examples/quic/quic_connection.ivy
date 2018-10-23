@@ -1147,8 +1147,8 @@ object frame = { ...
             require f.data.end = 8;
             require path_challenge_pending(dcid,f.data);
             ...
-            path_challenge_pending(dcid,f.data) := false;
-            call enqueue_frame(src,scid,f,e);
+            path_challenge_pending(scid,f.data) := false;
+            call enqueue_frame(dst,dcid,f,e);
         }
     }
 }
