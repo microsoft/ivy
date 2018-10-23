@@ -428,7 +428,9 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
             ag = self.parent.new_ag()
             with ag.context as ac:
-                post = ac.new_state(ag.init_cond)
+#                post = ac.new_state(ag.init_cond)
+                ag.add_initial_state(ag.init_cond)
+                post = ag.states[0]
             if 'initialize' in im.module.actions:
                 init_action = im.module.actions['initialize']
                 post = ag.execute(init_action, None, None, 'initialize')

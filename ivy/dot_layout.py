@@ -11,13 +11,18 @@ from __future__ import division
 
 from collections import deque, defaultdict
 
-from pygraphviz import AGraph
+import platform
+if platform.system() == 'Windows':
+    from ivy_graphviz import AGraph
+else:
+    from pygraphviz import AGraph
+
 
 from ivy_utils import topological_sort
 
 import ivy_utils as iu
 
-import pygraphviz
+# import pygraphviz
 
 def cubic_bezier_point(p0, p1, p2, p3, t):
     """
@@ -92,7 +97,7 @@ def get_approximation_points(bspline):
 def _to_position(st):
     global y_origin
     sp = st.split(',')
-    assert len(sp) == 2
+    assert len(sp) == 2, st
     return {
         "x": float(sp[0]),
         "y": y_origin-float(sp[1]),
