@@ -90,6 +90,9 @@ include quic_transport_parameters
 # - The predicate `conn_requested(S,D,C)` indicates that a client
 #   and endpoint S has requested to open a connection with a server
 #   at endpoint D, using cid C. 
+#
+# - The function `hi_non_probing(C)` indications the highest packet number
+#   of a non-probing packet sent by aid `C`. 
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
@@ -104,6 +107,7 @@ relation cid_dst_to_src_set(C:cid)
 function cid_dst_to_src(C:cid) : cid
 relation is_client(C:cid)
 relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
+function hi_non_probing(C:cid) : pkt_num
 
 # TLS handshake protocol state
 # ----------------------------
@@ -188,6 +192,10 @@ relation established_1rtt_keys(C:cid)
 # - The relation `queued_hello(C)` indicates that one of the queued
 #   frames at aid `C` contains a TLS hello record.
 #
+# - The relation `queued_non_probing(C)` indicates that one of the queued
+#   frames at aid `C` contains a non-probing frame. This is a frame
+#   other than path challenge, new connection id and padding.
+#
 # - The function num_queued_frames(C:cid) gives the number of frames
 #   queue at aid `C`.
 #
@@ -207,6 +215,7 @@ function max_stream(C:cid,K:stream_kind) : stream_id
 function queued_frames(C:cid) : frame.arr
 function queued_level(C:cid) : encryption_level
 relation queued_hello(C:cid)
+relation queued_non_probing(C:cid)
 function num_queued_frames(C:cid) : frame.idx
 relation path_challenge_pending(C:cid,D:stream_data)
 
@@ -257,12 +266,14 @@ after init {
     stream_reset(C,S) := false;
     stream_app_pos(C,S) := 0;
     queued_hello(C) := false;
+    queued_non_probing(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
     established_1rtt_keys(C:cid) := false;
     crypto_handler_pos(C,L) := 0;
     is_client(C) := false;
     conn_requested(S,D,C) := false;
     path_challenge_pending(C,D) := false;
+    hi_non_probing(C) := 0;
 }
 
 # Ghost events
@@ -562,6 +573,13 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require conn_seen(scid) & pkt.hdr_long & is_client(scid) -> conn_requested(src,dst,scid);
 
+    # If this is a non-probing packet, update the highest non-probing
+    # packet number seen on from this aid.
+
+    if queued_non_probing(scid) & pnum > hi_non_probing(scid) {
+        hi_non_probing(scid) := pnum;
+    }
+
     ...
 
     # TEMPORARY: The following are repeated because currently locals defined in
@@ -605,6 +623,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
     queued_frames(scid) := frame.arr.empty;
     queued_hello(scid) := false;
+    queued_non_probing(scid) := false;
     num_queued_frames(scid) := 0;
 }
 
@@ -670,10 +689,14 @@ object frame = {
 # specifying packet events. By encoding history information in this way, we make
 # it easier for constraint solvers to construct tests.
 
-action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level) = {
+action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level, probing:bool) = {
     queued_frames(scid) := queued_frames(scid).append(f);
     num_queued_frames(scid) := queued_frames(scid).end;
     queued_level(scid) := e;
+    if ~probing {
+        queued_non_probing(scid) := true;
+    }
+    
 }
 
 # #### Ack handler
@@ -744,7 +767,7 @@ object frame = {
             }
 	    ...
             force_new_ack := false;
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -841,7 +864,7 @@ object frame = {
             if f.fin {
                 stream_finished(dcid,f.id) := true;
             };
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -876,7 +899,7 @@ object frame = {
                 crypto_length(scid,e) := length
             };
 
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
             if e = encryption_level.handshake {
                 established_1rtt_keys(scid) := true;
             }
@@ -923,7 +946,7 @@ object frame = { ...
             stream_reset(dcid,f.id) := true;  # [2]
             stream_length(dcid,f.id) := f.final_offset;  #[3]
 	    ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -968,7 +991,7 @@ object frame = { ...
                 max_stream(dcid,kind) := f.id; #  [1]
             }
 	    ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1014,7 +1037,7 @@ object frame = { ...
             require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(scid) := true;
 	    ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1050,7 +1073,7 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             conn_closed(scid) := true;
 	    ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1080,7 +1103,7 @@ object frame = { ...
                 max_stream_data_val(dcid,f.id) := f.pos;  # [2]
             }
 	    ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1096,7 +1119,7 @@ object frame = { ...
             require e = encryption_level.other -> established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1111,7 +1134,7 @@ object frame = { ...
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,true);
         }
     }
 }
@@ -1129,7 +1152,7 @@ object frame = { ...
             require f.data.end = 8;
             ...
             path_challenge_pending(dcid,f.data) := true;
-            call enqueue_frame(src,scid,f,e);
+            call enqueue_frame(src,scid,f,e,true);
         }
     }
 }
@@ -1148,7 +1171,7 @@ object frame = { ...
             require path_challenge_pending(dcid,f.data);
             ...
             path_challenge_pending(scid,f.data) := false;
-            call enqueue_frame(dst,dcid,f,e);
+            call enqueue_frame(dst,dcid,f,e,false);
         }
     }
 }
