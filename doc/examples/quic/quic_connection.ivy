@@ -91,8 +91,11 @@ include quic_transport_parameters
 #   and endpoint S has requested to open a connection with a server
 #   at endpoint D, using cid C. 
 #
-# - The function `hi_non_probing(C)` indications the highest packet number
+# - The function `hi_non_probing(C)` indicates the highest packet number
 #   of a non-probing packet sent by aid `C`. 
+# 
+# - The function `hi_non_probing_endpoint(C)` indicates the source of
+#   highest numbered non-probing packet sent by aid `C`. 
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
@@ -108,6 +111,7 @@ function cid_dst_to_src(C:cid) : cid
 relation is_client(C:cid)
 relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
 function hi_non_probing(C:cid) : pkt_num
+function hi_non_probing_endpoint(C:cid) : ip.endpoint
 
 # TLS handshake protocol state
 # ----------------------------
@@ -573,11 +577,19 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     require conn_seen(scid) & pkt.hdr_long & is_client(scid) -> conn_requested(src,dst,scid);
 
+    # Packet must be sent to the endpoint from which the highest numbered
+    # packet has been received.
+
+    require conn_seen(dcid) -> dst = hi_non_probing_endpoint(dcid);
+
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.
+    # QUESTION: what if two differenht paths send the same packet number?
+    # QUESTION: how do you compare packet numbers with different encryption levels?
 
-    if queued_non_probing(scid) & pnum > hi_non_probing(scid) {
+    if queued_non_probing(scid) & pnum >= hi_non_probing(scid) {
         hi_non_probing(scid) := pnum;
+        hi_non_probing_endpoint(scid) := src;
     }
 
     ...

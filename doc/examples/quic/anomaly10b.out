@@ -1,0 +1,173 @@
+Starting PicoQUIC server on port 4443, server name = ::, just_once = 0, hrr= 0
+b: Receiving packet type: 2 (initial), S0, Version ff00000f,
+b:     <000000000000000b>, <000000000000000d>, Seq: 0, pl: 1171
+b:     Decrypted 1171 bytes
+b:     Crypto HS frame, offset 0, length 414: 0100019a03030b9d...
+b:     padding, 753 bytes
+
+b: 0.001999 : Connection established, state = 11, from length: 16
+b: Client address: 127.0.0.1, port 31507
+b: Received SNI: localhost
+b: ALPN not received.
+b: Received transport parameter TLS extension (44 bytes):
+b: Proposed version: ff00000f
+b:     Extension list (38 bytes):
+b:         Extension type: 0, length 4 (0x0000 / 0x0004), 00002000
+b:         Extension type: 1, length 4 (0x0001 / 0x0004), 00004000
+b:         Extension type: 3, length 2 (0x0003 / 0x0002), 003c
+b:         Extension type: 10, length 4 (0x000a / 0x0004), 00002000
+b:         Extension type: 11, length 4 (0x000b / 0x0004), 00002000
+aead_checksum_length = 16
+b: Sending packet type: 2 (initial), S0, Version ff00000f,
+b:     <000000000000000d>, <51c088ded3c02d51>, Seq: 0, pl: 132
+b:     Prepared 132 bytes
+b:     ACK (nb=0), 0
+b:     Crypto HS frame, offset 0, length 123: 020000770303a95c...
+
+aead_checksum_length = 16
+b: Sending packet type: 4 (handshake), S0, Version ff00000f,
+b:     <000000000000000d>, <51c088ded3c02d51>, Seq: 0, pl: 1031
+b:     Prepared 1031 bytes
+b:     Crypto HS frame, offset 0, length 1027: 0800006e006c0000...
+
+b: Connection state = 6
+aead_checksum_length = 16
+b: Sending packet type: 4 (handshake), S0, Version ff00000f,
+b:     <000000000000000d>, <51c088ded3c02d51>, Seq: 1, pl: 236
+b:     Prepared 236 bytes
+b:     Crypto HS frame, offset 1027, length 231: ccc561f867514de5...
+
+aead_checksum_length = 16
+b: Sending packet type: 6 (1rtt protected), S0,
+b:     <000000000000000d>, Seq: 0 (0), Phi: 0,
+b:     Prepared 357 bytes
+b:     Crypto HS frame, offset 0, length 137: 04000085000186a0...
+b:     NEW CONNECTION ID[1]: 0x7bdbe08677c1b4a1, fed9b4f3e37cc30f5736f73c4eb0a83f
+b:     NEW CONNECTION ID[2]: 0x99cf464b5e512760, b1f40d35fd669c576f540c223752de2f
+b:     NEW CONNECTION ID[3]: 0x03832c630d796e09, 29d4941eabe007fef0c2b9a906a2cb73
+b:     NEW CONNECTION ID[4]: 0xa3a3b66e48eba875, cfca67062865704278de32b58e76b200
+b:     NEW CONNECTION ID[5]: 0x70d605e5488c2dcb, ff98ea37c9296a3855ed23b98df987c3
+b:     NEW CONNECTION ID[6]: 0x9d3a392ef37db1e8, 89e8c94cc1f910eed1a8a27333a81662
+b:     NEW CONNECTION ID[7]: 0x9cf210b60432f3be, c6fb02621e22175c101742157d1db668
+b:     NEW CONNECTION ID[8]: 0x5d01e4cf3ac505b8, 1d96eea1ec77c9b7f059e07a89099d58
+
+aead_checksum_length = 16
+b: Sending packet type: 6 (1rtt protected), S0,
+b:     <000000000000000d>, Seq: 1 (1), Phi: 0,
+b:     Prepared 1411 bytes
+b:     ping, 1 bytes
+b:     padding, 1410 bytes
+
+b: Receiving packet type: 4 (handshake), S0, Version ff00000f,
+b:     <51c088ded3c02d51>, <000000000000000d>, Seq: 0, pl: 65
+b:     Decrypted 65 bytes
+b:     Crypto HS frame, offset 0, length 52: 140000304d6550ba...
+b:     ACK (nb=0), 1
+b:     ACK (nb=0), 0
+
+aead_checksum_length = 16
+b: Sending packet type: 4 (handshake), S0, Version ff00000f,
+b:     <000000000000000d>, <51c088ded3c02d51>, Seq: 2, pl: 5
+b:     Prepared 5 bytes
+b:     ACK (nb=0), 0
+
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: 0 (0), Phi: 0,
+b:     Decrypted 21 bytes
+b:     ACK (nb=0), 0
+b:     padding, 16 bytes
+
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: 1 (1), Phi: 0,
+b:     Decrypted 21 bytes
+b:     Stream 4, offset 0, length 1, fin = 0: 91
+b:     padding, 16 bytes
+
+b: 0.529918 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘
+b: Receiving packet type: 2 (initial), S0, Version ff00000f,
+b:     <51c088ded3c02d51>, <000000000000000d>, Seq: 1, pl: 1171
+b:     Decrypted 1171 bytes
+b:     ACK (nb=0), 0
+b:     padding, 1166 bytes
+
+b: Receiving packet type: 4 (handshake), S0, Version ff00000f,
+b:     <51c088ded3c02d51>, <000000000000000d>, Seq: 1, pl: 5
+b:     Decrypted 5 bytes
+b:     ACK (nb=0), 2
+
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: 5 (5), Phi: 0,
+b:     Decrypted 26 bytes
+b:     ACK (nb=0), 1
+b:     Stream 4, offset 1, length 1, fin = 0: c6
+b:     padding, 16 bytes
+
+b: 1.012782 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: 8 (8), Phi: 0,
+b:     Decrypted 31 bytes
+b:     Stream 4, offset 2, length 1, fin = 0: 01
+b:     Stream 4, offset 3, length 1, fin = 0: 7d
+b:     Stream 4, offset 4, length 1, fin = 0: b3
+b:     padding, 16 bytes
+
+b: 1.190209 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ
+b: 1.190220 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}
+b: 1.190223 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: c (c), Phi: 0,
+b:     Decrypted 21 bytes
+b:     Stream 4, offset 5, length 1, fin = 0: b0
+b:     padding, 16 bytes
+
+b: 1.294621 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: d (d), Phi: 0,
+b:     Decrypted 26 bytes
+b:     Stream 4, offset 6, length 1, fin = 0: e2
+b:     Stream 4, offset 7, length 1, fin = 0: e6
+b:     padding, 16 bytes
+
+b: 1.471601 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°â
+b: 1.471613 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: e (e), Phi: 0,
+b:     Decrypted 26 bytes
+b:     Stream 4, offset 8, length 1, fin = 0: 7f
+b:     Stream 4, offset 9, length 1, fin = 0: 23
+b:     padding, 16 bytes
+
+b: 1.638044 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ
+b: 1.638062 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ#
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: f (f), Phi: 0,
+b:     Decrypted 26 bytes
+b:     Stream 4, offset 10, length 1, fin = 0: 32
+b:     Stream 4, offset 11, length 1, fin = 0: 22
+b:     padding, 16 bytes
+
+b: 1.837076 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ#2
+b: 1.837094 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ#2"
+b: Receiving packet type: 6 (1rtt protected), S0,
+b:     <51c088ded3c02d51>, Seq: a (a), Phi: 0,
+b:     Decrypted 26 bytes
+b:     Stream 4, offset 12, length 1, fin = 0: f9
+b:     Stream 4, offset 13, length 1, fin = 0: 51
+b:     padding, 16 bytes
+
+b: 2.015008 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ#2"ù
+b: 2.015021 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+b: Server CB, Stream: 4, Partial command: ‘Æ}³°âæ#2"ùQ
