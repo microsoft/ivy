@@ -94,8 +94,8 @@ include quic_transport_parameters
 # - The function `hi_non_probing(C)` indicates the highest packet number
 #   of a non-probing packet sent by aid `C`. 
 # 
-# - The function `hi_non_probing_endpoint(C)` indicates the source of
-#   highest numbered non-probing packet sent by aid `C`. 
+# - The relation `hi_non_probing_endpoint(C,E)` that the highest-numbered
+#   non-probing packet of aid `C` was at some time sent from endpopint `E`.
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
@@ -111,7 +111,7 @@ function cid_dst_to_src(C:cid) : cid
 relation is_client(C:cid)
 relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
 function hi_non_probing(C:cid) : pkt_num
-function hi_non_probing_endpoint(C:cid) : ip.endpoint
+relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 
 # TLS handshake protocol state
 # ----------------------------
@@ -278,6 +278,7 @@ after init {
     conn_requested(S,D,C) := false;
     path_challenge_pending(C,D) := false;
     hi_non_probing(C) := 0;
+    hi_non_probing_endpoint(C,E) := false;
 }
 
 # Ghost events
@@ -580,7 +581,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Packet must be sent to the endpoint from which the highest numbered
     # packet has been received.
 
-    require conn_seen(dcid) -> dst = hi_non_probing_endpoint(dcid);
+    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);
 
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.
@@ -589,7 +590,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     if queued_non_probing(scid) & pnum >= hi_non_probing(scid) {
         hi_non_probing(scid) := pnum;
-        hi_non_probing_endpoint(scid) := src;
+        hi_non_probing_endpoint(scid,src) := true;
     }
 
     ...

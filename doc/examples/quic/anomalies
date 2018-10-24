@@ -116,24 +116,29 @@ The server log output follows. The two received packets marked with *** were sen
 
 Addendum: it appears that the same thing happens even if the first migration is after handshake completion. A possible cause of this seems to be resetting of the path challenge timer each time the ip address changes (packet.c, line 1358). Thus, if the IP address  changes frequently enough, the path_challenge is never set, and the server remains blocked.
 
-Event files:  anomaly10a.iev, anomaly10b.iev
-Picoquic log file: anomaly10a.log, anomaly10b.log
+Event files:  anomaly10.iev
+Picoquic log file: anomaly10.log
 QUIC version: draft 15
 Ivy commit: ???????
 Implementation:
   picoquic, commit: ???????
 Issue:
 
-The specification requires that non-probing packets be sent to the
-address from which the highest-numbered non-probing packet has been
-received. However, picoquic includes ACK packets in the same packet with
-path challenges, which classifies them as non-probing. There are different cases in
-which this violates the spec. In anomaly10a,iev, we see that when the server sends
-1rtt packet number 7, the highest non-probing packet is 21, sent from port 137c. However, the
-server sends a packet with an ACK in it to port 137b. This is a case where the most recent
-packet received is the highest number. However, in anomaly10b.iev, we see a case where the
-highest number is not the most recent (in the case, the log from picoquic was not flushed,
-so we do not see the last packet sent, which contains a path challenge and ack sent to 137c).
+The specification requires that the server start sending to a new
+address only if a packet with the highest-seen packet number is
+received from that address. Picoquic does not seem to check this, and
+detects a migration even if the new address sends a lower packet
+number than was previously seen.
+
+Incidentally, picoquic can also still send sometimes packets to the
+old address.  Example cases are in anomaly10a.iev and
+anomaly10b.iev. In this case, it seems that previously scheduled or
+queued path challenge frames are sent to the old address. It isn't
+clear that this is a specification violation, since the spec says that
+the server MUST start sending packets to the new address (meaning,
+presumably, it MUST stop sending to the old address) but it doesn't
+say it must start *immediately*. It seems reasonable to assume the
+some previously queued packets can still be sent to the old address.
 
 
 
