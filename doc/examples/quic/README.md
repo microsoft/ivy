@@ -242,3 +242,44 @@ Linux build instructions for Chromium:
 
     https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md
 
+TODO list
+=========
+
+- Generate new connection id, require fresh connection ids to be used if available,
+  handle retire_connection id.
+  
+- Version negotiation
+
+- Retry and new token
+
+- Enforce transport parameters in stream frames (update to quic15)
+
+- Make picoquic server send some data (perhaps echo server, or random data)
+
+- Test multiple streams, multiple clients
+
+- Preferred server address
+
+- Closing and draining states
+
+    - after sending close, all packets must contain a matching close
+    - after receiving close or stateless reset, send at most one close and nothing else
+    
+- Stateless reset
+
+- Frame types:
+
+    - MAX_DATA
+    - BLOCKED
+    - STREAM_BLOCKED
+    - RETIRE_CONNECTION_ID
+    - STOP_SENDING
+    - ACK (ECN section)
+    - NEW_TOKEN
+    
+- Ack-only packet rules (reinstate)
+
+- Retransmissions (seems to be only liveness properties)
+
+- Packet protection
+

@@ -472,6 +472,11 @@ around tls_recv_event {
 #   For a given cid, the number of ack-only packets sent from src to dst
 #   must not be greater than the number of non-ack-only packets sent
 #   from dst to src [5].
+#
+# - For a given connecitn, a server must only send packets to an
+#   address that at one time in the past sent the as packet with
+#   the highest packet numer thus far received. See notes below on
+#   migration and path challenge. [10]
 
 # ### Effects
 #
@@ -490,6 +495,23 @@ around tls_recv_event {
 #   can be responded to by multple ack-only packets. Here, we assume it
 #   cannot. That is, only a new distinct packet number allows an ack-only
 #   packet to be sent in response.
+#
+# - On see a packet form a new address with the highest packect number
+#   see thus far, the server detects migration of the client. It
+#   begins sending packets to this address and initiates path
+#   validation for this address. Until path validation succeeds, the
+#   server limits data sent to the new address. Currently we cannot specify
+#   this limit because we don't know the byte size of packets or the timings
+#   of packets. On detecting migration, the server abandons any pending path
+#   validation of the old address. We don't specify this because the definition
+#   of abandonment is not clear. In practice, we do observe path challenge frames
+#   sent to old addresses, perhaps because these were previously queued. QUESTION:
+#   abandoning an old path challenge could result in an attacker denying the ability
+#   of the client to migrate by replaying packets, spoofing the old address.
+#   The server would alternate between the old (bogus) and new address, and thus
+#   never complete the path challenge of the new address. 
+
+
 
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
@@ -581,7 +603,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Packet must be sent to the endpoint from which the highest numbered
     # packet has been received.
 
-    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);
+    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  [10]
 
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.
