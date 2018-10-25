@@ -290,9 +290,11 @@ def make_skolems(fmla,ast,pol,univs):
     global strat_map
     if isinstance(fmla,il.Not):
         make_skolems(fmla.args[0],ast,not pol,univs)
+        return
     if isinstance(fmla,il.Implies):
         make_skolems(fmla.args[0],ast,not pol,univs)
         make_skolems(fmla.args[1],ast,pol,univs)
+        return
     is_e = il.is_exists(fmla)
     is_a = il.is_forall(fmla)
     if is_e and pol or is_a and not pol:
