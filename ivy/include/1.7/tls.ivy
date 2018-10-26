@@ -1,6 +1,6 @@
 #lang ivy
 
-include tls_gnutls
+include tls_picotls
 
 # This module defines the interface TLS and the underlying transport.
 

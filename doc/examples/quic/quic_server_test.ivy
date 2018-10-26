@@ -132,19 +132,13 @@ after init {
 # Hook up tls to quic
 
 implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
-    # From draft 13 onward, we don't transmit the record headers.
-    # We peel of the first 5 bytes of record header.
-    # TODO: we also have to decrypt the records here if they are encrypted.
-    if bytes.value(0) ~= 20 {
-        var msgs := bytes.segment(5,bytes.end);
-        if tls_id = client.tls_id {
-            call tls_send_event(client.ep, server.ep, the_cid, 0, msgs, client.enc_level);
-            client.enc_level := client.enc_level.next;
-        };
-        if tls_id = server.tls_id {
-            call tls_send_event(server.ep, client.ep, the_cid, 0, msgs, server.enc_level);
-            server.enc_level := server.enc_level.next;
-        }
+    if tls_id = client.tls_id {
+        call tls_send_event(client.ep, server.ep, the_cid, 0, bytes, client.enc_level);
+        client.enc_level := client.enc_level.next;
+    };
+    if tls_id = server.tls_id {
+        call tls_send_event(server.ep, client.ep, the_cid, 0, bytes, server.enc_level);
+        server.enc_level := server.enc_level.next;
     }
 }
 
@@ -207,9 +201,7 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:quic_pa
 # to stream_length) is transferred to TLS, otherwise, the data will be
 # dribbled one byte at a time, which gets boring.
 #
-# Note: we need to send records to TLS, but as of draft 13, what we
-# have are sequences of messages. We prepend a record header to the messages.
-# 
+
 
 around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
     require src = server.ep & dst = client.ep;
@@ -221,13 +213,7 @@ around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:en
     ...
     var tls_id := client.tls_id if dst = client.ep else server.tls_id;
     var data := stream_data.empty;
-    # Create a record header
-    data := data.append(22);   # Code for a handshake record
-    data := data.append(0x3);  # Version hi byte
-    data := data.append(0x3);  # Version lo byte
-    data := data.append(hi_byte_pos(hi - lo)); # Length hi byte
-    data := data.append(lo_byte_pos(hi - lo)); # Length lo byte
-    # Now fill in the message bytes
+    # Fill in the message bytes
     var idx := lo;
     while idx < hi {
 	data := data.append(crypto_data(scid,e).value(idx));

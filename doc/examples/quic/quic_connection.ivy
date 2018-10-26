@@ -603,7 +603,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Packet must be sent to the endpoint from which the highest numbered
     # packet has been received.
 
-    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  [10]
+    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  # [10]
 
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.

@@ -4958,7 +4958,7 @@ def main_int(is_ivyc):
                     for x,y in im.module.attributes.iteritems():
                         p,c = iu.parent_child_name(x)
                         if c == 'libspec':
-                            libspec += ' -l' + y.rep
+                            libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(','))
                     if platform.system() == 'Windows':
                         if 'Z3DIR' in os.environ:
                             z3incspec = '/I %Z3DIR%\\include'
@@ -4990,7 +4990,8 @@ def main_int(is_ivyc):
                             paths = ''
                         for lib in libs:
                             _dir = lib[1]
-                            paths += ' -I {}/include -L {}/lib -Wl,-rpath={}/lib'.format(_dir,_dir,_dir)
+                            _libdir = lib[2] if len(lib) >= 3 else (_dir  + '/lib')
+                            paths += ' -I {}/include -L {} -Wl,-rpath={}'.format(_dir,_libdir,_libdir)
                         if emit_main:
                             cmd = "g++ {} {} -g -o {} {}.cpp".format(gpp11_spec,paths,basename,basename)
                         else:
