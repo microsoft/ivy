@@ -348,7 +348,7 @@ expressing the transitivity of equality:
 
 ```
 We don't need a proof for this, since the `auto` tactic can handle
-it. The verification condition that ivy generates is:
+it. The verification condition that IVy generates is:
 
     #   X = Y & Y = Z -> X = Z
 
