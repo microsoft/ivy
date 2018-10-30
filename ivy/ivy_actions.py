@@ -803,7 +803,13 @@ class IfAction(Action):
             res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+        res = join_action(if_part,else_part,domain.relations)
+        # Hack: the ite annotation comes out reversed. Fix it.
+        for i in range(1,3):
+            x = res[i].annot
+            if isinstance(x,IteAnnotation):
+                res[i].annot = IteAnnotation(Not(x.cond),x.elseb,x.thenb)
+        return res
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
     def get_cond(self):
@@ -1270,85 +1276,103 @@ def unite_annot(annot):
     res.append((annot.cond,annot.thenb))
     return res
 
+class AnnotationError(Exception):
+    pass
 
 def match_annotation(action,annot,handler):
     def recur(action,annot,env,pos=None):
-        if isinstance(annot,RenameAnnotation):
-            save = dict()
-            for x,y in annot.map.iteritems():
-                if x in env:
-                    save[x] = env[x]
-                env[x] = env.get(y,y)
-            recur(action,annot.arg,env,pos)
-            env.update(save)
-            return
-        if isinstance(action,Sequence):
-            if pos is None:
-                pos = len(action.args)
-            if pos == 0:
-                assert isinstance(annot,EmptyAnnotation),annot
+
+        def show_me():
+            print 'lineno: {} annot: {} pos: {}'.format(action.lineno if hasattr(action,'lineno') else None,annot,pos)
+
+        try:
+            if isinstance(annot,RenameAnnotation):
+                save = dict()
+                for x,y in annot.map.iteritems():
+                    if x in env:
+                        save[x] = env[x]
+                    env[x] = env.get(y,y)
+                recur(action,annot.arg,env,pos)
+                env.update(save)
                 return
-            if isinstance(annot,IteAnnotation):
-                # This means a failure may occur here
+            if isinstance(action,Sequence):
+                if pos is None:
+                    pos = len(action.args)
+                if pos == 0:
+                    if not isinstance(annot,EmptyAnnotation):
+                        raise AnnotationError()
+                    return
+                if isinstance(annot,IteAnnotation):
+                    # This means a failure may occur here
+                    rncond = env.get(annot.cond,annot.cond)
+                    cond = handler.eval(rncond)
+                    if cond:
+                        annot = annot.thenb
+                    else:
+                        recur(action,annot.elseb,env,pos=pos-1)
+                        return
+                if not isinstance(annot,ComposeAnnotation):
+                        iu.dbg('len(action.args)')
+                        iu.dbg('pos')
+                        iu.dbg('annot')
+                assert isinstance(annot,ComposeAnnotation)
+                recur(action,annot.args[0],env,pos-1)
+                recur(action.args[pos-1],annot.args[1],env)
+                return
+            if isinstance(action,IfAction):
+                assert isinstance(annot,IteAnnotation),annot
+                is_some = isinstance(action.args[0],ivy_ast.Some)
                 rncond = env.get(annot.cond,annot.cond)
-                cond = handler.eval(rncond)
+                try:
+                    cond = handler.eval(rncond)
+                except KeyError:
+                    print '{}skipping conditional'.format(action.lineno)
+                    iu.dbg('str_map(env)')
+                    iu.dbg('env.get(annot.cond,annot.cond)')
+                    return
                 if cond:
-                    annot = annot.thenb
+                    code = action.args[1]
+                    if is_some:
+                        code = Sequence(AssumeAction(And()),code)
+                    recur(code,annot.thenb,env)
                 else:
-                    recur(action,annot.elseb,env,pos=pos-1)
-                    return
-            if not isinstance(annot,ComposeAnnotation):
-                    iu.dbg('len(action.args)')
-                    iu.dbg('pos')
-                    iu.dbg('annot')
-            assert isinstance(annot,ComposeAnnotation)
-            recur(action,annot.args[0],env,pos-1)
-            recur(action.args[pos-1],annot.args[1],env)
-            return
-        if isinstance(action,IfAction):
-            assert isinstance(annot,IteAnnotation),annot
-            rncond = env.get(annot.cond,annot.cond)
-            try:
-                cond = handler.eval(rncond)
-            except KeyError:
-                print '{}skipping conditional'.format(action.lineno)
-                iu.dbg('str_map(env)')
-                iu.dbg('env.get(annot.cond,annot.cond)')
+                    if len(action.args) > 2:
+                        code = action.args[2]
+                        if is_some:
+                            code = Sequence(AssumeAction(And()),code)
+                        recur(code,annot.elseb,env)
                 return
-            if cond:
-                recur(action.args[1],annot.thenb,env)
-            else:
-                if len(action.args) > 2:
-                    recur(action.args[2],annot.elseb,env)
-            return
-        if isinstance(action,ChoiceAction):
-            assert isinstance(annot,IteAnnotation)
-            annots = unite_annot(annot)
-            assert len(annots) == len(action.args)
-            for act,(cond,ann) in reversed(zip(action.args,annots)):
-                if handler.eval(cond):
-                    recur(act,ann,env)
-                    return
-            assert False,'problem in match_annotation'
-        if isinstance(action,CallAction):
+            if isinstance(action,ChoiceAction):
+                assert isinstance(annot,IteAnnotation)
+                annots = unite_annot(annot)
+                assert len(annots) == len(action.args)
+                for act,(cond,ann) in reversed(zip(action.args,annots)):
+                    if handler.eval(cond):
+                        recur(act,ann,env)
+                        return
+                assert False,'problem in match_annotation'
+            if isinstance(action,CallAction):
+                handler.handle(action,env)
+                callee = ivy_module.module.actions[action.args[0].rep]
+                seq = Sequence(*([Sequence() for x in callee.formal_params]
+                                 + [callee] 
+                                 + [Sequence() for x in callee.formal_returns]))
+                recur(seq,annot,env)
+                return
+            if isinstance(action,LocalAction):
+                recur(action.args[-1],annot,env)
+                return
+            if isinstance(action,WhileAction):
+                recur(action.expand(ivy_module.module,[]),annot,env)
+                return
+            if hasattr(action,'failed_action'):
+    #            iu.dbg('annot')
+    #            iu.dbg('action.failed_action()')
+                recur(action.failed_action(),annot,env)
+                return
             handler.handle(action,env)
-            callee = ivy_module.module.actions[action.args[0].rep]
-            seq = Sequence(*([Sequence() for x in callee.formal_params]
-                             + [callee] 
-                             + [Sequence() for x in callee.formal_returns]))
-            recur(seq,annot,env)
-            return
-        if isinstance(action,LocalAction):
-            recur(action.args[-1],annot,env)
-            return
-        if isinstance(action,WhileAction):
-            recur(action.expand(ivy_module.module,[]),annot,env)
-            return
-        if hasattr(action,'failed_action'):
-#            iu.dbg('annot')
-#            iu.dbg('action.failed_action()')
-            recur(action.failed_action(),annot,env)
-            return
-        handler.handle(action,env)
+        except AnnotationError:
+            show_me()
+            raise AnnotationError()
     recur(action,annot,dict())
     
