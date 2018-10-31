@@ -610,9 +610,15 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # QUESTION: what if two differenht paths send the same packet number?
     # QUESTION: how do you compare packet numbers with different encryption levels?
 
-    if queued_non_probing(scid) & pnum >= hi_non_probing(scid) {
-        hi_non_probing(scid) := pnum;
-        hi_non_probing_endpoint(scid,src) := true;
+    if queued_non_probing(scid) {
+        if e = encryption_level.other {
+            if pnum >= hi_non_probing(scid) {
+                hi_non_probing(scid) := pnum;
+                hi_non_probing_endpoint(scid,src) := true;
+            }
+        } else {
+            hi_non_probing_endpoint(scid,src) := true;
+        }
     }
 
     ...
