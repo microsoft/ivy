@@ -603,16 +603,22 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Packet must be sent to the endpoint from which the highest numbered
     # packet has been received.
 
-    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  [10]
+    require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  # [10]
 
     # If this is a non-probing packet, update the highest non-probing
     # packet number seen on from this aid.
     # QUESTION: what if two differenht paths send the same packet number?
     # QUESTION: how do you compare packet numbers with different encryption levels?
 
-    if queued_non_probing(scid) & pnum >= hi_non_probing(scid) {
-        hi_non_probing(scid) := pnum;
-        hi_non_probing_endpoint(scid,src) := true;
+    if queued_non_probing(scid) {
+        if e = encryption_level.other {
+            if pnum >= hi_non_probing(scid) {
+                hi_non_probing(scid) := pnum;
+                hi_non_probing_endpoint(scid,src) := true;
+            }
+        } else {
+            hi_non_probing_endpoint(scid,src) := true;
+        }
     }
 
     ...
