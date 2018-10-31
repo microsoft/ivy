@@ -1595,7 +1595,7 @@ def create_conj_actions(mod):
                 action_isos[action].add(ison)
         for ison,isol in mod.isolates.iteritems():
             memo = set()
-            conjs = iso.get_isolate_conjs(mod,isol)
+            conjs = iso.get_isolate_conjs(mod,isol,verified=False)
             exports = myexports[ison]
             roots = set(iu.reachable(exports,lambda x: cg[x]))
             for conj in conjs:
@@ -1606,7 +1606,7 @@ def create_conj_actions(mod):
                             memo.add(action)
                             if action in roots:
                                 for victim in exports:
-                                    if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
+                                    if victim in set(iu.reachable([action],lambda x: cg[x])) and action != victim:
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
     

@@ -475,10 +475,10 @@ def cycle(arcs,first=lambda x:x[0],second=lambda x:x[1]):
         if dfs(first(arc)):
             end = second(path[0])
             fpath = []
-            for arc in reversed(path):
+            for arc in path:
                 fpath.append(arc)
                 if first(arc) == end:
-                    return fpath
+                    return reversed(fpath)
             assert False
     return None
 

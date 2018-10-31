@@ -1311,7 +1311,7 @@ if not (iu.get_numeric_version() <= [1,1]):
                 return stmts[0]
             else:
                 res = Sequence(*stmts)
-                res.lineno = get_lineno(p,n)
+                res.lineno = stmts[0].lineno # get_lineno(p,n)
                 return res
         def p_top_around_callatom_lcb_action_rcb(p):
             'top : top AROUND atype optargs optreturns LCB actseq optsemi DOTDOTDOT actseq optsemi RCB'
@@ -2043,7 +2043,7 @@ if not (iu.get_numeric_version() <= [1,5]):
     def p_action_var_opttypedsym_assign_fmla(p):
         'action : VAR opttypedsym optinit'
         p[0] = VarAction(p[2],p[3]) if p[3] is not None else VarAction(p[2])
-        p[0].lineno = get_lineno(p,2)
+        p[0].lineno = get_lineno(p,1)
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'
