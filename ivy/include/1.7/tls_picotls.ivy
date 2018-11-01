@@ -68,6 +68,22 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
     : ls(ls), ur(ur), ua(ua), use(use) {}
     };
 
+    /* Per epoch crypto context. There are four such contexts:
+     * 0: Initial context, with encryption based on a version dependent key,
+     * 1: 0-RTT context
+     * 2: Handshake context
+     * 3: Application data
+     */
+    struct picoquic_crypto_context_t {
+        void* aead_encrypt;
+        void* aead_decrypt;
+        void* pn_enc; /* Used for PN encryption */
+        void* pn_dec; /* Used for PN decryption */
+        picoquic_crypto_context_t() {
+           aead_encrypt = aead_decrypt = pn_enc = pn_dec = 0;
+        }
+    };
+
     // Structure to hold state of a tls session
 
     struct picotls_connection {
@@ -77,10 +93,12 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ptls_handshake_properties_t *hsp;
         std::vector<char> input;
         int handshake_status;
+        vector<picoquic_crypto_context_t> crypto_context;
         picotls_connection(`cid` id, ptls_t *gs, tls_callbacks cb,
             ptls_handshake_properties_t *hsp)
             : id(id),gs(gs),cb(cb),hsp(hsp) {
             handshake_status = 0;
+            crypto_context.resize(4);
         }
     };
 
@@ -96,8 +114,48 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         return 0;
     }
 
+    #define QUIC_LABEL_QUIC_BASE "quic "
 
-    #define PICOQUIC_LABEL_QUIC_BASE "quic "
+    // The following mess is to get the traffic keys from picotls
+
+    static void *aead_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        return ptls_aead_new(cipher->aead, cipher->hash, is_enc, secret, QUIC_LABEL_QUIC_BASE));
+    }
+
+    static void *pn_enc_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        uint8_t key[PTLS_MAX_SECRET_SIZE];
+
+        ptls_hkdf_expand_label(cipher->hash, key, 
+                               cipher->aead->ctr_cipher->key_size,
+                               ptls_iovec_init(secret, cipher->hash->digest_size), 
+                               QUIC_LABEL_PN,
+                               ptls_iovec_init(NULL, 0),
+                               QUIC_LABEL_QUIC_BASE);
+
+        return ptls_cipher_new(cipher->aead->ctr_cipher, is_enc, key));
+    }
+
+    static quic_set_key_from_secret(ptls_cipher_suite_t * cipher, int is_enc, quic_crypto_context_t * ctx, const void *secret)
+    {
+        if (is_enc) {
+             ctx->aead_encrypt = aead_from_secret(cipher, is_enc, secret);
+             ctx->pn_enc =  pn_enc_from_secret(cipher, is_enc, secret);
+        } else {
+            ctx->aead_decrypt = aead_from_secret(cipher, is_enc, secret);
+            ctx->pn_dec = pn_enc_from_secret(cipher, is_enc, secret);
+        }
+    }
+
+    static int quic_update_traffic_key_callback(ptls_update_traffic_key_t * self, ptls_t *tls, int is_enc, size_t epoch, const void *secret)
+    {
+        picotls_connection* cnx = (picotls_connection*)*ptls_get_data_ptr(tls);
+        ptls_cipher_suite_t * cipher = ptls_get_cipher(tls);
+        int ret = quic_set_key_from_secret(cipher, is_enc, &cnx->crypto_context[epoch], secret);
+    }
+
+
 
     // Some parameters for picotls as used by picoquic.
 
@@ -264,8 +322,9 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ctx->key_exchanges = picotls_key_exchanges; 
         ctx->cipher_suites = picotls_cipher_suites; 
         ctx->send_change_cipher_spec = 0;
-        ctx->hkdf_label_prefix = PICOQUIC_LABEL_QUIC_BASE;
-        ctx->update_traffic_key = 0; //picoquic_set_update_traffic_key_callback();
+        ctx->hkdf_label_prefix = QUIC_LABEL_QUIC_BASE;
+        ctx->update_traffic_key = new ptls_update_traffic_key_t;
+        ctx->update_traffic_key->cb = quic_update_traffic_key_callback;
         ctx->get_time = &ptls_get_time;
         ctx->ticket_lifetime = 100000; /* 100,000 seconds, a bit more than one day */
         ctx->require_dhe_on_psk = 1;
@@ -306,10 +365,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ptls_t *session;
         session = ptls_new(ctx,is_server ? 1 : 0);
         picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties);
-        
-        // *ptls_get_data_ptr(ctx->tls) = cnx;  // set pointer to self for callbacks?
-
-
+        *ptls_get_data_ptr(session) = s;        
 
 	`cid_map`[c] = s;
 	
