@@ -326,10 +326,10 @@ def check_safety_in_state(mod,ag,post,report_pass=True):
 
 opt_summary = iu.BooleanParameter("summary",False)
 
-# This gets the pre-state for inductive checks
+# This gets the pre-state for inductive checks. Only implicit conjectures are used.
 
 def get_conjs(mod):
-    fmlas = [lf.formula for lf in mod.labeled_conjs]
+    fmlas = [lf.formula for lf in mod.labeled_conjs if not lf.explicit]
     return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
 
 

@@ -1396,6 +1396,7 @@ def apply_present_conjectures(isol,mod):
         return []
     brackets = []
     conjs = get_isolate_conjs(mod,isol,verified=False)
+    conjs = [c for c in conjs if not c.explicit]
     cg = mod.call_graph()  # TODO: cg should be cached
     myexports = get_isolate_exports(mod,cg,isol)
     for actname in myexports:

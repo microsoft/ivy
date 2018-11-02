@@ -536,6 +536,7 @@ class LabeledFormula(AST):
         self.args = args
         self.id = lf_counter
         self.temporal = None
+        self.explicit = False
         lf_counter += 1
     @property
     def label(self):
@@ -554,6 +555,7 @@ class LabeledFormula(AST):
         lf_counter -= 1
         res.id = self.id
         res.temporal = self.temporal
+        res.explicit = self.explicit
         return res
 
 class LabeledDecl(Decl):

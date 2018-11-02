@@ -374,14 +374,26 @@ def p_top_conjecture_labeledfmla(p):
 
 # from version 1.7, "invariant" replaces "conjecture"
 if not iu.get_numeric_version() <= [1,6]:
+
+    def p_optexplicit(p):
+        'optexplicit : '
+        p[0] = False
+
+    def p_optexplicit_explicit(p):
+        'optexplicit : EXPLICIT'
+        p[0] = True
+
     def p_top_invariant_labeledfmla(p):
-        'top : top INVARIANT labeledfmla optproof'
+        'top : top optexplicit INVARIANT labeledfmla optproof'
         p[0] = p[1]
-        d = ConjectureDecl(addlabel(p[3],'invar'))
-        d.lineno = get_lineno(p,2)
+        lf = addlabel(p[4],'invar')
+        if p[2]:
+            lf.explicit = True
+        d = ConjectureDecl(lf)
+        d.lineno = get_lineno(p,3)
         p[0].declare(d)
-        if p[4] is not None:
-            p[0].declare(ProofDecl(p[4]))
+        if p[5] is not None:
+            p[0].declare(ProofDecl(p[5]))
 
 def p_modulestart(p):
     'modulestart :'
