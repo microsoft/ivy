@@ -1,0 +1,100 @@
+#lang ivy1.7
+
+include deduction
+
+module tree_tc(t) = {
+
+    action add(x:t,y:t)
+    action succ(x:t,y:t) returns (r:bool)
+    action reaches(x:t,y:t) returns (r:bool)
+
+    specification {
+	relation tc(X:t,Y:t)
+
+	after init {
+	    tc(X,Y) := false
+	}
+
+	# we require that adding an edge preserve the shape as an oriented tree
+	# the transitive closure is updated so that x and everything that previously
+	# reached x now reaches x
+
+	around add {
+	    require x ~= y;                # no trivial cycles added
+	    require ~tc(y,x);              # no non-trivial cycles added
+	    require ~(tc(Z,x) & tc(Z,y))   # no reconvergence added
+	    ...
+	    tc(X,y) := X = x | tc(X,x)
+	}
+
+	# y is a successor of x is x reaches y and there is nothing between x and y
+
+	after succ {
+	    ensure r <-> (tc(x,y) & ~exists Z. tc(x,Z) & tc(Z,y))
+	}
+
+	after reaches {
+	    ensure r = tc(x,y)
+	}
+
+	# These invariants state that tc is the transitive closure of a tree
+	# Treeness means there are no cycles, and the ancestors of every node are totally ordered.
+
+	invariant ~tc(X,X)
+	invariant tc(X,Y) & tc(Z,Y) -> (X = Z | tc(X,Z) | tc(Z,X))
+
+    }
+
+    implementation {
+
+	relation tree(X:t,Y:t)
+
+	# lfp ttc(X,Y) = tree(X,Y) | exists Z. (ttc(X,Z) & ttc(Z,Y))
+
+	relation ttc(X:t,Y:t)
+	# ttc is a fixed point
+	schema fp = {
+	    property (tree(X,Y) | exists Z. (ttc(X,Z) & ttc(Z,Y))) -> ttc(X,Y) 
+	}
+	# ttc is the least fixed point
+	schema lep = {
+	    relation r(X:t,Y:t)
+	    forall X,Y. ((tree(X,Y) | exists Z. (r(X,Z) & r(Z,Y))) -> r(X,Y))
+	    property ttc(X,Y) -> r(X,Y)
+	}
+	    
+
+	after init {
+	    tree(X,Y) := false;
+	}
+
+	implement add {
+	    tree(x,y) := true;
+	}
+
+	implement succ {
+	    r := tree(x,y);
+	}
+
+	implement reaches {
+	    r := ttc(x,y);
+	}
+
+    }
+
+    # The representation invariant is that the transitive closure of 'tree' is equal to tc.
+
+    private {
+	invariant tc(X,Y) <-> ttc(X,Y)
+	proof {
+	    apply elimImp with p = ttc(X,Y) -> tr.tree(X,Y); showgoals;
+	    apply lep with r(X,Y) = tree(X,Y) ; showgoals }
+    }
+    
+    isolate iso = this
+
+}
+
+type t
+instance tr : tree_tc(t)
+export tr.add
