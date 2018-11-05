@@ -19,6 +19,7 @@ import ivy_theory as ith
 import ivy_transrel as itr
 import ivy_solver as islv
 import ivy_fragment as ifc
+import ivy_proof
 
 import sys
 from collections import defaultdict
@@ -312,13 +313,14 @@ def check_fcs_in_state(mod,ag,post,fcs):
     return not any(fc.failed for fc in fcs)
 
 def check_conjs_in_state(mod,ag,post,indent=8):
+    conjs = mod.conj_subgoals if mod.conj_subgoals is not None else mod.labeled_conjs
     check_lineno = act.checked_assert.get()
     if check_lineno == "":
         check_lineno = None
     if check_lineno is not None:
-        lcs = [sub for sub in mod.labeled_conjs if sub.lineno == check_lineno]
+        lcs = [sub for sub in conjs if sub.lineno == check_lineno]
     else:
-        lcs = mod.labeled_conjs
+        lcs = conjs
     return check_fcs_in_state(mod,ag,post,[ConjChecker(c,indent) for c in lcs])
 
 def check_safety_in_state(mod,ag,post,report_pass=True):
@@ -331,6 +333,21 @@ opt_summary = iu.BooleanParameter("summary",False)
 def get_conjs(mod):
     fmlas = [lf.formula for lf in mod.labeled_conjs if not lf.explicit]
     return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
+
+def apply_conj_proofs(mod):
+    # Apply any proof tactics to the conjs to get the conj_subgoals.
+
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
+    conjs = []
+    for lf in mod.labeled_conjs:
+        if lf.id in pmap:
+            proof = pmap[lf.id]
+            subgoals = pc.admit_proposition(lf,proof)
+            conjs.extend(subgoals)
+        else:
+            conjs.append(lf)
+    mod.conj_subgoals = conjs
 
 
 def summarize_isolate(mod):
@@ -383,6 +400,8 @@ def summarize_isolate(mod):
         for lf in mod.labeled_conjs:
             print pretty_lf(lf)
 
+    apply_conj_proofs(mod)
+    
     if mod.isolate_info.implementations:
         print "\n    The following action implementations are present:"
         for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
