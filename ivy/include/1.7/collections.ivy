@@ -728,10 +728,14 @@ module partial_function(dom,rng) = {
 	implement lemma(x:dom) {
 	    assume pre(x) -> exists Y. map(x,Y)
 	}
+
+        explicit invariant [img] pre(X) -> exists Y. map(X,Y)
+
     }
 
     conjecture map(K,L) & map(K,M) -> L = M
 
+    trusted isolate iso = this
 }
 
 ################################################################################

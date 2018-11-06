@@ -77,7 +77,8 @@ class Module(object):
         self.subgoals = [] # (labeled formula * labeled formula list) list
         self.isolate_info = None # IsolateInfo or None
         self.conj_actions = dict() # map from conj names to action name list
-        self.con_subgoals = None # None or labeled formula list
+        self.conj_subgoals = None # None or labeled formula list
+        self.assumed_invariants = [] # labeled_formula_list
 
         
         self.sig = il.sig.copy() # capture the current signature

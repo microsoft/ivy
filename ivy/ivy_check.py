@@ -337,13 +337,14 @@ def get_conjs(mod):
 def apply_conj_proofs(mod):
     # Apply any proof tactics to the conjs to get the conj_subgoals.
 
-    pc = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
         if lf.id in pmap:
             proof = pmap[lf.id]
             subgoals = pc.admit_proposition(lf,proof)
+            subgoals = map(ivy_compiler.theorem_to_property,subgoals)
             conjs.extend(subgoals)
         else:
             conjs.append(lf)
