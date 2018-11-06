@@ -1,0 +1,173 @@
+#lang ivy1.7
+
+include collections
+include order
+include quic_stream
+
+object frame = {
+
+    # The base type for frames
+
+    type this
+
+    # Stream frames
+
+    object stream = {
+
+        # Stream frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            off : bool,        # is there an offset field
+            len : bool,        # is there a length field
+            fin : bool,        # is this the final offset
+
+            id : stream_id,            # the stream ID
+            offset : stream_pos,       # the stream offset (zero if ~off)
+            length : stream_pos,       # length of the data
+            data : stream_data         # the stream data
+        }
+    }
+
+    object ack = {
+
+        object block = {
+            type this = struct {
+                gap : pkt_num,       # gap, or zero for first block
+                blocks : pkt_num     # number of packets in block - 1
+            }
+            instance idx : unbounded_sequence
+            instance arr : array(idx,this)
+        }
+
+        # Ack frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            largest_acked   : pkt_num,    # largest acknowledged packet number
+            ack_delay       : microsecs,  # delay of largest acked packet
+            ack_blocks      : block.arr   # ack blocks
+            
+        }
+    }
+
+    object rst_stream = {
+
+        # Rst_stream frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            id              : stream_id,  # id of stream being reset
+            err_code        : error_code, # the error code
+            final_offset    : stream_pos  # position of the end of the stream
+            
+        }
+    }
+
+    object max_stream_id = {
+
+        # Max_stream_id frames are a variant of frame.
+
+        variant this of frame = struct {
+        
+            id              : stream_id  # maximum stream id
+            
+        }
+    }
+
+    object connection_close = {
+        
+        # Connection close frames are a variant of frame.
+
+        variant this of frame = struct {
+            err_code               : error_code, # the error code
+            frame_type             : error_code, # TODO: not the real type
+            reason_phrase_length   : stream_pos, # number of bytes in reason phrase
+            reason_phrase          : stream_data # bytes of reason phrase
+        }
+    }
+
+    object max_stream_data = {
+        
+        # Max stream data frames are a variant of frame.
+
+        variant this of frame = struct {
+            id                : stream_id,  # the stream id
+            pos               : stream_pos  # max number of bytes
+        }
+    }
+
+    object stream_id_blocked = {
+        
+        # Stream id blocked frames are a variant of frame.
+
+        variant this of frame = struct {
+            id                : stream_id  # the stream id
+        }
+    }
+
+    object crypto = {
+
+        # Crypto frames are a variant of frame
+
+        variant this of frame = struct {
+        
+            offset : stream_pos,       # the stream offset (zero if ~off)
+            length : stream_pos,       # length of the data
+            data : stream_data         # the stream data
+        }
+    }
+
+    object ping = {
+
+        # Ping frames contain no data
+
+        variant this of frame = struct {
+        }
+    }
+
+    object application_close = {
+        
+        # Application close frames are a variant of frame.
+
+        variant this of frame = struct {
+            err_code               : error_code, # the error code
+            reason_phrase_length   : stream_pos, # number of bytes in reason phrase
+            reason_phrase          : stream_data # bytes of reason phrase
+        }
+    }
+
+    object new_connection_id = {
+        
+        # New connection id frames are a variant of frame.
+
+        variant this of frame = struct {
+            seq_num                : cid_seq,     # the sequence number of the new cid
+            length                 : cid_length,  # the length of the new cid in bytes
+            scid                   : cid,         # the new cid
+            token                  : reset_token  # the stateless reset token
+        }
+        
+    }
+
+    object path_challenge = {
+        
+        # Path challenge frames are a variant of frame.
+
+        variant this of frame = struct {
+            data : stream_data                    # 8-byte payload
+        }
+    }
+
+    object path_response = {
+        
+        # Path response frames are a variant of frame.
+
+        variant this of frame = struct {
+            data : stream_data                    # 8-byte payload
+        }
+    }
+
+    instance idx : unbounded_sequence
+    instance arr : array(idx,this)
+}        

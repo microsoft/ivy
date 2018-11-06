@@ -1,0 +1,182 @@
+#lang ivy
+
+# This module inplements a reader for the pcap packet dump format
+# (https://wiki.wireshark.org/Development/LibpcapFileFormat). 
+
+# The module parameters are:
+#
+# - pkt: the packet type
+# - serdes : the serializer/deserializer for type pkt
+
+# The module takes one command-line parameter "name" giving the pathname of
+# the file to read. 
+
+# Packets are read from file "name", deserialized, and passes to
+# action "handle".
+
+# We assume that only IP packets are captured
+
+include ip
+
+module pcap(pkt,deser) = {
+
+    # This action is called for each deserialized packet
+
+    action handle(src:ip.endpoint, dst:ip.endpoint, p:pkt)
+
+    implementation {
+
+        # The command-line parameter "name" gives the pathname of the
+        # file. Here, we should really use a pathname type and not
+        # strlit, so correct pathname syntax is enforced.
+
+        type pathname
+        interpret pathname -> strlit
+        parameter name : pathname
+
+        # This is a reader object associated to the file. When installed,
+        # a reader thread will call the "read" method of this object until
+        # the file descriptor fd is negative or end-of-file.
+
+        <<< impl
+
+            #include <stdint.h>
+
+            // This struct holds the pcap global header
+
+            typedef struct pcap_hdr_s {
+                    uint32_t magic_number;   /* magic number */
+                    uint16_t version_major;  /* major version number */
+                    uint16_t version_minor;  /* minor version number */
+                    int32_t  thiszone;       /* GMT to local correction */
+                    uint32_t sigfigs;        /* accuracy of timestamps */
+                    uint32_t snaplen;        /* max length of captured packets, in octets */
+                    uint32_t network;        /* data link type */
+            } pcap_hdr_t;
+
+            // This struct holds the pcap packet header
+
+            typedef struct pcaprec_hdr_s {
+                    uint32_t ts_sec;         /* timestamp seconds */
+                    uint32_t ts_usec;        /* timestamp microseconds */
+                    uint32_t incl_len;       /* number of octets of packet saved in file */
+                    uint32_t orig_len;       /* actual length of packet */
+            } pcaprec_hdr_t;
+
+            // This template is the reader object
+
+            template <typename pkt, typename deser>
+            class pcap_reader : public reader {
+
+                int fd;                // The file descriptor
+                pcap_hdr_t pcap_hdr;   // The global header
+                %`handle` cb;          // The packet handler callback
+
+            public:
+
+                // In the constructor, we open the file and 
+                // read the global header.
+
+                pcap_reader(const std::string &name, %`handle` cb) : cb(cb) {
+                    fd = ::open(name.c_str(),O_RDONLY,0666);
+                    if (fd < 0) {
+                        perror("cannot open pcap file to read");
+                    }
+                    if (::read(fd,&pcap_hdr,sizeof(pcap_hdr)) < sizeof(pcap_hdr)) {
+                        perror("cannot read header of pcap file");
+                    }
+                }
+            
+                int fdes() { return fd; }
+
+                void read() {
+                    pcaprec_hdr_t rh;
+                    int bytes = ::read(fd,&rh,sizeof(rh));
+                    if (bytes == 0) {
+                        fd = -1;   // indicate we are done if end-of-file
+                        return;
+                    }
+                    if (bytes < sizeof(rh)) {
+                        perror("cannot read record header from pcap file");
+                    }
+
+                    // Get the packet size from header. If truncated, exit.
+
+                    unsigned size = rh.incl_len; // packet bytes actually stored
+                    if (size < rh.orig_len) {
+                        perror("packet was truncated in pcap file");
+                    }
+
+                    // Read the packet into a vector.
+
+                    std::vector<char> buf;
+                    buf.resize(size);
+                    if (::read(fd,&buf[0],size) < size) {
+                        perror("cannot read record body from pcap file");
+                    }
+
+                    // We handle only UDP packets for now. This is protocol 17.
+
+                    if (!(size >= 24 && buf[23] == 17))
+                        return;
+
+                    // Get the source and destination addresses from the IP header and UDP headers
+
+                    `ip.endpoint` src;
+                    src.protocol = `ip.udp`;
+                    src.addr = ntohl(*(uint32_t *)(&buf[26]));
+                    src.port = ntohs(*(uint16_t *)(&buf[34]));
+
+                    `ip.endpoint` dst;
+                    dst.protocol = `ip.udp`;
+                    dst.addr = ntohl(*(uint32_t *)(&buf[30]));
+                    dst.port = ntohs(*(uint16_t *)(&buf[36]));
+
+		    // skip 42 bytes of IP and UDP header
+
+		    buf.erase(buf.begin(),buf.begin()+42);
+		
+                    // Create a deserializer and deserialize the packet.
+
+                    deser ds(buf);
+                
+                    while (ds.inp.size() > ds.pos) {
+                        pkt packet;
+                        try {
+                           __deser(ds,packet);
+                        }
+
+                        // If deserialization failure, print out the packet for
+                        // debugging purposes.
+
+                        catch(deser_err &err) {
+                            std::cerr << "error: failed to deserialize packet in pcap file." << std::endl;
+                            std::cerr << "hex dump of packet follows." << std::endl;
+                            for (unsigned i = 0; i < buf.size(); i++) {
+                                if (i > 0 && i % 16 == 0) 
+                                    std::cerr << std::endl;
+                                if (i == ds.pos)
+                                    fprintf(stderr,"*");
+                                fprintf(stderr,"%02X",((unsigned)buf[i]) & 0xff);
+                            }
+                        }
+
+                        // Finally, if we got a good packet, hit the callback.
+
+                        cb(src,dst,packet);
+                    }
+                }
+            };
+
+        >>>
+
+        # At initialization, we instantiate a reader object and install it
+
+        <<< init
+          
+            install_reader(new pcap_reader<`pkt`,`deser`>(`name`,`handle`));
+        
+        >>>
+
+    }        
+}

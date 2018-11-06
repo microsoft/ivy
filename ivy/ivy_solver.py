@@ -53,16 +53,27 @@ def set_use_native_enums(t):
     global use_z3_enums
     use_z3_enums = t
 
+
+z3_builtins = set(["bit0","bit1"])
+
 def solver_name(symbol):
     name = symbol.name
-    if name in iu.polymorphic_symbols:
+    if name.startswith('bfe['):
+        if bfe_to_z3(symbol) is not None:
+            return None
+    elif name in iu.polymorphic_symbols:
         sort = symbol.sort.domain[0].name
         if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
             return None
-        name += ':' + sort
+#        name += ':' + sort
+        for s in symbol.sort.domain:
+            name += ':' + s.name
     if name in ivy_logic.sig.interp:
         return None
+    if name in z3_builtins:
+        raise iu.IvyError(None,'name "{}" clashes with Z3 built-in'.format(name))
     return name
+    #    return '_' + name if isinstance(symbol,ivy_logic.Symbol) and name[0].isalpha() else name
 
 # S = z3.DeclareSort("S")
 
@@ -85,6 +96,9 @@ def sorts(name):
     if name.startswith('strbv[') and name.endswith(']'):
         width = int(name[6:-1])
         return z3.BitVecSort(width)
+    if name.startswith('intbv[') and name.endswith(']'):
+        width = int(name[name.rfind('[')+1:-1])
+        return z3.BitVecSort(width)
     if name == 'int':
         return z3.IntSort()
     if name == 'nat':
@@ -106,7 +120,7 @@ def parse_int_params(name):
     
 
 def is_solver_sort(name):
-    return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'nat' or name == 'strlit' or name.startswith('strbv[')
+    return name.startswith('bv[') and name.endswith(']') or name == 'int' or name == 'nat' or name == 'strlit' or name.startswith('strbv[') or name.startswith('intbv[')
 
 relations_dict = {'<':(lambda x,y: z3.ULT(x, y) if z3.is_bv(x) else x < y),
              '<=':(lambda x,y: z3.ULE(x, y) if z3.is_bv(x) else x <= y),
@@ -127,16 +141,40 @@ functions_dict = {"+":(lambda x,y: x + y),
              "bvnot":(lambda x: ~x),
              }
 
-
-def functions(name):
-    if name.startswith('bfe['):
-        try:
-            things = parse_int_params(name)
-            if len(things) == 2:
-                lo,hi = things
-                return lambda x: z3.Extract(lo,hi,x)
-        except:
+def bfe_to_z3(sym):
+    try:
+        things = parse_int_params(sym.name)
+    except:
+        return None
+    if len(things) == 2:
+        lo,hi = things
+        insort = sym.sort.dom[0].to_z3()
+        outsort = sym.sort.rng.to_z3()
+#        assert (z3.is_bv_sort(insort) and z3.is_bv_sort(outsort))
+        if not (z3.is_bv_sort(insort) and z3.is_bv_sort(outsort)):
             return None
+        if insort.size() <= hi:
+            hi = insort.size() - 1
+        if outsort.size() < hi - lo + 1:
+            hi = lo + outsort.size() - 1
+        if hi < lo:
+            return lambda x: z3.BitVecVal(0,outsort.size())
+        elif hi - lo + 1 < outsort.size():
+            return lambda x: z3.Concat(z3.BitVecVal(0,outsort.size() - (hi - lo + 1)),z3.Extract(hi,lo,x))
+        else:
+            return lambda x: z3.Extract(hi,lo,x)
+
+
+    
+def functions(name):
+    # if name.startswith('bfe['):
+    #     try:
+    #         things = parse_int_params(name)
+    #         if len(things) == 2:
+    #             lo,hi = things
+    #             return lambda x: my_z3_extract(hi,lo,x)
+    #     except:
+    #         return None
     return functions_dict.get(name)
 
 def is_solver_op(name):
@@ -188,6 +226,8 @@ ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.do
 def lookup_native(thing,table,kind):
     z3name = ivy_logic.sig.interp.get(thing.name)
     if z3name == None:
+        if  thing.name.startswith('bfe['):
+            return bfe_to_z3(thing)
         if thing.name in iu.polymorphic_symbols:
             sort = thing.sort.domain[0].name
             if sort in ivy_logic.sig.interp and not isinstance(ivy_logic.sig.interp[sort],ivy_logic.EnumeratedSort):
@@ -316,7 +356,7 @@ def term_to_z3(term):
                 # TODO: this is dangerous
                 sig = iso.to_z3() if iso is not None else S
 #                print "term: {}, iso : {}, sig = {}".format(term,iso,sig)
-                res = z3.Const(term.rep.name,sig)
+                res = z3.Const(solver_name(term.rep),sig)
             z3_constants[term.rep] = res
     elif isinstance(term,ivy_logic.Ite):
         return z3.If(formula_to_z3_int(term.args[0]),term_to_z3(term.args[1]),term_to_z3(term.args[2]))
@@ -329,7 +369,9 @@ def term_to_z3(term):
             fun = lookup_native(term.rep,functions,"function")
             if fun is None:
                 sig = term.rep.sort.to_z3()
-                fun = z3.Function(term.rep.name, *sig)
+                sn = solver_name(term.rep)
+                assert solver_name is not None, term.rep
+                fun = z3.Function(sn, *sig)
             z3_functions[term.rep] = fun
         args = [term_to_z3(arg) for arg in term.args]
         res = apply_z3_func(fun,args)

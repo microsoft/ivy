@@ -1,0 +1,423 @@
+#lang ivy1.7
+
+# This is an implementation of the generic TLS interface based on the picotls library.
+# The parameters are:
+#
+#     cid : the type of connection ids
+#     index : an unbounded sequence type
+#     bytes : a type of byte arrays indexed by `index`
+#     extens : a type of lists of extensions
+#     lower : the lower interface
+#     upper : the upper interface
+#
+
+module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
+
+    # Link the gnutls library
+
+    attribute libspec = "picotls-core,picotls-minicrypto,picotls-openssl,ssl,crypto,dl"
+    
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+    object cid_map = {}     # map from cid's to connections
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    extern "C" {
+    #include "picotls.h"
+    #include "picotls/openssl.h"
+    #include "picotls/minicrypto.h"
+    }
+
+    // TODO: put any forward class definitions here
+
+    class tls_callbacks;
+    class picotls_connection;
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+
+    // This structure holds all the callbacks. These are functions
+    // that are called synchronously.
+
+    struct tls_callbacks {
+        %`lower.send` ls;
+        %`upper.recv` ur;
+        %`upper.alert` ua;
+        %`upper.session_established` use;
+    tls_callbacks(
+        const %`lower.send` ls,
+        const %`upper.recv` ur,
+        const %`upper.alert` ua,
+        const %`upper.session_established` use
+    )
+    : ls(ls), ur(ur), ua(ua), use(use) {}
+    };
+
+    /* Per epoch crypto context. There are four such contexts:
+     * 0: Initial context, with encryption based on a version dependent key,
+     * 1: 0-RTT context
+     * 2: Handshake context
+     * 3: Application data
+     */
+    struct quic_crypto_context_t {
+        void* aead_encrypt;
+        void* aead_decrypt;
+        void* pn_enc; /* Used for PN encryption */
+        void* pn_dec; /* Used for PN decryption */
+        quic_crypto_context_t() {
+           aead_encrypt = aead_decrypt = pn_enc = pn_dec = 0;
+        }
+    };
+
+    // Structure to hold state of a tls session
+
+    struct picotls_connection {
+        `cid` id;
+        ptls_t *gs;
+        tls_callbacks cb;
+        ptls_handshake_properties_t *hsp;
+        std::vector<char> input;
+        int handshake_status;
+        std::vector<quic_crypto_context_t> crypto_context;
+        picotls_connection(`cid` id, ptls_t *gs, tls_callbacks cb,
+            ptls_handshake_properties_t *hsp)
+            : id(id),gs(gs),cb(cb),hsp(hsp) {
+            handshake_status = 0;
+            crypto_context.resize(4);
+        }
+    };
+
+    int tls_collect_extensions_cb(ptls_t* tls, struct st_ptls_handshake_properties_t* properties, uint16_t type)
+    {
+        return type & 0xff00 == 0xff00;
+    }
+
+    int tls_collected_extensions_cb(ptls_t* tls, ptls_handshake_properties_t* properties,
+    ptls_raw_extension_t* slots)
+    {
+        // TODO: do something with incoming extensions
+        return 0;
+    }
+
+    #define QUIC_LABEL_QUIC_BASE "quic "
+    #define QUIC_LABEL_PN "pn"
+
+    // The following mess is to get the traffic keys from picotls
+
+    void *aead_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        return ptls_aead_new(cipher->aead, cipher->hash, is_enc, secret, QUIC_LABEL_QUIC_BASE);
+    }
+
+    void *pn_enc_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        uint8_t key[PTLS_MAX_SECRET_SIZE];
+
+        ptls_hkdf_expand_label(cipher->hash, key, 
+                               cipher->aead->ctr_cipher->key_size,
+                               ptls_iovec_init(secret, cipher->hash->digest_size), 
+                               QUIC_LABEL_PN,
+                               ptls_iovec_init(NULL, 0),
+                               QUIC_LABEL_QUIC_BASE);
+
+        return ptls_cipher_new(cipher->aead->ctr_cipher, is_enc, key);
+    }
+
+    void quic_set_key_from_secret(ptls_cipher_suite_t * cipher, int is_enc, quic_crypto_context_t * ctx, const void *secret)
+    {
+        if (is_enc) {
+             ctx->aead_encrypt = aead_from_secret(cipher, is_enc, secret);
+             ctx->pn_enc =  pn_enc_from_secret(cipher, is_enc, secret);
+        } else {
+            ctx->aead_decrypt = aead_from_secret(cipher, is_enc, secret);
+            ctx->pn_dec = pn_enc_from_secret(cipher, is_enc, secret);
+        }
+    }
+
+    int quic_update_traffic_key_callback(ptls_update_traffic_key_t * self, ptls_t *tls, int is_enc, size_t epoch, const void *secret)
+    {
+        picotls_connection* cnx = (picotls_connection*)*ptls_get_data_ptr(tls);
+        ptls_cipher_suite_t * cipher = ptls_get_cipher(tls);
+        quic_set_key_from_secret(cipher, is_enc, &cnx->crypto_context[epoch], secret);
+        return 0;
+    }
+
+
+
+    // Some parameters for picotls as used by picoquic.
+
+    ptls_key_exchange_algorithm_t *picotls_key_exchanges[] = 
+        { &ptls_openssl_secp256r1, &ptls_minicrypto_x25519, NULL };
+
+    ptls_cipher_suite_t *picotls_cipher_suites[] = { 
+        &ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
+        &ptls_minicrypto_chacha20poly1305sha256, NULL };
+
+    // Here we process handshake data on a TLS connection. The in_epoch is a picotls
+    // epoch. For the initial client handshake, input is null.
+
+    int picotls_do_handshake(picotls_connection *s, size_t in_epoch, void *input, size_t inlen ) {
+        size_t epoch_offsets[5] = { 0, 0, 0, 0, 0 };
+        struct st_ptls_buffer_t sendbuf;
+        ptls_buffer_init(&sendbuf, (void *)"", 0);
+        int ret = ptls_handle_message(s->gs, &sendbuf, epoch_offsets, in_epoch, input, inlen, s->hsp);
+        if (ret == PTLS_ERROR_IN_PROGRESS) {
+            std::cerr << "PICOTLS RETURNED PTLS_ERROR_IN_PROGRESS\n";
+        } else if (ret != 0) {
+            std::cerr << "PICOTLS RETURNED ERROR: " << ret << "\n";
+        }
+
+        // Any generated bytes go to the lower send callback (even in case of error).
+
+        if (sendbuf.off > 0) {
+            `bytes` bytes;
+            bytes.resize(sendbuf.off);
+            std::copy(sendbuf.base,sendbuf.base+sendbuf.off,bytes.begin());
+            s->cb.ls(s->id,bytes);
+        }
+    }
+
+    #if false
+
+    // Handle callback from gnutls to send data
+
+    ssize_t gnutls_session_push_func(gnutls_transport_ptr_t ptr, const void* data, size_t len) {
+        gnutls_connection *s = (gnutls_connection *) ptr;
+        `cid` c = s->id;
+        unsigned char *d = (unsigned char *)data;
+        `bytes` bytes;
+        bytes.resize(len);
+        std::copy(d,d+len,bytes.begin());
+        s->cb.ls(c,bytes);
+        return len;
+    }
+
+    // Handle callback from gnutls to recv data
+
+    ssize_t gnutls_session_pull_func(gnutls_transport_ptr_t ptr, void* data, size_t len){
+        gnutls_connection *s = (gnutls_connection *) ptr;
+        `cid` c = s->id;
+        std::vector<char> &input = s->input;
+        size_t res = input.size();
+        if (len < res)
+            res = len;
+        if (res == 0) {
+            errno = EAGAIN;
+            return -1;
+        }
+        char *d = (char *)data;
+        for (size_t i = 0; i < res; i++) {
+            d[i] = input[i];
+        }
+        input.erase(input.begin(),input.begin()+res);
+        return res;
+    }
+
+   // Start or resume handshake
+
+   void gnutls_do_handshake(gnutls_connection *s) {
+       // HACK HACK HACK HACK
+       // set the read and write epochs to zero to hopefully disable encryption of records
+       // s->gs->security_parameters.epoch_read = 0;
+       // s->gs->security_parameters.epoch_write = 0;
+       s->handshake_status = gnutls_handshake(s->gs);
+        if (s->handshake_status != GNUTLS_E_SUCCESS &&
+            s->handshake_status != GNUTLS_E_AGAIN) {
+            std::cerr << "gnutls_handshake returned error\n";
+            exit(1);
+        }
+    }
+
+    // This is horrible, but it can't be helped, because the gnutls
+    // callbacks for external extensions don't have parameters.
+
+    hash_space::hash_map<gnutls_session_t,std::vector<std::vector<unsigned char> > > gnutls_ext_data_map;
+
+    // Send extension data
+
+    int gnutls_ext_supp_recv_params(gnutls_session_t session, const unsigned char *data, size_t _data_size) {
+        const unsigned char *d = (const unsigned char *) data;
+        std::vector<unsigned char> v;
+        v.resize(_data_size);
+        std::copy(d,d+_data_size,v.begin());
+        gnutls_ext_data_map[session].push_back(v);
+        return _data_size;
+    }
+
+    // Receive extension data
+
+    int gnutls_ext_supp_send_params(gnutls_session_t session, gnutls_buffer_t buf) {
+        std::vector<std::vector<unsigned char> > &datas = gnutls_ext_data_map[session];
+        std::vector<unsigned char> v = datas.front();
+        int len = v.size();
+        if (gnutls_buffer_append_data(buf, &v[0], len) < 0) {
+            std::cerr << "gnutls_buffer_append_data returned error\n";
+            exit(1);
+        }
+        datas.erase(datas.begin());
+        return len;
+    }
+    #endif
+>>>
+
+# Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+# object, we declared it here anti-quoted. The plugs in the actual member name, which may
+# be any array if this is a parameterized instance.
+
+<<< member
+
+    hash_space::hash_map<`cid`,picotls_connection *> `cid_map`; // maps cid's to connections
+    tls_callbacks *`cb`;             // the callbacks to ivy
+
+>>>
+
+
+# Here, we put code to go in the initializer. If this is a
+# parameterized instance, then this code will be run in a loop, so we
+# have to be careful that any initialization of common objects is
+# idempotent.
+
+<<< init
+
+    // Create the callbacks. When you put an
+    // action in anti-quotes it creates a function object (a "thunk")
+    // that captures the instance environment, in this case including
+    // the instance's endpoint id "me".
+
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.session_established`);
+
+>>>
+
+
+    object impl = {
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    implement create(c:cid, is_server:bool, e:extens) {
+        <<< impure
+            
+	// We create a new picootls session, and add an entry in the cid_map
+	// for it.
+
+        ptls_context_t* ctx;
+        ctx = new ptls_context_t;
+        memset(ctx, 0, sizeof(ptls_context_t));
+        ctx->random_bytes = ptls_openssl_random_bytes;
+        ctx->key_exchanges = picotls_key_exchanges; 
+        ctx->cipher_suites = picotls_cipher_suites; 
+        ctx->send_change_cipher_spec = 0;
+        ctx->hkdf_label_prefix = QUIC_LABEL_QUIC_BASE;
+        ctx->update_traffic_key = new ptls_update_traffic_key_t;
+        ctx->update_traffic_key->cb = quic_update_traffic_key_callback;
+        ctx->get_time = &ptls_get_time;
+        ctx->ticket_lifetime = 100000; /* 100,000 seconds, a bit more than one day */
+        ctx->require_dhe_on_psk = 1;
+        ctx->max_early_data_size = 0xFFFFFFFF;
+        ctx->omit_end_of_early_data = 1;
+        ptls_handshake_properties_t *handshake_properties = new ptls_handshake_properties_t; 
+        memset(handshake_properties, 0, sizeof(ptls_handshake_properties_t));
+        handshake_properties->collect_extension = tls_collect_extensions_cb;
+        handshake_properties->collected_extensions = tls_collected_extensions_cb;
+        
+
+        // add the extensions
+
+        ptls_raw_extension_t *ptls_exts = new ptls_raw_extension_t[e.size()+1];
+        for (unsigned i = 0; i < e.size(); i++) {
+            `exten_ser` ser;
+            __ser(ser,e[i]);
+            unsigned etype = (((unsigned char)(ser.res[0])) << 8) + ((unsigned char)(ser.res[1]));
+            unsigned len = (((unsigned char)(ser.res[2])) << 8) + ((unsigned char)(ser.res[3]));
+            unsigned char *data = new unsigned char[ser.res.size()-4];
+            std::copy(ser.res.begin()+4,ser.res.end(),data);
+            ptls_exts[i].type = etype;
+            ptls_exts[i].data.base = data;
+            ptls_exts[i].data.len = len;
+            // int eres = gnutls_session_ext_register (session, "ext_name", etype,
+            //   GNUTLS_EXT_APPLICATION, gnutls_ext_supp_recv_params,
+            //   gnutls_ext_supp_send_params, 0,0,0,0);
+            // if (eres != GNUTLS_E_SUCCESS) {
+            //     std::cerr << "gnutls_session_ext_register\n";
+            //     exit(1);
+            // }
+        }
+        ptls_exts[e.size()].type = 0xffff;
+        ptls_exts[e.size()].data.base = NULL;
+        ptls_exts[e.size()].data.len = 0;
+        handshake_properties->additional_extensions = ptls_exts;
+        
+        ptls_t *session;
+        session = ptls_new(ctx,is_server ? 1 : 0);
+        picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties);
+        *ptls_get_data_ptr(session) = s;        
+
+	`cid_map`[c] = s;
+	
+        // Start the handshake. The in_epoch is zero for "initial".
+
+        picotls_do_handshake(s,0,0,0);
+        >>>
+    }
+
+
+    # Destroy frees a cid
+    
+    implement destroy(c:cid) {
+	<<< impure
+
+	// TODO: actually delete everything here
+	`cid_map`.erase(c);
+
+	>>>
+
+    }
+
+    # upper.send is called with application data to be transmitted to the peer.
+
+    implement upper.send(c:cid,data:bytes) {
+        <<< impure
+        // TODO: implement this
+        >>>
+    }
+
+    # lower.recv is called with data received from the peer on the lower interface.
+
+    implement lower.recv(c:cid,data:bytes) {
+        <<< impure
+	picotls_connection *s = `cid_map`[c];
+        std::vector<char> &input = s->input;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    input.push_back(data[i]);
+	}
+        // TODO: make the epoch a parameter of this call
+        // For now, we assume that the epochs come in order
+        size_t in_epoch = ptls_get_read_epoch(s->gs);
+        picotls_do_handshake(s,in_epoch,&(s->input[0]),s->input.size());
+        s->input.clear();
+        >>>
+    }
+
+    
+    trusted isolate iso = this
+
+    attribute test = impl
+}
+}

@@ -126,7 +126,9 @@
     "require"
     "ensure"
     "around"
-    "parameter"))
+    "parameter"
+    "autoinstance"
+))
 
 (defconst ivy-types '("bool" "int" "bv"))
 (defconst ivy-constants '())

@@ -783,14 +783,20 @@ def empty_clone(action):
     res.formal_returns = action.formal_returns
     return res
 
+def collect_sort_destructors(sort,res):
+    if sort.name in im.module.sort_destructors:
+        for dstr in im.module.sort_destructors[sort.name]:
+            res.add(dstr)
+            collect_relevant_destructors(dstr,res)
+    elif sort.name in im.module.variants:
+        for sort2 in im.module.variants[sort.name]:
+            collect_sort_destructors(sort2,res)
 
 def collect_relevant_destructors(sym,res):
     if not hasattr(sym.sort,'rng'):
         return 
-    if sym.sort.rng.name in im.module.sort_destructors:
-        for dstr in im.module.sort_destructors[sym.sort.rng.name]:
-            res.add(dstr)
-            collect_relevant_destructors(dstr,res)
+    collect_sort_destructors(sym.sort.rng,res)
+
            
 def add_extern_precond(mod,subaction,preconds):
     called = mod.actions[subaction.args[0].rep]
@@ -1313,8 +1319,15 @@ def get_cone(actions,action_name,cone):
     if action_name not in cone:
 #        print '({} '.format(action_name)
         cone.add(action_name)
-        for a in actions[action_name].iter_calls():
-            get_cone(actions,a,cone)
+        for a in actions[action_name].iter_subactions():
+            if isinstance(a,ia.CallAction):
+                get_cone(actions,a.callee(),cone)
+            elif isinstance(a,ia.NativeAction):
+                for arg in a.args[1:]:
+                    if isinstance(arg,ivy_ast.Atom):
+                        n = arg.relname
+                        if n in actions:
+                            get_cone(actions,n,cone)
 #        print ')'
             
 # Get the names of the actions that accessible from a given set of

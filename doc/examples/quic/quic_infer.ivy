@@ -1,0 +1,63 @@
+#lang ivy1.7
+
+#
+# Ghost event inference
+# ---------------------
+#
+# As an aid in monitoring QUIC packet streams, this section provides
+# actions for inferring unobserved ghost events from QUIC packet
+# events.
+
+# From a QUIC packet event, infer unobserved TLS events
+
+#
+# TODO: as of version 11, each role has its own cid, so connections
+# are not renamed at the clinet side on a server hello. This code
+# is commented and should be removed [1].
+#
+
+action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
+
+    # Stream frames on id 0 indicate that a `tls_send_event` has occurred.
+    # TODO: ignore duplicate frames.
+
+    var scid := pkt.hdr_cid;
+    var dcid := pkt.dst_cid;
+
+    # On short headers, the scid is not given, so we use the recorded value
+
+    if ~pkt.hdr_long {
+        scid := cid_dst_to_src(dcid)
+    };
+
+    # the encryption level of frames has to be inferred from the packet header
+
+    var e := encryption_level.initial if (pkt.hdr_type = 0x7f)
+        else (encryption_level.handshake if pkt.hdr_type = 0x7d
+        else encryption_level.other);
+    
+    call set_encryption_level(src,scid,e);
+
+    # Infer an open_connection event.
+    if conn_requested(dst,src,dcid) & ~cid_dst_to_src_set(dcid) & ~cid_dst_to_src_set(scid) {
+        call open_connection(src,dst,scid,dcid);
+    };
+
+    var idx := pkt.payload.begin;
+    while idx < pkt.payload.end {
+	var f := pkt.payload.value(idx);
+	if some(cf:frame.crypto) f *> cf {
+	    call tls_send_event(src,dst,scid,dcid,cf.data,e)
+	};
+	if some(sf:frame.stream) f *> sf {
+	    call app_send_event(src,dst,dcid,sf.id,sf.data)
+	};
+	call show_frame(src,dst,scid,dcid,f);
+	call f.handle(src,dst,scid,dcid,e);
+        idx := idx.next
+    }
+}
+
+action show_frame(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,f:frame)
+
+import show_frame

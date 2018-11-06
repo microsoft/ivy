@@ -1,0 +1,336 @@
+#lang ivy1.7
+
+# This is an implementation of the generic TLS interface based on the Botan library.
+# The parameters are:
+#
+#     cid : the type of connection ids
+#     index : an unbounded sequence type
+#     bytes : a type of byte arrays indexed by `index`
+#     extens : a type of lists of extensions
+#     lower : the lower interface
+#     upper : the upper interface
+#
+
+module tls_impl(cid,index,bytes,extens,exten_ser,lower,upper) = {
+
+    # The Botan header requires C++11 and the libbotan-2 library
+
+    attribute cppstd = cpp11
+    attribute libspec = "botan-2"
+    
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+    object cid_map = {}     # map from cid's to connections
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    #include <botan-2/botan/tls_client.h>
+    #include <botan-2/botan/tls_server.h>
+    #include <botan-2/botan/tls_callbacks.h>
+    #include <botan-2/botan/tls_session_manager.h>
+    #include <botan-2/botan/tls_extensions.h>
+    #include <botan-2/botan/tls_reader.h>
+    #include <botan-2/botan/tls_policy.h>
+    #include <botan-2/botan/auto_rng.h>
+    #include <botan-2/botan/certstor.h>
+
+    // TODO: put any forward class definitions here
+
+    class tls_callbacks;
+    class tls_connection;
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+
+    // This structure holds all the callbacks. These are function objects
+    // that are called synchronously.
+
+    struct tls_callbacks {
+        %`lower.send` ls;
+        %`upper.recv` ur;
+        %`upper.alert` ua;
+        %`upper.session_established` use;
+    tls_callbacks(
+        const %`lower.send` ls,
+        const %`upper.recv` ur,
+        const %`upper.alert` ua,
+        const %`upper.session_established` use
+    )
+    : ls(ls), ur(ur), ua(ua), use(use) {}
+    };
+
+    // A class for arbitrary TLS extensions
+
+    class tls_any_extension : public Botan::TLS::Extension
+       {
+       public:
+          tls_any_extension(Botan::TLS::Handshake_Extension_Type type,
+                            Botan::TLS::TLS_Data_Reader& reader,
+                            uint16_t extension_size)  :
+           m_type(type),
+           m_value(reader.get_fixed<uint8_t>(extension_size))
+           {
+           }
+
+          std::vector<uint8_t> serialize() const override {return m_value;} 
+
+          const std::vector<uint8_t>& value() { return m_value; }
+
+          bool empty() const override { return false; }
+
+          Botan::TLS::Handshake_Extension_Type type() const override { return m_type; }
+
+       private:
+          Botan::TLS::Handshake_Extension_Type m_type;
+          std::vector<uint8_t> m_value;
+
+       };
+
+    // This object is the callback interface for Botan
+
+    class botan_tls_callbacks : public Botan::TLS::Callbacks {
+	public:
+	`cid` the_cid;
+	tls_callbacks cb;
+        `extens` extns;
+
+        botan_tls_callbacks(const `cid` &the_cid, const tls_callbacks &cb, `extens` extns)
+        : the_cid(the_cid), cb(cb), extns(extns) {}
+
+	void tls_emit_data(const uint8_t data[], size_t size) override
+	{
+	    `bytes` vdata;
+	    for (size_t i = 0; i < size; i++)
+	    vdata.push_back(data[i]);
+	    cb.ls(the_cid,vdata);
+	}
+
+	void tls_record_received(uint64_t seq_no, const uint8_t data[], size_t size) override
+	{
+	    `bytes` vdata;
+	    for (size_t i = 0; i < size; i++)
+	    vdata.push_back(data[i]);
+	    cb.ur(the_cid,vdata);
+	}
+
+	void tls_alert(Botan::TLS::Alert alert) override
+	{
+	    std::string astr = alert.type_string();
+	    `bytes` vdata;
+	    for (size_t i = 0; i < astr.size(); i++)
+	    vdata.push_back(astr[i]);
+	    cb.ua(the_cid,vdata);
+	    // handle a tls alert received from the tls server
+	}
+
+	bool tls_session_established(const Botan::TLS::Session& session) override
+	{
+	    // the session with the tls server was established
+	    cb.use(the_cid);
+	    // return false to prevent the session from being cached, true to
+	    // cache the session in the configured session manager
+	    return false;
+	}
+
+        void tls_modify_extensions(Botan::TLS::Extensions &extn, Botan::TLS::Connection_Side which_side) override
+        {
+            `extens` &e = extns;
+            for (size_t i = 0; i < e.size(); i++) {
+                `exten_ser` ser;
+                __ser(ser,e[i]);
+                unsigned etype = (((unsigned char)(ser.res[0])) << 8) + ((unsigned char)(ser.res[1]));
+                unsigned len = (((unsigned char)(ser.res[2])) << 8) + ((unsigned char)(ser.res[3]));
+                std::vector< uint8_t > data;
+                data.resize(ser.res.size()-4);
+                std::copy(ser.res.begin()+4,ser.res.end(),data.begin());
+                Botan::TLS::TLS_Data_Reader rdr("unknown",data);
+                auto betype = static_cast<Botan::TLS::Handshake_Extension_Type>(etype);
+                auto the_extn = new tls_any_extension(betype,rdr,len);
+                extn.add(the_extn);
+            }
+        }	
+    };
+
+    // This is a credentials manager for Botan that provdes no credentials
+
+    class tls_null_credentials : public Botan::Credentials_Manager
+    {
+       public:
+	  std::vector<Botan::Certificate_Store*> trusted_certificate_authorities(
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // return a list of certificates of CAs we trust for tls server certificates,
+	     // e.g., all the certificates in the local directory "cas"
+	     return std::vector<Botan::Certificate_Store*>();
+	     }
+
+	  std::vector<Botan::X509_Certificate> cert_chain(
+	     const std::vector<std::string>& cert_key_types,
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // when using tls client authentication (optional), return
+	     // a certificate chain being sent to the tls server,
+	     // else an empty list
+	     return std::vector<Botan::X509_Certificate>();
+	     }
+
+	  Botan::Private_Key* private_key_for(const Botan::X509_Certificate& cert,
+	     const std::string& type,
+	     const std::string& context) override
+	     {
+	     // when returning a chain in cert_chain(), return the private key
+	     // associated with the leaf certificate here
+	     return nullptr;
+	     }
+    };
+
+
+    class tls_connection {
+	public:
+	Botan::RandomNumberGenerator *rng;
+	Botan::TLS::Session_Manager *session_mgr;
+	Botan::TLS::Callbacks *btcs;
+	Botan::Credentials_Manager *creds;
+        Botan::TLS::Policy *policy;
+	Botan::TLS::Channel *chan;
+    };
+
+    class tls_policy : public Botan::TLS::Policy {
+	public:
+	std::vector<std::string> allowed_signature_methods() const override {
+	    std::vector<std::string> res;
+	    res.push_back("ECDSA");
+	    res.push_back("RSA");
+	    res.push_back("");
+	    return res;
+	}
+        bool allow_tls10() const override {
+            return false;
+        }
+        bool allow_tls11() const override {
+            return false;
+        }
+};
+
+
+>>>
+
+# Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+# object, we declared it here anti-quoted. The plugs in the actual member name, which may
+# be any array if this is a parameterized instance.
+
+<<< member
+
+    hash_space::hash_map<`cid`,tls_connection *> `cid_map`; // maps cid's to connections
+    tls_callbacks *`cb`;             // the callbacks to ivy
+
+>>>
+
+
+# Here, we put code to go in the initializer. If this is a
+# parameterized instance, then this code will be run in a loop, so we
+# have to be careful that any initialization of common objects is
+# idempotent.
+
+<<< init
+
+    // Create the callbacks. When you put an
+    // action in anti-quotes it creates a function object (a "thunk")
+    // that captures the instance environment, in this case including
+    // the instance's endpoint id "me".
+
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.session_established`);
+
+>>>
+
+
+    object impl = {
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    implement create(c:cid, is_server:bool, e:extens) {
+        <<< impure
+            
+	// We allocate an unused cid, and create an entry in the cid_map
+	// for it.
+
+	tls_connection tc;
+	tc.rng = new Botan::AutoSeeded_RNG; 
+	tc.session_mgr = new Botan::TLS::Session_Manager_In_Memory(*tc.rng);
+	tc.btcs = new botan_tls_callbacks(c,*`cb`,e);
+	tc.creds = new tls_null_credentials;
+	tc.policy = new tls_policy; // Botan::TLS::Strict_Policy;
+	if (is_server) {
+	    tc.chan = new Botan::TLS::Server(*tc.btcs,*tc.session_mgr,*tc.creds,*tc.policy,*tc.rng);
+	} else {
+	    tc.chan = new Botan::TLS::Client(*tc.btcs,*tc.session_mgr,*tc.creds,*tc.policy,*tc.rng);
+        }	
+	`cid_map`[c] = new tls_connection(tc);
+	
+        >>>
+    }
+
+
+    # Destroy frees a cid
+    
+    implement destroy(c:cid) {
+	<<< impure
+
+	// TODO: actually delete everything here
+	`cid_map`.erase(c);
+
+	>>>
+
+    }
+
+    # upper.send is called with application data to be transmitted to the peer.
+
+    implement upper.send(c:cid,data:bytes) {
+        <<< impure
+	tls_connection *tc = `cid_map`[c];
+	std::vector<uint8_t> vec;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    vec.push_back(data[i]);
+	}
+	tc->chan->send(vec);
+        >>>
+    }
+
+    # lower.recv is called with data received from the peer on the lower interface.
+
+    implement lower.recv(c:cid,data:bytes) {
+        <<< impure
+	tls_connection *tc = `cid_map`[c];
+	std::vector<uint8_t> vec;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    vec.push_back(data[i]);
+	}
+	tc->chan->received_data(vec);
+        >>>
+    }
+
+    
+    trusted isolate iso = this
+
+    attribute test = impl
+}
+}

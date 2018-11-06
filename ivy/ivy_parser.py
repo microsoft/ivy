@@ -3,7 +3,7 @@
 #
 from ivy_concept_space import NamedSpace, ProductSpace, SumSpace
 from ivy_ast import *
-from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction
+from ivy_actions import AssumeAction, AssertAction, EnsuresAction, SetAction, AssignAction, VarAction, HavocAction, IfAction, AssignFieldAction, NullFieldAction, CopyFieldAction, InstantiateAction, CallAction, LocalAction, LetAction, Sequence, UpdatePattern, PatternBasedUpdate, SymbolList, UpdatePatternList, Schema, ChoiceAction, NativeAction, WhileAction, Ranking, RequiresAction, EnsuresAction, CrashAction, ThunkAction
 from ivy_lexer import *
 import ivy_utils as iu
 import copy
@@ -19,20 +19,21 @@ if not (iu.get_numeric_version() <= [1,2]):
         precedence = (
             ('left', 'SEMI'),
             ('left', 'GLOBALLY', 'EVENTUALLY'),
-            ('left', 'IF'),
-            ('left', 'ELSE'),
             ('left', 'ARROW', 'IFF'),
             ('left', 'OR'),
             ('left', 'AND'),
             ('left', 'TILDA'),
             ('left', 'EQ','LE','LT','GE','GT','PTO'),
             ('left', 'TILDAEQ'),
+            ('left', 'IF'),
+            ('left', 'ELSE'),
             ('left', 'COLON'),
             ('left', 'PLUS'),
             ('left', 'MINUS'),
             ('left', 'TIMES'),
             ('left', 'DIV'),
             ('left', 'DOLLAR'),
+            ('left', 'OLD'),
             ('left', 'DOT')
         )
 
@@ -175,6 +176,8 @@ def do_insts(ivy,insts):
                     raise iu.IvyError(instantiation,"variable {} is unbound".format(v))
             module = defn.args[1]
             inst_mod(ivy,module,pref,subst,vsubst)
+            if pref is None:
+                ivy.objects.update(module.objects)
         else:
             others.append(inst)
     if others:
@@ -191,6 +194,7 @@ def check_non_temporal(x):
         return x
 
 special_attribute = None
+parent_object = None
 
 class Ivy(object):
     def __init__(self):
@@ -198,6 +202,7 @@ class Ivy(object):
         self.defined = defaultdict(list)
         self.static = set()
         self.modules = dict()
+        self.objects = dict()  # maps object names to "defined" dictionary
         self.macros = dict()
         self.actions = dict()
         self.included = set()
@@ -206,11 +211,27 @@ class Ivy(object):
         global special_attribute
         self.attributes = (special_attribute,) if special_attribute is not None else ()
         special_attribute = None
+        # if we are a continuation object, inherent defined symbols from previous declaration
+        global parent_object
+        if parent_object is not None:
+#            print 'got parent_object = {}'.format(parent_object)
+            parent = stack[-1]
+            if parent_object == "this":
+                defined = parent.defined
+            else:
+#                if parent_object in parent.defined:
+#                    print parent.defined[parent_object]
+#                print parent.defined.keys()
+                defined = parent.get_object_defined(parent_object)
+#            print 'defined = {}'.format(defined)
+            if defined is not None:
+                self.defined = defined
+            parent_object = None
     def __repr__(self):
         return '\n'.join([repr(x) for x in self.decls])
-    def declare(self,decl):
+    def declare(self,decl,allow_redef=False):
         for df in decl.defines():
-            self.define(df)
+            self.define(df,allow_redef)
         for df in decl.static():
             self.static.add(df)
         decl.attributes = self.attributes + decl.attributes
@@ -222,16 +243,19 @@ class Ivy(object):
             for d in decl.args:
                 self.actions[d.defines()] = d
 
-    def define(self,df):
+    def define(self,df,allow_redef=False):
         if len(df) == 3:
             name,lineno,cls = df
         else:
             name,lineno = df
             cls = None
-        for olineno,ocls in self.defined[name]:
+        for x in self.defined[name]:
+            olineno,ocls = x[0],x[1]
             conflict = ((ocls is not ObjectDecl) if cls is TypeDecl 
                         else (ocls is not TypeDecl) if cls is ObjectDecl else True)
             if conflict:
+                if allow_redef:
+                    return
                 report_error(Redefining(name,lineno,olineno))
         self.defined[name].append((lineno,cls))
 
@@ -240,6 +264,19 @@ class Ivy(object):
         if name in self.defined_types:
             report_error(Redefining(name,lineno,self.defined[name]))
         self.defined[name] = lineno
+
+    def get_object_defined(self,name):
+        if name in self.defined:
+            x = self.defined[name][0]
+            if len(x) >= 3:
+                return x[2]
+        return None
+
+    def set_object_defined(self,name,defined):
+#        print 'set_object_defined: {}'.format(name)
+        if name in self.defined:
+#            print 'prev: {}'.format(self.defined[name])
+            self.defined[name] = [(x[0],x[1],defined) for x in self.defined[name]]
 
     @property
     def args(self):
@@ -270,9 +307,14 @@ def p_top_include_symbol(p):
         pref = Atom(p[3],[])
         pref.lineno = get_lineno(p,2)
         with ASTContext(pref):
+            global parent_object
+            parent_object = "this"
             module = importer(p[3])
+            stack.pop()
         for decl in module.decls:
-            p[0].declare(decl)
+            p[0].declare(decl,allow_redef=True)
+        p[0].included.update(module.included)
+        p[0].modules.update(module.modules)
 
 def p_labeledfmla_fmla(p):
     'labeledfmla : fmla'
@@ -415,6 +457,8 @@ def p_top_module_atom_eq_lcb_top_rcb(p):
 
 def p_optdotdotdot(p):
     'optdotdotdot : '
+    global parent_object
+    parent_object = None
     p[0] = False
 
 def p_optdotdotdot_dotdotdot(p):
@@ -431,12 +475,14 @@ def p_objectend(p):
     stack[-1].is_object=False
     p[0] = None
 
-def create_object(top,name,objectargs,module,continuation=False):
+def create_object(top,name,objectargs,module,lineno=None,continuation=False):
     prefargs = [Variable('V'+str(idx),pr.sort) for idx,pr in enumerate(objectargs)]
     pref = Atom(name,prefargs)
+    pref.lineno = lineno
 #    top.define((pref.rep,get_lineno(p,2)))
     if not continuation:
         top.declare(ObjectDecl(pref))
+        top.set_object_defined(name,module.defined)
     vsubst = dict((pr.rep,v) for pr,v in zip(objectargs,prefargs))
     inst_mod(top,module,pref,{},vsubst)
     # for decl in module.decls:
@@ -444,10 +490,16 @@ def create_object(top,name,objectargs,module,continuation=False):
     #     top.declare(idecl)
     stack.pop()
 
-def p_top_object_symbol_eq_lcb_top_rcb(p):
-    'top : top OBJECT SYMBOL objectargs EQ LCB optdotdotdot top RCB objectend'
+def p_objsym(p):
+    'objsym : SYMBOL'
     p[0] = p[1]
-    create_object(p[0],p[3],p[4],p[8],p[7])
+    global parent_object
+    parent_object = p[0]
+
+def p_top_object_symbol_eq_lcb_top_rcb(p):
+    'top : top OBJECT objsym objectargs EQ LCB optdotdotdot top RCB objectend'
+    p[0] = p[1]
+    create_object(p[0],p[3],p[4],p[8],get_lineno(p,3),p[7])
 
 def p_optsemi(p):
     'optsemi : '
@@ -584,6 +636,11 @@ def p_top_instantiate_insts(p):
     'top : top INSTANTIATE insts'
     p[0] = p[1]
     do_insts(p[0],p[3])
+
+def p_top_autoinstance_insts(p):
+    'top : top AUTOINSTANCE insts'
+    p[0] = p[1]
+    p[0].declare(AutoInstanceDecl(*p[3]))
 
 def p_insts_inst(p):
     'insts : inst'
@@ -1233,6 +1290,11 @@ else:
     'optactiondef : EQ topseq'
     p[0] = p[2]
 
+  def p_optactiondef_eq_symbol(p):
+    'optactiondef : EQ TIMES'
+    p[0] = CrashAction()
+    p[0].lineno = get_lineno(p,2)
+
   def p_optimpex(p):
       'optimpex : '
       p[0] = None
@@ -1251,6 +1313,8 @@ else:
     adef = p[7]
     if not hasattr(adef,'lineno'):
         adef.lineno = get_lineno(p,4)
+    if isinstance(adef,CrashAction):
+        adef = adef.clone([Atom(This(),p[5])])
     decl = ActionDecl(ActionDef(Atom(p[4],[]),adef,formals=p[5],returns=p[6]))
     p[0].declare(decl)
     for foo in decl.args:
@@ -1389,7 +1453,7 @@ if not (iu.get_numeric_version() <= [1,1]):
     def p_top_opttrusted_isolate_callatom_eq_lcb_top_rcb_optwith(p):
         'top : top opttrusted ISOLATE SYMBOL optargs EQ LCB top RCB optwith'
         p[0] = p[1]
-        create_object(p[0],p[4],p[5],p[8])
+        create_object(p[0],p[4],p[5],p[8],get_lineno(p,4))
         ty = TrustedIsolateDef if p[2] else IsolateDef
         d = IsolateObjectDecl(ty(*([Atom(p[4],p[5]),Atom(p[4],p[5])]+p[10])))
         d.args[0].with_args = len(p[10])
@@ -1540,7 +1604,7 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
 def parse_nativequote(p,n):
     string = p[n][3:-3] # drop the quotation marks
     fields = string.split('`')
-    bqs = [Atom(s) for idx,s in enumerate(fields) if idx % 2 == 1]
+    bqs = [(Atom(This()) if s == 'this' else Atom(s))  for idx,s in enumerate(fields) if idx % 2 == 1]
     text = "`".join([(s if idx % 2 == 0 else str(idx/2)) for idx,s in enumerate(fields)])
     eols = [sum(1 for c in s if c == '\n') for idx,s in enumerate(fields) if idx % 2 == 0]
     seols = 0
@@ -1587,8 +1651,8 @@ def p_top_attribute_callatom_eq_attributeval(p):
     thing.lineno = get_lineno(p,2)
     p[0].declare(thing)   
 
-def p_top_variant_symbol_of_symbol(p):
-    'top : top VARIANT SYMBOL OF SYMBOL'
+def p_top_variant_symbol_of_atype(p):
+    'top : top VARIANT typesymbol OF atype'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
@@ -1599,7 +1663,7 @@ def p_top_variant_symbol_of_symbol(p):
     p[0].declare(VariantDecl(vdfn))
 
 def p_top_variant_symbol_of_symbol_eq_sort(p):
-    'top : top VARIANT SYMBOL OF SYMBOL EQ sort'
+    'top : top VARIANT typesymbol OF atype EQ sort'
     p[0] = p[1]
     scnst = Atom(p[3])
     scnst.lineno = get_lineno(p,3)
@@ -1714,6 +1778,13 @@ def lower_var_stmts(stmts):
             res = LocalAction(*[asgn,body])
             res.lineno = body.lineno;
             return stmts[:idx] + [res]
+        if isinstance(stmt,ThunkAction):
+            name = stmt.args[1].rep
+            lname = 'loc:'+name
+            subst = {name:lname}
+            lines = lower_var_stmts(stmts[idx+1:])
+            lines = [subst_prefix_atoms_ast(s,subst,None,None) for s in lines]
+            return stmts[:idx] + [stmt.clone(stmt.args + [Sequence(*lines)])]
     return stmts
 
 def p_sequence_lcb_rcb(p):
@@ -2012,6 +2083,14 @@ def p_lparam_variable_colon_symbol(p):
     p[0].lineno = get_lineno(p,1)
     p[0].sort = p[3]
 
+if not (iu.get_numeric_version() <= [1,6]):
+
+    def p_lparam_caret_variable_colon_symbol(p):
+        'lparam : CARET SYMBOL COLON atype'
+        p[0] = KeyArg(p[2])
+        p[0].lineno = get_lineno(p,2)
+        p[0].sort = p[4]
+
 def p_lparams_lparam(p):
     'lparams : lparam'
     p[0] = [p[1]]
@@ -2056,6 +2135,15 @@ if not (iu.get_numeric_version() <= [1,5]):
         'action : VAR opttypedsym optinit'
         p[0] = VarAction(p[2],p[3]) if p[3] is not None else VarAction(p[2])
         p[0].lineno = get_lineno(p,1)
+
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_action_thunk_symbol_optargs_colon_atype_assign_sequence(p):
+        'action : THUNK LABEL SYMBOL optargs COLON atype ASSIGN sequence'
+        action = Atom(p[3],p[4])
+        action.lineno = get_lineno(p,3)
+        p[0] = ThunkAction(Atom(p[2][1:-1],[]),action,Atom(p[6]),p[8])
+        p[0].lineno = get_lineno(p,1)
+
 
 def p_eqn_SYMBOL_EQ_SYMBOL(p):
     'eqn : SYMBOL EQ SYMBOL'
@@ -2322,6 +2410,35 @@ parser = yacc.yacc(start='top',tabmodule='ivy_parsetab',errorlog=yacc.NullLogger
 #parser = yacc.yacc(start='top',tabmodule='ivy_parsetab')
 # formula_parser = yacc.yacc(start = 'fmla', tabmodule='ivy_formulatab')
 
+def expand_autoinstances(ivy):
+    autos = defaultdict(list)
+    trefs = set()
+    decls = ivy.decls
+    ivy.decls = []
+    for decl in decls:
+        if isinstance(decl,AutoInstanceDecl):
+            for inst in decl.args:
+                if len(inst.args) == 2:
+                    pref,parms = iu.extract_parameters_name(inst.args[0].rep)
+                    key = (pref,len(parms))
+                    autos[key].append(inst)
+        else:
+            drefs = set()
+            decl.get_type_names(drefs)
+            for tname in drefs:
+                if tname not in trefs:
+                    trefs.add(tname)
+                    pref,refparms = iu.extract_parameters_name(tname)
+                    key = (pref,len(refparms))
+                    for inst in autos[key]:
+                        pref,parms = iu.extract_parameters_name(inst.args[0].rep)
+                        lhs = Atom(tname,[]) 
+                        subst = dict(zip(parms,refparms))
+                        rhs = inst.args[1].clone([Atom(subst.get(a.rep,a.rep),[]) for a in inst.args[1].args])
+                        newinst = Instantiation(lhs,rhs)
+                        do_insts(ivy,[newinst])
+            ivy.decls.append(decl)                    
+
 def parse(s,nested=False):
     global error_list
     global stack
@@ -2332,6 +2449,8 @@ def parse(s,nested=False):
     with LexerVersion(vernum):
         # shallow copy the parser and lexer to try for re-entrance (!!!)
         res = copy.copy(parser).parse(s,lexer=copy.copy(lexer))
+    if not nested:
+        expand_autoinstances(res)
     if error_list:
         raise iu.ErrorList(error_list)
     return res

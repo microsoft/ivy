@@ -186,6 +186,9 @@ class Forall(Quantifier):
 class Exists(Quantifier):
     pass
 
+class Isa(Formula):
+    pass
+
 class NamedBinder(Formula):
     def __init__(self, name, bounds, body):
         self.name = name
@@ -289,15 +292,21 @@ class App(Term):
     def is_numeral(self):
         return self.rep.rep[0].isdigit() or self.rep.rep[0] == '"'
     def prefix(self,s):
-        res = App(s + self.rep)
+        res = type(self)(s + self.rep)
         if hasattr(self,'sort'):
             res.sort = self.sort
         return res
     def drop_prefix(self,s):
         assert self.rep.startswith(s)
-        res = App(self.rep[len(s):],*self.args)
+        res = type(self)(self.rep[len(s):],*self.args)
         if hasattr(self,'sort'):
             res.sort = self.sort
+        return res
+    def rename(self,s):
+        res = self.clone(self.args)
+        res.rep = s
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
         return res
 
 
@@ -503,6 +512,8 @@ class Decl(AST):
         return []
     def static(self):
         return []
+    def get_type_names(self,names):
+        return
 
 
 class ModuleDecl(Decl):
@@ -709,17 +720,34 @@ class InstantiateDecl(Decl):
     def name(self):
         return 'instantiate'
 
+class AutoInstanceDecl(Decl):
+    def name(self):
+        return 'autoinstance'
+
+
 class RelationDecl(Decl):
     def name(self):
         return 'relation'
     def defines(self):
         return [(c.relname,lineno(c)) for c in self.args if c.relname not in iu.polymorphic_symbols]
 
+def tterm_type_names(c,names):
+    if hasattr(c,'sort'):
+        names.add(c.sort)
+    for arg in c.args:
+        if hasattr(arg,'sort'):
+            names.add(arg.sort)
+
+
 class ConstantDecl(Decl):
     def name(self):
         return 'individual'
     def defines(self):
         return [(c.rep,lineno(c)) for c in self.args if c.rep not in iu.polymorphic_symbols]
+    def get_type_names(self,names):
+        for c in self.args:
+            tterm_type_names(c,names)
+                
 
 class ParameterDecl(ConstantDecl):
     def name(self):
@@ -770,7 +798,10 @@ class ActionDecl(Decl):
     def name(self):
         return 'action'
     def defines(self):
-        return [(c.defines(),lineno(c)) for c in self.args]
+        res =  [(c.defines(),lineno(c)) for c in self.args]
+        for a in self.args:
+            res.extend(a.iter_internal_defines())
+        return res
 
 class StateDecl(Decl):
     def name(self):
@@ -792,6 +823,12 @@ class TypeDecl(Decl):
     def static(self):
         res = [a for a,b in self.args[0].defines()]
         return res
+    def get_type_names(self,names):
+        for c in self.args:
+            t = c.args[1]
+            if isinstance(t,StructSort):
+                for s in t.args:
+                    tterm_type_names(s,names)
 
 class VariantDecl(Decl):
     def name(self):
@@ -975,7 +1012,7 @@ class NativeCode(AST):
 class NativeType(AST):
     """ Quote native type """
     def __str__(self):
-        return ivy_ast.native_to_string(self.args)
+        return native_to_string(self.args)
 
 class NativeExpr(AST):
     """ Quote native expr """
@@ -1060,9 +1097,11 @@ class ActionDef(Definition):
             action = subst_prefix_atoms_ast(action,subst,None,None)
         self.args = [atom,action]
     def __repr__(self):
-        return self.args[0].relname + ' = ' + str(self.args[1])
+        return str(self.args[0]) + '(' + ','.join(str(p) for p in self.formal_params) + ') = ' + str(self.args[1])
     def defines(self):
         return self.args[0].relname
+    def iter_internal_defines(self):
+        return self.args[1].iter_internal_defines()
     def clone(self,args):
         if not hasattr(self.args[1],'lineno'):
             print 'no lineno!!!!!: {}'.format(self)
@@ -1082,7 +1121,7 @@ class ActionDef(Definition):
                 [s.drop_prefix('fml:') for s in self.formal_returns])
 
 def rewrite_param(p,rewrite):
-    res = App(p.rep)
+    res = type(p)(p.rep)
     res.sort = rewrite_sort(rewrite,p.sort)
     return res
 
@@ -1147,7 +1186,6 @@ class ScenarioDef(AST):
         res.extend(self.places())
         return res
     
-
 # predefined things
 
 universe = 'S'
@@ -1246,7 +1284,16 @@ class AstRewriteSubstPrefix(object):
         self.subst,self.pref,self.to_pref,self.static = subst,pref,to_pref,static
     def rewrite_name(self,name):
         return subst_subscripts(name,self.subst)
+    def prefix_str(self,name,always):
+        if not (self.pref and (always or self.to_pref == None or split_name(name)[0] in self.to_pref)):
+            return name
+        return iu.compose_names(self.pref.rep,name)
     def rewrite_atom(self,atom,always=False):
+        if not(isinstance(atom.rep,This)):
+            g = name_parser.findall(atom.rep)
+            if len(g) > 1:
+                n = g[0] + ''.join(('[' + self.prefix_str(x[1:-1],always) + ']' if x.startswith('[') else x) for x in g[1:])
+                atom = atom.rename(n)
         if not (self.pref and (always or self.to_pref == None or isinstance(atom.rep,This) or 
                 split_name(atom.rep)[0] in self.to_pref)):
             return atom
@@ -1454,3 +1501,7 @@ class Labeler(object):
         self.rn = iu.UniqueRenamer()
     def __call__(self):
         return Atom(self.rn(),[])
+
+class KeyArg(App):
+    def __repr__(self):
+        return '^' + App.__repr__(self)

@@ -14,7 +14,7 @@ setup(name='ms_ivy',
           'tarjan'
       ],
       entry_points = {
-        'console_scripts': ['ivy=ivy.ivy:main','ivy_check=ivy.ivy_check:main','ivy_to_cpp=ivy.ivy_to_cpp:main','ivy_show=ivy.ivy_show:main','ivy_ev_viewer=ivy.ivy_ev_viewer:main','ivy_to_md=ivy.ivy_to_md:main',],
+        'console_scripts': ['ivy=ivy.ivy:main','ivy_check=ivy.ivy_check:main','ivy_to_cpp=ivy.ivy_to_cpp:main','ivy_show=ivy.ivy_show:main','ivy_ev_viewer=ivy.ivy_ev_viewer:main','ivyc=ivy.ivy_to_cpp:ivyc','ivy_to_md=ivy.ivy_to_md:main'],
         },
       zip_safe=False)
 

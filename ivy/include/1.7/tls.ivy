@@ -1,0 +1,111 @@
+#lang ivy
+
+include tls_picotls
+
+# This module defines the interface TLS and the underlying transport.
+
+module tls_lower_intf(cid,bytes) = {
+
+    # Transfers data from connection to underlying transport
+    
+    action send(c:cid,data:bytes)
+    
+    # Transfers data from the underlying transport to connection
+    
+    action recv(c:cid,data:bytes)
+    
+}
+
+# This module defines the interface of a TLS endpoint (either a client
+# or a server. The parameters are:
+#
+# `cid` : the type of connection identifiers
+# `bytes` : the type of byte arrays
+# `lower` : the interface to the underlying transport
+# `extens` : the type of lists of extensions
+# `exten_ser` : serializer for extensions
+
+module tls_intf(cid,index,bytes,lower,extens,exten_ser) = {
+
+    # The upper interface is between TLS and the application
+
+    # Transfers connection data to application
+    
+    action recv(c:cid,data:bytes)
+    
+    # Transfers application data to conection
+    
+    action send(c:cid,data:bytes)
+    
+    # Alert from connection to application
+    
+    action alert(c:cid,data:bytes)
+    
+    # Indicates to application that a session is established,
+    # meaning the connection is ready to send on.
+    
+    action session_established(c:cid)
+    
+    # Generates key material based on master secret, per RFC 5705.
+    
+    action key_material_export(c:cid,label:bytes,context:bytes,length:index)
+    returns (key:bytes)
+    
+    # Create a new connection with a fresh cid, and list of extensions
+
+    action create(c:cid, is_server : bool, e : extens)
+
+    # Destroy an existing connection
+
+    action destroy(c:cid)
+
+    specification {
+
+	relation open(C:cid)
+	relation established(C:cid)
+	
+	after init {
+	    open(C) := false;
+	    established(C) := false;
+	}
+
+	around create {
+	    require ~open(c);
+	    ...
+	    open(c) := true;
+	}
+
+	around destroy {
+	    require open(c);
+	    ...
+	    open(c) := false;
+	    established(c) := false;
+	}
+
+	before recv {
+	    require open(c);
+	}
+
+	before send {
+	    require open(c) & established(c);
+	}
+
+	before session_established {
+	    require open(c) & ~established(c);
+	    established(c) := true
+	}
+
+	before key_material_export {
+	    require open(c) & established(c);
+	}
+
+	invariant established(C) -> open(C)
+    }
+    
+    implementation {
+        instance impl : tls_gnutls(cid,index,bytes,extens,exten_ser,lower,this)
+    }
+
+}
+
+

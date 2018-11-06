@@ -45,4 +45,3 @@ def main():
                 last_was_comment = False
         if not last_was_comment:
             outf.write('```\n')
-            

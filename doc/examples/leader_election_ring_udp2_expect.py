@@ -6,7 +6,7 @@ def run(name,opts,res):
     for idx in range(2):
         child[idx].logfile = sys.stdout
     try:
-        child[0].expect('>')
+        # child[0].expect('>')
         child[0].expect(r'< serv.elect')
         return True
     except pexpect.EOF:

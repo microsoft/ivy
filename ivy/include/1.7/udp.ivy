@@ -246,6 +246,72 @@ module nondup_endpoint_set(addr,port_base,pkt) = {
 
 }
 
+module udp_network(host,pkt) = {
+
+    type socket
+
+# calls
+
+    action open(self:host,addr:ip.endpoint) returns (s:socket)
+
+    action close(self:host,s:socket)
+
+    action send(self:host,s:socket,p:pkt)
+
+# callbacks
+
+    action recv(self:addr,s:socket,src:ip.endpoint,p:pkt)
+
+    var bound(H:host,S:socket,A:ip.endpoint) : bool
+    var sent(S:ip.endpoint,D:ip.endpoint,P:pkt) : bool
+        
+    object spec =  {
+
+
+        after init {
+            bound(H,S,A) := false;
+	    sent(S,D,P) := false;
+        }
+
+
+        after open {
+            assume ~bound(self,s,A);
+            bound(self,s,addr) := true;
+        }
+
+
+        around send {
+            require exists A. open(self,s,A);
+            ...
+            if some (src:ip.endpoint) bound(self,s,addr) {
+                sent(src,dst,p) := true
+            }
+        }
+
+        before recv {
+            require bound(self,s,dst);
+            require sent(src,dst,p);
+        }            
+
+        around close {
+            require exists A. bound(self,s,A);
+            ...
+            bound(self,s,A) := false;
+        }
+
+    }
+
+    
+    implementation {
+        instance impl(X:addr) : udp_impl(host,pkt)
+    }
+
+    isolate iso = this
+    attribute test = impl
+}
+
+
+
 
 # type a
 # type t

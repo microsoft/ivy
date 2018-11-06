@@ -95,6 +95,7 @@ class CppContext(Context):
         self.classname = None
         self.global_includes = []
         self.impl_includes = []
+        self.once_globals = set()
 
     def enter(self):
         global context
@@ -110,6 +111,12 @@ context = None  # The current C++ context
 def add_global(code):
     """ Adds code to the current global (header) context. """
     context.globals.write(code)
+
+def add_once_global(code):
+    """ Adds code once to the current global (header) context. """
+    if code not in context.once_globals:
+        context.globals.write(code)
+        context.once_globals.add(code)
 
 def add_impl(code):
     """ Adds code to the current implementation context. """

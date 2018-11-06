@@ -25,9 +25,9 @@ class Event(object):
     @property
     def subs(self):
         return ([ArgList(self.args)] if self.args else []) + self.children
-    def match(self,ev):
+    def match(self,ev,binding=None):
         return ((ev.rep == '*' or ev.rep == self.rep)
-                and all(a.match(b) for a,b in zip(self.args,ev.args)))
+                and all(a.match(b,binding) for a,b in zip(self.args,ev.args)))
     def __str__(self):
         res = self.text()
         if self.children:
@@ -63,8 +63,15 @@ class Symbol(object):
     @property
     def subs(self):
         return []
-    def match(self,s):
-        return isinstance(s,Symbol) and (s.name == '*' or s.name == self.name)
+    def match(self,s,binding=None):
+        if isinstance(s,Symbol) and (s.name == '*' or s.name == self.name):
+            return True
+        if s.name.startswith('$'):
+            if s.name in binding:
+                return binding[s.name] == self
+            binding[s.name] = self
+            return True
+        return False
     def map(self,fun):
         iu.dbg('fun')
         return fun(self.name)
@@ -80,10 +87,10 @@ class App(object):
     @property
     def subs(self):
         return self.args
-    def match(self,ev):
+    def match(self,ev,binding=None):
         return (isinstance(ev,Symbol) and (ev.name == '*')
                 or isinstance(ev,App) and (ev.rep == '*' or ev.rep == self.rep)
-                and all(a.match(b) for a,b in zip(self.args,ev.args)))
+                and all(a.match(b,binding) for a,b in zip(self.args,ev.args)))
     def map(self,fun):
         return type(self)(mymap(fun,self.args))
     def __str__(self):
@@ -100,11 +107,11 @@ class ListValue(list):
     def subs(self):
         res = list(self)
         return res
-    def match(self,l):
+    def match(self,l,binding=None):
         return (isinstance(l,Symbol) and (l.name == '*')
                 or (isinstance(l,ListValue)
                     and len(l) == len(self)
-                    and all(a.match(b) for a,b in zip(self,l))))
+                    and all(a.match(b,binding) for a,b in zip(self,l))))
     def map(self,fun):
         return type(self)(*[mymap(fun,x) for x in self])
 
@@ -129,10 +136,10 @@ class DictValue(dict):
         return [DictEntry(entry) for entry in self.iteritems()]
     def __str__(self):
         return '{' + ','.join(x + ':' + str(y) for x,y in self.iteritems()) + '}'
-    def match(self,d):
+    def match(self,d,binding=None):
         return (isinstance(d,Symbol) and (d.name == '*')
                 or (isinstance(d,DictValue)
-                    and all(k in self and self[k].match(v) for k,v in d.iteritems())))
+                    and all(k in self and self[k].match(v,binding) for k,v in d.iteritems())))
     def map(self,fun):
         return type(self)(*[(x,mymap(fun,y)) for x,y in self.iteritems()])
 
@@ -217,10 +224,21 @@ def find(evs,pats,anchor=None):
     if anchor != None:
         pats = [e.map(Anchor(anchor)) for e in pats]
     for a,e in evs:
-        if any(e.match(pat) for pat in pats):
+        if any(e.match(pat,None) for pat in pats):
             return a,e
     return None
 
+# Match against patters with free variables. Yields a sequence
+# of pairs e,b where e is an event and b is a binding of free variable
+# names to expressions.
+
+def bind(evs,pats,anchor=None):
+    if anchor != None:
+        pats = [e.map(Anchor(anchor)) for e in pats]
+    for e in evs:
+        binding = dict()
+        if any(e.match(pat,binding) for pat in pats):
+            yield e,binding
 
 import ply.lex as lex
 
@@ -406,13 +424,22 @@ parser = yacc.yacc(tabmodule='ev_parsetab',errorlog=yacc.NullLogger(),outputdir=
 if __name__ == '__main__':
     while True:
        try:
-           s = raw_input('calc > ')
+           s = raw_input('events > ')
        except EOFError:
            break
        if not s: continue
        result = parser.parse(s)
 #       print result
-       for a,x in EventFwdGen("2/2")(result):
-           print a + ':' + x.text()
-
+#       for a,x in EventFwdGen("2/2")(result):
+#           print a + ':' + x.text()
+       try:
+           patstring = raw_input('patterns > ')
+       except EOFError:
+           break
+       if not s: continue
+       pats = parser.parse(patstring)
+       for e,b in bind(EventGen()(result),pats):
+           print 'event: {} binding: {}'.format(e,list((n,str(v)) for n,v in b.iteritems()))
+           
+           
 

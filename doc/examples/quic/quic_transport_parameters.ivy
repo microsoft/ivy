@@ -1,0 +1,120 @@
+#lang ivy1.7
+
+include quic_types
+include quic_stream
+include tls_record
+
+type trans_params_struct
+
+object transport_parameter = {
+    type this
+    action set(p:this,s:trans_params_struct) returns (s:trans_params_struct) = {}
+}
+
+
+module trans_params_ops(ptype) = {
+    destructor is_set(S:trans_params_struct) : bool
+    destructor value(S:trans_params_struct) : ptype
+    action set(p:ptype,s:trans_params_struct) returns (s:trans_params_struct) = {
+        require ~is_set(s);
+        is_set(s) := true;
+        value(s) := p;
+    }
+}
+
+object initial_max_stream_data_bidi_local = {
+    variant this of transport_parameter = struct {  # tag = 0
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_data = {
+    variant this of transport_parameter = struct {  # tag = 1
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_id_bidi = {
+    variant this of transport_parameter = struct {  # tag = 2
+        stream_id_16 : stream_id
+    }
+    instantiate trans_params_ops(this)
+}
+
+object idle_timeout = {
+    variant this of transport_parameter = struct {  # tag = 3
+        seconds_16 : microsecs
+    }
+    instantiate trans_params_ops(this)
+}
+
+object preferred_address = {
+    variant this of transport_parameter = struct {  # tag = 4
+        # TODO: fill this in
+    }
+    instantiate trans_params_ops(this)
+}
+
+object max_packet_size = {
+    variant this of transport_parameter = struct {  # tag = 5
+        stream_pos_16 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object stateless_reset_token = {
+    variant this of transport_parameter = struct {  # tag = 6
+        stream_pos_32 : stream_data
+    }
+    instantiate trans_params_ops(this)
+}
+
+object ack_delay_exponent = {
+    variant this of transport_parameter = struct {  # tag = 7
+        exponent_8 : microsecs
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_id_uni = {
+    variant this of transport_parameter = struct {  # tag = 8
+        stream_id_16 : stream_id
+    }
+    instantiate trans_params_ops(this)
+}
+
+object disable_migration = {
+    variant this of transport_parameter = struct {  # tag = 9
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_data_bidi_remote = {
+    variant this of transport_parameter = struct {  # tag = 10
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object initial_max_stream_data_uni = {
+    variant this of transport_parameter = struct {  # tag = 11
+        stream_pos_32 : stream_pos
+    }
+    instantiate trans_params_ops(this)
+}
+
+object max_ack_delay = {
+    variant this of transport_parameter = struct {  # tag = 12
+        exponent_8 : microsecs
+    }
+    instantiate trans_params_ops(this)
+}
+
+object quic_transport_parameters = {
+    variant this of tls.extension = struct {
+        initial_version : version,
+        transport_parameters : vector[transport_parameter]
+    }
+}
