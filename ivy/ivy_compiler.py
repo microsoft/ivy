@@ -157,7 +157,7 @@ class cfrfail(Exception):
     def __init__(self,symbol_name):
         self.symbol_name = symbol_name
 
-def compile_field_reference_rec(symbol_name,args,top=False):
+def compile_field_reference_rec(symbol_name,args,top=False,old=False):
     sym = ivy_logic.find_polymorphic_symbol(symbol_name,throw=False)
     if sym is None:
         parent_name,child_name = iu.parent_child_name(symbol_name)
@@ -165,7 +165,7 @@ def compile_field_reference_rec(symbol_name,args,top=False):
             raise cfrfail(symbol_name)
         try:
             with ReturnContext(None):
-                base = compile_field_reference_rec(parent_name,args)
+                base = compile_field_reference_rec(parent_name,args,old=old)
         except cfrfail as err:
             raise cfrfail(symbol_name if err.symbol_name in im.module.hierarchy else err.symbol_name)
         sort = base.sort
@@ -189,7 +189,7 @@ def compile_field_reference_rec(symbol_name,args,top=False):
         args = [ivy_logic.sort_infer(arg,sort) for arg,sort in zip(args,sym.sort.dom)]
         res = sym(*args)
         return res
-    return sym
+    return old_sym(sym,old)
                            
 def field_reference_action(actname,args,top):
     nformals = len(top_context.actions[actname][0])
@@ -198,11 +198,11 @@ def field_reference_action(actname,args,top):
     call.lineno = field_reference_lineno
     return compile_inline_call(call,pull_args(args,nformals,actname,top),methodcall=True)
 
-def compile_field_reference(symbol_name,args,lineno):
+def compile_field_reference(symbol_name,args,lineno,old=False):
     global field_reference_lineno
     field_reference_lineno = lineno
     try:
-        return compile_field_reference_rec(symbol_name,args,top=True)
+        return compile_field_reference_rec(symbol_name,args,top=True,old=old)
     except cfrfail as err:
         if symbol_name in ivy_logic.sig.sorts:
             raise IvyError(None,"type {} used where a function or individual symbol is expected".format(err.symbol_name))
@@ -287,11 +287,15 @@ def compile_inline_call(self,args,methodcall=False):
         return res()
     return None
 
-def compile_app(self):
+def old_sym(sym,old):
+    return sym.prefix('old_') if old else sym
+
+def compile_app(self,old=False):
     with ReturnContext(None):
         args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment
     if expr_context and top_context and self.rep in top_context.actions:
+        # note, we are taking 'old' of an action to be the action, since actions are immutable
         return compile_inline_call(self,args)
     sym = self.rep.cmpl() if isinstance(self.rep,ivy_ast.NamedBinder) else ivy_logic.Equals if self.rep == '=' else ivy_logic.find_polymorphic_symbol(self.rep,throw=False) 
     if sym is not ivy_logic.Equals:
@@ -299,8 +303,9 @@ def compile_app(self):
             if hasattr(self,'sort') and self.sort != 'S':
                 sym = ivy_logic.Symbol(sym.name,variable_sort(self))
     if sym is not None:
+        sym = old_sym(sym,old)
         return (sym)(*args)
-    res = compile_field_reference(self.rep,args,self.lineno)
+    res = compile_field_reference(self.rep,args,self.lineno,old=old)
     return res
     
 def compile_method_call(self):
@@ -406,8 +411,9 @@ def ConstantDecl_cmpl(self):
 ConstantDecl.cmpl =  ConstantDecl_cmpl 
 
 def Old_cmpl(self):
-    foo = self.args[0].compile()
-    return foo.rep.prefix('old_')(*foo.args)
+#    foo = self.args[0].compile()
+#    return foo.rep.prefix('old_')(*foo.args)
+    return compile_app(self.args[0],old=True)
 
 ivy_ast.Old.cmpl = Old_cmpl
 

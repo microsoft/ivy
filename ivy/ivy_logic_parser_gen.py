@@ -23,6 +23,7 @@ precedence = (
     ('left', 'DIV'),
     ('left', 'DOLLAR'),
     ('left', 'OLD'),
+    ('left', 'DOT'),
 )
 
 from ivy_logic_parser import *

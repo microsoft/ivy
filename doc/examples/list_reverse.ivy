@@ -520,10 +520,10 @@ isolate my_rev2 = {
             var i : idx := 0;
             var j := rt.reverse(i,a.end);
             while i < j
-            invariant 0 <= i & i <= a.end & a.end = arr.end(old a) & rt.rev(a.end,i,j)
+            invariant 0 <= i & i <= a.end & a.end = old a.end & rt.rev(a.end,i,j)
             invariant forall I. (0 <= I & I < i | j < I & I < a.end) 
-                                & rt.rev(a.end,I,J)-> a.value(J) = arr.value(old a,I)
-            invariant i <= I & I <= j -> a.value(I) = arr.value(old a,I)
+                                & rt.rev(a.end,I,J)-> a.value(J) = old a.value(I)
+            invariant i <= I & I <= j -> a.value(I) = old a.value(I)
             {
                 var tmp := a.value(j);
                 a := a.set(j,a.value(i));
