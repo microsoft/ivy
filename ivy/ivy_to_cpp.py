@@ -114,7 +114,7 @@ def varname(name):
     if name.startswith('"'):
         return name
     
-    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('prm:','prm__').replace('__fml:','').replace('fml:','').replace('ret:','')
+    name = name.replace('loc:','loc__').replace('ext:','ext__').replace('___branch:','__branch__').replace('__prm:','prm__').replace('prm:','prm__').replace('__fml:','').replace('fml:','').replace('ret:','')
     name = re.sub(puncs,'__',name).replace('@@','.')
     return name.replace(':','__COLON__')
 #    return name.split(':')[-1]
@@ -2839,8 +2839,8 @@ class z3_thunk : public thunk<D,R> {
 
                 impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
                 impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
+                impl.append("        int runs = TEST_RUNS;\n".replace('TEST_RUNS',opt_test_runs.get()))
                 impl.append("""
-    int runs = 1;
     int seed = 1;
     int sleep_ms = 10;
     int final_ms = 0; 
@@ -4829,6 +4829,7 @@ opt_classname = iu.Parameter("classname","")
 opt_build = iu.BooleanParameter("build",False)
 opt_trace = iu.BooleanParameter("trace",False)
 opt_test_iters = iu.Parameter("test_iters","100")
+opt_test_runs = iu.Parameter("test_runs","1")
 opt_compiler = iu.EnumeratedParameter("compiler",["g++","cl","default"],"default")
 opt_main = iu.Parameter("main","main")
 opt_stdafx = iu.BooleanParameter("stdafx",False)

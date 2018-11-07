@@ -101,7 +101,7 @@ tests = [
          ['leader_election_ring','isolate=iso_t test_iters=5','test_completed'],
          ['token_ring','isolate=iso_p','test_completed'],
          ['token_ring','isolate=iso_t','test_completed'],
-         ['token_ring_buggy','isolate=iso_t','assertion failed'],
+         ['token_ring_buggy','isolate=iso_t test_runs=10','assertion failed'],
          ['token_ring','isolate=iso_n','test_completed'],
          ['token_ring','isolate=iso_pt','test_completed'],
       ]
