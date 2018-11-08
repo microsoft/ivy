@@ -54,6 +54,8 @@ module serdes(data,bytes,serializer,deserializer) = {
 	}
     }
 
+    isolate iso = this
+    attribute test = impl
 }
 
 <<< header

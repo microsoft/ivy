@@ -811,16 +811,16 @@ class IfAction(Action):
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
 
-        # res = join_action(if_part,else_part,domain.relations)
-        # # Hack: the ite annotation comes out reversed. Fix it.
-        # for i in range(1,3):
-        #     x = res[i].annot
-        #     if isinstance(x,IteAnnotation):
-        #         res[i].annot = IteAnnotation(Not(x.cond),x.elseb,x.thenb)
+        res = join_action(if_part,else_part,domain.relations)
+        # Hack: the ite annotation comes out reversed. Fix it.
+        for i in range(1,3):
+            x = res[i].annot
+            if isinstance(x,IteAnnotation):
+                res[i].annot = IteAnnotation(Not(x.cond),x.elseb,x.thenb)
 
         # tricky: "else" branch is first in the join because the annotation
         # for join is of the form "if v then second arg else firs arg"
-        res = join_action(else_part,if_part,domain.relations)
+        #res = join_action(else_part,if_part,domain.relations)
         return res
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
@@ -1392,10 +1392,7 @@ def match_annotation(action,annot,handler):
                         recur(action,annot.elseb,env,pos=pos-1)
                         return
                 if not isinstance(annot,ComposeAnnotation):
-                        iu.dbg('len(action.args)')
-                        iu.dbg('pos')
-                        iu.dbg('annot')
-                assert isinstance(annot,ComposeAnnotation)
+                        raise AnnotationError()
                 recur(action,annot.args[0],env,pos-1)
                 recur(action.args[pos-1],annot.args[1],env)
                 return

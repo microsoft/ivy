@@ -564,7 +564,7 @@ class History(object):
         self.maps = maps     # sequence of symbol renamings resulting from forward images
         self.post = clauses  # characteristic formula of the history
         self.actions = actions
-
+ 
 
     def forward_step(self,axioms,update,action=None):
         """ This is like forward_image on states, but records the
@@ -572,7 +572,7 @@ class History(object):
         renamings is used to reconstruct the state symbols at previous
         times in the history. A new history after forward step is
         returned. """
-#        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
+#        print "step: pre = {}, axioms = {}, update = {}, action = {}, annot = {}".format(self.post,axioms,update,action,self.post.annot)
 #        iu.dbg('update')
         map1,res = forward_image_map(self.post,axioms,update)
 #        iu.dbg('res.annot')
