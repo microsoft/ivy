@@ -94,9 +94,11 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         std::vector<char> input;
         int handshake_status;
         std::vector<quic_crypto_context_t> crypto_context;
+        bool is_server;
+
         picotls_connection(`cid` id, ptls_t *gs, tls_callbacks cb,
-            ptls_handshake_properties_t *hsp)
-            : id(id),gs(gs),cb(cb),hsp(hsp) {
+            ptls_handshake_properties_t *hsp, bool is_server)
+            : id(id),gs(gs),cb(cb),hsp(hsp),is_server(is_server) {
             handshake_status = 0;
             crypto_context.resize(4);
         }
@@ -114,8 +116,14 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         return 0;
     }
 
+    // These are some parameters defined byt the QUIC-TLS standard. They
+    // don't really belong here, but then again, QUIC is currently the only
+    // existing client of this TLS interface.
+
     #define QUIC_LABEL_QUIC_BASE "quic "
     #define QUIC_LABEL_PN "pn"
+    #define QUIC_LABEL_INITIAL_CLIENT "client in"
+    #define QUIC_LABEL_INITIAL_SERVER "server in"
 
     // The following mess is to get the traffic keys from picotls
 
@@ -157,6 +165,54 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         return 0;
     }
 
+    // This additional mess sets the initial traffic keys
+
+
+    void bail(int ret, const char *msg) {
+        if (ret) {
+            std::cerr << msg;
+            exit(1);
+        }
+    }
+
+    void vec_to_ptls_iovec(ptls_iovec_t &res, const `bytes` &vec) {
+        res.base = new uint8_t[vec.size()];
+        std::copy(vec.begin(),vec.end(),res.base);
+        res.len = vec.size();
+    }    
+
+    int setup_initial_traffic_keys(picotls_connection *session,
+                                   const `bytes` &salt_vec,
+                                   const `bytes` &ikm_vec)
+    {
+        int ret = 0;
+        uint8_t master_secret[256]; /* secret_max */
+        ptls_cipher_suite_t cipher = { 0, &ptls_openssl_aes128gcm, &ptls_openssl_sha256 };
+        ptls_iovec_t salt;
+        ptls_iovec_t ikm;
+        ptls_iovec_t prk;
+        uint8_t client_secret[256];
+        uint8_t server_secret[256];
+        uint8_t *secret1, *secret2;
+
+        vec_to_ptls_iovec(salt,salt_vec);
+        vec_to_ptls_iovec(ikm,ikm_vec);
+        ret = ptls_hkdf_extract(cipher.hash, master_secret, salt, ikm);
+        bail(ret,"tls: failed to set up initial master secret\n");
+        prk.base = master_secret;
+        prk.len = cipher.hash->digest_size;
+        ret = ptls_hkdf_expand_label(cipher.hash, client_secret, cipher.hash->digest_size,
+            prk, QUIC_LABEL_INITIAL_CLIENT, ptls_iovec_init(NULL, 0),
+            QUIC_LABEL_QUIC_BASE);
+        bail(ret,"tls: failed to set up initial client secret\n");
+        ret = ptls_hkdf_expand_label(cipher.hash, server_secret, cipher.hash->digest_size,
+            prk, QUIC_LABEL_INITIAL_SERVER, ptls_iovec_init(NULL, 0),
+            QUIC_LABEL_QUIC_BASE);
+        bail(ret,"tls: failed to set up initial server secret\n");
+        quic_set_key_from_secret(&cipher, session->is_server, &session->crypto_context[0], server_secret);
+        quic_set_key_from_secret(&cipher, !session->is_server, &session->crypto_context[0], client_secret);
+    }
+
 
 
     // Some parameters for picotls as used by picoquic.
@@ -192,87 +248,6 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         }
     }
 
-    #if false
-
-    // Handle callback from gnutls to send data
-
-    ssize_t gnutls_session_push_func(gnutls_transport_ptr_t ptr, const void* data, size_t len) {
-        gnutls_connection *s = (gnutls_connection *) ptr;
-        `cid` c = s->id;
-        unsigned char *d = (unsigned char *)data;
-        `bytes` bytes;
-        bytes.resize(len);
-        std::copy(d,d+len,bytes.begin());
-        s->cb.ls(c,bytes);
-        return len;
-    }
-
-    // Handle callback from gnutls to recv data
-
-    ssize_t gnutls_session_pull_func(gnutls_transport_ptr_t ptr, void* data, size_t len){
-        gnutls_connection *s = (gnutls_connection *) ptr;
-        `cid` c = s->id;
-        std::vector<char> &input = s->input;
-        size_t res = input.size();
-        if (len < res)
-            res = len;
-        if (res == 0) {
-            errno = EAGAIN;
-            return -1;
-        }
-        char *d = (char *)data;
-        for (size_t i = 0; i < res; i++) {
-            d[i] = input[i];
-        }
-        input.erase(input.begin(),input.begin()+res);
-        return res;
-    }
-
-   // Start or resume handshake
-
-   void gnutls_do_handshake(gnutls_connection *s) {
-       // HACK HACK HACK HACK
-       // set the read and write epochs to zero to hopefully disable encryption of records
-       // s->gs->security_parameters.epoch_read = 0;
-       // s->gs->security_parameters.epoch_write = 0;
-       s->handshake_status = gnutls_handshake(s->gs);
-        if (s->handshake_status != GNUTLS_E_SUCCESS &&
-            s->handshake_status != GNUTLS_E_AGAIN) {
-            std::cerr << "gnutls_handshake returned error\n";
-            exit(1);
-        }
-    }
-
-    // This is horrible, but it can't be helped, because the gnutls
-    // callbacks for external extensions don't have parameters.
-
-    hash_space::hash_map<gnutls_session_t,std::vector<std::vector<unsigned char> > > gnutls_ext_data_map;
-
-    // Send extension data
-
-    int gnutls_ext_supp_recv_params(gnutls_session_t session, const unsigned char *data, size_t _data_size) {
-        const unsigned char *d = (const unsigned char *) data;
-        std::vector<unsigned char> v;
-        v.resize(_data_size);
-        std::copy(d,d+_data_size,v.begin());
-        gnutls_ext_data_map[session].push_back(v);
-        return _data_size;
-    }
-
-    // Receive extension data
-
-    int gnutls_ext_supp_send_params(gnutls_session_t session, gnutls_buffer_t buf) {
-        std::vector<std::vector<unsigned char> > &datas = gnutls_ext_data_map[session];
-        std::vector<unsigned char> v = datas.front();
-        int len = v.size();
-        if (gnutls_buffer_append_data(buf, &v[0], len) < 0) {
-            std::cerr << "gnutls_buffer_append_data returned error\n";
-            exit(1);
-        }
-        datas.erase(datas.begin());
-        return len;
-    }
-    #endif
 >>>
 
 # Here we put any new members of the ivy C++ class. If we have allocated a per-instance
@@ -366,7 +341,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         
         ptls_t *session;
         session = ptls_new(ctx,is_server ? 1 : 0);
-        picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties);
+        picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties,is_server);
         *ptls_get_data_ptr(session) = s;        
 
 	`cid_map`[c] = s;
@@ -388,6 +363,47 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
 	>>>
 
+    }
+
+    # Set the initial key material.
+
+    implement set_initial_keys(c:cid,salt:bytes,ikm:bytes) {
+        <<< impure
+        
+	picotls_connection *s = `cid_map`[c];
+        setup_initial_traffic_keys(s,salt,ikm);
+        
+        >>>
+    }
+
+    # Get the cipher initial value size
+
+    implement iv_size(c:cid,l:level) returns (sz:index) {
+        <<< impure
+        
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        sz = pn_enc->algo->iv_size
+
+        >>>
+    }
+
+    implement encrypt_cipher(c:dic,l:level,clear:bytes,iv:bytes) returns (cipher:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        std::vector<uint8_t> bytes;
+        bytes.resize(iv.size());
+        std::copy(iv.begin(),iv.end(),bytes.end());
+        ptls_cipher_init(pn_enc, &bytes[0]);
+        std::vector<uint8_t> input, output;
+        input.resize(clear.size());
+        std::
+        output.resize(clear.size() + aead_checksum_size);
+        ptls_cipher_encrypt(pn_enc, &output[0], &input, len);
+
+        >>>
     }
 
     # upper.send is called with application data to be transmitted to the peer.

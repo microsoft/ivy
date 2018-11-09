@@ -6,7 +6,7 @@ include quic_connection
 include quic_deser
 include quic_ser
 include quic_infer
-include tls
+include tls_msg
 include udp_impl
 include serdes
 
@@ -162,6 +162,47 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 }
 
 # Hook up to the remote server
+
+# If this is an initial client request, we set up the initial keys
+# based on the destination cid (which in principle is a random sequence
+# of bytes. Note, the "salt" is specified in QUIC-TLS version 15, and is
+# unchanged in version 16.
+
+after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    var ikm := cid_to_bytes(pkt.dst_cid,pkt.dcid + 3 if pkt.dcid > 0 else 0);
+    var salt : stream_data := stream_data.empty;
+    salt := salt.append(0x9c);
+    salt := salt.append(0x10);
+    salt := salt.append(0x8f);
+    salt := salt.append(0x98);
+    salt := salt.append(0x52);
+    salt := salt.append(0x0a);
+    salt := salt.append(0x5c);
+    salt := salt.append(0x5c);
+    salt := salt.append(0x32);
+    salt := salt.append(0x96);
+    salt := salt.append(0x8e);
+    salt := salt.append(0x95);
+    salt := salt.append(0x0e);
+    salt := salt.append(0x8a);
+    salt := salt.append(0x2c);
+    salt := salt.append(0x5f);
+    salt := salt.append(0xe0);
+    salt := salt.append(0x6d);
+    salt := salt.append(0x6c);
+    salt := salt.append(0x38);
+    call botan.upper.set_initial_keys(0,salt,ikm);
+}
+
+action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
+    <<<
+    res.resize(len);
+    for (unsigned i = 0; i < len; i++) {
+        res[len-i-1] = 0xff & (c.val >> (i * 8));
+    }
+    >>>
+}
+
 
 # When the client sends a packet, route it to the server on the socket
 # corresponding to the ip endpoint. TODO: coalesce packets. As of now,

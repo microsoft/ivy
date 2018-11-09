@@ -426,7 +426,14 @@ around tls_recv_event {
     #    crypto_pos(pcid,0) := crypto_pos(pcid,0) + data.end 
 }
 
+#
+# Client initial request event
+# ============================
+#
+# This event occurs when a client transmits in initial request to open
+# a connection.
 
+action client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 
 # Packet events
 # -------------
@@ -640,8 +647,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         | (pkt.payload.value(I) isa frame.connection_close));
         # require ~conn_closed(src,scid);  # [6]
 
-        # An initial packet with an unseen source cid is a connection request.
-        if ~conn_seen(scid) {
+        # An initial packet with an unseen destination cid is a connection request.
+        if ~conn_seen(dcid) {
+            call client_initial_request(src,dst,pkt);
             conn_requested(src,dst,scid) := true;
         };
     

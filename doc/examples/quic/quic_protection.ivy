@@ -1,0 +1,191 @@
+#lang ivy1.7
+
+# Here, we define functions for QUIC packet packet protection.
+
+include tls_msg
+include byte_stream
+include quic_types
+
+module quic_protection(tls) = {
+
+    # Protect a packet, given the TLS session and the actual (not compressed)
+    # sequence number of the packet;
+
+    action encrypt(c:tls.cid,seq:pkt_num,pkt:stream_data) returns (pkt:stream_data)
+
+    # Protect a packet, given the TLS session and the actual (not
+    # compressed) highest sequence number of any packet received so
+    # far. The latter is used to guess the real sequence number of the
+    # packet, which is needed to decrypt the payload. This means that
+    # a significantly delayed packet might not be successfully
+    # decrypted, since we might not guess its full sequence number
+    # correctly. The return parameter `ok` is true if the packet is
+    # successfully decrypted. Note, unsuccessful decryption might
+    # indicate a stateless reset.
+
+    action decrypt(c:tls.cid,seq:pkt_num,pkt:stream_data) returns (ok:bool, pkt:stream_data)
+    
+    implement encrypt {
+        var level := get_level(pkt);
+        var sample_size := tls.iv_size(level);
+        var pnum_pos := get_pnum_pos(pkt);
+        var pnum_len := get_pnum_len(pkt,pnum_pos);
+        var hdr_len := pnum_pos + pnum_len;
+        var hdr := pkt.segment(0,pnum_pos);
+        var pnum := pkt.segment(pnum_pos,hdr_len);
+        var pyld := pkt.segment(hdr_len,pkt.end);
+        var auth := pkt.segment(0,hdr_len);
+        var seq := get_pnum(pnum,0,pnum_len);
+        pyld := tls.encrypt_aead(c,level,pyld,seq,auth);
+
+        # Computing the sample position is a bit tricky. First we
+        # assume the length of the pnum is 4, which means the offset
+        # of the sample withing the payload is `4 -
+        # pnum_len`. However, if there are not enough bytes in the
+        # payload, we change it to `payld.end - sample`. Note,
+        # however, that we are using natural numbers, so if the
+        # position would be negative, it saturates to zero. This is
+        # consistent with the statement that you should never sample
+        # any bytes from the packet number itself. This leaves the
+        # possibility that there are not enough bytes to sample, that
+        # is, in the sample, there will be some trailing
+        # zeros. Nonetheless, the spec says that the sample size will
+        # never be larger than the smallest encrypted payload, so we
+        # should be OK.
+
+        var sample_pos := 4 - pnum_len;
+        if sample_pos + sample_size > pyld.end {
+            sample_pos := pyld.end - sample_size
+        };
+        var sample := pyld.segment(sample_pos,sample_pos+sample_size);
+        var pnum := tls.encrypt_cipher(c,level,pnum,sample);
+        pkt := hdr.extend(pnum).extend(pyld);
+    }
+
+    implement decrypt {
+        var level := get_level(pkt);
+        var sample_size := tls.iv_size(level);
+        var pnum_pos := get_pnum_pos(pkt);
+
+        var sample_pos := pnum_pos + 4;
+        if sample_pos + sample_size > pkt.end {
+            sample_pos := pkt.end - sample_size
+        };
+        var sample := pkt.segment(sample_pos,sample_pos+sample_size);
+        var pnum := pkt.segment(pnum_pos,pnum_pos+4);
+        (ok,pnum) := tls.decrypt_cipher(c,level,pnum,sample);
+
+        if ok {
+            var pnum_len := get_pnum_len(pnum,0);
+            var hdr := pkt.segment(0,pnum_pos);
+            hdr := hdr.extend(pnum.segment(0,pnum_len);
+            var new_seq := get_pnum(pnum,0,pnum_len);
+            new_seq := correct_pnum(seq,new_seq);
+            var pyld := pkt.segment(pnum_pos + pnum_len);
+            (ok,pyld) := tls.decrypt_aead(c,level,pyld,new_seq,hdr);
+            if ok {
+                pkt := hdr.extend(pyld);
+            }
+        }
+    }
+
+    # This returns the encryption level of a protected or unprotected
+    # packet.
+
+    action get_level(pkt:stream_data) returns (level:tls.level) = {
+        var hdr_type := pkt.value(0);
+        if hdr_type = 0x7f {
+            level := 0;
+        } else if hdr_type = 0x7d {
+            level := 2;
+        } else {
+            level := 3;
+        }
+    }
+    
+    # This returns the position of the packet number in a protected or
+    # unprotected packet. For long packets, we have to skip over 6
+    # bytes of header, plus the two cid's, plus the retry token length
+    # and bytes, plus the payload length. For short packets, we just
+    # skip ver the type byte and the cid. Since we don't know the
+    # length of the cid here, we assume it is 8.
+
+    action get_pnum_pos(pkt:stream_data) returns (pnum_pos:stream_pos) = {
+        var hdr_type := pkt.value(0);
+        if hdr_type = 0x7f | hdr_type = 0x7d {
+            var lens := pkt.value[5];
+            var dcil := bfe[4][7](lens);
+            var scil := bfe[0][3](lens);
+            dcil := dcil + 3 if dcil ~= 0 else 0;
+            scil := scil + 3 if scil ~= 0 else 0;
+            pnum_pos := 6 + dcil + scil;
+            var len := get_var_int_len(pkt,pnum_pos);
+            var retry_token_len := get_var_int(pkt,pnum_pos,len);
+            pnum_pos := pnum_pos + len + retry_token_len;
+            pnum_pos := pnum_pos + len := get_var_int_len(pkt,pnum_pos);
+        }
+        else {
+            pnum_pos := 9;
+        }
+    }
+
+    # Get the length of a packet number at position `pos`
+
+    action get_pnum_len(pkt:stream_data,pnum_pos:stream_pos) returns (pnum_len:stream_pos) = {
+        var byte = pkt.value(pnum_pos);
+        if bvand(byte,0x80) = 0 {
+            pnum_len := 1;
+        } else if bvand(byte,0x40) = 0 {
+            pnum_len := 2;
+        } else {
+            pnum_len := 4;
+        }
+    }
+    
+    # Given the length of the packet number, get the number it encodes.
+
+    action get_pnum_len(pkt:stream_data,pnum_pos:stream_pos,pnum_len:stream_pos)
+    returns (seq:pkt_num) =
+    {
+        var data := pkt.segment(pnum_pos,pnum_pos + pnum_len);
+        var mask:byte := 0x7f if pnum_len = 1 else 0x3f;
+        var data := data.set(0,bvand(mask,data.value(0)));
+        seq := 0;
+        var idx:stream_pos := 0;
+        while idx < data.end {
+            seq := 256 * seq + data.value(idx);
+            idx := idx.next;
+        }
+    }
+
+    # Get the length of a variable-length ingteger in a packet.
+
+    action get_var_int_len(pkt:stream_data,pos:stream_pos) returns (len:stream_pos) = {
+        var code := bfe[6][7](pkt.value(pos));
+        if code = 0 {
+            len := 1;
+        } else if code = 1 {
+            len := 2;
+        } else if code = 2 {
+            len := 4;
+        } else {
+            len := 8;
+        }
+    }
+
+    # Get the value of a variable-length integer at position `pos`,
+    # whose length is `len`.
+
+    action get_var_int(pkt:stream_data,pos:stream_pos,len:stream_pos) returns (val:stream_pos) {
+        var idx:stream_pos := pos;
+        val := 0;
+        while idx < pos + len {
+            var byte := pkt.value(idx);
+            if idx = pos {
+                byte := bvand(byte,0x3f);
+            }
+            val := 256 * val + byte;
+            idx := idx.next;
+        }
+    }
+}

@@ -1592,7 +1592,8 @@ def create_constructor_schemata(mod):
     for sortname,destrs in mod.sort_destructors.iteritems():
         if any(len(f.sort.dom) > 1 for f in destrs):
             continue # TODO: higher-order constructors!
-        sort = destrs[0].sort.dom[0]
+        sort = ivy_logic.find_sort(sortname)
+        #sort = destrs[0].sort.dom[0]
         Y = ivy_logic.Variable('Y',sort)
         eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
         fmla = ivy_logic.Exists([Y],ivy_logic.And(*eqs))
