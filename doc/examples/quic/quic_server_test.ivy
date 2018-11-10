@@ -9,6 +9,7 @@ include quic_infer
 include tls_msg
 include udp_impl
 include serdes
+include quic_protection
 
 # This is a simple tester for quic servers. We assume the server is located on localhost at port 4433.
 # The tester plays the role of a single client.
@@ -41,8 +42,6 @@ action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:str
 object endpoint_id = {
     type this = {client, client_alt, server}
 }
-
-instance net : udp_impl(endpoint_id,quic_packet.arr,quic_ser,quic_deser)
 
 # fix a single connection id
 
@@ -78,8 +77,12 @@ action make_transport_parameters returns (tp:quic_transport_parameters) = {
 object botan = {
     instance id : unbounded_sequence
     instance lower : tls_lower_intf(id,stream_data)
-    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser)
+    instance upper : tls_intf(id,stream_pos,stream_data,lower,tls_extensions,tls_ser,pkt_num)
 }    
+
+instance prot : quic_protection(botan.id,botan.upper)
+
+instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
 
 # Map test endpoint ids to the ip endpoints
 
@@ -203,14 +206,54 @@ action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
     >>>
 }
 
+# To estimate the sequence number of packets, we have to know the encryption level.
+# This action gets the encryption level from the packet header.
+
+action packet_encryption_level(h:prot.header_info) returns (e:encryption_level) = {
+    e := encryption_level.other if ~h.hdr_long
+            else (encryption_level.initial if h.hdr_type = 0x7f
+                  else encryption_level.handshake);
+}
+
+# To get the reference packet number for a packet, we need to know the source connection
+# id, which is not present in short packets. Here we get it from history.
+
+action packet_scid(h:prot.header_info) returns (scid:cid) = {
+    if h.hdr_long {
+        scid := h.scid;
+    } else {
+        scid := cid_dst_to_src(h.dcid);
+    }
+}
+
+# To encrypt and decrypt packets we need to know the true packet number, which
+# must be inferred from truncated number in the packet and the packet number history.
+# As a workaround, we use `last_pkt_num(scid,e)` where `e` is the
+# encryption level. We infer the encryption level from the packet type.
+
+action reference_pkt_num(spkt:stream_data) returns (pnum:pkt_num) = {
+    var h := prot.get_header_info(spkt);
+    var e := packet_encryption_level(h);
+    var scid := packet_scid(h);
+    pnum := last_pkt_num(scid,e);
+}
+
+# To send and receive packets, we need to serialize and deserialize them.
+# This object allows that.
+
+instance pkt_serdes : serdes(quic_packet,stream_data,quic_ser,quic_deser)
 
 # When the client sends a packet, route it to the server on the socket
-# corresponding to the ip endpoint. TODO: coalesce packets. As of now,
-# we send only one QUIC packet per UDP datagram.
+# corresponding to the ip endpoint, after first serializing it, then
+# encrypting it. TODO: coalesce packets. As of now, we send only one
+# QUIC packet per UDP datagram.
 
 after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    var pkts := quic_packet.arr.empty;
-    pkts := pkts.append(pkt);
+    var spkt := pkt_serdes.to_bytes(pkt);
+    var rnum := reference_pkt_num(spkt);
+    var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
+    var pkts := prot.arr.empty;
+    pkts := pkts.append(ppkt);
     if src = client.ep {
 	call net.send(endpoint_id.client,sock,dst,pkts);
     } else if src = client_alt {
@@ -218,18 +261,27 @@ after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     } 
 }
 
-# When an packet arrives at the client endpoint, generate a `packet_event`
+# When an packet arrives at the client endpoint, decrypt it, deserialize it,
+# then generate a `packet_event`.
 
-implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:quic_packet.arr) {
+implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.arr) {
     if host ~= endpoint_id.server {
 	var dst := client.ep if host = endpoint_id.client else client_alt; 
         var idx := pkts.begin;
         while idx < pkts.end {
-            var pkt := pkts.value(idx);
-	    call show_packet(src,dst,pkt);
-	    call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
-	    call packet_event(src,dst,pkt);
-            idx := idx.next;
+            var ppkt := pkts.value(idx);
+            var rnum := reference_pkt_num(ppkt);
+            var res := prot.decrypt(client.tls_id,rnum,ppkt);
+            if res.ok {
+                var pkt := pkt_serdes.from_bytes(res.data);
+	        call show_packet(src,dst,pkt);
+	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
+	        call packet_event(src,dst,pkt);
+                idx := idx.next;
+            }
+            else {
+                call undecryptable_packet_event(src,dst,ppkt);
+            }
         }
     }
 }
@@ -418,5 +470,8 @@ import show_tls_send_event
 
 action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 import show_packet
+
+action undecryptable_packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:stream_data)
+import undecryptable_packet_event
 
 import action show_level_offset_length(e:encryption_level,offset:stream_pos,length:stream_pos)

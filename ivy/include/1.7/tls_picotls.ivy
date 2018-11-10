@@ -213,6 +213,19 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         quic_set_key_from_secret(&cipher, !session->is_server, &session->crypto_context[0], client_secret);
     }
 
+    void encrypt_symm(ptls_cipher_context_t *pn_enc, const `bytes` &clear, const `bytes` &iv, `bytes` &cipher) {
+        std::vector<uint8_t> bytes;
+        bytes.resize(iv.size());
+        std::copy(iv.begin(),iv.end(),bytes.begin());
+        ptls_cipher_init(pn_enc, &bytes[0]);
+        std::vector<uint8_t> input, output;
+        input.resize(clear.size());
+        std::copy(clear.begin(),clear.end(),input.begin());
+        output.resize(clear.size());
+        ptls_cipher_encrypt(pn_enc, &output[0], &input[0], input.size());
+        cipher.resize(output.size());
+        std::copy(output.begin(),output.end(),cipher.begin());
+    }
 
 
     // Some parameters for picotls as used by picoquic.
@@ -383,28 +396,78 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         
 	picotls_connection *s = `cid_map`[c];
         ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
-        sz = pn_enc->algo->iv_size
+        sz = pn_enc->algo->iv_size;
 
         >>>
     }
 
-    implement encrypt_cipher(c:dic,l:level,clear:bytes,iv:bytes) returns (cipher:bytes) {
+    implement encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes) returns (cipher:bytes) {
         <<< impure
 
 	picotls_connection *s = `cid_map`[c];
         ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
-        std::vector<uint8_t> bytes;
-        bytes.resize(iv.size());
-        std::copy(iv.begin(),iv.end(),bytes.end());
-        ptls_cipher_init(pn_enc, &bytes[0]);
-        std::vector<uint8_t> input, output;
-        input.resize(clear.size());
-        std::
-        output.resize(clear.size() + aead_checksum_size);
-        ptls_cipher_encrypt(pn_enc, &output[0], &input, len);
+        encrypt_symm(pn_enc,clear,iv,cipher);
 
         >>>
     }
+
+    implement decrypt_cipher(c:cid,l:level,cipher:bytes,iv:bytes) returns (clear:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        encrypt_symm(pn_enc,cipher,iv,clear);
+
+        >>>
+    }
+
+    implement encrypt_aead(c:cid,l:level,clear:bytes,seq:seq_num,ad:bytes) returns (cipher:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_aead_context_t *aead = (ptls_aead_context_t *)(s->crypto_context[l].aead_encrypt);
+        uint32_t checksum_length = aead->algo->tag_size;
+        std::vector<uint8_t> bytes;
+        bytes.resize(ad.size());
+        std::copy(ad.begin(),ad.end(),bytes.begin());
+        std::vector<uint8_t> input, output;
+        input.resize(clear.size());
+        std::copy(clear.begin(),clear.end(),input.begin());
+        output.resize(clear.size() + checksum_length);
+        size_t encrypted = ptls_aead_encrypt(aead,
+          &output[0], &input[0], input.size(), seq,
+          &bytes[0], bytes.size());
+        cipher.resize(output.size());
+        std::copy(output.begin(),output.end(),cipher.begin());
+        
+        >>>
+    }
+
+    implement decrypt_aead(c:cid,l:level,cipher:bytes,seq:seq_num,ad:bytes)
+    returns (res:decrypt_result) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_aead_context_t *aead = (ptls_aead_context_t *)(s->crypto_context[l].aead_decrypt);
+        uint32_t checksum_length = aead->algo->tag_size;
+        std::vector<uint8_t> bytes;
+        bytes.resize(ad.size());
+        std::copy(ad.begin(),ad.end(),bytes.begin());
+        std::vector<uint8_t> input, output;
+        input.resize(cipher.size());
+        std::copy(cipher.begin(),cipher.end(),input.begin());
+        output.resize(cipher.size() + checksum_length);
+        size_t decrypted = ptls_aead_decrypt(aead,
+          &output[0], &input[0], input.size(), seq,
+          &bytes[0], bytes.size());
+        res.ok = decrypted < input.size();
+        if (res.ok) {
+            res.data.resize(output.size());
+            std::copy(output.begin(),output.end(),res.data.begin());
+        }
+        >>>
+    }
+
 
     # upper.send is called with application data to be transmitted to the peer.
 

@@ -42,6 +42,8 @@ module array(domain,range) = {
     # add one element to the array
     action append(a:t,v:range) returns (a:t)
 
+    # extend an array by another arrary (i.e., concatenate the arrays)
+    action extend(a:t,b:t) returns (a:t)
 
     ########################################
     # Representation
@@ -175,6 +177,13 @@ module array(domain,range) = {
 	implement append {
 	    <<<
 	        `a`.push_back(`v`);
+            >>>
+        }
+
+	implement extend {
+	    <<<
+                for (unsigned i = 0; i < `b`.size(); i++)
+	            `a`.push_back(`b`[i]);
             >>>
         }
 

@@ -33,6 +33,10 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser,seq_num) = {
 
     # The upper interface is between TLS and the application
 
+    # Encryption level, ranges from 0-3. 
+    
+    type level
+
     # Transfers connection data to application
     
     action recv(c:cid,data:bytes)
@@ -74,26 +78,30 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser,seq_num) = {
 
     action iv_size(c:cid,l:level) returns (sz:index)
 
-    # Encrypt data with cipher for given level and initial value.
+    # Encrypt data with symmetric cipher for given level and initial value.
 
-    action encrypt_cipher(c:dic,l:level,clear:bytes,iv:bytes) returns (cipher:bytes)
+    action encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes) returns (cipher:bytes)
     
-    # Decrypt data with cipher for given level and initial value. Return parameter
-    # `ok` indicates decryption was successful.
+    # Decrypt data with symmetric cipher for given level and initial value. 
 
-    action decrypt_cipher(c:dic,l:level,cipher:bytes,iv:bytes) returns (ok:bool,clear:bytes)
+    action decrypt_cipher(c:cid,l:level,cipher:bytes,iv:bytes) returns (clear:bytes)
     
     # Encrypt data with AEAD for given level, additional data `ad` and
     # sequence number `seq`.
 
-    action encrypt_aead(c:dic,l:level,clear:bytes,seq:seq_num,ad:bytes) returns (cipher:bytes)
+    action encrypt_aead(c:cid,l:level,clear:bytes,seq:seq_num,ad:bytes) returns (cipher:bytes)
     
+    type decrypt_result = struct {
+        ok : bool,
+        data : bytes
+    }
+
     # Decrypt data with cipher for given level, additional data `ad`
     # and sequence number `seq`. Return parameter `ok` indicates
     # decryption was successful.
 
-    action decrypt_cipher(c:dic,l:level,cipher:bytes,seq:seq_num,ad:bytes)
-    returns (ok:bool,clear:bytes)
+    action decrypt_aead(c:cid,l:level,cipher:bytes,seq:seq_num,ad:bytes)
+    returns (res:decrypt_result)
     
     specification {
 

@@ -1088,6 +1088,8 @@ class IvyDomainSetup(IvyDeclInterp):
                 self.domain.sort_destructors[typedef.name] = []
             for a in typedef.value.args:
                 p = a.clone([ivy_ast.Variable('V:dstr',sort.name)]+a.args)
+                if not hasattr(a,'sort'):
+                    raise IvyError(a,'no sort provided for field {}'.format(a))
                 p.sort = a.sort
                 with ASTContext(typedef):
                     with ASTContext(a):
