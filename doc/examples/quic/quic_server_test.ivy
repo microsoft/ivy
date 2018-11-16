@@ -145,8 +145,13 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     }
 }
 
-after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) {
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data, e:encryption_level) {
     call show_tls_send_event(src,dst,scid,dcid,data);
+    # HACK: send crypto data to client TLS right away, else we won't have the keys when next packet arrives.
+    # Really this should happen on a tls_recv_event, but this is too late.
+    if dst = client.ep | dst = client_alt {
+        call botan.lower.recv(client.tls_id,data);
+    }
 }
 
 # Assume that initial packets are sent only to the server under test
@@ -249,16 +254,18 @@ instance pkt_serdes : serdes(quic_packet,stream_data,quic_ser,quic_deser)
 # QUIC packet per UDP datagram.
 
 after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    var spkt := pkt_serdes.to_bytes(pkt);
-    var rnum := reference_pkt_num(spkt);
-    var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
-    var pkts := prot.arr.empty;
-    pkts := pkts.append(ppkt);
-    if src = client.ep {
-	call net.send(endpoint_id.client,sock,dst,pkts);
-    } else if src = client_alt {
-	call net.send(endpoint_id.client_alt,sock_alt,dst,pkts);
-    } 
+    if src = client.ep | src = client_alt {
+        var spkt := pkt_serdes.to_bytes(pkt);
+        var rnum := reference_pkt_num(spkt);
+        var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
+        var pkts := prot.arr.empty;
+        pkts := pkts.append(ppkt);
+        if src = client.ep {
+            call net.send(endpoint_id.client,sock,dst,pkts);
+        } else if src = client_alt {
+            call net.send(endpoint_id.client_alt,sock_alt,dst,pkts);
+        } 
+    }
 }
 
 # When an packet arrives at the client endpoint, decrypt it, deserialize it,
@@ -312,7 +319,7 @@ around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:en
 	data := data.append(crypto_data(scid,e).value(idx));
 	idx := idx.next
     };
-    call botan.lower.recv(tls_id,data)
+#    call botan.lower.recv(tls_id,data)
 }
     
 action hi_byte_pos(x:stream_pos) returns (res:byte) = {

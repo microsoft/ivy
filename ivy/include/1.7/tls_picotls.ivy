@@ -396,6 +396,12 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         
 	picotls_connection *s = `cid_map`[c];
         ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        if (!pn_enc)
+            pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        if (!pn_enc) {
+            std::cerr << "cipher for level " << l << " is not set\n";
+            exit(1);
+        }
         sz = pn_enc->algo->iv_size;
 
         >>>
@@ -456,7 +462,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         std::vector<uint8_t> input, output;
         input.resize(cipher.size());
         std::copy(cipher.begin(),cipher.end(),input.begin());
-        output.resize(cipher.size() + checksum_length);
+        output.resize(cipher.size() - checksum_length);
         size_t decrypted = ptls_aead_decrypt(aead,
           &output[0], &input[0], input.size(), seq,
           &bytes[0], bytes.size());

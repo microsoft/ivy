@@ -12,6 +12,8 @@ object quic_deser = {}
 
 <<< impl
 
+    #define QUIC_DESER_FAKE_CHECKSUM_LENGTH 0
+
     class `quic_deser` : public ivy_binary_deser {
         enum {quic_s_init,
               quic_s_type,
@@ -145,9 +147,9 @@ object quic_deser = {}
             {
                 fence = 0;
                 if (payload_length > 0) {
-                    fence = pos + payload_length - 16;
+                    fence = pos + payload_length - QUIC_DESER_FAKE_CHECKSUM_LENGTH;
                 } else {
-                    fence = inp.size() - 16;
+                    fence = inp.size() - QUIC_DESER_FAKE_CHECKSUM_LENGTH;
                 }
                 get_pkt_num(res);
                 state = quic_s_payload;
@@ -452,7 +454,7 @@ object quic_deser = {}
         void close_list() {
             if (state == quic_s_payload) {
                 state = quic_s_init;
-                pos += 16; // skip the checksum
+                pos += QUIC_DESER_FAKE_CHECKSUM_LENGTH; // skip the fake checksum
             }
             if (state == quic_s_retry_token) {
                 state = quic_s_payload_length;

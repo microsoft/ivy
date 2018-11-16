@@ -48,6 +48,18 @@ module quic_protection(tls_id,tls) = {
         var pnum_pos := h.pkt_num_pos;
         var pnum_len := get_pnum_len(pkt,pnum_pos);
         var hdr_len := pnum_pos + pnum_len;
+
+        # Tricky: before encrypting the payload, we need to adjust the length field
+        # so that it includes the aead checksum. Of course, we don't know what
+        # that actually is. Here we assume it is 16 bytes. Even worse, the length of
+        # the length field could grow. Here, we assume the length field format is
+        # always two bytes. 
+        if h.hdr_long {
+            var new_len := to_var_int_16(h.payload_length+16);
+            pkt := pkt.set(pnum_pos-2,new_len.value(0));
+            pkt := pkt.set(pnum_pos-1,new_len.value(1));
+        };
+
         var hdr := pkt.segment(0,pnum_pos);
         var pnum := pkt.segment(pnum_pos,hdr_len);
         var pyld := pkt.segment(hdr_len,pkt.end);
@@ -99,8 +111,14 @@ module quic_protection(tls_id,tls) = {
         var new_seq := get_pnum(pnum,0,pnum_len);
         new_seq := correct_pnum(seq,new_seq,pnum_len);
         var pyld := pkt.segment(pnum_pos + pnum_len,pkt.end);
-        var res := tls.decrypt_aead(c,level,pyld,new_seq,hdr);
+        res := tls.decrypt_aead(c,level,pyld,new_seq,hdr);
         if res.ok {
+            # fix up the length field to account for removal of checksum
+            if h.hdr_long {
+                var new_len := to_var_int_16(h.payload_length-16);
+                hdr := hdr.set(pnum_pos-2,new_len.value(0));
+                hdr := hdr.set(pnum_pos-1,new_len.value(1));
+            };
             res.data := hdr.extend(res.data);
         }
     }
@@ -137,10 +155,12 @@ module quic_protection(tls_id,tls) = {
             h.dcid := bytes_to_cid(pkt.segment(6,6+dcil));
             h.scid := bytes_to_cid(pkt.segment(6+dcil,6+dcil+scil));
             var pos := 6 + dcil + scil;
+            if h.hdr_type = 0x7f {
+                var len := get_var_int_len(pkt,pos);
+                var retry_token_len := get_var_int(pkt,pos,len);
+                pos := pos + len + retry_token_len;
+            };
             var len := get_var_int_len(pkt,pos);
-            var retry_token_len := get_var_int(pkt,pos,len);
-            pos := pos + len + retry_token_len;
-            len := get_var_int_len(pkt,pos);
             h.payload_length := get_var_int(pkt,pos,len);
             h.pkt_num_pos := pos + len;
         }
@@ -226,6 +246,13 @@ module quic_protection(tls_id,tls) = {
         }
     }
 
+    action to_var_int_16(val:stream_pos) returns (bytes:stream_data) = {
+        <<<
+        bytes.push_back(0x40 | (val >> 8) & 0x3f);
+        bytes.push_back(val & 0xff);
+        >>>
+    }
+
     action bytes_to_cid(bytes:stream_data) returns (val:cid) = {
         <<<
         val.val = 0;
@@ -285,16 +312,16 @@ object quic_prot_deser = {}
 <<< impl
 
     class `quic_prot_deser` : public ivy_binary_deser {
-        unsigned data_remaining;
+        int data_remaining;
         int level;
     public:
         quic_prot_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),level(0) {}
 
-        void  get(long long res) {
+        void  get(long long &res) {
             getn(res,1);
         }    
 
-        char peek(unsigned p) {
+        unsigned char peek(unsigned p) {
             return more(p-pos+1) ? inp[p] : 0;
         }
 
@@ -320,27 +347,31 @@ object quic_prot_deser = {}
                 dcil = (dcil != 0) ? dcil + 3 : 0;
                 scil = (scil != 0) ? scil + 3 : 0;
                 unsigned pnum_pos = pos + 6 + dcil + scil;
+                if (peek(pos) == 0xff) { // initial packets have tokens
+                    unsigned len = get_var_int_len(pnum_pos);
+                    unsigned retry_token_len = get_var_int(pnum_pos,len);
+                    pnum_pos = pnum_pos + len + retry_token_len;
+                }
                 unsigned len = get_var_int_len(pnum_pos);
-                unsigned retry_token_len = get_var_int(pnum_pos,len);
-                pnum_pos = pnum_pos + len + retry_token_len;
-                len = get_var_int_len(pnum_pos);
                 unsigned pyld_len = get_var_int(pnum_pos,len);
                 data_remaining = pnum_pos + len + pyld_len;
             }
             else {
-                data_remaining = 0xffffffff;
+                data_remaining = 0x7fffffff;
             }
         }
 
         bool open_list_elem() {
-            level++;
             if (!more(1)) {
                 return false;
             }
-            if (level == 2) {
-                return data_remaining-- > 0;
+            bool res = true;
+            if (level == 1) {
+                res = data_remaining-- > 0;
             }
-            return true;
+            if (res)
+                level++;
+            return res;
         }
         void close_list_elem() {
             level--;
