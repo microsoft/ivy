@@ -127,13 +127,17 @@ def show_assertions():
     for a in find_assertions():
         print '{}: {}'.format(a.lineno,a)
 
+checked_action_found = False
+
 def get_checked_actions():
     cact = checked_action.get()
     if cact and 'ext:'+cact in im.module.public_actions:
         cact = 'ext:'+cact
-    if cact and cact not in im.module.public_actions:
-        raise iu.IvyError(None,'{} is not an exported action'.format(cact))
-    return [cact] if cact else sorted(im.module.public_actions)
+    if not(cact and cact not in im.module.public_actions):
+        global checked_action_found
+        checked_action_found = True
+        return [cact] if cact else sorted(im.module.public_actions)
+    return []
 
 failures = 0
 
@@ -353,7 +357,7 @@ def summarize_isolate(mod):
         for lf in mod.definitions:
             print pretty_lf(lf)
 
-    if mod.labeled_props or schema_instances:
+    if (mod.labeled_props or schema_instances) and not checked_action.get():
         print "\n    The following properties are to be checked:"
         if check:
             for lf in schema_instances:
@@ -402,7 +406,7 @@ def summarize_isolate(mod):
         for actname,action in sorted(mod.initializers, key=lambda x: x[0]):
             print "        {}{}".format(pretty_lineno(action),actname)
 
-    if mod.labeled_conjs:
+    if mod.labeled_conjs and not checked_action.get():
         print "\n    Initialization must establish the invariant"
         if check:
             with itp.EvalContext(check=False):
@@ -598,6 +602,10 @@ def check_module():
     print ''
     if failures > 0:
         raise iu.IvyError(None,"failed checks: {}".format(failures))
+    if checked_action.get() and not checked_action_found:
+        raise iu.IvyError(None,"{} is not an exported action of any isolate".format(checked_action.get()))
+
+    cact = checked_action.get()
 
 
 def main():
