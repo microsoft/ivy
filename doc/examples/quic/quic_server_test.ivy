@@ -30,7 +30,8 @@ action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # This is a ghost action representing a TLS send event.
 
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,e:encryption_level) = {}
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,
+                      pos:stream_pos,e:encryption_level) = {}
 
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
@@ -134,22 +135,36 @@ after init {
 
 # Hook up tls to quic
 
+# When the local TLS sends message data, we generate a `tls_send_event`. This causes
+# the data to be recorded in the appropriate abstract crypto stream, and later to be
+# transmitted via a generated crypto frame event. 
+
 implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     if tls_id = client.tls_id {
-        call tls_send_event(client.ep, server.ep, the_cid, 0, bytes, client.enc_level);
+        call tls_send_event(client.ep, server.ep, the_cid, 0, bytes,
+                            crypto_data_end(the_cid,client.enc_level), client.enc_level);
         client.enc_level := client.enc_level.next;
     };
     if tls_id = server.tls_id {
-        call tls_send_event(server.ep, client.ep, the_cid, 0, bytes, server.enc_level);
+        call tls_send_event(server.ep, client.ep, the_cid, 0, bytes,
+                             crypto_data_end(the_cid,server.enc_level), server.enc_level);
         server.enc_level := server.enc_level.next;
     }
 }
 
-after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data, e:encryption_level) {
-    call show_tls_send_event(src,dst,scid,dcid,data);
-    # HACK: send crypto data to client TLS right away, else we won't have the keys when next packet arrives.
-    # Really this should happen on a tls_recv_event, but this is too late.
+after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
+                     pos:stream_pos, e:encryption_level) {
+    call show_tls_send_event(src,dst,scid,dcid,data,pos,e);
+}
+
+
+after tls.handshake_data_event(src : ip.endpoint, dst : ip.endpoint, data:stream_data) {
+    # When TLS handshake data is conceputally transferred from the server to the client,
+    # we feed it to the real TLS. We do it at this point because we may need it to generate the
+    # keys for the next packet to be decrypted. Perhaps this should
+    # happen on a `tls_recv_event`, but that would be too late.
     if dst = client.ep | dst = client_alt {
+        
         call botan.lower.recv(client.tls_id,data);
     }
 }
@@ -468,7 +483,8 @@ attribute stream_pos.cardinality = 4
 #attribute ip.addr.override = bv[1]
 #attribute ip.port.override = bv[1]
 
-action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data) = {}
+action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data:stream_data,
+                           pos:stream_pos, e:encryption_level) = {}
 
 import show_tls_send_event
 

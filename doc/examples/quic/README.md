@@ -127,7 +127,11 @@ Run a client
 
     ./picoquicdemo localhost
     
+### quant
 
+To run the quant server in this directory:
+
+    ~/projects/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key 
 
 
 Virtual network startup

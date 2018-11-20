@@ -47,7 +47,7 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     while idx < pkt.payload.end {
 	var f := pkt.payload.value(idx);
 	if some(cf:frame.crypto) f *> cf {
-	    call tls_send_event(src,dst,scid,dcid,cf.data,e)
+	    call tls_send_event(src,dst,scid,dcid,cf.data,cf.offset,e)
 	};
 	if some(sf:frame.stream) f *> sf {
 	    call app_send_event(src,dst,dcid,sf.id,sf.data)

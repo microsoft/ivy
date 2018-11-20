@@ -120,9 +120,18 @@ relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 #   transmitted by TLS from C in encyption level L. This data may or
 #   may not yet have been transmitted in any QUIC packet.
 #
+# - For aid C, the relation `crypto_data_presents(C,L)` represents the
+#   set of byte positions that are present in the crypto handshake
+#   data transmitted by TLS from C in encyption level L. A handshake
+#   data byte may not be present, even if bytes in higher positions
+#   are present (in other words, the handshake data may contain
+#   "holes"). This allows the handshake data bytes to be generated out
+#   of order, but processed in order.
+#
 # - For aid C, `crypto_data_end(C,L)` represents the length in bytes
 #   of the crypto handshake data transmitted by TLS from C in
-#   encyption level L.
+#   encyption level L. That is, it is the position of the highest
+#   present byte plus one, or zero if there are no present bytes.
 #
 # - For aid C, `crypto_length(C,L)` indicates the length of the crypto
 #   handshake data transmitted in QUIC frames from C at encyption
@@ -146,6 +155,7 @@ relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 #   its 1rrt keys at aid C.
 
 function crypto_data(C:cid,L:encryption_level) : stream_data
+relation crypto_data_present(C:cid,L:encryption_level,P:stream_pos)
 function crypto_data_end(C:cid,L:encryption_level) : stream_pos
 function crypto_length(C:cid,L:encryption_level) : stream_pos
 function crypto_pos(C:cid,L:encryption_level) : stream_pos
@@ -384,18 +394,33 @@ after set_encryption_level {
 #   connection's initial transport parameters and is required.
 #
 
-before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data, e:encryption_level) {
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
+                      pos : stream_pos, e:encryption_level) {
     var jdx := data.begin;
+    var end := pos + data.end;
+    if end > crypto_data(scid,e).end {
+        crypto_data(scid,e) := crypto_data(scid,e).resize(end,0);
+    };
     while jdx < data.end {
-	crypto_data(scid,e) :=
-	    crypto_data(scid,e).append(data.value(jdx));  # [4]
+        var cpos := pos+jdx;
+        var byte := data.value(jdx);
+        require crypto_data_present(scid,e,cpos) -> crypto_data(scid,e).value(cpos) = byte;
+        crypto_data_end(scid,e) := end;
+	crypto_data(scid,e) := crypto_data(scid,e).set(cpos,byte);  # [4]
+        crypto_data_present(scid,e,cpos) := true;
 	jdx := jdx.next
     };
     crypto_data_end(scid,e) := crypto_data(scid,e).end;
+    var max_present : stream_pos := 0;
+    while max_present < crypto_data_end(scid,e) & crypto_data_present(scid,e,max_present) {
+        max_present := max_present.next
+    };
     # require conn_open(src,dcid);  # [3]
-    var res := tls.handshake_parser.deserialize(crypto_data(scid,e),crypto_handler_pos(scid,e));
+    var avail := crypto_data(scid,e).segment(crypto_handler_pos(scid,e),max_present);
+    var res := tls.handshake_parser.deserialize(avail,0);
     var hs := res.value;
-    crypto_handler_pos(scid,e) := res.pos;
+    call tls.handshake_data_event(src,dst,avail.segment(0,res.pos));
+    crypto_handler_pos(scid,e) := crypto_handler_pos(scid,e) + res.pos;
     var idx := hs.begin;
     while idx < hs.end {
         var h := hs.value(idx);
@@ -947,7 +972,11 @@ object frame = {
             if crypto_length(scid,e) < length {
                 crypto_length(scid,e) := length
             };
-
+            var idx := f.offset;
+            while idx < f.offset + f.length {
+                crypto_data_present(scid,e,idx) := true;
+                idx := idx.next
+            };
             call enqueue_frame(src,scid,f,e,false);
             if e = encryption_level.handshake {
                 established_1rtt_keys(scid) := true;
