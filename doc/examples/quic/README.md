@@ -107,7 +107,7 @@ according to the instructions [here](https://github.com/h2o/picotls).
 
 Then you need to tell the Ivy compiler where to find the `picotls`
 library and headers (unless you copy them to standard locations). Use
-this commands, where `PICOTLS_DIR` is the directory in which `picotls`
+this command, where `PICOTLS_DIR` is the directory in which `picotls`
 was built:
 
 
@@ -115,30 +115,19 @@ was built:
     
 Notice the dot in the above, which is essential.
 
-### Ivy packet monitor
+### Build the Ivy packet monitor
+
+* Note: skip this step, as the packet monitor doesn't currently
+  work. *
 
 To build the Ivy monitor, change to this directory (the one this README file
 is in) and compile `quic_monitor.ivy` like this:
 
     ivyc quic_monitor.ivy
 
-This should create a binary file `quic_monitor`. Copy `mycap.pcap` into this directory and then do:
+This should create a binary file `quic_monitor`. 
 
-    ./quic_monitor mycap.pcap > log.iev
-
-The file `log.iev` should have lines like this:
-
-    < show_packet({protocol:udp,addr:0xa000002,port:0x869b},{protocol:udp,addr:0xa000001,port:0x1151},{hdr_long:0x1,hdr_type:0x7f,hdr_cid:0x7c74846907e4ce90,hdr_version:0xff000009,hdr_pkt_num:0x3dee3059,payload:[{frame.stream:{off:0x1,len:0x1,fin:0,id:0,offset:0,length:0x282,data:[0x16,0x3,0x3,...]}}]})
-
-These are decoded packets. Each line consists of a source endpoint, a
-destination endpoint and a packet. The structure of packets is
-described in [quic_packet.ivy](quic_packet.md).
-
-If the specification is violated by the packet trace, the file will
-end with an error message indicating the requirement that was
-violated. 
-
-#### Build the server tester
+### Build the server tester
 
 There are various testers available that generate different sorts of
 traffic for the server. The most basic one is
