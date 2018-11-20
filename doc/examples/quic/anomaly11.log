@@ -1,0 +1,153 @@
+$ server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443
+0.032   q_init quic.c:498 quant/socket 0.0.16/dd567715 with libev 4.22 ready
+        q_init quic.c:499 submit bug reports at https://github.com/NTAP/quant/issues
+0.034   q_init quic.c:521 debug build, storing fuzzer corpus data
+        q_bind quic.c:368 binding serv socket on port 4443
+        init_rec recovery.c:527 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        new_conn conn.c:1265 serv conn ? on port 4443 created
+        new_conn conn.c:1267 conn ? state conn_clsd -> conn_idle
+        q_bind quic.c:370 bound serv socket on port 4443
+        main server.c:239 server waiting on lo port 4443
+427.512   rx_pkts conn.c:885 new serv conn on port 4443 from 127.0.0.1:4988 w/cid=0:000000000000000b
+          init_rec recovery.c:527 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          new_conn conn.c:1265 serv conn 0:000000000000000b on port 4443 created
+          new_conn conn.c:1267 conn 0:000000000000000b state conn_clsd -> conn_idle
+427.513   log_pkt pkt.c:116 RX len=1216 0xff=Initial vers=0xff00000f dcid=000000000000000b scid=000000000000000d tok= len=1207 nr=0
+          rx_pkt conn.c:642 supporting clnt-requested vers 0xff00000f
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=243 [seq]
+          dec_frames frame.c:891 PADDING len=939
+          rx_pkt conn.c:668 conn 0:000000000000000b state conn_idle -> conn_opng
+          update_act_scid conn.c:465 hshk switch to scid 0:fa15135b1bb7c15d for serv conn (was 0:000000000000000b)
+          on_ch tls.c:310 	SNI = 
+          on_ch tls.c:313 	ALPN = 
+427.514   chk_tp tls.c:473 	initial_max_stream_data_bidi_local = 8192
+          chk_tp tls.c:485 	initial_max_data = 16384
+          chk_tp tls.c:502 	idle_timeout = 60
+          chk_tp tls.c:480 	initial_max_stream_data_bidi_remote = 8192
+          chk_tp tls.c:467 	initial_max_stream_data_uni = 8192
+427.522   rx_crypto conn.c:545 conn 0:fa15135b1bb7c15d state conn_opng -> conn_estb
+          tx conn.c:420 data TX on serv conn 0:fa15135b1bb7c15d strm -4 w/1 pkt in queue
+          enc_pkt pkt.c:386 hshk switch to scid 0:88a5f94c9e7a3a74 for serv conn (was 0:fa15135b1bb7c15d)
+          update_act_scid conn.c:465 hshk switch to scid 0:88a5f94c9e7a3a74 for serv conn (was 0:fa15135b1bb7c15d)
+427.522   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 tok=feeab57c9b1bc644a6564dacc67ae0e1a50eabe8345b68934aef3b9b0d6163d2fa15135b1bb7c15d len=0 nr=0
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+          enc_padding_frame frame.c:1095 PADDING len=97
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 
+          on_pkt_sent recovery.c:285 in_flight=299, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -2 w/2 pkts in queue
+427.522   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=0 nr=0
+          enc_padding_frame frame.c:1095 PADDING len=103
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 
+          on_pkt_sent recovery.c:285 in_flight=1551, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+427.523   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=0 nr=1
+          enc_padding_frame frame.c:1095 PADDING len=103
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=1108 len=292 
+          on_pkt_sent recovery.c:285 in_flight=1987, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 
+          coalesce pkt.c:218 coalescing 0xfd len 436 behind 0xff len 299
+427.712   on_ld_alarm recovery.c:201 handshake RTX #1 on serv conn 0:88a5f94c9e7a3a74
+          detect_lost_pkts recovery.c:155 pkt 0 considered lost
+          detect_lost_pkts recovery.c:162 in_flight=1688, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          detect_lost_pkts recovery.c:155 pkt 0 considered lost
+          detect_lost_pkts recovery.c:162 in_flight=436, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          detect_lost_pkts recovery.c:155 pkt 1 considered lost
+          detect_lost_pkts recovery.c:162 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+          detect_lost_pkts recovery.c:185 in_flight=0, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -4 w/1 pkt in queue
+427.713   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 tok=feeab57c9b1bc644a6564dacc67ae0e1a50eabe8345b68934aef3b9b0d6163d2fa15135b1bb7c15d len=274 nr=1
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=25037 (200296 usec) cnt=0 block=0 [0]
+          enc_padding_frame frame.c:1095 PADDING len=90
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=299, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -2 w/2 pkts in queue
+427.713   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=1228 nr=2
+          enc_padding_frame frame.c:1095 PADDING len=99
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=1551, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+427.713   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=412 nr=3
+          enc_padding_frame frame.c:1095 PADDING len=98
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=1108 len=292 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=1987, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 *2 *3 
+          coalesce pkt.c:218 coalescing 0xfd len 436 behind 0xff len 299
+428.113   on_ld_alarm recovery.c:201 handshake RTX #2 on serv conn 0:88a5f94c9e7a3a74
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -4 w/1 pkt in queue
+428.113   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 tok=feeab57c9b1bc644a6564dacc67ae0e1a50eabe8345b68934aef3b9b0d6163d2fa15135b1bb7c15d len=274 nr=2
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=75114 (600912 usec) cnt=0 block=0 [0]
+          enc_padding_frame frame.c:1095 PADDING len=90
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=2286, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 *2 *3 
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -2 w/2 pkts in queue
+428.113   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=1228 nr=4
+          enc_padding_frame frame.c:1095 PADDING len=99
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=3538, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+428.113   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=412 nr=5
+          enc_padding_frame frame.c:1095 PADDING len=98
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=1108 len=292 [RTX] 
+          on_pkt_sent recovery.c:285 in_flight=3974, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 *2 *3 *4 *5 
+          coalesce pkt.c:218 coalescing 0xfd len 436 behind 0xff len 299
+428.390   log_pkt pkt.c:126 RX len=104 0xfd=Handshake vers=0xff00000f dcid=88a5f94c9e7a3a74 scid=000000000000000d len=96 nr=0
+          log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=52 [seq]
+          dec_ack_frame frame.c:388 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+          update_rtt recovery.c:319 in_flight=3974, cwnd=6000, ssthresh=6000, srtt=0.878110, rttvar=0.439055
+          on_pkt_acked recovery.c:461 0 was RTX'ed as 4
+          dec_frames frame.c:891 PADDING len=15
+428.416   ack_alarm pn.c:56 ACK timer fired on serv conn 0:88a5f94c9e7a3a74 epoch 2
+428.416   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=0 nr=6
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=3203 (25624 usec) cnt=0 block=0 [0]
+428.604   log_pkt pkt.c:134 RX len=44 0x30=Short kyph=0 dcid=88a5f94c9e7a3a74 nr=0
+          new_stream stream.c:101 conn 0:88a5f94c9e7a3a74 strm 4 (bidir, clnt) state strm_idle -> strm_open
+          log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/4 off=0/16384 len=1 coff=1/32768 [seq]
+          dec_frames frame.c:903 addtl stream or crypto frame at pos 18, copy
+          log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/4 off=1/16384 len=1 coff=2/32768 [seq]
+          dec_frames frame.c:903 addtl stream or crypto frame at pos 23, copy
+          log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/4 off=2/16384 len=1 coff=3/32768 [seq]
+          dec_frames frame.c:891 PADDING len=15
+          rx conn.c:1023 q_rx_ready(0, 0) done, exiting event loop
+          q_rx_ready quic.c:657 serv conn 0:88a5f94c9e7a3a74 ready to rx
+          q_read quic.c:318 non-blocking read on serv conn 0:88a5f94c9e7a3a74
+          q_read quic.c:342 read 3 bytes on serv conn 0:88a5f94c9e7a3a74 strm 4
+          main server.c:281 HTTP parser error: -
+          q_read quic.c:318 non-blocking read on serv conn 0:88a5f94c9e7a3a74
+          q_close quic.c:548 closing serv conn 0:88a5f94c9e7a3a74 on port 4443
+          q_close quic.c:556 conn 0:88a5f94c9e7a3a74 state conn_estb -> conn_qlse
+          enter_closing conn.c:1133 closing/draining alarm in 4.390550 sec on serv conn 0:88a5f94c9e7a3a74
+          enter_closing conn.c:1139 conn 0:88a5f94c9e7a3a74 state conn_qlse -> conn_clsg
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -4 w/1 pkt in queue
+428.605   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 tok=feeab57c9b1bc644a6564dacc67ae0e1a50eabe8345b68934aef3b9b0d6163d2fa15135b1bb7c15d len=274 nr=3
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=136602 (1092816 usec) cnt=0 block=0 [0]
+          enc_close_frame frame.c:1280 APPLICATION_CLOSE err=0x0000 rlen=0 reason=
+          on_pkt_sent recovery.c:285 in_flight=4028, cwnd=6000, ssthresh=6000, srtt=0.878110, rttvar=0.439055
+          tx_stream_data conn.c:312 cwnd limit 4028 reached (2020 + 6000 > 511163881)
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 *3 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *1 *2 *3 *4 *5 (6) 
+          tx conn.c:420 data TX on serv conn 0:88a5f94c9e7a3a74 strm -2 w/2 pkts in queue
+428.605   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=88a5f94c9e7a3a74 len=1228 nr=7
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=26839 (214712 usec) cnt=0 block=0 [0]
+          enc_close_frame frame.c:1280 APPLICATION_CLOSE err=0x0000 rlen=0 reason=
+          on_pkt_sent recovery.c:285 in_flight=4081, cwnd=6000, ssthresh=6000, srtt=0.878110, rttvar=0.439055
+          tx_stream_data conn.c:312 cwnd limit 4081 reached (2020 + 6000 > 511163881)
+          log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 *3 
+          log_sent_pkts conn.c:227 epoch 2 unacked: *1 *2 *3 *4 *5 (6) *7 
+428.605   log_pkt pkt.c:187 TX 0x32=Short kyph=0 dcid=000000000000000d nr=0
+          enc_ack_frame frame.c:1167 ACK lg=0 delay=79 (632 usec) cnt=0 block=0 [0]
+          enc_close_frame frame.c:1280 APPLICATION_CLOSE err=0x0000 rlen=0 reason=
+          on_pkt_sent recovery.c:285 in_flight=4117, cwnd=6000, ssthresh=6000, srtt=0.878110, rttvar=0.439055
+          coalesce pkt.c:218 coalescing 0xfd len 53 behind 0xff len 54
+          coalesce pkt.c:218 coalescing 0x32 len 36 behind 0xfd len 107
+432.998   enter_closed conn.c:1080 conn 0:88a5f94c9e7a3a74 state conn_clsg -> conn_clsd
+          enter_closed conn.c:1083 <any>(c, 0) done, exiting event loop
+          free_stream stream.c:132 freeing strm 4 on serv conn 0:88a5f94c9e7a3a74
+443.008   cancel_api_call quic.c:380 canceling API call
+          cancel_api_call quic.c:383 q_rx_ready(0, 0) done, exiting event loop
+443.026   main server.c:294 server exiting

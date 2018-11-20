@@ -141,6 +141,25 @@ say it must start *immediately*. It seems reasonable to assume the
 some previously queued packets can still be sent to the old address.
 
 
+Event files:  anomaly11.iev
+Quant log file: anomaly11.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
 
+After an http parse error, Quant sends an application close frame
+inside an intial packet, which appears not to be allowed in the
+spec. The spec says:
+
+   The payload of an Initial packet includes a CRYPTO frame (or frames)
+   containing a cryptographic handshake message, ACK frames, or both.
+   PADDING and CONNECTION_CLOSE frames are also permitted.  An endpoint
+   that receives an Initial packet containing other frames can either
+   discard the packet as spurious or treat it as a connection error.
+
+This appears to imply the other frames, such as APPLICATION_CLOSE, are
+not allowed in initial packets.
 
 

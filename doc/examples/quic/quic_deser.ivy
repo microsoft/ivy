@@ -414,6 +414,10 @@ object quic_deser = {}
                     state = quic_path_challenge_data;
                     return 12;
                 }
+                if (frame_type == 0x19) {  // new token frame
+                    state = quic_crypto_length;  // new token equivalent to this
+                    return 13;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();

@@ -1,99 +1,192 @@
-Ivy specification of QUIC
--------------------------
+Mechanized specification of QUIC
+--------------------------------
 
-This directory contains work on specifying the QUIC protocol in Ivy.
-The currently targeted version is 9, as described in [this
-document](https://tools.ietf.org/html/draft-ietf-quic-transport-09).
+This directory contains work on a mechanized specification of the QUIC
+protocol in the Ivy language.  The currently targeted version is IETF
+draft 15, as described in
+[this document](https://tools.ietf.org/html/draft-ietf-quic-transport-15).
 
 The specification is written in a way that allows monitoring of
-packets on the wire, and will eventually allow for modular testing of
-implementations and possibly a fully verified implementation.
+packets on the wire, as well as modular testing of implementations.
+That is, from the specification we can produce an automated tester
+that takes one role in the protocol. The tester uses a technique
+called symbolic execution to randomly generate protocol traffic that
+complies with the specification. For example, if the tester is taking
+the client role, it generates packets that are legal for the client to
+send, and these are transmitted to the server being tested. The
+responses sent by the server are then checked for compliance with the
+specification.
 
-The Ivy spec is being developed from the informal IETF draft cited
-above. Ambiguities are resolved by observing the behavior of existing
-implementations. In particular, we use the evolving specification to
-monitor packet traces captured from implementations.  This allows us
-to check consistency and possibly discover incompatibilities between
-implementations.
+This approach has certain advantages when compared to interoperablilty
+testing. First, the specification-based tester can generate stimulus
+that can't be produced by any current implementation and perhaps would
+only be produced by attackers. Because it is randomized, it tends to
+generate the unusual cases that specifiers may not have
+considered. Second, it checks for actual specification compliance and
+not just for correct interopation. Ensuring compliance to the
+specification can be helpful for future protocol developers who have
+deal with compatibility with legacy implementations.
+
+In addition, the mechanized specification can be seen as
+documentation, since it gives an unambiguous interpretation of
+statements made in natural language in the IETF specification
+documents.
+
+A guide to the specification
+============================
+
+The mechanized specification is given in terms of a set of protocol
+events or "actions" in the Ivy language. These events abstractly
+represent occurrences at various layers of the protocol stack, for
+example, the transmission of a QUIC packet from one endpoint to
+another, or the transfer of data to or from an application. To each of
+these events are attached *monitors*. The monitors assert requirements
+on the events that determine protocol compliance and also record
+history information by updating shared variables. This information
+makes it possible to specify legal sequences of events, and also to
+specify the required relationships between events occurring at
+different protocol layers.
+
+A good place to start in reading the specification is the file
+`quic_connection.ivy`, which contains the monitors for the various
+protocol events and the declarations of all of the relevant state
+variables. These specifications use structured representions of data
+such as packets or frames rather than byte-level encodings. The
+corresponding data types are described in the file `quic_types.ivy`,
+`quic_frame.ivy` and `quic_packet.ivy`. 
+
+The Ivy language used to express the specification is described
+[here](http://microsoft.github.io/ivy/language.html). An example of
+using Ivy for specification-based tesing can be found
+[here](http://microsoft.github.io/ivy/examples/testing/intro.html).
+
+The specification is intended to be a "literate" document, containing
+a natural language description of the protocol, interleaved with the
+formal description. This is somewhat a work in progress, however, with
+some aspects more clearly documented than others.
+
+The specification as it stands has a number of limitations. First, it
+covers only a subset of features of QUIC. Currently, enough features
+are covered for the test client to have a successful dialog with
+server implementations, but much work remains to be done in specifying
+all of the protocol features. Second, the specification does not deal
+with quantitative time, meaning certain aspects of the QUIC
+specification relating to transmission rates and timeouts can't be
+stated. 
+
+The remainder of this document describes how to use the mechanized
+specification to test implementations.
+
 
 Installation steps
 ==================
+
+First, Ivy must be installed, as described
+[here](http://microsoft.github.io/ivy/install.html). It must be
+installed from source, using the git branch `quic15_merge_temp`.
 
 Do these steps just once on a given machine.
 
 ### Virtual networking and packet capture
 
-To monitor implementations of the protocol, it is useful to run them
-in a virtual network environment. For this we use the [CORE virtual
-networking
-environment](https://www.nrl.navy.mil/itd/ncs/products/core), the
-`tcpdump` command and the `pcap` library. To install these on an Ubuntu
-system with version 14.04 or higher, do the following:
+Optionally, to monitor implementations of the protocol, it is useful
+to run them in a virtual network environment. For this we use the
+[CORE virtual networking environment](https://www.nrl.navy.mil/itd/ncs/products/core),
+the `tcpdump` command and the `pcap` library. To install these on an
+Ubuntu system with version 14.04 or higher, do the following:
 
     sudo apt-get install core-network tcpdump libpcap-dev
 
 On Ubuntu 18.04 you have to install from source. Get the source from
 the link above and follow the README. 
 
-### Botan
+### Picotls
 
-For test generation, the Botan implementation of TLS is used. Install
-version 2.6.0 from [here](https://botan.randombit.net/releases/). Instructions
-are [here](https://botan.randombit.net/).
+The testers make use of the `picotls` implementation of TLS. Install it
+according to the instructions [here](https://github.com/h2o/picotls). 
 
-Install Botan like this (from the Botan source directory):
+Then you need to tell the Ivy compiler where to find the `picotls`
+library and headers (unless you copy them to standard locations). Use
+this commands, where `PICOTLS_DIR` is the directory in which `picotls`
+was built:
 
-    ./configure.py
-    make
-    sudo make install
-    sudo ln -s /usr/local/include/botan-2/botan /usr/local/include/botan
-    cp src/lib/tls/tls_reader.h /usr/local/include/botan
 
-The last two commands are needed because Botan installs itself in a
-way that it can't find its own header files, and it forgets a header
-file (at least in 2.6.0).
+    $ ivy_libs add picotls $PICOTLS_DIR .
+    
+Notice the dot in the above, which is essential.
+
+### Ivy packet monitor
+
+To build the Ivy monitor, change to this directory (the one this README file
+is in) and compile `quic_monitor.ivy` like this:
+
+    ivyc quic_monitor.ivy
+
+This should create a binary file `quic_monitor`. Copy `mycap.pcap` into this directory and then do:
+
+    ./quic_monitor mycap.pcap > log.iev
+
+The file `log.iev` should have lines like this:
+
+    < show_packet({protocol:udp,addr:0xa000002,port:0x869b},{protocol:udp,addr:0xa000001,port:0x1151},{hdr_long:0x1,hdr_type:0x7f,hdr_cid:0x7c74846907e4ce90,hdr_version:0xff000009,hdr_pkt_num:0x3dee3059,payload:[{frame.stream:{off:0x1,len:0x1,fin:0,id:0,offset:0,length:0x282,data:[0x16,0x3,0x3,...]}}]})
+
+These are decoded packets. Each line consists of a source endpoint, a
+destination endpoint and a packet. The structure of packets is
+described in [quic_packet.ivy](quic_packet.md).
+
+If the specification is violated by the packet trace, the file will
+end with an error message indicating the requirement that was
+violated. 
+
+#### Build the server tester
+
+There are various testers available that generate different sorts of
+traffic for the server. The most basic one is
+`quic_server_test_stream.ivy`, in this directory. Build it like this
+
+    ivyc target=test quic_server_test_stream.ivy
+
+If successful, this will produce a binary file
+`quic_server_test_stream`.
 
 
 Implementations of QUIC
 -----------------------
 
-### Google QUIC
+### picoquic
 
-The Google implementation of QUIC is supposed to be IEFT compatible if
-you used version 99. It is part of Chromium code base.
+Source code and build instructions:
 
-Some instructions to install it are here:
+    https://github.com/private-octopus/picoquic
+    
+Run a server:
 
-    http://www.chromium.org/quic/playing-with-quic
+    ./picoquicdemo
+    
+Run a client 
 
-Before, compiling, you need to patch it to disable packet protection.
-A patch against commit `1720d2a` can be found in `chromium_diffs.txt`.
+    ./picoquicdemo localhost
+    
+### quant
 
-After compiling and certificate creation, to run the test server, from
-the `src` directory of Chromium:
+Source code and build instructions:
 
-    ./out/Debug/quic_server \
-      --quic_response_cache_dir=/tmp/quic-data/www.example.org \
-      --certificate_file=net/tools/quic/certs/out/leaf_cert.pem \
-      --key_file=net/tools/quic/certs/out/leaf_cert.pkcs8 --quic-enable-version-99
+    https://github.com/NTAP/quant
 
-To run the test client:
+To run the quant server in this directory:
 
-    out/Default/quick_client --host=127.0.0.1 --port=6121 --disable-certificate-verification https://www.example.org/ --quic-enable-version-99
-
-
-
+    $QUANT_DIR/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443
+    
+    
 ### MinQUIC
 
-This implementation of version 9 in the go language is available [on
-github](https://github.com/ekr/minq). However, for Ivy you should use
-the fork [here](https://github.com/kenmcmil/minq) which has been
-modified to disable crypto.
+This implementation does not support IETF version 15 as of this writing. 
+When it does, ese these isntructions to run it.
 
-#### Steps to get started with MinQUIC and Ivy
+#### Steps to get started with MinQUIC
 
 - Install the [go language](https://golang.org/doc/install) on your platform.
-- Follow the instructions [here](https://github.com/kenmcmil/minq) to install MinQUIC.
+- Follow the instructions [here](https://github.com/ekr/minq) to install MinQUIC.
 
 ##### Go installation notes:
 
@@ -113,47 +206,55 @@ To get MinQUIC running, this command may be helpful:
     cd $GOPATH/src
     go get github.com/cloudflare/cfssl/helpers
 
-### picoquic
+### Google QUIC
 
-Source code and build instructions:
+The Google implementation of QUIC is part of Chromium code base, and
+is supposed to be IEFT compatible if you used version 99. However,
+this in itself seems to be non-standard behavior, and it has not yet
+proved possible to interoperate with Google QUIC. For anyone willing
+to attempt to rectify this, some instructions to install it are here:
 
-    https://github.com/private-octopus/picoquic
-    
-Run a server:
+    http://www.chromium.org/quic/playing-with-quic
 
-    ./picoquicdemo
-    
-Run a client 
+After compiling and certificate creation, to run the test server, from
+the `src` directory of Chromium:
 
-    ./picoquicdemo localhost
-    
-### quant
+    ./out/Debug/quic_server \
+      --quic_response_cache_dir=/tmp/quic-data/www.example.org \
+      --certificate_file=net/tools/quic/certs/out/leaf_cert.pem \
+      --key_file=net/tools/quic/certs/out/leaf_cert.pkcs8 --quic-enable-version-99
 
-To run the quant server in this directory:
+To run the test client:
 
-    ~/projects/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key 
+    out/Default/quick_client --host=127.0.0.1 --port=6121 --disable-certificate-verification https://www.example.org/ --quic-enable-version-99
 
 
 Virtual network startup
 =======================
 
-This step should be performed once, and then redone after each reboot
-of the machine (or after you shut down the virtual network
+If you want to use virtual networking on linux to isolate QUIC, this
+step should be performed once, and then redone after each reboot of
+the machine (or after you shut down the virtual network
 configuration).
 
 Use the following command in this directory (the one containing this
-file!) to set up a suitable virtual network on your system:
+file) to set up a suitable virtual network on your system:
 
     sudo ./vnet_setup.sh
 
 
+Running QUIC and capturing packets
+==================================
 
-
-Running MinQUIC and capturing packets
-=====================================
+*Note: the packet monitor doesn't currently work because it needs a
+way to get the negotiated secrets from TLS. When does does again work,
+the following instructions can be used.*
 
 If you haven't done the above virtual network startup step since the
 last reboot of your machine, do it now.
+
+We will use MinQUIC as an example, here, but the commands can be
+monitored to run different implementations (or mix implementations).
 
 Change to the directory containing MinQUIC:
 
@@ -183,14 +284,15 @@ To run the server with logging, do this:
 
     MINQ_LOG='*' MINT_LOG='*' go run bin/server/main.go
 
-Build and run the Ivy monitor
-=============================
+Running the Ivy monitor
+=======================
 
-To build the Ivy monitor, change to this directory and compile `quic_monitor.ivy` like this:
+*Note: the packet monitor doesn't currently work because it needs a
+way to get the negotiated secrets from TLS. When does does again work,
+the following instructions can be used.*
 
-    ivyc quic_monitor.ivy
-
-This should create a binary file `quic_monitor`. Copy `mycap.pcap` into this directory and then do:
+To run the Ivy monitor, change to this directory.  Copy your packet
+capture file `mycap.pcap` into this directory and then do:
 
     ./quic_monitor mycap.pcap > log.iev
 
@@ -204,13 +306,19 @@ described in [quic_packet.ivy](quic_packet.md).
 
 If the specification is violated by the packet trace, the file will
 end with an error message indicating the requirement that was
-violated. 
+violated.
 
-Build and run the server tester
-===============================
+Run the server tester
+=====================
 
-    ivyc target=test quic_server_test.ivy
+In this directory, start the server using the instructions for that
+server implementation. Use port number 4443 on the loopack
+interface. Then use this command:
 
+    ./quic_server_test_stream > log.iev
+
+See above for description of the output file log.iev. You can used the
+command line option `seed=<int>` to set the random seed.
 
 View the log
 ============

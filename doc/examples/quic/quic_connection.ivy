@@ -1254,6 +1254,23 @@ object frame = { ...
     }
 }
 
+# New token frames are sent by the server to provide the client a
+# token for establishing a new connection.
+
+object frame = { ...
+    object new_token = { ...
+        action handle(f:frame.new_token,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~is_client(scid);
+            ...
+            call enqueue_frame(dst,dcid,f,e,false);
+        }
+    }
+}
+
 # ### Packet number decoding
 
 # The packet number is decoded from the packet header fields as follows.

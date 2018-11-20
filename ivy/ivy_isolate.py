@@ -1292,7 +1292,7 @@ def get_mixin_order(iso,mod):
         if len(implements) > 1:
             raise iu.IvyError(implements[1],'Multiple implementations for {}'.format(action))
         mixins = [m for m in mixins if not isinstance(m,ivy_ast.MixinImplementDef)]
-        mixers = iu.topological_sort(list(set(m.mixer() for m in mixins)),arcs)
+        mixers = iu.topological_sort(list(iu.unique(m.mixer() for m in mixins)),arcs)
         keymap = dict((x,y) for y,x in enumerate(mixers))
         key = lambda m: keymap[m.mixer()]
         before = sorted([m for m in mixins if isinstance(m,ivy_ast.MixinBeforeDef)],key=key)
