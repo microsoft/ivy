@@ -117,8 +117,7 @@ Notice the dot in the above, which is essential.
 
 ### Build the Ivy packet monitor
 
-* Note: skip this step, as the packet monitor doesn't currently
-  work. *
+*Note: skip this step, as the packet monitor doesn't currently work.*
 
 To build the Ivy monitor, change to this directory (the one this README file
 is in) and compile `quic_monitor.ivy` like this:
@@ -170,7 +169,7 @@ To run the quant server in this directory:
 ### MinQUIC
 
 This implementation does not support IETF version 15 as of this writing. 
-When it does, ese these isntructions to run it.
+When it does, use these isntructions to run it.
 
 #### Steps to get started with MinQUIC
 
@@ -236,7 +235,7 @@ Running QUIC and capturing packets
 ==================================
 
 *Note: the packet monitor doesn't currently work because it needs a
-way to get the negotiated secrets from TLS. When does does again work,
+way to get the negotiated secrets from TLS. When it does again work,
 the following instructions can be used.*
 
 If you haven't done the above virtual network startup step since the
@@ -277,7 +276,7 @@ Running the Ivy monitor
 =======================
 
 *Note: the packet monitor doesn't currently work because it needs a
-way to get the negotiated secrets from TLS. When does does again work,
+way to get the negotiated secrets from TLS. When it does again work,
 the following instructions can be used.*
 
 To run the Ivy monitor, change to this directory.  Copy your packet
