@@ -354,7 +354,8 @@ object quic_prot_deser = {}
                 }
                 unsigned len = get_var_int_len(pnum_pos);
                 unsigned pyld_len = get_var_int(pnum_pos,len);
-                data_remaining = pnum_pos + len + pyld_len;
+                data_remaining = (pnum_pos-pos) + len + pyld_len;
+                std::cout << "pkt len: " << data_remaining << " type: " << (peek(pos)-pos) << " len len: " << len << " pyld_len: " << pyld_len << " pnum_pos: " << pnum_pos << std::endl;
             }
             else {
                 data_remaining = 0x7fffffff;

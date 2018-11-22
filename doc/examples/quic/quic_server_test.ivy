@@ -10,6 +10,7 @@ include tls_msg
 include udp_impl
 include serdes
 include quic_protection
+include file
 
 # This is a simple tester for quic servers. We assume the server is located on localhost at port 4433.
 # The tester plays the role of a single client.
@@ -50,6 +51,16 @@ var the_cid : cid
 
 after init {
     the_cid := 13;
+}
+
+# read a data file to send to server
+
+var http_request : stream_data
+instance http_request_file : binary_input_file(stream_data,cid)
+
+
+after init {
+    http_request := http_request_file.read;
 }
 
 instance tls_extensions : vector(tls.extension)
@@ -299,11 +310,12 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
 	        call show_packet(src,dst,pkt);
 	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
 	        call packet_event(src,dst,pkt);
-                idx := idx.next;
             }
             else {
                 call undecryptable_packet_event(src,dst,ppkt);
-            }
+                assert false;
+            };
+            idx := idx.next;
         }
     }
 }
@@ -372,7 +384,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
         require f.length > 0;
         call show_level_offset_length(e,f.offset,stream_length(dcid,f.id));
         require f.offset = stream_length(dcid,f.id);
-        # require f.length = (stream_app_data_end(dst,dcid,f.id)) - f.offset;
+        require f.length = (stream_app_data_end(dcid,f.id)) - f.offset;
         # require ~f.fin;  # TODO: should allow fin after handshake is complete, or never?
     }
 }
@@ -440,16 +452,28 @@ before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:
 
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
-# for stream id 0x4.
+# for stream id 0x4. TEMPORARY: we only send the http request data read from the input file.
+# We always read up to a newline or the end-of-file, since some servers can't seem to handle partial
+# lines.
 
-before app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data) {
-    if _generating {
-        require s = 0x4;
-        require (src = client.ep | src = client_alt);
-        require dst = server.ep;
-        require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
-        require stream_length(dcid,s) = stream_app_data_end(dcid,s);
-    }
+action client_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, end : stream_pos)
+    
+around client_send_event {
+    require s = 0x4;
+    require (src = client.ep | src = client_alt);
+    require dst = server.ep;
+    require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
+    require stream_length(dcid,s) = stream_app_data_end(dcid,s);
+    require stream_length(dcid,s) < end & end <= http_request.end;
+    ...
+    while end < http_request.end & http_request.value(end) ~= 10 {
+        end := end.next
+    };
+    if end < http_request.end {
+        end := end.next
+    };
+    var data := http_request.segment(stream_length(dcid,s),end);
+    call app_send_event(src,dst,dcid,s,data);
 }
 
 # Note, we don't need a tester precondition for packet protocol
@@ -462,7 +486,7 @@ export frame.stream.handle
 export frame.crypto.handle
 export frame.path_response.handle
 export packet_event
-export app_send_event
+export client_send_event
 export tls_recv_event
 #export frame.rst_stream.handle
 #export frame.max_stream_id.handle

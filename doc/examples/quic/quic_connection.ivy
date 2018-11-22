@@ -556,7 +556,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # Allowed header types
 
     require pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
-    require ~pkt.hdr_long -> pkt.hdr_type = 0x30;
+    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0xf8) = 0x30;
     
     # Extract the source and destination cid's and packet number from the packet.
 
@@ -1246,10 +1246,10 @@ object frame = { ...
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require f.data.end = 8;
-            require path_challenge_pending(dcid,f.data);
+            require path_challenge_pending(scid,f.data);
             ...
             path_challenge_pending(scid,f.data) := false;
-            call enqueue_frame(dst,dcid,f,e,false);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
@@ -1266,7 +1266,7 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~is_client(scid);
             ...
-            call enqueue_frame(dst,dcid,f,e,false);
+            call enqueue_frame(src,scid,f,e,false);
         }
     }
 }
