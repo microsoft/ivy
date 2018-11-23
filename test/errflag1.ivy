@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+var p : bool
+var q : bool
+
+export action act = {
+    p := true;
+    while q
+    invariant p
+    invariant p
+    invariant p
+    invariant p
+    invariant p
+    invariant p
+    invariant p
+    invariant p
+    {
+        assert p;
+        p := p;
+        q := *
+    };
+    assert ~q
+}

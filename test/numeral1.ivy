@@ -1,0 +1,13 @@
+#lang ivy1.7
+
+type t = struct {
+}
+
+var x : t
+
+action a = {
+    x := 0
+}
+
+export a
+

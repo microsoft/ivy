@@ -1,0 +1,25 @@
+
+isolate1:
+
+var x : t
+
+action foo = {
+ ...
+    call bar
+    invariant  ...
+
+    if (x = ...) ....
+...
+}
+
+action baz = {
+  x := ...
+}
+
+isolate2:
+
+action bar = {
+
+...
+   call baz
+...

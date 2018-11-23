@@ -1,0 +1,5 @@
+#lang ivy1.6
+
+type t
+relation p(X:t)
+axiom p(Y)

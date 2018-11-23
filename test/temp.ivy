@@ -1,0 +1,42 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function f(X:t) : t
+
+function foo(X:t) = f(X) = X
+
+# definition f(X) = X
+
+function g(X:t) : t
+var p : t
+
+function h(X:t) : t
+definition h(Z) =  Z
+function bar(X:t) = f(X) = h(X)
+
+var q : bool
+
+object test3 = {
+    relation r(X:t)
+    definition r(X) = (X <= p)
+    axiom r(p)
+}
+
+# OK
+# object test4 = {
+#     function f(X:t) : t
+#     definition f(X) = X
+#     axiom f(Y) <= (p)
+# }
+
+# OK
+# object test5 = {
+#     function f(X:t) : t
+#     definition f(X) = g(X)
+#     axiom f(Y) <= (p)
+# }
+
+property false
+

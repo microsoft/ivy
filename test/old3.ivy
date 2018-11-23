@@ -1,0 +1,11 @@
+#lang ivy1.7
+
+object foo = {
+    relation r
+}
+
+action a = {
+    assert (old foo).r;
+}
+
+export a

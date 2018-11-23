@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+include order
+
+instance foo : iterable
+
+action a (s:foo) returns (r:foo) = {
+    require ~s.is_max;
+    r := s.next
+}
+
+action b returns (r:foo) = {
+    r := 0
+}
+
+export a
+export b
+
+extract iso_impl = this

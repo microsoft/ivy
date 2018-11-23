@@ -1,0 +1,56 @@
+#lang ivy1.7
+
+isolate iso1 = {
+
+    action a
+
+    specification {
+
+        type t
+
+        property [p1] true
+
+        before a {
+            assert true;
+            require true;
+            ensure true
+        }
+        after a {
+            assert true;
+            require true;
+            ensure true
+        }
+    }
+
+    implementation {
+
+        property [p2] true
+
+        implement a {
+            assert true;
+#            require true;
+            ensure true
+        }
+
+    }
+
+    private {
+        axiom true
+    }
+
+}
+
+isolate iso2 = {
+
+    action a = {
+       call iso1.a
+    }
+
+} with iso1
+
+
+
+export iso1.a
+export iso2.a
+
+

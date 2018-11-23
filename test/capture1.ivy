@@ -1,0 +1,20 @@
+#lang ivy1.7
+
+type t
+
+schema foo = {
+    function q : t
+    {
+        function x : t
+        property x = q
+    }
+    property Y:t = Z
+}
+
+var x : t
+var y : t
+
+property x = y
+proof
+    apply foo with q = x;
+    showgoals

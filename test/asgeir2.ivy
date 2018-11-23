@@ -1,0 +1,31 @@
+action step(ph:dram_ph_type,a:addr_type.t,t:lclock.t) = {
+
+
+    var blk_older_wr_same_a       : bool;
+
+
+    var p   : proc.t;
+    
+    var src : bool;
+    
+    
+    var tt  : lclock.t;
+    
+    
+    tt := t;
+    
+    
+    if ph=dram_rd0_ph & rd0(a).cmd = read {
+        
+        p                 := rd0(a).p;
+        
+        
+        if ~rd0(a).src {
+            
+            blk_older_wr_same_a := 
+                exists T1,T2. ep(p).isd_wr0(a,T1) & ep(p).isd_rd0(a,T2) & T1 < T2;
+            
+            
+
+       }
+}

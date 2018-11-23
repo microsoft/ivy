@@ -1,0 +1,36 @@
+#lang ivy1.7
+
+type client
+type server
+
+relation link(X:client, Y:server)
+relation semaphore(X:server)
+relation 
+
+after init {
+    semaphore(W) := true;
+    link(X,Y) := false
+}
+
+action connect(x:client,y:server) = {
+  assume semaphore(y);
+  link(x,y) := true;
+  semaphore(y) := false
+}
+
+action disconnect(x:client,y:server) = {
+  assume link(x,y);
+  link(x,y) := false;
+  semaphore(y) := true
+}
+
+
+invariant [safety] ~(X ~= Z & link(X,Y) & link(Z,Y))
+
+axiom __X = X & __Z = X -> __X = __Z
+axiom __Y = Y -> (semaphore(__Y) = semaphore(Y))
+axiom __X = X & __Y = Y -> (link(__X,__Y) = link(X,Y))
+axiom __Z = X & __Y = Y -> (link(__Z,__Y) = link(X,Y))
+
+export connect
+export disconnect

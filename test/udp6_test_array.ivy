@@ -1,0 +1,26 @@
+#lang ivy1.7
+
+include order
+include collections
+
+type a  # network addresses
+type index
+type t
+instance arr : array(index,t)
+
+include udp6
+instance foo : udp_simple(a,arr.t)
+
+# action send(src:a,dst:a,idx:index,val:t) = {
+#     var x : arr.t;
+#     x := arr.resize(x,idx,val);
+#     call foo.send(src,dst,x)
+# }
+
+import foo.recv
+ export foo.send
+#export send
+
+interpret a->bv[1]
+
+extract iso_impl = this

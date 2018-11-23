@@ -1,0 +1,39 @@
+#lang ivy1.7
+
+type t
+
+var x : t
+var y : t
+
+after init {
+  x := y
+}
+
+action a = {
+  y := *
+}
+
+invariant x = y
+proof let X = y
+ 
+export a
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema trans2 = {
+    type t
+    function x : t
+    property Y = X  -> (x = X <-> x = Y)
+}
+
+schema contra = {
+    type t
+    function x : t
+    property Y ~= X -> ~(x = X & x = Y)
+}
+

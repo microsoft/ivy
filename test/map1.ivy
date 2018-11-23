@@ -1,0 +1,10 @@
+#lang ivy1.7
+
+include collections
+
+type t
+
+instance foo : map(t,t,0)
+
+isolate iso(m:t) = foo(m)
+

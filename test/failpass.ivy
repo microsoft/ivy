@@ -1,0 +1,11 @@
+#lang ivy1.7
+
+action a = {
+    assert false
+}
+
+action b = {
+}
+
+export a
+

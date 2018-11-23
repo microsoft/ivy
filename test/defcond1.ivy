@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+type t
+
+relation foo(X:t)
+relation m(X:t)
+
+definition foo(X) = m(X)
+
+action a(c:bool,x:t) = {
+    if c {
+        m(x) := true
+    };
+    if c {
+        m(x) := true
+    };
+}
+
+invariant foo(X)
+
+export a
+
+

@@ -1,0 +1,56 @@
+#lang ivy1.7
+
+include order
+
+type node
+
+type value
+type round
+
+type ballot = struct {
+    n:round,
+    x:value
+}
+
+# TODO: this does not seem to work:
+# type statement = {abort, commit}
+type statement
+individual commit:statement
+individual abort:statement
+trusted isolate commit_abort_iso = {
+    property commit ~= abort
+    property X = commit | X = abort 
+}
+
+isolate abs_actions = {
+    
+    relation vote(N:node, B:ballot, S:statement)
+    
+}
+
+isolate ballot_protocol = {
+    
+    specification {
+        
+        relation vote(N:node, B:ballot, S:statement)
+
+        invariant vote(N,B,S) <-> abs_actions.vote(N,B,S)
+        
+        action vote_or_accept_prepared_ghost(v:node,b:ballot)
+        
+        after vote_or_accept_prepared_ghost
+        {
+            assume abs_actions.vote(V,B,S) <-> ((old abs_actions.vote(V,B,S)) | (V = v & S = abort & B < b & x(B) ~= x(b) & (S = commit & ~vote(V,B,abort)) | (S = abort & ~vote(V,B,commit))));
+        }
+        
+        action send_prepare(v:node, b:ballot, p:ballot, pp:ballot, nc:round, nh:round) = {
+            call vote_or_accept_prepared_ghost(v,b);
+            vote(v, B, abort) := vote(v, B, abort) | (B < b & x(B) ~= x(b) & (~vote(v,B,commit)));
+            # TODO: the assert below passes, while the invariant fails
+            assert vote(N,B,S) <-> abs_actions.vote(N,B,S);
+        }
+    }
+    
+    export send_prepare
+    
+} with abs_actions, commit_abort_iso

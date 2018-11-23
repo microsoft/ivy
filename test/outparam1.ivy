@@ -1,0 +1,25 @@
+#lang ivy1.7
+
+type t
+type u
+interpret t->int
+interpret u->int
+
+action a1 returns (out:t) = {
+    assume out >= 0;
+}
+
+
+action a2 returns (out:u) = {
+    assume out >= 1;
+}
+
+object bar = {
+action foo = {
+    var x := a1;
+    assume x = 0;
+    var y := a2;
+}
+}
+
+export bar.foo

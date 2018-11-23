@@ -1,0 +1,302 @@
+#lang ivy1.7
+
+include relarray
+include order
+include udp
+
+instance node : iterable
+
+isolate nset = {
+
+    type this
+    alias t = this
+    type index
+
+    relation member(N:node, S:t)
+    relation majority(S:t)
+
+    action emptyset returns (s:nset) 
+    action add(s:nset, n : node) returns (s:nset) 
+
+    specification {
+        after emptyset {
+            ensure ~member(N, s)
+        }
+
+        after add {
+            ensure member(N,s) <-> (member(N , old s) | N = n)
+        }
+    }
+
+    private {
+        invariant [majorities_intersect]
+            (majority(S) & majority(T)) -> exists N. member(N,S) & member(N,T)
+    }
+
+    implementation {
+	interpret index -> int
+	function card(S:nset) : index
+	instance arr : array(index,node)
+	destructor repr(N:nset) : arr
+	individual all : nset
+	
+	definition member(N,S) = exists I. 0 <= I & I < repr(S).end & repr(S).value(I, N)
+	definition majority(S) = card(S) + card(S) > card(all)
+
+	after init {
+	    card(S) := 0;
+            all.repr := arr.empty;
+	    var i := node.iter.create(0);
+	    while ~i.is_end
+	        invariant (forall N.~(member(N,S) & member(N,T))) ->
+	                      card(S) + card(T) <= card(all)
+                invariant node.iter.done(N,i) <-> member(N,all)
+                invariant card(S) >= 0
+	    {
+                all.repr := all.repr.append(i.val);
+		card(S) := card(S) + 1 if member(i.val, S) else card(S);
+                i := i.next
+	    };
+	}
+
+        implement emptyset {
+            s.repr := arr.empty()
+        }
+
+        implement add {
+            if ~member(n, s) {
+                s.repr := s.repr.append(n)
+            }
+        }
+    }
+}
+with node
+
+isolate toy_protocol = {
+
+    relation voted(N:node,M:node)
+    relation isleader(N:node)
+    var quorum : nset
+
+    specification {
+        after init {
+            voted(N,M) := false;
+            isleader(N) := false;
+        }
+
+        invariant [one_leader]
+            isleader(N) & isleader(M) -> N = M
+
+        invariant [one_vote_per_node] 
+            voted(L, N ) & voted(L, M ) -> N = M
+
+        invariant [leader_has_majority] 
+            isleader(N) ->
+                nset.majority(quorum) &
+                forall M. nset.member(M , quorum) -> voted(M,N)
+
+        action vote(v : node, n : node) = {
+            require ~voted(v,N);
+            voted(v, n) := true
+        }
+
+        action become_leader(n : node, s : nset) = {
+            require nset.majority(s) & (nset.member(N,s) -> voted(N, n));
+            isleader(n) := true;
+            quorum := s
+        }
+    }
+}
+with nset, nset.majorities_intersect
+
+object msg_kind = {
+    type this = {request_vote, vote, leader}
+}
+
+object msg = {
+    type this = struct {
+        kind : msg_kind,
+        src : node,
+        vote : node
+    }
+}
+
+instance net : udp_simple(node,msg)
+
+isolate shim = {
+
+
+    module handler(p_kind) = {
+        action handle(dst:node,m:msg)
+        specification {
+            before handle {
+                require sent(m,dst) & m.kind = p_kind
+            }
+        }
+    }    
+
+    relation sent(M:msg,N:node)
+
+    instance request_vote : handler(msg_kind.request_vote)
+    instance vote : handler(msg_kind.vote)
+    instance leader : handler(msg_kind.leader)
+
+    action bcast(src:node,m:msg)
+
+    specification {
+        after init {
+            sent(M,D) := false;
+        }
+
+        before bcast {
+            sent(m,D) := true;
+        }
+    }
+
+    implementation {
+
+        action debug_sending(src:node,dst:node,m:msg)
+        action debug_recving(dst:node,m:msg)
+
+        implement net.recv(dst:node,m:msg) {
+            call debug_recving(dst,m);
+            if m.kind = msg_kind.request_vote {
+                call request_vote.handle(dst,m)
+            }
+            else if m.kind = msg_kind.vote {
+                call vote.handle(dst,m)
+            }
+            else if m.kind = msg_kind.leader {
+                call leader.handle(dst,m)
+            }
+        }
+
+        implement bcast {
+            var iter := node.iter.create(0);
+            while ~iter.is_end
+            invariant net.spec.sent(M,D) -> sent(M,D)
+            {
+                var n := iter.val;
+                call debug_sending(src,n,m);
+                call net.send(src,n,m);
+                iter := iter.next;
+            }
+        }
+
+    }
+
+    private {
+        invariant net.spec.sent(M,D) -> sent(M,D)
+    }
+
+} with net, node
+
+
+isolate toy_system = {
+
+
+    relation alreadyvoted(N:node)
+    function voters(N:node) : nset
+
+    specification {
+        invariant [safe] forall M1:msg, M2:msg. 
+                       shim.sent(M1,N1) & M1.kind = msg_kind.leader
+                       & shim.sent(M2,N2) & M2.kind = msg_kind.leader
+                         -> M1.src = M2.src
+    }
+
+    after init (self : node) {
+        alreadyvoted(self) := false;
+        voters(self) := nset.emptyset()
+    }
+
+    action request_vote(self : node) = {
+        var msg : msg;
+        msg.kind := msg_kind.request_vote;
+        msg.src := self;
+        call shim.bcast(self,msg);
+        if ~alreadyvoted(self) {
+            alreadyvoted(self) := true;
+            voters(self) := voters(self).add(self);
+            call toy_protocol.vote(self,self) # ghost
+        }
+    }
+
+
+    implement shim.request_vote.handle(self : node, req : msg) {
+        if ~alreadyvoted(self) {
+            alreadyvoted(self) := true;
+            var reply : msg;
+            reply.kind := msg_kind.vote;
+            reply.src := self;
+            reply.vote := req.src;
+            call shim.bcast(self,reply);
+            call toy_protocol.vote(self,req.src)
+        }
+    }
+
+    implement shim.vote.handle(self : node, req : msg) {
+        if req.vote = self {
+            voters(self) := voters(self).add(req.src);
+            if nset.majority(voters(self)) {
+                var reply : msg;
+                reply.kind := msg_kind.leader;
+                reply.src := self;
+                call shim.bcast(self,reply);
+                call toy_protocol.become_leader(self, voters(self)) # ghost
+            }
+        }
+    }
+
+    private {
+
+        invariant forall M:msg. shim.sent(M,N) & M.kind = msg_kind.vote -> toy_protocol.voted(M.src, M.vote)
+#        invariant shim.sent(M) & M.kind = msg_kind.request -> toy_protocol.voted(M.src,M.src)
+        invariant nset.member(N1 ,voters(N2)) -> toy_protocol.voted(N1,N2)
+        invariant forall M:msg. shim.sent(M,N) & M.kind = msg_kind.leader -> toy_protocol.isleader(M.src)
+        invariant toy_protocol.voted(N1,N2) -> alreadyvoted(N1)
+
+    }
+        
+
+
+
+} with nset, toy_protocol, shim
+
+export toy_system.request_vote
+
+import shim.debug_sending
+import shim.debug_recving
+
+extract iso_impl(self:node) = toy_system(self),shim(self),net(self),nset,node
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema trans2 = {
+    type t
+    function x : t
+    property x = X & Y = X -> x = Y
+}
+
+schema cong1 = {
+    type t
+    type u
+    function x : t
+    function f(X:t) : u
+    property x = X -> f(x) = f(X)
+}
+
+schema cong2 = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function f(X1:t1,X2:t2) : u
+    property x1 = X1 & x2 = X2 -> f(x1,x2) = f(X1,X2)
+}

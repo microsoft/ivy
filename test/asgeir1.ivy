@@ -1,0 +1,326 @@
+#lang ivy1.7
+
+################################################################################
+# 
+################################################################################
+
+type proc
+
+type p_state_type = {_I,   # invalid
+                       _E
+                      }
+
+type dir_state_type = {dir_I,
+                       dir_E   # Exclusive
+                      }
+
+# Request
+
+type net_req_type = {
+                     _READE,         # Coherent Read Exclusive
+                     _NOP_req}
+
+# Completion
+
+type net_completion_type = {
+                            _ERESP,          # Fill data in exclusive state
+                            _NOP_cmp}
+# Snoop
+
+type net_snoop_type = {
+                       _IRDEX,
+                       _NOP_snp}
+
+module prb_type = {
+ individual v   : bool
+}
+
+module irb_type = {
+ individual v    : bool
+ individual src  : proc
+}
+
+type ph_type       = {p_req_ph,dir_rec_ph,p_rec_ph,snp_ph}
+
+type send_type     = {send_READS,send_READE,send_none}
+
+module net_req_type_msg = {
+ individual kind : net_req_type
+}
+
+module net_cmp_type_msg = {
+ individual kind : net_completion_type
+ individual src  : proc
+ individual dst  : proc
+}
+
+module net_snp_type_msg = {
+ individual kind : net_snoop_type
+ individual src  : proc
+}
+
+################################################################################
+# issues net requests and receives completions
+################################################################################
+
+module p_mod = { 
+  individual  state : p_state_type
+  instantiate prb   : prb_type
+  instantiate irb   : irb_type
+  individual  wr    : bool
+
+  individual  error     : bool
+
+  action p_rec(p:proc,ph:ph_type,send:send_type) = {
+
+    error := true;
+
+    if ph=p_req_ph & ~prb.v & ~irb.v & state=_I & send=send_READS {
+       prb.v           := true;
+       net.req(p).kind := _READE;
+       error := false;
+    }
+    else if ph=p_req_ph & ~prb.v & ~irb.v & state=_I & send=send_READE {
+       prb.v          := true;
+       net.req(p).kind := _READE;
+       error := false;
+    }
+    else if ph=p_rec_ph & prb.v & ~irb.v & net.cmp.kind=_ERESP & net.cmp.dst=p {
+       state           := _E;
+       prb.v           := false;
+       net.cmp.kind := _NOP_cmp;
+       error := false;
+    }
+    else if ph=p_rec_ph & prb.v & irb.v & net.cmp.kind=_ERESP & net.cmp.dst=p {
+       net.cmp.kind         := _ERESP;
+       net.cmp.dst          := irb.src;
+
+       irb.v                := false;
+       prb.v                := false;
+
+       dir.oldest_OwnerPtr  := irb.src;
+
+       net.cmp.kind         := _ERESP;
+       net.cmp.dst          := irb.src;
+
+       error := false;
+    }
+    else if ph=snp_ph & ~prb.v & net.snp(p).kind=_IRDEX {
+       state                            := _I;
+       net.cmp.kind     := _ERESP;
+       net.cmp.dst := net.snp(p).src;
+
+       dir.oldest_OwnerPtr := net.snp(p).src;
+
+       net.snp(p).kind                  := _NOP_snp;
+       error := false;
+    }
+    else if ph=snp_ph & prb.v & net.snp(p).kind=_IRDEX {
+       irb.v   := true;
+       irb.src := net.snp(p).src;
+
+       net.snp(p).kind                  := _NOP_snp;
+       error := false;
+    }
+  }
+} 
+
+## ****
+
+module dir_mod = {
+  individual _State           : dir_state_type
+  individual _OwnerPtrValid   : bool
+
+  individual _OwnerPtr        : proc
+  individual oldest_OwnerPtr  : proc  
+
+  individual  error : bool
+
+################################################################################
+#
+################################################################################
+
+  action dir_rec(p:proc,ph:ph_type) = {
+   error := true;
+
+   if ph=dir_rec_ph & net.req(p).kind=_READE & _State=dir_I {
+      net.cmp.kind       := _ERESP;
+      net.cmp.dst        := p;
+
+      _State               := dir_E;
+
+      _OwnerPtrValid       := true;
+      _OwnerPtr            := p;
+      oldest_OwnerPtr      := p;
+
+      net.req(p).kind       := _NOP_req;
+      error := false;
+   }
+   else if ph=dir_rec_ph & net.req(p).kind=_READE & _State=dir_E {
+      net.snp(_OwnerPtr).kind := _IRDEX;
+      net.snp(_OwnerPtr).src  := p;
+
+      _OwnerPtrValid          := true;
+      _OwnerPtr               := p;
+
+      net.req(p).kind         := _NOP_req;
+      error := false;
+   }
+  }
+
+}
+
+## ****
+
+################################################################################
+#
+################################################################################
+
+module net_fabric = {
+  instantiate req(P:proc)       : net_req_type_msg
+  instantiate cmp               : net_cmp_type_msg
+  instantiate snp(P:proc)       : net_snp_type_msg
+
+  action step(p:proc,ph:ph_type,send:send_type) = {
+   if ph=p_req_ph {                    # pi issues new request
+     call pi(p).p_rec(p,ph,send)
+   } else if ph=dir_rec_ph {            # dir receives request/owner-ship transfer
+     call dir.dir_rec(p,ph)
+   } else if ph=p_rec_ph {              # pi receives response
+     call pi(p).p_rec(p,ph,send)
+   } else if ph=snp_ph {                  # proc receives intervention/invalidate request
+     if (net.cmp.kind=_NOP_cmp | net.cmp.dst~=p) {
+       call pi(p).p_rec(p,ph,send)
+     }
+   }
+  }
+
+}
+
+after init {
+    net.req(P).kind          := _NOP_req;
+    net.cmp.kind             := _NOP_cmp;
+    net.snp(P).kind          := _NOP_snp;
+
+    pi(P).state       := _I;
+    pi(P).prb.v       := false;    
+    pi(P).irb.v       := false;    
+
+    pi(P).error       := false;
+    dir.error          := false;
+    dir._State         := dir_I;
+    dir._OwnerPtrValid := false;
+}
+
+################################################################################
+#
+################################################################################
+
+instantiate pi(X:proc)       : p_mod
+instantiate dir               : dir_mod
+instantiate net               : net_fabric
+
+################################################################################
+# Proofs 
+################################################################################
+
+conjecture net.cmp.kind=_ERESP
+           ->
+           (
+            dir._State=dir_E & (net.cmp.dst=dir._OwnerPtr & dir._OwnerPtr=dir.oldest_OwnerPtr  | net.cmp.dst=dir.oldest_OwnerPtr)
+           )
+
+conjecture dir._State=dir_E 
+           -> 
+           (
+            pi(dir.oldest_OwnerPtr).state=_E & net.cmp.kind=_NOP_cmp | 
+            net.cmp.kind=_ERESP & net.cmp.dst=dir.oldest_OwnerPtr
+           )
+
+conjecture dir._State=dir_E -> (~pi(dir._OwnerPtr).irb.v & net.snp(dir._OwnerPtr).kind=_NOP_snp)
+
+
+conjecture (net.snp(P).kind=_IRDEX | pi(P).irb.v) -> dir._State=dir_E
+
+conjecture ~(net.snp(P).kind=_IRDEX & pi(P).irb.v)
+
+conjecture (dir._OwnerPtrValid & (dir.oldest_OwnerPtr~=dir._OwnerPtr)) -> pi(dir._OwnerPtr).prb.v
+
+conjecture net.snp(P).kind=_IRDEX
+           ->
+           ((pi(P).prb.v | pi(P).state=_E) & ~(dir._OwnerPtr=dir.oldest_OwnerPtr))
+
+
+conjecture (dir._OwnerPtrValid & (dir.oldest_OwnerPtr ~= dir._OwnerPtr))
+           ->
+           (
+            net.snp(dir.oldest_OwnerPtr).kind=_IRDEX |
+            pi(dir.oldest_OwnerPtr).irb.v
+           )
+
+conjecture ~pi(P).prb.v -> (net.req(P).kind=_NOP_req & ~pi(P).irb.v)
+
+conjecture pi(P).irb.v
+           ->
+           (
+            dir.oldest_OwnerPtr~=dir._OwnerPtr
+           )
+
+conjecture pi(P).state=_I |
+           pi(P).state=_E & ~pi(P).prb.v & net.cmp.kind=_NOP_cmp & (
+                                                         dir._State=dir_E & dir._OwnerPtr=P |
+                                                         dir._State=dir_E & dir._OwnerPtr~=P & (net.snp(P).kind=_IRDEX | pi(P).irb.v)
+                                                        ) 
+
+conjecture net.req(P).kind~=_NOP_req -> ~(net.cmp.kind~=_NOP_cmp & net.cmp.dst=P | net.snp(P).kind~=_NOP_snp | pi(P).irb.v)
+conjecture net.cmp.kind~=_NOP_cmp    -> ~(net.req(net.cmp.dst).kind~=_NOP_req)
+
+
+conjecture dir._State=dir_I & ~dir._OwnerPtrValid |
+           dir._State=dir_E & dir._OwnerPtrValid & (
+                                                    pi(dir.oldest_OwnerPtr).state=_E |
+                                                    net.cmp.kind=_ERESP & net.cmp.dst=dir.oldest_OwnerPtr
+                                                   )
+
+conjecture (net.req(P).kind~=_NOP_req & dir._OwnerPtrValid) -> (dir._OwnerPtr ~= P)
+
+conjecture dir._State=dir_E -> dir._OwnerPtrValid
+
+conjecture pi(P).prb.v
+           ->
+           (
+           (
+             net.req(P).kind~=_NOP_req | 
+             net.cmp.kind~=_NOP_cmp & net.cmp.dst=P |
+             (exists X. net.snp(X).kind=_IRDEX & net.snp(X).src=P)
+           )
+           & (pi(P).state=_I) 
+           )
+
+conjecture ((net.req(P).kind~=_NOP_req | net.cmp.kind~=_NOP_cmp & net.cmp.dst=P) & (pi(P).state=_I))
+           ->
+           pi(P).prb.v
+
+conjecture net.req(P).kind = _READE | net.req(P).kind = _NOP_req
+conjecture net.cmp.kind = _ERESP   | net.cmp.kind = _NOP_cmp
+
+conjecture pi(P).state = _I | pi(P).state = _E
+conjecture dir._State = dir_I | dir._State = dir_E
+
+################################################################################
+# no errors
+################################################################################
+
+conjecture ~pi(P).error
+conjecture ~dir.error
+
+
+################################################################################
+# coherence properties
+################################################################################
+
+conjecture (pi(P).state=_E) -> dir.oldest_OwnerPtr=P
+
+export net.step
+
+

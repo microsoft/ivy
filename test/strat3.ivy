@@ -1,0 +1,117 @@
+#lang ivy1.7
+
+type t
+interpret t -> int
+
+function f(X:t) : t
+
+function foo(X:t) = f(X) = X
+
+# definition f(X) = X
+
+function g(X:t) : t
+var p : t
+
+# OK
+#axiom foo(g(Y))
+
+# bad
+#axiom foo(Y)
+
+function h(X:t) : t
+definition h(Z) =  Z
+function bar(X:t) = f(X) = h(X)
+
+# OK
+#axiom bar(g(Y))
+
+# bad
+#axiom bar(Y)
+
+var q : bool
+
+# OK
+# axiom g(X) = f(X) if q else g(X)
+
+# OK
+# function ite(X:t) : t
+# axiom q -> ite(X) = f(X)
+# axiom ~q -> ite(X) = g(X)
+# axiom g(X) = ite(X)
+
+# bad
+#axiom g(X) = f(X) if q else X
+
+# bad
+# axiom g(X) = p if q else X
+
+# bad
+# function ite(X:t) : t
+# axiom q -> ite(X) = p
+# axiom ~q -> ite(X) = X
+# axiom g(X) = ite(X)
+
+# bad
+# axiom g(X) = Y if q else Z
+
+# function ite2(Y:t,Z:t) : t
+# axiom q -> ite2(Y,Z) = Y
+# axiom ~q -> ite2(Y,Z) = Z
+# axiom g(X) = ite2(Y,Z)
+
+
+# OK
+# object test1 = {
+#     function f(X:t) : t
+#     function g(X:t,Y:t) : t
+#     function h(X:t) : t
+#     var a : t
+#     var b : t
+#     axiom g(X1, X2) = 0 | h(X2) = 0
+#     axiom g(f(X1), b) + 1 <= f(X1)
+#     axiom h(b) = 1
+#     axiom f(a) = 0
+# }
+
+# OK
+# axiom X <= p
+
+# OK
+# axiom X:t < Y
+
+# bad
+# axiom X:t <= Y
+
+# bad
+# axiom X <= h(Y)
+
+# OK
+# object test2 = {
+#     relation r(X:t)
+#     definition r(X) = (X <= p)
+#     axiom r(Y)
+# }
+
+# OK
+# object test3 = {
+#     relation r(X:t)
+#     definition r(X) = (X <= p)
+#     axiom r(p)
+# }
+
+# OK
+# object test4 = {
+#     function f(X:t) : t
+#     definition f(X) = X
+#     axiom f(Y) <= (p)
+# }
+
+# OK
+# object test5 = {
+#     function f(X:t) : t
+#     definition f(X) = g(X)
+#     axiom f(Y) <= (p)
+# }
+
+property false
+

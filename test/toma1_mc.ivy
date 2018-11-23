@@ -1,0 +1,278 @@
+#lang ivy1.7
+
+type WORD
+type REG
+type TAG
+type EU 0..0;
+
+typedef st_opr struct{
+  valid : boolean;
+  tag : TAG;
+  val : WORD;
+}
+
+module main()
+{
+
+  /* an uninterpreted function */
+
+  f : array WORD of array WORD of WORD;
+  next(f) := f;
+
+  opin : {ALU,RD,WR,NOP};       /* opcode input */
+  srca,srcb,dst : REG;          /* source and dest indices input */
+  din,dout : WORD;              /* data input and output */
+  r : array REG of WORD;        /* the register file */
+  opra,oprb,res : WORD;         /* operands and result */
+  stallout : boolean;           /* stall output (nondeterministic) */
+
+  /* the abstract model */
+
+  layer arch:
+    if(~stallout)
+      switch(opin){
+	ALU : {
+	  opra := r[srca];
+	  oprb := r[srcb];
+	  res := f[opra][oprb];
+	  next(r[dst]) := res;
+	}
+	RD : {
+	  dout := r[srca];
+	}
+	WR : {
+	  next(r[dst]) := din;
+	}
+      }
+  
+  /* the implementation */
+
+  ir : array REG of
+    struct{
+      resvd : boolean;
+      tag : TAG;
+      val : WORD;
+    }
+  
+  st : array TAG of
+    struct{
+      valid : boolean;
+      opra, oprb : st_opr;
+      dst : REG;
+      issued : boolean;
+    }
+
+  pout : struct{
+    valid : boolean;
+    tag : TAG;
+    val : WORD;
+  }
+
+  st_choice : TAG;
+  issue_choice : TAG;
+
+  forall(i in TAG)
+    init(st[i].valid) := 0;
+  forall(i in REG)
+    init(ir[i].resvd) := 0;
+    
+  default {
+    /* instruction completion logic */
+
+    if(pout.valid){
+      forall(i in REG)
+	if(ir[i].resvd & ir[i].tag = pout.tag){
+	  next(ir[i].resvd) := 0;
+	  next(ir[i].val) := pout.val;
+	}
+      
+      forall(i in TAG){
+	if(~st[i].opra.valid & st[i].opra.tag = pout.tag){
+	  next(st[i].opra.valid) := 1;
+	  next(st[i].opra.val) := pout.val;
+	}
+	if(~st[i].oprb.valid & st[i].oprb.tag = pout.tag){
+	  next(st[i].oprb.valid) := 1;
+	  next(st[i].oprb.val) := pout.val;
+	}
+	if(st[i].issued && pout.tag = i)
+	  next(st[i].valid) := 0;
+      }
+    }
+
+  } in default {
+    /* incoming instruction logic */
+
+    if(~stallout)
+      switch(opin){
+	ALU : {
+	  
+	  /* store the instrcution in an RS */
+	  
+	  next(ir[dst].resvd) := 1;
+	  next(ir[dst].tag) := st_choice;
+	  next(st[st_choice].valid) := 1;
+	  next(st[st_choice].issued) := 0;
+	  
+	  /* fetch the a operand (with bypass) */
+	  
+	  if(pout.valid & ir[srca].resvd & pout.tag = ir[srca].tag){
+	    next(st[st_choice].opra.valid) := 1;
+	    next(st[st_choice].opra.tag) := ir[srca].tag;
+	    next(st[st_choice].opra.val) := pout.val;
+	  } else {
+	    next(st[st_choice].opra.valid) := ~ir[srca].resvd;
+	    next(st[st_choice].opra.tag) := ir[srca].tag;
+	    next(st[st_choice].opra.val) := ir[srca].val;
+	  }
+	  
+	  /* fetch the b operand (with bypass) */
+	  
+	  if(pout.valid & ir[srcb].resvd & pout.tag = ir[srcb].tag){
+	    next(st[st_choice].oprb.valid) := 1;
+	    next(st[st_choice].oprb.tag) := ir[srcb].tag;
+	    next(st[st_choice].oprb.val) := pout.val;
+	  } else {
+	    next(st[st_choice].oprb.valid) := ~ir[srcb].resvd;
+	    next(st[st_choice].oprb.tag) := ir[srcb].tag;
+	    next(st[st_choice].oprb.val) := ir[srcb].val;
+	  }
+	}
+	
+	RD : dout := ir[srca].val;
+	
+	WR : {
+	  next(ir[dst].val) := din;
+	  next(ir[dst].resvd) := 0;
+	}
+      }
+    
+  } in {
+    /* instruction issue logic */
+
+    if(st[issue_choice].valid
+       & st[issue_choice].opra.valid
+       & st[issue_choice].oprb.valid
+       & ~st[issue_choice].issued
+       & exe_rdy)
+      {
+	exe_valid := 1;
+	next(st[issue_choice].issued) := 1;
+      }
+    else exe_valid := 0;
+    
+    exe_tag  := issue_choice;
+    exe_opra :=  st[issue_choice].opra.val;
+    exe_oprb :=  st[issue_choice].oprb.val;
+  }
+
+  /* the stall signal */
+
+  ASSIGN stallout := 
+    opin = ALU & st[st_choice].valid 
+    | opin = RD & ir[srca].resvd;
+  
+  /* the execution units */
+
+  issue_eu, complete_eu : EU;
+
+  eu : array EU of struct{
+    valid, ready : boolean;
+    res : WORD;
+    tag : TAG;
+  }
+
+   exe_rdy,exe_valid : boolean;
+   exe_tag : TAG;
+   exe_opra, exe_oprb : WORD;
+
+   forall(i in EU)
+     init(eu[i].valid) := 0;
+   
+   default{
+     if(~eu[issue_eu].valid){
+       next(eu[issue_eu].valid) := exe_valid;
+       next(eu[issue_eu].res) := f[exe_opra][exe_oprb];
+       next(eu[issue_eu].tag) := exe_tag;
+     }
+   } in {
+     pout.valid := eu[complete_eu].valid & eu[complete_eu].ready;
+     pout.val := eu[complete_eu].res;
+     pout.tag := eu[complete_eu].tag;
+     if(pout.valid)
+       next(eu[complete_eu].valid) := 0;
+   }
+   
+   /* the witness function */
+
+   layer arch:
+     forall(i in REG)
+       init(r[i]) := ir[i].val;
+
+   /* the auxiliary state */
+
+   aux : array TAG of struct {
+     opra, oprb, res : WORD;
+     srca, srcb : REG;
+   }
+
+   if(~stallout & opin = ALU){
+     next(aux[st_choice].opra) := opra;
+     next(aux[st_choice].oprb) := oprb;
+     next(aux[st_choice].res)  := res;
+     next(aux[st_choice].srca) := srca;
+     next(aux[st_choice].srcb) := srcb;
+   } 
+
+   /* the refinement maps */
+
+   forall(k in TAG)
+     layer lemma1 :
+      if(st[k].valid & st[k].opra.valid)
+	st[k].opra.val := aux[k].opra;
+
+   forall(k in TAG)
+     layer lemma1 :
+      if(st[k].valid & st[k].oprb.valid)
+	st[k].oprb.val := aux[k].oprb;
+   
+   forall (i in TAG)
+     layer lemma2[i] :
+      if(pout.tag = i & pout.valid)
+	pout.val := aux[i].res;
+   
+   /* case splitting */
+
+   forall (i in TAG) forall (j in REG) forall (k in TAG) forall(c in WORD){
+     subcase lemma1[i][j][c] 
+     of st[k].opra.val//lemma1
+     for st[k].opra.tag = i & aux[k].srca = j & aux[k].opra = c;
+
+     subcase lemma1[i][j][c] 
+     of st[k].oprb.val//lemma1
+     for st[k].oprb.tag = i & aux[k].srcb = j & aux[k].oprb = c;
+
+     subcase arch[i][j][c]
+     of dout//arch
+     for srca = j & ir[j].tag = i & r[j] = c;
+   }
+
+   forall(i in TAG) forall(j in EU)
+   forall(a in WORD) forall(b in WORD) forall(c in WORD)
+     subcase lemma2[i][j][a][b][c]
+     of pout.val//lemma2[i]
+     for aux[i].opra = a & aux[i].oprb = b & f[a][b] = c
+         &  complete_eu = j;
+
+   /* the proof */
+
+  forall (i in TAG) forall (j in REG) forall (k in TAG) forall(c in WORD)
+    using res//free, pout//free, pout.val//lemma2[i]
+    prove st[k]//lemma1[i][j][c], dout//arch[i][j][c];
+
+  forall(i in TAG) forall(j in EU)
+  forall(a in WORD) forall(b in WORD) forall(c in WORD)
+    using opra//free, oprb//free, st[i]//lemma1, f//undefined, f[a][b]
+    prove pout//lemma2[i][j][a][b][c];
+
+}

@@ -1,0 +1,31 @@
+#lang ivy1.7
+
+object foo = {
+
+    type t
+
+    interpret t -> int
+
+    var n : t
+
+    action a = {
+	var i : t := 0;
+	while i < n 
+	    decreases n - i
+	{
+	    i := i + 1;
+	}
+    }
+
+}
+
+object bar = {
+    action b = {
+	call foo.a
+    }
+}
+
+export bar.b
+
+isolate iso_bar = bar
+isolate iso_foo = foo

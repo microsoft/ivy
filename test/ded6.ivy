@@ -1,0 +1,31 @@
+#lang ivy1.7
+
+include deduction
+
+theorem [nonce] {
+    type t
+    individual x : t
+    relation p
+    property [triv] p
+    property p
+}
+proof
+    apply triv
+
+theorem [andA2] {
+    type u
+    function p(X:u) : bool
+    function q : bool
+    property forall X. p(X) & q
+    property (forall X. p(X)) & q
+}
+proof
+    apply introAnd;
+    apply introA;
+    apply elimAndL with q = q;
+    apply elimA with X=x;
+    showgoals;
+    apply nonce<u/t>;
+    apply elimAndR with p = p(x);
+    apply elimA with X=x
+

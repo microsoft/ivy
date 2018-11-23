@@ -1,0 +1,17 @@
+#lang ivy1.7
+
+# Here we want to test that a function closure captures the value of
+# all relevant symbols in the environment.
+
+type t
+interpret t -> int
+
+var thing : t
+function f(X:t) = X + thing
+function g(X:t) : t 
+
+action myaction = {
+    g(X) := f(g(X)) + 1
+}
+
+export myaction

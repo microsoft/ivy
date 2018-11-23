@@ -1,0 +1,6 @@
+#lang ivy1.6
+
+include collections
+
+var p : bool
+init p

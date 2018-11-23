@@ -1,0 +1,14 @@
+#lang ivy1.7
+
+type t
+
+relation r(X:t,Y:t)
+
+axiom exists Y. r(X,Y)
+axiom exists U. r(U,V)
+
+function f(X:t):t
+function g(X:t):t
+
+#axiom r(X,f(X))
+#axiom r(g(Y),Y)

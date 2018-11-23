@@ -1,0 +1,23 @@
+#lang ivy1.7
+
+type t
+var x:t
+var y:t
+
+after init {
+    x := y
+}
+
+action a = {
+    x := y
+}
+
+schema trans2 = {
+    type q
+    function r : t
+    property r = X & Y = X -> r = Y
+}
+
+invariant Z:t = Z
+
+export a

@@ -1,0 +1,35 @@
+#lang ivy1.7
+
+object obj1 = {
+    relation r1    
+    action a
+
+    specification {
+        after a {
+            ensure r1;
+        }
+    }
+
+    implementation {
+        relation r2
+        definition r1 = r2        
+        implement a {
+            r2 := true;
+        }
+    }
+}
+
+object obj2 = {
+    action b = {
+        if ~obj1.r1 {
+            call obj1.a;
+            assert false;
+        }
+    }
+    export b
+}
+
+isolate iso1 = obj1 # this verifies, as it should
+isolate iso2 = obj2 with obj1 # this verifies, but it shouldn't
+isolate iso3 = obj1,obj2 # this does not verify, correctly stating the assertion in line 26 is violated
+extract iso_impl = obj1,obj2

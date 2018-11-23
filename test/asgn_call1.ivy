@@ -1,0 +1,25 @@
+#lang ivy1.6
+
+object obj = {
+
+type q
+
+type t = struct {
+  a : q
+}
+
+var x :t
+
+function fun(X:t) = X
+
+action foo(x:t) returns(x:t) = {
+    x := x
+}
+
+action bar = {
+    x := x.foo;
+    x := fun(x)
+ 
+}
+
+}

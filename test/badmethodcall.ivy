@@ -1,0 +1,25 @@
+#lang ivy1.6
+object obj = {
+    type t
+    action act(a:t) returns (b:t) = {
+
+    }
+}
+
+action caller(a:obj.t) = {
+    var x:obj.t;
+    call x := a.act.act
+}
+
+type r
+
+action foo returns (x:r,y:r) = {
+
+}
+
+action bar = {
+    var s:r;
+    var q:r;
+    (s,q) := foo
+}
+

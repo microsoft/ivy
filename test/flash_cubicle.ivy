@@ -1,0 +1,594 @@
+#lang ivy1.7
+
+type id
+type cache_state = { invalid, shared, exclusive }
+type wait_type = { none, get, getX }
+type unitype = { nouni, uGet, uGetX, uNAK, uPut, uPutX }
+type swhbtype = {noshwb,shwb,fack}
+
+module cache_line = {
+   individual wait : wait_type
+   relation invmarked
+   individual state : cache_state
+}
+
+module header = {
+  relation pending
+  relation local_
+  relation dirty
+  relation head
+  individual hptr : id
+  relation list
+  relation real(X:id)
+  relation upgrade
+  relation shlist(X:id)
+}
+
+object net(self:id) = {
+  var mtype : unitype
+  var proc : id
+}
+
+module wb_network = {
+  individual proc : id
+  relation wb
+}
+
+object shwbnet = {
+    var mtype : swhbtype
+    var proc : id
+}
+
+individual home : id
+instantiate cache(X:id) : cache_line
+instantiate dir : header
+relation collecting
+individual requester : id
+relation rp_net(X:id)
+individual real_owner : id
+individual fwd_get : wait_type
+individual fwd_src : id
+individual excl_src : id
+instantiate wbnet : wb_network
+individual last_WB : id
+relation nakc
+relation invnet(X:id)
+relation invack(X:id)
+
+# locals used in actions
+
+individual src : id
+individual dst : id
+
+after init {
+    cache(X).state := invalid;
+    cache(X).wait := none;
+    cache(X).invmarked := false;
+    dir.pending := false;
+    dir.dirty := false;
+    collecting := false;
+    net.mtype(S) := nouni;
+    shwbnet.mtype := noshwb;
+    dir.list := false;
+    dir.head := false;
+    dir.shlist(X) := false;
+    rp_net(X) := false;
+    fwd_get := none;
+    wbnet.wb := false;
+    real_owner := home;
+    invnet(X) := false;
+    invack(X) := false;
+    nakc := false
+}
+
+action pi_Local_Get_dirty = {
+    assume cache(home).state = invalid;
+    assume cache(home).wait = none;
+    assume ~dir.pending;
+    assume dir.dirty;
+    dir.pending := true;
+    collecting := false;
+    cache(home).wait := get;
+    net(home).mtype := uGet;
+    net(home).proc := dir.hptr;
+    requester := home
+}
+
+action pi_Local_Get = {
+    assume cache(home).state = invalid;
+    assume cache(home).wait = none;
+    assume ~dir.pending;
+    assume ~dir.dirty;
+    assume ~cache(home).invmarked;
+    dir.local_ := true;
+    cache(home).state := shared
+}
+
+# TODO: can this ever happen?
+
+action pi_Local_Get_im = {
+    assume cache(home).state = invalid;
+    assume cache(home).wait = none;
+    assume ~dir.pending;
+    assume ~dir.dirty;
+    assume cache(home).invmarked;
+    cache(home).invmarked := false
+}
+
+action pi_Remote_Get = {
+    assume src ~= home;
+    assume cache(src).state = invalid;
+    assume cache(src).wait = none;
+    cache(src).wait := get;
+    net(src).mtype := uGet;
+    net(src).proc := home;
+    src := *
+}
+
+action ni_Local_Get_nak = {
+    assume net(src).mtype = uGet & net(src).proc = home;
+    assume home ~= src;
+    assume ~rp_net(src);
+    assume dir.pending | (dir.dirty & dir.local_ & cache(home).state~=exclusive) | (dir.dirty & ~dir.local_ & src = dir.hptr);
+    net(src).mtype := uNAK;
+}
+
+# action ni_Local_Get_fwd = {
+#     assume net(src).mtype = uGet & net(src).proc = home;
+#     assume home ~= src;
+#     assume ~dir.pending & ~dir.dirty & ~ rp_net(src) & ~cache(src).invmarked;
+#     net.get(src,home) := false;
+#     net.put(home,src) := true;
+#     if (dir.head) {
+#         dir.list := true;
+# 	dir.shlist(src) := true;
+# 	dir.real := dir.shlist # what is this?
+#     }
+#     else { 
+# 	dir.head := true;
+# 	dir.hptr := src
+#     }
+# }
+
+action ni_Local_Get = {
+    assume net(src).mtype = uGet & net(src).proc = home;
+    assume home ~= src;
+    assume ~dir.pending & ~dir.dirty & ~ rp_net(src) & ~cache(src).invmarked;
+    net(src).mtype := uPut;
+    dir.head := true;
+    dir.hptr := src;
+    dir.shlist(src) := true;
+    src := *
+}
+
+action ni_Local_Get_fwd = {
+    assume net(src).mtype = uGet & net(src).proc = home;
+    assume home ~= src;
+    assume ~dir.pending & dir.dirty & ~dir.local_ & src ~= dir.hptr;
+    net(src).proc := dir.hptr;
+    dir.pending := true;
+    src := *
+}
+
+action ni_Remote_Put = {
+    assume dst ~= home;
+    assume net(dst).mtype = uPut;
+    net(dst).mtype := nouni;
+    cache(dst).wait := none;
+    cache(dst).state := shared;
+    src := *;
+    dst := *
+}
+
+# Non-deterministically drop a shared line from the cache. Send an rp message.
+# informing the directory.
+
+action pi_Remote_Replace = {
+    assume cache(src).state=shared & cache(src).wait=none & src ~= home;
+    cache(src).state := invalid;
+    rp_net(src) := true;
+    src := *
+}
+
+# Directory receives a replace message, removes sender from sharing list, assuming it is not head.
+
+action ni_Replace_list = {
+    assume rp_net(src);
+    assume dir.hptr ~= src;
+    rp_net(src) := false;
+    dir.shlist(src) := false;
+    dir.real(src) := false;
+    src := *
+}
+
+# Remote is invalid and wants an exclusive copy
+
+action pi_Remote_GetX = {
+    assume cache(src).state=invalid & cache(src).wait=none & src ~= home;
+    cache(src).wait := getX;
+    net(src).mtype := uGetX;
+    net(src).proc := home;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when no invalidation is needed, that is, there is no exclusive
+# copy and either the sharing list is empty or it contains only the
+# source.
+
+action ni_Local_GetX = {
+    assume net(src).mtype = uGetX & net(src).proc = home;
+    assume home ~= src;
+    assume ~dir.pending & ~dir.dirty;
+    assume ~dir.head | src = dir.hptr;
+    assume ~dir.head | ~dir.shlist(X) | X = src;
+    net(src).mtype := uPutX;
+    dir.dirty := true;
+    dir.head := true;
+    dir.hptr := src;
+    dir.real(X) := X = src;
+    dir.shlist(X) := X = src;
+    real_owner := src; # ghost
+    cache(home).state := invalid;
+    cache(home).invmarked := (cache(home).wait = get & dir.local_) | cache(home).invmarked;
+    dir.local_ := false;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when the request is nak'd
+
+action ni_Local_GetX_nak = {
+    assume net(src).mtype = uGetX & net(src).proc = home;
+    assume home ~= src;
+    assume dir.pending | dir.dirty & cache(home).state ~= exclusive | src = dir.hptr; 
+    net(src).mtype := uNAK;
+    src := *
+}
+
+
+# Directory receives an exclusive request. This action handles the
+# case when the request is pended.
+
+action ni_Local_GetX_pend = {
+    assume net(src).mtype = uGetX & net(src).proc = home;
+    assume home ~= src;
+    assume ~dir.pending & dir.dirty & ~dir.local_ & src ~= dir.hptr; 
+    dir.pending :=  true;
+    collecting := false;
+    net(src).proc := dir.hptr;
+    fwd_get := getX;
+    requester := src;
+    src := *
+}
+
+# Directory receives an exclusive request. This action handles the
+# case when invalidations are sent out.
+ 
+action ni_localGetX_inv = {
+    assume net(src).mtype = uGetX & net(src).proc = home;
+    assume home ~= src;
+    assume ~dir.pending & ~dir.dirty & ~dir.local_; 
+    assume dir.head;
+    assume src ~= dir.hptr | (dir.shlist(dst) & dst~=src);
+    net(src).mtype := uPutX;
+    invnet(X) := X ~= home & X ~= src & dir.shlist(X);
+    collecting := true;
+    #   m1 := m;
+    #   last_other_invack := (dir.hptr ~= src) ? dir.hptr . {i  . i in Proc, dir.shlist(i) & i~=src}; 
+    cache(home).invmarked := (cache(home).wait = get & dir.local_) | cache(home).invmarked;
+    dir.local_ := false;
+    dir.dirty := true;
+    dir.head := true; 
+    dir.hptr := src;
+    dir.pending := true;
+    dir.real(X) := X ~= home & X ~= src & dir.shlist(X);
+    dir.shlist(X) := X = src;
+    real_owner := src;
+    cache(home).state := invalid;
+    src := *;
+    dst := *
+}
+
+action ni_Remote_PutX = {
+    assume net(dst).mtype = uPutX & net(dst).proc = src;
+    assume dst~=home & cache(dst).wait = getX;
+    net(dst).mtype := nouni;
+    cache(dst).wait :=none;
+    cache(dst).invmarked := false;
+    cache(dst).state := exclusive;
+    excl_src := src;
+    src := *;
+    dst := *
+}
+
+action pi_Remote_PutX = {
+    assume cache(src).state = exclusive & src ~= home; # cache(src).wait=none ???
+    cache(src).state := invalid;
+    wbnet.proc := src;
+    wbnet.wb := true;
+    src := *
+}
+
+action ni_Inv = {
+    assume invnet(dst) & dst~=home;
+    invnet(dst) := false;
+    invack(dst) := true;
+    cache(dst).invmarked := (cache(dst).wait = get) | cache(dst).invmarked;
+    cache(dst).state := invalid;
+    dst := *
+}
+
+action ni_InvAck = {
+      assume dir.pending & invack(src) & src~=home;
+      assume dir.real(dst) & dst ~= src;
+      invack(src) := false;
+      dir.real(src) := false;
+      # last_invack := src;
+      # last_other_invack := {i : i in Proc, dir.real(i) & i ~= src};
+      src := *;
+      dst := *
+}
+
+action ni_InvAck_last = {
+    assume dir.pending & invack(src) & src~=home;
+    assume ~dir.real(X) | X = src;
+    dir.pending := false;
+    collecting := false;
+    #	m1 := undefined; ???
+    invack(src) := false;
+    dir.real(src) := false;
+    #	last_invack := src;
+    if ( dir.local_ & ~ dir.dirty)  {
+       dir.local_ := false
+    }
+}
+
+
+action ni_WB = {
+    assume wbnet.wb;
+    wbnet.wb := false;
+    dir.dirty := false;
+    dir.head := false;
+    dir.shlist(X) := false; 
+    last_WB := wbnet.proc
+}
+
+action ni_Remote_GetX_nak = {
+  assume net(src).mtype = uGetX & net(src).proc = dst;
+  assume dst ~=src & dst ~= home & cache(dst).state ~= exclusive;
+  net(src).mtype := uNAK;
+  fwd_get := none;
+  fwd_src := src;
+  nakc := true;
+  src := *;
+  dst := *
+}
+
+action ni_Remote_GetX_fwd = {
+  assume net(src).mtype = uGetX & net(src).proc = dst;
+  assume dst ~=src & dst ~= home & cache(dst).state = exclusive;
+  net(src).mtype := uPutX;
+  cache(dst).state := invalid;
+  fwd_get := none;
+  fwd_src := src;
+  real_owner := src;
+  if src~=home {
+    shwbnet.mtype := fack;
+    shwbnet.proc := src
+  };
+  src := *;
+  dst := *
+}
+
+action ni_FAck = {
+    assume shwbnet.mtype = fack;
+    shwbnet.mtype := noshwb;
+    dir.pending := false;
+    if dir.dirty {
+        dir.hptr := shwbnet.proc;
+        dir.shlist(X) := X = shwbnet.proc;
+    }
+}
+
+action ni_Remote_Get_nak = {
+  assume net(src).mtype = uGet & net(src).proc = dst;
+  assume dst ~=src & dst ~= home & cache(dst).state ~= exclusive;
+  net(src).mtype := uNAK;
+  fwd_get := none;
+  fwd_src := src;
+  nakc := true;
+  src := *;
+  dst := *
+}
+
+action ni_Remote_Get_fwd = {
+  assume net(src).mtype = uGet & net(src).proc = dst;
+  assume dst ~=src & dst ~= home & cache(dst).state = exclusive;
+  net(src).mtype := uPut;
+#  assume ~cache(src).invmarked; TODO: ???
+  cache(dst).state := shared;
+  fwd_get := none;
+  fwd_src := src;
+  if src~=home {
+    real_owner := home;
+    shwbnet.mtype := shwb;
+    shwbnet.proc := src;
+  };
+# shwb_src := dst;
+  src := *;
+  dst := *
+}
+
+action ni_ShWB = {
+  assume shwbnet.mtype = shwb;
+  shwbnet.mtype := noshwb;
+  dir.pending := false;
+  dir.dirty := false;
+  dir.shlist(shwbnet.proc) := true;
+  dir.real(X) := dir.shlist(X);
+#  last_WB := shwb_src;
+}
+
+action ni_NAK_Clear = {
+  assume nakc;
+  dir.pending := false;
+  nakc := false
+}
+
+export pi_Local_Get_dirty
+export pi_Local_Get
+export pi_Local_Get_im
+export pi_Remote_Get
+export ni_Local_Get_nak
+#export  ni_Local_Get
+export ni_Local_Get
+export ni_Local_Get_fwd
+export ni_Remote_Put
+export pi_Remote_Replace
+export ni_Replace_list
+export pi_Remote_GetX
+export ni_Local_GetX
+export ni_Local_GetX_nak
+export ni_Local_GetX_pend
+export ni_localGetX_inv
+export ni_Remote_PutX
+export pi_Remote_PutX
+export ni_Inv
+export ni_InvAck
+export ni_InvAck_last
+export ni_WB
+export ni_Remote_GetX_nak
+export ni_Remote_GetX_fwd
+export ni_FAck
+export ni_Remote_Get_nak
+export ni_Remote_Get_fwd
+export ni_ShWB
+export ni_NAK_Clear
+
+
+invariant ~(cache(home).state = exclusive &
+        cache(X).state = exclusive)
+
+invariant ~(X ~= Y & cache(X).state = exclusive &
+        cache(Y).state = exclusive)
+
+invariant ~(~dir.dirty &
+        cache(X).state = exclusive)
+
+invariant ~(net(home).mtype = uPutX &
+        cache(X).state = exclusive)
+
+invariant ~(home ~= X &
+        cache(home).state = exclusive &
+        net(X).mtype = uPutX)
+
+invariant ~(home ~= X &
+        cache(Y).state = exclusive &
+        net(X).mtype = uPutX &
+        X ~= Y)
+
+invariant ~(cache(home).invmarked)
+
+invariant ~(net(home).mtype = uPut &
+        cache(X).state = exclusive)
+
+invariant ~(home ~= X &
+        ~dir.dirty &
+        net(X).mtype = uPutX)
+
+invariant ~(wbnet.wb &
+         cache(X).state = exclusive)
+
+invariant ~(shwbnet.mtype = shwb &
+         shwbnet.proc = home)
+
+invariant ~(shwbnet.mtype = shwb &
+         cache(X).state = exclusive)
+
+invariant ~(home ~= X &
+         net(home).mtype = uPutX &
+         net(X).mtype = uPutX)
+
+invariant ~(cache(home).state = exclusive &
+         dir.head)
+
+invariant ~(home ~= X &
+         home ~= Y &
+         net(X).mtype = uPutX &
+         net(Y).mtype = uPutX
+         & X ~= Y)
+
+invariant ~(home ~= X &
+         net(home).mtype = uPut &
+         net(X).mtype = uPutX)
+
+invariant ~(home ~= X &
+         wbnet.wb &
+         net(X).mtype = uPutX)
+
+invariant ~(home ~= X &
+         shwbnet.mtype = shwb &
+         net(X).mtype = uPutX)
+
+invariant ~(net(home).mtype = uPutX &
+         ~dir.head)
+
+invariant ~(net(home).mtype = uPutX &
+         ~dir.dirty)
+
+invariant ~(home ~= X &
+         cache(X).state = exclusive &
+         net(X).mtype = uPutX)
+
+invariant ~(net(home).mtype = uPut &
+         ~dir.head)
+
+invariant ~(net(home).mtype = uPut &
+         ~dir.dirty)
+
+invariant ~(~dir.head &
+         wbnet.wb)
+
+invariant ~(~dir.dirty &
+         wbnet.wb)
+
+invariant ~(~dir.head &
+         shwbnet.mtype = shwb)
+
+invariant ~(~dir.dirty &
+         shwbnet.mtype = shwb)
+
+invariant ~(net(home).mtype = uPutX &
+         wbnet.wb)
+
+invariant ~(net(home).mtype = uPutX &
+         shwbnet.mtype = shwb)
+
+invariant ~(net(home).mtype = uPut &
+         wbnet.wb)
+
+invariant ~(net(home).mtype = uPut &
+         shwbnet.mtype = shwb)
+
+invariant ~(wbnet.wb &
+         shwbnet.mtype = shwb)
+
+invariant ~(home ~= X &
+         ~dir.head &
+         cache(X).state = exclusive)
+
+invariant ~(cache(home).state = exclusive &
+         ~dir.dirty)
+
+invariant ~(cache(home).wait = get &
+         dir.local_)
+
+invariant ~(home ~= X &
+         ~dir.head &
+         net(X).mtype = uPutX)
+
+invariant ~(cache(home).state = invalid &
+         dir.local_ &
+         dir.dirty)
+

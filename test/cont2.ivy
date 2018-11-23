@@ -1,0 +1,7 @@
+#lang ivy1.7
+
+include cont2a
+include cont2a
+include cont2b
+
+export foo.obj.bar

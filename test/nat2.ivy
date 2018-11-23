@@ -1,0 +1,11 @@
+#lang ivy1.7
+
+include order
+
+instance foo : unbounded_sequence
+
+export foo.next
+export foo.prev
+
+extract iso_impl = this
+

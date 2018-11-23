@@ -1,0 +1,141 @@
+#lang ivy1.7
+
+include collections
+include order
+
+
+################################################################################
+#
+# Modules that should probably come from a standard library
+#
+################################################################################
+
+################################################################################
+#
+# Module for axiomatizing a total order
+#
+################################################################################
+
+module total_order(r) = {
+    axiom r(X,X)                        # Reflexivity
+    axiom r(X, Y) & r(Y, Z) -> r(X, Z)  # Transitivity
+    axiom r(X, Y) & r(Y, X) -> X = Y    # Anti-symmetry
+    axiom r(X, Y) | r(Y, X)             # Totality
+}
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+instance replica : iterable
+type operation
+type view
+type slot
+type tquorum
+
+
+individual none: view # null - used for max value on an empty set
+individual noneop : operation # used as default operation value
+individual i0 : slot
+
+relation le_slot(X:slot, Y:slot)
+instantiate total_order(le_slot)
+
+isolate creport = {
+    type this
+    # commit report relations
+    relation maxv(CR:this, I:slot, VI:view)
+    relation maxo(CR:this, I:slot, OP:operation)
+    relation start(CR:this, I: slot)
+    relation afterend(CR:this, I: slot)
+    
+    action emptycr(i: slot) returns (cr:this)
+    action trim(cr:this, i: slot) returns (cr2:this)
+    
+    specification {
+
+        after emptycr {
+	    ensure start(cr, i);
+	    ensure afterend(cr, i);
+	    ensure maxv(cr, I, none);
+	    ensure maxo(cr, I, noneop);
+	}
+
+        before trim {
+            require start(cr, I) -> le_slot(I, i);
+        }
+
+        after trim {
+            ensure forall I. ~le_slot(i, I) -> maxv(cr2, I, none);
+            ensure forall I.  le_slot(i, I) & maxv(cr, I, V1) & maxv(cr2, I, V2) -> V1 = V2;
+            ensure forall I.  le_slot(i, I) & maxo(cr, I, O1) & maxo(cr2, I, O2) -> O1 = O2;
+            ensure start(cr, i);
+        }
+    }
+
+    private {
+        function getmaxo(CR:this, I:slot) : operation
+        function getmaxv(CR:this, I:slot) : view
+        function getstart(CR:this) : slot
+        property [totality1] exists V. maxv(CR, I, V)
+        property [totality2] exists O. maxo(CR, I, O)
+        property [totality3] exists I. start(CR, I)
+    }
+
+    implementation {
+        interpret slot -> nat
+	    interpret view -> nat
+        type commit = struct {
+            maxview : view,
+            maxop : operation
+        }
+	individual empty_commit : commit
+	object nac = {
+            invariant [empty_commit_inv] empty_commit.maxview = none
+            invariant [empty_commit_inv2] empty_commit.maxop = noneop
+            after init { empty_commit.maxview := none; 
+                         empty_commit.maxop := noneop; }
+	}
+
+        instance arr : array(slot, commit)
+        destructor repr(CR: this) : arr
+        destructor begin(CR: this) : slot
+        definition getmaxv(CR, I) = maxview(repr(CR).value(I - begin(CR))) if (I >= begin(CR) & I < begin(CR) + repr(CR).end) else none
+        definition maxv(CR, I, VI) = getmaxv(CR, I) = VI
+        
+        definition getmaxo(CR, I) = maxop(repr(CR).value(I - begin(CR))) if (I >= begin(CR) & I < begin(CR) + repr(CR).end) else noneop
+        
+        definition maxo(CR, I, O) = O = getmaxo(CR, I)
+        definition start(CR, I) = begin(CR) = I
+        definition getstart(CR) = begin(CR)
+        definition afterend(CR, I) = begin(CR) + repr(CR).end = I
+        
+        implement emptycr {
+	    begin(cr) := i;
+	    repr(cr) := arr.empty;
+	}        
+
+        implement trim {
+            cr2 := emptycr(i);
+            var diff := i - begin(cr);
+            var idx := diff;
+            while idx ~= repr(cr).end
+            invariant diff >= 0
+            invariant idx <= repr(cr).end
+            invariant cr = old cr
+            invariant ~le_slot(i, I) -> maxv(cr2, I, none)
+            invariant le_slot(i, I) & ~le_slot(idx, I) & maxv(cr, I, V1) & maxv(cr2, I, V2) -> V1 = V2
+            invariant le_slot(i, I) & ~le_slot(idx, I) & maxo(cr, I, O1) & maxo(cr2, I, O2) -> O1 = O2
+            {
+                repr(cr2) := repr(cr2).set(idx - diff, repr(cr).value(idx));
+                idx := idx + 1;
+            } 
+        }
+    }
+}
+
+action g(cr:creport, i:slot) = {
+    cr := cr.trim(i);
+}

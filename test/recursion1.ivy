@@ -1,0 +1,22 @@
+#lang ivy1.6
+
+schema recursion[t](f:t->beta,c:t,b:t->beta,g:beta->beta) = {
+    definition f(X) = b(X) if X <= c else g(f(X-1))
+} 
+
+schema recursion[t](beta,f) = {
+    require type beta
+    require function f(X:t) : beta
+    individual c : t
+    function b(X:t) : beta
+    function g(X:beta) : beta
+    recursive definition f(X) = b(X) if X <= c else g(f(X-1))
+}
+
+schema recursion[t] = {
+    individual c : t
+    function b(X:t) : 'beta
+    function g(X:'beta) : 'beta
+    recursive definition f(X) = b(X) if X <= c else g(f(X-1))
+}
+

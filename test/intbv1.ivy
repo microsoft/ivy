@@ -1,0 +1,16 @@
+#lang ivy1.7
+
+type t
+interpret t -> intbv[1][13][2]
+
+action fun(x:t) returns(x:t) = {
+    x := 1;
+}
+
+action foo(x:t) returns(y:t) = {
+    if __generating {
+        y := fun(x);
+    }
+}
+
+export foo

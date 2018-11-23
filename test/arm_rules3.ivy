@@ -1,0 +1,445 @@
+#lang ivy1.7
+
+################################################################################
+#
+# TODO: 
+#
+################################################################################
+
+isolate proc = {
+ type t
+
+ object impl = {
+   interpret proc.t->bv[1] 
+ }
+    attribute test=impl
+}
+
+isolate data_type = {
+ type t
+
+ object impl = {
+   interpret data_type.t->bv[1] 
+ }
+    attribute test=impl
+}
+
+isolate addr_type = {
+ type t
+
+ object impl = {
+   interpret addr_type.t->bv[1] 
+ }
+    attribute test=impl
+}
+
+isolate ltime = {
+    type t
+
+    relation (X:t < Y:t)
+    action incr(inp:t) returns (out:t)
+
+    object spec = {
+	property X:t < Y & Y < Z -> X < Z
+	property ~(X:t < Y & Y < X)
+	property X:t < Y | X = Y | Y < X
+
+        after incr {
+            assume inp < out
+        }
+    }
+
+    object impl = {
+	interpret ltime.t->bv[8]
+        implement incr {
+            out := inp + 1
+        }
+    }
+    attribute test=impl
+}
+
+isolate gtime = {
+    type t
+
+    relation (X:t < Y:t)
+    action incr(inp:t) returns (out:t)
+
+    object spec = {
+	property X:t < Y & Y < Z -> X < Z
+	property ~(X:t < Y & Y < X)
+	property X:t < Y | X = Y | Y < X
+
+        after incr {
+            assume inp < out
+        }
+    }
+
+    object impl = {
+	interpret gtime.t->bv[8]
+    }
+    attribute test=impl
+}
+
+type op_type = {nop,ld,st,lda,stl}
+
+module evs_type = {
+   individual p       : proc.t
+   individual op      : op_type
+   individual addr    : addr_type.t
+   individual data    : data_type.t
+
+   individual serialized : bool
+
+   individual time    : gtime.t
+}
+
+################################################################################
+# Specification: 
+################################################################################
+
+object ref = {
+
+ instantiate evs(T:ltime.t) : evs_type
+
+################################################################################
+# current global time
+
+ individual  gt : gtime.t
+
+################################################################################
+# global memory state 
+
+  individual mem(A:addr_type.t) : data_type.t
+
+################################################################################
+# event T1 prevents T2 if it must come before T2 according to the
+# ordering conditions but is not yet serialized. The definition
+# here is strong enough to imply release consistency (ld and
+# st to different addresses commute, but nothing commutes with
+# stl and lda)
+#
+#    P1) only one of ld, lda, st, stl pending for same address from same processor
+#
+# An acquire synchronization must ensure that no younger load/store executes before the
+# acquire is complete
+#
+# => A1) prevent lda to issue until all older ld*/st* are finished to ensure it
+#        doesn't overtake those 
+#    A2) prevent younger ld*/st* to issue before lda
+#
+# A release synchronization must ensure that all older loads/stores complete before the
+# release is issued.
+#
+# => R1) prevent stl to issue until all older ld*/st* are finished to ensure it
+#        doesn't overtake those
+#
+#  P0 1) st         P1 1) ld
+#  P0 2) stl        P1 2) lda
+#
+# Acquires and releases must execute atomically with respect to one another
+#
+
+relation   prevents(T1:ltime.t,T2:ltime.t)
+definition prevents(T1,T2) = ~evs(T1).serialized 
+     	                   & (T1 < T2) & (evs(T1).op=ld | evs(T1).op=lda | evs(T1).op=st | evs(T1).op=stl)
+    	                   & evs(T1).p = evs(T2).p
+    	                   & (evs(T1).addr = evs(T2).addr | evs(T2).op = stl | evs(T2).op = lda)
+
+action create(lt:ltime.t,p:proc.t,op:op_type,a:addr_type.t,d:data_type.t) = {
+  evs(lt).p          := p;
+  evs(lt).op         := op;
+  evs(lt).addr       := a;
+  evs(lt).data       := d;
+  evs(lt).serialized := false;
+}
+
+action perform(p:proc.t, lt:ltime.t) = {
+  var a : addr_type.t;
+  var d : data_type.t;
+
+# serialization must be appropriately ordered
+
+  assert ~prevents(T,lt);
+
+# serialize at current global time
+  evs(lt).serialized := true;
+  evs(lt).time       := gt;
+  evs(lt).op         := nop;
+
+  # advance global time
+    gt := gt.incr();
+
+# update the global memory state
+
+     a := evs(lt).addr;
+     d := evs(lt).data;
+
+     if evs(lt).op = ld | evs(lt).op = lda {
+	evs(lt).data := mem(a)
+     } else if evs(lt).op = st | evs(lt).op = stl {
+	mem(a) := d
+     }			
+  }
+
+}
+
+################################################################################
+# arm: 
+################################################################################
+type arm_ph_type = {arm_idle_ph, arm_st_ph, arm_stl_ph, arm_ld_ph, arm_lda_ph, arm_rsp_ph, arm_rspa_ph, arm_st_isd_ph, arm_ld_isd_ph, arm_stl_isd_ph, arm_lda_isd_ph}
+
+object arm = {
+ relation pnd_st(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation pnd_stl(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation pnd_ld(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation pnd_lda(P:proc.t, A:addr_type.t, T:ltime.t)
+
+ relation isd_st(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation isd_stl(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation isd_ld(P:proc.t, A:addr_type.t, T:ltime.t)
+ relation isd_lda(P:proc.t, A:addr_type.t, T:ltime.t)
+
+ individual lt : ltime.t
+
+ action step(p:proc.t, ph:arm_ph_type, a:addr_type.t,d:data_type.t,t:ltime.t) = {
+
+     if ph=arm_st_ph {
+          if forall T. ~(pnd_ld(p,a,T) | pnd_lda(p,a,T) | pnd_st(p,a,T) | pnd_stl(p,a,T)) { # P1
+            if forall A. forall T. ~pnd_lda(p,A,T) { # A2
+               pnd_st(p,a,lt) := true;
+               isd_st(p,a,lt) := true;
+
+               call dcs.st(p,a,d);
+               call ref.create(lt,p,st,a,d);
+               call ref.perform(p,lt);
+
+               pnd_st(p,a,lt) := false;
+               isd_st(p,a,lt) := false;
+            } else {
+               pnd_st(p,a,lt) := true;
+               isd_st(p,a,lt) := false;
+            };
+
+            lt := lt.incr();
+          }
+     } else if ph=arm_st_isd_ph {
+          if pnd_st(p,a,t) {
+             if ~isd_st(p,a,t) {
+                 if forall A. forall T. ~pnd_lda(p,A,T) | t<T { # A2
+                    isd_st(p,a,t) := true;
+
+                    call dcs.st(p,a,d);
+                    call ref.create(t,p,st,a,d);
+                    call ref.perform(p,t);
+
+                    pnd_st(p,a,t) := false;
+                    isd_st(p,a,t) := false;
+                 }
+             }
+          }
+     } else if ph=arm_stl_ph {
+          if forall T. ~(pnd_ld(p,a,T) | pnd_lda(p,a,T) | pnd_st(p,a,T) | pnd_stl(p,a,T)) { # P1
+            if forall A. forall T. ~(pnd_ld(p,A,T) | pnd_lda(p,A,T) | pnd_st(p,A,T) | pnd_stl(p,A,T)) { # R1
+               pnd_stl(p,a,lt)      := true;
+               isd_stl(p,a,lt)      := true;
+
+               call dcs.st(p,a,d);
+               call ref.create(lt,p,stl,a,d);
+
+               call ref.perform(p,lt);
+
+               pnd_stl(p,a,lt) := false;
+               isd_stl(p,a,lt) := false;
+            } else {
+               pnd_stl(p,a,lt)      := true;
+               isd_stl(p,a,lt)      := false;
+            };
+
+            lt := lt.incr();
+	  }
+     } else if ph=arm_stl_isd_ph {
+          if pnd_stl(p,a,t) {
+             if ~isd_stl(p,a,t) {
+                 if forall A. forall T. ~(pnd_ld(p,A,T) | pnd_lda(p,A,T) | pnd_st(p,A,T) | pnd_stl(p,A,T)) | t<T | t=T { # R1
+                    isd_stl(p,a,t) := true;
+
+                    call dcs.st(p,a,d);
+                    call ref.create(t,p,stl,a,d);
+                    call ref.perform(p,t);
+
+                    pnd_stl(p,a,t) := false;
+                    isd_stl(p,a,t) := false;
+                 }
+             }
+          }
+     } else if ph=arm_ld_ph {
+          if forall T. ~pnd_ld(p,a,T) & ~pnd_lda(p,a,T) & ~pnd_st(p,a,T) & ~pnd_stl(p,a,T) { # P1
+            if forall A. forall T. ~pnd_lda(p,A,T) { # A2
+               pnd_ld(p,a,lt)      := true;
+               isd_ld(p,a,lt)      := true;
+
+               call ref.create(lt,p,ld,a,d);
+            } else {
+               pnd_ld(p,a,lt) := true;
+               isd_ld(p,a,lt) := false;
+            };
+
+            lt := lt.incr();
+	  }
+     } else if ph=arm_ld_isd_ph {
+          if pnd_ld(p,a,t) {
+             if ~isd_ld(p,a,t) {
+                 if forall A. forall T. ~pnd_lda(p,A,T) | t<T { # A2
+                    isd_ld(p,a,t) := true;
+                    call ref.create(t,p,ld,a,d);
+                 }
+             }
+          }
+     } else if ph=arm_lda_ph {
+          if forall T. ~pnd_ld(p,a,T) & ~pnd_lda(p,a,T) & ~pnd_st(p,a,T) & ~pnd_stl(p,a,T) { # P1
+            if forall A. forall T. ~pnd_lda(p,A,T) & ~pnd_ld(p,A,T) & ~pnd_st(p,A,T) & ~pnd_stl(p,A,T) { # A1
+              pnd_lda(p,a,lt)      := true;
+              isd_lda(p,a,lt)      := true;
+
+              call ref.create(lt,p,lda,a,d);
+            } else {
+              pnd_lda(p,a,lt)      := true;
+              isd_lda(p,a,lt)      := false;
+            };
+
+            lt := lt.incr();
+	  }
+     } else if ph=arm_lda_isd_ph {
+          if pnd_lda(p,a,t) {
+             if ~isd_lda(p,a,t) {
+                 if forall A. forall T. ~pnd_lda(p,A,T) & ~pnd_ld(p,A,T) & ~pnd_st(p,A,T) & ~pnd_stl(p,A,T) | t<T | t=T { # A2
+                    isd_lda(p,a,t) := true;
+                    call ref.create(t,p,lda,a,d);
+                 }
+             }
+          }
+     }
+  }
+
+# receive ld response and check the value against the expected value
+
+ action recv(ph:arm_ph_type, p:proc.t, a:addr_type.t, t:ltime.t) = {
+
+   if ph=arm_rsp_ph {
+
+      if isd_ld(p,a,t) {
+
+      call ref.perform(p,t);
+
+      pnd_ld(p,a,t)      := false;
+      isd_ld(p,a,t)      := false;
+     }
+   } else if ph=arm_rspa_ph {
+
+      if isd_lda(p,a,t) {
+
+      call ref.perform(p,t);
+
+      pnd_lda(p,a,t)      := false;
+      isd_lda(p,a,t)      := false;
+     }
+   }
+ }
+}
+
+################################################################################
+# DCS+DRAM
+################################################################################
+
+object dcs = {
+
+ individual data(A:addr_type.t) : data_type.t
+
+ action st(p:proc.t, a:addr_type.t, d:data_type.t) = {
+  data(a) := d;
+ }
+
+ action ld(a:addr_type.t) returns (d:data_type.t)  = {
+  d := data(a)
+ }
+
+}
+
+# instantiate model: processors, network, and memory
+
+# initialize the state to nothing outstanding
+
+after init {
+ arm.pnd_st(P,A,T)      := false;
+ arm.pnd_stl(P,A,T)     := false;
+ arm.pnd_ld(P,A,T)      := false;
+ arm.pnd_lda(P,A,T)     := false;
+
+ arm.isd_st(P,A,T)      := false;
+ arm.isd_stl(P,A,T)     := false;
+ arm.isd_ld(P,A,T)      := false;
+ arm.isd_lda(P,A,T)     := false;
+
+ ref.evs(T).op          := nop;
+
+ ref.evs(T).serialized  := false;
+}
+
+# zero
+
+# 
+
+conjecture ~arm.isd_st(P,A,T)
+conjecture ~arm.isd_stl(P,A,T)
+
+conjecture (arm.pnd_st(P,A,T)  & arm.isd_st(P,A,T))  <-> (ref.evs(T).p=P & ref.evs(T).op=st  & ref.evs(T).addr=A)
+conjecture (arm.pnd_stl(P,A,T) & arm.isd_stl(P,A,T)) <-> (ref.evs(T).p=P & ref.evs(T).op=stl & ref.evs(T).addr=A)
+conjecture (arm.pnd_ld(P,A,T)  & arm.isd_ld(P,A,T))  <-> (ref.evs(T).p=P & ref.evs(T).op=ld  & ref.evs(T).addr=A)
+conjecture (arm.pnd_lda(P,A,T) & arm.isd_lda(P,A,T)) <-> (ref.evs(T).p=P & ref.evs(T).op=lda & ref.evs(T).addr=A)
+
+conjecture arm.pnd_st(P,A,T)  -> (T < arm.lt)
+conjecture arm.pnd_stl(P,A,T) -> (T < arm.lt)
+conjecture arm.pnd_ld(P,A,T)  -> (T < arm.lt)
+conjecture arm.pnd_lda(P,A,T) -> (T < arm.lt)
+
+conjecture (arm.pnd_st(P,A,T1)  & arm.pnd_st(P,A,T2))  -> T1=T2
+conjecture (arm.pnd_stl(P,A,T1) & arm.pnd_stl(P,A,T2)) -> T1=T2
+conjecture (arm.pnd_ld(P,A,T1)  & arm.pnd_ld(P,A,T2))  -> T1=T2
+conjecture (arm.pnd_lda(P,A,T1) & arm.pnd_lda(P,A,T2)) -> T1=T2
+
+conjecture ~(arm.pnd_ld(P,A,T1)  & arm.pnd_st(P,A,T2))
+conjecture ~(arm.pnd_ld(P,A,T1)  & arm.pnd_stl(P,A,T2))
+conjecture ~(arm.pnd_ld(P,A,T1)  & arm.pnd_lda(P,A,T2))
+conjecture ~(arm.pnd_lda(P,A,T1) & arm.pnd_st(P,A,T2))
+conjecture ~(arm.pnd_lda(P,A,T1) & arm.pnd_stl(P,A,T2))
+conjecture ~(arm.pnd_st(P,A,T1)  & arm.pnd_stl(P,A,T2))
+
+conjecture arm.isd_st(P,A,T)  -> arm.pnd_st(P,A,T)
+conjecture arm.isd_stl(P,A,T) -> arm.pnd_stl(P,A,T)
+conjecture arm.isd_ld(P,A,T)  -> arm.pnd_ld(P,A,T)
+conjecture arm.isd_lda(P,A,T) -> arm.pnd_lda(P,A,T)
+
+# When lda is issued there are no older ld, lda, st, stl pending
+
+conjecture arm.isd_lda(P,A,T) -> ~((arm.pnd_ld(P,A1,T1) | arm.pnd_lda(P,A1,T1) | arm.pnd_st(P,A1,T1) | arm.pnd_stl(P,A1,T1)) & T1<T)
+
+# When lda is issued there are no younger ld, lda, st, stl issued
+
+conjecture arm.pnd_lda(P,A,T) -> ~((arm.isd_ld(P,A1,T1) | arm.isd_lda(P,A1,T1) | arm.isd_st(P,A1,T1) | arm.isd_stl(P,A1,T1)) & T1>T)
+
+conjecture  (arm.pnd_ld(P1,A1,T1)  & arm.pnd_ld(P2,A2,T2)  & T1=T2) -> (P1=P2 & A1=A2)
+conjecture ~(arm.pnd_ld(P1,A1,T1)  & arm.pnd_lda(P2,A2,T2) & T1=T2)
+conjecture ~(arm.pnd_ld(P1,A1,T1)  & arm.pnd_st(P2,A2,T2)  & T1=T2)
+conjecture ~(arm.pnd_ld(P1,A1,T1)  & arm.pnd_stl(P2,A2,T2) & T1=T2)
+conjecture  (arm.pnd_lda(P1,A1,T1) & arm.pnd_lda(P2,A2,T2) & T1=T2) -> (P1=P2 & A1=A2)
+conjecture ~(arm.pnd_lda(P1,A1,T1) & arm.pnd_st(P2,A2,T2)  & T1=T2)
+conjecture ~(arm.pnd_lda(P1,A1,T1) & arm.pnd_stl(P2,A2,T2) & T1=T2)
+conjecture  (arm.pnd_st(P1,A1,T1)  & arm.pnd_st(P2,A2,T2) & T1=T2)  -> (P1=P2 & A1=A2)
+conjecture ~(arm.pnd_st(P1,A1,T1)  & arm.pnd_stl(P2,A2,T2) & T1=T2)
+conjecture  (arm.pnd_stl(P1,A1,T1) & arm.pnd_stl(P2,A2,T2) & T1=T2) -> (P1=P2 & A1=A2)
+
+export arm.step
+export arm.recv
+
+
+
