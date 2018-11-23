@@ -1,0 +1,8 @@
+#lang ivy1.7
+
+include quic_server_test
+
+export frame.connection_close.handle
+
+attribute frame.connection_close.handle.weight = "0.2"
+
