@@ -1,0 +1,100 @@
+# This is the stage three compiler
+
+# These are the data type not already resent in the Python preamble
+# The field types are just placeholders. They are not currently checked.
+
+type Field = struct
+    {
+       name : str,
+       type : Type
+    }
+
+type StructType = struct
+    {
+       fields : FieldList
+    }
+
+type TypeDecl = struct 
+    {
+       name : str,
+       type : StructType
+    }
+
+type Top = struct
+    {
+       typedecls : TypeDeclList,
+       grammar : Grammar,
+       code : str
+    }
+        
+# This is the input format
+
+format Ident = ~'[_a-zA-Z0-9]+'
+
+format Field = 
+   struct Field ( < name := Ident > ':' < type := Ident > ) 
+
+format Type = 
+    struct StructType ( 'struct' '{' < fields := [ Field ',' ...] > '}' )
+
+format TypeDecl =
+    struct TypeDecl ( 'type' < name := Ident > '=' < type := Type> )
+
+format Format =
+    {
+        struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
+        struct RegEx nowhite ( '~' '''' < exp := ~'([^'']|(\''\''))*' > '''' )
+        struct NoWhite ( 'nowhite' < fmt := Format > )
+        struct Meta ( 'meta' < fmt := Format > )
+        struct Line ( 'line' < fmt := Format > )
+        struct Indent ( 'indent' < fmt := Format > )
+	struct Escape ( 'escape' nowhite ( '''' < spec := ~'([^'']|(\''\''))*' > '''' ) < fmt := Format > )
+        struct Breakable ( 'breakable' < fmt := Format > )
+        struct Assign ( '<' < fld := ~'[_a-zA-Z0-9]+' > ':=' < fmt := Format > '>' )
+        struct List ( '[' < fmt := Format > ? < delim := Exact > '...' ']' )
+        struct Seq ( '(' < elems := [ Format ... ] > ')' )
+        struct Struct ( 'struct' < cls := ~'[_a-zA-Z0-9]+' > < fmt := Format > )
+        struct NonTerm < name := ~'[_a-zA-Z0-9]+' > struct Option ( '?' < elem := Format > )
+        struct Alt ( '{' < elems := [ Format ... ] > '}' )
+    }
+
+format Exact = struct Exact nowhite ( '''' < text := ~'([^'']|(\''\''))*' > '''' )
+
+format Grammar =
+    struct Grammar
+	< rules :=
+	    [ struct Rule ( 'format' < lhs := ~'[_a-zA-Z0-9]+' > '=' < rhs := Format > ) ... ] >
+         
+format Top = 
+    struct Top ( < typedecls := [ TypeDecl ... ] >  < grammar := Grammar > '>>>' < code := ~'.*' > )
+
+# The output format
+
+format PyIdent = ~'[_a-zA-Z0-9]+'
+format PyArg = struct MetaField ( < name := PyIdent > '=' < value := PyExpr > )
+format PyApply = struct MetaStruct ( < cls :=  PyIdent > breakable ( '(' < args := [ PyArg ',' ... ] > ')' ) )
+format PyList = struct MetaList ( '[' < elems := [ PyExpr ',' ... ] > ']' )
+format PyStr = struct MetaString nowhite ( '''' < val := escape '\\''' ~'([^'']|(\''\''))*' > '''' )
+format PyExpr = meta { PyApply PyList PyStr}
+
+format PyTypeDecl = struct TypeDecl (
+     line ( 'class ' < name := PyIdent > '(Format):' )
+     < type := struct StructType indent (
+         line ( 'def __init__(self,' < fields := [ struct Field < name := PyIdent > ',' ... ] > '):' )
+         < fields := [ struct Field indent line ( 'self.' < name := PyIdent > ' = ' < name := PyIdent > ) ... ] > ) > )
+
+format PyTop = struct Top ( 
+    line 'from parser1 import *'
+    < typedecls := [ PyTypeDecl ... ] >
+    line ( 'with ivywhite: grammar = ' < grammar := PyExpr > )
+    < code := ~'.*' > )
+    
+>>>
+
+src = "stage7.src"
+obj = "stage7.py"
+with ivywhite:
+    with grammar:
+        with DefaultSemantics(globals()):
+            thing = parse_file("Top",src)
+            pretty_to_file("PyTop",thing,obj)

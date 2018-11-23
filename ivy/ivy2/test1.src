@@ -1,0 +1,15 @@
+# This is a test of Eval 
+
+format inp = [ ~'[_a-zA-Z0-9]+' '+' ... ]
+
+format out = var sum := set() [ $ sum.add(this) $ ... ]
+
+>>>
+
+src = "test1_inp.txt"
+obj = "test1_out.txt"
+with ivywhite:
+    with grammar:
+        with DefaultSemantics(globals()):
+            thing = parse_file("inp",src)
+            pretty_to_file("out",thing,obj)
