@@ -664,6 +664,10 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         scid := cid_dst_to_src(dcid)
     };
 
+    # TODO: in draft 15, application close is not allowed in an
+    # initial packet. This will change in draft 17 so that it is
+    # allowed, but not if the RTT-1 keys are available. 
+
     if pkt.hdr_type = 0x7f {
         require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
         ((pkt.payload.value(I) isa frame.ack)

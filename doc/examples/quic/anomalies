@@ -162,4 +162,63 @@ spec. The spec says:
 This appears to imply the other frames, such as APPLICATION_CLOSE, are
 not allowed in initial packets.
 
+Event files:  [none]
+Quant log file: anomaly12.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This assertion failure occurred while serving multiple HTTP requests
+in the same QUIC packet. The repro is a little complicated, because it
+requires the application (the http server) to be slow.
+
+Here are the requests being served:
+
+    GET /5
+    
+    GET /3
+    
+    GET /index.html
+
+
+An idle timeout appears to occur while the first request is being
+served. The happened because I was stepping through the http parser
+code in the debugger, but in principle I think it could happen because
+the application is slow for any reason. The server continues to parse
+requests, however. The second request causes an attempt to send three
+bytes on the stream, which results in the assertion failure.
+
+Note, line 139 of server.c was modified to cause it not to send the
+FIN bit after every request, but I don't know if this is relevant.
+
+Event files:  anomaly13.iev
+Quant log file: anomaly13.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This server log shows a case where the client stops communicating. The
+connection enters the draining and then closed states after an idle
+timeout, however the server continues to send ACK and PATH_CHALLENGE
+frames. This first occurs at 88.046, and subsequently at increasing
+intervals. To obtain this trace, server.c was modified to use blocking
+read rather than non-blocking, allowing it to continue to serve
+requests. The likely cause seems to be that alarms were not cancelled
+when the connection entered the closed state.
+
+Event files:  anomaly14.iev
+Quant log file: anomaly14.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This assertion failure occurs while the server is transmitting a
+PATH_CHALLENGE frame and seems to be related to a negative alarm
+value.
 

@@ -10,6 +10,11 @@ import re
 
 spawn = pexpect.spawn
 
+servers = [
+    ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo']],
+    ['quant',['..','/home/mcmillan/projects/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
+]
+
 tests = [
     ['..',
       [
@@ -23,14 +28,15 @@ tests = [
 
 import sys
 def usage():
-    print "usage: \n  {} <dir> <iters> [pat]".format(sys.argv[0])
+    print "usage: \n  {} <dir> <iters> <server> [pat]".format(sys.argv[0])
     sys.exit(1)
-if len(sys.argv) < 3 or len(sys.argv) > 4 :
+if len(sys.argv) < 4 or len(sys.argv) > 5 :
     usage()
     exit(1)
 dirpath = sys.argv[1]
 iters = int(sys.argv[2])
-pat = sys.argv[3] if len(sys.argv) >= 4 else '*'
+server_name = sys.argv[3]
+pat = sys.argv[4] if len(sys.argv) >= 5 else '*'
 try:
     patre = re.compile(pat)
 except:
@@ -42,6 +48,16 @@ try:
 except OSError:  
     sys.stderr.write('cannot create directory "{}"\n'.format(dirpath))
     exit(1)
+
+svrd = dict(servers)
+if server_name not in svrd:
+    sys.stderr.write('unknown server: {}\n'.format(server_name))
+    exit(1)
+server_dir,server_cmd = svrd[server_name]
+
+print 'server directory: {}'.format(server_dir)
+print 'server command: {}'.format(server_cmd)
+
 
 def open_out(name):
     return open(os.path.join(dirpath,name),"w")
@@ -68,8 +84,8 @@ class Test(object):
         with open_out(self.name+str(seq)+'.out') as out:
             with open_out(self.name+str(seq)+'.err') as err:
                 with open_out(self.name+str(seq)+'.iev') as iev:
-                    server = subprocess.Popen(["./picoquicdemo"],
-                                              cwd='/home/mcmillan/projects/picoquic',
+                    server = subprocess.Popen(server_cmd.split(),
+                                              cwd=server_dir,
                                               stdout=out,
                                               stderr=err)
                     print 'server pid: {}'.format(server.pid)
@@ -127,7 +143,7 @@ class Test(object):
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return 'timeout 100 ./{} seed={}'.format(self.name,seq)
+        return 'timeout 100 ./build/{} seed={}'.format(self.name,seq)
 
 all_tests = []
 
