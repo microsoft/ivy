@@ -222,3 +222,39 @@ This assertion failure occurs while the server is transmitting a
 PATH_CHALLENGE frame and seems to be related to a negative alarm
 value.
 
+Event files:  anomaly15.iev
+Quant log file: anomaly15.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+Here is a case where the server sends a non-probing packet to a new
+address, though the packet received from the new address does not have
+the highest packet number received.
+
+In the server log, the source IP addresses are not shown. The packets from
+the new IP address are at the following times:
+
+    2.682
+    2.956
+
+Neither of these packets has a largest packet number. The largest packet
+number at the time is 8, from the packet received at 1.688.
+
+The packet sent by the server to the new address is a handshake packet
+at time 2.682, whish seems to be in response to the first packet from
+the new address.
+
+This behavior violates the following requirement from section 9.3 of
+draft-16:
+
+An endpoint only changes the address that it sends packets to in
+response to the highest-numbered non-probing packet.
+
+Also, the server sends a rapid sequence of packets to the new address,
+which might violate this provision:
+
+An endpoint MAY send data to an unvalidated peer address, but it MUST
+protect against potential attacks as described in Section 9.3.1
