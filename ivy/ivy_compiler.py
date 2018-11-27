@@ -1787,9 +1787,12 @@ def create_conj_actions(mod):
                             memo.add(action)
                             if action in roots:
                                 for victim in exports:
-                                    if victim in set(iu.reachable([action],lambda x: cg[x])) and action != victim:
+                                    if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
+def show_call_graph(cg):
+    for caller,callees in cg.iteritems():
+        print '{} -> {}'.format(caller,','.join(callees))
     
 def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
     mod = mod or im.module
