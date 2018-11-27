@@ -226,6 +226,22 @@ class SourceFile(object):
 
 filename = None
 
+class WorkingDir(object):
+    """ Context Manager that temporarily sets the working directory.
+    """
+
+    def __init__(self,fname):
+        self.fname = fname
+
+    def __enter__(self):
+        self.oldf = os.getcwd()
+        os.chdir(self.fname)
+        return self
+
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        os.chdir(self.oldf)
+        return False # don't block any exceptions
+
 
 def Location(filename=None,line=None):
     return LocationTuple([filename,line])

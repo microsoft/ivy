@@ -4915,6 +4915,7 @@ def main_int(is_ivyc):
             with im.module.copy():
                 with iu.ErrorPrinter():
 
+                    import os
                     if isolate:
                         if len(isolates) > 1:
                             print "Compiling isolate {}...".format(isolate)
@@ -4948,15 +4949,15 @@ def main_int(is_ivyc):
                             header,impl = module_to_cpp_class(classname,basename)
             #        print header
             #        print impl
-                    f = open(outfile(basename+'.h'),'w')
+                    builddir = 'build' if os.path.exists('build') else '.'
+                    f = open(outfile(builddir+'/'+basename+'.h'),'w')
                     f.write(header)
                     f.close()
-                    f = open(outfile(basename+'.cpp'),'w')
+                    f = open(outfile(builddir+'/'+basename+'.cpp'),'w')
                     f.write(impl)
                     f.close()
                 if opt_build.get():
                     import platform
-                    import os
                     libpath = os.path.join(os.path.dirname(os.path.dirname(__file__)),'lib')
                     specfilename = os.path.join(libpath,'specs')
                     if os.path.isfile(specfilename):
@@ -5018,7 +5019,8 @@ def main_int(is_ivyc):
                         cmd += ' -pthread'
                     print cmd
                     sys.stdout.flush()
-                    status = os.system(cmd)
+                    with iu.WorkingDir(builddir):
+                        status = os.system(cmd)
                     if status:
                         exit(1)
 
