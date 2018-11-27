@@ -58,12 +58,12 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         %`lower.send` ls;
         %`upper.recv` ur;
         %`upper.alert` ua;
-        %`upper.session_established` use;
+        %`upper.keys_established` use;
     tls_callbacks(
         const %`lower.send` ls,
         const %`upper.recv` ur,
         const %`upper.alert` ua,
-        const %`upper.session_established` use
+        const %`upper.keys_established` use
     )
     : ls(ls), ur(ur), ua(ua), use(use) {}
     };
@@ -162,6 +162,9 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         picotls_connection* cnx = (picotls_connection*)*ptls_get_data_ptr(tls);
         ptls_cipher_suite_t * cipher = ptls_get_cipher(tls);
         quic_set_key_from_secret(cipher, is_enc, &cnx->crypto_context[epoch], secret);
+        if (cnx->crypto_context[epoch].aead_encrypt && cnx->crypto_context[epoch].aead_decrypt) {
+            cnx->cb.use(cnx->id,epoch);
+        }
         return 0;
     }
 
@@ -287,7 +290,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
     // that captures the instance environment, in this case including
     // the instance's endpoint id "me".
 
-    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.session_established`);
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.keys_established`);
 
 >>>
 

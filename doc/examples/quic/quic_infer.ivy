@@ -38,6 +38,10 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     
     call set_encryption_level(src,scid,e);
 
+    # infer sender of packet has established keys for the packet
+
+    call tls_keys_established_event(scid,e);
+
     # Infer an open_connection event.
     if conn_requested(dst,src,dcid) & ~cid_dst_to_src_set(dcid) & ~cid_dst_to_src_set(scid) {
         call open_connection(src,dst,scid,dcid);

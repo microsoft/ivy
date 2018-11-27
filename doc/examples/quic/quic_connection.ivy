@@ -153,6 +153,9 @@ relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 #
 # - The predicate `established_1rtt_keys(C)` holds if TLS has established
 #   its 1rrt keys at aid C.
+#
+# - The predicate `established_handshake_keys(C)` holds if TLS has established
+#   its handshake keys at aid C.
 
 function crypto_data(C:cid,L:encryption_level) : stream_data
 relation crypto_data_present(C:cid,L:encryption_level,P:stream_pos)
@@ -162,6 +165,7 @@ function crypto_pos(C:cid,L:encryption_level) : stream_pos
 function crypto_handler_pos(C:cid,L:encryption_level) : stream_pos
 function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
 relation established_1rtt_keys(C:cid)
+relation established_handshake_keys(C:cid)
 
 # The frame protocol
 # ------------------
@@ -283,6 +287,7 @@ after init {
     queued_non_probing(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
     established_1rtt_keys(C:cid) := false;
+    established_handshake_keys(C:cid) := false;
     crypto_handler_pos(C,L) := 0;
     is_client(C) := false;
     conn_requested(S,D,C) := false;
@@ -450,6 +455,26 @@ around tls_recv_event {
     crypto_pos(dcid,e) := hi;
     #    crypto_pos(pcid,0) := crypto_pos(pcid,0) + data.end 
 }
+
+#
+# TLS keys established event
+# ==========================
+#
+# This event occurs when TLS ata particular aid discovers the
+# encryption and decryption keys for a particular encryption level
+#
+
+action tls_keys_established_event(scid:cid, e:encryption_level)
+
+after tls_keys_established_event {
+    call show_tls_keys_established_event(scid,e);
+    if e = encryption_level.handshake {
+        established_handshake_keys(scid) := true
+    } else if e = encryption_level.other {
+        established_1rtt_keys(scid) := true
+    }
+}
+
 
 #
 # Client initial request event
@@ -1507,3 +1532,5 @@ import show_enc_level
 import action show_offset_length(offset:stream_pos,length:stream_pos)
 
 import action show_pstats(scid:cid,e:encryption_level,pnum:pkt_num)
+
+import action show_tls_keys_established_event(scid:cid, e:encryption_level)

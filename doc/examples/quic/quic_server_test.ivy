@@ -169,6 +169,13 @@ after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data 
 }
 
 
+implement botan.upper.keys_established(tls_id:botan.id,lev:botan.upper.level) {
+    var e := encryption_level.handshake if lev = 2 else encryption_level.other;
+    if tls_id = client.tls_id {
+        call tls_keys_established_event(the_cid,e)
+    }
+}
+
 after tls.handshake_data_event(src : ip.endpoint, dst : ip.endpoint, data:stream_data) {
     # When TLS handshake data is conceputally transferred from the server to the client,
     # we feed it to the real TLS. We do it at this point because we may need it to generate the

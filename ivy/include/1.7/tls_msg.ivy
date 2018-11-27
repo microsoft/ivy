@@ -54,6 +54,11 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser,seq_num) = {
     
     action session_established(c:cid)
     
+    # Indicates to application that the keys for a given encryption
+    # level are established.  
+    
+    action keys_established(c:cid,lev:level)
+    
     # Generates key material based on master secret, per RFC 5705.
     
     action key_material_export(c:cid,label:bytes,context:bytes,length:index)
