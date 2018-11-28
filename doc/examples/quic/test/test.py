@@ -96,7 +96,7 @@ class Test(object):
                         raise KeyboardInterrupt
                     server.terminate()
                     retcode = server.wait()
-                    if retcode != -15:  # if not exit on SIGTERM...
+                    if retcode != -15 and retcode != 0:  # if not exit on SIGTERM...
                         iev.write('server_return_code({})\n'.format(retcode))
                         print "server return code: {}".format(retcode)
                         return False

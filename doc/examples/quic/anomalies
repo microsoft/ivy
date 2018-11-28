@@ -258,3 +258,17 @@ which might violate this provision:
 
 An endpoint MAY send data to an unvalidated peer address, but it MUST
 protect against potential attacks as described in Section 9.3.1
+
+Event files:  anomaly16.iev
+Quant log file: anomaly16.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+Quant crashes while printing a log message due to a wrong number of
+arguments for a format string.
+
+
+

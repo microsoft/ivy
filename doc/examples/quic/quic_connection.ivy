@@ -838,6 +838,7 @@ object frame = {
 
 	around handle {
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.handshake -> established_handshake_keys(scid);  # [4]
             require e = encryption_level.other -> established_1rtt_keys(scid);  # [4]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             var idx : frame.ack.block.idx := 0;
