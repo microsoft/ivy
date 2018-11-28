@@ -272,3 +272,29 @@ arguments for a format string.
 
 
 
+Event files:  anomaly17.iev
+Quant log file: anomaly17.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+An assertion failure. I can't tell what's going wrong here. It seems
+like maybe trying to send data on a stream that doesn't exist?
+
+Event files:  anomaly18.iev
+Quant log file: anomaly18.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+A memory error.
+
+
+
+
+
+
