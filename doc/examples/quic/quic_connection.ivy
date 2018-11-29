@@ -927,7 +927,7 @@ object frame = {
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~conn_closed(scid);  # [8]
 
-            var offset := f.offset if f.off else stream_length(dcid,f.id);
+            var offset := f.offset if f.off else 0;
 	    require ((offset) + (f.length)) <= stream_app_data_end(dcid,f.id);
             call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dcid,f.id).segment(offset,offset+f.length); 
@@ -959,7 +959,7 @@ object frame = {
             # };
             stream_seen(dcid,f.id) := true;
 	    ...
-            var offset := f.offset if f.off else stream_length(dcid,f.id);
+            var offset := f.offset if f.off else 0;
             var length := offset + f.length;
             # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
             if stream_length(dcid,f.id) < length {
@@ -992,7 +992,7 @@ object frame = {
 	around handle {
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             call show_enc_level(e);
-            require ~conn_closed(scid);  # [1]
+#            require ~conn_closed(scid);  # [1]
 
 	    require ((f.offset) + (f.length)) <= crypto_data_end(scid,e);
 	    require f.data = crypto_data(scid,e).segment(f.offset,f.offset+f.length); 
@@ -1139,6 +1139,7 @@ object frame = { ...
         action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other -> established_1rtt_keys(scid);
             require e = encryption_level.other -> established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;

@@ -222,6 +222,13 @@ This assertion failure occurs while the server is transmitting a
 PATH_CHALLENGE frame and seems to be related to a negative alarm
 value.
 
+The negative alarm values seem to derive from pseudo-code in the
+QUIC-RECOVERY document. This triggered a discussion here, suggesting
+that the pseudo-code should have a test for negative timer values:
+
+    https://github.com/quicwg/base-drafts/issues/2052
+
+
 Event files:  anomaly15.iev
 Quant log file: anomaly15.log
 QUIC version: draft 15
@@ -292,6 +299,29 @@ Implementation:
 Issue:
 
 A memory error.
+
+
+Event files:  anomaly19.iev
+Quant log file: anomaly19.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+A use-after-free error. Maybe caused by writing to stream after stream is reset.
+
+Event files:  ???????
+Quant log file: anomaly20.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+SEGV in diet_remove (quant issue #28)
+
+
 
 
 
