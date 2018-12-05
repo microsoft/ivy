@@ -50,7 +50,7 @@ object endpoint_id = {
 var the_cid : cid
 
 after init {
-    the_cid := 13;
+#    the_cid := 13;
 }
 
 # read a data file to send to server
@@ -68,15 +68,15 @@ instance tls_extensions : vector(tls.extension)
 # HACK: we fix the initial client transport parameters here
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff00000f;
+    tp.initial_version := 0xff000010;
     var imsdbl : initial_max_stream_data_bidi_local;
-    imsdbl.stream_pos_32 := 0x2000;
+    imsdbl.stream_pos_32 := 2;  # TEMPORARY: was 0x2000
     var imd : initial_max_data;
     imd.stream_pos_32 := 0x4000;
     var it : idle_timeout;
     it.seconds_16 := 60;
     var imsdbr : initial_max_stream_data_bidi_remote;
-    imsdbr.stream_pos_32 := 0x2000;
+    imsdbr.stream_pos_32 := 2; # TEMPORARY: was 0x2000
     var imsdu : initial_max_stream_data_uni;
     imsdu.stream_pos_32 := 0x2000;
     tp.transport_parameters := tp.transport_parameters.append(imsdbl);
@@ -98,9 +98,11 @@ instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
 
 # Map test endpoint ids to the ip endpoints
 
+# parameter server_addr: ip.addr
+
 action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
-    ep.addr := 0x7f000001;   # the loop-back addr
+    ep.addr := 0xc0a80101 if ep_id = endpoint_id.server else 0xc0a80102;   # the loop-back addr
     ep.port := 4987 if ep_id = endpoint_id.client
                else (4988 if ep_id = endpoint_id.client_alt
                else 4443);
@@ -154,7 +156,7 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data) {
     if tls_id = client.tls_id {
         call tls_send_event(client.ep, server.ep, the_cid, 0, bytes,
                             crypto_data_end(the_cid,client.enc_level), client.enc_level);
-        client.enc_level := client.enc_level.next;
+#        client.enc_level := client.enc_level.next;
     };
     if tls_id = server.tls_id {
         call tls_send_event(server.ep, client.ep, the_cid, 0, bytes,
@@ -172,7 +174,10 @@ after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data 
 implement botan.upper.keys_established(tls_id:botan.id,lev:botan.upper.level) {
     var e := encryption_level.handshake if lev = 2 else encryption_level.other;
     if tls_id = client.tls_id {
-        call tls_keys_established_event(the_cid,e)
+        call tls_keys_established_event(the_cid,e);
+        if e = encryption_level.handshake | e = encryption_level.other {
+            client.enc_level := encryption_level.handshake
+        }
     }
 }
 
@@ -198,8 +203,9 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require src = client.ep | src = client_alt;
         require dst = server.ep;
         require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
+        require pkt.hdr_token_length = 0 & pkt.hdr_token.end = 0; 
     };
-    require pkt.hdr_long -> pkt.hdr_version = 0xff00000f
+    require pkt.hdr_long -> pkt.hdr_version = 0xff000010
 }
 
 # Hook up to the remote server
@@ -387,7 +393,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
         require scid = the_cid;
         require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
         require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
-        require ~f.fin; # TEMPORARY
+#        require ~f.fin; # TEMPORARY
         require f.length > 0;
         call show_level_offset_length(e,f.offset,stream_length(dcid,f.id));
         require f.offset = stream_length(dcid,f.id);
@@ -464,9 +470,16 @@ before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:
 # lines.
 
 action client_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, end : stream_pos)
+
+var current_stream : stream_id
+
+after init {
+    current_stream := 4
+}
+
     
 around client_send_event {
-    require s = 0x4;
+    require s = current_stream;
     require (src = client.ep | src = client_alt);
     require dst = server.ep;
     require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
@@ -480,7 +493,9 @@ around client_send_event {
         end := end.next
     };
     var data := http_request.segment(stream_length(dcid,s),end);
-    call app_send_event(src,dst,dcid,s,data);
+#    call app_send_event(src,dst,dcid,s,data,end = http_request.end);
+    call app_send_event(src,dst,dcid,s,data,true);
+    current_stream := current_stream + 4;
 }
 
 # Note, we don't need a tester precondition for packet protocol
@@ -506,7 +521,7 @@ interpret cid -> intbv[1][13][2]
 interpret version -> bv[32]
 interpret pkt_num -> bv[32]
 interpret error_code -> bv[16]
-interpret stream_id -> bv[3]
+interpret stream_id -> bv[5]
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1

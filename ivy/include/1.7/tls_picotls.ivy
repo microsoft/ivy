@@ -328,6 +328,11 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         handshake_properties->collect_extension = tls_collect_extensions_cb;
         handshake_properties->collected_extensions = tls_collected_extensions_cb;
         
+        ptls_iovec_t *alpn_vec = new(ptls_iovec_t);  // TODO: will leak this
+        alpn_vec->base = (uint8_t*)"hq-16";
+        alpn_vec->len = strlen((char *)(alpn_vec->base));
+        handshake_properties->client.negotiated_protocols.count = 1;
+        handshake_properties->client.negotiated_protocols.list = alpn_vec;
 
         // add the extensions
 

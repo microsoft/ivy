@@ -7,12 +7,14 @@ import imp
 import subprocess
 import stats
 import re
+import time
 
 spawn = pexpect.spawn
 
 servers = [
     ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo']],
     ['quant',['..','/home/mcmillan/projects/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
+    ['winquic',['..','true']],
 ]
 
 tests = [
@@ -61,6 +63,12 @@ print 'server command: {}'.format(server_cmd)
 
 def open_out(name):
     return open(os.path.join(dirpath,name),"w")
+
+def sleep():
+    if server_name == 'winquic':
+        st = 20
+        print 'sleeping for {}'.format(st)
+        time.sleep(st)
 
 class Test(object):
     def __init__(self,dir,args):
@@ -118,10 +126,12 @@ class Test(object):
         if retcode == 124:
             print 'timeout'
             iev.write('timeout\n')
+            sleep()
             return False
         if retcode != 0:
             iev.write('ivy_return_code({})\n'.format(retcode))
             print 'client return code: {}'.format(retcode)
+        sleep()
         return retcode == 0
 #             oldcwd = os.getcwd()
 #             os.chdir(self.dir)

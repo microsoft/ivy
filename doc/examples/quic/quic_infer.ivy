@@ -56,7 +56,7 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
 	if some(sf:frame.stream) f *> sf {
             require sf.offset <= stream_app_data_end(dcid,sf.id);  # TODO: deal with gaps in stream
             var data := sf.data.segment(stream_app_data_end(dcid,sf.id) - sf.offset,sf.data.end);
-	    call app_send_event(src,dst,dcid,sf.id,data)
+	    call app_send_event(src,dst,dcid,sf.id,data,sf.fin)
 	};
 	call show_frame(src,dst,scid,dcid,f);
 	call f.handle(src,dst,scid,dcid,e);

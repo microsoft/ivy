@@ -343,6 +343,18 @@ object quic_ser = {}
                     frame_type = 0x0f;
                     state = quic_path_challenge_data;
                 }
+                else if (tag == 13) {
+                    frame_type = 0x19;
+                    state = quic_crypto_length;  // new token equivalent to this
+                }
+                else if (tag == 14) {
+                    frame_type = 0x04;
+                    state = quic_reset_final_offset;
+                }
+                else if (tag == 15) {
+                    state = quic_max_stream_data_id;
+                    frame_type = 0x09;
+                }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  
                     throw deser_err();

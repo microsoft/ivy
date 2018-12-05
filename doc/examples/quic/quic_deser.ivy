@@ -418,6 +418,14 @@ object quic_deser = {}
                     state = quic_crypto_length;  // new token equivalent to this
                     return 13;
                 }
+                if (frame_type == 0x04) {  // new token frame
+                    state = quic_reset_final_offset;  // new token equivalent to this
+                    return 14;
+                }
+                if (frame_type == 0x09) {
+                    state = quic_max_stream_data_id;  // stream_blocked equivalent to this
+                    return 15;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();

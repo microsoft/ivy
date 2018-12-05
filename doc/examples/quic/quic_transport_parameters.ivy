@@ -16,7 +16,7 @@ module trans_params_ops(ptype) = {
     destructor is_set(S:trans_params_struct) : bool
     destructor value(S:trans_params_struct) : ptype
     action set(p:ptype,s:trans_params_struct) returns (s:trans_params_struct) = {
-        require ~is_set(s);
+#        require ~is_set(s);
         is_set(s) := true;
         value(s) := p;
     }

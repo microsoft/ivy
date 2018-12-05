@@ -198,8 +198,8 @@ object impl(me:host) = {
 		// std::cout << "SOCKET " << s << std::endl;
 		struct sockaddr_in myaddr;
 		myaddr.sin_family = AF_INET;
-		// myaddr.sin_addr.s_addr = htonl(addr.addr);
-		myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+		myaddr.sin_addr.s_addr = htonl(addr.addr);
+		// myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		myaddr.sin_port = htons(addr.port);
 		// std::cout << "binding id: " << `me` << " port: " << ntohs(myaddr.sin_port) << std::endl;
 		if (::bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
@@ -250,8 +250,8 @@ object impl(me:host) = {
 	<<< impure
 	struct sockaddr_in dstaddr;
 	dstaddr.sin_family = AF_INET;
-//	dstaddr.sin_addr.s_addr = htonl(dst.addr);
-	dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	dstaddr.sin_addr.s_addr = htonl(dst.addr);
+	//dstaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	dstaddr.sin_port = htons(dst.port);
 	// std::cout << "sending id: " << me << " addr: " << ntohl(dstaddr.sin_addr.s_addr) << " port: " << ntohs(dstaddr.sin_port) << std::endl;
 	`ser` sr;

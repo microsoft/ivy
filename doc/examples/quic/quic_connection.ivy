@@ -255,10 +255,13 @@ relation path_challenge_pending(C:cid,D:stream_data)
 #   on stream id S to C. This is the number of bytes in the stream that have
 #   been read by the application.
 #
+# - For each aid C,and stream id S, `stream_app_data_finished(C,S)` indicates
+#   the data transmitted to C on S is finished.
 
 function stream_app_data(C:cid,S:stream_id) : stream_data
 function stream_app_data_end(C:cid,S:stream_id) : stream_pos
 function stream_app_pos(C:cid,S:stream_id) : stream_pos
+function stream_app_data_finished(C:cid,S:stream_id) : bool
 
 
 # Initial state
@@ -294,6 +297,7 @@ after init {
     path_challenge_pending(C,D) := false;
     hi_non_probing(C) := 0;
     hi_non_probing_endpoint(C,E) := false;
+    stream_app_data_finished(C,S) := false;
 }
 
 # Ghost events
@@ -355,7 +359,7 @@ after init {
 #   the cid and `S` is the stream id.
 #
 
-action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data)
+action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, close : bool)
 
 after app_send_event {
     var idx := data.begin;
@@ -363,6 +367,9 @@ after app_send_event {
 	stream_app_data(dcid,s) := stream_app_data(dcid,s).append(data.value(idx));
         stream_app_data_end(dcid,s) := stream_app_data(dcid,s).end;
 	idx := idx.next
+    };
+    if close {
+        stream_app_data_finished(dcid,s) := true;
     }
 }
 
@@ -932,6 +939,8 @@ object frame = {
             call show_offset_length(offset,f.length);
 	    require f.data = stream_app_data(dcid,f.id).segment(offset,offset+f.length); 
 
+            require f.fin <-> (stream_app_data_finished(dcid,f.id) & offset+f.length = stream_app_data_end(dcid,f.id));
+
             var kind := get_stream_kind(f.id);
             require max_stream_set(dcid,kind) -> f.id < max_stream(dcid,kind);  # [6]
             # require ~stream_reset(dcid,f.id);  # [7]
@@ -1206,6 +1215,7 @@ object frame = { ...
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require stream_seen(scid,f.id) | stream_seen(dcid,f.id);  # TEMPORARY -- should not be needed
 
             if ~(max_stream_data_set(dcid,f.id) & f.pos < max_stream_data_val(dcid,f.id)) {
                 max_stream_data_set(dcid,f.id) := true;
@@ -1216,6 +1226,61 @@ object frame = { ...
         }
     }
 }
+
+# Stream blocked frames indicate that sender wishes to send data on stream beyond current limit.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object stream_blocked = { ...
+        action handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(src,scid,f,e,false);
+        }
+    }
+}
+
+# Max data frames set the limit on the total data bytes that the source endpoint is willing
+# to receive for all streams combined.
+#
+# Requirements
+#
+# (None)
+#
+# Effects
+# - If the given limit is greater than any previously set limit, then
+#   the max data limit for the connection is updated [2].
+#
+
+object frame = { ...
+    object max_data = { ...
+        action handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+
+            # TODO: implement this
+            # if ~(max_data_set(dcid,f.id) & f.pos < max_data_val(dcid,f.id)) {
+            #     max_data_set(dcid,f.id) := true;
+            #     max_data_val(dcid,f.id) := f.pos;  # [2]
+            # }
+	    ...
+            call enqueue_frame(src,scid,f,e,false);
+        }
+    }
+}
+
 
 # Ping frames contain no data and have no semantics. They can
 # be used to keep a connection alive.
@@ -1371,7 +1436,7 @@ action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt
         };
         # require pnum <= la + 0x7ffffffe;
         # TEMPORARY: work around minquic bug
-        require pnum <= last + 0x7;
+        require pnum <= last + 0x15;
     }
 }
 
@@ -1466,7 +1531,7 @@ action handle_tls_extensions
 
         if some (tps:quic_transport_parameters) ext *> tps {
             call handle_client_transport_parameters(src,dst,scid,tps,is_client_hello);
-            require ~trans_params_set(scid);  # [2]
+#            require ~trans_params_set(scid);  # [2]
             trans_params_set(scid) := true;
             
         };
