@@ -727,9 +727,23 @@ def p_constantdecl_var_tterms(p):
     'constantdecl : VAR tterms'
     p[0] = ConstantDecl(*p[2])
 
-def p_constantdecl_parameter_tterms(p):
-    'constantdecl : PARAMETER tterms'
-    p[0] = ParameterDecl(*p[2])
+def p_param_tterm(p):
+    'parameter : tterm'
+#    p[1].sort = p[3]
+    p[0] = ParameterDecl(p[1])
+    p[0].lineno = p[1].lineno
+
+def p_param_tterm_eq_symbol(p):
+    'parameter : tterm EQ SYMBOL'
+    dflt = App(p[3])
+    dflt.lineno = get_lineno(p,3)
+    df = Definition(p[1],dflt)
+    df.lineno = get_lineno(p,2)
+    p[0] = ParameterDecl(df)
+
+def p_constantdecl_parameter_tterm(p):
+    'constantdecl : PARAMETER parameter'
+    p[0] = p[2]
 
 def p_rel_defnlhs(p):
     'rel : defnlhs'

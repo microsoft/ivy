@@ -62,7 +62,8 @@ class Module(object):
         self.natives = [] # list of NativeDef
         self.native_definitions = [] # list of definitions whose rhs is NativeExpr
         self.initializers = [] # list of name,action pairs
-        self.params = []
+        self.params = [] # list of symbol
+        self.param_defaults = [] # list of string or None
         self.ghost_sorts = set() # set of sort names
         self.native_types = {} # map from sort names to ivy_ast.NativeType
         self.sort_order = [] # list of sorts names in order declared

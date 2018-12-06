@@ -47,7 +47,7 @@ object endpoint_id = {
 
 # fix a single connection id
 
-var the_cid : cid
+parameter the_cid : cid = 0xd
 
 after init {
 #    the_cid := 13;

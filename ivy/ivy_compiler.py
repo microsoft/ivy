@@ -993,8 +993,14 @@ class IvyDomainSetup(IvyDeclInterp):
         self.domain.functions[sym] = len(v.args)
         return sym
     def parameter(self,v):
-        sym = self.individual(v)
+        if isinstance(v,ivy_ast.Definition):
+            sym = self.individual(v.args[0])
+            dflt = v.args[1]
+        else:
+            sym = self.individual(v)
+            dflt = None
         self.domain.params.append(sym)
+        self.domain.param_defaults.append(dflt)
         return sym
     def destructor(self,v):
         sym = self.individual(v)

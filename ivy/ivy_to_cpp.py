@@ -2846,6 +2846,10 @@ class z3_thunk : public thunk<D,R> {
                 impl.append("int "+ opt_main.get() + "(int argc, char **argv){\n")
                 impl.append("        int test_iters = TEST_ITERS;\n".replace('TEST_ITERS',opt_test_iters.get()))
                 impl.append("        int runs = TEST_RUNS;\n".replace('TEST_RUNS',opt_test_runs.get()))
+                for p,d in zip(im.module.params,im.module.param_defaults):
+                    impl.append('    {} p__'.format(ctypefull(p.sort,classname=classname))+varname(p)+';\n')
+                    if d is not None:
+                        emit_value_parser(impl,p,'"{}"'.format(d.rep),classname,lineno=d.lineno)
                 impl.append("""
     int seed = 1;
     int sleep_ms = 10;
@@ -2860,6 +2864,18 @@ class z3_thunk : public thunk<D,R> {
         else {
             std::string param = arg.substr(0,p);
             std::string value = arg.substr(p+1);
+""")
+                pos_params = []
+                for p,d in zip(im.module.params,im.module.param_defaults):
+                    if d is None:
+                        pos_params.append(p)
+                    else:
+                        impl.append('            if (param == "{}") {{\n'.format(str(p)))
+                        emit_value_parser(impl,p,"value",classname)
+                        impl.append('                continue;\n')
+                        impl.append('            }\n')
+                
+                impl.append("""
             if (param == "out") {
                 __ivy_out.open(value.c_str());
                 if (!__ivy_out) {
@@ -2901,7 +2917,7 @@ class z3_thunk : public thunk<D,R> {
     argc = pargs.size();
     argv = &pargs[0];
 """)
-                impl.append("    if (argc == "+str(len(im.module.params)+2)+"){\n")
+                impl.append("    if (argc == "+str(len(pos_params)+2)+"){\n")
                 impl.append("        argc--;\n")
                 impl.append("        int fd = _open(argv[argc],0);\n")
                 impl.append("        if (fd < 0){\n")
@@ -2910,15 +2926,14 @@ class z3_thunk : public thunk<D,R> {
                 impl.append('        }\n')
                 impl.append("        _dup2(fd, 0);\n")
                 impl.append("    }\n")
-                impl.append("    if (argc != "+str(len(im.module.params)+1)+"){\n")
+                impl.append("    if (argc != "+str(len(pos_params)+1)+"){\n")
                 impl.append('        std::cerr << "usage: {} {}\\n";\n'
-                            .format(classname,' '.join(map(varname,im.module.params))))
+                            .format(classname,' '.join(map(str,pos_params))))
                 impl.append('        __ivy_exit(1);\n    }\n')
                 impl.append('    std::vector<std::string> args;\n')
-                impl.append('    std::vector<ivy_value> arg_values({});\n'.format(len(im.module.params)))
+                impl.append('    std::vector<ivy_value> arg_values({});\n'.format(len(pos_params)))
                 impl.append('    for(int i = 1; i < argc;i++){args.push_back(argv[i]);}\n')
-                for idx,s in enumerate(im.module.params):
-                    impl.append('    {} p__'.format(ctypefull(s.sort,classname=classname))+varname(s)+';\n')
+                for idx,s in enumerate(pos_params):
                     impl.append('    try {\n')
                     impl.append('        int pos = 0;\n')
                     impl.append('        arg_values[{}] = parse_value(args[{}],pos);\n'.format(idx,idx))
@@ -2952,6 +2967,19 @@ class z3_thunk : public thunk<D,R> {
 
         
     return ivy_cpp.context.globals.get_file(), ivy_cpp.context.impls.get_file()
+
+def emit_value_parser(impl,s,arg,classname,lineno=None):
+    impl.append('    try {\n')
+    impl.append('        int pos = 0;\n')
+    impl.append('        std::vector<ivy_value> arg_values; arg_values.resize(1); arg_values[0] = parse_value({},pos);\n'.format(arg))
+    impl.append('        p__'+varname(s)+' =  _arg<{}>(arg_values,{},{});\n'
+                                .format(ctype(s.sort,classname=classname),0,csortcard(s.sort)))
+    impl.append('    }\n    catch(out_of_bounds &) {\n')
+    impl.append('        std::cerr << "{}parameter {} out of bounds\\n";\n'.format(str(lineno) if lineno else "",str(s)))
+    impl.append('        __ivy_exit(1);\n    }\n')
+    impl.append('    catch(syntax_error &) {\n')
+    impl.append('        std::cerr << "{}syntax error in parameter value {}\\n";\n'.format(str(lineno) if lineno else "",str(s)))
+    impl.append('        __ivy_exit(1);\n    }\n')
 
 
 def check_representable(sym,ast=None,skip_args=0):

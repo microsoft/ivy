@@ -752,6 +752,13 @@ class ConstantDecl(Decl):
 class ParameterDecl(ConstantDecl):
     def name(self):
         return 'parameter'
+    def mysym(self):
+        return self.args[0].args[0] if isinstance(self.args[0],Definition) else self.args[0]
+    def defines(self):
+        c = self.mysym()
+        return [(c.rep,lineno(c))]
+    def get_type_names(self,names):
+        tterm_type_names(self.mysym(),names)
 
 class FreshConstantDecl(ConstantDecl):
     pass
