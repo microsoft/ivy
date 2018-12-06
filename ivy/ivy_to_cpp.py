@@ -752,13 +752,17 @@ public:
             global is_derived
             if sym_is_member(sym):
                 if sym in used:
-                    emit_randomize(impl,sym,classname=classname)
+                    if sym in im.module.params:
+                        emit_set(impl,sym)  # parameters are already set in constructor
+                    else:
+                        emit_randomize(impl,sym,classname=classname)
                 else:
-                    if is_large_type(sym.sort):
-                        code_line(impl,'obj.'+varname(sym) + ' = ' + make_thunk(impl,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,sym.name,0)))
-                    elif not is_native_sym(sym):
-                        fun = lambda v: (mk_rand(v.sort,classname=classname) if not is_native_sym(v) else None)
-                        assign_array_from_model(impl,sym,'obj.',fun)
+                    if sym not in im.module.params:
+                        if is_large_type(sym.sort):
+                            code_line(impl,'obj.'+varname(sym) + ' = ' + make_thunk(impl,variables(sym.sort.dom),HavocSymbol(sym.sort.rng,sym.name,0)))
+                        elif not is_native_sym(sym):
+                            fun = lambda v: (mk_rand(v.sort,classname=classname) if not is_native_sym(v) else None)
+                            assign_array_from_model(impl,sym,'obj.',fun)
     indent_level -= 1
     impl.append("""
     // std::cout << slvr << std::endl;
@@ -2553,6 +2557,8 @@ class z3_thunk : public thunk<D,R> {
             indent_level -= 1
     if target.get() not in ["gen","test"]:
         emit_one_initial_state(impl)
+    else:
+        emit_parameter_assignments(impl)
 
     impl.append('}\n')
 
@@ -3068,7 +3074,11 @@ def emit_one_initial_state(header):
     action = ia.Sequence(*[a for n,a in im.module.initializers])
     action.emit(header)
 
-
+def emit_parameter_assignments(impl):
+    for sym in im.module.params:
+        name = varname(sym)
+        impl.append('    this->{} = {};\n'.format(name,name))
+    
 
 def emit_constant(self,header,code):
     if self in is_derived:
