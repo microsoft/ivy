@@ -1,0 +1,28 @@
+#lang ivy1.6
+
+include shard
+include table
+
+object key = {
+    type t
+    instantiate totally_ordered(t)
+    instance iter : order_iterator(t)
+}
+
+type value
+
+instance shard : table_shard(key.t,value)
+instance tab : hash_table(key,value,shard)
+
+object impl = {
+    interpret key.t -> bv[2]
+    interpret value -> bv[2]
+}
+
+export tab.set
+export tab.get
+export tab.extract_
+export tab.incorporate
+
+isolate iso_tab = tab.impl with tab,shard,key
+

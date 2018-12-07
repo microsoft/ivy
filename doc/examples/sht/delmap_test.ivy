@@ -1,0 +1,20 @@
+#lang ivy1.6
+
+include key
+include delmap
+
+type id
+
+instance dmap : delegation_map(key,id)
+
+export dmap.set
+export dmap.get
+
+object impl = {
+    interpret id -> bv[1]
+    interpret key.t -> bv[4]
+}
+
+isolate iso_dmap = dmap with key
+extract iso_impl = dmap, key, impl
+trusted isolate iso_test = dmap with key,impl

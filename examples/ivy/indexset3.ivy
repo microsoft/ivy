@@ -1,0 +1,201 @@
+#lang ivy1.6
+
+# Here, we prove a basic fact about finite sets: is X and Y are disjoint
+# subsets of S, then |X| + |Y| <= |S|. This can be used to show that any two
+# majorities of S have an element in common.
+
+# We set up the problem with two types: the *basis* type (which we can
+# think of as ordinal numbers) and the *index* type (which we can
+# think of as cardinal numbers). Both are isomorphic to the
+# integers. Our sets are subsets of the basis type, while their
+# cardinalities a members of the index type. The separation of these
+# two types is used to keep us in the "essentially uninterpreted"
+# fragment, as we will see below.
+
+# We definte a module that takes basis and index types, and provides the following
+# interface:
+
+# 1) a type *set* representing finite subsets of the basis type
+# 2) a basis element *n* that is an upper bound on set elements (so the basis is finite)
+# 3) a *member* relation
+# 4) a relation *disjoint* beteween sets
+# 5) a function *card* giving the cardinality of a set as an index
+# 6) a function *cnt* gives the cardinality of the set of basis elements less than E
+# 7) an action `empty` returning the empty set
+# 8) an action `add` that adds an element to a set
+
+# The spec can then be stated as disjoint(X,Y) -> card(X)+card(Y) <= cnt(n).
+
+# The implementation defines card and cnt as recursive functions over the basis type.
+
+# We then give an inductive invariant with parameter B. This states
+# that the theorem holds for elements of the sets X and Y less than
+# B. This fact is proved by induction on B, using the induction schema
+# for the basis type.
+
+# This all seems straightforward, but it was tricky to figure out how
+# to set up the problem without function cycles. The key was to give
+# ordinals and cardinal distinct types. The functions are stratified
+# in this order: set -> basis.t -> index.t. In particular, this allows
+# us to state the inductive lemma in a way that does not involve
+# quantified variables under arithmetic operators. 
+
+include collections
+include order
+
+module indexset(basis,index) = {
+
+    type set 
+    
+    individual n : basis.t
+    relation member(E:basis.t,S:set)
+    function card(S:set) : index.t
+    relation majority(S:set)
+
+    action empty returns(s:set)
+    action add(s:set,e:basis.t) returns (s:set)
+
+    # This symbol n gives the upper bound on ordinals. So the set S
+    # consists by definiton of all the ordinals N suct that 0 <= N <
+    # n. In principle, n should be a parameter of the module, and the
+    # module should require the property n > 0.
+
+    axiom [n_positive] n > 0
+    
+    object spec = {
+
+	after empty {
+	    assert ~member(E,s);
+	}
+
+	after add {
+	    assert member(X,s) <-> (member(X,old s) | X = e)
+	}
+    }
+    
+    function cnt(E:basis.t) : index.t
+    relation disjoint(X:set,Y:set)
+
+    
+    isolate disjointness = {
+
+	# The funtion cnt(x) returns the cardinaility of the set of
+	# ordinals < x. We define it recursively by instantiating the
+	# recursion scheman fo the basis type.
+
+	# Note here we use a constant symbol x for the argument. This
+	# tells IVy that the defintion should only be unfolded for
+	# ground terms x occurring in the proof goal. Without this, we
+	# would exit the decidable fragment, due to a quantified
+	# variable under an arithmetic operator.
+
+	definition cnt(x:basis.t) = 0 if x <= 0 else cnt(x-1) + 1
+    	proof rec[basis.t]
+	
+	# We define cardinality in terms of a recursive function
+	# cardUpTo that counts the number of elements in a set that
+	# are less than a bound B.
+
+	function cardUpTo(S:set,B:basis.t) : index.t
+
+	# Note again the we deal with recursion by restricting the
+	# instantion of the definition.
+	
+    	definition cardUpTo(s:set,b:basis.t) =
+    	    0 if b <= 0 else (cardUpTo(s,b-1)+1 if member(b-1,s) else cardUpTo(s,b-1))
+    	proof rec[basis.t]
+	
+	# The cardinality function is then defined in terms of cardUpTo.
+
+	definition card(S) = cardUpTo(S,n)
+
+	# This is the definition of dijoint sets in terms of the member relation.
+	# Notice that there is a quantifier alternation in the direction set -> basis.t.
+
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+	
+	# A majority is a set whose cardinality is greater than 1/2 of
+	# the basis set.
+
+    	definition majority(X) = 2 * card(X) > cnt(n)
+	
+	# This is our inductive invariant. It says that, for disjoint
+	# sets, the sum of the cardinailities up to bound B is less
+	# than the total number of elements less than B. We prove it
+	# by induction on B, using the induction schema for
+	# basis.t. We had to rename the variable X in the property to
+	# avoid a name clash with X in the conclusion of the rule
+	# (which is the inducation parameter). Obviously, IVy should
+	# have done this renaming for us. Also, notice we had to
+	# explicitly say that the induction is over B, since Ivy can't
+	# infer this automatically.
+
+	# Most importantly, notice how arithmetic is used here, We
+	# have a + operation over a quantified variable B. However, B
+	# is of ordinal type, while the + operator is over cardinals.
+	# This means the formulas in our proof context are still
+	# essentially uninterpreted. Without the separate types, IVy
+	# would complain about this property. Question: is it possible
+	# to automatically detect this kind of sorting of theories so
+	# we don't have to explicitly use distinct types?
+
+	property disjoint(Xa,Y) -> cardUpTo(Xa,B) + cardUpTo(Y,B) <= cnt(B)
+	proof ind[basis.t] with X = B
+	
+	# With the above lemma, the desired property is trivial.
+
+    	property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+	
+	# We can also prove that two majorities have an element in common.
+	
+	property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
+	
+	# We can interpret both the ordinals and cardinals as integers
+	# without running afoul of the fragment checker.
+
+	interpret index.t -> int
+	interpret basis.t -> int
+
+    }
+    with nodeset.n_positive
+
+    # Note that `nodeset.n_positive` is a workaround to an IVY bug. We
+    # should be able to say just `n_positive`.
+
+    isolate api = {
+	
+    	# Here is the implementation of the set type using an unsorted array.
+
+    	instance arridx : unbounded_sequence
+    	instance arr:array(arridx.t,basis.t)
+
+    	# Tricky: this is a bit of aspect-orientation. It turns the type `set` into a struct
+    	# with just one field called `repr`. This field gives the concrete representation of a
+    	# set as an array. To an isolate that doesn't use the definition of `member` below,
+    	# the tpye `set` will still appear to be uninterpreted.
+
+    	destructor repr(X:set) : arr.t
+
+    	definition member(y:basis.t,X:set) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+
+    	implement empty {
+    	    repr(s) := arr.create(0,0)
+    	}
+
+    	implement add {
+    	    if ~member(e,s) {
+    		repr(s) := repr(s).resize(repr(s).end.next,e)
+    	    }
+    	}
+    } with spec
+}
+
+
+instance nodeord : unbounded_sequence
+instance nodecard : unbounded_sequence
+instance nodeset : indexset(nodeord,nodecard)
+
+export nodeset.empty
+export nodeset.add
+
+    

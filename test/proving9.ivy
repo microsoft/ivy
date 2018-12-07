@@ -1,0 +1,22 @@
+#lang ivy1.6
+
+type t
+
+function f(X:t) : t
+
+isolate t_theory = {
+
+    interpret t -> int
+    definition f(X) = X + 1
+
+    property [expanding] f(X) > X
+    property [transitivity] X:t < Y & Y < Z -> X < Z	
+
+}
+
+isolate extra = {
+
+    property [prop] f(f(X)) > X
+
+}
+with t_theory.expanding, t_theory.transitivity

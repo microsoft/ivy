@@ -1,0 +1,58 @@
+#lang ivy1.5
+
+module bar = {
+
+    object foo = {}
+    object bar = {}
+
+    <<< once
+        #include <map>
+    >>>
+
+    <<< member
+        int `foo`;
+        std::map<int,int> `bar`;
+    >>>
+
+    <<< init
+        `foo` = 0;
+    >>>
+
+    action incr returns(x:t) = {
+        <<<
+            `foo`++;
+	    `x` = `foo`;
+        >>>
+    }
+
+    action setmap(x:t,y:t) = {
+	<<<
+	    `bar`[`x`] = `y`;
+        >>>
+    }
+
+    action getmap(x:t) returns (y:t) = {
+	<<<
+	    `y` = `bar`[`x`];
+        >>>
+    }
+
+    action show = {
+	call out(incr)
+    }
+
+    action askme returns (x:t) = {
+	x := ask
+    }
+}
+
+type t
+interpret t -> {0..1} 
+instance baz(X:t) : bar
+
+action out(x:t)
+
+action ask returns (x:t)
+
+import out
+import ask

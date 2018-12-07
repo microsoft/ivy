@@ -1,0 +1,29 @@
+#lang ivy1.6
+
+type t
+
+interpret t -> bv[1]
+
+type s = struct {
+  x : t,
+  y : t
+}
+
+relation sent(X:s,Y:t)
+
+after init {
+    sent(X,Y) := false
+}
+
+individual foo : s
+
+action baz(q:s,r:t) = {
+    sent(q,r) := true
+}
+
+action bar(q:s,r:t) = {
+  assume sent(q,r)
+}
+
+export baz
+export bar

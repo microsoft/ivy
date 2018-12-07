@@ -1,0 +1,100 @@
+#lang ivy1.6
+
+
+################################################################################
+#
+# Reference specification
+#
+# This is a monitor for linearizability of a concurrent map.
+#
+################################################################################
+
+module sht_reference(id,key,data) = {
+
+    ########################################
+    # type of map operations
+
+    type otype = {read, write}
+
+    ########################################
+    # type of transaction ids
+
+    ghost type txid
+
+    ########################################
+    # transaction fields:
+
+    function type_(T:txid) : otype
+    function key_(T:txid) : key.t
+    function data_(T:txid)  : data
+	
+
+    ########################################
+    # Monitor state
+
+    # The set of existing transactions
+
+    relation generated(T:txid)
+    init ~generated(T)
+
+    # The subset of committed transactions
+
+    relation committed(T:txid)
+    init ~committed(T)
+
+    # The abstract state
+
+    individual map(A:key.t) : data
+    init map(A) = 0
+    
+    ########################################
+    # commit a transaction now. The "id" parameter tells us what
+    # process is committing the event.
+    # 
+
+    action commit(lt:txid)
+
+    before commit {
+
+	assert ~committed(lt);
+	committed(lt) := true;
+
+	# execute the transaction abstractly
+	if type_(lt) = read {
+	    data_(lt) := map(key_(lt))
+	}
+	else {
+	    map(key_(lt)) := data_(lt)
+	}			
+    }     
+
+
+    ############################################
+    # Begin a transaction. This returns a transaction id as a ghost
+    # value.
+
+    action begin(i:id, o:otype, k:key.t, d:data) returns (lt:txid) = {
+	assume exists T. ~generated(T);
+	if some c:txid. ~generated(c) {
+	    type_(c) := o;
+	    key_(c) := k;
+	    data_(c) := d;
+	    generated(c) := true;
+	    lt := c
+	}
+    }
+
+    ############################################
+    # End transaction. Must commit transaction before
+    # it ends.
+
+    action end(lt:txid)
+    before end {
+	assert committed(lt)
+    }	
+
+    # Invariant: everything committed has been generated
+
+    conjecture committed(T) -> generated(T)
+	
+}

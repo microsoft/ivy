@@ -55,14 +55,14 @@ with ivy_module.Module():
     cg = ui.current_concept_graph
     cg.show_relation(cg.relation('s'),'+')
     cg.gather() 
-    cg.select_fact(cg.fact('1:client ~= 0:client'),False)
-    cg.select_fact(cg.fact('0:client ~= 1:client'),False)
+    cg.select_fact(cg.fact('1:client ~= 0'),False)
+    cg.select_fact(cg.fact('0:client ~= 1'),False)
     main_ui.answer("OK")
     assert cg.is_inductive(), "should have been relatively inductive"
     main_ui.answer("OK")
     assert cg.is_sufficient(), "should have been sufficient"
-    cg.select_fact(cg.fact('1:client ~= 0:client'),True)
-    cg.select_fact(cg.fact('0:client ~= 1:client'),True)
+    cg.select_fact(cg.fact('1:client ~= 0'),True)
+    cg.select_fact(cg.fact('0:client ~= 1'),True)
     main_ui.answer("OK")
     cg.minimize_conjecture(bound=2)
     main_ui.answer("OK")

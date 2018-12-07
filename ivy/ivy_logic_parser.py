@@ -7,7 +7,7 @@ import ivy_logic_utils
 import ivy_utils as iu
 
 def get_lineno(p,n):
-    return (iu.filename,p.lineno(n))
+    return iu.Location(iu.filename,p.lineno(n))
 
 def symbol(s):
     return Variable(s,universe) if str.isupper(s[0]) else Constant(s)
@@ -20,7 +20,10 @@ def p_aterm_symbol(p):
 def p_aterm_aterm_terms(p):
     'aterm : aterm LPAREN terms RPAREN'
     p[0] = p[1]
-    p[0].args.extend(p[3])
+    if isinstance(p[0],MethodCall):
+        p[0].args[1].args.extend(p[3])
+    else:
+        p[0].args.extend(p[3])
 
 if iu.get_numeric_version() <= [1,2]:
 
@@ -31,10 +34,27 @@ if iu.get_numeric_version() <= [1,2]:
 
 else:
 
-    def p_term_term_dot_term(p):
-        'aterm : aterm DOT SYMBOL'
-        p[0] = compose_atoms(p[1],App(p[3]))
-        p[0].lineno = get_lineno(p,2)
+    if iu.get_numeric_version() <= [1,6]:
+        def p_term_term_dot_term(p):
+            'aterm : aterm DOT SYMBOL'
+            p[0] = compose_atoms(p[1],App(p[3]))
+            p[0].lineno = get_lineno(p,2)
+
+def p_atype_symbol(p):
+    'atype : SYMBOL'
+    p[0] = p[1]
+
+if not (iu.get_numeric_version() <= [1,2]):
+    def p_atype_atype_dot_symbol(p):
+        'atype : atype DOT SYMBOL'
+        if isinstance(p[1],This):
+            p[0] = p[3]
+        else:
+            p[0] = p[1] + '.' + p[3]
+    def p_atype_this(p):
+        'atype : THIS'
+        p[0] = This()
+        p[0].lineno = get_lineno(p,1)
 
 def p_var_variable(p):
     'var : VARIABLE'
@@ -42,7 +62,17 @@ def p_var_variable(p):
     p[0].lineno = get_lineno(p,1)
 
 def p_var_variable_colon_symbol(p):
-    'var : VARIABLE COLON SYMBOL'
+    'var : VARIABLE COLON atype'
+    p[0] = Variable(p[1],p[3])
+    p[0].lineno = get_lineno(p,1)
+
+def p_simplevar_variable(p):
+    'simplevar : VARIABLE'
+    p[0] = Variable(p[1],universe)
+    p[0].lineno = get_lineno(p,1)
+
+def p_simplevar_variable_colon_symbol(p):
+    'simplevar : VARIABLE COLON SYMBOL'
     p[0] = Variable(p[1],p[3])
     p[0].lineno = get_lineno(p,1)
 
@@ -50,6 +80,15 @@ def p_term_aterm(p):
     'term : aterm'
     p[0] = p[1]
 
+if not (iu.get_numeric_version() <= [1,6]):
+    def p_term_term_dot_aterm(p):
+        'aterm : term DOT aterm'
+        if isinstance(p[1],(Atom,App)):
+            p[0] = compose_atoms(p[1],p[3])
+        else:
+            p[0] = MethodCall(p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+            
 def p_aterm_old_symbol(p):
     'term : OLD aterm'
     p[0] = Old(p[2])
@@ -76,10 +115,36 @@ if not (iu.get_numeric_version() <= [1,2]):
         p[0] = App(p[2],p[1],p[3])
         p[0].lineno = get_lineno(p,2)
 
+    def p_term_term_DIV_term(p):
+        'term : term DIV term'
+        p[0] = App(p[2],p[1],p[3])
+        p[0].lineno = get_lineno(p,2)
+
     def p_term_if_fmla_else_term(p):
         'term : term IF fmla ELSE term'
         p[0] = Ite(p[3],p[1],p[5])
         p[0].lineno = get_lineno(p,2)
+
+# if not (iu.get_numeric_version() <= [1,5]):
+
+#     def p_term_term_and_term(p):
+#         'term : term AND term'
+#         if isinstance(p[1],And):
+#             p[0] = p[1]
+#             p[0].args.append(p[3])
+#         else:
+#             p[0] = And(p[1],p[3])
+#             p[0].lineno = get_lineno(p,2)
+
+#     def p_term_term_or_term(p):
+#         'term : term OR term'
+#         if isinstance(p[1],Or):
+#             p[0] = p[1]
+#             p[0].args.append(p[3])
+#         else:
+#             p[0] = Or(p[1],p[3])
+#             p[0].lineno = get_lineno(p,2)
+
 
 def p_terms(p):
     'terms : '
@@ -108,6 +173,15 @@ def p_vars_vars_comma_var(p):
     p[0] = p[1]
     p[0].append(p[3])
 
+def p_simplevars_simplevar(p):
+    'simplevars : simplevar'
+    p[0] = [p[1]]
+
+def p_simplevars_simplevars_comma_simplevar(p):
+    'simplevars : simplevars COMMA simplevar'
+    p[0] = p[1]
+    p[0].append(p[3])
+
 # apps are terms of the form symbol or symbol(term*)
 
 def p_app_symbol(p):
@@ -124,7 +198,7 @@ def p_app_term_infix_term(p):
     'app : term infix term'
     p[0] = App(p[2],p[1],p[3])
     p[0].lineno = get_lineno(p,2)
-    
+
 
 def p_apps_app(p):
     'apps : app'
@@ -197,7 +271,11 @@ def p_relop_ge(p):
 def p_relop_gt(p):
     'relop : GT'
     p[0] = p[1]
-    
+
+def p_relop_pto(p):
+    'relop : PTO'
+    p[0] = p[1]
+
 def p_infix_plus(p):
     'infix : PLUS'
     p[0] = p[1]
@@ -208,6 +286,10 @@ def p_infix_minus(p):
 
 def p_infix_times(p):
     'infix : TIMES'
+    p[0] = p[1]
+
+def p_infix_div(p):
+    'infix : DIV'
     p[0] = p[1]
 
 # formulas are boolean combinations of terms and equalities between terms
@@ -234,7 +316,7 @@ def p_fmla_true(p):
     'fmla : TRUE'
     p[0] = And()
     p[0].lineno = get_lineno(p,1)
-    
+
 def p_fmla_false(p):
     'fmla : FALSE'
     p[0] = Or()
@@ -275,12 +357,50 @@ def p_fmla_fmla_iff_fmla(p):
     p[0] = Iff(p[1],p[3])
     p[0].lineno = get_lineno(p,2)
 
-def p_fmla_forall_vars_dot_fmla(p):
-    'fmla : FORALL vars DOT fmla'
-    p[0] = Forall(p[2],p[4])
+if (iu.get_numeric_version() <= [1,6]):
+
+    def p_fmla_forall_vars_dot_fmla(p):
+        'fmla : FORALL simplevars DOT fmla'
+        p[0] = Forall(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_exists_vars_dot_fmla(p):
+        'fmla : EXISTS simplevars DOT fmla'
+        p[0] = Exists(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+else:
+
+    def p_fmla_forall_vars_dot_fmla(p):
+        'fmla : FORALL simplevars DOT fmla %prec SEMI'
+        p[0] = Forall(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+    def p_fmla_exists_vars_dot_fmla(p):
+        'fmla : EXISTS simplevars DOT fmla %prec SEMI'
+        p[0] = Exists(p[2],p[4])
+        p[0].lineno = get_lineno(p,1)
+
+def p_fmla_globally_fmla(p):
+    'fmla : GLOBALLY fmla'
+    p[0] = Globally(p[2])
     p[0].lineno = get_lineno(p,1)
 
-def p_fmla_exists_vars_dot_fmla(p):
-    'fmla : EXISTS vars DOT fmla'
-    p[0] = Exists(p[2],p[4])
+def p_fmla_eventually_fmla(p):
+    'fmla : EVENTUALLY fmla'
+    p[0] = Eventually(p[2])
     p[0].lineno = get_lineno(p,1)
+
+def p_term_namedbinder_vars_dot_fmla(p):
+    'term : LPAREN DOLLAR SYMBOL simplevars DOT fmla RPAREN LPAREN terms RPAREN'
+    x = NamedBinder(p[3], p[4],p[6])
+    x.lineno = get_lineno(p,2)
+    p[0] = App(x, p[9])
+    p[0].lineno = get_lineno(p,2)
+
+def p_term_namedbinder_dot_fmla(p):
+    'term : DOLLAR SYMBOL DOT fmla %prec SEMI'
+    p[0] = NamedBinder(p[2], [],p[4])
+    p[0].lineno = get_lineno(p,1)
+
+# TODO: should the above rules create formulas also or only for terms

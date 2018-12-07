@@ -1,0 +1,284 @@
+#lang ivy1.6
+
+module totally_ordered(t) = {
+    property [transitivity] (T:t < U & U < V) -> (T < V)
+    property [antisymmetry] ~(T:t < U & U < T)
+    property [totality] T:t < U | T = U | U < T
+}
+
+module totally_ordered_with_zero(t) = {
+    instantiate totally_ordered(t)
+    property 0 <= X:t
+}
+
+module unbounded_sequence = {
+    
+    type t
+
+    # returns the least key greater than x
+    action next(x:t) returns (y:t)
+
+    # returns the greatest key less than x
+    action prev(x:t) returns (y:t)
+
+    relation succ(X:t,Y:t)
+
+    object spec = {
+
+	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
+
+	instantiate totally_ordered(t)
+
+	after next {
+	    assert x < y & (x < Y -> y <= Y);
+	    assert succ(x,y)
+	}
+	before prev {
+	    assert 0 < x
+	}
+	after prev {
+	    assert y < x & (Y < x -> Y <= y);
+	    assert succ(y,x)
+	}
+    }
+
+    object impl = {
+
+	interpret t -> int
+
+	definition succ(X,Y) = (Y = X + 1)
+
+	implement next {
+	    y := x + 1
+	}
+	implement prev {
+	    y := x - 1
+	}
+    }
+
+    isolate iso = impl,spec
+    
+    # When testing, use the integer implementation.
+
+    attribute test = impl
+
+}
+
+module bounded_sequence(interp) = {
+    
+    type t
+
+    # returns the least key greater than x
+    action next(x:t) returns (y:t)
+
+    # returns the greatest key less than x
+    action prev(x:t) returns (y:t)
+
+    # returns true if key is the maximum value
+    action is_max(x:t) returns (r:bool)
+
+    relation succ(X:t,Y:t)
+
+    object spec = {
+
+	property succ(X,Z) -> (X < Z & ~(X < Y & Y < Z))
+
+	instantiate totally_ordered(t)
+
+	before next {
+	    assert exists S. S > x;
+	}
+	after next {
+	    assert x < y & (x < Y -> y <= Y);
+	    assert succ(x,y)
+	}
+	before prev {
+	    assert 0 < x
+	}
+	after prev {
+	    assert y < x & (Y < x -> Y <= y);
+	    assert succ(y,x)
+	}
+	after is_max {
+	    assert r <-> ~exists S. S > x
+	}
+    }
+
+    object impl = {
+
+	interpret t -> interp
+
+	definition succ(X,Y) = (Y = X + 1 & X < Y)
+
+	implement next {
+	    y := x + 1
+	}
+	implement prev {
+	    y := x - 1
+	}
+	implement is_max {
+	    r := ~(x + 1 > x)
+	}
+    }
+
+    isolate iso = impl,spec
+    
+    # When testing, use the integer implementation.
+
+    attribute test = impl
+
+}
+
+module order_iterator(range) = {
+    type t = struct {
+	is_end : bool,
+	val : range.t
+    }
+
+    definition (X < Y) = ~is_end(X) & is_end(Y) 
+                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
+
+    function done(X,Y) = is_end(Y) | X < val(Y)
+    function ahead(X,Y) = ~is_end(Y) & val(Y) < X
+    function between(X,V,Y) = ~done(V,X) & done(V,Y)
+
+    action create(x:range.t) returns (y:t)
+    action end returns (y:t)
+    
+    object spec = {
+
+	instantiate totally_ordered(range.t)
+
+	after create {
+	    assert ~is_end(y);
+	    assert val(y) = x
+	}
+	after end {
+	    assert is_end(y);
+	    assert val(y) = 0
+	}
+    }
+
+    object impl = {
+	implement create {
+	    is_end(y) := false;
+	    val(y) := x
+	}
+	implement end {
+	    is_end(y) := true;
+	    val(y) := 0
+	}
+    }
+
+    isolate iso = impl,spec with range
+    attribute test = impl
+
+}
+
+module order_iterator_impl(range) = {
+    type t = struct {
+	is_end : bool,
+	val : range.t
+    }
+
+    definition (X < Y) = ~is_end(X) & is_end(Y) 
+                      | ~is_end(X) & ~is_end(Y) & val(X) < val(Y)
+
+    function done(X,Y) = is_end(Y) | X < val(Y)
+    function ahead(X,Y) = ~is_end(Y) & val(Y) < X
+    function between(X,V,Y) = ~done(V,X) & done(V,Y)
+
+    action create(x:range.t) returns (y:t)
+    action end returns (y:t)
+    
+    implement create {
+	is_end(y) := false;
+	val(y) := x
+    }
+    implement end {
+	is_end(y) := true;
+	val(y) := 0
+    }
+
+}
+
+module sequence_iterator(range) = {
+
+    instantiate order_iterator(range)
+
+    action next(x:t) returns (x:t)
+    action prev(x:t) returns (x:t)
+    
+    object spec = {
+	...
+	before next {
+	    assert ~is_end(x)
+	}
+	after next {
+	    assert X <= val(old x) & is_end(x)
+	           | ~(val(old x) < Y & Y < val(x))
+	             & val(old x) < val(x) & ~is_end(x)
+	}
+	before prev {
+	    assert is_end(x) | exists X. X < val(x)
+	}
+	after prev {
+	    assert ~is_end(x);
+	    assert X <= val(x) & is_end(old x)
+	           | ~(val(x) < Y & Y < val(old x))
+	             & val(x) < val(old x) & ~is_end(old x)
+	}
+    }
+
+    object impl = {
+	...
+	implement next {
+	    if range.is_max(val(x)) {
+		x := end
+	    } else {
+		x := create(range.next(val(x)))
+	    }
+	}
+	implement prev {
+	    x := create(range.prev(val(x)))
+	}
+    }
+
+}
+
+################################################################################
+#
+# Queue
+#
+################################################################################
+
+module unbounded_queue(data) = {
+    instance index : unbounded_sequence
+    individual head : index.t
+    individual tail : index.t
+    function contents(X:index.t) : data
+
+    after init {
+	head := 0;
+	tail := 0;
+    }
+    
+    derived empty = tail >= head
+    derived first = contents(tail)
+    
+    # action empty returns (res:bool) = {
+    # 	res := tail >= head;
+    # }
+
+    action push(d:data) = {
+	contents(head) := d;
+	head := head.next;
+    }
+
+    action pop returns (res:data) = {
+	assert ~empty;
+	res := contents(tail);
+	tail := tail.next;
+    }
+    delegate pop
+}

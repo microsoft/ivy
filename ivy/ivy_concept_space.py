@@ -183,7 +183,9 @@ def p_error(p):
     print "Syntax error in input!"
 
 # Build the parser
-parser = yacc.yacc(tabmodule='concept_space_parsetab',errorlog=yacc.NullLogger())
+import os
+tabdir = os.path.dirname(os.path.abspath(__file__))
+parser = yacc.yacc(tabmodule='concept_space_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir)
 
 def to_concept_space(s):
     return parser.parse(s)

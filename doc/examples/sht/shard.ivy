@@ -1,0 +1,29 @@
+#lang ivy1.6
+
+########################################
+# A shard contains an interval of keys [lo,hi) from a hash table
+#
+# It is represented as a struct containing the fields lo and hi, and a
+# key/value array kv that maps keys to their value in the table.
+
+include order
+include collections
+
+module table_shard(key,data) = {
+
+    instance index : unbounded_sequence
+    instance kvt : keyval(index,key.t,data)
+
+    type t = struct {
+	lo : key.iter.t,
+	hi : key.iter.t,
+	kv : kvt.t
+    }
+
+    relation key_at(S:t,I:index.t,X:key.t) = kv(S).key_at(I,X)
+    function value_at(S:t,I:index.t) = kv(S).value_at(I)
+
+    function value(S:t,X:key.t) = some Y. key_at(S,Y,X) in value_at(S,Y) else 0
+    function valid(S:t) = forall X,Y,Z. key_at(S,Y,X) & key_at(S,Z,X) -> Y = Z
+
+}

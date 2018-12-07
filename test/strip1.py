@@ -30,7 +30,7 @@ instance inst(X:foo) : mod(X)
 
 axiom inst(X).r & inst(X).x = X
 
-isolate iso = inst(me)
+isolate iso(me:foo) = inst(me)
 
 export inst.set_me
 """

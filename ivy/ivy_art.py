@@ -3,15 +3,14 @@
 #
 import ivy_actions
 from ivy_interp import *
-from ivy_graph import standard_graph
 import ivy_utils as iu
 import ivy_module as im
 from cy_elements import CyElements
-from dot_layout import dot_layout
 from string import *
 import copy
 import functools
 import pickle
+import ivy_actions
 
 
 ################################################################################
@@ -104,11 +103,19 @@ class AnalysisGraph(object):
         if ic == None:
             ic = im.init_cond
         s = self.domain.new_state(ic)
-        s2 = self.domain.new_state(ic)
-        self.add(s2,s)
+        if self.domain.initializers:
+            action = ivy_actions.Sequence(*[a for n,a in self.domain.initializers])
+            s = action_app(action,s)
+            with AC(self,no_add=True):
+                with EvalContext(check=False):
+                    s2 = eval_state(s)
+            s2.expr = s
+            self.add(s2)
+        else:
+            s2 = self.domain.new_state(ic)
+            self.add(s2,s)
         if abstractor:
             abstractor(s2)
-        print "initial state: {}".format(s2)
 
     def initialize(self, abstractor):
         ac = self.context
@@ -296,7 +303,7 @@ class AnalysisGraph(object):
         self.transitions = [t for t in self.transitions if t[0].id != -1 and t[-1].id != -1]
         self.covering = [t for t in self.covering if t[0].id != -1 and t[-1].id != -1]
 
-    def concept_graph(self,state,clauses=None):
+    def concept_graph(self,state,standard_graph,clauses=None):
         if clauses == None:
             clauses = state.clauses
         bg = self.domain.background_theory(state.in_scope)
@@ -336,16 +343,16 @@ class AnalysisGraph(object):
             state.universe = universe
         return other_art
 
-    def check_bounded_safety(self,state,_get_model_clauses=None):
+    def check_bounded_safety(self,state,_get_model_clauses=None,bound=None):
         postcond = get_state_assertions(state)
         if postcond != None:
-            res = self.bmc(state,postcond,_get_model_clauses=_get_model_clauses)
+            res = self.bmc(state,postcond,_get_model_clauses=_get_model_clauses,bound=bound)
             if res != None:
                 return res
         # currently checks failure only in last action
         if state.expr != None:
             fail = State(expr = fail_expr(state.expr))
-            res = self.bmc(fail,true_clauses(),_get_model_clauses=_get_model_clauses)
+            res = self.bmc(fail,true_clauses(),_get_model_clauses=_get_model_clauses,bound=bound)
             return res
         return True
 
@@ -384,7 +391,6 @@ class AnalysisGraph(object):
     def decompose_state(self,state):
         if hasattr(state,'expr') and state.expr != None:
             other_art = AnalysisGraph(self.domain)
-            print [a for a in other_art.actions]
             with AC(other_art):
                 res = decompose_action_app(state,state.expr)
                 if res != None:
@@ -430,7 +436,7 @@ class AnalysisGraph(object):
                 if not eval_state_order(equation.args[1],fpc[equation.args[0]]):
                     yield equation
 
-    def as_cy_elements(self):
+    def as_cy_elements(self,dot_layout):
         return dot_layout(render_rg(self),edge_labels=True)
 
 def label_from_action(action):

@@ -6,6 +6,9 @@ import string
 import operator
 import functools
 import collections
+import re
+import os
+import platform
 
 # some useful combinators
 
@@ -124,6 +127,14 @@ def partition(things,key):
         res[key(t)].append(t)
     return res
 
+# split a l list into a pair of lists (lp,1n) such that lp has the
+# elements of l satisfying predicate p and ln has the rest.
+
+def split_list(l,p):
+    pl = [p[x] for x in l]
+    return ([x for x,c in zip(l,pl) if c],
+            [x for x,c in zip(l,pl) if not c])
+
 # unique name generation
 
 def constant_name_generator():
@@ -166,6 +177,23 @@ def distinct_obj_renaming(names1,names2):
     rn = UniqueRenamer('',names2)
     return dict((s,s.rename(rn)) for s in names1)
 
+class VariableGenerator(object):
+    def __init__(self):
+        self.used = set()
+    def __call__(self,name = ''):
+        nchars = 1
+        firstchar = name[0].upper() if name else 'A'
+        while True:
+            while firstchar <= 'Z':
+                guess = nchars * firstchar
+                if firstchar != 'O' and guess not in self.used:
+                    self.used.add(guess)
+                    return guess
+                firstchar = chr(ord(firstchar) + 1)
+            firstchar = 'A'
+            nchars += 1
+
+
 class SourceFile(object):
     """ Context Manager that temporarily sets values of parameters by
     name.  See class "Parameter".
@@ -187,34 +215,58 @@ class SourceFile(object):
 
 filename = None
 
+
+def Location(filename=None,line=None):
+    return LocationTuple([filename,line])
+
+class LocationTuple(tuple):
+    @property
+    def filename(self):
+        return self[0]
+    @property
+    def line(self):
+        return self[1]
+    def __str__(self):
+        if platform.system() == 'Windows':
+            res =  (((str(self.filename)) if self.filename else '')
+                    + ('(' + str(self.line) + ')') if self.line else '')
+            if res:
+                res += ': '
+        else:
+            res = ''
+            if self.filename:
+                res += str(self.filename) + ': '
+            if self.line:
+                res += 'line ' + str(self.line) + ': '
+        return res
+
 def lineno_str(ast):
     if not hasattr(ast,'lineno'):
         return ''
-    lineno = ast.lineno
-    filename = None
-    if isinstance(lineno,tuple):
-        filename,lineno = lineno
-    return (((filename + ': ') if filename else '') + "line {}".format(lineno))
+    r = str(ast.lineno)
+    if r.endswith(': '):
+        r = r[:-2]
+    return r
 
 class IvyError(Exception):
     def __init__(self,ast,msg):
-        self.lineno = ast.lineno if hasattr(ast,'lineno') else None
-        if isinstance(self.lineno,tuple):
-            self.filename,self.lineno = self.lineno
+        self.lineno = ast.lineno if hasattr(ast,'lineno') else Location()
         self.msg = msg
         if not catch.get():
-            print repr(self)
+            print str(self)
             assert False
+    def __str__(self):
+        return str(self.lineno) + 'error: ' + self.msg
     def __repr__(self):
-        pre = (self.filename + ': ') if hasattr(self,'filename') and self.filename else ''
-        pre += "line {}: ".format(self.lineno) if self.lineno else ''
-        return (pre + 'error: ' + self.msg)
-    __str__ = __repr__
+        return str(self)
 
 class IvyUndefined(IvyError):
     def __init__(self,ast,name):
-        assert False
+#        assert False
         super(IvyUndefined,self).__init__(ast,"undefined: " + name)
+
+def warn(ast,msg):
+    print str(IvyError(ast,msg)).replace('error: ','warning: ')
 
 # This module provides a generic parameter mechanism similar to
 # "parameterize" in racket. 
@@ -272,6 +324,7 @@ class Parameter(object):
         self.check = check
         self.process = process
         self.key = key
+        self.callback = lambda x:None
         assert key not in registry
         registry[key] = self
 
@@ -282,9 +335,13 @@ class Parameter(object):
         if not self.check(new_val):
             raise IvyError(None,"bad parameter value: {}={}".format(self.key,new_val))
         self.value = self.process(new_val)
+        self.callback(self.value)
 
     def __nonzero__(self):
         return True if self.value else False
+
+    def set_callback(self,callback):
+        self.callback = callback
 
 class BooleanParameter(Parameter):
     """ Parameter that takes "true" for True and "false" for False """
@@ -341,6 +398,9 @@ def pairs_to_dict(pairs,key=lambda x:x):
         d[key(x)].append(y)
     return d
 
+def dict_to_pairs(d):
+    return [(x,y) for x,l in d.iteritems() for y in l]
+
 def topological_sort(items,order,key=lambda x:x):
     """ items is a list, key maps list elements to hashable keys,
     order is a set of pairs of items representing a pre-order.  Returns a
@@ -386,7 +446,7 @@ class ErrorPrinter(object):
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         if exc_type == IvyError or isinstance(exc_val,IvyError):
-            print repr(exc_val)
+            print str(exc_val)
             exit(1)
             return True
         return False # don't block any other exceptions
@@ -399,7 +459,7 @@ class ErrorList(IvyError):
         self.errors = errors
     def __repr__(self):
         pre = (self.filename + ': ') if hasattr(self,'filename') else ''
-        return '\n'.join((repr(e) if hasattr(e,'filename') else pre + repr(e)) for e in self.errors)
+        return '\n'.join((repr(e) if hasattr(e,'filename') else pre + str(e)) for e in self.errors)
     __str__ = __repr__
 
 
@@ -418,30 +478,66 @@ def p_error(token):
         report_error(ParseError(None,None,'unexpected end of input'));
 
 # the default language version is the latest
-ivy_latest_language_version = '1.3'
+ivy_latest_language_version = '1.7'
 ivy_language_version = ivy_latest_language_version
 ivy_compose_character = '.'
 ivy_have_polymorphism = True
+ivy_use_polymorphic_macros = False
+ivy_forbid_ghost_init = False
 
 def set_string_version(version):
     global ivy_language_version
     global ivy_compose_character
     global ivy_have_polymorphism
+    global ivy_use_polymorphic_macros
     ivy_language_version = version
     ivy_compose_character = ':' if get_numeric_version() <= [1,1] else '.'
     ivy_have_polymorphism = not get_numeric_version() <= [1,2]
+    ivy_use_polymorphic_macros = not get_numeric_version() <= [1,5]
+    ivy_forbid_ghost_init = not get_numeric_version() <= [1,6]
     
 def get_string_version():
     return ivy_language_version
 
+def string_version_to_numeric_version(v):
+    return map(int,string.split(v,'.'))
+
 def get_numeric_version():
-    return map(int,string.split(ivy_language_version,'.'))
+    return string_version_to_numeric_version(ivy_language_version)
+
+def version_le(v1,v2):
+    return string_version_to_numeric_version(v1) <= string_version_to_numeric_version(v2)
+
+inc_dir_pat = re.compile(r'[0-9]*\.[0-9]*')
+
+def get_std_include_dir():
+    inc_base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),'include')
+    inc_dir = None
+    for d in os.listdir(inc_base_dir):
+        m = inc_dir_pat.match(d)
+        if (m and m.end() == len(d) and
+              version_le(ivy_language_version,d) and (inc_dir is None or version_le(d,inc_dir))):
+            inc_dir = d
+    if inc_dir is None:
+        raise IvyError(None,'cannot find standard library for language version {}'.format(ivy_language_version))
+    return os.path.join(inc_base_dir,inc_dir)
 
 def compose_names(*names):
+    if names[0] == 'this':
+        return ivy_compose_character.join(names[1:])
     return ivy_compose_character.join(names)
 
 def split_name(name):
     return name.split(ivy_compose_character)
+
+def base_name(name):
+    return split_name(name)[0]
+
+def parent_child_name(name):
+    parts = name.rsplit(ivy_compose_character,1)
+    if len(parts) == 2:
+        return parts
+    return ['this',name]
 
 def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')
@@ -462,25 +558,55 @@ def pretty(s,max_lines=None):
 polymorphic_symbols = set(
     ['<',
     '<=',
+    '>',
+    '>=',
     '+',
     '*',
     '-',
-    '/',]
+    '/',
+    '*>',
+     'bvand',
+     'bvor',
+     'bvnot',
+    ]
 )
 
 use_numerals = BooleanParameter("use_numerals",True)
 use_new_ui = BooleanParameter("new_ui",False)
 catch = BooleanParameter("catch",True)
 
+default_ui = Parameter("ui","art")
+
+def get_default_ui_module():
+    defui = default_ui.get()
+    if defui == "art":
+        defui = 'ivy_ui'
+#        return sys.modules[__name__]
+    else:
+        defui = 'ivy_ui_' + defui
+    return __import__('ivy.'+defui).__dict__[defui]
+    
+def get_default_ui_class():
+    mod = get_default_ui_module()
+    return mod.IvyUI
+
+def get_default_ui_compile_kwargs():
+    mod = get_default_ui_module()
+    return mod.compile_kwargs
+    
+
+enable_debug = BooleanParameter("debug",False)
 
 def dbg(*exprs):
     """Print expressions evaluated in the caller's frame."""
+    assert enable_debug,"must use debug=true to enable debug output"
     import inspect
     frame = inspect.currentframe()
     try:
         locs = frame.f_back.f_locals
+        globs = frame.f_back.f_globals
         for e in exprs:
-            print "{}:{}".format(e,eval(e,globals(),locs))
+            print "{}:{}".format(e,eval(e,globs,locs))
     finally:
         del frame
 

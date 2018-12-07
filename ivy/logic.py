@@ -58,7 +58,7 @@ class EnumeratedSort(recstruct('EnumeratedSort', ['name','extension'], [])):
         return '{' + ','.join(self.extension) + '}'
     @property
     def constructors(self):
-        return [Const(n,self) for n in self.extension]    
+        return [Const(n,self) for n in self.extension]
     @property
     def card(self):
         return len(self.extension)
@@ -77,7 +77,6 @@ class TopSort(recstruct('TopSort', ['name="TopSort"'], [])):
         return self.name != 'TopSort'
 
 TopS = TopSort()
-
 
 def first_order_sort(s):
     return type(s) is not FunctionSort
@@ -117,7 +116,7 @@ class Var(recstruct('Var', ['name', 'sort'], [])):
     def __str__(self):
         return self.name
     def __call__(self, *terms):
-        return Apply(self, *terms)
+        return Apply(self, *terms) if len(terms) > 0 else self
 
 
 class Const(recstruct('Const', ['name', 'sort'], [])):
@@ -130,8 +129,12 @@ class Const(recstruct('Const', ['name', 'sort'], [])):
     def __str__(self):
         return self.name
     def __call__(self, *terms):
-        return Apply(self, *terms)
+        return Apply(self, *terms) if len(terms) > 0 else self
 
+
+def report_bad_sort(op,position,expected,got):
+    raise SortError("in application of {}, at position {}, expected sort {}, got sort {}" 
+                    .format(op,position+1,expected,got))
 
 class Apply(recstruct('Apply', [], ['func', '*terms'])):
     __slots__ = ()
@@ -143,8 +146,6 @@ class Apply(recstruct('Apply', [], ['func', '*terms'])):
         elif type(func.sort) is not FunctionSort:
             raise SortError("Tried to apply a non-function: {}".format(func))
         elif func.sort.arity != len(terms):
-            print func.sort.arity
-            print func.sort
             raise SortError("Bad arity in: {}({})".format(
                 str(func),
                 ', '.join(str(t) for t in terms)
@@ -153,12 +154,8 @@ class Apply(recstruct('Apply', [], ['func', '*terms'])):
             bad_sorts = [i for i in range(func.sort.arity) if
                          terms[i].sort != func.sort.domain[i] and
                          not any(type(t) is TopSort for t in (terms[i].sort, func.sort.domain[i]))]
-            if len(bad_sorts) > 0:
-                raise SortError("Bad sorts in: {}({}) (positions: {})".format(
-                    str(func),
-                    ', '.join(repr(t) for t in terms),
-                    bad_sorts,
-                ))
+            for i in bad_sorts:
+                report_bad_sort(func,i,func.sort.domain[i],terms[i].sort)
         return (func, ) + terms
 
     def __str__(self):
@@ -196,7 +193,7 @@ class Ite(recstruct('Ite', [], ['cond', 't_then', 't_else'])):
     def _preprocess_(cls, cond, t_then, t_else):
         if cond.sort not in (Boolean, TopS):
             raise SortError("Ite condition must be Boolean: {}".format(body))
-        elif TopS in (t_then.sort, t_else.sort):
+        elif isinstance(t_then.sort,TopSort) or isinstance(t_else.sort,TopSort):
             pass
         elif t_then.sort != t_else.sort:
             raise SortError("Ite then and else terms must have same sort: {}, {}".format(t_then, t_else))
@@ -224,6 +221,30 @@ class Not(recstruct('Not', [], ['body'])):
             return 'Not({})'.format(self.body)
 
 
+class Globally(recstruct('Globally', [], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, body):
+        if body.sort not in (Boolean, TopS):
+            raise SortError("Globally body must be Boolean: {}".format(body))
+        return (body,)
+    def __str__(self):
+        return 'Globally({})'.format(self.body)
+
+
+class Eventually(recstruct('Eventually', [], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, body):
+        if body.sort not in (Boolean, TopS):
+            raise SortError("Eventually body must be Boolean: {}".format(body))
+        return (body,)
+    def __str__(self):
+        return 'Eventually({})'.format(self.body)
+
+
 class And(recstruct('And', [], ['*terms'])):
     __slots__ = ()
     sort = Boolean
@@ -236,7 +257,8 @@ class And(recstruct('And', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'And({})'.format(
             ', '.join(str(t) for t in self)
@@ -255,7 +277,8 @@ class Or(recstruct('Or', [], ['*terms'])):
                 ', '.join(str(t) for t in terms),
                 bad_sorts,
             ))
-        return sorted(set(terms))
+        return tuple(terms)
+#        return sorted(set(terms))
     def __str__(self):
         return 'Or({})'.format(
             ', '.join(str(t) for t in self)
@@ -299,6 +322,8 @@ class ForAll(recstruct('ForAll', ['variables'], ['body'])):
     sort = Boolean
     @classmethod
     def _preprocess_(cls, variables, body):
+        if len(variables) == 0:
+            raise IvyError("Must quantify over at least one variable")
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only quantify over variables")
         if body.sort not in (Boolean, TopS):
@@ -315,6 +340,8 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
     sort = Boolean
     @classmethod
     def _preprocess_(cls, variables, body):
+        if len(variables) == 0:
+            raise IvyError("Must quantify over at least one variable")
         if not all(type(v) is Var for v in variables):
             raise IvyError("Can only quantify over variables")
         if body.sort not in (Boolean, TopS):
@@ -326,9 +353,47 @@ class Exists(recstruct('Exists', ['variables'], ['body'])):
             self.body)
 
 
-true = Const('true', Boolean)
-false = Const('false', Boolean)
+class Lambda(recstruct('Lambda', ['variables'], ['body'])):
+    __slots__ = ()
+    sort = Boolean
+    @classmethod
+    def _preprocess_(cls, variables, body):
+        if not all(type(v) is Var for v in variables):
+            raise IvyError("Can only abstract over variables")
+        return tuple(variables), body
+    def __str__(self):
+        return '(Lambda {}. {})'.format(
+            ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
+            self.body)
 
+
+class NamedBinder(recstruct('NamedBinder', ['name', 'variables'], ['body'])):
+    __slots__ = ()
+    @classmethod
+    def _preprocess_(cls, name, variables, body):
+        if not all(type(v) is Var for v in variables):
+            raise IvyError("Can only abstract over variables")
+        # TODO: check the name after we decide on valid names
+        return name, tuple(variables), body
+    def __str__(self):
+        return '(${} {}. {})'.format( # TODO: change after we decide on the syntax for this
+            self.name,
+            ', '.join('{}:{}'.format(v.name, v.sort) for v in sorted(self.variables)),
+            self.body)
+    def __call__(self, *terms):
+        return Apply(self, *terms) if len(terms) > 0 else self
+    sort = property(
+        lambda self:
+        FunctionSort(*([v.sort for v in self.variables] + [self.body.sort]))
+        if len(self.variables) > 0 else
+        self.body.sort
+    )
+
+
+# true = Const('true', Boolean)
+# false = Const('false', Boolean)
+true = And()
+false = Or()
 
 if __name__ == '__main__':
     S = UninterpretedSort('S')
@@ -342,7 +407,7 @@ if __name__ == '__main__':
 
     antisymmetric = ForAll((X, Y), Implies(And(leq(X,Y), leq(Y,X)), Eq(Y,X)))
 
-    assert Eq(X,Y) == Eq(Y,X)
+    # assert Eq(X,Y) == Eq(Y,X)
 
     X, Y = (Var(n, TopS) for n in ['X', 'Y']) # note that Z remains Z:S
     f = Const('f', FunctionSort(TopS, TopS, Boolean))
@@ -357,6 +422,15 @@ if __name__ == '__main__':
     assert contains_topsort(f)
     assert not contains_topsort(g)
     assert contains_topsort(h)
+
+    b = NamedBinder('mybinder', [X,Y,Z], Implies(And(f(X,Y), f(X,Z)), Eq(Y,Z)))
+    print b
+    print b.sort
+    print
+
+    b = NamedBinder('mybinder', [X,Y,Z], Z)
+    print b
+    print b.sort
 
 
     # TODO: add more tests, add tests for errors

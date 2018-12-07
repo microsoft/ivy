@@ -1,0 +1,276 @@
+#lang ivy1.6
+
+# Exercise
+# ========
+#
+# Here is a buggy version of the layered token ring. Look for the bug by
+# testing (don't use diff!).
+#
+# Try testing both the token protocol (`iso_p`) and the transport
+# service (`iso_t`), each in isolation. 
+#
+# Hint:
+# -----
+#
+# You can adjust the amount of testing that is done with
+# command-line options to the tester. For example:
+#
+#     $ ./token_ring_buggy runs=10 iters=100 out=file.iev
+#
+# This will do 10 test runs (each starting from the initial state). Each run
+# will generate 100 test inputs. The log will go to file.iev. You can open
+# file.iev in VS or any text editor to search the log.
+#
+# Also, if you want to log all the state variable updates in the run, add this
+# option to the compilation line (that is, not at run time):
+#
+#     trace=true
+#
+# Further hint:
+# -------------
+#
+# See the bottom of this file for a further hint.
+
+object packet = {
+    type t
+
+    interpret t -> bv[1]
+}
+
+################################################################################
+#
+# Concrete type of node addresses.
+#
+################################################################################
+
+
+object node = {
+    type t
+
+    interpret t -> bv[1]
+
+    action next(x:t) returns (y:t) = {
+	y := x + 1
+    }
+}
+
+
+
+################################################################################
+#
+# The transport service specification
+#
+################################################################################
+
+include queue
+include timeout
+include seqnum
+
+module transport(lower,packet,id) = {
+
+    relation sent(D:id,P:packet)
+
+    action send(src:id,dst:id,pkt:packet)
+    action recv(dst:id,pkt:packet)
+
+    object spec = {
+
+	after init {
+	    sent(D,P) := false
+	}
+
+	before send {
+	    assert ~sent(dst,pkt);
+	    sent(dst,pkt) := true
+	}
+
+	before recv {
+	    assert sent(dst,pkt);
+	    sent(dst,pkt) := false
+	}
+    }
+
+    instance seq_num : sequence_numbers
+
+    # these type describe the format of messages
+    
+    type mtype = {msg_t, ack_t}
+    
+    object net_msg = {
+	type t = struct {
+	    mty : mtype,
+	    src : id,
+	    num : seq_num.t,
+	    payload : packet
+	}
+    }
+
+    object impl(me:id) = {
+
+
+
+	# Create one outgoing message queue for each host
+	# and a timout for each queue.
+
+	instance mq(D:id) : message_queue(net_msg,seq_num)
+	instance timer(D:id) : timeout_sec
+
+	# Keep track of the latest sequence number sent and received
+	# on each channel.
+
+	individual send_seq(S:id) : seq_num.t
+	individual recv_seq(S:id) : seq_num.t
+
+	init recv_seq(S) = 0 & send_seq(S) = 0
+
+	# Implementations of interface actions
+
+	implement send(dst:id,pkt:packet) {
+	    local msg : net_msg.t, seq : seq_num.t {
+		net_msg.mty(msg) := msg_t;
+		net_msg.src(msg) := me;
+		net_msg.num(msg) := send_seq(dst);
+		net_msg.payload(msg) := pkt;
+		send_seq(dst) := seq_num.next(send_seq(dst));
+		call mq(dst).enqueue(msg);
+		call lower.send(me,dst,msg)
+	    }
+	}
+
+	# Receiving a message is the most complicated. First, we send
+	# an ack. Then, if the sequence number is correct, we call the
+	# application layer action determined by the message type.
+
+	implement lower.recv(msg:net_msg.t) {
+	    local src:id,seq:seq_num.t {
+		seq := net_msg.num(msg);
+		src := net_msg.src(msg);
+		if seq <= recv_seq(src) & net_msg.mty(msg) ~= ack_t  {
+		    local ack : net_msg.t {
+			net_msg.mty(ack) := ack_t;
+			net_msg.src(ack) := me;
+			net_msg.num(ack) := seq;
+			call lower.send(me,src,ack)
+		    }
+		};
+		if net_msg.mty(msg) = ack_t {
+		    call mq(src).delete_all(seq)
+		}
+		else if seq >= recv_seq(src) {
+		    recv_seq(src) := seq_num.next(recv_seq(src));
+		    call recv(me,net_msg.payload(msg))
+		}
+	    }
+	}
+
+	# If an outgoing channel times out and the queue is not empty,
+	# we pick an arbitrary message in the queue and retransmit it.
+
+	implement timer.timeout(dst:id) {
+	    if ~mq(dst).empty {
+		call lower.send(me,dst,mq(dst).pick_one)
+	    }
+	}
+
+
+    }
+
+}
+
+instance trans : transport(net,packet.t,node.t)
+
+################################################################################
+#
+# The network service specification
+#
+################################################################################
+
+include udp
+instance net : udp_simple(node.t,trans.net_msg.t)
+
+
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    action grant(v:node.t)                 # grant lock to client
+    action release(v:node.t)               # client releases lock
+
+    object spec = {
+	relation lock(X:node.t)
+	init lock(X) <-> X = 0
+	
+	before grant {
+	    assert ~lock(X);
+	    lock(v) := true
+	}
+	
+	before release {
+	    assert lock(v);
+	    lock(v) := false
+	}
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+object proto(me:node.t) = {
+
+    relation token
+    after init {
+	token := me = 0
+    }
+
+    implement serv.release {
+	if token {
+	    token := false;
+	    local pkt : packet.t {
+		call trans.send(me,node.next(me),pkt)
+	    }
+	}
+    }
+
+    implement trans.recv(pkt:packet.t) {
+	token := true;
+	call serv.grant(me)
+    }
+}
+
+export serv.release
+import serv.grant
+
+trusted isolate iso_p = proto with serv,node,trans
+trusted isolate iso_t = trans with net,node
+trusted isolate iso_n = net with node
+
+#trusted isolate iso_pt = proto with serv,trans.impl,net.impl,node,trans.seq_num,trans.impl.timer
+trusted isolate iso_pt = proto,trans,net,node,trans.impl.timer with serv
+
+extract iso_impl(me:node.t) = proto(me),trans.impl(me),net(me),node,trans.seq_num
+
+# Further hint:
+# -------------
+
+# If you see a bogus message like this:
+#
+#     > trans.recv(0,...)
+#
+# look at the past sequence numbers reveived by process 0. That is, look at
+# the events like this:
+#
+#     > net.recv(0,{mty:msg_t,src:...,num:...,payload:...})
+#
+# Is there something odd about the `num` fields? Does the transport
+# layer respond strangely to this? Why did that happen?
+
+

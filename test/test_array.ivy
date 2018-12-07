@@ -1,0 +1,42 @@
+#lang ivy1.6
+
+include collections
+
+type d
+type r
+
+instance arr : array(d,r)
+
+interpret d -> int
+interpret r -> bv[8]
+
+object p = {
+
+individual a : arr.t
+    action get(x:d) returns (y:r) = {
+	y := arr.get(a,x)
+    }
+
+    action set(x:d,y:r) = {
+	a := arr.set(a,x,y)
+    }
+
+    action create(s:d,v:r) = {
+	a := arr.create(s,v)
+    }
+
+    action size returns (s:d) = {
+	s := arr.size(a)
+    }
+}
+
+export p.get
+export p.set
+export p.create
+export p.size
+export arr.create
+export arr.get
+export arr.size
+export arr.set
+
+extract iso_impl =  p,arr

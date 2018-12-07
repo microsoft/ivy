@@ -341,7 +341,7 @@ interpret data -> {0..1}
 interpret addr -> {0..3}
 interpret id -> {0..2}
 interpret tl_addrhi -> {0..1}
-interpret tl_addrlo -> {0..1}
+interpret tl_addrlo -> bv[1]
 interpret acq_id -> {0..0}
 interpret gnt_id -> {0..0}
 interpret fns_id -> {0..0}

@@ -1,0 +1,21 @@
+#lang ivy1.6
+
+include queue
+include seq_num
+
+instance seq_num : sequence_numbers
+
+object net_msg = {
+    type t = struct {
+	num : seq_num.t
+    }
+}
+
+instance q : message_queue(net_msg,seq_num.t)
+
+isolate iso_q = q.impl with q,net_msg,seq_num
+
+export q.enqueue
+export q.empty
+export q.pick_one
+export q.delete_all

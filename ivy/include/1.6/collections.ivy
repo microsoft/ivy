@@ -1,0 +1,1303 @@
+#lang ivy
+
+################################################################################
+#
+# Arrays
+#
+# Array types represent maps from an interval [0,end) of a type
+# "domain" to a type "range".  An array type thing.t can be created
+# like this:
+#
+#    instance thing : array(domain.t,range.t)
+#
+# The implementation of this type requires that domain.t be
+# interpreted as 'int'.
+
+
+module array(domain,range) = {
+
+    type t
+
+    # return an empty array
+
+    action empty returns (a:t)
+
+    # return an array with end=s and all values mapped to y
+    action create(s:domain,y:range) returns (a:t)
+
+    # mutate an array a so that x in [0,end) maps to y
+    action set(a:t,x:domain,y:range) returns (a:t)
+
+    # get the value y such that x in [0,end) maps to y in array a
+    action get(a:t,x:domain) returns (y:range) 
+
+    # get the value of end
+    action size(a:t) returns (s:domain)
+    
+    # change the size of the array
+    action resize(a:t,s:domain,v:range) returns (a:t)
+
+    # add one element to the array
+    action append(a:t,v:range) returns (a:t)
+
+    ########################################
+    # Representation
+    #
+    # Function "end" gives the end value of an array while value(a,x)
+    # gives the value that x maps to in a.
+
+    function end(A:t) : domain
+    function value(A:t,X:domain) : range
+
+    ########################################
+    # Specification
+    #
+    # Notice that get and set have the precondition that x is in
+    # [0,end).
+
+
+    object spec = {
+	property end(X) >= 0
+
+	after empty {
+	    assert end(a) = 0
+	}
+	before create {
+	    assert 0 <= s
+	}
+	after create {
+	    assert end(a) = s & value(a,X) = y
+	}
+        before set {
+	    assert 0 <= x & x < end(a)
+	}	       	 
+	after set {
+            assert end(a) = end(old a);
+	    assert value(a,X) = y if X = x else value(old a,X)
+	}
+	before get {
+	    assert 0 <= x & x < end(a)
+	}
+	after get {
+	    assert value(a,x) = y
+	}
+	after size {
+	    assert s = end(a)
+	}
+	after resize {
+	    assert end(a) = s;
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert end(old a) <= X & X < s -> value(a,X) = v
+	}
+	after append {
+	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert value(a,end(old a)) = v
+	}
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
+
+	implement create {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+
+	implement resize {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
+	implement append {
+	    <<<
+	        `a`.push_back(`v`);
+            >>>
+        }
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '[';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << ',';
+		    s << a[i];
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+	        a.resize(arg.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<`range`>(arg.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<`t`>( gen &g, const  z3::expr &v,`t` &res){
+	        `domain` __end;
+	        __from_solver(g,g.apply("`end`",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<`t`>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("`domain`"),__sz);
+                z3::expr pred =  g.apply("`end`",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<`range`>(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)));
+	    }
+	    #endif
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+
+    attribute test = impl
+}
+
+################################################################################
+#
+# Option types
+#
+# An option is either empty or has value or type range_t.
+
+module option(range_t) = {
+
+    type domain_t
+
+    instantiate array(domain_t,range_t)
+
+    # True if the option is empty
+    derived is_empty(X:t) = (end(X) = 0)
+
+    # If not empty, gives the value
+    derived contents(X:t) = value(X,0)
+
+    action just(inp:range_t) returns(out:t) = {
+        out := create(1,inp);
+    }
+
+    interpret domain_t -> bv[1]
+}
+
+################################################################################
+#
+# Null number types 
+#
+# A Null number type is one that has a special value representing "not a number".
+# The "not a number" value is encoded as the constant `null_value`.
+
+module null_type(range_t,null_value) = {
+
+    type t = struct {
+        is_null : bool,
+	contents : range_t
+    }
+
+    <<< encode `t`
+
+	std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	    if (a.is_null)
+	        s << "`null_value`";
+	    else
+	        s << a.contents;
+	    return s;
+	}
+
+	template <>
+	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    ivy_value &arg = args[idx];
+	    if (arg.fields.size()) 
+		throw out_of_bounds(idx);
+	    `t` a;
+	    a.is_null = (arg.atom == "`null_value`");
+	    a.contents = _arg<`range_t`>(args,idx,bound);
+	    return a;
+	}
+
+	template <>
+	void  __ser<`t`>(ivy_ser &res, const `t` &t){
+	    if (t.is_null)
+	        res.set((long long)strtoull("`null_value`",NULL,0));
+	    else
+	        __ser(res,t.contents);
+	}
+
+	template <>
+	void __deser<`t`>(ivy_deser &inp, `t` &res){
+	    long long val;
+	    inp.get(val);
+	    res.is_null = (val == (long long)strtoull("`null_value`",NULL,0));
+	    std::vector<ivy_value> args;
+	    args.resize(1);
+	    std::ostringstream sts;
+	    sts << val;
+	    args[0].atom = sts.str();
+	    res.contents = _arg<`range_t`>(args,0,0);	    
+        }
+    >>>
+}
+
+
+################################################################################
+#
+# Paths
+#
+# A path is similar to an array but differs in the way it is serialized.
+# That is, a path with elements e_0, e_1, ... is serialized as a string of
+# the form "e_0/e_1/...". To prevent misinterpretation, a separator character
+# '/' is replaced by '\/' and '\' by '\\'. Also, string quatation marks '"' are
+# elided from e_0, e_1 ... A further difference between paths and strings is
+# that paths are extensional -- if two paths have the same sequence of elements,
+# they are equal. This means that to stay decidable, the index type of paths must
+# be finite.
+#
+# A path type thing.t can be created
+# like this:
+#
+#    instance thing : path(domain.t,range.t)
+#
+# The implementation of this type requires that domain.t be
+# interpreted as an integer type.
+
+
+module path(domain,range) = {
+
+    type t
+
+    # return an empty array
+
+    action empty returns (a:t)
+
+    # return an array with end=s and all values mapped to y
+    action create(s:domain,y:range) returns (a:t)
+
+    # mutate an array a so that x in [0,end) maps to y
+    action set(a:t,x:domain,y:range) returns (a:t)
+
+    # get the value y such that x in [0,end) maps to y in array a
+    action get(a:t,x:domain) returns (y:range) 
+
+    # get the value of end
+    action size(a:t) returns (s:domain)
+    
+    # change the size of the array
+    action resize(a:t,s:domain,v:range) returns (a:t)
+
+    # add one element to the array
+    action append(a:t,v:range) returns (a:t)
+
+    ########################################
+    # Representation
+    #
+    # Function "end" gives the end value of an array while value(a,x)
+    # gives the value that x maps to in a.
+
+    function end(A:t) : domain
+    function value(A:t,X:domain) : range
+
+    ########################################
+    # Specification
+    #
+    # Notice that get and set have the precondition that x is in
+    # [0,end).
+
+    property [extensionality]
+       forall X,Y. (end(X) = end(Y))
+                   & (forall I. (I < end(X) -> value(X,I) = value(Y,I)))
+                   -> X = Y
+
+    object spec = {
+	property end(X) >= 0
+
+	after empty {
+	    assert end(a) = 0
+	}
+	before create {
+	    assert 0 <= s
+	}
+	after create {
+	    assert end(a) = s & value(a,X) = y
+	}
+        before set {
+	    assert 0 <= x & x < end(a)
+	}	       	 
+	after set {
+	    assert value(a,X) = y if X = x else value(old a,X)
+	}
+	before get {
+	    assert 0 <= x & x < end(a)
+	}
+	after get {
+	    assert value(a,x) = y
+	}
+	after size {
+	    assert s = end(a)
+	}
+	after resize {
+	    assert end(a) = s;
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert end(old a) <= X & X < s -> value(a,X) = v
+	}
+	after append {
+	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert value(a,end(old a)) = v
+	}
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
+
+	implement create {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+
+	implement resize {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
+	implement append {
+	    <<<
+	        `a`.push_back(`v`);
+            >>>
+        }
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '\"';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    if (i != 0)
+		        s << '/';
+		    std::ostringstream os;
+		    os << a[i];
+		    std::string st = os.str();
+		    for (unsigned j = 0; j < st.size(); j++) {
+		        char c = st[j];
+			if (c == '/')
+			    s << "\\/";
+			else if (c == '\\')
+			    s << "\\\\";
+			else if (c != '\"')
+			    s << c;
+		    }
+		}
+	        s << '\"';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.fields.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+		ivy_value tmp;
+		tmp.fields.resize(1);
+		std::string str = arg.atom;
+		for (unsigned i = 0; i < str.size(); i++) {
+		    char c = str[i];
+		    if (c == '\\' && i+1 < str.size())
+	                tmp.fields.back().atom.push_back(str[++i]);
+                    else if (c == '/')
+		        tmp.fields.resize(tmp.fields.size()+1);
+		    else if (c != '\"')
+                        tmp.fields.back().atom.push_back(c);
+                }			
+	        a.resize(tmp.fields.size());
+		for (unsigned i = 0; i < a.size(); i++) {
+		    a[i] = _arg<`range`>(tmp.fields,i,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        z3::expr cond = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        for (unsigned i = 0; i < val.size(); i++)
+		    cond = cond && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),i)),val[i]);
+	        return cond;
+            }
+
+	    template <>
+	    void  __from_solver<`t`>( gen &g, const  z3::expr &v,`t` &res){
+	        `domain` __end;
+	        __from_solver(g,g.apply("`end`",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<`t`>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("`domain`"),__sz);
+                z3::expr pred =  g.apply("`end`",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<`range`>(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)));
+	    }
+	    #endif
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+}
+
+################################################################################
+#
+# Maps. 
+#
+# This module provides a relational model of a function from a type
+# dom to a type rng. Initially, everything is mapped to the element zero.
+# 
+# The key invariant of a map is that it is a function, i.e., for every
+# X there exists a Y such that map(X,Y). The module does not state
+# this invariant, however, since the quantifier alternation could
+# destroy stratification.  Instead it provides a "lemma" that allows
+# the user to instantiate Y for particular values of X.
+#
+# Parameters:
+#
+#  dom        The domain type
+#  rng        The range type
+#  zero       The initial value for every domain element
+
+module map(dom,rng,zero) = {
+
+    relation map(X:dom,Y:rng)
+
+    action set_(x:dom,y:rng)
+    # get the value of x
+    action get(x:dom) returns (y:rng)
+    # prove there exists a value for x
+    action lemma(x:dom)
+
+    object spec = {
+	init map(X,Y) <-> Y = zero
+
+	implement set_(x:dom,y:rng) {
+	    call lemma(x);
+	    map(x,Y) := Y = y
+	}
+	implement get(x:dom) returns (y:rng) {
+	    assume map(x,y)
+	}
+	implement lemma(x:dom) {
+	    assume exists Y. map(x,Y)
+	}
+    }
+    conjecture map(K,L) & map(K,M) -> L = M
+}
+
+################################################################################
+#
+# Partial functions
+#
+# This module represents a mutable partial function type dom to type
+# rng. The state consists of relation map that stores the function as
+# a set of tuples, and an auxiliary set pre that gives the pre-image.
+#
+################################################################################
+
+module partial_function(dom,rng) = {
+
+    relation map(X:dom,Y:rng)
+    relation pre(X:dom) 
+
+    # mutate the function so x maps to y
+    action remap(x:dom,y:rng)
+
+    # remove an element from the pre-image
+    action remove(x:dom)
+
+    # get the value of x, if any
+    action get(x:dom) returns (y:rng)
+
+    # true if x is in the pre-image
+    action present(x:dom) returns (r:bool)
+    
+    # if x in pre, there exists a y such that map(x,y)
+    action lemma(x:dom)
+
+    object spec = {
+	init ~map(X,Y)
+
+	implement remap {
+	    call lemma(x);
+	    map(x,Y) := Y = y;
+	    pre(x) := true
+	}
+
+	implement remove {
+	    call lemma(x);
+	    map(x,Y) := false;
+	    pre(x) := false
+	}
+
+	after get {
+	    assume pre(x) -> map(x,y)
+	}
+
+	after present {
+	    assume r = pre(x)
+	}
+
+	implement lemma(x:dom) {
+	    assume pre(x) -> exists Y. map(x,Y)
+	}
+    }
+
+    conjecture map(K,L) & map(K,M) -> L = M
+
+}
+
+################################################################################
+#
+# Witness
+#
+# This is similar to partial_function, but has no domain. Useful for storing a witness
+# to an existential quantifier without creating a function cycle.
+#
+################################################################################
+
+module witness(rng) = {
+
+    action set(v:rng)
+
+    action get returns (v:rng)
+
+    action is_empty returns (r:bool)
+
+    action clear 
+
+    relation is(Y:rng)
+
+    relation present
+
+    object spec = {
+
+	after init {
+	    is(Y) := false;
+	    present := false
+	}
+
+	after set {
+	    is(Y) := Y = v;
+	    present := true
+	}
+
+	after get {
+	    assert present -> is(v)
+	}
+
+	after clear {
+	    is(Y) := false;
+	    present := false
+	}
+
+	after is_empty {
+	    assert r <-> ~present
+	}
+    }
+
+    object impl = {
+	relation full
+	individual val : rng
+
+	after init {
+	    full := false
+	}
+
+	implement set {
+	    val := v;
+	    full := true
+	}
+	implement get {
+	    v := val
+	}
+	implement clear {
+	    full := false
+	}
+	implement is_empty {
+	    r := ~full
+	}
+
+	conjecture (present <-> full) & (full -> is(val))
+    }
+
+    isolate iso = this
+
+    attribute test = impl
+}
+
+# This module makes a relation functional, meaning that it
+# is total and injective. 
+
+module functional(rel) = {
+    property [totality] exists Y. rel(X,Y)
+    property [injectivity] rel(X,Y) & rel(X,Z) -> Y = Z
+}
+
+# This module makes a relation inverse functional, meaning that its
+# transpose is total and injective. 
+
+module inverse_functional(rel) = {
+    property [totality] exists Y. rel(Y,X)
+    property [injectivity] rel(Y,X) & rel(Z,X) -> Y = Z
+}
+
+module set_wrapper(key) = {
+
+    object s = {}
+
+    <<< header
+	#include <set>
+    >>>
+
+    <<< member
+	std::set<`key`> `s`;
+    >>>
+
+    <<< init
+        `s`.insert(0);
+    >>>
+
+    implement insert(x:key) {
+	<<<
+	    `s`.insert(`x`);
+	>>>
+    }
+
+    implement erase(lo:key,hi:key) {
+	<<<
+            `s`.erase(`s`.lower_bound(`lo`),`s`.upper_bound(`hi`));
+	>>>
+    }
+
+    implement get_glb(k:key) returns (res:key) {
+	<<<
+            `res` = *(--`s`.upper_bound(`k`));
+	>>>
+	
+    }
+
+
+}
+
+################################################################################
+#
+# Ordered set representation
+#
+# This is intended to be implemented using the STL set template.
+#
+# Ordered sets assume the element type has a total non-strict order,
+# with a least element 0.  They provide insertion of elements (in log
+# time), deletion of ranges (in n log(n) time) and finding greatest
+# lower bounds (log n).
+# 
+# For help with proofs, this module also provides an auxiliary map
+# "succ" that gives the successor of every element in the set. The
+# "successor" of the maximal element in the set is 0.
+
+module ordered_set(key) = {
+
+    action insert(nkey:key)
+    action erase(lo:key,hi:key)
+    action get_glb(k:key) returns (res:key)
+
+    relation s(K:key)
+
+    instantiate succ : map(key,key,0) # ghost
+
+    object spec = {
+	init s(K) <-> K = 0
+	# insert one element
+	before insert {
+	    s(nkey) := true;
+
+	    # following is ghost code to update the successor relation
+	    local v:key {
+		if some lub:key. ~(lub <= nkey) & s(lub) minimizing lub {
+		    v := lub
+		}
+		else {
+		    v := 0
+		};
+		call succ.set_(nkey,v)
+	    };
+	    if some glb:key. ~(nkey <= glb) & s(glb) maximizing glb {
+		call succ.lemma(glb); # instantiate succ(glb)
+		call succ.set_(glb,nkey)
+	    }
+	}
+
+	# erase elements in a closed interval
+	before erase {
+	    s(K) := s(K) & ~(lo <= K & K <= hi)
+	}
+
+	# the the greatest element <= k
+	after get_glb {
+	    if some glb:key. glb <= k & s(glb) maximizing glb {
+		call succ.lemma(glb); # instantiate succ(glb)
+		assume res = glb
+	    }
+	}
+    }
+
+    # Useful invariants of the "succ" relation. The successor of K is
+    # also in the set, and nothing between K and its successor is in
+    # the set. Here, if L = 0 it means K is the maximim element, so we
+    # have to treat this as a special case.
+
+    conjecture s(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & s(L)
+    conjecture s(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~s(M)
+
+    instance impl : set_wrapper(key)
+
+}
+
+module map_wrapper(key,value) = {
+
+    object s = {}
+
+    <<< header
+	#include <map>
+    >>>
+
+    <<< member
+	std::map<`key.t`,`value`> `s`;
+    >>>
+
+    <<< init
+    >>>
+
+    implement set(x:key.t,y:value) {
+	<<<
+	    `s`[`x`] = `y`;
+	>>>
+    }
+
+    implement get(x:key.t,def:value) returns (y:value) {
+	<<<
+	    std::map<`key.t`,`value`>::iterator it = `s`.find(`x`);
+	    if (it == `s`.end()) {
+	        `y` = `def`;
+	    } else {
+	        `y` = it->second;
+	    }
+	>>>
+    }
+
+    implement erase(lo:key.iter.t,hi:key.iter.t) {
+	<<<
+
+
+	    if (!`lo`.is_end && (`hi`.is_end || `lo`.val < `hi`.val))
+              `s`.erase(`lo`.is_end ? `s`.end() : `s`.lower_bound(`lo`.val),
+ 	                `hi`.is_end ? `s`.end() : `s`.lower_bound(`hi`.val));
+
+	>>>
+    }
+
+    # implement begin(k:key.t) returns (res:key.iter.t) {
+    # 	<<<
+    # 	    std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`k`);
+    # 	    if (__it == `s`.end()) {
+    # 	        `res`.is_end = true;
+    # 	        `res`.val = 0;
+    # 	    } else {
+    #             `res`.is_end = false;
+    # 	        `res`.val = __it->first;
+    # 	    }
+    # 	>>>
+	
+    # }
+
+    implement lub(it:key.iter.t) returns (res:key.iter.t) {
+	<<<
+	    if (`it`.is_end) {
+	     	`res`.is_end = true;
+	        `res`.val = 0;
+	    } else {
+		std::map<`key.t`,`value`>::iterator __it = `s`.lower_bound(`it`.val);
+		if (__it == `s`.end()) {
+		    `res`.is_end = true;
+		    `res`.val = 0;
+		} else {
+		    `res`.is_end = false;
+		    `res`.val = __it->first;
+		}
+	    }
+	>>>
+	
+    }
+
+    implement glb(it:key.iter.t) returns (res:key.iter.t) {
+	<<<
+	    std::map<`key.t`,`value`>::iterator __it = `it`.is_end ? `s`.end() : `s`.upper_bound(`it`.val);
+	    `res`.is_end = false;
+            `res`.val = (--__it)->first;
+	>>>
+	
+    }
+
+    implement next(inp:key.iter.t) returns (res:key.iter.t) {
+	<<<
+	    std::map<`key.t`,`value`>::iterator __it = `s`.upper_bound(`inp`.val);
+	    if (__it == `s`.end()) {
+	        `res`.is_end = true;
+	        `res`.val = 0;
+	    } else {
+                `res`.is_end = false;
+	        `res`.val = __it->first;
+	    }
+	>>>
+    }
+
+    action show = {
+	<<<
+            std::cout << "{";
+	    for(std::map<`key.t`,`value`>::iterator __it = `s`.begin(), __en = `s`.end(); __it != __en; ++__it)
+	        std::cout << __it->first << ":" << __it->second << ",";
+            std::cout << "}" << std::endl;
+	>>>
+
+    }
+}
+
+################################################################################
+#
+# Ordered map representation
+#
+# This is intended to be implemented using the STL map template.
+#
+# Ordered maps assume the key type has a total non-strict order, with
+# a least element 0 and iteration.  They provide insertion of
+# key/value pairs (in log time), deletion of ranges of keys (in n
+# log(n) time) and iteration.
+# 
+# For help with proofs, this module also provides an auxiliary map
+# "succ" that gives the successor of every element in the map. The
+# "successor" of the maximal element in the map is 0.
+
+module ordered_map(key,value) = {
+
+    # set the value of key k
+    action set(nkey:key.t,v:value)
+
+    # is the key present in the map?
+    action present(k:key.t) returns (ans:bool)
+
+    # get the value of key k or zero
+    action get(k:key.t,def:value) returns (v:value)
+
+    # remove all leys in range [lo,hi]
+    action erase(lo:key.iter.t,hi:key.iter.t)
+
+    # get least iterator >= it
+    action lub(it:key.iter.t) returns (res:key.iter.t)
+
+    # get least iterator >= it
+    action glb(it:key.iter.t) returns (res:key.iter.t)
+
+    # iterator least key > iter or end
+    action next(it:key.iter.t) returns (res:key.iter.t)
+
+    relation contains(K:key.t)
+    relation maps(K:key.t,V:value)
+
+    function gap(k:key.iter.t,m:key.iter.t) =
+              forall L. ~(key.iter.ahead(L,k) & key.iter.done(L,m) & contains(L))
+
+    object spec = {
+
+	init ~contains(K) & ~maps(K,V)
+
+	property gap(W,X) & gap(Y,Z) & Y < X -> gap(W,Z)
+	property gap(W,X) & W <= Y & Z <= X -> gap(Y,Z)
+	property gap(K,M) -> ~(key.iter.ahead(L,K) & key.iter.done(L,M) & contains(L))
+
+	# insert one element
+	before set {
+	    contains(nkey) := true;
+	    maps(nkey,X) := X = v
+	}
+
+
+	after set {
+	    local it:key.iter.t {
+		it := key.iter.create(nkey);
+		assert gap(X,Y) <-> old gap(X,Y) & ~(X < it & it < Y)
+	    }
+	}
+
+	after get {
+	    assert maps(k,v) & contains(k) | ~contains(k) & v = def
+	}
+
+	# erase elements in a closed interval
+	before erase {
+	    contains(K) := contains(K) & ~key.iter.between(lo,K,hi);
+	    maps(K,V) := maps(K,V) & ~key.iter.between(lo,K,hi)
+	}
+
+	after erase {
+	    assert gap(X,Y) <-> (old gap(X,Y)
+	                         | old gap(X,lo) & old gap(hi,Y)
+                                   & (Y < hi | key.iter.is_end(hi) | ~contains(key.iter.val(hi))))
+	}
+
+	after lub {
+	    assert it <= res;
+	    assert key.iter.between(it,X,res) -> ~contains(X);
+	    assert key.iter.is_end(res) | (contains(key.iter.val(res))
+	                                   & exists Y. maps(key.iter.val(res),Y))
+#		assert succ(K,key.iter.val(res)) -> done(K,it)
+	}
+
+	before glb {
+	    assert exists K. (~key.iter.ahead(K,it) & contains(K))
+	}
+
+	after glb {
+	    assert res <= it & contains(key.iter.val(res));
+	    assert exists U. (gap(res,U) & key.iter.between(res,key.iter.val(it),U))
+	}
+
+	before next {
+	    assert it < key.iter.end
+	}
+
+	after next {
+	    assert it < res & gap(it,res);
+	    assert key.iter.is_end(res) | contains(key.iter.val(res))
+	}
+
+    }
+
+
+    # Useful invariants of the "succ" relation. The successor of K is
+    # also in the map, and nothing between K and its successor is in
+    # the map. Here, if L = 0 it means K is the maximim element, so we
+    # have to treat this as a special case.
+
+#    conjecture contains(K) & succ.map(K,L) & L ~= 0 -> ~(L <= K) & contains(L)
+#    conjecture contains(K) & succ.map(K,L) & ~(M <= K) & (L = 0 | ~(L <= M)) -> ~contains(M)
+
+    # Mapping relation R is injective
+
+    conjecture maps(X,Y) & maps(X,Z) -> Y = Z
+
+    # Maps implies contains
+
+    conjecture maps(X,Y) -> contains(X)
+
+    instance impl : map_wrapper(key,value)
+
+    trusted isolate iso = impl,spec
+
+}
+
+
+module ordered_map_impl(key,value) = {
+
+    # set the value of key k
+    action set(nkey:key.t,v:value)
+
+    # is the key present in the map?
+    action present(k:key.t) returns (ans:bool)
+
+    # get the value of key k or zero
+    action get(k:key.t,def:value) returns (v:value)
+
+    # remove all leys in range [lo,hi]
+    action erase(lo:key.iter.t,hi:key.iter.t)
+
+    # get least iterator >= it
+    action lub(it:key.iter.t) returns (res:key.iter.t)
+
+    # get least iterator >= it
+    action glb(it:key.iter.t) returns (res:key.iter.t)
+
+    # iterator least key > iter or end
+    action next(it:key.iter.t) returns (res:key.iter.t)
+
+    instantiate map_wrapper(key,value)
+}
+
+################################################################################
+#
+# Key/value arrays
+#
+# This modules implements arrays of key/value pairs. The keys are specified
+# relationally so that one can write properties such as "for every key satisfying
+# predicate p, there exists an element having that key". On the other hand, the
+# values are specified funcitonally, so one can easily retreive the value associated
+# to a particular key.
+#
+# The parameters of this module are:
+#
+# index : the index structure, as in "array"
+# key : the key type
+# data : the value type
+#
+# The available methods are:
+#
+# empty : returns an empty array
+# end : returns the index one after the last element
+# get_key : gets the key at an index
+# get_value : gets the value at and index
+# append_pair : appends a key/value pair
+#
+# Typical code to look up the value of a key k in array a would be:
+#
+# if some (i : index.t) a.key_at(i,k) {
+#     var v := a.value_at(i);
+#     ... use value v ...
+# } else {
+#     ... k is not present ...
+# }
+
+module keyval(index,key,data) = {
+
+    type t 
+
+    function end(A:t) : index.t
+    relation key_at(A:t, I:index.t, X:key)
+    function value_at(A:t, I:index.t) : data
+    
+    action empty returns (s:t)
+    action get_key(s:t, i:index.t) returns (k:key)
+    action get_value(s:t, i:index.t) returns (d:data)
+    action append_pair(s:t, k:key, d:data) returns (s:t)
+
+    object spec = {
+
+        property key_at(A,I,X) -> 0 <= I & I < end(A)
+        property key_at(A,I,X) & key_at(A,I,Y) -> X = Y
+        property 0 <= end(A) 
+
+        after empty {
+            assert s.end = 0 & ~key_at(s,I,X)
+        }
+        before get_key {
+            assert 0 <= i & i < s.end
+        }
+        after get_key {
+            assert key_at(s,i,k)
+        }
+        before get_value {
+            assert 0 <= i & i < s.end
+        }
+        after get_value {
+            assert value_at(s,i) = d
+        }
+        after append_pair {
+            assert key_at(s,I,X) <-> key_at(old s,I,X) | I = end(old s) & X = k;
+            assert key_at(old s,I,X) -> value_at(s,I) = value_at(old s,I);
+            assert value_at(s,end(old s)) = d
+        }
+    }
+
+    object impl = {
+
+        type pair = struct {
+            p_key : key,
+            p_value : data
+        }
+
+        instance arr : array(index.t,pair)
+
+        destructor repr(X:t) : arr.t
+
+        definition end(A:t) = repr(A).end
+        definition value_at(A,I) = repr(A).value(I).p_value
+        definition key_at(A,I,X) = (0 <= I & I < end(A) & repr(A).value(I).p_key = X)
+        
+        implement empty {
+            repr(s) := arr.empty
+        }
+        implement get_key {
+            k := repr(s).get(i).p_key
+        }
+        implement get_value {
+            d := repr(s).get(i).p_value
+        }
+        implement append_pair {
+            var p : pair;
+            p.p_key := k;
+            p.p_value := d;
+            repr(s) := repr(s).append(p)
+        }
+    }
+    isolate iso = this with index
+}

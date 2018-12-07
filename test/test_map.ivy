@@ -1,0 +1,25 @@
+#lang ivy1.6
+
+include order
+include collections
+
+
+object key = {
+    type t
+    instantiate totally_ordered(t)
+    instance iter : order_iterator(t)
+}
+
+type value
+
+instance foo : ordered_map(key,value)
+
+interpret key.t -> bv[2]
+interpret value -> bv[2]
+
+export foo.set
+export foo.get
+export foo.erase
+export foo.begin
+export foo.next
+

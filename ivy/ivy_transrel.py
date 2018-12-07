@@ -32,7 +32,7 @@ from ivy_utils import UniqueRenamer, union_to_list, list_union, list_diff, IvyEr
 from ivy_logic import Variable, Constant, Literal, Atom, Not, And, Or,App, RelationSort, Definition, is_prenex_universal
 from ivy_logic_utils import used_symbols_clauses, rename_clauses, clauses_using_symbols, simplify_clauses,\
     used_variables_clauses, used_constants_clauses, substitute_constants_clause, substitute_constants_clauses, constants_clauses,\
-    relations_clauses, eq_lit, condition_clauses, or_clauses, and_clauses, false_clauses, true_clauses,\
+    relations_clauses, eq_lit, condition_clauses, or_clauses, ite_clauses, and_clauses, false_clauses, true_clauses,\
     formula_to_clauses, clauses_to_formula, formula_to_clauses_tseitin, is_ground_clause, \
     relations_clause, Clauses, sym_inst, negate_clauses, negate
 from ivy_solver import unsat_core, clauses_imply, clauses_imply_formula, clauses_sat, clauses_case, get_model_clauses, clauses_model_to_clauses, get_small_model
@@ -74,6 +74,16 @@ def is_skolem(sym):
     Symbols with __ in them in the TR are considerd to be implicitly existentially quantified.
     """
     return sym.contains('__')
+
+def is_global_skolem(sym):
+    """
+    Global skolems are essentially prophesy variables. That is, they represent existential
+    quantifiers outside the scope of the temporal "globally" and hence are constants over time.
+    That means they don't get renamed when composing transition relations sequentially.
+
+    Global skolems have names of the form '__X...' where X is a capitol letter.
+    """
+    return sym.startswith('__') and len(sym.name) > 2 and sym.name[2].isupper()
 
 def null_update():
     return ([],true_clauses(),false_clauses())
@@ -188,6 +198,33 @@ def join(s1,s2,relations,op):
     p = or_clauses(p1,p2)
     return (u,c,p)
 
+def ite(cond,s1,s2,relations,op):
+    u1,c1,p1 = s1
+    u2,c2,p2 = s2
+    df12 = diff_frame(u1,u2,relations,op)
+    df21 = diff_frame(u2,u1,relations,op)
+    c1 = and_clauses(c1,df12)
+    c2 = and_clauses(c2,df21)
+    p1 = and_clauses(p1,df12)
+    p2 = and_clauses(p2,df21)
+    u = updated_join(u1,u2)
+    c = ite_clauses(cond,[c1,c2])
+    p = ite_clauses(cond,[p1,p2])
+    return (u,c,p)
+
+
+# Bind the "old" symbols to their current values in an action
+# In practice, this just means dropping the "old" prefix.
+
+def bind_olds_clauses(clauses):
+    subst = dict((s,old_of(s)) for s in used_symbols_clauses(clauses) if is_old(s))
+    return rename_clauses(clauses,subst)
+    
+def bind_olds_action(action):
+    u,c,p = action
+    res = (u,bind_olds_clauses(c),bind_olds_clauses(p))
+    return res
+
 class CounterExample(object):
     def __init__(self,clauses):
         self.clauses = clauses
@@ -231,6 +268,9 @@ def join_state(s1,s2,relations):
 def join_action(s1,s2,relations):
     return join(s1,s2,relations,new)
 
+def ite_action(cond,s1,s2,relations):
+    return ite(cond,s1,s2,relations,new)
+
 def condition_update_on_fmla(update,fmla,relations):
     """Given an update, return an update conditioned on fmla. Maybe an "else" would
     be useful too :-).
@@ -253,23 +293,30 @@ def rename_distinct(clauses1,clauses2):
     rn = UniqueRenamer('',used2)
     map1 = dict()
     for s in used1:
-        if is_skolem(s):
+        if is_skolem(s) and not is_global_skolem(s):
             map1[s] = rename(s,rn)
     return rename_clauses(clauses1,map1)
 
-# TODO: this will be quadratic for chains of updates
+#
+# With errf = True, we use the "error flag" construction.
+# In this case, the transition relation and the "precondition"
+# are compose in the same way. Without this flag the composition
+# is quadratic, which doesn't work for action with many assertions.
+# 
 
-def compose_updates(update1,axioms,update2):
+def compose_updates(update1,axioms,update2,errf=False):
     updated1, clauses1, pre1 = update1
     updated2, clauses2, pre2 = update2
     clauses2 = rename_distinct(clauses2,clauses1)
-    pre2 = rename_distinct(pre2,clauses1)
+    pre2 = rename_distinct(pre2, pre1 if errf else clauses1)
 #    print "clauses2 = {}".format(clauses2)
     us1 = set(updated1)
     us2 = set(updated2)
     mid = us1.intersection(us2)
     mid_ax = clauses_using_symbols(mid,axioms)
     used = used_symbols_clauses(and_clauses(clauses1,clauses2))
+    if errf: # this protects err$flag
+        used.update(used_symbols_clauses(and_clauses(pre1,pre2)))
     rn = UniqueRenamer('__m_',used)
     map1 = dict()
     map2 = dict()
@@ -279,14 +326,26 @@ def compose_updates(update1,axioms,update2):
         mvf = rename(mv,rn)
         map1[new(mv)] = mvf
         map2[mv] = mvf
+#    iu.dbg('clauses1')
+#    iu.dbg('clauses1.annot')
     clauses1 = rename_clauses(clauses1,map1)
-    new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2))
+    annot_op = lambda x,y: x.compose(y) if x is not None and y is not None else None
+    new_clauses = and_clauses(clauses1, rename_clauses(and_clauses(clauses2,mid_ax),map2),annot_op=annot_op)
     new_updated = list(us1.union(us2))
 #    print "pre1 before = {}".format(pre1)
-    pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
-#    print "pre1 = {}".format(pre1)
-    new_pre = or_clauses(pre1,and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2)))
+#    iu.dbg('pre1.annot')
+#    iu.dbg('pre1')
+    if errf:
+        pre1 = rename_clauses(pre1,map1)
+        new_pre = and_clauses(pre1, rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=annot_op)
+    else:
+        pre1 = and_clauses(pre1,diff_frame(updated1,updated2,None,new))  # keep track of post-state of assertion failure
+        temp = and_clauses(clauses1,rename_clauses(and_clauses(pre2,mid_ax),map2),annot_op=my_annot_op)
+        new_pre = or_clauses(pre1,temp)
+#    iu.dbg('new_pre.annot')
 #    print "new_pre = {}".format(new_pre)
+#    iu.dbg('new_clauses')
+#    iu.dbg('new_clauses.annot')
     return (new_updated,new_clauses,new_pre)
 
 def exist_quant_map(syms,clauses):
@@ -301,9 +360,9 @@ def exist_quant(syms,clauses):
     map1,res = exist_quant_map(syms,clauses)
     return res
 
-def conjoin(clauses1,clauses2):
+def conjoin(clauses1,clauses2,annot_op=None):
     """ Conjoin clause sets, taking into account skolems """
-    return and_clauses(clauses1,rename_distinct(clauses2,clauses1))
+    return and_clauses(clauses1,rename_distinct(clauses2,clauses1),annot_op=annot_op)
 
 def constrain_state(upd,fmla):
     return (upd[0],and_clauses(upd[1],formula_to_clauses(fmla)),upd[2])
@@ -348,12 +407,18 @@ def subst_action(update,subst):
     new_pre = rename_clauses(update[2],syms)
     return (new_updated,new_tr,new_pre)
 
+def  my_annot_op(x,y):
+#    iu.dbg('x')
+#    iu.dbg('y')
+    return x.compose(y) if x is not None and y is not None else None
+
+
 def forward_image_map(pre_state,axioms,update):
     updated, clauses, _precond = update
 #    print "transition_relation: {}".format(clauses)
     pre_ax = clauses_using_symbols(updated,axioms)
     pre = conjoin(pre_state,pre_ax)
-    map1,res = exist_quant_map(updated,conjoin(pre,clauses))
+    map1,res = exist_quant_map(updated,conjoin(pre,clauses,annot_op=my_annot_op))
     res = rename_clauses(res, dict((new(x),x) for x in updated))
 ##    print "before simp: %s" % res
     # res = simplify_clauses(res)
@@ -494,30 +559,33 @@ def interp_from_unsat_core(clauses1,clauses2,core,interpreted):
 #    print "interp_from_unsat_core res = {}".format(res)
     return res
 
-def small_model_clauses(cls,final_cond=None):
+def small_model_clauses(cls,final_cond=None,shrink=True):
     # Don't try to shrink the integers!
-    return get_small_model(cls,ivy_logic.uninterpreted_sorts(),[],final_cond=final_cond)
+    return get_small_model(cls,ivy_logic.uninterpreted_sorts(),[],final_cond=final_cond,shrink=shrink)
 
 class History(object):
     """ A history is a symbolically represented sequence of states. """
-    def __init__(self,state,maps = []):
+    def __init__(self,state,maps = [],actions=[]):
         """ state is the initial state of the history """
 #        print "init: {}".format(state)
         update,clauses,pre = state
         assert update == None and pre.is_false()
         self.maps = maps     # sequence of symbol renamings resulting from forward images
         self.post = clauses  # characteristic formula of the history
+        self.actions = actions
 
 
-    def forward_step(self,axioms,update):
+    def forward_step(self,axioms,update,action=None):
         """ This is like forward_image on states, but records the
         symbol renaming used in the forward image. The list of
         renamings is used to reconstruct the state symbols at previous
         times in the history. A new history after forward step is
         returned. """
 #        print "step: pre = {}, axioms = {}, update = {}".format(self.post,axioms,update)
+#        iu.dbg('update')
         map1,res = forward_image_map(self.post,axioms,update)
-        return History(pure_state(res),self.maps + [map1])
+#        iu.dbg('res.annot')
+        return History(pure_state(res),self.maps + [map1],self.actions+[action])
 
     def assume(self,clauses):
         """ Returns a new history in which the final state is constrainted to
@@ -528,7 +596,7 @@ class History(object):
             assert is_pure_state(clauses)
             clauses = clauses[1]
         clauses = rename_distinct(clauses,self.post) # TODO: shouldn't be needed
-        return History(pure_state(and_clauses(self.post,clauses)),self.maps)
+        return History(pure_state(and_clauses(self.post,clauses)),self.maps,self.actions)
 
     def ignore(self,s,img,renaming):
         res = not(s in img or not s.is_skolem() and s not in renaming)
@@ -550,9 +618,9 @@ class History(object):
 #        print "concrete state: {}".format(self.post)
 #        print "background: {}".format(axioms)
         post = and_clauses(self.post,axioms)
-        print "bounded check {"
+#        print "bounded check {"
         model = _get_model_clauses(post,final_cond=final_cond)
-        print "} bounded check"
+#        print "} bounded check"
         if model == None:
 #            print "core = {}".format(unsat_core(post,true_clauses()))
             return None
@@ -566,7 +634,11 @@ class History(object):
             img = set(renaming[s] for s in renaming if not s.is_skolem())
             ignore = lambda s: self.ignore(s,img,renaming)
             # get the sub-mode for the given past time as a formula
-            clauses = clauses_model_to_clauses(post,ignore = ignore, model = model, numerals=use_numerals())
+            
+            if isinstance(final_cond,list):
+                final_cond = or_clauses(*[fc.cond() for fc in final_cond])
+            all_clauses = and_clauses(post,final_cond) if final_cond != None else post
+            clauses = clauses_model_to_clauses(all_clauses,ignore = ignore, model = model, numerals=use_numerals())
             # map this formula into the past using inverse map
             clauses = rename_clauses(clauses,inverse_map(renaming))
             # remove tautology equalities, TODO: not sure if this is correct here

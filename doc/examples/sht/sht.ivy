@@ -1,0 +1,52 @@
+#lang ivy1.6
+
+include proto
+include reference
+include key
+include trans
+include udp
+include shard
+include seqnum
+
+type id
+type data
+
+
+instance ref : sht_reference(id,key,data)
+instance shard : table_shard(key,data)
+instance num: sequence_numbers
+instance proto(X:id) : sht_protocol(X,ref,trans,id,key,data,shard)
+instance trans : sht_transport(udp,proto.req.t,shard.t,num,id)
+instance udp : udp_simple(id,trans.net_msg.t)
+
+isolate iso_p = proto with ref,trans,key,shard
+isolate iso_dm(me:id) = proto.impl.dm(me) with key
+isolate iso_hash(me:id) = proto.impl.hash(me) with key,shard
+isolate iso_key = key with impl
+isolate iso_key_iter = key.iter with impl
+
+export proto.set
+export proto.get
+export proto.delegate_
+import proto.answer
+
+object impl = {
+    interpret id -> bv[1]
+    interpret key.t -> bv[16]
+}
+
+object debug = {
+    action send(src:id,dst:id,m:trans.net_msg.t)
+    action recv(dst:id,m:trans.net_msg.t)
+    before udp.send(src:id,dst:id,msg:trans.net_msg.t) {
+	call send(src,dst,msg)
+    }
+    before udp.recv(dst:id,msg:trans.net_msg.t) {
+	call recv(dst,msg)
+    }
+}
+import debug.send
+import debug.recv
+
+extract iso_impl(me:id) = key,shard,num,trans.impl(me),proto.impl(me),udp.impl(me),debug(me)
+

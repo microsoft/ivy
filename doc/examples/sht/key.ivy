@@ -1,0 +1,18 @@
+#lang ivy1.6
+
+include order
+
+object key = {
+    
+    type t
+    instance iter : order_iterator(this)
+
+    object spec  = {
+	instantiate totally_ordered_with_zero(t)
+    }
+
+    object impl = {
+    }
+
+}
+

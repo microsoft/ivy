@@ -1,9 +1,6 @@
 #!/bin/bash
 
-tests='enum1 client_server1  client_server4  detect_transitive
-client_server2  client_server5  enum1
-client_server3  client_server6  transitive
-projections'
+tests=`ls *.py | grep -v run_expects`
 
 sh_tests='tilelink_unit_test.sh'
 
@@ -11,8 +8,8 @@ trap '{ echo "Exiting on SIGINT." ; exit 1; }' INT
 
 errors=0
 for x in $tests; do
-    echo $x ...
-    if timeout 100 python $x.py > $x.log 2>&1 ; then
+    echo ${x/.py/} ...
+    if timeout 100 python $x > ${x/.py/.log} 2>&1 ; then
         echo PASS
     else
         echo FAIL

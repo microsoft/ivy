@@ -1,0 +1,81 @@
+#lang ivy1.7
+
+include collections
+
+include order
+
+module set(elem) = {
+
+    type this
+    alias t = this
+
+    relation contains(X:t,Y:elem)
+    relation valid(X:t)
+    action emptyset returns(s:t)
+    action add(s:t,e:elem) returns (s:t)
+    action remove(s:t,e:elem) returns (s:t)
+    
+    object spec = {
+	after emptyset {
+	    assert ~contains(s,X)
+	}
+	before add {
+	    assert valid(s)
+	}
+	after add {
+	    assert contains(s,X) <-> (contains(old s,X) | X = e);
+	    assert valid(s) & (~contains(s,e) | contains(s,e))
+	}
+	before remove {
+	    assert valid(s)
+	}
+	after remove {
+	    assert (contains(s,X) <-> (contains(old s,X) & X ~= e)) & (~contains(s,e) | contains(s,e));
+	    assert valid(s)
+	}
+    }
+
+    object impl = {
+
+        instance index : unbounded_sequence
+        instance arr : array(index.t,elem)
+        destructor repr(X:t) : arr
+        
+        definition contains(X:t,y:elem) =
+            exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+
+        definition valid(X:t) =
+            forall Y,Z. (0 <= Y & Y < repr(X).end & 0 <= Z & Z < repr(X).end
+                          & repr(X).value(Y) = repr(X).value(Z) -> Y = Z)
+
+	implement emptyset {
+	    repr(s) := arr.create(0,0)
+	}
+	
+	implement add {
+	    if ~contains(s,e) {
+                repr(s) := arr.resize(repr(s),index.next(arr.end(repr(s))),e)
+	    }
+        }
+
+	implement remove {
+	    if some (i:index.t) 0 <= i & i < repr(s).end & repr(s).value(i) = e {
+		var last := repr(s).end.prev;
+		repr(s) := repr(s).set(i,repr(s).get(last));
+                repr(s) := repr(s).resize(last,0)
+	    }
+        }
+
+
+    }
+    isolate iso = this
+}
+
+type elem
+
+instance s : set(elem)
+
+export s.emptyset
+export s.add
+
+extract iso_impl = s

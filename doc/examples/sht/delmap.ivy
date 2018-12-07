@@ -1,0 +1,77 @@
+#lang ivy1.6
+
+
+include collections
+
+################################################################################
+#
+# Specification of delegation map
+#
+
+module delegation_map(key,id) = {
+
+    # set the value of all keys in the range [lo,hi] to id
+
+    action set(lo:key.iter.t,hi:key.iter.t,dst:id)
+
+    # get the value of key k
+
+    action get(k:key.t) returns (val:id)
+
+    # The delegation map is a relation, since as a function it might
+    # not be stratified.
+
+    relation map(K:key.t, X:id)
+
+    object spec = {
+	init map(K,X) <-> X = 0
+
+	before set {
+	    map(K,X) := (X = dst) & key.iter.between(lo,K,hi)
+	                | map(K,X) & ~key.iter.between(lo,K,hi)
+	}
+        after get {
+	    assert map(k,val)
+	}
+
+	conjecture map(K,V) & map(K,W) -> V = W
+    }
+
+    # The implementation uses an ordered map.  Each key in the
+    # the ordered map represents the lower bound of an interval of
+    # keys with the same value. The map gives the values for the lower bounds.
+
+    object impl = {
+
+	instance imap : ordered_map(key,id)
+
+	after init {
+	    call imap.set(0,0)
+	}
+
+	implement set(lo:key.iter.t,hi:key.iter.t,dst:id)  {
+	    if lo < hi {
+		if ~key.iter.is_end(hi) {
+		    local nid:id {
+			nid := imap.get(key.iter.val(imap.glb(hi)),0);
+		        call imap.set(key.iter.val(hi),nid)
+		    }
+		};
+		call imap.erase(lo,hi);
+		call imap.set(key.iter.val(lo),dst)
+	    }
+	}
+
+	implement get(k:key.t) returns (val:id)  {
+	    val := imap.get(key.iter.val(imap.glb(key.iter.create(k))),0)
+	}
+
+	# The value of every key between K and its successor is the same as K's value.
+
+	conjecture imap.maps(key.iter.val(I),V) & imap.gap(I,J) & key.iter.between(I,K,J) -> map(K,V)
+
+	# We always have an entry for key zero. 
+
+	conjecture imap.contains(0)
+    }
+}

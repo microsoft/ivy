@@ -1,0 +1,178 @@
+#lang ivy1.6
+
+# Here, we prove a basic fact about finite sets: is X and Y are disjoint
+# subsets of S, then |X| + |Y| <= |S|. This can be used to show that any two
+# majorities of S have an element in common.
+
+# We set up the problem with two types: the *basis* type and the
+# *index* type, both isomorphic to the integers. Our sets are subsets
+# of the basis type, while their cardinalities a members of the index
+# type. In other words ordinals are in basis, while cardinals are in
+# index. The separation of these two types is used to avoid
+# non-stratified functions.
+
+# We definte a module that takes basis and index types, and provides the following
+# interface:
+
+# 1) a type *set* representing finite subsets of the basis type
+# 2) a basis element *n* that is an upper bound on set elements (so the basis is finite)
+# 3) a *member* relation
+# 4) a relation *disjoint* beteween sets
+# 5) a function *card* giving the cardinality of a set as an index
+# 6) a function *cnt* gives the cardinality of the basis elements less than E
+# 7) an action `empty` returning the empty set
+
+# The spec can then be stated as disjoint(X,Y) -> card(X)+card(Y) <= cnt(n).
+
+# The implementation defines card and cnt recursively over the basis type. Ideally, the
+# basis type should provide a recursion schema, but here we just give the instantions
+# of the recursion schema as axioms.
+
+# We then give an inductive invariant with parameter B. This states that the theorem holds
+# for elements of the sets X and Y less than B. We then instantiate the induction schema for
+# basis using the invariant.
+
+# This all seems straightforward, but it was tricky to figure out how to set up the problem
+# without function cycles. Also, see the comment below about integer arithmetic. For the
+# basis type, we used the succesor relation to avoid using airthmetic on this type.
+
+include collections
+include order
+
+module indexset(basis,index) = {
+
+    type set 
+    
+    individual n : basis.t
+    relation member(E:basis.t,S:set)
+    function card(S:set) : index.t
+    relation majority(S:set)
+
+    action empty returns(s:set)
+    action add(s:set,e:basis.t) returns (s:set)
+
+    axiom [n_positive] n > 0
+    
+    object spec = {
+
+	after empty {
+	    assert ~member(E,s);
+	}
+
+	after add {
+	    assert member(X,s) <-> (member(X,old s) | X = e)
+	}
+    }
+    
+    isolate succ_fact = {
+    	object spec = {
+    	    property basis.succ(X:basis.t,Y:basis.t) <-> (Y-1 = X)
+    	}
+    }
+    with basis.impl
+
+    function cnt(E:basis.t) : index.t
+    function cardUpTo(S:set,B:basis.t) : index.t
+    
+    isolate counting = {
+
+
+    	object spec = {
+
+    	    property [cnt_base] cnt(0) = 0
+    	    property [cnt_step] F > 0 & basis.succ(E,F) -> cnt(F) = cnt(E) + 1
+
+    	    property [cardUpTo_base] cardUpTo(S,0) = 0
+    	    property [cardUpTo_step] basis.succ(B,BS) & BS > 0 ->
+    					cardUpTo(S,BS) = cardUpTo(S,B)+1 if member(B,S) else cardUpTo(S,B)
+    	}
+
+    	object impl = {
+
+    	    definition cnt(x:basis.t) = 0 if x <= 0 else cnt(x-1) + 1
+    	    proof rec[basis.t]
+
+    	    definition cardUpTo(s:set,b:basis.t) =
+    		0 if b <= 0 else (cardUpTo(s,b-1)+1 if member(b-1,s) else cardUpTo(s,b-1))
+    	    proof rec[basis.t]
+
+    	}
+    } with basis.spec.antisymmetry, basis.spec.totality, succ_fact
+
+    relation disjoint(X:set,Y:set)
+
+    isolate disjointness = {
+
+    	object spec = {
+
+    	    definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+
+    	    property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+
+    	    definition majority(X) = 2 * card(X) > cnt(n)
+
+	    property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
+
+    	}
+
+    	object impl = {
+    	    derived inv(X,Y,B) = 
+    		disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
+
+    	    property exists L. (L >= 0 & forall B. (B >= 0 & ~inv(X,Y,B) -> ~inv(X,Y,L) & L <= B))
+    	    named lerr(X,Y)
+    	    proof lep[basis.t]
+
+    	    object succ_lemma = {
+    		object spec = {
+    		    property [induc] exists E. basis.succ(E,lerr(X,Y))
+    		}
+    		isolate iso = spec with succ_fact
+    	    }
+
+    	    definition card(S) = cardUpTo(S,n)
+
+    	    interpret index.t -> int
+    	}
+
+    }
+    with counting,basis,nodeset.n_positive
+
+
+    isolate api = {
+	
+    	# Here is the implementation of the set type using an unsorted array.
+
+    	instance arridx : unbounded_sequence
+    	instance arr:array(arridx.t,basis.t)
+
+    	# Tricky: this is a bit of aspect-orientation. It turns the type `set` into a struct
+    	# with just one field called `repr`. This field gives the concrete representation of a
+    	# set as an array. To an isolate that doesn't use the definition of `member` below,
+    	# the tpye `set` will still appear to be uninterpreted.
+
+    	destructor repr(X:set) : arr.t
+
+    	definition member(y:basis.t,X:set) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+
+    	implement empty {
+    	    repr(s) := arr.create(0,0)
+    	}
+
+    	implement add {
+    	    if ~member(e,s) {
+    		repr(s) := repr(s).resize(repr(s).end.next,e)
+    	    }
+    	}
+    } with spec
+}
+
+
+instance nodeord : unbounded_sequence
+instance nodecard : unbounded_sequence
+instance nodeset : indexset(nodeord,nodecard)
+
+export nodeset.empty
+export nodeset.add
+
+    

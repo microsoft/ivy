@@ -1,0 +1,168 @@
+#lang ivy1.6
+
+################################################################################
+#
+# A module containing the axioms of total order
+#
+################################################################################
+
+module total_order_axioms(t) = {
+    relation (X:t < Y:t)
+    axiom [transitivity] X:t < Y & Y < Z -> X < Z
+    axiom [antisymmetry] ~(X:t < Y & Y < X)
+    axiom [totality] X:t < Y | X = Y | Y < X
+}
+
+################################################################################
+#
+# A module containing the injectivity axiom
+#
+################################################################################
+
+module injectivity_axioms(f) = {
+    axiom [injectivity] f(X) = f(Y) -> X = Y
+}
+
+################################################################################
+#
+# ADT describing a totally ordered datatype
+#
+################################################################################
+
+module total_order = {
+    type t
+    instantiate total_order_axioms(t)   # t is totally ordered
+}
+
+################################################################################
+#
+# ADT describing a ring topology.
+#
+# The module includes a ring_head and ring_tail elements, and a ring
+# total order relation.
+#
+# The module also includes get_next and get_prev actions.
+#
+# In this module, the ring topology is arbitrary and fixed.
+#
+################################################################################
+
+module ring_topology = {
+    type t
+    relation btw(X:t,Y:t,Z:t)
+
+    property btw(W, Y, Z) & btw(W, X, Y) -> btw(X, Y, Z)
+    property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, X, Y)
+    property btw(W, X, Z) & btw(X, Y, Z) -> btw(W, Y, Z)
+    property btw(W, Y, Z) & btw(W, X, Y) -> btw(W, X, Z)
+    property W = X | btw(W, X, W)
+    property ~btw(X, X, Y)
+    property ~btw(X, Y, Y)
+    property btw(X,Y,Z) |  Y = Z |  btw(X,Z,Y)
+    property btw(X,Y,Z) |  Y = X |  btw(Y,X,Z)
+
+    action get_next(x:t) returns (y:t)
+
+    object spec = {
+	after get_next {
+	    assert ~btw(x,Z,y)
+	}
+    }
+}
+
+
+################################################################################
+#
+# Types, relations and functions describing state of the network
+#
+################################################################################
+
+# A totally ordered set of ids
+instance id : total_order
+
+# A ring topology of nodes
+instance node : ring_topology
+
+################################################################################
+#
+# The transport-layer service specification
+#
+################################################################################
+
+object trans = {
+
+    relation sent(V:id.t, N:node.t) # The identity V is sent at node N
+    init ~sent(V, N)
+    
+    action send(dst:node.t, v:id.t)
+    action recv(dst:node.t, v:id.t)
+
+    object spec = {
+	before send {
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst)
+	}
+    }
+}
+
+################################################################################
+#
+# The high-level service specification
+#
+################################################################################
+
+
+object serv = {
+
+    function pid(X:node.t) : id.t          # map each node to an id
+
+    instantiate injectivity_axioms(pid)    # id's are unique
+
+    action elect(v:node.t)                 # called when v is elected leader
+
+    object spec = {
+	before elect {
+	    assert pid(v) >= pid(X)        # only the max pid can be elected
+	}
+    }
+}
+
+################################################################################
+#
+# The high-level protocol
+#
+################################################################################
+
+module process(pid) = {
+
+    action async(me:node.t) = {
+	call trans.send(node.get_next(me),pid(me))
+    }
+
+    implement trans.recv(me:node.t,v:id.t) {
+        if v = pid(me) {  # Found a leader
+            call serv.elect(me)
+        }
+	else if v > pid(me)  { # pass message to next node
+	    call trans.send(node.get_next(me),v)
+        }
+    }
+
+    # conjecture ~(serv.pid(P) < serv.pid(N) & trans.sent(serv.pid(P),P))
+    # conjecture ~(serv.pid(N) < serv.pid(P) & serv.pid(Q) < serv.pid(N) & node.btw(Q,N,P)
+    #                  & trans.sent(serv.pid(N),Q))
+}
+
+# instantiate one process per ring element
+
+instance app: process(serv.pid)
+
+import serv.elect
+import trans.send
+export app.async
+export trans.recv
+
+isolate iso_app = app with node,id,trans,serv
+

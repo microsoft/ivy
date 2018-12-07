@@ -182,10 +182,12 @@ class GraphWidget(object):
 
     def undo(self):
         self.graph_stack.undo()
+        self.reverse_sync_checkboxes()
         self.update()
 
     def redo(self):
         self.graph_stack.redo()
+        self.reverse_sync_checkboxes()
         self.update()
 
     # Undo to the most recent backtrack point
@@ -310,6 +312,7 @@ class GraphWidget(object):
                 lit = self.g.string_to_concept(text)
                 self.add_concept(lit)
 
+
     # Record the current goal with a string name
 
     def remember(self,text):
@@ -325,6 +328,7 @@ class GraphWidget(object):
     def update_relations(self):
         if self.update_callback != None:
             self.update_callback()
+            
         
 
     # Add a concept to the graph

@@ -1,0 +1,51 @@
+#lang ivy1.6
+
+########################################
+# A shard contains an interval of keys [lo,hi] from a hash table
+#
+
+include order
+
+
+module table_shard(key,data) = {
+
+    type range
+    instance props : totally_ordered_with_zero(range)
+    
+    type t = struct {
+	lo : key,
+	hi : key,
+	first(Y:range) : key,
+	second(Y:range) : data
+    }
+
+    instance iter : order_iterator(range)
+
+    function value(S:t,X:key):data
+    relation valid(S:t)
+    relation at(S:t,X:key,Y:range)
+
+    object repr = {
+	definition at(S,X,Y) = (first(S,Y) = X & second(S,Y) ~= 0)
+	definition value(S:t,x:key) = some Y. at(S,x,Y) in second(S,Y) else 0
+	definition valid(s:t) = forall X,Y,Z. at(s,X,Y) & at(s,X,Z) -> Y = Z
+    }
+
+    object impl = {
+	
+	interpret range -> bv[2]
+	
+	implement iter.next(x:iter.t) returns (y:iter.t) {
+	    if iter.iter_val(x) = 3 {
+		iter.iter_end(y) := true;
+		iter.iter_val(y) := 0
+	    }
+	    else {
+		iter.iter_end(y) := false;
+		iter.iter_val(y) := iter.iter_val(x) + 1
+	    }
+	}
+    }
+
+    isolate iso_props = props with impl
+}

@@ -1,0 +1,101 @@
+#lang ivy1.6
+
+# Here, we prove a basic fact about finite sets: is X and Y are disjoint
+# subsets of S, then |X| + |Y| <= |S|. This can be used to show that any two
+# majorities of S have an element in common.
+
+# We set up the problem with two types: the *basis* type and the
+# *index* type, both isomorphic to the integers. Our sets are subsets
+# of the basis type, while their cardinalities a members of the index
+# type. In other words ordinals are in basis, while cardinals are in
+# index. The separation of these two types is used to avoid
+# non-stratified functions.
+
+# We definte a module that takes basis and index types, and provides the following
+# interface:
+
+# 1) a type *set* representing finite subsets of the basis type
+# 2) a basis element *n* that is an upper bound on set elements (so the basis is finite)
+# 3) a *member* relation
+# 4) a relation *disjoint* beteween sets
+# 5) a function *card* giving the cardinality of a set as an index
+# 6) a function *cnt* gives the cardinality of the basis elements less than E
+
+# The spec can then be stated as disjoint(X,Y) -> card(X)+card(Y) <= cnt(n).
+
+# The implementation defines card and cnt recursively over the basis type. Ideally, the
+# basis type should provide a recursion schema, but here we just give the instantions
+# of the recursion schema as axioms.
+
+# We then give an inductive invariant with parameter B. This states that the theorem holds
+# for elements of the sets X and Y less than B. We then instantiate the induction schema for
+# basis using the invariant.
+
+# This all seems straightforward, but it was tricky to figure out how to set up the problem
+# without function cycles. Also, see the comment below about integer arithmetic. For the
+# basis type, we used the succesor relation to avoid using airthmetic on this type.
+
+module indexset(basis,index) = {
+
+    type set 
+    
+    individual n : basis.t
+    relation member(E:basis.t,S:set)
+    relation disjoint(X:set,Y:set)
+    function card(S:set) : index.t
+    function cnt(E:basis.t) : index.t
+
+    axiom n >= 0
+    
+    object spec = {
+	property disjoint(X,Y) -> card(X) + card(Y) <= cnt(n)
+    }
+    
+    object impl = {
+	
+	definition disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+
+	# recursive definiton of cnt
+
+	axiom cnt(0) = 0
+	axiom basis.succ(E,F) -> cnt(F) = cnt(E) + 1
+
+	# recursive definition of card
+
+	function cardUpTo(S:set,B:basis.t) : index.t
+
+	axiom cardUpTo(S,0) = 0
+	axiom basis.succ(B,BS) -> cardUpTo(S,BS) = cardUpTo(S,B)+1 if member(B,S) else cardUpTo(S,B)
+
+	definition card(S) = cardUpTo(S,n)
+
+	# invariant
+
+	derived inv(B,X,Y) = 
+            disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
+
+
+	# induction schema instance: basis.t is well-founded, and every
+	# element > 0 has a predecessor
+
+	derived lerr(X,Y) = some E. (E >= 0 & ~inv(E,X,Y))
+	axiom ~(E >= 0 & ~inv(E,X,Y) & E < lerr(X,Y))
+	axiom lerr(X,Y) > 0 -> exists E. basis.succ(E,lerr(X,Y))
+
+	# tricky: we interpret the index type as the integers, so we can use addition
+	# without axioms. we have set up the above so the index type is never the domain of
+	# a function. a bug in IVy's logic fragmetn checker seems to allow us to get away with this,
+	# and it works, but I don't know if Z3 is actually a decision procedure for this case.
+
+	interpret index.t -> int
+    }
+}
+
+	
+    
+include order
+instance bss : unbounded_sequence
+instance idx : unbounded_sequence
+instance s : indexset(bss,idx)
+
+isolate iso = s with idx,bss

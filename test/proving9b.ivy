@@ -1,0 +1,24 @@
+#lang ivy1.6
+
+type t
+function f(X:t) : t
+
+isolate extra = {
+
+    isolate t_theory = {
+
+	object impl = {
+	    interpret t -> int
+	    definition f(X) = X + 1
+	}
+
+	object spec = {
+	    property [expanding] f(X) > X
+	    property [transitivity] X:t < Y & Y < Z -> X < Z
+	}
+
+    }
+
+    property [prop] f(f(X)) > X
+
+}

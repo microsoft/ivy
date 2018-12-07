@@ -1,0 +1,188 @@
+#lang ivy1.6
+
+################################################################################
+# 
+# This is the top-level server description
+#
+# "ref" is the reference object
+# "me" is the server's id
+# net is the network
+
+include table
+include delmap
+
+module sht_protocol(me,ref,trans,id,key,data,shard) = {
+
+    action set(k:key.t,d:data) returns(tx:ref.txid)
+    action get(k:key.t) returns(tx:ref.txid)
+    action answer(k:key.t,d:data,tx:ref.txid)
+    action delegate_(dst:id, lo:key.iter.t, hi:key.iter.t)  returns(ok:bool)
+
+    object spec = {
+	before set {
+	    tx := ref.begin(me,ref.write,k,d)
+	}
+	before get {
+	    tx := ref.begin(me,ref.read,k,0)
+	}
+	before answer {
+	    assert ref.data_(tx) = d;
+	    call ref.end(tx)
+	}
+	before delegate_ {
+	    assert dst ~= me;
+	    assert lo < hi;
+	    assert key.iter.between(lo,K,hi) -> impl.dm.map(K,me)
+	}
+    }
+
+
+    object req = {
+	type t = struct {
+	    src : id,
+	    rkey : key.t,
+	    rtype : ref.otype,
+	    rdata : data,
+	    rtxid : ref.txid
+	}
+    }
+
+    object impl = {
+
+	# The server's hash table
+
+	instance hash : hash_table(key,data,shard)
+
+	# The server's delegation map
+
+	instance dm : delegation_map(key,id)
+
+	# Handle a request from user or from network
+	
+	action handle_request(rq:req.t) returns(ok:bool) = {
+	    local src:id, k:key.t, op:ref.otype, d:data, tx:ref.txid, ow:id {
+		src := req.src(rq);
+		k := req.rkey(rq);
+		op := req.rtype(rq);
+		d := req.rdata(rq);
+		tx := req.rtxid(rq);
+		ow := dm.get(k);
+		if ow = me {
+		    call ref.commit(tx);  # this is ghost!
+		    if op = ref.read {
+			req.rdata(rq) := hash.get(k)
+		    }
+		    else {
+			call hash.set(k,d)
+		    };
+		    ok := trans.send_reply(me, src, rq)
+		} else {
+		    ok := trans.send_request(me, ow, rq)  # forward request
+		}
+	    }
+	}
+
+
+	implement set {
+	    local rq:req.t {
+		req.src(rq) := me;
+		req.rkey(rq) := k;
+		req.rtype(rq) := ref.write;
+		req.rdata(rq) := d;
+		req.rtxid(rq) := tx;
+		local ok:bool {
+		    ok := handle_request(rq)
+		}
+	    }
+	}
+
+	implement get {
+	    local rq:req.t {
+		req.src(rq) := me;
+		req.rkey(rq) := k;
+		req.rtype(rq) := ref.read;
+		req.rtxid(rq) := tx;
+		local ok:bool {
+		    ok := handle_request(rq)
+		}
+	    }
+	}
+
+	implement delegate_ {
+	    call dm.set(lo,hi,dst);
+	    ok := trans.send_delegate(me,dst,hash.extract_(lo,hi))
+	}
+
+	implement trans.recv_request(rq:req.t) {
+	    local ok : bool {
+		ok := handle_request(rq)
+	    }
+	}
+
+	implement trans.recv_reply(rq:req.t) {
+	    call answer(req.rkey(rq),req.rdata(rq),req.rtxid(rq))
+	}
+
+	implement trans.recv_delegate(s:shard.t) {
+	    call dm.set(shard.lo(s),shard.hi(s),me);
+	    call hash.incorporate(s)
+	}
+
+
+	# If I own this key, then my hash table data matches the reference
+	conjecture impl.dm.map(K,me) -> hash.hash(K) = ref.map(K)
+
+	# If I own this key, then no one else does
+	conjecture impl.dm.map(K,me) & X ~= me -> ~proto.impl.dm(X).map(K,X)
+
+	# If I own this key, then no delegated shard does
+	conjecture impl.dm.map(K,me) -> ~(trans.delegated(X,S) & key.iter.between(shard.lo(S),K,shard.hi(S)))
+
+	# No two delegated shards have keys in common
+	conjecture trans.delegated(X,S) & key.iter.between(shard.lo(S),K,shard.hi(S))
+		   & trans.delegated(X1,S1) & key.iter.between(shard.lo(S1),K,shard.hi(S1))
+		   -> X = X1 & S = S1
+
+	# Forwarded requests have correct operations relative to the reference
+
+	conjecture trans.requested(D,R) & L = req.rtxid(R)->
+		   (req.rkey(R) = ref.key_(L) &
+		    req.rtype(R) = ref.type_(L) &
+		    (req.rtype(R) = ref.write -> req.rdata(R) = ref.data_(L)))
+
+	# Forwarded replies have correct operations relative to the reference
+
+	conjecture trans.replied(D,R) & L = req.rtxid(R)->
+		   (req.rkey(R) = ref.key_(L) &
+		    req.rtype(R) = ref.type_(L) &
+		    req.rdata(R) = ref.data_(L))
+
+	# All forwarded requests have been generated but not committed
+
+	conjecture trans.requested(D,R) -> ref.generated(req.rtxid(R)) & ~ref.committed(req.rtxid(R))
+
+	# All forwarded replies have been generated and committed
+
+	conjecture trans.replied(D,R) -> ref.generated(req.rtxid(R)) & ref.committed(req.rtxid(R))
+
+	# No two forwarded requests with the same txid
+
+	conjecture trans.requested(D1,R1) & trans.requested(D2,R2) & req.rtxid(R1) = req.rtxid(R2)
+		   -> D1 = D2 & R1 = R2
+
+	# No two forwarded replies with the same txid
+
+	conjecture trans.replied(D1,R1) & trans.replied(D2,R2) & req.rtxid(R1) = req.rtxid(R2)
+		   -> D1 = D2 & R1 = R2
+
+	# Delegated shards have correct data
+
+	conjecture trans.delegated(X,S) & key.iter.between(shard.lo(S),K,shard.hi(S)) -> shard.value(S,K) = ref.map(K)
+
+	# Every shard in transit is valid
+
+	conjecture trans.delegated(D,S) -> shard.valid(S)
+
+    }
+}
+

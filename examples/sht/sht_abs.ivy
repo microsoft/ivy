@@ -54,6 +54,7 @@ object keys = {
 	assert exists Z. ~(Z <= x);
 	assume x <= y & x ~= y & (X <= y & X ~= y -> X <= x)
     }
+    delegate next
 }
 
 axiom 0 <= K:key
@@ -271,7 +272,7 @@ module delegation_map() = {
 	    if hi ~= keys.max {
 		local nkey:key, nid:id {
 		    nkey := keys.next(hi);
-		    nid := get(nkey);
+		    nid := entries(has.get_glb(nkey));
 		    entries(nkey) := nid;
 		    call has.insert(nkey)
 		}
@@ -303,7 +304,7 @@ module delegation_map() = {
 # "me" is the server's id
 # net is the network
 
-module server_top(ref,me,net) = {
+module server_top(ref,me,neti) = {
 
     # The server's hash table
     
@@ -312,6 +313,7 @@ module server_top(ref,me,net) = {
     # The server's delegation map
 
     instance dm : delegation_map
+    private dm
 
     action handle_request(rq:req) = {
 	local src:id, k:key, op:otype, d:data, lt:ltime, ow:id {
@@ -329,9 +331,9 @@ module server_top(ref,me,net) = {
 		else {
 		    call hash.set_(k,d)
 		};
-		call net.send_reply(src, d, lt)
+		call neti.send_reply(me, src, d, lt)
 	    } else {
-		call net.send_request(ow,rq)  # forward request
+		call neti.send_request(me, ow, rq)  # forward request
 	    }
 	}
     }
@@ -348,7 +350,7 @@ module server_top(ref,me,net) = {
 	assume dst ~= me;
 	assume lo <= K & K <= hi -> dm.get(K:key) = me;
 	call dm.set_(lo,hi,dst);
-	call net.send_delegate(dst,hash.extract_(lo,hi))
+	call neti.send_delegate(me,dst,hash.extract_(lo,hi))
     }
 
     action recv_delegate(s:shard) = {
@@ -357,7 +359,7 @@ module server_top(ref,me,net) = {
     }
 
 
-    # If I own this key, then my has table data matches the reference
+    # If I own this key, then my hash table data matches the reference
     conjecture dma(me).map(K,me) -> hash.hash(K) = ref.hash(K)
 
     # If I own this key, then no one else does
@@ -380,7 +382,7 @@ module server_top(ref,me,net) = {
 
     # All forwarded requests have been generated
 
-    conjecture net.requested(D,R) -> net.generated(req_ltime(R))
+    conjecture net.requested(D,R) -> io_spec.generated(req_ltime(R)) & ~ref.evs(req_ltime(R)).serialized
 
     # No two forwarded requests with the same ltime
 
@@ -391,6 +393,7 @@ module server_top(ref,me,net) = {
 
     conjecture net.delegated(X,S) & shard_lo(S) <= K & K <= shard_hi(S) -> shard_value(S,K) = ref.hash(K)
 
+    conjecture ref.evs(T).serialized -> io_spec.generated(T)
 }
 
 
@@ -400,7 +403,7 @@ module server_top(ref,me,net) = {
 #
 # Currently, delivery is out-of-order non-duplicating
 
-module net_top(ref,proto) = {
+module net_top(ref,proto,neti) = {
 
     relation requested(D:id,R:req)
     relation delegated(D:id,S:shard)
@@ -408,25 +411,18 @@ module net_top(ref,proto) = {
     init ~requested(D,R)
     init ~delegated(D,S)
 
-    relation generated(L:ltime)
-    init ~generated(L)
 
-    action send_reply(dst:id, d:data, lt:ltime) = {
-	assert ref.evs(lt).data_ = d   # for now, just assert data values are correct
-    }
-    delegate send_reply
-
-    action send_request(dst:id,rq:req) = {
+    action send_request(src:id,dst:id,rq:req) = {
 	assert ~requested(dst,rq);
 	requested(dst,rq) := true
     }
-    delegate send_request
+    execute send_request before neti.send_request
 
-    action send_delegate(dst:id,s:shard) = {
+    action send_delegate(src:id,dst:id,s:shard) = {
 	assert ~delegated(dst,s);
 	delegated(dst,s) := true
     }
-    delegate send_delegate
+    execute send_delegate before neti.send_delegate
 
     action recv_request(dst:id,rq:req) = {
 	assert requested(dst,rq);
@@ -434,15 +430,6 @@ module net_top(ref,proto) = {
     }
     execute recv_request before proto.recv_request
 
-    action generate_request(dst:id,rq:req) = {
-	assert ~generated(req_ltime(rq));
-	assert L = req_ltime(rq)->
-               (req_key(rq) = ref.evs(L).key_ &
-                req_otype(rq) = ref.evs(L).type_ &
-                (req_otype(rq) = write -> req_data(rq) = ref.evs(L).data_));
-	generated(req_ltime(rq)) := true
-    }
-    execute generate_request before proto.generate_request
 
     action recv_delegate(dst:id,s:shard) = {
 	assume delegated(dst,s);
@@ -510,7 +497,7 @@ module message_queue_top(me) = {
 
     action empty returns (res:bool) = {
 	assume contents(M) -> ~res;
-	assume res -> ~contents(M)
+	assume ~res -> exists M. contents(M)
     }
 
     action pick_one returns (res:net_msg) = {
@@ -536,7 +523,7 @@ module net_impl(ref,proto,me,lower) = {
 	    msg := encoder.mk_req(me,dst,rq,send_seq(dst));
 	    send_seq(dst) := seq_nums.next(send_seq(dst));
 	    call mq(dst).enqueue(msg);
-	    call lower.send(msg)
+	    call lower.send_msg(msg)
         }
     }
 
@@ -545,7 +532,7 @@ module net_impl(ref,proto,me,lower) = {
 	    msg := encoder.mk_delegate(me,dst,sh,send_seq(dst));
 	    send_seq(dst) := seq_nums.next(send_seq(dst));
 	    call mq(dst).enqueue(msg);
-	    call lower.send(msg)
+	    call lower.send_msg(msg)
         }
     }
 
@@ -573,12 +560,17 @@ module net_impl(ref,proto,me,lower) = {
 
     action timeout = {
 	if exists D:id,M:net_msg. mq(D).contents(M) {
-	    local dst:id, msg:net_msg {
-		assume ~mq(dst).empty;
+	    local dst:id, msg:net_msg, b:bool {
+		b := mq(dst).empty;
+		assume ~b;
 		msg := mq(dst).pick_one;
 		call lower.send_msg(msg)
 	    }
 	}
+    }
+
+    action send_reply(dst:id, d:data, lt:ltime) = {
+	# for now, do nothing, but we verify data correct
     }
 
     # If I have a request message for D enqueued and if its sequence number is
@@ -615,15 +607,15 @@ module net_impl(ref,proto,me,lower) = {
 
     # No two messages in a queue have the same sequence number
 
-    conjecture mq(D).contents(M1) & mq(D).contents(M2) 
+    conjecture mq(D).contents(M1) & mq(D).contents(M2) & M1 ~= M2
         -> net_msg_seq_num(M1) ~= net_msg_seq_num(M2)
 
-    # A sent message must match any message queue entry with the same
+    # A sent non-ack message must match any message queue entry with the same
     # sequence number
 
     conjecture low.sent(M) & net_msg_src(M) = me & net_msg_dst(M) = D
        & mq(D).contents(M2) & net_msg_seq_num(M2) = net_msg_seq_num(M)
-       -> M = M2
+       & net_msg_mtype(M) ~= ack_t -> M = M2
 
     # Following added due to counterexamples
 
@@ -638,6 +630,15 @@ module net_impl(ref,proto,me,lower) = {
 
     conjecture low.sent(M) & net_msg_src(M) = S & net_msg_dst(M) = D
       & net_msg_mtype(M) = ack_t -> ~(neti(S).recv_seq(D) <= net_msg_seq_num(M))
+
+    # The sending seq number is greater than non-ack sent message
+
+    conjecture low.sent(M) & net_msg_src(M) = me & net_msg_mtype(M) ~= ack_t
+                     -> ~(send_seq(net_msg_dst(M)) <= net_msg_seq_num(M))
+
+    # A message in the queue has correct src and dst and is not ack
+
+    conjecture mq(D).contents(M) -> net_msg_src(M) = me & net_msg_dst(M) = D & net_msg_mtype(M) ~= ack_t
 }
 
 module lower(net_impl) = {
@@ -663,10 +664,10 @@ module lower(net_impl) = {
 #  instantiate some components
 
 # make one server for each id
-instance servers(X:id) : server_top(reference,X,net)
+instance servers(X:id) : server_top(reference,X,neti)
 
 # make one top level network
-instance net : net_top(reference,servers)
+instance net : net_top(reference,servers,neti)
 
 # delegation map spec
 instance dma(X:id) : delegation_map_spec
@@ -679,6 +680,28 @@ instance neti(X:id) : net_impl(reference,servers,X,low)
 # lower network specification
 instance low : lower(neti) 
 
+## input/output specification
+
+object io_spec = {
+
+    relation generated(L:ltime)
+    init ~generated(L)
+
+    action generate_request(dst:id,rq:req) = {
+	assert ~generated(req_ltime(rq));
+	assert L = req_ltime(rq)->
+               (req_key(rq) = reference.evs(L).key_ &
+                req_otype(rq) = reference.evs(L).type_ &
+                (req_otype(rq) = write -> req_data(rq) = reference.evs(L).data_));
+	generated(req_ltime(rq)) := true
+    }
+    execute generate_request before servers.generate_request
+
+    action send_reply(src:id, dst:id, d:data, lt:ltime) = {
+	assert reference.evs(lt).data_ = d   # for now, just assert data values are correct
+    }
+    execute send_reply before neti.send_reply
+}
 
 ################################################################################
 #
@@ -698,7 +721,7 @@ export neti.timeout
 # This says verify all the actions of "servers", keeping "ref" and "net"
 # concrete. 
 
-isolate iso_s = servers with reference,net
+isolate iso_s = servers with reference,net,dma,io_spec
 
 # Verify the network implementation, using its upper and lower specifications
 

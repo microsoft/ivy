@@ -7,7 +7,9 @@ from ivy_utils import p_error, parse_with
 
 import ply.yacc as yacc
 
-parser = yacc.yacc(start='top',tabmodule='ivy_dafny_parsetab',errorlog=yacc.NullLogger())
+import os
+tabdir = os.path.dirname(os.path.abspath(__file__))
+parser = yacc.yacc(start='top',tabmodule='ivy_dafny_parsetab',errorlog=yacc.NullLogger(),outputdir=tabdir)
 
 def parse(s):
     return parse_with(s,parser,lexer)

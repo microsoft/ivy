@@ -1,0 +1,22 @@
+#lang ivy1.6
+
+type t
+
+variant a of t
+
+variant b of t
+
+individual v : t
+
+action act (inp: a) = {
+    v := inp
+}
+
+action act2 returns(out:a) = {
+    if some (q:a) v *> q {
+        out := q;
+    }
+}
+
+export act
+export act2

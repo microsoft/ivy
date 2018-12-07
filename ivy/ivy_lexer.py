@@ -2,6 +2,7 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 import ply.lex as lex
+import ivy_utils as iu
 
 tokens = (
    'COMMA',
@@ -9,6 +10,7 @@ tokens = (
    'RPAREN',
    'PLUS',
    'TIMES',
+   'DIV',
    'TILDA',
    'AND',
    'OR',
@@ -31,12 +33,16 @@ tokens = (
    'GT',
    'MINUS',
    'DOTS',
+   'DOTDOTDOT',
+   'NATIVEQUOTE',
+   'PTO',
+   'DOLLAR',
 )
 
 reserved = all_reserved = {
    'relation' : 'RELATION',
    'individual' : 'INDIV',
-   'function' : 'INDIV',
+   'function' : 'FUNCTION',
    'axiom' : 'AXIOM',
    'conjecture' : 'CONJECTURE',
    'schema' : 'SCHEMA',
@@ -88,6 +94,7 @@ reserved = all_reserved = {
    'export' : 'EXPORT',
    'delegate' : 'DELEGATE',
    'import' : 'IMPORT',
+   'using' : 'USING',
    'include' : 'INCLUDE',
    'progress' : 'PROGRESS',
    'rely' : 'RELY',
@@ -97,7 +104,36 @@ reserved = all_reserved = {
    'some' : 'SOME',
    'maximizing' : 'MAXIMIZING',
    'minimizing' : 'MINIMIZING',
-
+   'private' : 'PRIVATE',
+   'implement' : 'IMPLEMENT',
+   'property' : 'PROPERTY',
+   'while' : 'WHILE',
+   'invariant' : 'INVARIANT',
+   'struct' : 'STRUCT',
+   'definition' : 'DEFINITION',
+   'ghost' : 'GHOST',
+   'alias' : 'ALIAS',
+   'trusted' : 'TRUSTED',
+   'this' : 'THIS',
+   'var' : 'VAR',
+   'attribute' : 'ATTRIBUTE',
+   'variant' : 'VARIANT',
+   'of' : 'OF',
+   'scenario' : 'SCENARIO',
+   'proof' : 'PROOF',
+   'named' : 'NAMED',
+   'fresh' : 'FRESH',
+   'temporal' : 'TEMPORAL',
+   'globally' : 'GLOBALLY',
+   'eventually' : 'EVENTUALLY',
+   'decreases' : 'DECREASES',
+   'specification' : 'SPECIFICATION',
+   'implementation' : 'IMPLEMENTATION',
+   'ensure' : 'ENSURE',
+   'require' : 'REQUIRE',
+   'around' : 'AROUND',
+   'parameter' : 'PARAMETER',
+   'apply' : 'APPLY',
 }
 
 tokens += tuple(all_reserved.values())
@@ -107,11 +143,13 @@ t_TILDA    = r'\~'
 t_COMMA    = r'\,'
 t_PLUS    = r'\+'
 t_TIMES   = r'\*'
+t_DIV   = r'\/'
 t_MINUS   = r'\-'
 t_LT      = r'\<'
 t_LE      = r'\<='
 t_GT      = r'\>'
 t_GE      = r'\>='
+t_PTO      = r'\*>'
 t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
 t_OR = r'\|'
@@ -127,8 +165,10 @@ t_ARROW = r'\->'
 t_IFF = r'\<->'
 t_COLON = r':'
 t_DOTS = r'\.\.'
+t_DOTDOTDOT = r'\.\.\.'
+t_DOLLAR = r'\$'
 
-t_ignore  = ' \t'
+t_ignore  = ' \t\r'
 t_ignore_COMMENT = r'\#.*'
 
 def t_newline(t):
@@ -136,7 +176,7 @@ def t_newline(t):
     t.lexer.lineno += len(t.value)
 
 def t_SYMBOL(t):
-    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9]*\])*'
+    r'[_a-z0-9][_a-zA-Z0-9]*(\[[ab-zA-Z_0-9.]*\])*|".*?"'
     t.type = reserved.get(t.value,'SYMBOL')
     return t
 
@@ -150,9 +190,19 @@ def t_VARIABLE(t):
     t.type = reserved.get(t.value,'VARIABLE')
     return t
 
+def t_NATIVEQUOTE(t):
+    r'<<<[\s\S]*?>>>'
+    t.lexer.lineno += sum(1 for c in t.value if c == '\n')
+    t.type = reserved.get(t.value,'NATIVEQUOTE')
+    return t
+
+class TokenErrorNode(object):
+    def __init__(self,token):
+        self.lineno = iu.Location(iu.filename,token.lineno)
+
 def t_error(t):
+    raise iu.IvyError(TokenErrorNode(t),"illegal character '{}'".format(t.value[0]))
     print "Illegal character '%s'" % t.value[0]
-    t.lexer.skip(1)
 
 lexer = lex.lex(errorlog=lex.NullLogger())
 
@@ -180,10 +230,25 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,4]:
-            for s in ['function','class','object','method','execute','destructor','some','maximizing','maximizing']:
+            for s in ['function','class','object','method','execute','destructor',
+                      'some','maximizing','maximizing','private','implement','using','property','while','invariant','struct','definition','ghost','alias','trusted','this','var','attribute','scenario','proof','named','fresh']:
 #                print "deleting {}".format(s)
                 if s in reserved:
                     del reserved[s]
+        if self.version <= [1,5]:
+            for s in ['variant','of', 'globally', 'eventually', 'temporal']:
+#                print "deleting {}".format(s)
+                if s in reserved:
+                    del reserved[s]
+        if self.version <= [1,6]:
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply']:
+                if s in reserved:
+                    del reserved[s]
+        else:
+            for s in ['requires','ensures']:
+                if s in reserved:
+                    del reserved[s]
+
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global reserved

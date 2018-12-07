@@ -1,0 +1,88 @@
+#lang ivy1.6
+
+# Now let's try to specify something a little more interesting about
+# the "hello world" program. We want the value of the `world` response
+# to be bigger than the value of the `hello` it responds to.
+
+# We'll define the same interface that we had before:
+
+
+type t
+
+action hello(val:t)
+action world(val:t)
+
+export hello
+import world
+
+# Now we'll add to our monitor a variable `hello_value` that remembers
+# the parameter to `hello`. We assert that the `world` value has to be greater than this.
+
+object spec = {
+
+    var pending : bool
+
+    # Here is our new variable, of type `t`. We don't care what its
+    # initial value is.
+
+    var hello_value : t
+
+    after init {
+	pending := false
+    }
+
+    before hello(val:t) {
+	pending := true;
+	hello_value := val        # remember the value
+    }
+
+    before world(val:t) {
+	assert pending;
+	assert val > hello_value;  #  new assertion
+	pending := false
+    }
+}
+
+# The rest is the same as before.
+
+object impl = {
+    implement hello {
+	call world(val+1)
+    }
+}
+
+interpret t -> bv[4]
+
+# Now build a tester and run it. What happens?
+#
+# You might see something like this:
+#
+#     > hello(1)
+#     < world(2)
+#     > hello(12)
+#     < world(13)
+#     > hello(10)
+#     < world(11)
+#     ...
+#     > hello(1)
+#     < world(2)
+#     > hello(15)
+#     < world(0)
+#     assertion_failed("hello3.ivy(41)")
+#     hello3.ivy(41): error: assertion failed
+#
+# Yikes! It looks like we got an overflow. Since we are using 4-bit
+# numbers, 15 + 1 = 0. So our implementation fails the specification.
+# Notice that if we had used, say 32-bit, integers as our data type,
+# we probably wouldn't have found this error, since the chance of randomly
+# drawing 2^32 - 1 would be too samll. This is one good reason to set limits
+# low in testing. It becomes more likely that we will reach them.
+#
+# But maybe we really didn't want to allow the environment to say
+# `hello` with the maximum value. Have a look at `hello4.ivy`.
+
+
+
+
+
+

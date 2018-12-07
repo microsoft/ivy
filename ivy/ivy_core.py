@@ -2,10 +2,27 @@
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
 # TODO get rid of import *
+
 from z3 import *
+import ivy_utils as iu
 
 def get_id(x):
     return Z3_get_ast_id(x.ctx_ref(), x.as_ast())
+
+def biased_core(s,alits,unlikely):
+    """ Try to produce a minimal unsatisfiable subset of alits, using as few
+    of the alits in unlikely as possible. 
+    """
+    core = alits
+    for lit in unlikely:
+        test = [c for c in core if get_id(c) != get_id(lit)]
+        if s.check(test) == unsat:
+            core = test
+    is_sat = s.check(core)
+    assert is_sat == unsat
+    core = minimize_core(s)
+    return core
+    
 
 def minimize_core_aux2(s, core):
     mus = []

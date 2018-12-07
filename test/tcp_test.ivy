@@ -1,0 +1,66 @@
+#lang ivy1.7
+
+
+include tcp
+
+type addr
+type pkt
+
+instance net : simple_tcp(addr,pkt)
+
+export net.send
+
+# export net.tcp.recv
+# export net.tcp.connected
+# export net.tcp.accept
+# export net.tcp.failed
+
+import net.recv
+
+relation foo
+
+isolate test = {
+    implementation {
+        interpret addr -> bv[1]
+        interpret pkt -> bv[1]
+        interpret net.tcp.socket -> bv[4]
+
+        action close_socket(src:addr,dst:addr) = {
+            call net.tcp.close(src,net.proc.sock(src,dst))
+        }
+
+    }
+        before close_socket(src:addr,dst:addr) {
+            require net.proc.isup(src,dst)
+        }
+}
+
+# extract iso_impl = this,test
+
+# isolate iso_test = net,test with net.tcp,net.tcp.impl
+
+
+# export test.close_socket
+
+extract iso_proc(self:addr) = net(self),test
+
+# instance net : tcp_network(addr,pkt)
+
+
+# export net.listen
+
+# export net.close
+
+# export net.connect
+
+# export net.send
+
+
+# export net.accept
+
+# export net.recv
+
+# export net.failed
+
+# export net.connected
+

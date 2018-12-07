@@ -12,9 +12,13 @@ from ivy_logic_utils import *
 from ivy_concept_space import *
 from ivy_utils import Parameter
 
+test_bottom = True
+
 def alpha(state):
+#    print "prestate: {}".format(state.clauses)
     d = ProgressiveDomain(state.domain.concept_spaces,verbose = False)
     state.clauses = d.post(state.clauses,state.domain.background_theory(state.in_scope),{},[])
+#    print "poststate: {}".format(state.clauses)
     
 #log = Parameter("log.alpha")
 log = False
@@ -64,6 +68,12 @@ class ProgressiveDomain(object):
     def inhabited_lit(self,lit):
         self.inhabited_cube([lit])
 
+
+    def unfold_defs(self,cube):
+        insts = definition_instances(cube_to_formula(cube))
+        add_clauses(self.solver, insts)
+
+
     def test_cube(self,cube):
         canon_cube = canonize_clause(cube)
         if log:
@@ -78,8 +88,10 @@ class ProgressiveDomain(object):
         cube = rename_clause(cube,self.new_sym)
         vs = used_variables_clause(cube)
         # TODO: these constants need to have right sorts
-        subs = dict((v,var_to_skolem('__c',v)) for v in vs)
-        res = check_cube(self.solver,substitute_clause(cube,subs),self.cube_memo,memo_unsat_only = True)
+        subs = dict((v.rep,var_to_skolem('__c',v)) for v in vs)
+        scube = substitute_clause(cube,subs)
+        self.unfold_defs(scube)
+        res = check_cube(self.solver,scube,self.cube_memo,memo_unsat_only = True)
         if res:
             if len(cube) <= 4:
                 self.model_check()
@@ -101,7 +113,7 @@ class ProgressiveDomain(object):
             print "concrete state: %s" % theory
             print "background: %s" % background_theory
         add_clauses(self.solver, and_clauses(theory,background_theory))
-        self.unsat = self.solver.check() == z3.unsat
+        self.unsat = test_bottom and self.solver.check() == z3.unsat
         if self.unsat:
             print "core: %s" % unsat_core(and_clauses(theory,background_theory),true_clauses())
         

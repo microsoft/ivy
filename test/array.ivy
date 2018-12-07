@@ -1,0 +1,69 @@
+#lang ivy1.6
+
+module array(domain,range) = {
+
+    type t
+
+    action create(s:domain,y:range) returns (a:t)
+    action set(a:t,x:domain,y:range) returns (a:t)
+    action get(a:t,x:domain) returns (y:range) 
+    action size(a:t) returns (s:domain)
+    
+    function end(A:t) : domain
+    function value(A:t,X:domain) : range
+
+    object spec = {
+	before create {
+	    assert 0 <= s
+	}
+        before set {
+	    assert 0 <= x & x < end(a)
+	}	       	 
+	after set {
+	    assert value(a,x) = y
+	}
+	before get {
+	    assert 0 <= x & x < end(a)
+	}
+	after get {
+	    assert value(a,x) = y
+	}
+	after size {
+	    assert s = end(a)
+	}
+
+    }
+
+    object impl = {
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	implement create {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+    }
+}

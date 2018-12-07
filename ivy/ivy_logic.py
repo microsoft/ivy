@@ -66,10 +66,11 @@ from ivy_utils import flatten, IvyError
 import ivy_utils as iu
 import logic as lg
 import logic_util as lu
-from logic import And,Or,Not,Implies,Iff,Ite,ForAll,Exists
-from type_inference import concretize_sorts
+from logic import And,Or,Not,Globally,Eventually,Implies,Iff,Ite,ForAll,Exists,Lambda,NamedBinder
+from type_inference import concretize_sorts, concretize_terms
 from collections import defaultdict
 from itertools import chain
+import ivy_smtlib
 
 allow_unsorted = False
 repr = str
@@ -89,16 +90,15 @@ class UnsortedContext(object):
         allow_unsorted = self.old_allow_unsorted
         return False # don't block any exceptions
 
-class top_sort_as_default(object):
-    """ Context in which TopSort is the default sort
+class sort_as_default(object):
+    """ Context in which a given sort is the default sort
     """
-    def __init__(self):
-        pass
+    def __init__(self,sort):
+        self.sort = sort
     def __enter__(self):
         global sig
-#        print "setting topsort as default"
         self.old_default_sort = sig.sorts.get('S',None)
-        sig.sorts['S'] = lg.TopS
+        sig.sorts['S'] = self.sort
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
@@ -108,9 +108,25 @@ class top_sort_as_default(object):
             del sig.sorts['S']
         return False # don't block any exceptions
 
+class top_sort_as_default(sort_as_default):
+    """ Context in which TopSort is the default sort
+    """
+    def __init__(self):
+        self.sort = lg.TopS
+
+class alpha_sort_as_default(sort_as_default):
+    """ Context in which alpha is the default sort
+    """
+    def __init__(self):
+        self.sort = lg.TopSort('alpha')
+
+def is_numeral_name(s):
+    return s[0].isdigit() or s[0] == '"'  or (s[0] == '-' and len(s) > 1 and s[1].isdigit)
+
 Symbol = lg.Const
 
 Symbol.rep = property(lambda self: self)
+Symbol.relname = property(lambda self: self)
 
 # this is just not needed, as it is implemented exactly the same
 # in logic.py
@@ -137,9 +153,11 @@ Symbol.deskolem = lambda self,s: self.drop_prefix('__')
 Symbol.__call__ = lambda self,*args: App(self,*args) if len(args) > 0 or isinstance(self.sort,FunctionSort) else self
 Symbol.is_relation = lambda self: isinstance(self.sort.rng,lg.BooleanSort)
 Symbol.args = property(lambda self : [])
-Symbol.is_numeral  = lambda self : self.name[0].isdigit()
+Symbol.is_numeral  = lambda self : is_numeral_name(self.name)
 Symbol.clone = lambda self,args : self
+Symbol.resort = lambda self,sort : Symbol(self.name,sort)
 
+BooleanSort = lg.BooleanSort
 
 class AST(object):
     """
@@ -168,6 +186,31 @@ class Let(AST):
             res = 'let ' + ', '.join([str(x) for x in self.args[0:-1]]) + ' in ' + res
         return res
 
+class Some(AST):
+    def __init__(self,*args):
+        assert len(args) >= 2
+        self.args = args
+    def __str__(self):
+        res = 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
+        if len(self.args) >= 3:
+            res += ' in ' + str(self.args[2])
+        if len(self.args) >= 4:
+            res += ' else ' + str(self.args[3])
+        return res
+    def params(self):
+        return [self.args[0]]
+    def fmla(self):
+        return self.args[1]
+    def if_value(self):
+        return self.args[2] if len(self.args) == 4 else None
+    def else_value(self):
+        return self.args[3] if len(self.args) == 4 else None
+    @property
+    def variables(self):
+        return [self.args[0]]
+    def clone_binder(self,vs,body):
+        return Some(*(vs+self.args[1:]))
+
 
 class Definition(AST):
     """
@@ -180,7 +223,21 @@ class Definition(AST):
         return ' = '.join([repr(x) for x in self.args])
     def defines(self):
         return self.args[0].rep
+    def lhs(self):
+        return self.args[0]
+    def rhs(self):
+        return self.args[1]
     def to_constraint(self):
+        if isinstance(self.args[1],Some):
+            if self.args[1].if_value() != None:
+                return And(Implies(self.args[1].args[1],
+                                   lg.Exists([self.args[1].args[0]],
+                                             And(self.args[1].args[1],Equals(self.args[0],self.args[1].if_value())))),
+                           Or(lg.Exists([self.args[1].args[0]],self.args[1].args[1]),
+                              Equals(self.args[0],self.args[1].else_value())))
+            return lg.ForAll([self.args[1].args[0]],
+                             Implies(self.args[1].args[1],
+                                     lu.substitute(self.args[1].args[1],{self.args[1].args[0]:self.args[0]})))
         if is_individual(self.args[0]):
             return Equals(*self.args)
         return Iff(*self.args)
@@ -188,19 +245,25 @@ class Definition(AST):
     def sort(self):
         return lg.Boolean
 
-lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists]
+
+
+lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
     cls.clone = lambda self,args: type(self)(*args)
 
-for cls in [lg.ForAll, lg.Exists]:
+for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.clone = lambda self,args: type(self)(self.variables,*args)
+
+lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args)
+lg.NamedBinder.rep = property(lambda self: self)
 
 lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
 lg.Apply.args = property(lambda self: self.terms)
 lg.Apply.rep = property(lambda self: self.func)
 lg.Apply.relname = property(lambda self: self.func)
+
 
 for cls in [lg.Apply] + lg_ops:
     cls.is_numeral = lambda self: False
@@ -211,18 +274,22 @@ def is_numeral(term):
 for cls in [lg.Const, lg.Var, lg.Apply]:
     cls.get_sort = lambda self: self.sort
 
-lg.Eq.rep = property(lambda self: equals)
+lg.Eq.rep = property(lambda self: Symbol('=',RelationSort([x.sort for x in self.args])))
 
 App = lg.Apply
 def Atom(rel,args):
-    return Equals(*args) if rel == equals else lg.Apply(rel,*args)
+    return Equals(*args) if rel == equals else lg.Apply(rel,*args) if args else rel
 
 def is_atom(term):
-    return isinstance(term,App) and term.sort == lg.Boolean or isinstance(term,lg.Eq)
+    return (isinstance(term,App) or isinstance(term,Symbol)) and term.sort == lg.Boolean or isinstance(term,lg.Eq)
 
 # note: ivy1 treats instances of a constant in a formula as an app
 def is_app(term):
-    return isinstance(term,App) or isinstance(term,lg.Const)
+    return (
+        isinstance(term,App) or
+        isinstance(term,lg.Const) or
+        isinstance(term,lg.NamedBinder) and len(term.variables) == 0
+    )
 
 def is_rel_app(term):
     return isinstance(term,App) and term.rep.is_relation()
@@ -250,7 +317,7 @@ def add_sort(sort):
         IvyError(None,"redefinition of sort {}".format(sort_name))
     sig.sorts[sort.name] = sort
 
-def find_symbol(symbol_name):
+def find_symbol(symbol_name,throw=True):
     if allow_unsorted:
         return Symbol(symbol_name,lg.TopS)
     try:
@@ -261,14 +328,24 @@ def find_symbol(symbol_name):
     except KeyError:
         if symbol_name == '=':
             return equals
-        raise IvyError(None,"unknown symbol: {}".format(symbol_name))
+        if not throw:
+            return None
+        else:
+            if symbol_name in sig.sorts:
+                IvyError(None,"type {} used where a function or individual symbol is expected".format(symbol_name))
+            raise IvyError(None,"unknown symbol: {}".format(symbol_name))
 
-def find_polymorphic_symbol(symbol_name):
+def find_polymorphic_symbol(symbol_name,throw=True):
     if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
         return polymorphic_symbols[symbol_name]
-    if symbol_name[0].isdigit():
+    if symbol_name[0].isdigit() or symbol_name[0] == '"':
         return Symbol(symbol_name,alpha)
-    return find_symbol(symbol_name)
+    return find_symbol(symbol_name,throw)
+
+def normalize_symbol(symbol):
+    if iu.ivy_use_polymorphic_macros and symbol.name in polymorphic_macros_map:
+        return Symbol(polymorphic_macros_map[symbol.name],symbol.sort)
+    return symbol
 
 class UnionSort(object):
     def __init__(self):
@@ -278,32 +355,13 @@ class UnionSort(object):
 
 def add_symbol(symbol_name,sort):
 #    print "add symbol: {} : {}".format(symbol_name,sort)
-    if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
-        if symbol_name not in sig.symbols:
-            sig.symbols[symbol_name] = Symbol(symbol_name,UnionSort())
-        u = sig.symbols[symbol_name].sort
-        if sort not in u.sorts:
-            u.sorts.append(sort)
-        return Symbol(symbol_name,sort)
-    elif symbol_name in sig.symbols:
-        if sort != sig.symbols[symbol_name].sort:
-            raise IvyError(None,"redefining symbol: {}".format(symbol_name))
-    else:
-        sig.symbols[symbol_name] = Symbol(symbol_name,sort)
-    return sig.symbols[symbol_name]
+    return sig.add_symbol(symbol_name,sort)
 
 def remove_symbol(symbol):
-    assert symbol.name in sig.symbols
-    assert not (iu.ivy_have_polymorphism and symbol.name in polymorphic_symbols)
-    del sig.symbols[symbol.name]
+    sig.remove_symbol(symbol)
 
 def all_symbols():
-    for name,sym in sig.symbols.iteritems():
-        if isinstance(sym.sort,UnionSort):
-            for sort in sym.sort.sorts:
-                yield Symbol(sym.name,sort)
-        else:
-            yield sym
+    return sig.all_symbols()
 
 def get_sort_term(term):
     if hasattr(term,'sort'):
@@ -366,7 +424,9 @@ def is_ea(term):
         return is_ae(term.args[0])
     return is_qf(term)
 
-logics = ["epr","qf"]
+logics = ["epr","qf","fo"]
+decidable_logics = ["epr","qf"]
+default_logics = ["epr"]
 
 def subterms(term):
     yield term
@@ -393,10 +453,81 @@ def is_segregated(fmla):
                 reason_text = "{} is not segrated (variable positions differ)".format(name)
                 return False
     return True
-            
+
 def reason():
     global reason_text
     return reason_text
+
+class NotEssentiallyUninterpreted(Exception):
+    pass
+
+def check_essentially_uninterpreted(fmla):
+    if is_variable(fmla):
+        return False
+    if is_binder(fmla):
+        return check_essentially_uninterpreted(fmla.body) and len(fmla.variables) == 0
+    argres = all([check_essentially_uninterpreted(a) for a in fmla.args])
+    if is_app(fmla) and is_interpreted_symbol(fmla.rep):
+        if not argres:
+            raise NotEssentiallyUninterpreted()
+    return argres
+
+def symbols_over_universals_rec(fmla,syms,pos,univs):
+    if is_variable(fmla):
+        return fmla not in univs
+    if is_quantifier(fmla):
+        if pos == isinstance(fmla,lg.ForAll) or len(univs) > 0:
+            univs.update(fmla.variables)
+            res = symbols_over_universals_rec(fmla.body,syms,pos,univs)
+            for v in fmla.variables:
+                univs.remove(v)
+            return res
+    if isinstance(fmla,Not):
+        pos = not pos
+    argres = all([symbols_over_universals_rec(a,syms,pos,univs) for a in fmla.args])
+    if is_app(fmla) and not is_eq(fmla) and not argres:
+        syms.add(fmla.rep)
+    return argres
+
+def symbols_over_universals(fmlas):
+    """ Return the set of function symbols that occur over universally
+    quantified variables after skolemization.  In the formula 'forall
+    X. exists Y. p(X)', p occurs over a universal, since this
+    skolemizes to 'forall X. p(f(X))'. We don't count free variables,
+    however. If you want free variabes to be considered quantified,
+    you have to add a quantifier (see close_formula)."""
+
+    syms = set()
+    for fmla in fmlas:
+        try:
+            symbols_over_universals_rec(fmla,syms,True,set())
+        except Exception as foo:
+            print fmla
+            raise foo
+    return syms
+
+def universal_variables_rec(fmla,pos,univs):
+    if is_quantifier(fmla):
+        if pos == isinstance(fmla,lg.ForAll):
+            univs.update(fmla.variables)
+            return
+    if isinstance(fmla,Not):
+        pos = not pos
+    for a in fmla.args:
+        universal_variables_rec(a,pos,univs)
+
+def universal_variables(fmlas):
+    """ Return the set of variables quantified universally after skolemization."""
+
+    univs = set()
+    for fmla in fmlas:
+        universal_variables_rec(fmla,True,univs)
+    return univs
+
+# def check_essentially_uninterpreted(fmla):
+#     syms = symbols_over_universals([fmla])
+#     if any(is_interpreted_symbol(sym) for sym in syms):
+#         raise NotEssentiallyUninterpreted()
 
 def is_in_logic(term,logic,unstrat = False):
     global reason_text
@@ -407,6 +538,11 @@ def is_in_logic(term,logic,unstrat = False):
         # if not ok:
         #     reason_text = "of quantifier alternation"
         #     return False
+        try:
+            check_essentially_uninterpreted(term)
+        except NotEssentiallyUninterpreted:
+            reason_text = "a variable occurs under an interpreted function symbol"
+            return False
         cs = lu.used_constants(term)
         for s in cs:
             if s.name in sig.interp:
@@ -415,13 +551,22 @@ def is_in_logic(term,logic,unstrat = False):
         if unstrat:
             reason_text = "functions are not stratified"
             return False
-            
+
             if not is_segregated(term):
                 reason_text = "formula is unsegregated"
                 return False
         return True
     elif logic == "qf":
+        reason_text = "a formula contains a quantifier"
         return is_qf(term)
+    elif logic == "fo":
+        cs = lu.used_constants(term)
+        for s in cs:
+            if s.name in sig.interp:
+                reason_text = "'{}' is iterpreted".format(s)
+                return False
+        return True
+
 
 
 def Constant(sym):
@@ -433,14 +578,96 @@ def is_forall(term):
 def is_exists(term):
     return isinstance(term,lg.Exists)
 
+def is_lambda(term):
+    return isinstance(term,lg.ForAll)
+
 def is_quantifier(term):
     return isinstance(term,lg.ForAll) or isinstance(term,lg.Exists)
+
+def is_binder(term):
+    return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder, Some))
+
+for b in [lg.ForAll,lg.Exists,lg.Lambda]:
+    b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
+
+lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
+
+def is_named_binder(term):
+    return isinstance(term, lg.NamedBinder)
+
+def is_temporal(term):
+    return isinstance(term, (lg.Globally, lg.Eventually))
 
 def quantifier_vars(term):
     return term.variables
 
+def binder_vars(term):
+    return term.variables
+
 def quantifier_body(term):
     return term.body
+
+def binder_args(term):
+    if isinstance(term,Some):
+        return term.args[1:]
+    return [term.body]
+
+def is_epr_rec(term,uvars):
+    if is_forall(term):
+        return is_epr_rec(term.body,frozenset.union(uvars,term.variables))
+    if is_exists(term):
+        if frozenset.intersection(lu.free_variables(term),uvars):
+            return False
+        return is_epr_rec(term.body,frozenset())
+    return all(is_epr_rec(a,uvars) for a in term.args)
+
+def is_epr(term):
+    return is_epr_rec(term,lu.free_variables(term))
+
+def variables(sorts):
+    return [Variable('V'+str(idx),s) for idx,s in enumerate(sorts)]
+
+def extensionality(destrs):
+    if not destrs:
+        return Or()
+    c = []
+    sort = destrs[0].sort.dom[0]
+    x,y = Variable("X",sort),Variable("Y",sort)
+    for d in destrs:
+        vs = variables(d.sort.dom[1:])
+        eqn = Equals(d(*([x]+vs)),d(*([y]+vs)))
+        if vs:
+            eqn = lg.ForAll(vs,eqn)
+        c.append(eqn)
+    res = Implies(And(*c),Equals(x,y))
+    return res
+
+# Return a prediciate stating relation "rel" is a partial function
+def partial_function(rel):
+    lsort,rsort = rel.sort.dom
+    x,y,z = [Variable(n,s) for n,s in [('X',lsort),('Y',rsort),('Z',rsort)]]
+    return ForAll([x,y,z],Implies(And(rel(x,y),rel(x,z)),Equals(y,z)))
+
+# Return a prediciate stating the an element of "sort" can point to
+# only one variant of "sort". This is sadly quadratic.  TODO: maybe
+# use a function to an enumerated type to express this constraint.
+# We also include here extensionality for variants, that is to values
+# that point to the same value are the equal. A sore point, however, is that
+# null values may not be equal.
+
+def exclusivity(sort,variants):
+    # partial funciton
+    def pto(s):
+        return Symbol('*>',RelationSort([sort,s]))
+    excs = [partial_function(pto(s)) for s in variants]
+    for s in enumerate(variants):
+        x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',sort),('Z',s)]]
+        excs.append(Implies(And(pto(s)(x,z),pto(s)(y,z)),Equals(x,y)))
+    for i1,s1 in enumerate(variants):
+        for s2 in variants[:i1]:
+            x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',s1),('Z',s2)]]
+            excs.append(Not(And(pto(s1)(x,y),pto(s2)(x,z))))
+    return And(*excs)
 
 Variable = lg.Var
 Variable.args = property(lambda self: [])
@@ -448,18 +675,9 @@ Variable.clone = lambda self,args: self
 Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
 Variable.rename = lambda self,name: Variable(name,self.sort)
+Variable.resort = lambda self,sort : Variable(self.name,sort)
 
-show_variable_sorts = False
 
-Variable.__str__ = lambda self: (self.name+':'+self.sort.name) if show_variable_sorts else self.name
-
-def to_str_with_var_sorts(t):
-    global show_variable_sorts
-    show_variable_sorts = True
-    res = str(t)
-    show_variable_sorts = False
-    return res
-    
 class Literal(AST):
     """
     Either a positive or negative atomic formula. Literals are not
@@ -556,21 +774,46 @@ FunctionSort.dom = FunctionSort.domain
 FunctionSort.defines = lambda self: []
 FunctionSort.is_relational = lambda self: self.rng == lg.Boolean
 
+lg.BooleanSort.is_relational = lambda self: True
+lg.BooleanSort.rng = property(lambda self: self)
+lg.BooleanSort.dom = property(lambda self: [])
+
+
 def is_enumerated_sort(s):
     return isinstance(s,EnumeratedSort)
 
 def is_boolean_sort(s):
     return s == lg.Boolean
 
+def is_boolean(term):
+    return term.sort == lg.Boolean
+
 # TODO: arguably boolean and enumerated are first-order sorts
 def is_first_order_sort(s):
     return isinstance(s,UninterpretedSort)
 
+def is_function_sort(s):
+    return isinstance(s,FunctionSort)
+
+def FuncConstSort(*sorts):
+    return FunctionSort(*sorts) if len(sorts) > 1 else sorts[0]
+
 def RelationSort(dom):
-    return FunctionSort(*(list(dom) + [lg.Boolean]))
+    return FunctionSort(*(list(dom) + [lg.Boolean])) if len(dom) else lg.Boolean
+
+def TopFunctionSort(arity):
+    if arity == 0:
+        return lg.TopSort('alpha')
+    res = FunctionSort(*[lg.TopSort('alpha{}'.format(idx)) for idx in range(arity+1)])
+    return res
+
+TopS = lg.TopS
 
 def apply(symbol,args):
     return App(symbol,*args)
+
+def is_topsort(sort):
+    return isinstance(sort,lg.TopSort)
 
 def sortify(ast):
     args = [sortify(arg) for arg in ast.args]
@@ -590,14 +833,16 @@ class Sig(object):
         self._default_sort = None
         self.default_numeric_sort = ConstantSort("int")
         self.sorts["bool"] = RelationSort([])
+        self.old_sigs = []
     def __enter__(self):
         global sig
-        self.old_sig = sig
+        self.old_sigs.append(sig)
         sig = self
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         global sig
-        sig = self.old_sig
+        sig = self.old_sigs[-1]
+        self.old_sigs = self.old_sigs[:-1]
         return False # don't block any exceptions
     def copy(self):
         res = Sig()
@@ -608,21 +853,137 @@ class Sig(object):
         res._default_sort = self._default_sort
         res.default_numeric_sort = self.default_numeric_sort
         return res
+    def all_symbols(self):
+        for name,sym in self.symbols.iteritems():
+            if isinstance(sym.sort,UnionSort):
+                for sort in sym.sort.sorts:
+                    yield Symbol(sym.name,sort)
+            else:
+                yield sym
+    def add_symbol(self,symbol_name,sort):
+        #    print "add symbol: {} : {}".format(symbol_name,sort)
+        if iu.ivy_have_polymorphism and symbol_name in polymorphic_symbols:
+            if symbol_name not in self.symbols:
+                self.symbols[symbol_name] = Symbol(symbol_name,UnionSort())
+            u = self.symbols[symbol_name].sort
+            if sort not in u.sorts:
+                u.sorts.append(sort)
+            return Symbol(symbol_name,sort)
+        elif symbol_name in self.symbols:
+            if sort != self.symbols[symbol_name].sort:
+                raise IvyError(None,"redefining symbol: {}".format(symbol_name))
+        else:
+            self.symbols[symbol_name] = Symbol(symbol_name,sort)
+        return self.symbols[symbol_name]
+
+    def remove_symbol(self,symbol):
+        assert symbol.name in self.symbols, symbol.name
+        sort = self.symbols[symbol.name].sort
+        if isinstance(sort,UnionSort):
+            assert symbol.sort in sort.sorts
+            sort.sorts.remove(symbol.sort)
+            return
+        del self.symbols[symbol.name]
+
+    def contains_symbol(self,symbol):
+        if symbol.name not in self.symbols:
+            return False
+        sort = self.symbols[symbol.name].sort
+        if isinstance(sort,UnionSort):
+            return symbol.sort in sort.sorts
+        return True
+
     def __str__(self):
         return sig_to_str(self)
 
+# Environment that temporarily adds symbols to a signature.
+
+class WithSymbols(object):
+    def __init__(self,symbols):
+        self.symbols = list(symbols)
+    def __enter__(self):
+        global sig
+        self.saved = []
+        for sym in self.symbols:
+            if sig.contains_symbol(sym):
+                self.saved.append(sym)
+                sig.remove_symbol(sym)
+            sig.add_symbol(sym.name,sym.sort)
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global sig
+        for sym in self.symbols:
+            sig.remove_symbol(sym)
+        for sym in self.saved:
+            sig.add_symbol(sym.name,sym.sort)
+        return False # don't block any exceptions
+
+class WithSorts(object):
+    def __init__(self,sorts):
+        self.sorts = list(sorts)
+    def __enter__(self):
+        global sig
+        self.saved = []
+        for sym in self.sorts:
+            if sym.name in sig.sorts:
+                self.saved.append(sym)
+            sig.sorts[sym.name] = sym
+        return self
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        global sig
+        for sym in self.sorts:
+            del sig.sorts[sym.name]
+        for sym in self.saved:
+            sig.sorts[sym.name] = sym
+        return False # don't block any exceptions
+
+
 alpha = lg.TopSort('alpha')
+beta = lg.TopSort('beta')
+
+lg.BooleanSort.name = 'bool'
 
 polymorphic_symbols_list = [
     ('<' , [alpha,alpha,lg.Boolean]),
     ('<=' , [alpha,alpha,lg.Boolean]),
+    ('>' , [alpha,alpha,lg.Boolean]),
+    ('>=' , [alpha,alpha,lg.Boolean]),
     ('+' , [alpha,alpha,alpha]),
     ('*' , [alpha,alpha,alpha]),
     ('-' , [alpha,alpha,alpha]),
     ('/' , [alpha,alpha,alpha]),
+    ('*>' , [alpha,beta,lg.Boolean]),
+    ('bvand' , [alpha,alpha,alpha]),
+    ('bvor' , [alpha,alpha,alpha]),
+    ('bvnot' , [alpha,alpha]),
+    # for liveness to safety reduction:
+    ('l2s_waiting', [lg.Boolean]),
+    ('l2s_frozen', [lg.Boolean]),
+    ('l2s_saved', [lg.Boolean]),
+    ('l2s_d', [alpha, lg.Boolean]),
+    ('l2s_a', [alpha, lg.Boolean]),
 ]
 
-polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y))) for x,y in polymorphic_symbols_list)
+polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
+                           for x,y in polymorphic_symbols_list)
+
+polymorphic_macros_map = {
+    '<=' : '<',
+    '>' : '<',
+    '>=' : '<',
+}
+
+macros_expansions = {
+    '<=' : lambda t: Or(normalize_symbol(t.func)(*t.args),Equals(*t.args)),
+    '>' : lambda t: normalize_symbol(t.func)(t.args[1],t.args[0]),
+    '>=' : lambda t: Or(normalize_symbol(t.func)(t.args[1],t.args[0]),Equals(*t.args)),
+}
+
+def is_macro(term):
+    return isinstance(term,lg.Apply) and term.func.name in macros_expansions and iu.ivy_use_polymorphic_macros
+
+def expand_macro(term):
+    return macros_expansions[term.func.name](term)
 
 def default_sort():
     ds = sig._default_sort
@@ -653,8 +1014,11 @@ def is_eq(ast):
 def is_equals(symbol):
     return isinstance(symbol,Symbol) and symbol.name == '='
 
+def is_ite(ast):
+    return isinstance(ast,lg.Ite)
+
 def is_enumerated(term):
-    return isinstance(term.get_sort(),EnumeratedSort)
+    return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
     return term.sort != lg.Boolean
@@ -665,17 +1029,37 @@ def is_constant(term):
 
 def is_variable(term):
     return isinstance(term,lg.Var)
-        
-def sort_infer(term):
-    res = concretize_sorts(term)
-    for x in chain(lu.used_variables(res),lu.used_constants(res)):
+
+
+def all_concretely_sorted(*terms):
+    return True
+
+def check_concretely_sorted(term,no_error=False,unsorted_var_names=()):
+    for x in chain(lu.used_variables(term),lu.used_constants(term)):
         if lg.contains_topsort(x.sort) or lg.is_polymorphic(x.sort):
-            raise IvyError(None,"cannot infer sort of {} in {}".format(x,term))
-#    print "sort_infer: res = {!r}".format(res)
+            if x.name not in unsorted_var_names:
+                if no_error:
+                    raise lg.SortError
+                raise IvyError(None,"cannot infer sort of {} in {}".format(x,repr(term)))
+
+
+def sort_infer(term,sort=None,no_error=False):
+    res = concretize_sorts(term,sort)
+    check_concretely_sorted(res,no_error)
+    return res
+
+def sort_infer_list(terms,sorts=None,no_error=False,unsorted_var_names=()):
+    res = concretize_terms(terms,sorts)
+    for term in res:
+        check_concretely_sorted(term,no_error,unsorted_var_names)
     return res
 
 def sorts():
     return [s for n,s in sig.sorts.iteritems()]
+
+def is_ui_sort(s):
+    return type(s) is lg.UninterpretedSort
+
 
 def is_concretely_sorted(term):
     return not lg.contains_topsort(term) and not lg.is_polymorphic(term)
@@ -724,56 +1108,159 @@ sig = Sig()
 
 # string conversions
 
-def nary_str(op,args):
-    res = (' ' + op + ' ').join([repr(a) for a in args])
-    return ('(' + res + ')') if len(args) > 1 else res
+infix_symbols = set(['<','<=','>','>=','+','-','*','/'])
 
-infix_symbols = set(['<','<=','+','-','*','/'])
+show_variable_sorts = True
+show_numeral_sorts = True
 
-to_str_ambiguous = False
+# This converts to string with all type decorations
 
-# This converts to string leaving variables and numerals without type decorations
-
-def fmla_to_str_ambiguous(term):
-    global to_str_ambiguous
-    to_str_ambiguous = True
-    res = str(term)
-    to_str_ambiguous = False
+def to_str_with_var_sorts(t):
+    res = t.ugly()
     return res
 
-def app_arg_str(self,poly):
-    if to_str_ambiguous or not poly or (not is_variable(self) and not is_numeral(self)):
-        return str(self)
-    return self.name + ':' + str(self.sort)
+# This converts to string with no type decorations
 
-def app_str(self):
-    name = self.func.name
-    poly = name in polymorphic_symbols
-    if poly and any(not(is_variable(a) or is_numeral(a)) for a in self.args):
-        poly = False
-    args = [app_arg_str(a,poly) for a in self.args]
+def fmla_to_str_ambiguous(term):
+    global show_variable_sorts
+    global show_numeral_sorts
+    show_variable_sorts = False
+    show_numeral_sorts = False
+    res = term.ugly()
+    show_variable_sorts = True
+    show_numeral_sorts = True
+    return res
+
+def app_ugly(self):
+    if type(self.func) is lg.NamedBinder:
+        name = str(self.func)
+    else:
+        name = self.func.name
+    args = [a.ugly() for a in self.args]
     if name in infix_symbols:
         return (' ' + name + ' ').join(args)
-    if len(args) == 0:
+    if len(args) == 0:  # shouldn't happen
         return name
     return name + '(' + ','.join(args) + ')'
 
-def eq_args_str(self):
-    poly = not any(not(is_variable(a) or is_numeral(a)) for a in self.args)
-    return [app_arg_str(a,poly) for a in self.args]
+def nary_ugly(op,args,parens = True):
+    res = (' ' + op + ' ').join([a.ugly() for a in args])
+    return ('(' + res + ')') if len(args) > 1 and parens else res
 
-    
-lg.Eq.__str__ = lambda self: '{} = {}'.format(*eq_args_str(self))
-lg.And.__str__ = lambda self: nary_str('&',self.args) if self.args else 'true'
-lg.Or.__str__ = lambda self: nary_str('|',self.args) if self.args else 'false'
-lg.Not.__str__ = lambda self: ('{} ~= {}'.format(*eq_args_str(self.body))
+lg.Var.ugly = (lambda self: (self.name+':'+self.sort.name)
+                  if show_variable_sorts and not isinstance(self.sort,lg.TopSort) else self.name)
+lg.Const.ugly = (lambda self: (self.name+':'+self.sort.name)
+                    if show_numeral_sorts and self.is_numeral() and not isinstance(self.sort,lg.TopSort)
+                 else self.name)
+lg.Eq.ugly = lambda self: nary_ugly('=',self.args,parens=False)
+lg.And.ugly = lambda self: nary_ugly('&',self.args) if self.args else 'true'
+lg.Or.ugly = lambda self: nary_ugly('|',self.args) if self.args else 'false'
+lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
                                if type(self.body) is lg.Eq
-                               else '~{}'.format(self.body))
-lg.Implies.__str__ = lambda self: '{} -> {}'.format(self.t1, self.t2)
-lg.Iff.__str__ = lambda self: '{} <-> {}'.format(self.t1, self.t2)
-lg.Ite.__str__ = lambda self:  '{} if {} else {}'.format(self.t_then, self.cond, self.t_else)
+                               else '~{}'.format(self.body.ugly()))
+lg.Globally.ugly = lambda self: ('globally {}'.format(self.body.ugly()))
+lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
+lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
+lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
+lg.Ite.ugly = lambda self:  '({} if {} else {})'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
 
-lg.Apply.__str__ = app_str
+lg.Apply.ugly = app_ugly
+
+def quant_ugly(self):
+    res = ('forall ' if isinstance(self,lg.ForAll) else
+           'exists ' if isinstance(self,lg.Exists) else
+           'lambda ' if isinstance(self,lg.Lambda) else
+           '$' + self.name + ' ')
+    res += ','.join(v.ugly() for v in self.variables)
+    res += '. ' + self.body.ugly()
+    return res
+
+for cls in [lg.ForAll,lg.Exists, lg.Lambda, lg.NamedBinder]:
+    cls.ugly = quant_ugly
+
+# Drop the type annotations of variables and polymorphic
+# constants that can be inferred using the current signature. Here,
+# "inferred_sort" is the sort of fmla that has been inferred, or
+# None, and annotated_vars is the set of variable names that have
+# already been annotated.
+
+def var_drop_annotations(self,inferred_sort,annotated_vars):
+    if inferred_sort or self.name in annotated_vars:
+        annotated_vars.add(self.name)
+        return lg.Var(self.name,lg.TopS)
+    if not isinstance(self.sort,lg.TopSort):
+        annotated_vars.add(self.name)
+    return self
+
+lg.Var.drop_annotations = var_drop_annotations
+
+def const_drop_annotations(self,inferred_sort,annotated_vars):
+    if inferred_sort and self.is_numeral():
+        return lg.Const(self.name,lg.TopS)
+    return self
+
+lg.Const.drop_annotations = const_drop_annotations
+
+def eq_drop_annotations(self,inferred_sort,annotated_vars):
+    arg0 = self.args[0].drop_annotations(False,annotated_vars)
+    arg1 = self.args[1].drop_annotations(True,annotated_vars)
+    return lg.Eq(arg0,arg1)
+
+lg.Eq.drop_annotations = eq_drop_annotations
+
+def ite_drop_annotations(self,inferred_sort,annotated_vars):
+    arg1 = self.args[1].drop_annotations(inferred_sort,annotated_vars)
+    arg2 = self.args[2].drop_annotations(True,annotated_vars)
+    arg0 = self.args[0].drop_annotations(True,annotated_vars)
+    return lg.Ite(arg0,arg1,arg2)
+
+lg.Ite.drop_annotations = ite_drop_annotations
+
+def apply_drop_annotations(self,inferred_sort,annotated_vars):
+    name = self.func.name
+    if name in polymorphic_symbols:
+        arg0 = self.args[0].drop_annotations(inferred_sort and self.sort != lg.Boolean,annotated_vars)
+        rest = [arg.drop_annotations(True,annotated_vars) for arg in self.args[1:]]
+        return self.clone([arg0]+rest)
+    return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
+
+lg.Apply.drop_annotations = apply_drop_annotations
+
+def symbol_is_polymorphic(func):
+    return func.name in polymorphic_symbols
+
+# convert symbol to string with its type
+def typed_symbol(func):
+    return func.name + ' : ' + str(func.sort)
+
+def quant_drop_annotations(self,inferred_sort,annotated_vars):
+    body = self.body.drop_annotations(True,annotated_vars)
+    return type(self)([v.drop_annotations(False,annotated_vars) for v in self.variables],body)
+
+for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
+    cls.drop_annotations = quant_drop_annotations
+
+lg.NamedBinder.drop_annotations = lambda self,inferred_sort,annotated_vars: lg.NamedBinder(
+    self.name,
+    [v.drop_annotations(False,annotated_vars) for v in self.variables],
+    self.body.drop_annotations(True,annotated_vars)
+)
+
+def default_drop_annotations(self,inferred_sort,annotated_vars):
+    return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
+
+for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff,]: # should binder be here?
+    cls.drop_annotations = default_drop_annotations
+
+def pretty_fmla(self):
+    d = self.drop_annotations(False,set())
+    return d.ugly()
+
+for cls in [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists,
+            lg.Apply, lg.Var, lg.Const, lg.Lambda, lg.NamedBinder]:
+    cls.__str__ = pretty_fmla
+
+# end string conversion stuff
 
 def close_formula(fmla):
     variables = list(lu.free_variables(fmla))
@@ -782,6 +1269,29 @@ def close_formula(fmla):
     else:
         return ForAll(variables,fmla)
 
+free_variables = lu.free_variables
+
+def implement_type(sort1,sort2):
+    sig.interp[sort1.name] = sort2
+
+def is_canonical_sort(sort):
+    if isinstance(sort,UninterpretedSort):
+        s = sig.interp.get(sort.name,None)
+        return not isinstance(s,UninterpretedSort)
+    return True
+
+def canonize_sort(sort):
+    if isinstance(sort,UninterpretedSort):
+        s = sig.interp.get(sort.name,None)
+        if isinstance(s,UninterpretedSort):
+            return canonize_sort(s)
+    return sort
+
+def sort_refinement():
+    return dict((s,canonize_sort(s)) for s in sig.sorts.values() if not is_canonical_sort(s))
+
+# This returns only the *canonical* uninterpreted sorts
+
 def uninterpreted_sorts():
     return [s for s in sig.sorts.values() if isinstance(s,UninterpretedSort) and s.name not in sig.interp]
 
@@ -789,13 +1299,42 @@ def interpreted_sorts():
     return [s for s in sig.sorts.values() if is_interpreted_sort(s)]
 
 def is_uninterpreted_sort(s):
+    s = canonize_sort(s)
     return isinstance(s,UninterpretedSort) and s.name not in sig.interp
 
+# For now, int is the only infinite interpreted sort
+def has_infinite_interpretation(s):
+    s = canonize_sort(s)
+    return s.name in sig.interp and not ivy_smtlib.quantifiers_decidable(s.name)
+
 def is_interpreted_sort(s):
+    s = canonize_sort(s)
     return (isinstance(s,UninterpretedSort) or isinstance(s,EnumeratedSort)) and s.name in sig.interp
+
+def sort_interp(s):
+    return sig.interp.get(canonize_sort(s).name,None)
 
 def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()
+
+def is_interpreted_symbol(s):
+    return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and is_interpreted_sort(s.sort.dom[0])
+
+def is_deterministic_fmla(f):
+    if isinstance(f,Some) and len(s.args) < 4:
+        return False
+    return all(is_deterministic_fmla(a) for a in f.args)
+
+
+def sym_decl_to_str(sym):
+    sort = sym.sort
+    res =  'relation ' if sort.is_relational() else 'function ' if sort.dom else 'individual '
+    res += sym.name
+    if sort.dom:
+        res += '(' + ','.join('V{}:{}'.format(idx,s) for idx,s in enumerate(sort.dom)) + ')'
+    if not sort.is_relational():
+        res += ' : {}'.format(sort.rng)
+    return res
 
 def sig_to_str(self):
     res = ''
@@ -832,3 +1371,105 @@ if __name__ == '__main__':
            [V1 == V2, V1 != V2],
            [x == V2, x != V2],
     ]
+
+def is_true(ast):
+    return isinstance(ast,And) and not ast.args
+
+def is_false(ast):
+    return isinstance(ast,Or) and not ast.args
+
+def simp_and(x,y):
+    if is_true(x):
+        return y
+    if is_false(x):
+        return x
+    if is_true(y):
+        return x
+    if is_false(y):
+        return y
+    return And(x,y)
+
+def simp_or(x,y):
+    if is_false(x):
+        return y
+    if is_true(x):
+        return x
+    if is_false(y):
+        return x
+    if is_true(y):
+        return y
+    return Or(x,y)
+
+def simp_not(x):
+    if isinstance(x,Not):
+        return x.args[0]
+    if is_true(x):
+        return Or()
+    if is_false(x):
+        return And()
+    return Not(x)
+
+def simp_ite(i,t,e):
+    if t == e:
+        return t
+    if is_true(i):
+        return t
+    if is_false(i):
+        return e
+    if is_true(t):
+        return simp_or(i,e)
+    if is_false(t):
+        return simp_and(simp_not(i),e)
+    if is_true(e):
+        return simp_or(simp_not(i),t)
+    if is_false(e):
+        return simp_and(i,t)
+    return Ite(i,t,e)
+
+def pto(*asorts):
+    return Symbol('*>',RelationSort(asorts))
+
+def lambda_apply(self,args):
+    assert len(args) == len(self.variables)
+    return lu.substitute(self.body,dict(zip(self.variables,args)))
+
+lg.Lambda.__call__ = lambda self,*args: lambda_apply(self,args)
+
+substitute = lu.substitute
+
+def rename_vars_no_clash(fmlas1,fmlas2):
+    """ Rename the free variables in formula list fmlas1
+    so they occur nowhere in fmlas2, avoiding capture """
+    uvs = lu.used_variables(*fmlas2)
+    uvs = lu.union(uvs,lu.bound_variables(*fmlas1))
+    rn = iu.UniqueRenamer('',(v.name for v in uvs))
+    vs = lu.free_variables(*fmlas1)
+    vmap = dict((v,Variable(rn(v.name),v.sort)) for v in vs)
+    return [lu.substitute(f,vmap) for f in fmlas1]
+
+class VariableUniqifier(object):
+    """ An object that alpha-converts formulas so that all variables are unique. """
+    def __init__(self):
+        self.rn = iu.UniqueRenamer()
+    def __call__(self,fmla):
+        return self.rec(fmla,dict())
+    def rec(self,fmla,vmap):
+        if is_binder(fmla):
+            # save the old bindings
+            obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
+            newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
+            vmap.update(zip(fmla.variables,newvars))
+            try:
+                res = fmla.clone_binder(newvars,self.rec(fmla.body,vmap))
+            except TypeError:
+                assert False,fmla
+            for v in fmla.variables:
+                del vmap[v]
+            vmap.update(obs)
+            return res
+        if is_variable(fmla):
+            if fmla not in vmap:
+                vmap[fmla] = Variable(self.rn(fmla.name),fmla.sort)
+            return vmap[fmla]
+        args = [self.rec(f,vmap) for f in fmla.args]
+        return fmla.clone(args)

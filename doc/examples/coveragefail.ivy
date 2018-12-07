@@ -1,0 +1,65 @@
+#lang ivy1.5
+
+object intf = {
+    action ping
+    action pong
+}
+
+type side_t = {left,right}
+
+object spec = {
+    individual side : side_t
+    init side = left
+
+    before intf.ping {
+	assert side = left;
+	side := right
+    }
+
+    before intf.pong {
+	assert side = right;
+	side := left
+    }
+}
+
+object left_player = {
+    individual ball : bool
+    init ball
+
+    action async = {
+	if ball {
+	    call intf.ping;
+	    ball := false
+	}
+    }
+    
+    implement intf.pong {
+	ball := true
+    }
+
+    conjecture left_player.ball -> spec.side = left
+}
+
+object right_player = {
+    individual ball : bool
+    init ~ball
+
+    action async = {
+	if ball {
+	    call intf.pong;
+	    ball := false
+	}
+    }
+    
+    implement intf.ping {
+	ball := true
+    }
+
+    conjecture right_player.ball -> spec.side = right
+}
+
+
+export left_player.async
+export right_player.async
+
+isolate iso_l = left_player with spec

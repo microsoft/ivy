@@ -1,0 +1,12 @@
+#lang ivy1.6
+
+    type t
+    interpret t->int
+
+    function sum(X:t) : t
+    definition sum(X:t) = 0 if X <= 0 else (X + sum(X-1))
+    proof rec[t]
+
+    property sum(X) >= X
+    proof ind[t]
+

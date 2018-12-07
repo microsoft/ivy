@@ -1,0 +1,69 @@
+#lang ivy1.6
+
+include indexset
+
+instance nodeord : unbounded_sequence
+instance nodecard : unbounded_sequence
+instance nodeset : indexset(nodeord,nodecard)
+
+alias node = nodeord.t
+type value
+alias quorum = nodeset.set
+
+object proto = {
+
+    action cast_vote(n:node, v:value)
+    action decide(v:value, q:quorum)
+
+    relation vote(N:node, V:value)
+
+    object spec = {
+	before cast_vote {
+	    assert ~vote(n,V)
+	}
+	before decide {
+	    assert q.majority;
+	    assert nodeset.member(N, q) -> vote(N, v)
+	}
+    }    
+
+    object impl = {
+	relation decision(V:value)
+
+	after init {
+	    vote(N,V) := false;
+	    decision(V) := false
+	}
+
+	implement cast_vote {
+	    vote(n, v) := true
+	}
+
+	implement decide {
+	    decision(v) := true
+	}
+	
+	# safety property:
+	conjecture decision(V1) & decision(V2) -> V1 = V2
+	
+	# inductive invariant:
+	conjecture vote(N,V1) & vote(N,V2) -> V1 = V2
+	conjecture decision(V) -> exists Q:quorum. nodeset.majority(Q) & 
+                                    forall N:node. nodeset.member(N, Q) -> vote(N,V)
+    }
+}
+
+export proto.cast_vote
+export proto.decide
+export nodeset.empty
+export nodeset.add
+
+isolate iso_p = proto with nodeset
+isolate iso_n = nodeset with nodeord,nodecard
+
+object conc = {
+    interpret value -> bv[1]
+    init nodeset.n = 3
+}
+
+extract iso_impl = proto,nodeset,nodeord,nodecard

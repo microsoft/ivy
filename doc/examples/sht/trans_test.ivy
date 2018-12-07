@@ -1,0 +1,28 @@
+#lang ivy1.6
+
+include trans
+include seqnum
+include udp
+
+type id
+type req
+type shard
+type data
+
+instance seq_num : sequence_numbers
+
+instance t : sht_transport(u,req,shard,seq_num,id)
+
+instance u : udp_simple(id,t.net_msg.t)
+
+
+export t.send_request
+export t.send_delegate
+import t.recv_request
+import t.recv_delegate
+
+object impl = {
+    interpret id -> bv[1]
+}
+
+extract iso_impl = t,u,seq_num,impl

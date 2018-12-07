@@ -60,7 +60,7 @@ class FileBrowser(Frame):
     def set(self,filename,lineno):
         print "set: {} {}".format(filename,lineno)
         if filename != self.filename:
-            f = open(filename,'r')
+            f = open(filename,'rU')
             if not f:
                 raise IvyError(None,"file {} not found".format(filename))
             self.filename = filename
@@ -247,8 +247,8 @@ class RunContext(object):
         return self
     def __exit__(self,exc_type, exc_val, exc_tb):
         self.parent.ready()
-        if exc_type == iu.IvyError:
-            dlg = Toplevel(self.parent)
+        if isinstance(exc_val,iu.IvyError): # exc_type == iu.IvyError:
+            dlg = Toplevel(self.parent.root)
             Label(dlg, text=repr(exc_val)).pack(side=TOP)
             b = Button(dlg, text="OK", command=dlg.destroy)
             b.pack(padx=5,side=TOP)

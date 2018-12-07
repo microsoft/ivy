@@ -1,0 +1,260 @@
+#lang ivy1.6
+
+module udp_wrapper(addr,pkt,me,port_base) = {
+
+    object rdr = {}
+
+    <<< header
+	class udp_reader;
+
+        class udp_config {
+	public:
+	    virtual void get(int id, unsigned long &inetaddr, unsigned long &inetport);
+        };
+    >>>
+    <<< impl
+        void udp_config::get(int id, unsigned long &inetaddr, unsigned long &inetport) {
+#ifdef _WIN32
+	        inetaddr = ntohl(inet_addr("127.0.0.1")); // can't send to INADDR_ANY in windows
+#else
+	        inetaddr = INADDR_ANY;
+#endif
+	        inetport = `port_base`+ id;
+        }
+	class udp_reader : public reader {
+	    int sock;
+	    int my_id;
+	    %`handle_recv` rcb;
+	    ivy_class *ivy;
+	    udp_config *conf;
+	    bool bound;
+	  public:
+	    udp_reader(int _my_id, %`handle_recv` rcb, ivy_class *ivy)
+	        : my_id(_my_id), rcb(rcb), ivy(ivy), conf(0), bound(false) {
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (sock < 0)
+		    { std::cerr << "cannot create socket\n"; exit(1); }
+
+            }
+            void bind_int() {
+                if (!bound) {
+                    struct sockaddr_in myaddr;
+                    get_addr(my_id,myaddr);
+//                    std::cout << "binding id: " << my_id << " port: " << ntohs(myaddr.sin_port) << std::endl;
+                    if (::bind(sock, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+                        { std::cerr << "bind failed\n"; exit(1); }
+                }
+                bound = true;
+            }
+                    
+	    virtual void bind() {
+	        ivy -> __lock();  // can be asynchronous, so must lock ivy!
+                bind_int();
+	        ivy -> __unlock();
+	    }
+	    virtual ~udp_reader() {
+#ifdef _WIN32
+                closesocket(sock);
+#else
+	        close(sock);
+#endif
+	    }
+	    virtual void get_addr(int my_id, sockaddr_in &myaddr) {
+		memset((char *)&myaddr, 0, sizeof(myaddr));
+		unsigned long inetaddr;
+		unsigned long inetport;
+	        if (!conf) {
+	            conf = ivy -> get_udp_config();
+                }
+		conf -> get(my_id,inetaddr,inetport);
+		myaddr.sin_family = AF_INET;
+		myaddr.sin_addr.s_addr = htonl(inetaddr);
+		myaddr.sin_port = htons(inetport);
+	    }
+
+	    virtual int fdes() {
+		return sock;
+	    }
+	    virtual void read() {
+		//std::cout << "RECEIVING\n";
+	        int len=0;
+                socklen_t lenlen=4;
+#ifdef _WIN32
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&len,&lenlen))
+#else
+	        if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,&len,&lenlen))
+#endif
+	            { perror("getsockopt failed"); exit(1); }
+	        std::vector<char> buf(len);
+	        int bytes;
+		if ((bytes = recvfrom(sock,&buf[0],len,0,0,0)) < 0)
+		    { std::cerr << "recvfrom failed\n"; exit(1); }
+	        buf.resize(bytes);
+	        `pkt` pkt;
+	        try {
+		    ivy_binary_deser ds(buf);
+		    __deser(ds,pkt);
+	            if (ds.pos < buf.size())
+	                throw deser_err();
+                } catch (deser_err &){
+		    std::cout << "BAD PACKET RECEIVED\n";
+		    return;
+		}
+		ivy->__lock();
+		rcb(pkt);
+		ivy->__unlock();
+	    }
+	    virtual void write(int dst, `pkt` pkt) {
+	        bind_int();
+		struct sockaddr_in dstaddr;
+		get_addr(dst,dstaddr);
+		ivy_binary_ser sr;
+	        __ser(sr,pkt);
+		//std::cout << "SENDING\n";
+		if (sendto(sock,&sr.res[0],sr.res.size(),0,(sockaddr *)&dstaddr,sizeof(sockaddr_in)) < 0) 
+#ifdef _WIN32
+		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
+#else
+		     { std::cerr << "sendto failed\n"; exit(1); }
+#endif
+	    }
+	};
+    >>>
+    <<< member
+	udp_reader *`rdr`;
+
+        udp_config *the_udp_config;        
+
+        udp_config *get_udp_config() {
+	    if (!the_udp_config) 
+	        the_udp_config = new udp_config();
+	    return the_udp_config; 
+	}
+
+        void set_udp_config(udp_config *conf) {
+	    the_udp_config = conf;
+        }
+    >>>
+    <<< init
+        the_udp_config = 0;
+	install_reader(`rdr` = new udp_reader(`me`,`handle_recv`, this));
+    >>>
+
+    action handle_recv(x:pkt) = {
+	call recv(me,x)
+    }
+
+    implement send(dst:addr,x:pkt) {
+	<<< impure
+	    `rdr`->write(`dst`,`x`);
+	>>>
+    }
+}
+
+module udp_simple(addr,pkt) = {
+
+    action recv(dst:addr,v:pkt)
+    action send(src:addr,dst:addr,v:pkt)
+
+    object spec = {
+        relation sent(V:pkt, N:addr)
+
+        after init {
+	    sent(V, N) := false
+	}
+    
+	before send {
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst)
+	}
+    }
+
+    instance impl(X:addr) : udp_wrapper(addr,pkt,X,4990)
+    trusted isolate iso = this
+}
+
+module nondup_endpoint(port,pkt) = {
+
+    action recv(v:pkt)
+    action send(v:pkt)
+
+    object spec = {
+        relation sent(V:pkt)
+
+        after init {
+	    sent(V) := false
+	}
+    
+	before send {
+	    assert ~sent(v);
+	    sent(v) := true
+	}
+	before recv {
+	    assert sent(v);
+	    sent(v) := false
+	}
+    }
+
+    object impl = {
+	action internal(p:pkt) = {
+	    call recv(p);
+	}
+	implement send(p : pkt) {
+	    # seriously need to do something here!
+	}
+    }
+
+    trusted isolate iso = impl with spec
+
+}
+
+
+module nondup_endpoint_set(addr,port_base,pkt) = {
+    
+    action recv(dst:addr,v:pkt)
+    action send(dst:addr,v:pkt)
+
+    object spec = {
+        relation sent(V:pkt, N:addr)
+
+        after init {
+	    sent(V, N) := false
+	}
+    
+	before send {
+	    assert ~sent(v,dst);
+	    sent(v,dst) := true
+	}
+	before recv {
+	    assert sent(v,dst);
+	    sent(v,dst) := false
+	}
+    }
+
+    object impl = {
+	action internal(dst:addr,p:pkt) = {
+	    call recv(dst,p);
+	}
+	implement send(dst:addr,v:pkt) {
+	    # seriously need to do something here!
+	}
+    }
+
+    trusted isolate iso = impl with spec
+
+}
+
+
+# type a
+# type t
+
+# instance foo : udp_simple(a,t)
+
+# interpret a -> bv[1]
+
+# import foo.recv
+# export foo.send
+
+# extract iso_foo(me) = foo(me)

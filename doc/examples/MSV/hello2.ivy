@@ -1,0 +1,98 @@
+#lang ivy1.6
+
+# Now let's write a specification for our "hello world" program.
+#
+# In IVy, a specification is just a piece of code that monitors
+# another piece of code (but doesn't interfere with it).
+#
+# We'll define the same interface that we had before:
+
+
+type t
+
+action hello(val:t)
+action world(val:t)
+
+export hello
+import world
+
+# Now we'll write a monitor that watches the interface actions `hello`
+# and `world` and makes sure they're working correctly. It's an IVy
+# idiom to write a specification inside an object called `spec`. This
+# object can member variables that record information about the
+# history of actions. For example, we want to record when a `hello` is
+# pending and only allow `world` to be called when this is true.
+# Here's how we can specify that there are no unsolicited calls to
+# `world`:
+
+object spec = {
+
+    # First we declare a state variable `pending` for our spec.
+
+    var pending : bool
+
+    # This says to initialize `pending` to `false`.
+
+    after init {
+        pending := false
+    }
+
+    # This says, before executing the implementation of `hello`, set
+    # `pending` to true.
+
+    before hello(val:t) {
+        pending := true
+    }
+
+    # This says, before executing the implementation of `world`,
+    # *assert* that `pending` is true, then set it to false. If we get
+    # an unsolicited call to `world`, this assertion will fail.
+
+    before world(val:t) {
+        assert pending;
+        pending := false
+    }
+}
+
+# That's our program's specification. Now let's give the implementation. It's
+# an IVY idiom to put the implementation in an object called `impl`.
+
+object impl = {
+    implement hello {
+        call world(val+1)
+    }
+}
+
+# Once again, we have to interpret type `t`.
+
+interpret t -> bv[4]
+
+# This time, instead of interacting with the program in a REPL, we're
+# going to *test* it automatically. We can produce a tester for the program
+# with a command like this:
+#
+#     $ ivy_to_cpp target=test build=true hello2.ivy
+#
+# This tells IVy to create a randomized tester to play the role of the environment.
+# and build it into an executable file called "hello2.exe". If
+# you're looking at this file in Visual Studio, you can just say
+# "Build" and "Run".
+#
+# The tester will just run by itself and print out something like the following:
+#
+#     > hello(7)
+#     < world(8)
+#     > hello(3)
+#     < world(4)
+#     ...
+#
+# The values of the parameter to `hello` are chosen randomly by the
+# tester.
+#
+# Now have a look at `hello3.ivy`. 
+
+
+
+
+
+

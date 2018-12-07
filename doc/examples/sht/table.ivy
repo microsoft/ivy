@@ -1,0 +1,122 @@
+#lang ivy1.6
+
+include collections
+
+module hash_table(key,value,shard) = {
+
+    ###########################################
+    # Interface
+
+    # Set the value of a key
+    action set(k:key.t, v:value)
+
+    # Get the value of a key
+    action get(k:key.t) returns (v:value)
+
+    # Extract a shard from a hash table
+    action extract_(lo:key.iter.t,hi:key.iter.t) returns(res:shard.t)
+
+    # Incorporates a shard into a hash table
+    action incorporate(s:shard.t)
+
+    ###########################################
+    # Specification
+
+    function hash(X:key.t) : value
+
+    object spec = {
+	init hash(X) = 0
+
+	before set {
+	    hash(k) := v
+	}
+
+	after get {
+	    assert v = hash(k)
+	}
+
+	after extract_ {
+	    assert shard.lo(res) = lo;
+	    assert shard.hi(res) = hi;
+	    assert key.iter.between(lo,X,hi)-> shard.value(res,X) = hash(X);
+	    assert shard.valid(res)
+	}
+
+	before incorporate(s:shard.t) {
+	    assert shard.valid(s);
+	    hash(K) := shard.value(s,K) 
+	               if key.iter.between(shard.lo(s),K,shard.hi(s))
+	               else hash(K)
+	}
+    }
+
+    ###########################################
+    # Implementation
+
+    object impl = {
+	
+	instance tab : ordered_map(key,value)
+
+	implement set {
+	    call tab.set(k,v)
+	}
+
+	implement get {
+	    v := tab.get(k,0)
+	}
+
+	implement extract_ {
+	    res.kv := shard.kvt.empty;
+            var idx := tab.lub(lo);
+            while idx < hi
+                invariant lo <= idx & (idx < hi -> tab.contains(idx.val))
+                invariant lo.between(X,idx) & tab.contains(X) -> 
+                               exists I. (res.key_at(I,X) & tab.maps(X,res.value_at(I)))
+                invariant res.key_at(I,X) -> lo.between(X,idx) & tab.contains(X)
+                invariant shard.valid(res)
+            {
+                var k := idx.val;
+                res.kv := res.kv.append_pair(k,tab.get(k,0));
+                idx := tab.next(idx)
+            };		
+            res.lo := lo;
+            res.hi := hi
+	}
+
+	implement incorporate(s:shard.t) {
+            var lo := s.lo;
+            var hi := s.hi;
+            call tab.erase(lo,hi);
+            var pos:shard.index.t  := 0;
+            while pos < s.kv.end
+                invariant 0 <= pos & pos <= s.kv.end
+                invariant lo.between(X,hi) & s.value(X) = 0 -> ~tab.contains(X)
+                invariant lo.between(X,hi) & 0 <= Y & Y < pos & s.key_at(Y,X) & s.value(X) ~= 0
+                                 -> tab.contains(X) & tab.maps(X,s.value(X))
+                invariant ~lo.between(X,hi) -> spec.tab_invar(X,Y)
+                # following are object invariants of tab and shouldn't be needed here
+                invariant tab.maps(X,Y) & tab.maps(X,Z) -> Y = Z & tab.contains(X)
+            {
+                var k := s.kv.get_key(pos);
+                var d := s.kv.get_value(pos);
+                if lo.between(k,hi) & d ~= 0{
+                    call tab.set(k,d)
+                };			
+                pos := pos.next
+            }
+	}	
+
+	object spec = {
+	    function tab_invar(X,Y) =
+	      (tab.contains(X) & tab.maps(X,Y) -> hash(X) = Y)
+	      & (~tab.contains(X) -> hash(X) = 0)
+	      & (tab.contains(X) -> tab.maps(X,hash(X)))
+	}
+
+#	conjecture shard.value(S,X)=Z -> spec.tab_invar(X,Y)
+	conjecture spec.tab_invar(X,Y)
+
+    }
+
+}
+

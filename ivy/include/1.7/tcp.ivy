@@ -1,0 +1,266 @@
+#lang ivy
+
+include order
+
+module tcp_channel(addr,pkt) = {
+
+    object sndr = {
+	action send(p : pkt)
+    }
+
+    object rcvr = {
+	action recv(p:pkt)
+    }
+
+    instance index : unbounded_sequence
+
+    object spec = {
+	individual send_idx : index.t
+	individual recv_idx : index.t
+	relation sent(I:index.t,P:pkt)
+	
+	after init {
+	    send_idx := 0;
+	    recv_idx := 0;
+	    sent(I,P) := false;
+	}
+
+	before sndr.send(p : pkt) {
+	    sent(send_idx,p) := true;
+	    send_idx := index.next(send_idx);
+	}
+
+	before rcvr.recv(p : pkt) {
+	    assert recv_idx < send_idx;
+	    assert sent(recv_idx,p);
+	    sent(recv_idx,p) := false;
+	    recv_idx := index.next(recv_idx);
+	}
+    }
+
+    object impl = {
+	action internal(p:pkt) = {
+	    call rcvr.recv(p);
+	}
+	implement sndr.send(p : pkt) {
+	    # seriously need to do something here!
+	}
+    }
+
+    trusted isolate iso = impl with spec
+
+}
+
+include tcp_impl
+
+module tcp_network(addr,pkt) = {
+
+    type socket
+
+# calls
+
+    action close(self:addr,s:socket)
+
+    action connect(self:addr,other:addr) returns (s:socket)
+
+    action send(self:addr,s:socket,p:pkt) returns (ok:bool)
+
+# callbacks
+
+    action accept(self:addr,s:socket,other:addr)
+
+    action recv(self:addr,s:socket,p:pkt)
+
+    action failed(self:addr,s:socket)
+
+    action connected(self:addr,s:socket)
+    
+        var open(A:addr,S:socket) : bool
+        var req(A1:addr,S1:socket,A2:addr) : bool
+        var ack(A1:addr,S1:socket) : bool
+        var conn(A1:addr,S1:socket,A2:addr,S2:socket) : bool
+        var sent_to(A:addr,S:socket,P:pkt) : bool
+        
+    object spec =  {
+
+
+        after init {
+            open(A,S) := false;
+            req(A,S,A1) := false;
+            ack(A,S) := false;
+            conn(A1,S1,A2,S2) := false;
+            sent_to(A,S,P) := false;
+        }
+
+
+        after connect {
+            assume ~open(self,s) & ~req(self,s,A) & ~ack(self,s); # can't return socket in use
+            req(self,s,other) := true;
+        }
+
+        around accept {
+            require exists S. req(other,S,self);
+            require ~open(self,s) & ~req(self,s,A) & ~ack(self,s); # can't return socket in use
+            ...
+            open(self,s) := true;
+            if some (s2 : socket) req(other,s2,self) {
+                conn(self,s,other,s2) := true;
+                conn(other,s2,self,s) := true;
+                req(other,s2,self) := false;
+                ack(other,s2) := true
+            }
+        }
+
+        around connected {
+            require ack(self,s);
+            ...
+            open(self,s) := true;
+            ack(self,s) := false;
+        }
+
+        around send {
+            require open(self,s);
+            ...
+            if ok {
+                if some (other:addr,s2:socket) conn(self,s,other,s2) {
+                    sent_to(other,s2,p) := true
+                }
+            } 
+        }
+
+        before recv {
+            require open(self,s);
+            require sent_to(self,s,p);
+        }            
+
+        around close {
+            require open(self,s);
+            ...
+            open(self,s) := false;
+            sent_to(self,s,P) := false;
+            conn(A,S,self,s) := false;
+            conn(self,s,A,S) := false;
+        }
+
+        around failed {
+            require exists A. req(self,s,A) | ack(self,s) | open(self,s);
+            ...
+            open(self,s) := false;
+            req(self,s,A) := false;
+            ack(self,s) := false;
+            sent_to(self,s,P) := false;
+            conn(A,S,self,s) := false;
+        }
+        
+        invariant ~(open(A,S) & (req(A,S,A1) | ack(A,S))) & ~(req(A,S,A1) & ack(A,S))
+        invariant req(A,S,A1) & req(A,S,A2) -> A1 = A2
+        invariant (conn(A,S,A1,S1) | sent_to(A1,S1,P)) -> (open(A1,S1) | ack(A1,S1))
+        invariant conn(A1,S1,A,S) -> (open(A1,S1) | ack(A1,S1))
+    }
+
+    
+    implementation {
+        instance impl(X:addr) : tcp_impl(addr,pkt,X,5990)
+    }
+
+    isolate iso = this
+    attribute test = impl
+}
+
+module simple_tcp(addr,pkt) = {
+
+    action recv(dst:addr,v:pkt)
+    action send(src:addr,dst:addr,v:pkt)
+
+    specification {
+
+        relation sent(V:pkt, N:addr)
+
+        after init {
+	    sent(V, N) := false
+	}
+    
+	before send {
+	    sent(v,dst) := true
+	}
+
+	before recv {
+	    assert sent(v,dst)
+	}
+
+    }
+
+    implementation {
+
+        instance tcp : tcp_network(addr,pkt)
+
+        object proc(self:addr) = {
+
+            relation isup(A:addr)
+            function sock(A:addr) : tcp.socket
+            relation pend(A:addr)
+            
+            after init {
+                isup(A) := false;
+                pend(A) := false;
+#                var foo := self;
+ #               call tcp.listen(foo);
+            }
+
+            implement send(dst:addr,v:pkt) {
+                if ~isup(dst) {
+                    if ~pend(dst) {
+                        sock(dst) := tcp.connect(self,dst);
+                        pend(dst) := true
+                    }
+                } else {
+                    var ok := tcp.send(self,sock(dst),v);
+                    if ~ok {
+                        call tcp.close(self,sock(dst));
+                        sock(dst) := tcp.connect(self,dst);
+                        isup(dst) := false;
+                        pend(dst) := true
+                    }
+                }
+            }
+
+            implement tcp.recv(s:tcp.socket,v:pkt) {
+                call recv(self,v)
+            }
+
+            implement tcp.connected(s:tcp.socket) {
+                if some(other:addr) pend(other) & sock(other) = s {
+                    pend(other) := false;
+                    isup(other) := true;
+                }
+            }
+
+            implement tcp.accept(s:tcp.socket,other:addr) {
+                # we ignore accept events
+            }
+
+            implement tcp.failed(s:tcp.socket) {
+                if some(other:addr) (isup(other) | pend(other)) & sock(other) = s {
+                    # isup(other) := false;
+                    # pend(other) := true;
+                    # sock(other) := tcp.connect(self,other);
+                    isup(other) := false;
+                    pend(other) := false;
+                }
+            }
+
+            specification {
+                invariant isup(A) -> tcp.open(self,sock(A))
+                invariant pend(A) -> (isup(A) | tcp.req(self,sock(A),A) | tcp.ack(self,sock(A)))
+#                invariant tcp.conn(self,S,A1,S1) -> S = sock(A1) & (isup(A1) | tcp.ack(self,S) & pend(A1))
+                invariant (isup(A) | pend(A)) & tcp.conn(self,sock(A),A1,S1) -> A = A1
+                invariant (isup(A) | pend(A)) & (isup(A1) | pend(A1)) & sock(A) = sock(A1) -> A = A1
+                invariant tcp.sent_to(A,S,V) -> sent(V,A)
+            }
+        }
+    }
+
+   isolate iso = this
+   attribute test = impl
+}
+

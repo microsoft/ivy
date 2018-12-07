@@ -1,0 +1,43 @@
+#lang ivy1.6
+
+include collections
+
+type index
+interpret index -> int
+instance arr : array(index,bool)
+
+type foo = struct {
+    y : bool,
+    ar : arr.t
+}
+
+action a(x:foo) = {
+    call b(x)
+}
+
+
+action b(z:foo) = {
+}
+
+var q : bool
+
+after init {
+    q := false;
+}
+
+export a
+import b
+
+object scen = {
+    scenario {
+	-> s0;
+	s0 -> s1 : before a {
+	    var v := x.ar.end;
+	    q := x.y
+	}
+	s1 -> s0 : after b {
+	    q := z.y
+	}
+    }
+}
+

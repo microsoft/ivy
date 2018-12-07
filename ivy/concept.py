@@ -34,8 +34,8 @@ class Concept(record('Concept', ['name', 'variables', 'formula'])):
         if not isinstance(name,str):
             raise IvyError("Concept name {} is not a string".format(name))
         variables = tuple(variables)
-        if set(variables) != free_variables(formula):
-            raise IvyError("Free variables {} must match formula: {}".format(variables, formula))
+#        if set(variables) != free_variables(formula):
+#            raise IvyError("Free variables {} must match formula: {}".format(variables, formula))
         if not all(type(v) is Var and first_order_sort(v.sort) for v in variables):
             raise IvyError("Concept variables must be first-order: {}".format(variables))
         return name,variables, formula

@@ -127,7 +127,7 @@ class AnalysisGraphUI(object):
 #            print "current cg: {}".format(type(self.current_concept_graph))
             self.current_concept_graph.set_parent_state(n,clauses,reset=reset)
             return
-        sg = self.g.concept_graph(n,clauses)
+        sg = self.g.concept_graph(n,standard_graph,clauses)
         self.current_concept_graph = self.show_graph(sg)
         return self.current_concept_graph
 
@@ -286,7 +286,7 @@ class AnalysisGraphUI(object):
             act = transition[1]
             assert isinstance(act,Action)
             if hasattr(act,'lineno'):
-                filename,lineno = act.lineno
+                filename,lineno = act.lineno.filename,act.lineno.line
                 self.ui_parent.browse(filename,lineno)
 
     # Recalculate a state based on its equation
@@ -392,24 +392,23 @@ class AnalysisGraphUI(object):
     # user to choose from. Also browses the source code of the
     # conjecture. The proof method depends on the current mode.
 
-    def try_conjecture(self,node,conj=None):
+    def try_conjecture(self,node,conj=None,msg=None,bound=None):
         if conj == None:
             udc = undecided_conjectures(node)
             udc_text = [repr(clauses_to_formula(conj)) for conj in udc]
-            msg = "Choose a conjecture to prove:"
-            cmd = lambda idx: self.try_conjecture(node,udc[idx])
+            msg = msg or "Choose a conjecture to prove:"
+            cmd = lambda idx: self.try_conjecture(node,udc[idx],bound=bound)
             self.ui_parent.listbox_dialog(msg,udc_text,command=cmd)
         else:
-            print "type(conj) = {}".format(type(conj))
             if hasattr(conj,'lineno'):
                 filename,lineno = conj.lineno
                 self.ui_parent.browse(filename,lineno)
             dual = dual_clauses(conj)
             if self.mode.get() == "induction":
-                self.bmc(node,dual)
+                self.bmc(node,dual,bound=bound)
             else:
-                sg = self.g.concept_graph(node)
-                sg.current.add_constraints(dual.clauses)
+                sg = self.g.concept_graph(node,standard_graph)
+                sg.current.add_constraints(dual.conjuncts)
                 self.show_graph(sg)
 
     # Set up to prove a remembered subgoal. If no goal is given, display a list
@@ -528,8 +527,8 @@ class AnalysisGraphUI(object):
     # Bounded reachability: find a concrete path from initial node to
     # a given state satisfying err_cond in state.
 
-    def bmc(self,state,err_cond):
-        res = self.g.bmc(state,err_cond)
+    def bmc(self,state,err_cond,bound=None):
+        res = self.g.bmc(state,err_cond,bound=bound)
         if res == None:
             msg = "The condition is unreachable along the given path"
             self.ui_parent.ok_dialog(msg)
@@ -551,30 +550,37 @@ class IvyUI(object):
     def AGUI(self):
         return AnalysisGraphUI
 
+    # Set up to prove a background property. If no property
+    # is given, display a list of not-yet-proven properties for the
+    # user to choose from. Also browses the source code of the
+    # property. The proof method depends on the current mode.
+
+    def try_property(self,prop=None):
+        if prop == None:
+            udc = false_properties()
+            udc_text = [str(prop) for prop in udc]
+            msg = "Choose a property to see counterexample:"
+            cmd = lambda idx: self.try_property(udc[idx])
+            self.listbox_dialog(msg,udc_text,command=cmd)
+        else:
+            print "type(prop) = {}".format(type(prop))
+            if hasattr(prop,'lineno'):
+                filename,lineno = prop.lineno
+                self.browse(filename,lineno)
+            dual = dual_clauses(formula_to_clauses(prop.formula))
+            dual = and_clauses(dual,get_property_context(prop))
+            ag = AnalysisGraph(initializer=top_alpha)
+            oag = ag.bmc(ag.states[0],dual)
+            self.add(oag)
+
+
 ui = None
 
 def ui_main_loop(art, tk = None, frame = None):
     ui_create(art,tk,frame)
     ui.tk.mainloop()
 
-default_ui = iu.Parameter("ui",None)
-
 compile_kwargs = {}
-
-def get_default_ui_module():
-    defui = default_ui.get()
-    if defui is None:
-        return sys.modules[__name__]
-    return __import__('ivy.ivy_ui_' + defui).__dict__['ivy_ui_' + defui]
-    
-def get_default_ui_class():
-    mod = get_default_ui_module()
-    return mod.IvyUI
-
-def get_default_ui_compile_kwargs():
-    mod = get_default_ui_module()
-    return mod.compile_kwargs
-    
 
 
 if __name__ == '__main__':
