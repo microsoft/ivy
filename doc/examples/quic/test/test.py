@@ -51,6 +51,8 @@ except OSError:
     sys.stderr.write('cannot create directory "{}"\n'.format(dirpath))
     exit(1)
 
+extra_args = ['server_addr=0xc0a80101','client_addr=0xc0a80102'] if server_name == 'winquic' else []
+
 svrd = dict(servers)
 if server_name not in svrd:
     sys.stderr.write('unknown server: {}\n'.format(server_name))
@@ -65,6 +67,7 @@ def open_out(name):
     return open(os.path.join(dirpath,name),"w")
 
 def sleep():
+    return
     if server_name == 'winquic':
         st = 20
         print 'sleeping for {}'.format(st)
@@ -153,7 +156,7 @@ class Test(object):
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return 'timeout 100 ./build/{} seed={}'.format(self.name,seq)
+        return ' '.join(['timeout 100 ./build/{} seed={} the_cid={} server_cid={}'.format(self.name,seq,2*seq,2*seq+1)] + extra_args)
 
 all_tests = []
 

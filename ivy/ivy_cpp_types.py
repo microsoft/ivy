@@ -209,7 +209,13 @@ CLASSNAME _arg<CLASSNAME>(std::vector<ivy_value> &args, unsigned idx, long long 
     if (args[idx].fields.size())
         throw out_of_bounds(idx);
     CLASSNAME res;
-    res.val = atoll(args[idx].atom.c_str());
+//    res.val = atoll(args[idx].atom.c_str());
+    std::istringstream s(args[idx].atom.c_str());
+    s.unsetf(std::ios::dec);
+    s.unsetf(std::ios::hex);
+    s.unsetf(std::ios::oct);
+    s  >> res.val;
+//    unsigned long long res = atoll(args[idx].atom.c_str());
     return res;
 }
 template <>

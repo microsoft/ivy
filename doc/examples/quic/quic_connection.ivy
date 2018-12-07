@@ -362,6 +362,7 @@ after init {
 action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, close : bool)
 
 after app_send_event {
+    require ~stream_app_data_finished(dcid,s);
     var idx := data.begin;
     while idx < data.end {
 	stream_app_data(dcid,s) := stream_app_data(dcid,s).append(data.value(idx));

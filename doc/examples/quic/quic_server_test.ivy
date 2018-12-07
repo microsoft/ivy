@@ -21,8 +21,24 @@ include file
 #
 # Run it like this:
 #
-#     ./quic_server_test
+#     ./quic_server_test [parameter=value...]
 #
+# Parameters are:
+#
+#     the_cid:int      cid to be used by the client (default 0xd)
+#     client_addr:int  the client IP address (default 0xff000001, i.e., the loopback interface)
+#     server_addr:int  the server IP address (default 0xff000001, i.e., the loopback interface)
+#     server_port:int  the server port number (default 4443)
+#     send_fin:bool    indicates the server waits for FIN in stream to respond
+#
+
+# Notes:
+#
+# - If `send_fin` is true, the client will send each HTTp request on a different stream. Othereise,
+#   all HTTP request use the same stream.
+#
+# - All IP addresses are IPv4 and are given as single 32-bit numbers,
+#   rather than using the dot notation.
 
 
 # The wire specification monitors this action.
@@ -45,13 +61,13 @@ object endpoint_id = {
     type this = {client, client_alt, server}
 }
 
-# fix a single connection id
+# The parameters
 
 parameter the_cid : cid = 0xd
-
-after init {
-#    the_cid := 13;
-}
+parameter client_addr : ip.addr = 0xff000001
+parameter server_addr : ip.addr = 0xff000001
+parameter server_port : ip.port = 4443
+parameter server_cid : cid = 0xb
 
 # read a data file to send to server
 
@@ -100,12 +116,14 @@ instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
 
 # parameter server_addr: ip.addr
 
+# server_addr=0xc0a80101 client_addr=0xc0a80102
+
 action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
-    ep.addr := 0xc0a80101 if ep_id = endpoint_id.server else 0xc0a80102;   # the loop-back addr
+    ep.addr := server_addr if ep_id = endpoint_id.server else 0xc0a80102;   # the loop-back addr
     ep.port := 4987 if ep_id = endpoint_id.client
                else (4988 if ep_id = endpoint_id.client_alt
-               else 4443);
+               else server_port);
 }    
 
 module quic_endpoint(ep_id) = {
@@ -204,6 +222,9 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require dst = server.ep;
         require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
         require pkt.hdr_token_length = 0 & pkt.hdr_token.end = 0; 
+        if pkt.hdr_long {
+            require ~cid_dst_to_src_set(pkt.hdr_cid) -> pkt.dst_cid = server_cid
+        }
     };
     require pkt.hdr_long -> pkt.hdr_version = 0xff000010
 }
@@ -485,6 +506,7 @@ around client_send_event {
     require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
     require stream_length(dcid,s) = stream_app_data_end(dcid,s);
     require stream_length(dcid,s) < end & end <= http_request.end;
+    require current_stream < 60;
     ...
     while end < http_request.end & http_request.value(end) ~= 10 {
         end := end.next
@@ -521,7 +543,7 @@ interpret cid -> intbv[1][13][2]
 interpret version -> bv[32]
 interpret pkt_num -> bv[32]
 interpret error_code -> bv[16]
-interpret stream_id -> bv[5]
+interpret stream_id -> bv[6]
 attribute frame.idx.cardinality = 1
 attribute frame.ack.block.idx.cardinality = 1
 attribute pkt_num.cardinality = 1
