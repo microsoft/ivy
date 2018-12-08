@@ -156,7 +156,7 @@ class Test(object):
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return ' '.join(['timeout 100 ./build/{} seed={} the_cid={} server_cid={}'.format(self.name,seq,2*seq,2*seq+1)] + extra_args)
+        return ' '.join(['timeout 100 ./build/{} seed={} the_cid={} server_cid={} client_port={} client_port_alt={}'.format(self.name,seq,2*seq,2*seq+1,2*seq+4987,2*seq+4988)] + extra_args)
 
 all_tests = []
 

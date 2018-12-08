@@ -4,12 +4,24 @@ include quic_server_test
 
 export frame.max_stream_id.handle
 export frame.max_stream_data.handle
-export frame.stream_blocked.handle
+#export frame.stream_blocked.handle
+#export frame.rst_stream.handle
+# export frame.connection_close.handle
+# attribute frame.connection_close.handle.weight = "0.02"
+
+#export frame.application_close.handle
+#attribute frame.application_close.handle.weight = "0.02"
+
+export frame.stop_sending.handle
 
 before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
-    require f.pos > 32;
+    if _generating {
+        require f.pos = 32 | f.pos = 16;
+    }
 }
 
 before frame.stream_blocked.handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
-    require f.pos > 32;
+    if _generating {
+        require f.pos > 32;
+    }
 }

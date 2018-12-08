@@ -191,8 +191,12 @@ module array(domain,range) = {
         template <typename T>
         T __array_segment(const T &a, long long lo, long long hi) {
             T res;
-            res.resize(hi-lo);
-            std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            lo = (lo < 0) ? 0 : lo;
+            hi = (hi > a.size()) ? a.size() : hi;
+            if (hi > lo) {
+                res.resize(hi-lo);
+                std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            }
             return res;
         }
         >>>

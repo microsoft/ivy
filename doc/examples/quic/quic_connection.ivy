@@ -1069,6 +1069,39 @@ object frame = { ...
     }
 }
 
+# Stop sending frames are sent by the receiver of s stream to indicate that stream data
+# is being ignored and it should stop sending.
+#
+# Requirements:
+#
+# - Stream id must not exceed maximim stream id for the stream kind [4].
+# - QUESTION: Can a previously reset stream be reset?
+# - The connection must not have been closed by the source endpoint [5].
+# - The encryption level must be 0rtt or 1rtt [6].
+#
+# Effects:
+#
+#   (None)
+#
+
+object frame = { ...
+    object stop_sending = { ...
+        action handle(f:frame.stop_sending,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);  # [6]
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require ~conn_closed(scid);  # [5]
+            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            var kind := get_stream_kind(f.id);
+            require max_stream_set(dcid,kind) -> f.id <= max_stream(dcid,kind);  # [4]
+	    ...
+            call enqueue_frame(src,scid,f,e,false);
+        }
+    }
+}
+
 # Max stream id frames cause the maximum stream id to be set. 
 # The receiver of the max stream id may use stream ids up to and including
 # the given maximum. Bit 1 of the stream id (the next-to-least significant)
@@ -1188,8 +1221,12 @@ object frame = { ...
         action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle{
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e ~= encryption_level.initial;
             require e = encryption_level.other -> established_1rtt_keys(scid);
+            require e = encryption_level.handshake -> established_handshake_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(scid) := true;
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1216,7 +1253,7 @@ object frame = { ...
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
-            require stream_seen(scid,f.id) | stream_seen(dcid,f.id);  # TEMPORARY -- should not be needed
+#            require stream_seen(scid,f.id) | stream_seen(dcid,f.id);  # TEMPORARY -- should not be needed
 
             if ~(max_stream_data_set(dcid,f.id) & f.pos < max_stream_data_val(dcid,f.id)) {
                 max_stream_data_set(dcid,f.id) := true;

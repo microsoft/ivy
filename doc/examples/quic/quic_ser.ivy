@@ -43,6 +43,8 @@ object quic_ser = {}
               quic_reset_stream_id,
               quic_reset_err_code,
               quic_reset_final_offset,
+              quic_stop_sending_id,
+              quic_stop_sending_err_code,
               quic_connection_close_err_code,
               quic_connection_close_frame_type,
               quic_connection_close_reason_length,
@@ -236,6 +238,17 @@ object quic_ser = {}
                 set_var_int(res);
             }
             break;
+            case quic_stop_sending_id:
+            {
+                set_var_int(res);
+                state = quic_stop_sending_err_code;
+            }
+            break;
+            case quic_stop_sending_err_code:
+            {
+                setn(res,2);
+            }
+            break;
             case quic_connection_close_err_code:
             {
                 setn(res,2);
@@ -354,6 +367,10 @@ object quic_ser = {}
                 else if (tag == 15) {
                     state = quic_max_stream_data_id;
                     frame_type = 0x09;
+                }
+                else if (tag == 16) {
+                    state = quic_stop_sending_id;
+                    frame_type = 0x0c;
                 }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  

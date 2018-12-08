@@ -197,6 +197,16 @@ object frame = {
         }
     }
 
+    object stop_sending = {
+        
+        # Stop sending frames are a variant of frame.
+
+        variant this of frame = struct {
+            id                : stream_id,  # the stream id
+            err_code          : error_code  # the error code
+        }
+    }
+
     instance idx : unbounded_sequence
     instance arr : array(idx,this)
 }        

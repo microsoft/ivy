@@ -68,6 +68,8 @@ parameter client_addr : ip.addr = 0xff000001
 parameter server_addr : ip.addr = 0xff000001
 parameter server_port : ip.port = 4443
 parameter server_cid : cid = 0xb
+parameter client_port : ip.port = 4987
+parameter client_port_alt : ip.port = 4988
 
 # read a data file to send to server
 
@@ -121,8 +123,8 @@ instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
 action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
     ep.addr := server_addr if ep_id = endpoint_id.server else 0xc0a80102;   # the loop-back addr
-    ep.port := 4987 if ep_id = endpoint_id.client
-               else (4988 if ep_id = endpoint_id.client_alt
+    ep.port := client_port if ep_id = endpoint_id.client
+               else (client_port_alt if ep_id = endpoint_id.client_alt
                else server_port);
 }    
 
@@ -456,6 +458,16 @@ before frame.rst_stream.handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoin
     }
 }
 
+# Generate stop_sending frames only for the client.
+
+before frame.stop_sending.handle(f:frame.stop_sending,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
+        require scid = the_cid;
+        require f.id = 4;
+    }
+}
+
 # Generate max_stream_id frames only for the client.
 
 before frame.max_stream_id.handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
@@ -474,9 +486,28 @@ before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,ds
     }
 }
 
+# Generate connection_close frames only for the client.
+
+before frame.application_close.handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
+        require scid = the_cid;
+    }
+}
+
 # Generate max_stream_id frames only for the client.
 
 before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
+        require scid = the_cid;
+        require f.id = 4;
+    }
+}
+
+# Generate max_stream_id frames only for the client.
+
+before frame.stream_blocked.handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
     if _generating {
         require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;

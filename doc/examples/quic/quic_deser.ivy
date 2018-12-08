@@ -45,6 +45,8 @@ object quic_deser = {}
               quic_reset_stream_id,
               quic_reset_err_code,
               quic_reset_final_offset,
+              quic_stop_sending_id,
+              quic_stop_sending_err_code,
               quic_connection_close_err_code,
               quic_connection_close_frame_type,
               quic_connection_close_reason_length,
@@ -265,6 +267,17 @@ object quic_deser = {}
                 get_var_int(res);
             }
             break;
+            case quic_stop_sending_id:
+            {
+                get_var_int(res);
+                state = quic_stop_sending_err_code;
+            }
+            break;
+            case quic_stop_sending_err_code:
+            {
+                getn(res,2);
+            }
+            break;
             case quic_connection_close_err_code:
             {
                 getn(res,2);
@@ -425,6 +438,10 @@ object quic_deser = {}
                 if (frame_type == 0x09) {
                     state = quic_max_stream_data_id;  // stream_blocked equivalent to this
                     return 15;
+                }
+                if (frame_type == 0x0c) {
+                    state = quic_stop_sending_id;  // stream_blocked equivalent to this
+                    return 16;
                 }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
