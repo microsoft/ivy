@@ -369,17 +369,15 @@ TODO list
 
 - Frame types:
 
-    - MAX_DATA
-    - BLOCKED
-    - STREAM_BLOCKED
-    - RETIRE_CONNECTION_ID
-    - STOP_SENDING
+    - MAX_DATA (not enforced)
+    - BLOCKED (implemented, but no properties)
+    - STREAM_BLOCKED (implemented, but no properties)
+    - RETIRE_CONNECTION_ID (not implemented)
+    - STOP_SENDING (implemented, but what to enforce?)
     - ACK (ECN section)
-    - NEW_TOKEN
+    - NEW_TOKEN (can receive it, but no properties)
     
 - Ack-only packet rules (reinstate)
 
 - Retransmissions (seems to be only liveness properties)
-
-- Packet protection
 

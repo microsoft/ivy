@@ -943,32 +943,12 @@ object frame = {
             require f.fin <-> (stream_app_data_finished(dcid,f.id) & offset+f.length = stream_app_data_end(dcid,f.id));
 
             var kind := get_stream_kind(f.id);
-            require max_stream_set(dcid,kind) -> f.id < max_stream(dcid,kind);  # [6]
-            # require ~stream_reset(dcid,f.id);  # [7]
-            # require conn_seen(scid);  # [9]
-            # if ~stream_seen(dcid,f.id) {
-            #     if initial_max_stream_data.is_set(trans_params(dcid)) {
-            #         max_stream_data_val(dcid,f.id) :=
-            #             initial_max_stream_data.value(trans_params(dcid)).stream_pos_32;  # [3]
-            #         max_stream_data_set(dcid,f.id) := true
-            #     };
-            #     if initial_max_stream_id_bidi.is_set(trans_params(dcid)) {
-            #         max_stream(dcid,bidir) :=
-            #             (initial_max_stream_id_bidi.value(trans_params(dcid)).stream_id_16) * 4;  # [3]
-            #         max_stream_set(dcid,bidir) := true
-            #     };
-            #     if initial_max_stream_id_uni.is_set(trans_params(dcid)) {
-            #         max_stream(dcid,unidir) :=
-            #             (initial_max_stream_id_uni.value(trans_params(dcid)).stream_id_16) * 4;  # [3]
-            #         max_stream_set(dcid,unidir) := true
-            #     };
-            #     stream_length(dcid,f.id) := 0;
-            # };
-            # if max_stream_data_set(dcid,f.id) {
-            #     require ((offset) + (f.length)) <= max_stream_data_val(dcid,f.id)  # [2]
-            # };
-            stream_seen(dcid,f.id) := true;
+            require ~stream_reset(dcid,f.id);  # [7]
+            require conn_seen(scid);  # [9]
+            require ((offset) + (f.length)) <= stream_max_data(dcid,f.id);  # [2]
+            # require stream_id_allowed(dcid,id:stream_id);  # [6]
 	    ...
+            stream_seen(dcid,f.id) := true;
             var offset := f.offset if f.off else 0;
             var length := offset + f.length;
             # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
@@ -980,6 +960,78 @@ object frame = {
             };
             call enqueue_frame(src,scid,f,e,false);
         }
+    }
+}
+
+#
+# The maximum number of bytes that may be transmitted to a give aid on a given stream is
+# computed by the following procedure. The number of bytes is the maximum of:
+#
+# - The receiver's `initial_max_stream_data_uni` transport parameter, if the stream
+#   is unidirectional.
+#
+# - The receiver's `initial_max_stream_data_bidi_local` transport parameter, if the stream
+#   is bidirectional and is initiated by the receiver.
+#
+# - The receiver's `initial_max_stream_data_bidi_remote` transport parameter, if the stream
+#   is bidirectional and is initiated by the sender.
+#
+# An aid is the initiator of a stream if its protocol role (client or server) matches the
+# role of the stream id.
+
+action stream_max_data(dcid:cid,id:stream_id) returns (max:stream_pos) = {
+    var tp := trans_params(dcid);
+    max := 0;
+    if get_stream_kind(id) = unidir {
+        if initial_max_stream_data_uni.is_set(tp) {
+            max := initial_max_stream_data_uni.value(trans_params(dcid)).stream_pos_32
+        }
+    } else {
+        if is_client(dcid) <-> get_stream_role(id) = role.client {
+            if initial_max_stream_data_bidi_local.is_set(tp) {
+                max := initial_max_stream_data_bidi_local.value(trans_params(dcid)).stream_pos_32
+            }
+        } else {
+            if initial_max_stream_data_bidi_remote.is_set(tp) {
+                max := initial_max_stream_data_bidi_remote.value(trans_params(dcid)).stream_pos_32
+            }
+        }
+    };
+    if max_stream_data_set(dcid,id) {
+        var msdv := max_stream_data_val(dcid,id); 
+        max := msdv if msdv > max else max;
+    }
+}
+
+#
+# Whether a give stream can be opened by a peer of a given aid is
+# computed by the following procedure. The id of a remotely initiated
+# stream must be less than the maximum of:
+#
+# - Four times the aid's `initial_max_stream_id_uni` transport
+#   parameter, if the stream is unidirectional [3].
+#
+# - Four times the aid's `initial_max_stream_id_bidi` transport
+#   parameter, if the stream is bidirectional [4].
+#
+# - The stream id parameter of any MAX_STREAM_ID frame sent by the
+#   aid, if it is of the same kind.
+
+action stream_id_allowed(dcid:cid,id:stream_id) returns (ok:bool) = {
+    ok := false;
+    var tp := trans_params(dcid);
+    var kind := get_stream_kind(id);
+    if ~(is_client(dcid) <-> get_stream_role(id) = role.client) {  # if stream remotely initiated
+        if kind = unidir {
+            if initial_max_stream_id_uni.is_set(tp) {
+                ok := id < (initial_max_stream_id_uni.value(tp).stream_id_16) * 4  # [3]
+            }
+        } else {
+            if initial_max_stream_id_bidi.is_set(tp) {
+                ok := id < (initial_max_stream_id_bidi.value(tp).stream_id_16) * 4;  # [4]
+            }
+        };
+        ok := ok | max_stream_set(dcid,kind) & id <= max_stream(dcid,kind)
     }
 }
 
