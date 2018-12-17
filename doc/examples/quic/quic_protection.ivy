@@ -95,31 +95,36 @@ module quic_protection(tls_id,tls) = {
         var h := get_header_info(pkt);
         var level := get_level(pkt);
         var sample_size := tls.iv_size(c,level);
-        var pnum_pos := h.pkt_num_pos;
+        if sample_size = 0 {
+            res.ok := false;
+        }
+        else {
+            var pnum_pos := h.pkt_num_pos;
 
-        var sample_pos := pnum_pos + 4;
-        if sample_pos + sample_size > pkt.end {
-            sample_pos := pkt.end - sample_size
-        };
-        var sample := pkt.segment(sample_pos,sample_pos+sample_size);
-        var pnum := pkt.segment(pnum_pos,pnum_pos+4);
-        pnum := tls.decrypt_cipher(c,level,pnum,sample);
-
-        var pnum_len := get_pnum_len(pnum,0);
-        var hdr := pkt.segment(0,pnum_pos);
-        hdr := hdr.extend(pnum.segment(0,pnum_len));
-        var new_seq := get_pnum(pnum,0,pnum_len);
-        new_seq := correct_pnum(seq,new_seq,pnum_len);
-        var pyld := pkt.segment(pnum_pos + pnum_len,pkt.end);
-        res := tls.decrypt_aead(c,level,pyld,new_seq,hdr);
-        if res.ok {
-            # fix up the length field to account for removal of checksum
-            if h.hdr_long {
-                var new_len := to_var_int_16(h.payload_length-16);
-                hdr := hdr.set(pnum_pos-2,new_len.value(0));
-                hdr := hdr.set(pnum_pos-1,new_len.value(1));
+            var sample_pos := pnum_pos + 4;
+            if sample_pos + sample_size > pkt.end {
+                sample_pos := pkt.end - sample_size
             };
-            res.data := hdr.extend(res.data);
+            var sample := pkt.segment(sample_pos,sample_pos+sample_size);
+            var pnum := pkt.segment(pnum_pos,pnum_pos+4);
+            pnum := tls.decrypt_cipher(c,level,pnum,sample);
+
+            var pnum_len := get_pnum_len(pnum,0);
+            var hdr := pkt.segment(0,pnum_pos);
+            hdr := hdr.extend(pnum.segment(0,pnum_len));
+            var new_seq := get_pnum(pnum,0,pnum_len);
+            new_seq := correct_pnum(seq,new_seq,pnum_len);
+            var pyld := pkt.segment(pnum_pos + pnum_len,pkt.end);
+            res := tls.decrypt_aead(c,level,pyld,new_seq,hdr);
+            if res.ok {
+                # fix up the length field to account for removal of checksum
+                if h.hdr_long {
+                    var new_len := to_var_int_16(h.payload_length-16);
+                    hdr := hdr.set(pnum_pos-2,new_len.value(0));
+                    hdr := hdr.set(pnum_pos-1,new_len.value(1));
+                };
+                res.data := hdr.extend(res.data);
+            }
         }
     }
 
