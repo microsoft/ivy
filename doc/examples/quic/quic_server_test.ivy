@@ -26,8 +26,8 @@ include file
 # Parameters are:
 #
 #     the_cid:int      cid to be used by the client (default 0xd)
-#     client_addr:int  the client IP address (default 0xff000001, i.e., the loopback interface)
-#     server_addr:int  the server IP address (default 0xff000001, i.e., the loopback interface)
+#     client_addr:int  the client IP address (default 0x7f000001, i.e., the loopback interface)
+#     server_addr:int  the server IP address (default 0x7f000001, i.e., the loopback interface)
 #     server_port:int  the server port number (default 4443)
 #     send_fin:bool    indicates the server waits for FIN in stream to respond
 #
@@ -64,8 +64,8 @@ object endpoint_id = {
 # The parameters
 
 parameter the_cid : cid = 0xd
-parameter client_addr : ip.addr = 0xff000001
-parameter server_addr : ip.addr = 0xff000001
+parameter client_addr : ip.addr = 0x7f000001
+parameter server_addr : ip.addr = 0x7f000001
 parameter server_port : ip.port = 4443
 parameter server_cid : cid = 0xb
 parameter client_port : ip.port = 4987
@@ -122,7 +122,7 @@ instance net : udp_impl(endpoint_id,prot.arr,quic_prot_ser,quic_prot_deser)
 
 action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
     ep.protocol := ip.udp;
-    ep.addr := server_addr if ep_id = endpoint_id.server else 0xc0a80102;   # the loop-back addr
+    ep.addr := server_addr if ep_id = endpoint_id.server else client_addr;   # the loop-back addr
     ep.port := client_port if ep_id = endpoint_id.client
                else (client_port_alt if ep_id = endpoint_id.client_alt
                else server_port);
@@ -349,7 +349,7 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
             }
             else {
                 call undecryptable_packet_event(src,dst,ppkt);
-                assert false;
+#                assert false;
             };
             idx := idx.next;
         }

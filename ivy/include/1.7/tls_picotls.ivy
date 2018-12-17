@@ -249,7 +249,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ptls_buffer_init(&sendbuf, (void *)"", 0);
         int ret = ptls_handle_message(s->gs, &sendbuf, epoch_offsets, in_epoch, input, inlen, s->hsp);
         if (ret == PTLS_ERROR_IN_PROGRESS) {
-            std::cerr << "PICOTLS RETURNED PTLS_ERROR_IN_PROGRESS\n";
+//            std::cerr << "PICOTLS RETURNED PTLS_ERROR_IN_PROGRESS\n";
         } else if (ret != 0) {
             std::cerr << "PICOTLS RETURNED ERROR: " << ret << "\n";
         }
@@ -408,9 +408,9 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
             pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
         if (!pn_enc) {
             std::cerr << "cipher for level " << l << " is not set\n";
-            exit(1);
+            sz = 0;
         }
-        sz = pn_enc->algo->iv_size;
+        else sz = pn_enc->algo->iv_size;
 
         >>>
     }

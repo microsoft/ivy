@@ -201,7 +201,7 @@ object impl(me:host) = {
 		myaddr.sin_addr.s_addr = htonl(addr.addr);
 		// myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		myaddr.sin_port = htons(addr.port);
-		// std::cout << "binding id: " << `me` << " port: " << ntohs(myaddr.sin_port) << std::endl;
+		std::cout << "binding id: " << `me` << " addr: " << ntohl(myaddr.sin_addr.s_addr) << " port: " << ntohs(myaddr.sin_port) << std::endl;
 		if (::bind(s, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
 		    { perror("bind failed"); exit(1); }
 		install_reader(new udp_reader(`me`,s, *`cb`, this));

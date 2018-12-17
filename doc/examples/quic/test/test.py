@@ -5,7 +5,6 @@ import os
 import sys
 import imp
 import subprocess
-import stats
 import re
 import time
 
@@ -30,15 +29,62 @@ tests = [
 
 import sys
 def usage():
-    print "usage: \n  {} <dir> <iters> <server> [pat]".format(sys.argv[0])
+    print """usage:
+    {} [option...]
+options:
+    dir=<output directory to create>
+    iters=<number of iterations>
+    server={{picoquic,quant,winquic}}
+    test=<test name pattern>
+    stats={{true,false}}
+""".format(sys.argv[0])
     sys.exit(1)
-if len(sys.argv) < 4 or len(sys.argv) > 5 :
-    usage()
-    exit(1)
-dirpath = sys.argv[1]
-iters = int(sys.argv[2])
-server_name = sys.argv[3]
-pat = sys.argv[4] if len(sys.argv) >= 5 else '*'
+
+dirpath = None
+iters = 100
+server_name = 'winquic'
+getstats = False
+pat = '*'
+
+# server_addr=0xc0a80101 client_addr=0xc0a80102
+ivy_options = {'server_addr':None,'client_addr':None}
+
+for arg in sys.argv[1:]:
+    vals = arg.split('=')
+    if len(vals) != 2:
+        usage()
+    name,val = vals
+    if name == 'dir':
+        dirpath = val
+    elif name == 'iters':
+        try:
+            iters = int(val)
+        except:
+            usage()
+    elif name == 'server':
+        server_name = val
+    elif name == 'stats':
+        if val not in ['true','false']:
+            usage()
+        getstats = val == 'true'
+    elif name == 'test':
+        pat = val
+    elif name in ivy_options:
+        ivy_options[name] = val
+    else:
+        usage()
+
+if dirpath is None:
+    idx = 0
+    while True:
+        path = os.path.join('temp',str(idx))
+        if not os.path.exists(path):
+            dirpath = path
+            break
+        idx = idx + 1
+
+print 'output directory: {}'.format(dirpath)
+            
 try:
     patre = re.compile(pat)
 except:
@@ -51,7 +97,8 @@ except OSError:
     sys.stderr.write('cannot create directory "{}"\n'.format(dirpath))
     exit(1)
 
-extra_args = ['server_addr=0xc0a80101','client_addr=0xc0a80102'] if server_name == 'winquic' else []
+# extra_args = ['server_addr=0xc0a80101','client_addr=0xc0a80102'] if server_name == 'winquic' else []
+extra_args = [oname+'='+oval for oname,oval in ivy_options.iteritems() if oval is not None]
 
 svrd = dict(servers)
 if server_name not in svrd:
@@ -178,11 +225,13 @@ try:
             status = test.run(seq)
             if not status:
                 num_failures += 1
-        with open_out(test.name+'.dat') as out:
-            save = os.getcwd()
-            os.chdir(dirpath)
-            stats.doit(test.name,out)
-            os.chdir(save)
+        if getstats:
+            import stats
+            with open_out(test.name+'.dat') as out:
+                save = os.getcwd()
+                os.chdir(dirpath)
+                stats.doit(test.name,out)
+                os.chdir(save)
     if num_failures:
         print 'error: {} tests(s) failed'.format(num_failures)
     else:
