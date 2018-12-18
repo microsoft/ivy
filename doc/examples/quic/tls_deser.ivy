@@ -23,11 +23,12 @@ object tls_ser = {}
 
     struct tls_name_map : hash_space::hash_map<std::string,int> {};
 
-    struct tls_name_struct tls_field_length_bytes[25] = {
+    struct tls_name_struct tls_field_length_bytes[26] = {
         {"fragment",2},
         {"content",2},
         {"tls.client_hello",3},
         {"tls.server_hello",3},
+        {"tls.encrypted_extensions",3},
         {"unknown_message_bytes",3},
         {"session_id",1},
         {"cipher_suites",2},
@@ -75,12 +76,13 @@ object tls_ser = {}
     };
     tls_name_map tls_field_bytes_map;
 
-    struct tls_name_struct tls_tags[22] = {
+    struct tls_name_struct tls_tags[23] = {
         {"tls.handshake_record",22},
         {"tls.application_data_record",23},
         {"tls.change_cipher_spec",20},
         {"tls.client_hello",1},
         {"tls.server_hello",2},
+        {"tls.encrypted_extensions",8},
         {"tls.unknown_message",-1},
         {"tls.unknown_extension",-1},
         {"quic_transport_parameters",0xffa5},
@@ -131,11 +133,13 @@ object tls_ser = {}
     class `tls_deser` : public ivy_binary_deser {
         int field_bytes;
         std::vector<unsigned> fence;
+        int in_encrypted_extensions;
 
     public:
 
         tls_deser(const std::vector<char> &inp) : ivy_binary_deser(inp) {
             field_bytes = 2;
+            in_encrypted_extensions = 0;
         }
 
         virtual bool more(unsigned bytes) {
@@ -149,6 +153,14 @@ object tls_ser = {}
                 fence.push_back(pos+28);
                 field_bytes = 1;
             }
+            else if (name == "versions") {
+                field_bytes = 4;
+                long long bytes = 0;
+                if (in_encrypted_extensions) {
+                    getn(bytes,1);
+                }
+                fence.push_back(pos+bytes);
+            }
             else if (tls_field_length_bytes_map.find(name) != tls_field_length_bytes_map.end()) {
                 int length_field_bytes = tls_field_length_bytes_map[name];
                 long long bytes;
@@ -160,9 +172,14 @@ object tls_ser = {}
             if (tls_field_bytes_map.find(name) != tls_field_bytes_map.end()) {
                 field_bytes = tls_field_bytes_map[name];
             }
+            if (name == "tls.encrypted_extensions") {
+                in_encrypted_extensions = fence.size();
+            }
         }
 
         virtual void close_field() {
+            if (fence.size() == in_encrypted_extensions)
+                in_encrypted_extensions = 0;
             if (fence.size() > 0)
                 fence.pop_back();
         }
@@ -220,11 +237,23 @@ object tls_ser = {}
         int field_bytes;
         std::vector<unsigned> field_start;
         std::vector<unsigned> field_length_bytes;
+        int in_encrypted_extensions;
+
+        tls_ser() {
+            in_encrypted_extensions = 0;
+        }
 
         virtual void open_field(const std::string &name) {
             int flb = 0;
             if (name == "random_bytes") {
                 field_bytes = 1;
+            }
+            else if (name == "versions") {
+                field_bytes = 4;
+                if (in_encrypted_extensions) {
+                    flb = 1;
+                    res.resize(res.size() + flb);
+                }
             }
             else if (tls_field_length_bytes_map.find(name) != tls_field_length_bytes_map.end()) {
                 flb = tls_field_length_bytes_map[name];
@@ -235,16 +264,22 @@ object tls_ser = {}
             if (tls_field_bytes_map.find(name) != tls_field_bytes_map.end()) {
                 field_bytes = tls_field_bytes_map[name];
             }
+            if (name == "tls.encrypted_extensions") {
+                in_encrypted_extensions = field_start.size();
+            }
         }
 
         virtual void close_field() {
+            if (field_start.size() == in_encrypted_extensions)
+                in_encrypted_extensions = 0;
             // tricky -- go back and fill in the length bytes after the field is serialized
             int start = field_start.back();
             int end = res.size();
             int flb = field_length_bytes.back();
             std::vector<char> temp;
             temp.swap(res);
-            setn(end-start,flb);
+            int len = end-start;
+            setn(len,flb);
             temp.swap(res);
             std::copy(temp.begin(),temp.end(),res.begin()+start-flb);
             field_start.pop_back();

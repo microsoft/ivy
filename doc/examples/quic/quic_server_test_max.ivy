@@ -5,7 +5,10 @@ include quic_server_test
 export frame.max_stream_id.handle
 export frame.max_stream_data.handle
 #export frame.stream_blocked.handle
-#export frame.rst_stream.handle
+export frame.rst_stream.handle
+attribute frame.rst_stream.handle.weight = "0.02"
+
+
 # export frame.connection_close.handle
 # attribute frame.connection_close.handle.weight = "0.02"
 

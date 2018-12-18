@@ -41,10 +41,11 @@ object tls = {
 
     # A handshake message has the following variants:
     #
-    # | variant      | description  | tag |
-    # |--------------|--------------|-----|
-    # | client_hello | Client Hello | 1   |
-    # | server_hello | Client Hello | 2   |
+    # | variant              | description  | tag |
+    # |----------------------|--------------|-----|
+    # | client_hello         | Client Hello | 1   |
+    # | server_hello         | Client Hello | 2   |
+    # | encrypted_extensions | Client Hello | 8   |
     #
     # The serialized form of `handshake` has the following four-byte prefix:
     #
@@ -160,6 +161,17 @@ object tls = {
             session_id : stream_data,
             the_cipher_suite : cipher_suite,
             the_compression_method : compression_method,
+            extensions : vector[extension]
+        }
+    }
+
+    # The Encrypted Extensions message has the following fields:
+    # 
+    # - `extensions` is a sequence of extensions. In serialized form it is prefixed by a two-byte
+    #   length field.
+    
+    object encrypted_extensions = {
+        variant this  of handshake = struct {
             extensions : vector[extension]
         }
     }

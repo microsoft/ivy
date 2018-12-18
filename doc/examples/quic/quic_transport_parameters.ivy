@@ -114,7 +114,8 @@ object max_ack_delay = {
 
 object quic_transport_parameters = {
     variant this of tls.extension = struct {
-        initial_version : version,
+        initial_version : version,  # holds negotiated version in encrypted extensions
+        versions : vector[version], # empty in client_hello
         transport_parameters : vector[transport_parameter]
     }
 }

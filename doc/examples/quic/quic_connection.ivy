@@ -724,7 +724,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
     if ack_only {
-#	require ack_credit(scid) > 0;  # [5]
+	require ack_credit(scid) > 0;  # [5]
 	ack_credit(scid) := ack_credit(scid) - 1;
     } else {
 	ack_credit(dcid) := ack_credit(dcid) + 1;
@@ -943,7 +943,8 @@ object frame = {
             require f.fin <-> (stream_app_data_finished(dcid,f.id) & offset+f.length = stream_app_data_end(dcid,f.id));
 
             var kind := get_stream_kind(f.id);
-            require ~stream_reset(dcid,f.id);  # [7]
+# this could fail because of packet re-ordering. QUESTION: what can we say?
+#            require ~stream_reset(dcid,f.id);  # [7]
             require conn_seen(scid);  # [9]
             require ((offset) + (f.length)) <= stream_max_data(dcid,f.id);  # [2]
             # require stream_id_allowed(dcid,id:stream_id);  # [6]
@@ -1235,7 +1236,7 @@ object frame = { ...
 	around handle{
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
             require e = encryption_level.other -> established_1rtt_keys(scid);
-            require e = encryption_level.other -> established_1rtt_keys(scid);
+            require e = encryption_level.handshake -> established_handshake_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
             require f.reason_phrase_length = f.reason_phrase.end;
@@ -1307,9 +1308,9 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 #            require stream_seen(scid,f.id) | stream_seen(dcid,f.id);  # TEMPORARY -- should not be needed
 
-            if ~(max_stream_data_set(dcid,f.id) & f.pos < max_stream_data_val(dcid,f.id)) {
-                max_stream_data_set(dcid,f.id) := true;
-                max_stream_data_val(dcid,f.id) := f.pos;  # [2]
+            if ~max_stream_data_set(scid,f.id) | f.pos > max_stream_data_val(scid,f.id) {
+                max_stream_data_set(scid,f.id) := true;
+                max_stream_data_val(scid,f.id) := f.pos;  # [2]
             }
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1536,10 +1537,10 @@ action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt
 # the reference `quic_transport_parameters`. Here we define the
 # protocol rules associated with `quic_transport_parameters`.
 #
-# The `handle_tls_handshake` rules apply to each `client_hello` or
-# `server_hello` message, in order of occurrence in the crypto data.
-# The last parameter, `is_client_hello`, is true for a `client_hello`
-# message (see below).
+# The `handle_tls_handshake` rules apply to each `client_hello`,
+# `server_hello` or `encrypted extensions` message, in order of
+# occurrence in the crypto data.  The last parameter,
+# `is_client_hello`, is true for a `client_hello` message (see below).
 #
 # A server hello establishes the connection between the server and the
 # client cids [1]. We have to do it this way because there is no way
@@ -1566,6 +1567,9 @@ action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs
 #        call map_cids(src,scid,dcid);    # [1]
 #        call map_cids(dst,dcid,scid);
         call handle_tls_extensions(src,dst,scid,sh.extensions,false);
+    }
+    else if some(ee:tls.encrypted_extensions) hs *> ee {
+        call handle_tls_extensions(src,dst,scid,ee.extensions,false);
     }
 }
 

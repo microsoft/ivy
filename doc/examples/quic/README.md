@@ -352,11 +352,11 @@ TODO list
 
 - Retry and new token
 
-- Enforce transport parameters in stream frames (update to quic15)
+- Enforce max stream id transport parameter
 
 - Make picoquic server send some data (perhaps echo server, or random data)
 
-- Test multiple streams, multiple clients
+- Test multiple clients
 
 - Preferred server address
 
