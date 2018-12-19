@@ -96,6 +96,9 @@ include quic_transport_parameters
 # 
 # - The relation `hi_non_probing_endpoint(C,E)` that the highest-numbered
 #   non-probing packet of aid `C` was at some time sent from endpopint `E`.
+#
+# - The function `conn_total_data(C)` represents the total number of stream
+#   bytes received by aid `C`.
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
@@ -112,6 +115,7 @@ relation is_client(C:cid)
 relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
 function hi_non_probing(C:cid) : pkt_num
 relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
+function conn_total_data(C:cid) : stream_pos
 
 # TLS handshake protocol state
 # ----------------------------
@@ -183,6 +187,12 @@ relation established_handshake_keys(C:cid)
 #   indicates the maximum number of bytes that may be sent on stream
 #   id S to C has been set.
 #
+# - For each aid C, `max_data_val(C,S)` indicates the maximum total
+#   number of bytes that may be sent on all streams to C.
+#
+# - For each aid C, `max_data_set(C,S)` indicates the maximum total
+#   number of bytes that may be sent on all streams to C has been set.
+#
 # - For each aid C,and stream id S, `stream_length(C,S)`
 #   indicates the length of the stream data transmitted in QUIC
 #   packets on stream id S to cid C. The length is the
@@ -225,6 +235,8 @@ relation established_handshake_keys(C:cid)
 relation stream_seen(C:cid,S:stream_id)
 function max_stream_data_val(C:cid,S:stream_id) : stream_pos
 relation max_stream_data_set(C:cid,S:stream_id)
+function max_data_val(C:cid) : stream_pos
+relation max_data_set(C:cid)
 function stream_length(C:cid,S:stream_id) : stream_pos
 relation stream_finished(C:cid,S:stream_id)
 relation stream_reset(C:cid,S:stream_id)
@@ -283,6 +295,7 @@ after init {
     stream_seen(C,S) := false;
     stream_length(C,S) := 0;
     max_stream_data_set(C,S) := false;
+    max_data_set(C) := false;
     stream_finished(C,S) := false;
     stream_reset(C,S) := false;
     stream_app_pos(C,S) := 0;
@@ -918,10 +931,10 @@ object frame = {
 #
 # - If the fin bit is set, the stream is marked as finished.
 #
-# Question: what is the value of `initial_max_stream_data` for stream
-# zero? Here we assume there is no back-pressure on stream zero.
+# - The total amount of data received on the connection is
+#   updated. Note this reflects the total of the observed length of
+#   all streams, including any unreceived gaps.
 #
-# Question: is the FIN bit allowed on stream zero?
 
 object frame = {
     ...
@@ -954,6 +967,7 @@ object frame = {
             var length := offset + f.length;
             # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
             if stream_length(dcid,f.id) < length {
+                conn_total_data(dcid) := conn_total_data(dcid) + (length - stream_length(dcid,f.id));  # [12]
                 stream_length(dcid,f.id) := length
             };
             if f.fin {
@@ -977,8 +991,13 @@ object frame = {
 # - The receiver's `initial_max_stream_data_bidi_remote` transport parameter, if the stream
 #   is bidirectional and is initiated by the sender.
 #
-# An aid is the initiator of a stream if its protocol role (client or server) matches the
-# role of the stream id.
+# An alternative maximum lenght is given by the maximum total data
+# limit for the receiving aid.  That is, it can be no greater than the
+# current stream length plus the maximum total additional
+# bytes allowed on all streams.
+
+# An aid is the initiator of a stream if its protocol role (client or
+# server) matches the role of the stream id.
 
 action stream_max_data(dcid:cid,id:stream_id) returns (max:stream_pos) = {
     var tp := trans_params(dcid);
@@ -1001,7 +1020,9 @@ action stream_max_data(dcid:cid,id:stream_id) returns (max:stream_pos) = {
     if max_stream_data_set(dcid,id) {
         var msdv := max_stream_data_val(dcid,id); 
         max := msdv if msdv > max else max;
-    }
+    };
+    var alt_max := max_additional_data(dcid) + stream_length(dcid,id);
+    max := alt_max if alt_max < max else max;
 }
 
 #
@@ -1034,6 +1055,24 @@ action stream_id_allowed(dcid:cid,id:stream_id) returns (ok:bool) = {
         };
         ok := ok | max_stream_set(dcid,kind) & id <= max_stream(dcid,kind)
     }
+}
+
+# The procedure computes the maximum number of additional bytes that a given
+# destination aid can receive, based on the `initial_max_data` transport parameter
+# and the highest position sent by the aid in a max data frame. This is computed as the
+# maximum of these two values, less the total data already received.
+
+action max_additional_data(dcid:cid) returns (max:stream_pos) = {
+    var tp := trans_params(dcid);
+    max := 0;
+    if initial_max_data.is_set(tp) {
+        max := initial_max_data.value(tp).stream_pos_32
+    };
+    if max_data_set(dcid) {
+        var smax := max_data_val(dcid);
+        max := smax if smax > max else max
+    };
+    max := max - conn_total_data(dcid);  # note the substraction is saturating
 }
 
 # Crypto frames carry crypto handshake data, that is, TLS records.
@@ -1361,11 +1400,10 @@ object frame = { ...
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 
-            # TODO: implement this
-            # if ~(max_data_set(dcid,f.id) & f.pos < max_data_val(dcid,f.id)) {
-            #     max_data_set(dcid,f.id) := true;
-            #     max_data_val(dcid,f.id) := f.pos;  # [2]
-            # }
+            if ~max_data_set(scid) | f.pos > max_data_val(scid) {
+                max_data_set(scid) := true;
+                max_data_val(scid) := f.pos;  # [2]
+            }
 	    ...
             call enqueue_frame(src,scid,f,e,false);
         }

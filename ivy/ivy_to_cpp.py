@@ -314,6 +314,11 @@ def ctype_remaining_cases(sort,classname):
         return ((classname+'::') if classname != None else '') + sn
     card = slv.sort_card(sort)
     if card is None:
+        if hasattr(sort,'name'):
+            name = sort.name
+            if name in il.sig.interp:
+                if il.sig.interp[name] == 'nat':
+                    return 'unsigned long long'
         return 'int'   # for uninterpreted sorts, can be anything
     if card <= 2**32:
         return 'unsigned'
@@ -3216,9 +3221,9 @@ def emit_app(self,header,code,capture_args=None):
             emit_bv_op(self,header,code)
             return
         if self.func.name == '-' and il.sig.interp.get(self.func.sort.rng.name,None) == 'nat':
-            x = new_temp(header)
+            x = new_temp(header,self.func.sort.rng)
             code_line(header,x + ' = ' + code_eval(header,self.args[0]))
-            y = new_temp(header)
+            y = new_temp(header,self.func.sort.rng)
             code_line(header,y + ' = ' + code_eval(header,self.args[1]))
             code.append('( {} < {} ? 0 : {} - {})'.format(x,y,x,y))
             return

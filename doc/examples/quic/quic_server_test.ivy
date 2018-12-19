@@ -90,7 +90,7 @@ action make_transport_parameters returns (tp:quic_transport_parameters) = {
     var imsdbl : initial_max_stream_data_bidi_local;
     imsdbl.stream_pos_32 := 2;  # TEMPORARY: was 0x2000
     var imd : initial_max_data;
-    imd.stream_pos_32 := 0x4000;
+    imd.stream_pos_32 := 0x30;  # 0x4000;
     var it : idle_timeout;
     it.seconds_16 := 60;
     var imsdbr : initial_max_stream_data_bidi_remote;
