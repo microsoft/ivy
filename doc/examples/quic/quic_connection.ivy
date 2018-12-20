@@ -737,7 +737,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
                                  (pkt.payload.value(I) isa frame.ack);
     if ack_only {
-	require ack_credit(scid) > 0;  # [5]
+#	require ack_credit(scid) > 0;  # [5]
 	ack_credit(scid) := ack_credit(scid) - 1;
     } else {
 	ack_credit(dcid) := ack_credit(dcid) + 1;

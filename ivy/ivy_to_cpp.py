@@ -4630,7 +4630,7 @@ public:
         return apply(decl_name,a);
     }
 
-    z3::expr int_to_z3(const z3::sort &range, int value) {
+    z3::expr int_to_z3(const z3::sort &range, __int64 value) {
         if (range.is_bool())
             return ctx.bool_val((bool)value);
         if (range.is_bv())
