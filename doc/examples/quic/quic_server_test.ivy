@@ -88,13 +88,13 @@ instance tls_extensions : vector(tls.extension)
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
     tp.initial_version := 0xff000010;
     var imsdbl : initial_max_stream_data_bidi_local;
-    imsdbl.stream_pos_32 := 2;  # TEMPORARY: was 0x2000
+    imsdbl.stream_pos_32 := 0x2000; # 2;  # TEMPORARY: was 0x2000
     var imd : initial_max_data;
-    imd.stream_pos_32 := 0x30;  # 0x4000;
+    imd.stream_pos_32 := 0x4000;
     var it : idle_timeout;
     it.seconds_16 := 60;
     var imsdbr : initial_max_stream_data_bidi_remote;
-    imsdbr.stream_pos_32 := 2; # TEMPORARY: was 0x2000
+    imsdbr.stream_pos_32 := 0x2000; # 2; # TEMPORARY: was 0x2000
     var imsdu : initial_max_stream_data_uni;
     imsdu.stream_pos_32 := 0x2000;
     tp.transport_parameters := tp.transport_parameters.append(imsdbl);
@@ -319,7 +319,9 @@ after packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     if src = client.ep | src = client_alt {
         var spkt := pkt_serdes.to_bytes(pkt);
         var rnum := reference_pkt_num(spkt);
+        call clear_packet(rnum,spkt);
         var ppkt := prot.encrypt(client.tls_id,rnum,spkt);
+        call cipher_packet(ppkt);
         var pkts := prot.arr.empty;
         pkts := pkts.append(ppkt);
         if src = client.ep {
@@ -515,6 +517,23 @@ before frame.stream_blocked.handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip
     }
 }
 
+# Generate max_data frames only for the client.
+
+before frame.max_data.handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid) {
+    if _generating {
+        require (src = client.ep | src = client_alt) & dst = server.ep; 
+        require scid = the_cid;
+    }
+    else {
+        require ~(max_data_set(scid) & max_data_val(scid) > f.pos);
+        var tp := trans_params(scid);
+        if initial_max_data.is_set(tp) {
+# TEMORARY: commented out until fixed
+#            require initial_max_data.value(tp).stream_pos_32 <= f.pos;
+        }
+    }
+}
+
 # We allow generating application data at the client end only if the previous data have
 # not been sent. This is to avoid building up a long queue. TEMPORARY: we only generate data
 # for stream id 0x4. TEMPORARY: we only send the http request data read from the input file.
@@ -597,3 +616,6 @@ action undecryptable_packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:stream_dat
 import undecryptable_packet_event
 
 import action show_level_offset_length(e:encryption_level,offset:stream_pos,length:stream_pos)
+
+import action clear_packet(rnum:pkt_num,pkt:stream_data)
+import action cipher_packet(pkt:stream_data)

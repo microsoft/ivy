@@ -369,7 +369,6 @@ TODO list
 
 - Frame types:
 
-    - MAX_DATA (not enforced)
     - BLOCKED (implemented, but no properties)
     - STREAM_BLOCKED (implemented, but no properties)
     - RETIRE_CONNECTION_ID (not implemented)
@@ -380,4 +379,6 @@ TODO list
 - Ack-only packet rules (reinstate)
 
 - Retransmissions (seems to be only liveness properties)
+
+- Test the key phase bit
 

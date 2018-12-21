@@ -375,7 +375,7 @@ after init {
 action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, close : bool)
 
 after app_send_event {
-    require ~stream_app_data_finished(dcid,s);
+    require ~(data.end > 0 & stream_app_data_finished(dcid,s));
     var idx := data.begin;
     while idx < data.end {
 	stream_app_data(dcid,s) := stream_app_data(dcid,s).append(data.value(idx));
@@ -1370,6 +1370,30 @@ object frame = { ...
 object frame = { ...
     object stream_blocked = { ...
         action handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(src,scid,f,e,false);
+        }
+    }
+}
+
+# Stream blocked frames indicate that sender wishes to send data beyond current total limit
+# for all streams.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object blocked = { ...
+        action handle(f:frame.blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
 	around handle {
             require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
             require e = encryption_level.other & established_1rtt_keys(scid);

@@ -16,6 +16,7 @@ counts = [
     ['ivy error','ivy_return_code'],
     ['server error','server_return_code'],
     ['server_ack','show_frame(*,*,*,*,{frame.ack:*})'],
+    ['server_stream','show_frame(*,*,*,*,{frame.stream:*})'],
 ]
 
 def count(x):

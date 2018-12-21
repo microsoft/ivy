@@ -1113,8 +1113,6 @@ class CallAction(Action):
             raise IvyError(self,"wrong number of output parameters");
         for x,y in zip(formal_params,actual_params):
             if x.sort != y.sort and not domain.is_variant(x.sort,y.sort):
-                iu.dbg('x.sort')
-                iu.dbg('y.sort')
                 raise IvyError(self,"value for input parameter {} has wrong sort".format(x))
         for x,y in zip(formal_returns,actual_returns):
             if x.sort != y.sort and not domain.is_variant(y.sort,x.sort):

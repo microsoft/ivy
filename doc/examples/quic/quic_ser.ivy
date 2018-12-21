@@ -372,6 +372,10 @@ object quic_ser = {}
                     state = quic_stop_sending_id;
                     frame_type = 0x0c;
                 }
+                else if (tag == 17) {
+                    state = quic_reset_final_offset;
+                    frame_type = 0x08;
+                }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  
                     throw deser_err();

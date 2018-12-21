@@ -443,6 +443,10 @@ object quic_deser = {}
                     state = quic_stop_sending_id;  // stream_blocked equivalent to this
                     return 16;
                 }
+                if (frame_type == 0x08) {
+                    state = quic_reset_final_offset;  // blocked equivalent to this
+                    return 17;
+                }
                 std::cerr << "saw tag " << ft << std::endl;  
             }
             throw deser_err();

@@ -321,6 +321,23 @@ Issue:
 
 SEGV in diet_remove (quant issue #28)
 
+Event files: anomaly22.iev
+picoquic log file: anomaly22.log
+QUIC version: draft 15
+Implementation:
+    picoquic, commit 89a5117
+
+The log shows a case where a migration occurs from port 5047 to port
+5048. However, instead of sending path challenges to both ports, the
+server sends two path challenges to port 5047 and continues to try to
+validate this path without ever validating the path to the new port,
+eventually timing out and closing the connection.
+
+Also, notice that the server does not seem to recognize the
+PATH_RESPONSE to the first of the two challenges. It seems to indicate
+that the second PATH_CHALLENGE overwrote the first, which was possibly
+intended for the new path.
+
 
 
 
