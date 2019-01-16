@@ -359,8 +359,16 @@ def l2s(mod, temporal_goal):
             (y for x,y in mod.initializers),
     )):
         named_binders[b.name].append(b)
-    named_binders = defaultdict(list, ((k,list(sorted(set(v)))) for k,v in named_binders.iteritems()))
-    # make sure old_l2s_g is consistent with l2s_g
+    # sort named binders according to a consistent order
+    named_binders = defaultdict(list, (
+        (k,list(sorted(
+            set(v),
+            key=lambda x: (len(x.variables), str(x.variables), str(x.body)),
+        )))
+        for k,v in named_binders.iteritems()
+    ))
+    # make sure old_l2s_g is consistent with l2s_g, so that
+    # old_l2s_g_X is really old l2s_g_X after the substitution
     assert len(named_binders['l2s_g']) == len(named_binders['old_l2s_g'])
     assert named_binders['old_l2s_g'] == [
          lg.NamedBinder('old_l2s_g', b.variables, b.body)

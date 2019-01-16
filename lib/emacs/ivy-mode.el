@@ -87,6 +87,8 @@
    "ensure"
    "around"
    "parameter"
+   "globally"
+   "eventually"
 ) )
 
 (setq ivy-types '("bool" "int" "bv"))
