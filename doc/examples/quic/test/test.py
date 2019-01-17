@@ -37,6 +37,7 @@ options:
     server={{picoquic,quant,winquic}}
     test=<test name pattern>
     stats={{true,false}}
+    run={{true,false}}
 """.format(sys.argv[0])
     sys.exit(1)
 
@@ -44,6 +45,7 @@ dirpath = None
 iters = 100
 server_name = 'winquic'
 getstats = False
+run = True
 pat = '*'
 
 # server_addr=0xc0a80101 client_addr=0xc0a80102
@@ -67,6 +69,10 @@ for arg in sys.argv[1:]:
         if val not in ['true','false']:
             usage()
         getstats = val == 'true'
+    elif name == 'run':
+        if val not in ['true','false']:
+            usage()
+        run = val == 'true'
     elif name == 'test':
         pat = val
     elif name in ivy_options:
@@ -105,6 +111,9 @@ if server_name not in svrd:
     sys.stderr.write('unknown server: {}\n'.format(server_name))
     exit(1)
 server_dir,server_cmd = svrd[server_name]
+
+if not run:
+    server_cmd = 'true'
 
 print 'server directory: {}'.format(server_dir)
 print 'server command: {}'.format(server_cmd)

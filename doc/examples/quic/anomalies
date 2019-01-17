@@ -323,7 +323,7 @@ SEGV in diet_remove (quant issue #28)
 
 Event files: anomaly22.iev
 picoquic log file: anomaly22.log
-QUIC version: draft 15
+QUIC version: draft 16
 Implementation:
     picoquic, commit 89a5117
 
@@ -338,7 +338,59 @@ PATH_RESPONSE to the first of the two challenges. It seems to indicate
 that the second PATH_CHALLENGE overwrote the first, which was possibly
 intended for the new path.
 
+Event files: anomaly23.iev
+picoquic log file: anomaly23.log
+QUIC version: draft 16
+Implementation:
+    picoquic, commit 89a5117
 
+Possible vulnerability due to corruption of data in a retransmission
+by server. The log is an excerpt of a longer log with many
+connections. The relevant events are:
+
+1) T=1.137155 Client sends HTTP request for /index.html on stream 24, seq=1
+
+2) T=2.456074 Server sends 503 bytes on stream 24, offset 0, seq=13
+
+3) T=3.758303 Server sends 130 bytes on stream 24, offset 503, seq=15.
+The first byte of data at offets 503 is 0x4e.
+
+4) T=4.252034 Server resends 513 bytes on stream 24, offset 0, seq=16.
+Byte 503 is 0x1a which conflicts with the value sent in step 2.
+
+The original text sent in steps 1 and 2 is:
+
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<HTML>
+<HEAD>
+<TITLE>PicoQuic HTTP 0.9 service</TITLE>
+</HEAD><BODY>
+<h1>Simple HTTP 0.9 Responder</h1>
+<p>GET /, and GET index.html returns this text</p>
+<p>Get /doc-NNNNN.html returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN also returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN.txt returns txt document of length NNNNN bytes(decimal)</p>
+<p>Get /NNNNN returns html document of length NNNNN bytes(decimal)</p>
+<p>Any other command will result in an error, and an empty response.</p>
+<h1>Enjoy!</h1>
+</BODY></HTML>
+
+The corrupted text sent in step 3 is:
+
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<HTML>
+<HEAD>
+<TITLE>PicoQuic HTTP 0.9 service</TITLE>
+</HEAD><BODY>
+<h1>Simple HTTP 0.9 Responder</h1>
+<p>GET /, and GET index.html returns this text</p>
+<p>Get /doc-NNNNN.html returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN also returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN.txt returns txt document of length NNNNN bytes(decimal)</p>
+<p>Get /NNNNN returns html document of length NNN^Z^X\200^Cl\357^@^D^@
+
+It seems clear that a buffer has been overwritten. This could be a
+vulnerability, depending on the data that is leaked.
 
 
 
