@@ -393,6 +393,14 @@ It seems clear that a buffer has been overwritten. This could be a
 vulnerability, depending on the data that is leaked.
 
 
+Event files: anomaly24.iev
+quant log file: anomaly24.log
+QUIC version: draft 16
+Implementation:
+    quant, commit 4ed3af4
+    
+When receiving an initial packet with version 0xff000010, the quant server seems to run into some kind of problem sending a Retry packet. There are also some reports of misaligned accesses, but I don't know if these are relevant.
+
 
 
 

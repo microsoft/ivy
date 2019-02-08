@@ -1,0 +1,30 @@
+0.033   q_init quic.c:546 quant/socket 0.0.17/4ed3af4 with libev/epoll 4.22 ready
+        q_init quic.c:547 submit bug reports at https://github.com/NTAP/quant/issues
+0.035   q_init quic.c:567 debug build, storing fuzzer corpus data
+/home/mcmillan/projects/quant/lib/deps/warpcore/lib/src/ip.h:185:13: runtime error: member access within misaligned address 0x60400000031e for type 'struct ip_hdr', which requires 4 byte alignment
+0x60400000031e: note: pointer points here
+ 00 00 08 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00
+             ^ 
+/home/mcmillan/projects/quant/lib/deps/warpcore/lib/src/ip.h:186:13: runtime error: member access within misaligned address 0x60400000031e for type 'struct ip_hdr', which requires 4 byte alignment
+0x60400000031e: note: pointer points here
+ 00 00 08 00 45 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00
+             ^ 
+/home/mcmillan/projects/quant/lib/deps/warpcore/lib/src/ip.h:187:13: runtime error: member access within misaligned address 0x60400000031e for type 'struct ip_hdr', which requires 4 byte alignment
+0x60400000031e: note: pointer points here
+ 00 00 08 00 45 00  00 00 00 00 40 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00
+             ^ 
+/home/mcmillan/projects/quant/lib/deps/warpcore/lib/src/ip.h:188:11: runtime error: member access within misaligned address 0x60400000031e for type 'struct ip_hdr', which requires 4 byte alignment
+0x60400000031e: note: pointer points here
+ 00 00 08 00 45 00  00 00 00 00 40 00 40 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00
+             ^ 
+/home/mcmillan/projects/quant/lib/deps/warpcore/lib/src/ip.h:189:15: runtime error: member access within misaligned address 0x60400000031e for type 'struct ip_hdr', which requires 4 byte alignment
+0x60400000031e: note: pointer points here
+ 00 00 08 00 45 00  00 00 00 00 40 00 40 11  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00
+             ^ 
+        q_bind quic.c:393 bound serv socket on port 4443
+        main server.c:240 server waiting on lo port 4443
+        q_rx_ready quic.c:722 waiting for conn to get ready to rx
+0.217   rx_pkts conn.c:998 cannot find conn 0:0000000000000001 for 2020-byte Retry pkt
+0.217   log_pkt pkt.c:87 RX from=127.0.0.1:4987 len=2020 0xff=Retry vers=0xff000010 dcid=0000000000000001 scid=0000000000000000 odcid=0044b7d0f9d0d265574f0e342eea5e7ffb00 tok=fe613551bf34d3cbc25f41ad024613f39c480db6662590295619c6359c271e88f29abe91e816ed653411f7fb8a7a475826a3134504674da697eef2c7863e3...
+        rx_pkts conn.c:1018 ignoring unexpected Retry pkt for conn 0:0000000000000001
+        
