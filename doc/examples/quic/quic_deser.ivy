@@ -357,6 +357,8 @@ object quic_deser = {}
         }
 
         void get_pkt_num(long long &res) {
+            ivy_binary_deser::getn(res,(hdr_type & 3)+1);
+            return;
             static int lens[4] = {0,0,1,3};
             long long lobyte;
             ivy_binary_deser::getn(lobyte,1);

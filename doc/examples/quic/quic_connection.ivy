@@ -593,16 +593,18 @@ action client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
+    var hdr_type_bits : type_bits := bvand(pkt.hdr_type,0x30);
     # TEMPORARY
+    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0x7c) = 0x40; # assume fixed bit is 1, S,R,K = 0
+    require pkt.hdr_long -> bvand(pkt.hdr_type,0x4c) = 0x40; # assume fixed bit is 1, R = 0
     require ~pkt.hdr_long -> (pkt.dcid = 5 & pkt.scid = 0);
     require pkt.hdr_long -> (pkt.dcid > 0 & pkt.scid > 0);
     require pkt.hdr_token_length = pkt.hdr_token.end;
-    require pkt.hdr_token_length ~= 0 -> (pkt.hdr_long & pkt.hdr_type = 0x7f);
+    require pkt.hdr_token_length ~= 0 -> (pkt.hdr_long & hdr_type_bits = 0);
 
-    # Allowed header types
+    # Allowed long header types (TEMPORARY)
 
-    require pkt.hdr_long -> (pkt.hdr_type = 0x7d | pkt.hdr_type = 0x7f);
-    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0xf8) = 0x30;
+    require pkt.hdr_long -> (hdr_type_bits = 0x20 | hdr_type_bits = 0);
     
     # Extract the source and destination cid's and packet number from the packet.
 
@@ -635,8 +637,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # The header type depends on the encryption level
 
-    require e = encryption_level.initial -> pkt.hdr_long & pkt.hdr_type = 0x7f;
-    require e = encryption_level.handshake -> pkt.hdr_long & pkt.hdr_type = 0x7d;
+    require e = encryption_level.initial -> pkt.hdr_long & hdr_type_bits = 0;
+    require e = encryption_level.handshake -> pkt.hdr_long & hdr_type_bits = 0x20;
     require e = encryption_level.other -> ~pkt.hdr_long;
     
     var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
@@ -714,7 +716,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # initial packet. This will change in draft 17 so that it is
     # allowed, but not if the RTT-1 keys are available. 
 
-    if pkt.hdr_type = 0x7f {
+    if pkt.hdr_long & hdr_type_bits = 0 {
         require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
         ((pkt.payload.value(I) isa frame.ack)
         | (pkt.payload.value(I) isa frame.crypto)

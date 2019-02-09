@@ -107,11 +107,14 @@ module quic_protection(tls_id,tls) = {
             };
             var sample := pkt.segment(sample_pos,sample_pos+sample_size);
             var pnum := pkt.segment(pnum_pos,pnum_pos+4);
-            pnum := tls.decrypt_cipher(c,level,pnum,sample);
-
-            var pnum_len := get_pnum_len(pnum,0);
-            var hdr := pkt.segment(0,pnum_pos);
-            hdr := hdr.extend(pnum.segment(0,pnum_len));
+            var mask := stream_data.empty.resize(5,0);
+            mask := tls.decrypt_cipher(c,level,mask,sample);
+            var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f;
+            var hdr := stream_data.empty.append(byte_xor(pkt.value(0),byte0_mask));
+            hdr := hdr.extend(pkt.segment(1,pnum_pos));
+            var pnum_len := get_pnum_len(hdr,pnum_pos);
+            var pnum := stream_data_xor(pkt.segment(pnum_pos,pnum_pos+pnum_len),mask.segment(1,1+pnum_len));
+            hdr := hdr.extend(pnum);
             var new_seq := get_pnum(pnum,0,pnum_len);
             new_seq := correct_pnum(seq,new_seq,pnum_len);
             var pyld := pkt.segment(pnum_pos + pnum_len,pkt.end);
@@ -194,14 +197,8 @@ module quic_protection(tls_id,tls) = {
     # Get the length of a packet number at position `pos`
 
     action get_pnum_len(pkt:stream_data,pnum_pos:stream_pos) returns (pnum_len:stream_pos) = {
-        var byte := pkt.value(pnum_pos);
-        if bvand(byte,0x80) = 0 {
-            pnum_len := 1;
-        } else if bvand(byte,0x40) = 0 {
-            pnum_len := 2;
-        } else {
-            pnum_len := 4;
-        }
+        var len_minus_one : stream_pos := bfe[0][1](pkt.value(0));
+        pnum_len := len_minus_one + 1;
     }
     
     # Given the length of the packet number, get the number it encodes.
@@ -210,8 +207,6 @@ module quic_protection(tls_id,tls) = {
     returns (seq:pkt_num) =
     {
         var data := pkt.segment(pnum_pos,pnum_pos + pnum_len);
-        var mask:byte := 0x7f if pnum_len = 1 else 0x3f;
-        data := data.set(0,bvand(mask,data.value(0)));
         seq := 0;
         var idx:stream_pos := 0;
         while idx < data.end {

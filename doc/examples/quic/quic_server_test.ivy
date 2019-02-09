@@ -86,7 +86,7 @@ instance tls_extensions : vector(tls.extension)
 # HACK: we fix the initial client transport parameters here
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff000010;
+    tp.initial_version := 0xff000011;
     var imsdbl : initial_max_stream_data_bidi_local;
     imsdbl.stream_pos_32 := 0x2000; # 2;  # TEMPORARY: was 0x2000
     var imd : initial_max_data;
@@ -228,7 +228,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
             require ~cid_dst_to_src_set(pkt.hdr_cid) -> pkt.dst_cid = server_cid
         }
     };
-    require pkt.hdr_long -> pkt.hdr_version = 0xff000010
+    require pkt.hdr_long -> pkt.hdr_version = 0xff000011
 }
 
 # Hook up to the remote server

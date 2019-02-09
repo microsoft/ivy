@@ -302,8 +302,9 @@ object quic_ser = {}
         }
 
         void set_pkt_num(long long &res) {
-            // TODO: Send packet number in other than four-byte format.
-            setn(0xc0000000 | (0x3fffffff & res),4);
+            // setn(0xc0000000 | (0x3fffffff & res),4);
+            // pkt number length is low two bits of first packet byte, plus one 
+            setn(res,(hdr_type & 3) 1);
         }
 
         virtual void open_tag(int tag, const std::string &) {
