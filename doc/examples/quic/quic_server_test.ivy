@@ -241,26 +241,27 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var ikm := cid_to_bytes(pkt.dst_cid,pkt.dcid + 3 if pkt.dcid > 0 else 0);
     var salt : stream_data := stream_data.empty;
-    salt := salt.append(0x9c);
-    salt := salt.append(0x10);
-    salt := salt.append(0x8f);
-    salt := salt.append(0x98);
-    salt := salt.append(0x52);
-    salt := salt.append(0x0a);
-    salt := salt.append(0x5c);
-    salt := salt.append(0x5c);
-    salt := salt.append(0x32);
-    salt := salt.append(0x96);
-    salt := salt.append(0x8e);
-    salt := salt.append(0x95);
-    salt := salt.append(0x0e);
-    salt := salt.append(0x8a);
-    salt := salt.append(0x2c);
-    salt := salt.append(0x5f);
-    salt := salt.append(0xe0);
-    salt := salt.append(0x6d);
-    salt := salt.append(0x6c);
-    salt := salt.append(0x38);
+
+    salt := salt.append(0xef);
+    salt := salt.append(0x4f);
+    salt := salt.append(0xb0);
+    salt := salt.append(0xab);
+    salt := salt.append(0xb4);
+    salt := salt.append(0x74);
+    salt := salt.append(0x70);
+    salt := salt.append(0xc4);
+    salt := salt.append(0x1b);
+    salt := salt.append(0xef);
+    salt := salt.append(0xcf);
+    salt := salt.append(0x80);
+    salt := salt.append(0x31);
+    salt := salt.append(0x33);
+    salt := salt.append(0x4f);
+    salt := salt.append(0xae);
+    salt := salt.append(0x48);
+    salt := salt.append(0x5e);
+    salt := salt.append(0x09);
+    salt := salt.append(0xa0);
     call botan.upper.set_initial_keys(0,salt,ikm);
 }
 
@@ -619,3 +620,5 @@ import action show_level_offset_length(e:encryption_level,offset:stream_pos,leng
 
 import action clear_packet(rnum:pkt_num,pkt:stream_data)
 import action cipher_packet(pkt:stream_data)
+
+import action show_stream(pkt:stream_data)

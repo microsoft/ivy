@@ -311,7 +311,7 @@ object quic_deser = {}
             break;
             case quic_s_retry_token_length:
             {
-                if (long_format & hdr_type == 0x7f)
+                if (long_format & ((hdr_type & 0x30) == 0x00))
                     get_var_int(res);
                 else res = 0;
                 data_remaining = res;
@@ -376,76 +376,76 @@ object quic_deser = {}
                 long long ft;
                 ivy_binary_deser::getn(ft,1);
                 frame_type = ft;
-                if (frame_type >= 0x10 && frame_type <= 0x17) {
+                if (frame_type >= 0x08 && frame_type <= 0x0f) {
                     state = quic_stream_off;
                     return 0;
                 }
-                if (frame_type == 0x1a) {
+                if (frame_type == 0x02) {
                     state = quic_ack_largest;
                     return 1;
                 }
-                if (frame_type == 0x01) {
+                if (frame_type == 0x04) {
                     state = quic_reset_stream_id;
                     return 2;
                 }
-                if (frame_type == 0x06) {
-                    state = quic_reset_stream_id; // parser state equivalent to this
+                if (frame_type == 0x12) {
+                    state = quic_reset_stream_id; // max_stream_id state equivalent to this
                     return 3;
                 }
-                if (frame_type == 0x02) {
+                if (frame_type == 0x1c) {
                     state = quic_connection_close_err_code;
                     return 4;
                 }
-                if (frame_type == 0x05) {
+                if (frame_type == 0x11) {
                     state = quic_max_stream_data_id;
                     return 5;
                 }
-                if (frame_type == 0x0a) {
+                if (frame_type == 0x16) {
                     state = quic_reset_final_offset;
                     return 6;
                 }
-                if (frame_type == 0x18) {
+                if (frame_type == 0x06) {
                     state = quic_crypto_offset;
                     return 7;
                 }
-                if (frame_type == 0x07) {
+                if (frame_type == 0x01) {
                     return 8;
                 }
-                if (frame_type == 0x03) {
-                    state = quic_application_close_err_code;
+                if (frame_type == 0x1d) {
+                    state = quic_connection_close_err_code;
                     return 9;
                 }
-                if (frame_type == 0x0b) {
+                if (frame_type == 0x18) {
                     state = quic_new_connection_id_length;
                     return 10;
                 }
-                if (frame_type == 0x0e) {
+                if (frame_type == 0x1a) {
                     data_remaining = 8;
                     state = quic_path_challenge_data;
                     return 11;
                 }
-                if (frame_type == 0x0f) {
+                if (frame_type == 0x1b) {
                     data_remaining = 8;
                     state = quic_path_challenge_data;
                     return 12;
                 }
-                if (frame_type == 0x19) {  // new token frame
+                if (frame_type == 0x07) {  // new token frame
                     state = quic_crypto_length;  // new token equivalent to this
                     return 13;
                 }
-                if (frame_type == 0x04) {  // new token frame
-                    state = quic_reset_final_offset;  // new token equivalent to this
+                if (frame_type == 0x10) {  // new token frame
+                    state = quic_reset_final_offset;  // max_data equivalent to this
                     return 14;
                 }
-                if (frame_type == 0x09) {
+                if (frame_type == 0x15) {
                     state = quic_max_stream_data_id;  // stream_blocked equivalent to this
                     return 15;
                 }
-                if (frame_type == 0x0c) {
+                if (frame_type == 0x05) {
                     state = quic_stop_sending_id;  // stream_blocked equivalent to this
                     return 16;
                 }
-                if (frame_type == 0x08) {
+                if (frame_type == 0x14) {
                     state = quic_reset_final_offset;  // blocked equivalent to this
                     return 17;
                 }

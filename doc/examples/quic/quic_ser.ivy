@@ -282,7 +282,7 @@ object quic_ser = {}
             break;
             case quic_s_retry_token_length:
             {
-                if (long_format & hdr_type == 0x7f)
+                if (long_format & ((hdr_type & 0x30) == 0x00))
                     set_var_int(res);
                 data_remaining = res;
                 state = quic_s_retry_token;
@@ -304,78 +304,82 @@ object quic_ser = {}
         void set_pkt_num(long long &res) {
             // setn(0xc0000000 | (0x3fffffff & res),4);
             // pkt number length is low two bits of first packet byte, plus one 
-            setn(res,(hdr_type & 3) 1);
+            setn(res,(hdr_type & 3) + 1);
         }
 
         virtual void open_tag(int tag, const std::string &) {
             if (state == quic_s_payload) {
                 if (tag == 0) {
-		    frame_type = 0x10;
+		    frame_type = 0x08;
                     state = quic_stream_off;
                     return;
                 }
                 if (tag == 1) {
                     state = quic_ack_largest;
-                    frame_type = 0x1a;
+                    frame_type = 0x02;
                 }
                 else if (tag == 2) {
                     state = quic_reset_stream_id;
-                    frame_type = 0x01;
+                    frame_type = 0x04;
                 }
                 else if (tag == 3) {
-                    state = quic_reset_stream_id; // parser state equivalent to this
-                    frame_type = 0x06;
+                    state = quic_reset_stream_id; // max_stream_id state equivalent to this
+                    frame_type = 0x12;
                 }
                 else if (tag == 4) {
                     state = quic_connection_close_err_code;
-                    frame_type = 0x02;
+                    frame_type = 0x1c;
                 }
                 else if (tag == 5) {
                     state = quic_max_stream_data_id;
-                    frame_type = 0x05;
+                    frame_type = 0x11;
                 }
                 else if (tag == 6) {
                     state = quic_reset_final_offset;
-                    frame_type = 0x0a;
+                    frame_type = 0x16;
                 }
                 else if (tag == 7) {
-                    frame_type = 0x18;
+                    frame_type = 0x06;
                     state = quic_crypto_offset;
                 }
                 else if (tag == 8) {
-                    frame_type = 0x07;
+                    frame_type = 0x01;
                 }
                 else if (tag == 9) {
-                    frame_type = 0x03;
-                    state = quic_application_close_err_code;
+                    frame_type = 0x1d;
+                    state = quic_connection_close_err_code;
                 }
+//                else if (tag == 10) {
+//                    frame_type = 0x18;
+//                    state = quic_new_connection_id_length;
+//                }
                 else if (tag == 11) {
-                    frame_type = 0x0e;
+                    frame_type = 0x1a;
                     state = quic_path_challenge_data;
                 }
                 else if (tag == 12) {
-                    frame_type = 0x0f;
+                    frame_type = 0x1b;
                     state = quic_path_challenge_data;
                 }
                 else if (tag == 13) {
-                    frame_type = 0x19;
+                    frame_type = 0x07;
                     state = quic_crypto_length;  // new token equivalent to this
                 }
                 else if (tag == 14) {
-                    frame_type = 0x04;
+                    frame_type = 0x10;  // max_data
                     state = quic_reset_final_offset;
                 }
                 else if (tag == 15) {
                     state = quic_max_stream_data_id;
-                    frame_type = 0x09;
+                    frame_type = 0x15;
                 }
                 else if (tag == 16) {
                     state = quic_stop_sending_id;
-                    frame_type = 0x0c;
+                    frame_type = 0x05;
                 }
                 else if (tag == 17) {
                     state = quic_reset_final_offset;
-                    frame_type = 0x08;
+                    frame_type = 0x14;
                 }
 	        else {
                     std::cerr << "saw frame tag " << tag << std::endl;  
@@ -400,7 +404,7 @@ object quic_ser = {}
         }
         void close_list() {
             if (state == quic_s_payload) {
-                if (hdr_type == 0x7f)
+                if ((hdr_type & 0x30) == 0x00)
                     while (res.size() < 1200)
                         res.push_back(0);  // pad initial packet to 1200 bytes
                 for(unsigned i = 0; i < 16; i++)

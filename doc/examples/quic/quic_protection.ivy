@@ -61,6 +61,7 @@ module quic_protection(tls_id,tls) = {
         };
 
         var hdr := pkt.segment(0,pnum_pos);
+        call show_stream(hdr);
         var pnum := pkt.segment(pnum_pos,hdr_len);
         var pyld := pkt.segment(hdr_len,pkt.end);
         var auth := pkt.segment(0,hdr_len);
@@ -87,7 +88,11 @@ module quic_protection(tls_id,tls) = {
             sample_pos := pyld.end - sample_size
         };
         var sample := pyld.segment(sample_pos,sample_pos+sample_size);
-        pnum := tls.encrypt_cipher(c,level,pnum,sample);
+        var mask := stream_data.empty;
+        mask := tls.encrypt_cipher(c,level,mask.resize(5,0),sample);
+        var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f);
+        hdr := hdr.set(0,byte_xor(pkt.value(0),byte0_mask));
+        pnum := stream_data_xor(pnum,mask.segment(1,1+pnum_len));        
         pkt := hdr.extend(pnum).extend(pyld);
     }
 
@@ -107,13 +112,13 @@ module quic_protection(tls_id,tls) = {
             };
             var sample := pkt.segment(sample_pos,sample_pos+sample_size);
             var pnum := pkt.segment(pnum_pos,pnum_pos+4);
-            var mask := stream_data.empty.resize(5,0);
-            mask := tls.decrypt_cipher(c,level,mask,sample);
-            var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f;
-            var hdr := stream_data.empty.append(byte_xor(pkt.value(0),byte0_mask));
-            hdr := hdr.extend(pkt.segment(1,pnum_pos));
+            var mask := stream_data.empty;
+            mask := tls.decrypt_cipher(c,level,mask.resize(5,0),sample);
+            var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f);
+            var hdr := pkt.segment(1,pnum_pos);
+            hdr := hdr.set(0,byte_xor(pkt.value(0),byte0_mask));
             var pnum_len := get_pnum_len(hdr,pnum_pos);
-            var pnum := stream_data_xor(pkt.segment(pnum_pos,pnum_pos+pnum_len),mask.segment(1,1+pnum_len));
+            pnum := stream_data_xor(pnum.segment(0,pnum_len),mask.segment(1,1+pnum_len));
             hdr := hdr.extend(pnum);
             var new_seq := get_pnum(pnum,0,pnum_len);
             new_seq := correct_pnum(seq,new_seq,pnum_len);
@@ -135,10 +140,10 @@ module quic_protection(tls_id,tls) = {
     # packet.
 
     action get_level(pkt:stream_data) returns (level:tls.level) = {
-        var hdr_type := pkt.value(0);
-        if hdr_type = 0xff {
+        var hdr_type := bvand(pkt.value(0),0x30);
+        if hdr_type = 0x00 {
             level := 0;
-        } else if bvand(0x80,hdr_type) = 0x80 {
+        } else if hdr_type = 0x20 {
             level := 2;
         } else {
             level := 3;
@@ -163,7 +168,7 @@ module quic_protection(tls_id,tls) = {
             h.dcid := bytes_to_cid(pkt.segment(6,6+dcil));
             h.scid := bytes_to_cid(pkt.segment(6+dcil,6+dcil+scil));
             var pos := 6 + dcil + scil;
-            if h.hdr_type = 0x7f {
+            if bvand(h.hdr_type,0x30) = 0x00 {
                 var len := get_var_int_len(pkt,pos);
                 var retry_token_len := get_var_int(pkt,pos,len);
                 pos := pos + len + retry_token_len;
@@ -261,7 +266,20 @@ module quic_protection(tls_id,tls) = {
         >>>
     }
 
+    action byte_xor(x:byte,y:byte) returns (z:byte) = {
+        <<<
+        z = x ^ y;
+        >>>
+    }
 
+    action stream_data_xor(x:stream_data,y:stream_data) returns (x:stream_data) = {
+        var idx := x.begin;
+        while idx < x.end {
+            x := x.set(idx,byte_xor(x.value(idx),y.value(idx)));
+            idx := idx.next
+        }
+    }
+    
 }
 
 

@@ -706,6 +706,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     # TEMPORARY: The following are repeated because currently locals defined in
     # the "before" section cannot be accessed in the "after" section.
 
+    var hdr_type_bits : type_bits := bvand(pkt.hdr_type,0x30);
     var dcid := pkt.dst_cid;
     var scid := pkt.hdr_cid;
     if ~pkt.hdr_long {

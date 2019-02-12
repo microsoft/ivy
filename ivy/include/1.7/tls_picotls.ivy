@@ -120,7 +120,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
     // don't really belong here, but then again, QUIC is currently the only
     // existing client of this TLS interface.
 
-    #define QUIC_LABEL_QUIC_BASE "quic "
+    #define QUIC_LABEL_QUIC_BASE "tls13 quic "
     #define QUIC_LABEL_PN "pn"
     #define QUIC_LABEL_INITIAL_CLIENT "client in"
     #define QUIC_LABEL_INITIAL_SERVER "server in"
@@ -139,9 +139,9 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ptls_hkdf_expand_label(cipher->hash, key, 
                                cipher->aead->ctr_cipher->key_size,
                                ptls_iovec_init(secret, cipher->hash->digest_size), 
-                               QUIC_LABEL_PN,
+                               "quic hp",
                                ptls_iovec_init(NULL, 0),
-                               QUIC_LABEL_QUIC_BASE);
+                               NULL);
 
         return ptls_cipher_new(cipher->aead->ctr_cipher, is_enc, key);
     }
@@ -205,12 +205,12 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         prk.base = master_secret;
         prk.len = cipher.hash->digest_size;
         ret = ptls_hkdf_expand_label(cipher.hash, client_secret, cipher.hash->digest_size,
-            prk, QUIC_LABEL_INITIAL_CLIENT, ptls_iovec_init(NULL, 0),
-            QUIC_LABEL_QUIC_BASE);
+            prk, QUIC_LABEL_INITIAL_CLIENT, ptls_iovec_init(NULL, 0),NULL);
+            // QUIC_LABEL_QUIC_BASE);
         bail(ret,"tls: failed to set up initial client secret\n");
         ret = ptls_hkdf_expand_label(cipher.hash, server_secret, cipher.hash->digest_size,
-            prk, QUIC_LABEL_INITIAL_SERVER, ptls_iovec_init(NULL, 0),
-            QUIC_LABEL_QUIC_BASE);
+            prk, QUIC_LABEL_INITIAL_SERVER, ptls_iovec_init(NULL, 0),NULL);
+            // QUIC_LABEL_QUIC_BASE);
         bail(ret,"tls: failed to set up initial server secret\n");
         quic_set_key_from_secret(&cipher, session->is_server, &session->crypto_context[0], server_secret);
         quic_set_key_from_secret(&cipher, !session->is_server, &session->crypto_context[0], client_secret);
@@ -330,7 +330,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         handshake_properties->collected_extensions = tls_collected_extensions_cb;
         
         ptls_iovec_t *alpn_vec = new(ptls_iovec_t);  // TODO: will leak this
-        alpn_vec->base = (uint8_t*)"hq-16";
+        alpn_vec->base = (uint8_t*)"hq-17";
         alpn_vec->len = strlen((char *)(alpn_vec->base));
         handshake_properties->client.negotiated_protocols.count = 1;
         handshake_properties->client.negotiated_protocols.list = alpn_vec;
