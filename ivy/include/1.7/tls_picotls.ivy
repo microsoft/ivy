@@ -315,8 +315,8 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ctx->key_exchanges = picotls_key_exchanges; 
         ctx->cipher_suites = picotls_cipher_suites; 
         ctx->send_change_cipher_spec = 0;
-        ctx->hkdf_label_prefix = QUIC_LABEL_QUIC_BASE;
-        // ctx->hkdf_label_prefix__obsolete = NULL;
+        // ctx->hkdf_label_prefix = QUIC_LABEL_QUIC_BASE;
+        ctx->hkdf_label_prefix__obsolete = NULL;
         ctx->update_traffic_key = new ptls_update_traffic_key_t;
         ctx->update_traffic_key->cb = quic_update_traffic_key_callback;
         ctx->get_time = &ptls_get_time;
@@ -416,11 +416,13 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         >>>
     }
 
-    implement encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes) returns (cipher:bytes) {
+    implement encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes,recv:bool) returns (cipher:bytes) {
         <<< impure
 
 	picotls_connection *s = `cid_map`[c];
-        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        ptls_cipher_context_t *pn_enc;
+        if (recv) pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        else pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
         encrypt_symm(pn_enc,clear,iv,cipher);
 
         >>>

@@ -83,11 +83,13 @@ module tls_intf(cid,index,bytes,lower,extens,exten_ser,seq_num) = {
 
     action iv_size(c:cid,l:level) returns (sz:index)
 
-    # Encrypt data with symmetric cipher for given level and initial value.
+    # Encrypt data with sending symmertic cipher cipher for given level and initial value.
+    # If `recv` is true, encrypt with receiving cipher. This option is needed for
+    # QUIC header protection.
 
-    action encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes) returns (cipher:bytes)
+    action encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes,recv:bool) returns (cipher:bytes)
     
-    # Decrypt data with symmetric cipher for given level and initial value. 
+    # Decrypt data with receiving symmetric cipher for given level and initial value. 
 
     action decrypt_cipher(c:cid,l:level,cipher:bytes,iv:bytes) returns (clear:bytes)
     

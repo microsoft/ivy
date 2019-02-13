@@ -89,7 +89,7 @@ module quic_protection(tls_id,tls) = {
         };
         var sample := pyld.segment(sample_pos,sample_pos+sample_size);
         var mask := stream_data.empty;
-        mask := tls.encrypt_cipher(c,level,mask.resize(5,0),sample);
+        mask := tls.encrypt_cipher(c,level,mask.resize(5,0),sample,false);
         var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f);
         hdr := hdr.set(0,byte_xor(pkt.value(0),byte0_mask));
         pnum := stream_data_xor(pnum,mask.segment(1,1+pnum_len));        
@@ -113,9 +113,10 @@ module quic_protection(tls_id,tls) = {
             var sample := pkt.segment(sample_pos,sample_pos+sample_size);
             var pnum := pkt.segment(pnum_pos,pnum_pos+4);
             var mask := stream_data.empty;
-            mask := tls.decrypt_cipher(c,level,mask.resize(5,0),sample);
+            # tricky: this encrypts with the receiving cipher
+            mask := tls.encrypt_cipher(c,level,mask.resize(5,0),sample,true);
             var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f);
-            var hdr := pkt.segment(1,pnum_pos);
+            var hdr := pkt.segment(0,pnum_pos);
             hdr := hdr.set(0,byte_xor(pkt.value(0),byte0_mask));
             var pnum_len := get_pnum_len(hdr,pnum_pos);
             pnum := stream_data_xor(pnum.segment(0,pnum_len),mask.segment(1,1+pnum_len));
@@ -140,11 +141,13 @@ module quic_protection(tls_id,tls) = {
     # packet.
 
     action get_level(pkt:stream_data) returns (level:tls.level) = {
-        var hdr_type := bvand(pkt.value(0),0x30);
-        if hdr_type = 0x00 {
-            level := 0;
-        } else if hdr_type = 0x20 {
-            level := 2;
+        if bvand(pkt.value(0),0x80) ~= 0 {
+            var hdr_type := bvand(pkt.value(0),0x30);
+            if hdr_type = 0x00 {
+                level := 0;
+            } else  { # if hdr_type = 0x20, TODO: other packet types
+                level := 2;
+            }
         } else {
             level := 3;
         }
@@ -365,7 +368,7 @@ object quic_prot_deser = {}
                 dcil = (dcil != 0) ? dcil + 3 : 0;
                 scil = (scil != 0) ? scil + 3 : 0;
                 unsigned pnum_pos = pos + 6 + dcil + scil;
-                if (peek(pos) == 0xff) { // initial packets have tokens
+                if ((peek(pos) &0x30) == 0x00) { // initial packets have tokens
                     unsigned len = get_var_int_len(pnum_pos);
                     unsigned retry_token_len = get_var_int(pnum_pos,len);
                     pnum_pos = pnum_pos + len + retry_token_len;

@@ -53,7 +53,7 @@ object tls_ser = {}
     };
     tls_name_map tls_field_length_bytes_map;
 
-    struct tls_name_struct tls_field_bytes[19] = {
+    struct tls_name_struct tls_field_bytes[20] = {
         {"version",2},
         {"client_version",2},
         {"server_version",2},
@@ -67,11 +67,12 @@ object tls_ser = {}
         {"session_id",1},
         {"content",1},
         {"initial_version",4},
-        {"stream_pos_32",4},
-        {"stream_id_16",2},
-        {"seconds_16",2},
-        {"stream_pos_16",2},
-        {"exponent_8",1},
+        {"stream_pos_32",-1},
+        {"stream_id_16",-1},
+        {"seconds_16",-1},
+        {"stream_pos_16",-1},
+        {"exponent_8",-1},
+        {"data_8",1},
         {0,0}
     };
     tls_name_map tls_field_bytes_map;
@@ -86,19 +87,19 @@ object tls_ser = {}
         {"tls.unknown_message",-1},
         {"tls.unknown_extension",-1},
         {"quic_transport_parameters",0xffa5},
-        {"initial_max_stream_data_bidi_local",0},
-        {"initial_max_data",1},
-        {"initial_max_stream_id_bidi",2},
-        {"idle_timeout",3},
-        {"preferred_address",4},
-        {"max_packet_size",5},
-        {"stateless_reset_token",6},
-        {"ack_delay_exponent",7},
-        {"initial_max_stream_id_uni",8},
-        {"disable_migration",9},
-        {"initial_max_stream_data_bidi_remote",10},
-        {"initial_max_stream_data_uni",11},
-        {"max_ack_delay",12}, 
+        {"initial_max_stream_data_bidi_local",5},
+        {"initial_max_data",4},
+        {"initial_max_stream_id_bidi",8},
+        {"idle_timeout",1},
+        {"preferred_address",0xd},
+        {"max_packet_size",3},
+        {"stateless_reset_token",2},
+        {"ack_delay_exponent",0xa},
+        {"initial_max_stream_id_uni",9},
+        {"disable_migration",0xc},
+        {"initial_max_stream_data_bidi_remote",6},
+        {"initial_max_stream_data_uni",7},
+        {"max_ack_delay",0xb}, 
        {0,0}
     };
     tls_name_map tls_tags_map;
@@ -211,7 +212,17 @@ object tls_ser = {}
         }
 
         virtual void get(long long &res) {
-            getn(res,field_bytes);
+            if (field_bytes == -1) get_var_int(res);
+            else getn(res,field_bytes);
+        }
+
+        void get_var_int(long long &res) {
+            static int lens[4] = {0,1,3,7};
+            long long lobyte;
+            ivy_binary_deser::getn(lobyte,1);
+            int bytes = lens[(lobyte & 0xc0) >> 6];
+            ivy_binary_deser::getn(res,bytes);
+            res |= (lobyte & 0x3f) << (bytes << 3);
         }
 
         virtual bool open_list_elem() {
@@ -301,8 +312,18 @@ object tls_ser = {}
         }
 
         void set(long long inp) {
-            setn(inp,field_bytes);
+            if (field_bytes == -1) set_var_int(inp);
+            else setn(inp,field_bytes);
         }
+
+        void set_var_int(long long res) {
+	    long long val = res & 0x3fffffffffffffff;
+	    int bytecode = res <= 0x3f ? 0 : res <= 0x3fff ? 1 : res <= 0x3fffffff ? 2 : 3;
+	    int bytes = 1 << bytecode;
+            val |= bytecode << ((bytes << 3) - 2);
+	    setn(val,bytes);
+        }
+
         void open_list(int len) {
         }
     };
