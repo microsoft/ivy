@@ -395,12 +395,23 @@ vulnerability, depending on the data that is leaked.
 
 Event files: anomaly24.iev
 quant log file: anomaly24.log
-QUIC version: draft 16
+QUIC version: draft 17
 Implementation:
     quant, commit 4ed3af4
-    
-When receiving an initial packet with version 0xff000010, the quant server seems to run into some kind of problem sending a Retry packet. There are also some reports of misaligned accesses, but I don't know if these are relevant.
 
+It looks like quant is not opening bidirectional streams on receipt of STOP_SENDING, per the change in draft-17. Here is the relevant language:
+
+An endpoint opens a bidirectional stream when a MAX_STREAM_DATA or STOP_SENDING
+frame is received from the peer for that stream.  Receiving a MAX_STREAM_DATA
+frame for an unopened stream indicates that the remote peer has opened the
+stream and is providing flow control credit.  Receiving a STOP_SENDING frame for
+an unopened stream indicates that the remote peer no longer wishes to receive
+data on this stream.  Either frame might arrive before a STREAM or
+STREAM_DATA_BLOCKED frame if packets are lost or reordered.
+
+I haven't checked whether it opens streams on MAX_STREAM_DATA.
+
+The log show the receipt of STOP_SENDING on stream 4 at 18.579.
 
 
 

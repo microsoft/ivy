@@ -61,11 +61,12 @@ module quic_protection(tls_id,tls) = {
         };
 
         var hdr := pkt.segment(0,pnum_pos);
-        call show_stream(hdr);
         var pnum := pkt.segment(pnum_pos,hdr_len);
         var pyld := pkt.segment(hdr_len,pkt.end);
         var auth := pkt.segment(0,hdr_len);
 #        var seq := get_pnum(pnum,0,pnum_len);
+        var new_seq := get_pnum(pnum,0,pnum_len);
+        new_seq := correct_pnum(seq,new_seq,pnum_len);
         pyld := tls.encrypt_aead(c,level,pyld,seq,auth);
 
         # Computing the sample position is a bit tricky. First we
@@ -88,8 +89,10 @@ module quic_protection(tls_id,tls) = {
             sample_pos := pyld.end - sample_size
         };
         var sample := pyld.segment(sample_pos,sample_pos+sample_size);
+        call show_stream(sample);
         var mask := stream_data.empty;
         mask := tls.encrypt_cipher(c,level,mask.resize(5,0),sample,false);
+        call show_stream(mask);
         var byte0_mask := bvand(mask.value(0), 0x0f if h.hdr_long else 0x1f);
         hdr := hdr.set(0,byte_xor(pkt.value(0),byte0_mask));
         pnum := stream_data_xor(pnum,mask.segment(1,1+pnum_len));        

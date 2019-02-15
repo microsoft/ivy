@@ -32,8 +32,8 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
 
     # the encryption level of frames has to be inferred from the packet header
 
-    var e := encryption_level.initial if (bvand(pkt.hdr_type,0x30) = 0x00)
-        else (encryption_level.handshake if (bvand(pkt.hdr_type,0x30) = 0x20)
+    var e := encryption_level.initial if (pkt.hdr_long & bvand(pkt.hdr_type,0x30) = 0x00)
+        else (encryption_level.handshake if (pkt.hdr_long & bvand(pkt.hdr_type,0x30) = 0x20)
         else encryption_level.other);
     
     call set_encryption_level(src,scid,e);
