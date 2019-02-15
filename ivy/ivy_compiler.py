@@ -1215,6 +1215,8 @@ class IvyConjectureSetup(IvyDeclInterp):
         self.last_fact = None
     def definition(self,p):
         self.last_fact = None
+    def theorem(self,sch):
+        self.last_fact = None
     def proof(self,pf):
         if self.last_fact is None:
             return # this is a not a conjecture
@@ -1791,7 +1793,7 @@ def create_conj_actions(mod):
                     for ison1 in action_isos[action]:
                         if ison1 != ison and action not in memo:
                             memo.add(action)
-                            if action in roots:
+                            if action in roots and action not in exports:
                                 for victim in exports:
                                     if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
