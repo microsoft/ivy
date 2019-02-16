@@ -963,7 +963,7 @@ object frame = {
 #            require ~stream_reset(dcid,f.id);  # [7]
             require conn_seen(scid);  # [9]
             require ((offset) + (f.length)) <= stream_max_data(dcid,f.id);  # [2]
-            # require stream_id_allowed(dcid,id:stream_id);  # [6]
+            require stream_id_allowed(dcid,f.id);  # [6]
 	    ...
             stream_seen(dcid,f.id) := true;
             var offset := f.offset if f.off else 0;
@@ -1056,8 +1056,9 @@ action stream_id_allowed(dcid:cid,id:stream_id) returns (ok:bool) = {
                 ok := id < (initial_max_stream_id_bidi.value(tp).stream_id_16) * 4;  # [4]
             }
         };
-        ok := ok | max_stream_set(dcid,kind) & id <= max_stream(dcid,kind)
+        ok := ok | max_stream_set(dcid,kind) & id < max_stream(dcid,kind) * 4
     }
+    else ok := true # TODO: locally initiated streams must have been seen!
 }
 
 # The procedure computes the maximum number of additional bytes that a given

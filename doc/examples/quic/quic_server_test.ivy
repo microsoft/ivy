@@ -622,3 +622,5 @@ import action clear_packet(rnum:pkt_num,pkt:stream_data)
 import action cipher_packet(pkt:stream_data)
 
 import action show_stream(pkt:stream_data)
+
+import action show_aead(level:botan.upper.level,pyld:stream_data,seq:pkt_num,auth:stream_data)

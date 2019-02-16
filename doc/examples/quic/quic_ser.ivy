@@ -347,7 +347,7 @@ object quic_ser = {}
                 }
                 else if (tag == 9) {
                     frame_type = 0x1d;
-                    state = quic_connection_close_err_code;
+                    state = quic_application_close_err_code;
                 }
 //                else if (tag == 10) {
 //                    frame_type = 0x18;

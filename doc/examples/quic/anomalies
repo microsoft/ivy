@@ -413,6 +413,12 @@ I haven't checked whether it opens streams on MAX_STREAM_DATA.
 
 The log show the receipt of STOP_SENDING on stream 4 at 18.579.
 
+symptom: reports protocol error
+adverse: yes
+spec-related: yes
+exploit: no
+
+
 
 
 
