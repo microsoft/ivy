@@ -1408,6 +1408,30 @@ object frame = { ...
     }
 }
 
+# Stream blocked frames indicate that sender wishes to opena stream beyond current limit
+# on streams of a giev kind.
+#
+# Requirements
+#
+# - Connection must be established
+#
+# Effects
+#
+# (None)
+
+object frame = { ...
+    object stream_id_blocked = { ...
+        action handle(f:frame.stream_id_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+	around handle {
+            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+            require e = encryption_level.other & established_1rtt_keys(scid);
+            require num_queued_frames(scid) > 0 -> e = queued_level(scid);
+	    ...
+            call enqueue_frame(src,scid,f,e,false);
+        }
+    }
+}
+
 # Max data frames set the limit on the total data bytes that the source endpoint is willing
 # to receive for all streams combined.
 #

@@ -47,6 +47,7 @@ server_name = 'winquic'
 getstats = False
 run = True
 pat = '*'
+time = 100
 
 # server_addr=0xc0a80101 client_addr=0xc0a80102
 ivy_options = {'server_addr':None,'client_addr':None}
@@ -75,6 +76,8 @@ for arg in sys.argv[1:]:
         run = val == 'true'
     elif name == 'test':
         pat = val
+    elif name == 'time':
+        time = val
     elif name in ivy_options:
         ivy_options[name] = val
     else:
@@ -212,7 +215,7 @@ class Test(object):
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return ' '.join(['timeout 100 ./build/{} seed={} the_cid={} server_cid={} client_port={} client_port_alt={}'.format(self.name,seq,2*seq,2*seq+1,2*seq+4987,2*seq+4988)] + extra_args)
+        return ' '.join(['timeout {} ./build/{} seed={} the_cid={} server_cid={} client_port={} client_port_alt={}'.format(time,self.name,seq,2*seq,2*seq+1,2*seq+4987,2*seq+4988)] + extra_args)
 
 all_tests = []
 
