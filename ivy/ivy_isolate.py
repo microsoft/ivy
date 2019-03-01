@@ -402,7 +402,8 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
             mod.params.append(sym)
         else:
             mod.params.append(add_map[s.rep])
-
+        mod.param_defaults.append(None)
+            
 def has_side_effect_rec(mod,new_actions,actname,memo):
     if actname in memo:
         return False

@@ -2,6 +2,7 @@ import pexpect
 import os
 import sys
 import imp
+import re
 
 import platform
 
@@ -188,21 +189,23 @@ class IvyCheck(Test):
 class IvyTest(Test):
     def command(self):
         import platform
-        return './'+self.name
+        return './build/'+self.name
 
     def preprocess_commands(self):
+        make_directory_exist('build')
         return ['ivy_to_cpp target=test build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
 
 class IvyRepl(Test):
     def command(self):
-        return './'+self.name
+        return './build/'+self.name
     def preprocess_commands(self):
+        make_directory_exist('build')
         return ['ivy_to_cpp target=repl build=true '+' '.join(self.opts) + ' '+self.name+'.ivy']
     def expect(self):
         print 'wd:{}'.format(os.getcwd())
         modname = self.res if self.res != None else (self.name+'_expect')
         mod = imp.load_source(modname,modname+'.py')
-        return mod.run(self.name,self.opts,self.res)
+        return mod.run('build/'+self.name,self.opts,self.res)
     
 class IvyToCpp(Test):
     def command(self):
@@ -210,18 +213,57 @@ class IvyToCpp(Test):
         print 'compiling: {}'.format(res)
         return res
 
+def make_directory_exist(dir):
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+
 all_tests = []
+
+allpat = re.compile('.*')
+test_type = allpat
+test_dir = allpat
+test_name = allpat
+
+for arg in sys.argv[1:]:
+    vals = arg.split('=')
+    if len(vals) != 2:
+        usage()
+    name,val = vals
+    if name == 'type':
+        test_type = re.compile(val)
+    elif name == 'dir':
+        test_dir = re.compile(val)
+    elif name == 'name':
+        test_name = re.compile(val)
+    else:
+        usage()
+
+def usage():
+    print """usage:
+    {} [option...]
+options:
+    type=<test type pattern>
+    dir=<test directory pattern>
+    name=<test name pattern>
+""".format(sys.argv[0])
+    sys.exit(1)
 
 def get_tests(cls,arr):
     for checkd in arr:
         dir,checkl = checkd
-        for check in checkl:
-            all_tests.append(cls(dir,check))
+        if test_dir.match(dir):
+            for check in checkl:
+                if test_name.match(check[0]):
+                    all_tests.append(cls(dir,check))
 
-get_tests(IvyCheck,checks)
-get_tests(IvyTest,tests)
-get_tests(IvyRepl,repls)
-get_tests(IvyToCpp,to_cpps)
+if test_type.match('check'):
+    get_tests(IvyCheck,checks)
+if test_type.match('test'):
+    get_tests(IvyTest,tests)
+if test_type.match('repl'):
+    get_tests(IvyRepl,repls)
+if test_type.match('to_cpp'):
+    get_tests(IvyToCpp,to_cpps)
 
 num_failures = 0
 for test in all_tests:
