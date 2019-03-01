@@ -1,0 +1,7 @@
+#lang ivy1.7
+
+interpret cid -> bv[62]
+interpret version -> bv[32]
+interpret pkt_num -> bv[62]
+interpret error_code -> bv[16]
+interpret stream_id -> bv[32]

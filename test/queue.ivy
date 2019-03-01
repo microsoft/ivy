@@ -1,0 +1,31 @@
+#lang ivy1.7
+
+include order
+include collections
+
+module message_queue(net_msg,seq_num) = {
+
+    action enqueue(msg:net_msg.t)
+    action empty returns (res:bool)
+    action pick_one returns (res:net_msg.t)
+    action delete_all(seq:seq_num.t)
+    
+    instance imap : ordered_map_impl(seq_num,net_msg.t)
+
+    implement enqueue {
+        call imap.set(net_msg.num(msg),msg)
+    }
+    
+    implement empty {
+        res := seq_num.iter.is_end(imap.lub(seq_num.iter.create(0)))
+    }
+    
+    implement delete_all(seq:seq_num.t) {
+        call imap.erase(seq_num.iter.create(0),seq_num.iter.create(seq_num.next(seq)))
+    }
+    
+    implement pick_one {
+        res := imap.get(seq_num.iter.val(imap.lub(seq_num.iter.create(0))),res)
+    }
+
+}

@@ -1,0 +1,398 @@
+0.033   q_init quic.c:498 quant/socket 0.0.16/dd567715 with libev 4.22 ready
+        q_init quic.c:499 submit bug reports at https://github.com/NTAP/quant/issues
+0.035   q_init quic.c:521 debug build, storing fuzzer corpus data
+        q_bind quic.c:368 binding serv socket on port 4443
+        init_rec recovery.c:527 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        new_conn conn.c:1265 serv conn ? on port 4443 created
+        new_conn conn.c:1267 conn ? state conn_clsd -> conn_idle
+        q_bind quic.c:370 bound serv socket on port 4443
+        main server.c:239 server waiting on lo port 4443
+0.192   rx_pkts conn.c:885 new serv conn on port 4443 from 127.0.0.1:4987 w/cid=0:000000000000000b
+        init_rec recovery.c:527 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        new_conn conn.c:1265 serv conn 0:000000000000000b on port 4443 created
+        new_conn conn.c:1267 conn 0:000000000000000b state conn_clsd -> conn_idle
+0.192   log_pkt pkt.c:116 RX len=1216 0xff=Initial vers=0xff00000f dcid=000000000000000b scid=000000000000000d tok=4ee8 len=1205 nr=0
+        rx_pkt conn.c:642 supporting clnt-requested vers 0xff00000f
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=243 [seq]
+        dec_frames frame.c:891 PADDING len=937
+        rx_pkt conn.c:668 conn 0:000000000000000b state conn_idle -> conn_opng
+        update_act_scid conn.c:465 hshk switch to scid 0:04cd8fb76a59adae for serv conn (was 0:000000000000000b)
+        on_ch tls.c:310 	SNI = 
+        on_ch tls.c:313 	ALPN = 
+        chk_tp tls.c:473 	initial_max_stream_data_bidi_local = 8192
+        chk_tp tls.c:485 	initial_max_data = 16384
+        chk_tp tls.c:502 	idle_timeout = 60
+        chk_tp tls.c:480 	initial_max_stream_data_bidi_remote = 8192
+        chk_tp tls.c:467 	initial_max_stream_data_uni = 8192
+0.195   rx_crypto conn.c:545 conn 0:04cd8fb76a59adae state conn_opng -> conn_estb
+        tx conn.c:420 data TX on serv conn 0:04cd8fb76a59adae strm -4 w/1 pkt in queue
+        enc_pkt pkt.c:386 hshk switch to scid 0:3c012818b680a82b for serv conn (was 0:04cd8fb76a59adae)
+        update_act_scid conn.c:465 hshk switch to scid 0:3c012818b680a82b for serv conn (was 0:04cd8fb76a59adae)
+0.195   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b tok=bf348eecec5f26df5f7b0ce3be9b531bc91f9d05fd88184d57508ecdbd16f1ae04cd8fb76a59adae len=0 nr=0
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=97
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 
+        on_pkt_sent recovery.c:285 in_flight=299, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -2 w/2 pkts in queue
+0.195   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=0 nr=0
+        enc_padding_frame frame.c:1095 PADDING len=103
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 
+        on_pkt_sent recovery.c:285 in_flight=1551, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+0.195   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=0 nr=1
+        enc_padding_frame frame.c:1095 PADDING len=103
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=1108 len=292 
+        on_pkt_sent recovery.c:285 in_flight=1987, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 
+        coalesce pkt.c:218 coalescing 0xfd len 436 behind 0xff len 299
+0.392   on_ld_alarm recovery.c:201 handshake RTX #1 on serv conn 0:3c012818b680a82b
+        detect_lost_pkts recovery.c:155 pkt 0 considered lost
+        detect_lost_pkts recovery.c:162 in_flight=1688, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        detect_lost_pkts recovery.c:155 pkt 0 considered lost
+        detect_lost_pkts recovery.c:162 in_flight=436, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        detect_lost_pkts recovery.c:155 pkt 1 considered lost
+        detect_lost_pkts recovery.c:162 in_flight=0, cwnd=12000, ssthresh=0, srtt=0.000000, rttvar=0.000000
+        detect_lost_pkts recovery.c:185 in_flight=0, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -4 w/1 pkt in queue
+0.392   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b tok=bf348eecec5f26df5f7b0ce3be9b531bc91f9d05fd88184d57508ecdbd16f1ae04cd8fb76a59adae len=274 nr=1
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=25065 (200520 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=90
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=299, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -2 w/2 pkts in queue
+0.392   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=1228 nr=2
+        enc_padding_frame frame.c:1095 PADDING len=99
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=1551, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+0.393   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=412 nr=3
+        enc_padding_frame frame.c:1095 PADDING len=98
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=1108 len=292 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=1987, cwnd=6000, ssthresh=6000, srtt=0.000000, rttvar=0.000000
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *0 *1 *2 *3 
+        coalesce pkt.c:218 coalescing 0xfd len 436 behind 0xff len 299
+0.619   log_pkt pkt.c:126 RX len=114 0xfd=Handshake vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d len=106 nr=0
+        dec_ack_frame frame.c:388 ACK lg=1 delay=0 (0 usec) cnt=0 block=0 [1]
+        update_rtt recovery.c:319 in_flight=1987, cwnd=6000, ssthresh=6000, srtt=0.427779, rttvar=0.213889
+        on_pkt_acked recovery.c:461 1 was RTX'ed as 3
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=52 [seq]
+        dec_ack_frame frame.c:388 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+        update_rtt recovery.c:319 in_flight=1987, cwnd=6000, ssthresh=6000, srtt=0.427779, rttvar=0.160417
+        on_pkt_acked recovery.c:461 0 was RTX'ed as 2
+        dec_ack_frame frame.c:388 ACK lg=3 delay=0 (0 usec) cnt=0 block=0 [3]
+        update_rtt recovery.c:319 in_flight=1987, cwnd=6000, ssthresh=6000, srtt=0.402714, rttvar=0.170443
+        dec_frames frame.c:891 PADDING len=15
+0.645   ack_alarm pn.c:56 ACK timer fired on serv conn 0:3c012818b680a82b epoch 2
+0.645   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=0 nr=4
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=3207 (25656 usec) cnt=0 block=0 [0]
+0.754   log_pkt pkt.c:134 RX len=40 0x30=Short kyph=0 dcid=3c012818b680a82b nr=0
+        new_stream stream.c:101 conn 0:3c012818b680a82b strm 4 (bidir, clnt) state strm_idle -> strm_open
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/4 off=0/16384 len=7 coff=7/32768 [seq]
+        dec_frames frame.c:891 PADDING len=15
+        rx conn.c:1023 q_rx_ready(0, 0) done, exiting event loop
+        q_rx_ready quic.c:657 serv conn 0:3c012818b680a82b ready to rx
+        q_read quic.c:318 blocking read on serv conn 0:3c012818b680a82b
+        q_read quic.c:342 read 7 bytes on serv conn 0:3c012818b680a82b strm 4
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /5
+        q_write quic.c:288 writing 5 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -4 w/1 pkt in queue
+0.754   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b tok=bf348eecec5f26df5f7b0ce3be9b531bc91f9d05fd88184d57508ecdbd16f1ae04cd8fb76a59adae len=274 nr=2
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=70362 (562896 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=90
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=2286, cwnd=6087, ssthresh=6000, srtt=0.402714, rttvar=0.170443
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -2 w/2 pkts in queue
+0.755   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=1228 nr=5
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=16890 (135120 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=91
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=3538, cwnd=6087, ssthresh=6000, srtt=0.402714, rttvar=0.170443
+        tx_stream_data conn.c:280 skip ACK'ed pkt 3
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) *5 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+0.755   log_pkt pkt.c:187 TX 0x30=Short kyph=0 dcid=000000000000000d nr=0
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=55 (440 usec) cnt=0 block=0 [0]
+        enc_max_stream_id_frame frame.c:1347 MAX_STREAM_ID max=8
+        enc_padding_frame frame.c:1095 PADDING len=31
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x12=LEN id=4/8 off=0/8192 len=5 coff=0/16384 
+        enc_new_token_frame frame.c:1494 NEW_TOKEN len=40 tok=bf348eecec5f26df5f7b0ce3be9b531bc91f9d05fd88184d57508ecdbd16f1ae04cd8fb76a59adae
+        enc_new_cid_frame frame.c:1473 NEW_CONNECTION_ID seq=1 len=8 cid=1:5310291471b44668 tok=fdf68877df28eb61a1f8cec7fddf6b45
+        on_pkt_sent recovery.c:285 in_flight=3676, cwnd=6087, ssthresh=6000, srtt=0.402714, rttvar=0.170443
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: *0 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) *5 
+1.102   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4988, probing
+1.102   log_pkt pkt.c:134 RX len=34 0x30=Short kyph=0 dcid=3c012818b680a82b nr=2
+        dec_ack_frame frame.c:388 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+        update_rtt recovery.c:319 in_flight=3676, cwnd=6087, ssthresh=6000, srtt=0.395858, rttvar=0.141544
+        on_pkt_acked recovery.c:474 stream 4 fully acked
+        on_pkt_acked recovery.c:477 q_write(s->c, s) done, exiting event loop
+        dec_frames frame.c:891 PADDING len=15
+        q_write quic.c:302 wrote 5 bytes on serv conn 0:3c012818b680a82b strm 4 
+        q_read quic.c:318 blocking read on serv conn 0:3c012818b680a82b
+        q_read quic.c:331 waiting for data on any stream on serv conn 0:3c012818b680a82b
+1.334   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4987, probing
+1.334   log_pkt pkt.c:134 RX len=62 0x30=Short kyph=0 dcid=3c012818b680a82b nr=6
+        dec_stream_or_crypto_frame frame.c:264 q_read(pm[w_iov_idx(v)].stream->c, 0) done, exiting event loop
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=7/16384 len=8 coff=15/32768 [seq]
+        dec_frames frame.c:903 addtl stream or crypto frame at pos 25, copy
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=15/16384 len=17 coff=32/32768 [seq]
+        dec_frames frame.c:891 PADDING len=15
+        q_read quic.c:342 read 25 bytes on serv conn 0:3c012818b680a82b strm 4
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /3
+        q_write quic.c:288 writing 3 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -4 w/1 pkt in queue
+1.334   log_pkt pkt.c:169 TX 0xff=Initial vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b tok= len=274 nr=3
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=142812 (1142496 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=90
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=155 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=3837, cwnd=6087, ssthresh=6000, srtt=0.395858, rttvar=0.141544
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 *3 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) *5 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm -2 w/2 pkts in queue
+1.334   log_pkt pkt.c:179 TX 0xfd=Handshake vers=0xff00000f dcid=000000000000000d scid=3c012818b680a82b len=1228 nr=6
+        enc_ack_frame frame.c:1167 ACK lg=0 delay=89339 (714712 usec) cnt=0 block=0 [0]
+        enc_padding_frame frame.c:1095 PADDING len=91
+        log_stream_or_crypto_frame frame.c:116 CRYPTO 0x18 off=0 len=1108 [RTX] 
+        on_pkt_sent recovery.c:285 in_flight=5089, cwnd=6087, ssthresh=6000, srtt=0.395858, rttvar=0.141544
+        tx_stream_data conn.c:312 cwnd limit 5089 reached (2020 + 6087 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 *3 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) *5 *6 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+1.334   log_pkt pkt.c:187 TX 0x32=Short kyph=0 dcid=000000000000000d nr=1
+        enc_ack_frame frame.c:1167 ACK lg=6 delay=53 (424 usec) cnt=1 block=0 [6]
+        enc_ack_frame frame.c:1160 ACK gap=2 block=0 [2]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=42e47d2e5a506649
+        enc_padding_frame frame.c:1095 PADDING len=22
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=5/8192 len=3 coff=5/16384 
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=42e47d2e5a506649
+        on_pkt_sent recovery.c:285 in_flight=5165, cwnd=6087, ssthresh=6000, srtt=0.395858, rttvar=0.141544
+        tx_stream_data conn.c:312 cwnd limit 5165 reached (2020 + 6087 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 0 unacked: *0 *1 *2 *3 
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: *1 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 (4) *5 *6 
+1.335   log_pkt pkt.c:187 TX 0x30=Short kyph=0 dcid=000000000000000d nr=2
+        enc_ack_frame frame.c:1167 ACK lg=6 delay=53 (424 usec) cnt=1 block=0 [6]
+        enc_ack_frame frame.c:1160 ACK gap=2 block=0 [2]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=42e47d2e5a506649
+        on_pkt_sent recovery.c:285 in_flight=5207, cwnd=6087, ssthresh=6000, srtt=0.395858, rttvar=0.141544
+1.759   log_pkt pkt.c:116 RX len=1216 0xff=Initial vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d tok= len=1207 nr=2
+        dec_ack_frame frame.c:388 ACK lg=0 delay=0 (0 usec) cnt=0 block=0 [0]
+        update_rtt recovery.c:319 in_flight=5207, cwnd=6087, ssthresh=6000, srtt=0.542235, rttvar=0.398912
+        on_pkt_acked recovery.c:461 0 was RTX'ed as 3
+        dec_ack_frame frame.c:388 ACK lg=3 delay=0 (0 usec) cnt=0 block=0 [3]
+        update_rtt recovery.c:319 in_flight=5207, cwnd=6087, ssthresh=6000, srtt=0.527502, rttvar=0.328649
+        on_pkt_acked recovery.c:474 stream -4 fully acked
+        dec_frames frame.c:891 PADDING len=1176
+2.124   log_pkt pkt.c:126 RX len=54 0xfd=Handshake vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d len=46 nr=1
+        dec_ack_frame frame.c:388 ACK lg=4 delay=0 (0 usec) cnt=0 block=0 [4]
+        update_rtt recovery.c:319 in_flight=5207, cwnd=6145, ssthresh=6000, srtt=0.646414, rttvar=0.484309
+        dec_ack_frame frame.c:388 ACK lg=6 delay=0 (0 usec) cnt=0 block=0 [6]
+        update_rtt recovery.c:319 in_flight=5207, cwnd=6145, ssthresh=6000, srtt=0.664328, rttvar=0.399061
+        on_pkt_acked recovery.c:474 stream -2 fully acked
+        dec_frames frame.c:891 PADDING len=15
+2.665   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4988, probing
+2.665   log_pkt pkt.c:134 RX len=60 0x30=Short kyph=0 dcid=3c012818b680a82b nr=7
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=42e47d2e5a506649
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=32/16384 len=8 coff=40/32768 [seq]
+        dec_ack_frame frame.c:388 ACK lg=1 delay=0 (0 usec) cnt=0 block=0 [1]
+        update_rtt recovery.c:319 in_flight=5207, cwnd=6389, ssthresh=6000, srtt=0.747628, rttvar=0.465895
+        on_pkt_acked recovery.c:474 stream 4 fully acked
+        on_pkt_acked recovery.c:477 q_write(s->c, s) done, exiting event loop
+        dec_ack_frame frame.c:388 ACK lg=2 delay=0 (0 usec) cnt=0 block=0 [2]
+        update_rtt recovery.c:319 in_flight=5131, cwnd=6389, ssthresh=6000, srtt=0.820515, rttvar=0.495195
+        dec_frames frame.c:891 PADDING len=15
+        q_write quic.c:302 wrote 3 bytes on serv conn 0:3c012818b680a82b strm 4 
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /index.html
+        q_write quic.c:288 writing 4 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+2.665   log_pkt pkt.c:187 TX 0x35=Short kyph=0 dcid=000000000000000d nr=3
+        enc_ack_frame frame.c:1167 ACK lg=7 delay=63 (504 usec) cnt=0 block=0 [7]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=ceb54ed7259464f1
+        enc_padding_frame frame.c:1095 PADDING len=24
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=8/8192 len=4 coff=8/16384 
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=ceb54ed7259464f1
+        on_pkt_sent recovery.c:285 in_flight=5166, cwnd=6396, ssthresh=6000, srtt=0.820515, rttvar=0.495195
+        tx_stream_data conn.c:312 cwnd limit 5166 reached (2020 + 6396 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 0 unacked: *1 *2 
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: *3 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 *5 
+2.665   log_pkt pkt.c:187 TX 0x34=Short kyph=0 dcid=000000000000000d nr=4
+        enc_ack_frame frame.c:1167 ACK lg=7 delay=63 (504 usec) cnt=0 block=0 [7]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=ceb54ed7259464f1
+        on_pkt_sent recovery.c:285 in_flight=5206, cwnd=6396, ssthresh=6000, srtt=0.820515, rttvar=0.495195
+3.156   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4987, probing
+3.156   log_pkt pkt.c:116 RX len=1216 0xff=Initial vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d tok=8258 len=1205 nr=4
+        dec_ack_frame frame.c:388 ACK lg=1 delay=0 (0 usec) cnt=0 block=0 [1]
+        update_rtt recovery.c:319 in_flight=5206, cwnd=6396, ssthresh=6000, srtt=1.063480, rttvar=0.857327
+        on_pkt_acked recovery.c:461 1 was RTX'ed as 3
+        dec_ack_frame frame.c:388 ACK lg=2 delay=0 (0 usec) cnt=0 block=0 [2]
+        update_rtt recovery.c:319 in_flight=5206, cwnd=6396, ssthresh=6000, srtt=1.230777, rttvar=0.977590
+        on_pkt_acked recovery.c:461 2 was RTX'ed as 3
+        dec_frames frame.c:891 PADDING len=1174
+3.856   log_pkt pkt.c:134 RX len=81 0x30=Short kyph=0 dcid=3c012818b680a82b nr=12
+        dec_ack_frame frame.c:388 ACK lg=4 delay=0 (0 usec) cnt=0 block=0 [4]
+        update_rtt recovery.c:319 in_flight=5206, cwnd=6452, ssthresh=6000, srtt=1.225756, rttvar=0.743235
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=ceb54ed7259464f1
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=40/16384 len=8 coff=48/32768 [seq]
+        dec_ack_frame frame.c:388 ACK lg=3 delay=0 (0 usec) cnt=0 block=0 [3]
+        update_rtt recovery.c:319 in_flight=5166, cwnd=6459, ssthresh=6000, srtt=1.221362, rttvar=0.566214
+        on_pkt_acked recovery.c:474 stream 4 fully acked
+        on_pkt_acked recovery.c:477 q_write(s->c, s) done, exiting event loop
+        dec_frames frame.c:903 addtl stream or crypto frame at pos 44, copy
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=48/16384 len=17 coff=65/32768 [seq]
+        dec_frames frame.c:891 PADDING len=15
+        q_write quic.c:302 wrote 4 bytes on serv conn 0:3c012818b680a82b strm 4 
+        q_read quic.c:318 blocking read on serv conn 0:3c012818b680a82b
+        q_read quic.c:342 read 33 bytes on serv conn 0:3c012818b680a82b strm 4
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /5
+        q_write quic.c:288 writing 5 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+3.856   log_pkt pkt.c:187 TX 0x35=Short kyph=0 dcid=000000000000000d nr=5
+        enc_ack_frame frame.c:1167 ACK lg=12 delay=73 (584 usec) cnt=0 block=0 [12]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=999274146d84e40
+        enc_padding_frame frame.c:1095 PADDING len=23
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=12/8192 len=5 coff=12/16384 
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=999274146d84e40
+        on_pkt_sent recovery.c:285 in_flight=5167, cwnd=6473, ssthresh=6000, srtt=1.221362, rttvar=0.566214
+        tx_stream_data conn.c:312 cwnd limit 5167 reached (2020 + 6473 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: *5 
+        log_sent_pkts conn.c:227 epoch 2 unacked: *2 *5 
+3.857   log_pkt pkt.c:187 TX 0x31=Short kyph=0 dcid=000000000000000d nr=6
+        enc_ack_frame frame.c:1167 ACK lg=12 delay=73 (584 usec) cnt=0 block=0 [12]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=999274146d84e40
+        on_pkt_sent recovery.c:285 in_flight=5208, cwnd=6473, ssthresh=6000, srtt=1.221362, rttvar=0.566214
+4.032   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4988, probing
+4.032   log_pkt pkt.c:134 RX len=51 0x30=Short kyph=0 dcid=3c012818b680a82b nr=8
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=999274146d84e40
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=65/16384 len=8 coff=73/32768 [seq]
+        dec_frames frame.c:891 PADDING len=15
+4.057   ack_alarm pn.c:56 ACK timer fired on serv conn 0:3c012818b680a82b epoch 3
+4.057   log_pkt pkt.c:187 TX 0x33=Short kyph=0 dcid=000000000000000d nr=7
+        enc_ack_frame frame.c:1167 ACK lg=12 delay=25189 (201512 usec) cnt=1 block=0 [12]
+        enc_ack_frame frame.c:1160 ACK gap=2 block=0 [8]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=8fa5b1b55e9cb476
+        on_pkt_sent recovery.c:285 in_flight=5253, cwnd=6473, ssthresh=6000, srtt=1.221362, rttvar=0.566214
+4.377   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4987, probing
+4.377   log_pkt pkt.c:126 RX len=49 0xfd=Handshake vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d len=41 nr=2
+        dec_ack_frame frame.c:388 ACK lg=5 delay=0 (0 usec) cnt=0 block=0 [5]
+        update_rtt recovery.c:319 in_flight=5253, cwnd=6473, ssthresh=6000, srtt=1.521487, rttvar=1.024911
+        on_pkt_acked recovery.c:461 5 was RTX'ed as 6
+        dec_frames frame.c:891 PADDING len=15
+4.828   log_pkt pkt.c:126 RX len=49 0xfd=Handshake vers=0xff00000f dcid=3c012818b680a82b scid=000000000000000d len=41 nr=6
+        dec_ack_frame frame.c:388 ACK lg=2 delay=0 (0 usec) cnt=0 block=0 [2]
+        update_rtt recovery.c:319 in_flight=5253, cwnd=6705, ssthresh=6000, srtt=1.885824, rttvar=1.497356
+        on_pkt_acked recovery.c:461 2 was RTX'ed as 6
+        dec_frames frame.c:891 PADDING len=15
+5.213   log_pkt pkt.c:134 RX len=34 0x30=Short kyph=0 dcid=3c012818b680a82b nr=14
+        dec_ack_frame frame.c:388 ACK lg=5 delay=0 (0 usec) cnt=0 block=0 [5]
+        update_rtt recovery.c:319 in_flight=5253, cwnd=6929, ssthresh=6000, srtt=1.819607, rttvar=1.255451
+        on_pkt_acked recovery.c:474 stream 4 fully acked
+        on_pkt_acked recovery.c:477 q_write(s->c, s) done, exiting event loop
+        dec_frames frame.c:891 PADDING len=15
+        q_write quic.c:302 wrote 5 bytes on serv conn 0:3c012818b680a82b strm 4 
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /3
+        q_write quic.c:288 writing 3 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+5.213   log_pkt pkt.c:187 TX 0x30=Short kyph=0 dcid=000000000000000d nr=8
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=f003cc6d491b10bf
+        enc_padding_frame frame.c:1095 PADDING len=29
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=17/8192 len=3 coff=17/16384 
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=f003cc6d491b10bf
+        on_pkt_sent recovery.c:285 in_flight=5251, cwnd=6942, ssthresh=6000, srtt=1.819607, rttvar=1.255451
+        tx_stream_data conn.c:312 cwnd limit 5251 reached (2020 + 6942 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: 6 7 *8 
+5.213   log_pkt pkt.c:187 TX 0x35=Short kyph=0 dcid=000000000000000d nr=9
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=f003cc6d491b10bf
+        on_pkt_sent recovery.c:285 in_flight=5286, cwnd=6942, ssthresh=6000, srtt=1.819607, rttvar=1.255451
+6.043   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4988, probing
+6.043   log_pkt pkt.c:134 RX len=83 0x30=Short kyph=0 dcid=3c012818b680a82b nr=15
+        dec_ack_frame frame.c:388 ACK lg=6 delay=0 (0 usec) cnt=0 block=0 [6]
+        update_rtt recovery.c:319 in_flight=5286, cwnd=6942, ssthresh=6000, srtt=1.865422, rttvar=1.033219
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=73/16384 len=8 coff=81/32768 [seq]
+        dec_frames frame.c:903 addtl stream or crypto frame at pos 31, copy
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=81/16384 len=17 coff=98/32768 [seq]
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=f003cc6d491b10bf
+        dec_ack_frame frame.c:388 ACK lg=8 delay=0 (0 usec) cnt=0 block=0 [8]
+        update_rtt recovery.c:319 in_flight=5245, cwnd=6949, ssthresh=6000, srtt=1.735949, rttvar=1.033862
+        on_pkt_acked recovery.c:474 stream 4 fully acked
+        on_pkt_acked recovery.c:477 q_write(s->c, s) done, exiting event loop
+        dec_frames frame.c:891 PADDING len=15
+        q_write quic.c:302 wrote 3 bytes on serv conn 0:3c012818b680a82b strm 4 
+        serve_cb server.c:110 conn 0:3c012818b680a82b str 4 serving URL /index.html
+        q_write quic.c:288 writing 4 bytes in 1 buf on serv conn 0:3c012818b680a82b strm 4 
+        tx conn.c:420 data TX on serv conn 0:3c012818b680a82b strm 4 w/1 pkt in queue
+6.043   log_pkt pkt.c:187 TX 0x33=Short kyph=0 dcid=000000000000000d nr=10
+        enc_ack_frame frame.c:1153 ACK lg=15 delay=81 (648 usec) cnt=1 block=1 [14..5]
+        enc_ack_frame frame.c:1160 ACK gap=4 block=0 [8]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=aec73ed8453c8d3
+        enc_padding_frame frame.c:1095 PADDING len=21
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=20/8192 len=4 coff=20/16384 
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=aec73ed8453c8d3
+        on_pkt_sent recovery.c:285 in_flight=5246, cwnd=6962, ssthresh=6000, srtt=1.735949, rttvar=1.033862
+        tx_stream_data conn.c:312 cwnd limit 5246 reached (2020 + 6962 > 1078582761)
+        log_sent_pkts conn.c:227 epoch 1/3 unacked: 7 9 *10 
+6.043   log_pkt pkt.c:187 TX 0x36=Short kyph=0 dcid=000000000000000d nr=11
+        enc_ack_frame frame.c:1153 ACK lg=15 delay=81 (648 usec) cnt=1 block=1 [14..5]
+        enc_ack_frame frame.c:1160 ACK gap=4 block=0 [8]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=aec73ed8453c8d3
+        on_pkt_sent recovery.c:285 in_flight=5289, cwnd=6962, ssthresh=6000, srtt=1.735949, rttvar=1.033862
+6.479   log_pkt pkt.c:134 RX len=34 0x30=Short kyph=0 dcid=3c012818b680a82b nr=16
+        dec_ack_frame frame.c:388 ACK lg=9 delay=0 (0 usec) cnt=0 block=0 [9]
+        update_rtt recovery.c:319 in_flight=5289, cwnd=6962, ssthresh=6000, srtt=1.677153, rttvar=0.892987
+        dec_frames frame.c:891 PADDING len=15
+6.754   log_pkt pkt.c:134 RX len=47 0x30=Short kyph=0 dcid=3c012818b680a82b nr=4
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=8fa5b1b55e9cb476
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=f003cc6d491b10bf
+        dec_frames frame.c:891 PADDING len=15
+6.780   ack_alarm pn.c:56 ACK timer fired on serv conn 0:3c012818b680a82b epoch 3
+6.780   log_pkt pkt.c:187 TX 0x30=Short kyph=0 dcid=000000000000000d nr=12
+        enc_ack_frame frame.c:1153 ACK lg=16 delay=37652 (301216 usec) cnt=2 block=2 [14..6]
+        enc_ack_frame frame.c:1160 ACK gap=4 block=0 [8]
+        enc_ack_frame frame.c:1160 ACK gap=2 block=0 [4]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=aec73ed8453c8d3
+        on_pkt_sent recovery.c:285 in_flight=5301, cwnd=6968, ssthresh=6000, srtt=1.677153, rttvar=0.892987
+7.421   rx_pkts conn.c:921 pkt came from new peer 127.0.0.1:4987, probing
+7.421   log_pkt pkt.c:134 RX len=34 0x30=Short kyph=0 dcid=3c012818b680a82b nr=1
+        dec_ack_frame frame.c:388 ACK lg=7 delay=0 (0 usec) cnt=0 block=0 [7]
+        update_rtt recovery.c:319 in_flight=5301, cwnd=6968, ssthresh=6000, srtt=1.887913, rttvar=1.091260
+        dec_frames frame.c:891 PADDING len=15
+8.069   log_pkt pkt.c:134 RX len=65 0x30=Short kyph=0 dcid=3c012818b680a82b nr=3
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=aec73ed8453c8d3
+        dec_ack_frame frame.c:388 ACK lg=12 delay=0 (0 usec) cnt=0 block=0 [12]
+        update_rtt recovery.c:319 in_flight=5256, cwnd=6975, ssthresh=6000, srtt=1.813113, rttvar=0.968044
+        log_stream_or_crypto_frame frame.c:111 STREAM 0x16=LEN|OFF id=4/8 off=98/16384 len=8 coff=106/32768 [seq]
+        dec_path_response_frame frame.c:732 PATH_RESPONSE data=aec73ed8453c8d3
+        dec_frames frame.c:891 PADDING len=15
+8.095   ack_alarm pn.c:56 ACK timer fired on serv conn 0:3c012818b680a82b epoch 3
+8.095   log_pkt pkt.c:187 TX 0x30=Short kyph=0 dcid=000000000000000d nr=13
+        enc_ack_frame frame.c:1167 ACK lg=3 delay=167544 (1340352 usec) cnt=1 block=0 [3]
+        enc_ack_frame frame.c:1160 ACK gap=0 block=0 [1]
+        enc_path_challenge_frame frame.c:1444 PATH_CHALLENGE data=5db9fa614f9a81bd
+        on_pkt_sent recovery.c:285 in_flight=5254, cwnd=6983, ssthresh=6000, srtt=1.813113, rttvar=0.968044
+8.095   set_ld_alarm recovery.c:118 ABORT: assertion failed 
+        c->rec.ld_alarm.repeat >= 0 
+        repeat -0.011747 [errno 17 = File exists]
+        /usr/lib/x86_64-linux-gnu/libasan.so.4(+0x558c0) [0x7f22d6d958c0]
+        util_die at /home/mcmillan/projects/quant/Debug/external/warp-prefix/src/warp/lib/src/util.c:224
+        set_ld_alarm at /home/mcmillan/projects/quant/lib/src/recovery.c:119
+        on_pkt_sent at /home/mcmillan/projects/quant/lib/src/recovery.c:288
+        enc_pkt at /home/mcmillan/projects/quant/lib/src/pkt.c:577
+        tx_ack at /home/mcmillan/projects/quant/lib/src/conn.c:450
+        ack_alarm at /home/mcmillan/projects/quant/lib/src/pn.c:59
+        /usr/lib/x86_64-linux-gnu/libev.so.4(ev_invoke_pending+0x53) [0x7f22d5f10d73]
+        /usr/lib/x86_64-linux-gnu/libev.so.4(ev_run+0x9ee) [0x7f22d5f143de]
+        do_write at /home/mcmillan/projects/quant/lib/src/quic.c:198 (discriminator 2)
+        q_write at /home/mcmillan/projects/quant/lib/src/quic.c:300
+        q_write_file at /home/mcmillan/projects/quant/lib/src/util.c:90
+        serve_cb at /home/mcmillan/projects/quant/bin/server.c:166
+        /usr/local/lib/libhttp_parser.so.2.8(http_parser_execute+0x17b5) [0x7f22d6b37e4a]
+        main at /home/mcmillan/projects/quant/bin/server.c:277
+        /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xe7) [0x7f22d4c07b97]
+        _start at ??:?

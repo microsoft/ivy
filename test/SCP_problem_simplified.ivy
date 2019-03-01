@@ -1,0 +1,74 @@
+#lang ivy1.7
+
+# IVy diverges but Z3 okay on smt file
+
+include order
+
+type node
+relation intact(N:node)
+
+type quorum
+relation member(N:node, Q:quorum)
+
+isolate fbas_properties = {
+    property (exists N1 . intact(N1) & member(N1,Q1)) & (exists N2 . intact(N2)  & member(N2,Q2)) -> exists N3 . intact(N3) & member(N3,Q1) & member(N3,Q2)
+}
+
+instance value : bounded_sequence(nat)
+instance round : bounded_sequence(nat)
+
+type ballot = struct {
+    n:round,
+    x:value
+}
+
+type statement
+individual commit:statement
+individual abort:statement
+
+
+isolate abstract_protocol = {
+            
+    relation vote(N:node, B:ballot, S:statement)
+    relation accept(N:node, B:ballot, S:statement)
+    relation confirm(N:node, B:ballot, S:statement)
+
+
+    # # a node does not cast contradictory votes
+    invariant ~(intact(N) & vote(N,B,S1) & vote(N,B,S2) & S1 ~= S2)
+
+    # federated voting invariants: 
+    invariant ~(intact(N1) & intact(N2) & accept(N1,B1,S1) & accept(N2,B1,S2) & S1 ~= S2)
+    invariant (exists N1 . intact(N1) & accept(N1,B1,S1)) -> exists Q . (exists N3 . intact(N3) & member(N3,Q)) & (forall N2 . intact(N2) & member(N2, Q) -> vote(N2,B1,S1))
+    
+    after init {
+        vote(N,B,S) := false;
+        accept(N,B,S) := false;
+        confirm(N,B,S) := false;
+    }
+    
+    relation condition_accept(N:node, B:ballot, S:statement)
+    definition condition_accept(V:node, B:ballot, S:statement) = 
+    (exists Q . member(V,Q) & forall N . member(N,Q) -> (vote(N,B,S) | accept(N,B,S)))
+    
+    action send_prepare(v:node, b:ballot, p:ballot, pp:ballot, nc:round, nh:round) = {
+	# p is accepted as prepared.
+	require ~(p ~= 0 & B < p & x(B) ~= x(p) & ~condition_accept(v,B,abort));
+
+	# pp is accepted as prepared.
+	require ~(pp ~= 0 & B < pp & x(B) ~= x(pp) & ~condition_accept(v,B,abort));
+
+	# if "prepared ~= null" accept prepare(p)
+	if (p ~= 0) {
+            accept(v, B, abort) := accept(v, B, abort) | (B < p & x(B) ~= x(p));
+	};
+         
+	# if "preparedPrime ~= null" accept prepare(pp)
+	if (pp ~= 0) {
+            accept(v, B, abort) := accept(v, B, abort) | (B < pp & x(B) ~= x(pp));
+	};
+    } 
+
+    export send_prepare
+    
+} with fbas_properties

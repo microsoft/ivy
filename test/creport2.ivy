@@ -2,6 +2,7 @@
 
 include order
 include collections
+include deduction
 
 module shift_theory(idx) = {
     relation r(T : idx, X : idx, Y : idx)
@@ -17,6 +18,11 @@ module shift_theory(idx) = {
         property r(0,X,X)
         property r(X,X,0)
         property r(T,X,Y) -> Y <= X & T <= X
+        theorem [into] {property X >= T -> exists Y. r(T,X,Y)}
+        proof {
+            apply introImp;
+            apply introE with witness = X - T
+        }
 	around f {
            require t <= x;
             ...
@@ -76,7 +82,8 @@ module mysegment(domain,range,none) = {
             require exists I. begin(w, I) & I <= i;
             ...
             ensure begin(w, I) <-> I = i;
-            ensure i <= I & value(old w, I, V) -> value(w, I, V);
+            ensure i <= I & value(old w, I, V) -> value(w, I, V)
+            proof assume shift.into with T = i, X = I;
             ensure I < i -> (value(w, I, V) <-> V = none);
         }
         # after empty {

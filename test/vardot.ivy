@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+object foo = {
+    type this
+    action a(x:foo) returns(y:foo) = {
+        y := x
+    }
+    function f(X:foo) = X
+}
+
+
+
+action b(x:foo) = {
+    var z := x.a.a.a;
+    assert forall X:foo. X.f = X
+    
+}
+
+export b

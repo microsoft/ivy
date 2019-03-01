@@ -1,0 +1,90 @@
+#lang ivy1.7
+
+include order
+include collections
+
+module segment(domain,range,arr) = {
+
+    # Requirements
+
+    # - Type `domain` must support arithmetic.
+    # - Type `arr` must be an array type over (`domain`,`range`).
+
+    # This is a type of segments over `arr`
+    
+    type this
+
+    # We say segment_of(X,Y) if X is a segment of array Y from
+    # index begin to index end
+
+    relation segment_of(X:this,Y:arr,B:domain,E:domain)
+
+    # Extract a segment of an array, from a begin index to an end
+    # index
+
+    action make(data:arr, begin:domain, end:domain) returns (seg:this)
+
+    # Get element `n` of the segment. 
+
+#    action get(seg:this, n:domain)
+
+    function value(X:this,N:domain) : range
+
+    specification {
+
+        # If X is a segment of Y over [B,E), then, for any n in [B,E), the nth
+        # element of X is the nth element of Y.
+
+        invariant segment_of(X,Y,B,E) & B <= N & N < E -> value(X,N) = arr.value(Y,N)
+
+        # When extracting a segment from an array, the range [begin,end) must
+        # describe a segment of the array. The return value is a segment representing
+        # that range [begin,end) of the array
+
+        around make {
+            require 0 <= begin & begin <= end & end <= data.end
+            ...
+            segment_of(seg,data,begin,end) := true
+        }
+    }
+        
+    implementation {
+        
+        destructor offset(X:this) : domain
+        destructor elems(X:this) : arr
+        
+        definition value(X,N) = elems(X).value(N + offset(X))
+
+        after init {
+            segment_of(X,Y,B,E) := false;
+        }
+
+        implement make {
+            seg.offset := begin;
+            seg.elems := arr.empty;
+            var idx := begin;
+            while idx < end
+            invariant begin <= idx
+            invariant begin <= N & N < idx -> seg.value(N) = arr.value(Y,N)
+            invariant begin + seg.elems.end = idx
+            {
+                seg.elems := seg.elems.append(data.value(idx));
+                idx := idx.next;
+            };
+        }
+    }
+    
+    isolate iso = this with domain.impl,arr
+
+}
+
+instance dom : unbounded_sequence
+type rng
+instance arr : array(dom,rng)
+
+instance s : segment(dom,rng,arr)
+
+export s.make
+
+
+ 

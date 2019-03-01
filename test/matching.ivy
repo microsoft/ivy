@@ -1,0 +1,37 @@
+#lang ivy1.7
+
+# Randomly construct a permutation over a type t.
+
+type t
+
+relation rel(X:t,Y:t)
+
+isolate prog = {
+    # Start with the identity
+    
+    after init {
+        rel(X,Y) := X = Y;
+    }
+    
+    # Swap pairs
+    
+    action swap(a:t,b:t,c:t,d:t) = {
+        require rel(a,b) & rel(c,d);
+        rel(a,b) := false;
+        rel(c,d) := false;
+        rel(a,d) := true;
+        rel(c,b) := true;
+    }
+}
+
+isolate forward = {
+    invariant rel(X,Y) & rel(X,Z) -> Y = Z
+    invariant exists Y. rel(X,Y)
+} with prog
+
+isolate reverse = {
+    invariant rel(Y,X) & rel(Z,X) -> Y = Z
+    invariant exists Y. rel(Y,X)
+} with prog
+
+export prog.swap

@@ -173,7 +173,7 @@ module array(domain,range) = {
             }
 
 	    template <>
-	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.atom.size()) 
 	            throw out_of_bounds(idx);
@@ -298,7 +298,7 @@ module null_type(range_t,null_value) = {
 	}
 
 	template <>
-	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	    ivy_value &arg = args[idx];
 	    if (arg.fields.size()) 
 		throw out_of_bounds(idx);
@@ -527,7 +527,7 @@ module path(domain,range) = {
             }
 
 	    template <>
-	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.fields.size()) 
 	            throw out_of_bounds(idx);

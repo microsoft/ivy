@@ -1,0 +1,29 @@
+#lang ivy1.7
+
+type t
+
+type p
+
+action run(proc:p, ^x:t) = {}
+
+var q : p
+
+object baz(self:p) = {
+    
+    action a = {
+        thunk [bar] f : t := {
+            q := self
+        };
+        call f.run(self)
+    }
+
+}
+
+var g : t
+
+action b = {
+    call g.run(q)
+}
+
+export baz.a
+export b

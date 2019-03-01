@@ -1,0 +1,33 @@
+#lang ivy1.6
+
+include collections
+
+object me = {
+    type idx
+    type val
+
+    instance arr : array(idx,val)
+
+    var a : arr.t
+
+    action foo(a:arr.t,b:arr.t) returns (a:arr.t) = {
+	b := a;
+	a := b
+    }
+
+    action add(i:idx,v:val) = {
+	var b : arr.t;
+	b := arr.append(a,arr.get(a,i));
+	a := foo(a,a)
+    }
+
+
+
+    interpret idx -> int
+    interpret val -> int
+}
+
+export me.add
+
+trusted isolate iso = me
+

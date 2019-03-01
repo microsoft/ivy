@@ -1,0 +1,5 @@
+#lang ivy1.7
+type t
+
+var x : t
+

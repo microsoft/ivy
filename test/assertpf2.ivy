@@ -1,0 +1,10 @@
+#lang ivy1.7
+
+relation p
+
+action a = {
+
+    assert p -> p
+}
+
+export a

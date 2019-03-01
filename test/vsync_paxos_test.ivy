@@ -1,0 +1,405 @@
+#lang ivy1.7
+
+include order
+
+type node
+
+instance epochobj : unbounded_sequence
+alias epoch = epochobj.t
+
+instance stakeord : unbounded_sequence
+alias stake = stakeord.t
+
+axiom 0 <= X:epoch
+axiom X:stake >= 0
+axiom ~(X:stake < 0)
+axiom X:stake < Y -> Y ~= 0
+axiom X:stake = Y -> (X = 0 <-> Y = 0)
+axiom X:stake < Y | X ~= 0 | Y = 0
+
+instance inst_object : unbounded_sequence
+alias inst = inst_object.t
+
+axiom ~(T:epoch < T)
+axiom X:epoch < Y -> Y ~= 0
+axiom X:epoch = Y -> (X = 0 <-> Y = 0)
+axiom X:epoch < Y | X ~= 0 | Y = 0
+
+type value
+
+type config
+relation val_at(C:config, I:inst, V:value)
+
+object nodeset = {
+    type set
+    relation member(N:node,S:set)
+    relation majority(S:set)
+    function common(S:set,T:set) : node
+    axiom majority(S) & majority(T) & N = common(S,T) -> member(N,S) & member(N,T)
+}
+
+function leader_of(E:epoch) : node
+
+relation wedge_msg(E:epoch, S:stake)
+relation wedge_ack_msg(E:epoch, N:node, S1:stake, S2:stake, C:config)
+relation accept_msg(E:epoch, S:stake, C:config)
+relation accepted_msg(E:epoch, N:node, S:stake, C:config)
+relation wedged(E:epoch, N:node)
+relation started(E:epoch, N:node) # TODO: add nodes and nodesets
+function config_decided(E:epoch) : config # ghost relation
+
+# derived relations:
+function node_stake(E:epoch, N:node) : stake
+
+relation proposal(E:epoch, I:inst, V:value)
+relation vote(E:epoch, N:node, I:inst, V:value)
+relation decision(E:epoch, N:node, I:inst, V:value)
+relation transferral(E:epoch, N:node, I:inst, V:value)
+
+# records past decisions of any epoch or node
+
+relation any_decision(I:inst, V:value)
+function dec_maj(I:inst, V:value) : nodeset.set # records majority for decision
+function dec_epoch(I:inst, V:value) : epoch
+function accept_maj(E:epoch,K:stake) : nodeset.set
+function epoch_maj(E:epoch) : nodeset.set  # The majority that finished epoch E
+relation epoch_ended(E:epoch)
+function epoch_stake(E:epoch) : stake
+function left_maj(E:epoch,K:stake) : nodeset.set
+function accepted_maj(E:epoch) : nodeset.set
+
+after init {
+    wedge_msg(E,S) := false;
+    wedge_ack_msg(E,N,S1,S2,C2) := false;
+    accept_msg(E,S,C2) := false;
+    accepted_msg(E,N,S,C) := false;
+    proposal(E,I,V) := false;
+    vote(E,N,I,V) := false;
+    decision(E,N,I,V) := false;
+    any_decision(I,V) := false;
+    transferral(E,N,I,V) := false;
+    node_stake(E,N) := 0;
+    wedged(E,N) := false;
+    started(E,N) := E = 0;
+    epoch_ended(E) := false;
+}
+
+# a client sends a wedge message:
+action send_wedge (e:epoch,s:stake) = { # TODO add nodeset.sets and membershipt
+    require s ~= 0;
+    wedge_msg(e,s) := true
+}
+
+action join_stake (e:epoch, n:node, s:stake) = {
+    require s ~= 0;
+    require started(e,n);
+    require wedge_msg(e,s);
+    require node_stake(e,n) < s;
+    wedged(e,n) := true;
+    node_stake(e,n) := s;
+}
+
+action receive_wedge_ack_msgs(e:epoch, s:stake, nset:nodeset.set, maxs : stake, n: node, c : config) = {
+
+    require s ~= 0;
+    assume forall C. ~accept_msg(e,s,C);
+    require forall N. nodeset.member(N,nset) -> ~(node_stake(e,N) < s);
+    require nodeset.majority(nset);
+
+    if maxs = 0 {
+	# if no stake, n must have the exact configuration and it must be maximal
+	require nodeset.member(n,nset) & forall I,V . val_at(c,I,V) <-> (vote(e,n,I,V) | transferral(e,n,I,V));
+	require forall N,I,V. nodeset.member(N,nset) & (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V);
+	require forall N,S,C. 0 < S & S < s & nodeset.member(N, nset) -> ~accepted_msg(e,N,S,C);
+        accept_maj(e,s) := nset;
+    } else {
+	# if stake, n must have accepted at the stake and stake must be maximal
+	require maxs < s & nodeset.member(n, nset) & accepted_msg(e,n,maxs,c);
+	require forall N,MAXS,C. (MAXS < s & nodeset.member(N, nset) & accepted_msg(e,N,MAXS,C)) -> MAXS <= maxs;
+        accept_maj(e,s) := accept_maj(e,maxs);
+    };
+
+    # Key invariant for stakes: when we create a new stake, all lesser stakes with different configs are
+    # dead. A stake is dead if there is a majority that has left it and not accepted it. The function
+    # left_maj records the majority that witnesses the death of a stake.
+
+    left_maj(e,K) := nset if maxs < K & K < s else left_maj(e,K);
+
+#    assert N1 = n & K2 = maxs & E1 = e & C1 = c & S1 = left_maj(E1,K) &
+#       0 < K & K < s  -> (accept_msg(e,K,c) | (nodeset.majority(S1) & (nodeset.member(N,S1) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C))));
+    assume forall K,C,N. 
+       0 < K & K < s  -> (accept_msg(e,K,c) | (nodeset.majority(left_maj(e,K)) & (nodeset.member(N,left_maj(e,K)) -> K < node_stake(e,N) & ~accepted_msg(e,N,K,C))));
+
+
+#    assert N1 = n & K2=maxs & E1 = e & C1 = c & S1 = accept_maj(e,s) & K = s -> 
+#        nodeset.majority(accept_maj(e,s)) & (nodeset.member(N,accept_maj(e,s)) -> ~(node_stake(e,N) = 0) & ((vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V)));
+    assume forall N,I,V. nodeset.majority(accept_maj(e,s)) & (nodeset.member(N,accept_maj(e,s)) -> ~(node_stake(e,N) = 0) & ( (vote(e, N, I, V) | transferral(e,N,I,V)) -> val_at(c, I, V)));
+
+    accept_msg(e, s, c) := true;
+}
+
+action send_accepted_msg(e:epoch, n:node, s:stake, c:config) = {
+    require s ~= 0;
+    require started(e,n);
+    require ~(s < node_stake(e,n));
+    require accept_msg(e,s,c);
+    accepted_msg(e, n, s, c) := true
+}
+
+
+action start(e:epoch, e_prev: epoch, n:node, s:stake, nset:nodeset.set, c:config) = {
+    require s ~= 0;
+    require ~started(e,n);
+    require nodeset.majority(nset);
+    require e_prev < e & forall E. ~(e_prev < E & E < e);
+#    require epochobj.succ(e_prev, e);     # make sure e_prev is the previous epoch deterministically
+    require forall N. nodeset.member(N,nset) -> accepted_msg(e_prev, N, s, c);
+
+#    assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) &
+#              S1 = left_maj(E1,K2) & S2 = accepted_maj(E1) & N = nodeset.common(S1,S2) & N1 = nodeset.common(nset,nset) &
+#        K2 < s -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
+#    assert E1 = e_prev & C1 = c & C2 = config_decided(e_prev) & K = s & K2 = epoch_stake(E1) & N1 = nodeset.common(nset,nset) &
+#              S1 = left_maj(E1,K) & S2 = nset & N = nodeset.common(S1,S2) &
+#        (s < K2) -> (epoch_ended(e_prev) -> c = config_decided(e_prev));
+    assume epoch_ended(e_prev) -> c = config_decided(e_prev);
+
+# Not needed....
+
+#    assume epoch_ended(e_prev) -> s = epoch_stake(e_prev) & c = config_decided(e_prev);
+#    assert E1 = e_prev & K = s & C = c & N = nodeset.common(nset,nset) -> accept_msg(e_prev,s,c);
+    assume accept_msg(e_prev,s,c);
+    
+#    assert forall C,K,E1,N,E2. C = c & K = s & E1 = e_prev & N = nodeset.common(nset,nset) & E2 < e_prev -> epoch_ended(E2);
+#    assume forall E2. (E2 < e_prev -> epoch_ended(E2));
+
+    assert forall C,K,E1,N,E2,N1,I,V1,S2,K2,C2. C = c & K = s & E1 = e_prev & S1 = accept_maj(E1,s) & N = nodeset.common(S1,S1) & S2 = epoch_maj(E2) & K2 = epoch_stake(E2) & C2 = config_decided(E2)
+         & E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
+     assume forall E2,N1,I,V1. E2 < e_prev & nodeset.member(N1,epoch_maj(E2)) & vote(E2,N1,I,V1) -> val_at(c,I,V1);
+
+    config_decided(e_prev) := c;
+    transferral(e,n,I,V) := val_at(c,I,V);
+    decision(e,n,I,V) := val_at(c,I,V);
+    started(e,n) := true;
+    if ~epoch_ended(e_prev) {
+        epoch_maj(e_prev) := accept_maj(e_prev,s);
+        epoch_stake(e_prev) := s;
+        accepted_maj(e_prev) := nset;
+    };
+    epoch_ended(e_prev) := true;
+}
+
+# the leader proposes a value to vote for at instance i.
+action propose(e:epoch, i:inst, v:value) = {
+    require started(e,leader_of(e));
+    require forall BIG_I,V. i <= BIG_I -> ~transferral(e,leader_of(e),BIG_I,V);
+    require forall BIG_I,V. i <= BIG_I -> ~proposal(e,BIG_I,V);
+
+    proposal(e,i,v) := true
+}
+
+
+action do_vote(e:epoch, n:node, i:inst, v:value) = {
+    require started(e, n);
+    require ~wedged(e,n);
+    require proposal(e,i,v);
+    # assume ~(i <= I) -> exists V . vote(c,n,I,V);
+
+    vote(e, n, i, v) := true
+}
+
+
+action decide(e:epoch, n:node, v:value, nset:nodeset.set, i:inst) = {
+    require started(e, n);
+    require nodeset.majority(nset);
+    require forall N. nodeset.member(N, nset) -> vote(e, N, i, v);
+
+
+#    assert I = i & V1 = v & S1 = epoch_maj(E2) & S2 = dec_maj(I,V2) & N = nodeset.common(S1,S2) & E1 = e & E2 = dec_epoch(I,V2) & K = epoch_stake(E2) & C = config_decided(E2)
+#      & E2 < E1 & N1 = leader_of(E1) & N2 = nodeset.common(nset,nset) ->  (any_decision(i,V2) -> v = V2);
+#    assert I = i & V1 = v & S1 = epoch_maj(E1) & S2 = nset & N = nodeset.common(S1,S2) & E1 = e & E2 = dec_epoch(I,V2) & K = epoch_stake(E1) & C = config_decided(E1)
+#      & E1 < E2 & N1 = leader_of(E2) & S3 = dec_maj(I,V2) & N2 = nodeset.common(S3,S3) ->  (any_decision(i,V2) -> v = V2);
+    assume forall V2. any_decision(i,V2) -> v = V2;
+    decision(e, n, i, v) := true;
+    any_decision(i,v) := true;
+    dec_maj(i,v) := nset;
+    dec_epoch(i,v) := e;
+}
+
+# invariant ~(any_decision(I,V1) & any_decision(I,V2) & V1 ~= V2)
+# proof let S1 = dec_maj(I,V1), S2 = dec_maj(I,V2), N = nodeset.common(S1,S2), E1 = dec_epoch(I,V1), E2 = dec_epoch(I,V2)
+
+# invariant any_decision(I,V1) & dec_epoch(I,V1) < E1 & started(E1,N1) -> transferral(E1,N1,I,V1)
+# proof let E2 = dec_epoch(I,V1), S1 = dec_maj(I,V1), S2 = epoch_maj(E2), N = nodeset.common(S1,S2) 
+
+# invariant E2 < E1 & nodeset.member(N,epoch_maj(E2)) & vote(E2,N,I,V1) & started(E1,N1) -> transferral(E1,N1,I,V1)
+
+
+export send_wedge
+export join_stake
+export receive_wedge_ack_msgs
+export send_accepted_msg
+export start
+export propose
+export do_vote
+export decide
+
+
+
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema trans2 = {
+    type t
+    function x : t
+    property Y = X  -> (x = X <-> x = Y)
+}
+
+schema contra = {
+    type t
+    function x : t
+    property Y ~= X -> ~(x = X & x = Y)
+}
+
+# schema cong1 = {
+#     type t
+#     type u
+#     function x : t
+#     function f1(X:t) : u
+#     property x = X -> f1(x) = f1(X)
+# }
+
+schema cong1 = {
+    type t
+    type u
+    function x : t
+    function y : u
+    function f1(X:t) : u
+    property (f1(X) = y <-> f1(x) = y) | x ~= X 
+}
+
+schema cong1b = {
+    type t
+    function x : t
+    function f2(X:t) : bool
+    property (f2(X) = f2(x)) | x ~= X 
+}
+
+schema cong2 = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function y : u
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = y <-> f1(x1,x2) = y) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong2b = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong3 = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = y <-> f1(x1,x2,x3) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong3b = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = f1(x1,x2,x3)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong4 = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = y <-> f1(x1,x2,x3,x4) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
+
+schema cong4b = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = f1(x1,x2,x3,x4)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
+
+schema lt1 = {
+    function x1 : stake
+    property ~(X < Y & Y < x1 & x1 < X)
+}
+
+schema lt2 = {
+    function x1 : stake
+    property ~(~(X < Y) & ~(x1 < X) & x1 < Y)
+}
+
+schema lt3 = {
+    function x1 : stake
+    property Y = X  -> (x1 < X <-> x1 < Y)
+}
+
+schema lt4 = {
+    type t1
+    type t2
+    function x1 : t1
+    function x2 : t2
+    function x : stake
+    function f1(X1:t1,X2:t2) : stake
+    property (x < f1(X1,X2) <-> x < f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+}
+
+schema lt5 = {
+    function x1 : stake
+    property X = x1 -> ~(X < x1) & ~(x1 < X)
+}
+
+schema lt6 = {
+    type t1
+    type t2
+    function x1 : t1
+    function x2 : t2
+    function x : stake
+    function f1(X1:t1,X2:t2) : stake
+    property (f1(X1,X2) = 0 <-> f1(x1,x2) = 0) | x1 ~= X1 | x2 ~= X2
+}

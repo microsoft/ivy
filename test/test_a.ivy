@@ -1,0 +1,337 @@
+#lang ivy1.7
+
+################################################################################
+# ivy Origin protocol model
+#
+# Copyright 2017-2018 Asgeir Eiriksson (asgeir.eiriksson@gmail.com)
+#
+# - write this to look as close to the SMV model structure as possible
+#   to investigate how well ivy matches the typical hardware design
+#   paradigm
+#
+# - this would enable moving the same model between ivy, SMV and verilog
+#
+# - why do we need the back-and-forth between tools/paradigms capability?
+#
+#   1) analyze liveness within smv
+#   2) refine the design within smv in both directions, i.e. increase
+#      abstraction e.g. similar to the BRD* to IRD* proc handling,
+#      and to formally verify the actual hardware design
+#   3) prove memory consistency model within ivy
+#   4) generate executable model within ivy
+#   5) mixed sw/fw/hw designs with ivy
+#
+# TODO
+#
+# 1) change action to ph, both in the smv model
+# 2) module p_mod "individual  msg_req_rsp : msg_req_rsp_type" looks like it
+#    might be moved to net, but maybe not
+# 3) change the SMV defines to lower case to better match ivy
+#
+################################################################################
+
+type proc
+type data_type
+type addr_type
+
+type state_type        = {inv,shd,cex,dex}
+type dstate_type       = {uown,shrd,excl,busys,busye}
+
+type msg_req_rsp_type  = {idle_r_r,erply,espec,nack,rdsh,rdex,srply,sspec,upack,upgrd,wack,wb,wbbak}
+type msg_rpl_type      = {idle_rpl,eack,eresp,sack,sresp}
+type msg_req_type      = {idle_req,irdex,irdsh}
+type msg_trf_type      = {idle_trf,dngrd,xfer}
+
+type ph_type        = {req_rsp_ph1,req_rsp_ph2,req_rsp_ph3,rpl_ph,req_ph,trf_ph,store_ph}
+
+type send_type         = {send_ex,send_evct,send_rdsh,send_none}
+
+module req_rsp_type = {
+ individual kind : msg_req_rsp_type
+ individual data : data_type
+}
+
+module req_type = {
+ individual kind : msg_req_type
+ individual src  : proc
+ individual dst  : proc
+}
+
+module rpl_type = {
+ individual kind : msg_rpl_type
+ individual src  : proc
+ individual dst  : proc
+ individual data : data_type
+}
+
+module trf_type = {
+ individual kind : msg_trf_type
+ individual src  : proc
+ individual data : data_type
+}
+
+module rrb_type = {
+ individual v : bool
+ individual a : bool
+ individual r : bool
+}
+
+module wrb_type = {
+ individual v : bool
+ individual a : bool
+}
+
+module irb_type = {
+ individual i     : bool
+ individual kind  : msg_req_type
+ individual src   : proc
+}
+
+################################################################################
+# proc issues requests and pesses responses, interventions and store
+# requests
+#
+################################################################################
+## ****
+module p_mod = { 
+  individual  state(A:addr_type) : state_type
+  instantiate rrb(A:addr_type)      : rrb_type
+  instantiate irb(A:addr_type)      : irb_type
+  instantiate wrb(A:addr_type)      : wrb_type
+  individual  data(A:addr_type)      : data_type
+  individual wr        : bool
+ 
+  individual error       : bool
+  individual ivack : bool
+ 
+  action p_rec(p:proc,a:addr_type,ph:ph_type,send:send_type,store:bool,store_data:data_type) = {
+  error := true;
+
+  if ph=rpl_ph & net.ivack(p,a) {
+    net.ivack(p,a) := false;
+    if (exists X. net.ivack(X,a)) | (exists Y. net.ivec(Y,a)) | (exists P. pi(P).irb(a).i & pi(P).irb(a).kind=idle_req) {
+       net.last_ivack := false;
+    } else {
+       net.last_ivack := true;
+    };
+       
+    ivack := true;
+  } else {
+    net.last_ivack := false;
+    ivack := false;    
+  };
+ 
+ if ph=req_rsp_ph1 & ~rrb(a).v & ~wrb(a).v & state(a)=inv & send=send_rdsh {
+  rrb(a).v := true;
+  rrb(a).r := false;
+  rrb(a).a := false;
+  net.req_rsp(p,a).kind := rdsh;
+ 
+  error    := false;
+}
+else if ph=req_rsp_ph1 & ~rrb(a).v & ~wrb(a).v & state(a)=inv & send=send_ex {
+  rrb(a).v := true;
+  rrb(a).r := false;
+  rrb(a).a := false;
+  net.req_rsp(p,a).kind := rdex;
+ 
+  error    := false;
+}
+  else {
+    error := false;
+  }
+  }
+}
+
+## ****
+  object d = {
+    individual dstate(A:addr_type) : dstate_type
+
+    individual ptr(A:addr_type)       : proc
+    individual pptr(A:addr_type)  : proc
+    individual tmp_pptr  : proc    
+    individual pptr_vld(A:addr_type) : bool
+  
+    relation   owner(X:proc,A:addr_type)
+
+    individual mem(A:addr_type)         : data_type
+    individual mem_real(A:addr_type)    : data_type
+
+    individual error       : bool
+
+    individual  shrd_only  : bool
+    individual  excl_owner : bool
+
+    ################################################################################
+    # directory receives proc requests and ownership transfer messages
+    # and responds with response messages and optionally invalidates and
+    # interventions
+    #
+    ################################################################################
+
+action dir_rec(p:proc,a:addr_type,ph:ph_type) = {
+    error    := true;
+    tmp_pptr := ptr(a);
+
+    shrd_only  := ~(exists P. owner(P,a) & p~=P);
+    excl_owner := p=ptr(a);
+ 
+if ph=req_rsp_ph2 & net.req_rsp(p,a).kind=rdsh & dstate(a)=uown {
+  dstate(a) := shrd;
+  owner(p,a) := true;
+  net.req_rsp(p,a).kind := srply;
+  net.req_rsp(p,a).data := mem(a);
+
+  pptr_vld(a) := false;
+  error := false;
+}
+else if ph=req_rsp_ph2 & net.req_rsp(p,a).kind=rdsh & dstate(a)=excl & excl_owner {
+  dstate(a) := shrd;
+  owner(p,a) := true;
+  net.req_rsp(p,a).kind := srply;
+  net.req_rsp(p,a).data := mem(a);
+
+  pptr(a)     := ptr(a);
+  pptr_vld(a) := true;
+  error := false;
+}
+    else {
+      error                 := false;
+      }
+    }
+ 
+    after dir_rec { 
+      assert ~error 
+    } 
+ 
+  }
+
+## ****
+
+################################################################################
+#
+################################################################################
+
+module network = {
+  instantiate req_rsp(X:proc,A:addr_type) : req_rsp_type
+  instantiate req(X:proc,A:addr_type)     : req_type
+  
+  instantiate rpl(A:addr_type)     : rpl_type
+  
+  instantiate trf(A:addr_type)      : trf_type
+
+  individual binv(A:addr_type)        : bool
+  individual inval(A:addr_type)       : bool
+  
+  individual store_data   : data_type
+
+  individual last_ivack  : bool
+
+  individual ivec(X:proc,A:addr_type) :  bool
+  individual ivack(X:proc,A:addr_type) : bool
+
+  action step(p:proc,a:addr_type,ph:ph_type,send:send_type,store:bool) = {
+   if ph=req_rsp_ph1 {                    # proc issues new request
+     call pi(p).p_rec(p,a,ph,send,store,store_data)
+   } else if ph=req_rsp_ph2 {             # directory receives request/owner-ship transfer
+     call d.dir_rec(p,a,ph)
+   } else if ph=req_rsp_ph3 {             # proc receives response
+     call pi(p).p_rec(p,a,ph,send,store,store_data)
+   } else if ph=rpl_ph & net.rpl(a).dst=p {  # proc receives intervention/invalidate response
+      if net.rpl(a).kind~= idle_rpl & net.rpl(a).dst=p {
+         call pi(p).p_rec(p,a,ph,send,store,store_data)
+      } else if net.ivack(p,a) {
+         call pi(d.ptr(a)).p_rec(p,a,ph,send,store,store_data)
+      }
+   } else if ph=req_ph {                  # proc receives intervention/invalidate request
+     call pi(p).p_rec(p,a,ph,send,store,store_data)
+   } else if ph=trf_ph {                  # directory receives ownership transfer message
+     call d.dir_rec(p,a,ph) 
+   } else if ph=store_ph {                # proc writes/dirties a cex cache line
+     call pi(p).p_rec(p,a,ph,send,store,store_data)
+   }
+  }
+
+#
+  action step0(p:proc,a:addr_type,send:send_type,store:bool) = {
+     call pi(p).p_rec(p,a,req_rsp_ph1,send,store,store_data)
+  }
+
+  action step1(p:proc,a:addr_type,send:send_type,store:bool) = {
+     call d.dir_rec(p,a,req_rsp_ph2)
+  }
+
+  action step2(p:proc,a:addr_type,send:send_type,store:bool) = {
+     call pi(p).p_rec(p,a,req_rsp_ph3,send,store,store_data)
+  }
+
+  action step3(p:proc,a:addr_type,send:send_type,store:bool) = {
+   if net.rpl(a).dst=p {
+      if net.rpl(a).kind~= idle_rpl & net.rpl(a).dst=p {
+         call pi(p).p_rec(p,a,rpl_ph,send,store,store_data)
+      } else if net.ivack(p,a) {
+         call pi(d.ptr(a)).p_rec(p,a,rpl_ph,send,store,store_data)
+      }
+    }
+  }
+
+  action step4(p:proc,a:addr_type,send:send_type,store:bool) = {  
+     call pi(p).p_rec(p,a,req_ph,send,store,store_data)
+  }
+
+  action step5(p:proc,a:addr_type,send:send_type,store:bool) = {  
+     call d.dir_rec(p,a,trf_ph) 
+  }
+
+  action step6(p:proc,a:addr_type,send:send_type,store:bool) = {  
+     call pi(p).p_rec(p,a,store_ph,send,store,store_data)
+  }
+
+}
+
+after init {
+    net.req_rsp(P,A).kind := idle_r_r;
+    net.req(P,A).kind     := idle_req;
+    net.ivec(P,A)         := false;
+    net.ivack(P,A)        := false;    
+    net.inval(A)          := false;  
+    net.binv(A)           := false;  
+    
+    pi(X).state(A)        := inv;
+    pi(X).rrb(A).v        := false;    
+    
+    d.dstate(A)           := uown;
+    d.owner(X,A)          := false;
+    d.pptr_vld(A)         := false;    
+
+    d.mem_real(A)         := d.mem(A);
+
+    net.rpl(A).kind       := idle_rpl;
+    net.trf(A).kind       := idle_trf
+}
+
+################################################################################
+#
+################################################################################
+
+instantiate pi(X:proc) : p_mod
+#instantiate dir                 : dir_mod
+
+instantiate net : network
+
+################################################################################
+# 
+################################################################################
+
+ conjecture (net.req_rsp(P,A).kind~=rdsh)
+
+#export net.step
+
+export net.step0
+export net.step1
+export net.step2
+export net.step3
+export net.step4
+export net.step5
+export net.step6
+

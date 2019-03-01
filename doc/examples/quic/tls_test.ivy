@@ -1,0 +1,31 @@
+#lang ivy1.7
+
+
+include order
+include collections
+include tls
+
+
+instance idx : unbounded_sequence
+type byte
+instance bytes : array(idx,byte)
+interpret byte -> bv[8]
+type cid
+
+type extens
+type exten_ser
+
+instance lower : tls_lower_intf(cid,bytes)
+instance upper : tls_intf(cid,idx,bytes,lower,extens,exten_ser)
+
+import lower.send
+export lower.recv
+export upper.send
+import upper.recv
+import upper.alert
+import upper.session_established
+export upper.key_material_export
+export upper.create
+export upper.destroy
+
+

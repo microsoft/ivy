@@ -1,0 +1,16 @@
+#lang ivy1.7
+
+axiom [ax1] {
+    relation p
+    relation q
+    property q
+    property q
+}
+
+relation p
+axiom p
+property p
+proof
+    apply ax1 with q = p;
+    showgoals
+

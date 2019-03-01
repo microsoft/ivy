@@ -101,6 +101,7 @@ def map_fmla(lineno,fmla,pol):
         if fmla in universally_quantified_variables:
             if fmla not in strat_map:
                 res = UFNode()
+                res.var = fmla
                 strat_map[fmla] = res
             return strat_map[fmla],set()
         node,vs = macro_var_map.get(fmla,None), macro_dep_map.get(fmla,set())
@@ -143,7 +144,7 @@ def map_fmla(lineno,fmla,pol):
                 anode = strat_map[(func,idx)]
                 if node is not None:
                     unify(anode,node)
-                arcs.extend((v,anode,fmla,lineno) for v in uvs[idx])
+                arcs.extend((v,anode,fmla,lineno,idx) for v in uvs[idx])
         else:
             check_interpreted(fmla,nodes,uvs,lineno,pol)
         return None,all_uvs
@@ -284,15 +285,21 @@ def create_macro_maps(assumes,asserts,macros):
 # equivalent to add `w -> v` to `macro_dep_map`. The following
 # procedure does this for a given formula.
 #
+# skolem_map maps existential variables to the terms that bind them. 
+
+skolem_map = {}
 
 def make_skolems(fmla,ast,pol,univs):
     global macro_dep_map
     global strat_map
+    global skolem_map
     if isinstance(fmla,il.Not):
         make_skolems(fmla.args[0],ast,not pol,univs)
+        return
     if isinstance(fmla,il.Implies):
         make_skolems(fmla.args[0],ast,not pol,univs)
         make_skolems(fmla.args[1],ast,pol,univs)
+        return
     is_e = il.is_exists(fmla)
     is_a = il.is_forall(fmla)
     if is_e and pol or is_a and not pol:
@@ -300,6 +307,7 @@ def make_skolems(fmla,ast,pol,univs):
         for u in univs:
             if u in fvs:
                 for e in il.quantifier_vars(fmla):
+                    skolem_map[e] = (fmla,ast)
                     macro_dep_map[e].add(strat_map[u])
     if is_e and not pol or is_a and pol:
         make_skolems(fmla.args[0],ast,pol,univs+list(il.quantifier_vars(fmla)))
@@ -389,10 +397,30 @@ def show_strat_graph(m,a):
 def report_feu_error(text):
     raise iu.IvyError(None,"The verification condition is not in the fragment FAU.\n\n{}".format(text))
 
+def get_node_sort(n):
+    for t,m in strat_map.iteritems():
+        if m is n:
+            if isinstance(t,tuple):
+                return t[0].sort.dom[t[1]]
+            return t.sort
+    assert False
+
+def report_arc(arc):
+    v,anode,fmla,lineno = arc[0:4]
+    res = '\n' + str(lineno) + str(fmla)
+    if len(arc) > 4:
+        idx = arc[4]
+        term = fmla.args[idx]
+        res += '\n    (position {} is a function from '.format(idx) + str(get_node_sort(v)) + ' to ' + str(term.sort) + ')'
+        if term in skolem_map:
+            sm = skolem_map[term]
+            res += '\n    ' + str(sm[1].lineno) + 'skolem function defined by:\n         ' + str(sm[0])  
+    return res
+
 def report_cycle(cycle):
     if cycle is not None:
         report_feu_error("The following terms may generate an infinite sequence of instantiations:\n"+
-                         '\n'.join('  ' + str(arc[3]) + str(arc[2]) for arc in cycle))
+                         '\n'.join('  ' + report_arc(arc) for arc in cycle))
 
 def report_interp_over_var(fmla,lineno,node):
     """ Report a violation of FAU due to a universal variable

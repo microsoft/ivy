@@ -1,0 +1,424 @@
+Capture file: anomaly1.pcap
+Implementation:
+  minquic, commit ???????
+Endpoints:
+  - 10.0.0.1: server
+  - 10.0.0.2: client
+Issue:
+  Client sends ack-only packet in response to an ack-only packet.
+  That is the packet does not ack any packet with data that is not
+  previously acked. The number of ack-only packets from client is three,
+  while server has sent only two packets with data.
+
+  This is a violation of the following section of the version 9 draft:
+
+   8.16.2.  Sending ACK Frames
+
+   ... Implementations MUST NOT send more than one ACK frame per received
+   packet that contains frames other than ACK frames. ...
+
+Capture file: none
+Implementation:
+  minquic, commit ???????
+Issue:
+   Server treats the case of off bit being false in stream frame of
+   initial packet as an error, but it isn't clear that this violates the
+   specification. Need to check this.
+
+Capture file: none
+Implementation:
+  minquic, commit ???????
+Ivy commit:
+  39a6f6f
+Issue:
+  When given a large jump in packet numbers, the minquic server counts down
+  from the received packet number, printing log messages, spending time
+  proportional to the gap in the packet numbers. Minquic seems to assume that
+  the client will simply increment packet numbers.
+
+
+
+Capture file: picoquic.pcap
+Implementation:
+  picoquic
+Endpoints:
+  - 10.0.0.1: server
+  - 10.0.0.2: client
+Issue:
+  Regarding the retry token, The specification, draft 14 states:
+
+    The Initial packet has two additional header fields that follow the
+    normal Long Header.
+
+  However, picoquic is putting these fields in the middle of the long header,
+  before the length and the packet number fields.
+
+
+Event file:  anomaly6.iev
+Picoquic log file: anomaly6.log
+QUIC version: draft 14
+Ivy commit: 7bcdf6a
+Implementation:
+  picoquic, commit: cb34de2
+Issue:
+  Client sends a MAX_STREAM_ID frame with stream id 0, which is a client, not
+  a server stream id. Server (picoquicdemo) responds with connection close and
+  error code of STREAM_ID_ERROR. However, specification does not state that it
+  is an error to send a stream id that is not an id of the peer, and does not
+  state that STREAM_ID_ERROR should be returned in this case.
+
+Event file:  anomaly7.iev
+Picoquic log file: anomaly7.log
+QUIC version: draft 14
+Ivy commit: 4c8087e
+Implementation:
+  picoquic, commit: cb34de2
+Issue:
+  Seg fault occurs when server receives an initial packet with client
+  hello handshake message followed immediately by an initial packet
+  with a connection close frame. It appears that the server tries to
+  send a 1rtt propected packet as a response before the packet number
+  encoder for this packet type has been initialized. See picoquic issue 340.
+
+Event file:  anomaly8.iev
+Picoquic log file: anomaly8.log
+QUIC version: draft 14
+Ivy commit: ???????
+Implementation:
+  picoquic, commit: cb34de2
+Issue:
+  Seg fault occurs when server tries to send a packet in the draining
+  state. As in the anomaly above, it appears that the server tries to
+  send a 1rtt propected packet but the packet number encoder is null.
+
+  picoquic stack trace:
+
+#0  0x000055555557a7bd in picoquic_pn_iv_size (pn_enc=0x0) at /home/mcmillan/projects/picoquic/picoquic/tls_api.c:1345
+#1  0x000055555557227f in picoquic_protect_packet (cnx=0x5555557c23e0, ptype=picoquic_packet_1rtt_protected_phi0, bytes=0x5555557c9f0d "", sequence_number=0, length=18, header_length=13, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, aead_context=0x0, pn_enc=0x0) at /home/mcmillan/projects/picoquic/picoquic/sender.c:395
+#2  0x0000555555572c4a in picoquic_finalize_and_protect_packet (cnx=0x5555557c23e0, packet=0x5555557c9ed0, ret=0, length=18, header_length=13, checksum_overhead=16, send_length=0x7fffffffd2f8, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, path_x=0x5555557c2a80, current_time=1539114320087490) at /home/mcmillan/projects/picoquic/picoquic/sender.c:659
+#3  0x000055555557617b in picoquic_prepare_packet_closing (cnx=0x5555557c23e0, path_x=0x5555557c2a80, packet=0x5555557c9ed0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1252, send_length=0x7fffffffd2f8) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2024
+#4  0x0000555555576d68 in picoquic_prepare_segment (cnx=0x5555557c23e0, path_x=0x5555557c2a80, packet=0x5555557c9ed0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1536, send_length=0x7fffffffd2f8) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2314
+#5  0x0000555555576f0a in picoquic_prepare_packet (cnx=0x5555557c23e0, current_time=1539114320087490, send_buffer=0x7fffffffdc00 "0", send_buffer_max=1536, send_length=0x7fffffffd398) at /home/mcmillan/projects/picoquic/picoquic/sender.c:2367
+#6  0x00005555555610f1 in quic_server (server_name=0x55555559904c "::", server_port=4443, pem_cert=0x555555599028 "certs/cert.pem", pem_key=0x555555599037 "certs/key.pem", just_once=0, do_hrr=0, cnx_id_callback=0x0, cnx_id_callback_ctx=0x0, reset_seed=0x0, mtu_max=0) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:488
+#7  0x000055555556395b in main (argc=1, argv=0x7fffffffe418) at /home/mcmillan/projects/picoquic/picoquicfirst/picoquicdemo.c:1305
+
+Event file:  anomaly9.iev
+Picoquic log file: anomaly9.log
+QUIC version: draft 14
+Ivy commit: ???????
+Implementation:
+  picoquic, commit: be5a9b1
+Issue:
+
+If migration of the client occurs during the handshake, strange server behavior follows. That is, it seems that the handshake completes and the server continues to accept stream frames, but it stops sending any ack packets. I'm not sure what the correct server behavior would be in this odd case, but I imagine it should either close the connection or continue to function normally.
+
+The server log output follows. The two received packets marked with *** were sent from a different ip address from the previous client packets. The client is sending random bytes on stream 4, which is why the funny characters appear in the log.
+
+Addendum: it appears that the same thing happens even if the first migration is after handshake completion. A possible cause of this seems to be resetting of the path challenge timer each time the ip address changes (packet.c, line 1358). Thus, if the IP address  changes frequently enough, the path_challenge is never set, and the server remains blocked.
+
+Event files:  anomaly10.iev
+Picoquic log file: anomaly10.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  picoquic, commit: ???????
+Issue:
+
+The specification requires that the server start sending to a new
+address only if a packet with the highest-seen packet number is
+received from that address. Picoquic does not seem to check this, and
+detects a migration even if the new address sends a lower packet
+number than was previously seen.
+
+Incidentally, picoquic can also still send sometimes packets to the
+old address.  Example cases are in anomaly10a.iev and
+anomaly10b.iev. In this case, it seems that previously scheduled or
+queued path challenge frames are sent to the old address. It isn't
+clear that this is a specification violation, since the spec says that
+the server MUST start sending packets to the new address (meaning,
+presumably, it MUST stop sending to the old address) but it doesn't
+say it must start *immediately*. It seems reasonable to assume the
+some previously queued packets can still be sent to the old address.
+
+
+Event files:  anomaly11.iev
+Quant log file: anomaly11.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+After an http parse error, Quant sends an application close frame
+inside an intial packet, which appears not to be allowed in the
+spec. The spec says:
+
+   The payload of an Initial packet includes a CRYPTO frame (or frames)
+   containing a cryptographic handshake message, ACK frames, or both.
+   PADDING and CONNECTION_CLOSE frames are also permitted.  An endpoint
+   that receives an Initial packet containing other frames can either
+   discard the packet as spurious or treat it as a connection error.
+
+This appears to imply the other frames, such as APPLICATION_CLOSE, are
+not allowed in initial packets.
+
+Event files:  [none]
+Quant log file: anomaly12.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This assertion failure occurred while serving multiple HTTP requests
+in the same QUIC packet. The repro is a little complicated, because it
+requires the application (the http server) to be slow.
+
+Here are the requests being served:
+
+    GET /5
+    
+    GET /3
+    
+    GET /index.html
+
+
+An idle timeout appears to occur while the first request is being
+served. The happened because I was stepping through the http parser
+code in the debugger, but in principle I think it could happen because
+the application is slow for any reason. The server continues to parse
+requests, however. The second request causes an attempt to send three
+bytes on the stream, which results in the assertion failure.
+
+Note, line 139 of server.c was modified to cause it not to send the
+FIN bit after every request, but I don't know if this is relevant.
+
+Event files:  anomaly13.iev
+Quant log file: anomaly13.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This server log shows a case where the client stops communicating. The
+connection enters the draining and then closed states after an idle
+timeout, however the server continues to send ACK and PATH_CHALLENGE
+frames. This first occurs at 88.046, and subsequently at increasing
+intervals. To obtain this trace, server.c was modified to use blocking
+read rather than non-blocking, allowing it to continue to serve
+requests. The likely cause seems to be that alarms were not cancelled
+when the connection entered the closed state.
+
+Event files:  anomaly14.iev
+Quant log file: anomaly14.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+This assertion failure occurs while the server is transmitting a
+PATH_CHALLENGE frame and seems to be related to a negative alarm
+value.
+
+The negative alarm values seem to derive from pseudo-code in the
+QUIC-RECOVERY document. This triggered a discussion here, suggesting
+that the pseudo-code should have a test for negative timer values:
+
+    https://github.com/quicwg/base-drafts/issues/2052
+
+
+Event files:  anomaly15.iev
+Quant log file: anomaly15.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+Here is a case where the server sends a non-probing packet to a new
+address, though the packet received from the new address does not have
+the highest packet number received.
+
+In the server log, the source IP addresses are not shown. The packets from
+the new IP address are at the following times:
+
+    2.682
+    2.956
+
+Neither of these packets has a largest packet number. The largest packet
+number at the time is 8, from the packet received at 1.688.
+
+The packet sent by the server to the new address is a handshake packet
+at time 2.682, whish seems to be in response to the first packet from
+the new address.
+
+This behavior violates the following requirement from section 9.3 of
+draft-16:
+
+An endpoint only changes the address that it sends packets to in
+response to the highest-numbered non-probing packet.
+
+Also, the server sends a rapid sequence of packets to the new address,
+which might violate this provision:
+
+An endpoint MAY send data to an unvalidated peer address, but it MUST
+protect against potential attacks as described in Section 9.3.1
+
+Event files:  anomaly16.iev
+Quant log file: anomaly16.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+Quant crashes while printing a log message due to a wrong number of
+arguments for a format string.
+
+
+
+Event files:  anomaly17.iev
+Quant log file: anomaly17.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+An assertion failure. I can't tell what's going wrong here. It seems
+like maybe trying to send data on a stream that doesn't exist?
+
+Event files:  anomaly18.iev
+Quant log file: anomaly18.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+A memory error.
+
+
+Event files:  anomaly19.iev
+Quant log file: anomaly19.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+A use-after-free error. Maybe caused by writing to stream after stream is reset.
+
+Event files:  ???????
+Quant log file: anomaly20.log
+QUIC version: draft 15
+Ivy commit: ???????
+Implementation:
+  quant, commit: ???????
+Issue:
+
+SEGV in diet_remove (quant issue #28)
+
+Event files: anomaly22.iev
+picoquic log file: anomaly22.log
+QUIC version: draft 16
+Implementation:
+    picoquic, commit 89a5117
+
+The log shows a case where a migration occurs from port 5047 to port
+5048. However, instead of sending path challenges to both ports, the
+server sends two path challenges to port 5047 and continues to try to
+validate this path without ever validating the path to the new port,
+eventually timing out and closing the connection.
+
+Also, notice that the server does not seem to recognize the
+PATH_RESPONSE to the first of the two challenges. It seems to indicate
+that the second PATH_CHALLENGE overwrote the first, which was possibly
+intended for the new path.
+
+Event files: anomaly23.iev
+picoquic log file: anomaly23.log
+QUIC version: draft 16
+Implementation:
+    picoquic, commit 89a5117
+
+Possible vulnerability due to corruption of data in a retransmission
+by server. The log is an excerpt of a longer log with many
+connections. The relevant events are:
+
+1) T=1.137155 Client sends HTTP request for /index.html on stream 24, seq=1
+
+2) T=2.456074 Server sends 503 bytes on stream 24, offset 0, seq=13
+
+3) T=3.758303 Server sends 130 bytes on stream 24, offset 503, seq=15.
+The first byte of data at offets 503 is 0x4e.
+
+4) T=4.252034 Server resends 513 bytes on stream 24, offset 0, seq=16.
+Byte 503 is 0x1a which conflicts with the value sent in step 2.
+
+The original text sent in steps 1 and 2 is:
+
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<HTML>
+<HEAD>
+<TITLE>PicoQuic HTTP 0.9 service</TITLE>
+</HEAD><BODY>
+<h1>Simple HTTP 0.9 Responder</h1>
+<p>GET /, and GET index.html returns this text</p>
+<p>Get /doc-NNNNN.html returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN also returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN.txt returns txt document of length NNNNN bytes(decimal)</p>
+<p>Get /NNNNN returns html document of length NNNNN bytes(decimal)</p>
+<p>Any other command will result in an error, and an empty response.</p>
+<h1>Enjoy!</h1>
+</BODY></HTML>
+
+The corrupted text sent in step 3 is:
+
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+<HTML>
+<HEAD>
+<TITLE>PicoQuic HTTP 0.9 service</TITLE>
+</HEAD><BODY>
+<h1>Simple HTTP 0.9 Responder</h1>
+<p>GET /, and GET index.html returns this text</p>
+<p>Get /doc-NNNNN.html returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN also returns html document of length NNNNN bytes(decimal)</p>
+<p>Get /doc-NNNNN.txt returns txt document of length NNNNN bytes(decimal)</p>
+<p>Get /NNNNN returns html document of length NNN^Z^X\200^Cl\357^@^D^@
+
+It seems clear that a buffer has been overwritten. This could be a
+vulnerability, depending on the data that is leaked.
+
+
+Event files: anomaly24.iev
+quant log file: anomaly24.log
+QUIC version: draft 17
+Implementation:
+    quant, commit 4ed3af4
+
+It looks like quant is not opening bidirectional streams on receipt of STOP_SENDING, per the change in draft-17. Here is the relevant language:
+
+An endpoint opens a bidirectional stream when a MAX_STREAM_DATA or STOP_SENDING
+frame is received from the peer for that stream.  Receiving a MAX_STREAM_DATA
+frame for an unopened stream indicates that the remote peer has opened the
+stream and is providing flow control credit.  Receiving a STOP_SENDING frame for
+an unopened stream indicates that the remote peer no longer wishes to receive
+data on this stream.  Either frame might arrive before a STREAM or
+STREAM_DATA_BLOCKED frame if packets are lost or reordered.
+
+I haven't checked whether it opens streams on MAX_STREAM_DATA.
+
+The log show the receipt of STOP_SENDING on stream 4 at 18.579.
+
+symptom: reports protocol error
+adverse: yes
+spec-related: yes
+exploit: no
+
+
+
+
+

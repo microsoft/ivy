@@ -1,0 +1,257 @@
+#lang ivy1.7
+
+# Here, we prove a basic fact about finite sets: is X and Y are disjoint
+# subsets of S, then |X| + |Y| <= |S|. This can be used to show that any two
+# majorities of S have an element in common.
+
+# We set up the problem with two types: the *basis* type (which we can
+# think of as ordinal numbers) and the *index* type (which we can
+# think of as cardinal numbers). The basis type can be any totally ordered
+# set that provides the Peano induction principle  (so, integers, bit vectors
+# integers mod n will work). The index type must be an unbounded sequence.
+#
+# Our sets are subsets of the basis type in the range [0,n-1]. Their
+# cardinalities a members of the index type. Note that we don't
+# actually require that the number n be an element of the basis type.
+# This allows us to count elements of bit vector and modular types.
+
+
+# We definte a module that takes basis and index types, and provides the following
+# interface:
+
+# 1) a type *set* representing subsets of the basis type in the range [0,n-1]
+# 2) a *member* relation
+# 3) a relation *disjoint* beteween sets
+# 4) a function *card* giving the cardinality of a set as an index
+# 5) a function *cnt* gives the cardinality of the set of the set [0,x]
+# 6) a predicate `majority` on sets that is true if the cardinality is > n/2.
+# 6) an action `empty` returning the empty set
+# 7) an action `add` that adds an element to a set
+# 8) an action `is_empty` returning true if a set is empty
+
+# The implementation gives computable definitions of card, cnt and majority.
+# The complexity of card and majority is quadratic in n, which is not optimimal
+# but should be acceptable for small n (say, up to 5). In principal, we could
+# add more efficient actions that compute these functions.
+
+# The main property provided is that any two majorities have an element in common.
+# To prove this, we use a lemma stating that the sum of the cardinaties of two disjoint
+# sets is <= cnt(n-1). This is proved by induction on n. This lemma implies the
+# majority property.
+
+# This all seems straightforward, but it was tricky to figure out how
+# to set up the problem without function cycles. The key was to give
+# ordinals and cardinals distinct types. The functions are stratified
+# in this order: set -> basis -> index.t. In particular, this allows
+# us to state the inductive lemma in a way that does not involve
+# quantified variables under arithmetic operators. 
+
+include collections
+include order
+include deduction
+
+# The parameters of the module are:
+#
+#  - basis: the basis object (instance of unbounded_sequence)
+#  - index: the index object (instance of unbounded_sequence)
+#  - upper: object giving upper bound of the set S in basis
+
+# The structure 'upper' must contain a value `n` of type `basis`
+# that gives the upper bound on ordinals. That is, this defines the
+# set S as the set of ordinals N such that 0 <= N <= n-1. It must also
+# contain a proof that n-1 >= 0. 
+
+# Notice this is set up so that for modular types you can give the
+# modulus for `n`. For example, for bv[4], you can let `n` be 16
+# (thus, n = 0 mod 16). This gives n-1 = 15, so the range is
+# effectively [0..15] which is the complete universe of bv[4].
+
+module indexset(basis,index,upper) = {
+
+    type set 
+    
+    relation member(E:basis,S:set)
+    function card(S:set) : index.t
+    relation majority(S:set)
+
+    action empty returns(s:set)
+    action add(s:set,e:basis) returns (s:set)
+    action is_empty(s:set) returns(r:bool)
+
+    object spec = {
+
+	after empty {
+	    assert ~member(E,s);
+	}
+
+	after add {
+	    assert member(X,s) <-> (member(X,old s) | X = e)
+	}
+
+	after is_empty {
+	    assert r <-> ~ exists X. member(X,s)
+	}
+    }
+    
+    function cnt(E:basis) : index.t
+    relation disjoint(X:set,Y:set)
+
+    
+    isolate disjointness = {
+
+	object impl = {
+	    # The funtion cnt(x) returns the cardinaility of the set of
+	    # ordinals < x. We define it recursively by instantiating the
+	    # recursion scheman fo the basis type.
+
+	    # Note here we use a constant symbol x for the argument. This
+	    # tells IVy that the defintion should only be unfolded for
+	    # ground terms x occurring in the proof goal. Without this, we
+	    # would exit the decidable fragment, due to a quantified
+	    # variable under an arithmetic operator.
+
+	    definition cnt(x:basis) = 1 if x <= 0 else cnt(x-1) + 1
+	    proof
+                apply rec[basis]
+
+	    # We define cardinality in terms of a recursive function
+	    # cardUpTo that counts the number of elements in a set that
+	    # are less than a bound B.
+
+	    function cardUpTo(S:set,B:basis) : index.t
+
+	    # Note again the we deal with recursion by restricting the
+	    # instantion of the definition.
+
+	    definition cardUpTo(s:set,b:basis) =
+		(1 if member(b,s) else 0) if b <= 0
+                else (cardUpTo(s,b-1) + (1 if member(b,s) else 0))
+	    proof
+               apply rec[basis]
+
+	    # The cardinality function is then defined in terms of cardUpTo.
+
+	    definition card(S) = cardUpTo(S,(upper.n) - 1)
+
+	    # A majority is a set whose cardinality is greater than 1/2 of
+	    # the basis set.
+
+	    definition majority(X) = 2 * card(X) > cnt((upper.n) - 1)
+	    
+	    object spec = {
+		# This is the definition of dijoint sets in terms of the member relation.
+		# Notice that there is a quantifier alternation in the direction set -> basis.
+
+		definition {
+                    disjoint(X,Y) = forall E. ~(member(E,X) & member(E,Y))
+                }
+
+                axiom [disax] {
+                    property disjoint(X,Y)
+                    property ~(member(E,X) & member(E,Y))
+                }
+
+		# This is our inductive invariant. It says that, for disjoint
+		# sets, the sum of the cardinailities up to bound B is less
+		# than the total number of elements less than B. We prove it
+		# by induction on B, using the induction schema for
+		# basis. We had to rename the variable X in the property to
+		# avoid a name clash with X in the conclusion of the rule
+		# (which is the inducation parameter). Obviously, IVy should
+		# have done this renaming for us. Also, notice we had to
+		# explicitly say that the induction is over B, since Ivy can't
+		# infer this automatically.
+
+		# Most importantly, notice how arithmetic is used here, We
+		# have a + operation over a quantified variable B. However, B
+		# is of ordinal type, while the + operator is over cardinals.
+		# This means the formulas in our proof context are still
+		# essentially uninterpreted. Without the separate types, IVy
+		# would complain about this property. Question: is it possible
+		# to automatically detect this kind of sorting of theories so
+		# we don't have to explicitly use distinct types?
+
+		property disjoint(X,Y) -> cardUpTo(X,B) + cardUpTo(Y,B) <= cnt(B)
+		proof
+                    apply introImp;
+                    apply ind[basis] with X = B;
+                    apply elimImp with p = ~(member(B,X) & member(B,Y));
+                    apply disax; 
+                    showgoals
+	    }
+
+	}
+	
+	object spec = {
+
+	    # With the above lemma, the desired property is trivial.
+
+#	    property disjoint(X,Y) -> card(X) + card(Y) <= cnt(upper.n)
+
+	    # We can also prove that two majorities have an element in common.
+
+            property majority(X) & majority(Y) -> exists E. (member(E,X) & member(E,Y))
+	}
+	
+	attribute test = impl
+    }
+    with upper,basis.impl,index.impl
+
+    # Note: we need the object `upper` to get the fact that `n` is positive. Also,
+    # we use the *implementations* of the basis and index types. That means both
+    # are interpreted. Fortunately, we don't run afoul of the fragment checker.
+
+    isolate api = {
+	
+	object impl = {
+	    # Here is the implementation of the set type using an unsorted array.
+
+	    instance arridx : unbounded_sequence
+	    instance arr:array(arridx.t,basis)
+
+	    # Tricky: this is a bit of aspect-orientation. It turns the type `set` into a struct
+	    # with just one field called `repr`. This field gives the concrete representation of a
+	    # set as an array. To an isolate that doesn't use the definition of `member` below,
+	    # the tpye `set` will still appear to be uninterpreted.
+
+	    destructor repr(X:set) : arr.t
+
+	    definition member(y:basis,X:set) = exists Z. 0 <= Z & Z < repr(X).end & repr(X).value(Z) = y
+
+	    # These lemmas are needed to prove correctness of is_empty. 
+
+	    property member(Y,X) -> repr(X).end ~= 0
+	    property repr(X).end ~= 0 -> member(repr(X).value(0),X)
+
+	    implement empty {
+		repr(s) := arr.create(0,0)
+	    }
+
+	    implement add {
+		if ~member(e,s) {
+		    repr(s) := arr.resize(repr(s),repr(s).end.next,e)
+		}
+	    }
+
+	    implement is_empty {
+		r := repr(s).end = 0;
+	    }
+	}
+
+	attribute test = impl
+
+    } with spec
+
+    attribute test = impl
+}
+
+
+instance basis : unbounded_sequence
+instance index : unbounded_sequence
+
+object upper = {
+    var n : basis
+    axiom n > 0
+}
+
+instance nset : indexset(basis,index,upper)

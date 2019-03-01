@@ -1,0 +1,42 @@
+#lang ivy1.7
+
+isolate foo = {
+    relation p
+    action act
+
+    specification {
+        explicit invariant [inv1] p
+
+        after init {
+            p := true;
+        }
+
+        implement act {
+            p := true;
+        }
+    }
+}
+
+
+isolate bar = {
+    relation p
+
+    after init {
+        p := true;
+    }
+
+    action act = {
+        p := foo.p;
+    }
+
+    invariant [inv1] p
+    proof {
+        assume foo.inv1
+    }
+
+} with foo
+
+export bar.act
+export foo.act
+
+

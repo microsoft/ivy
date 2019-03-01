@@ -1,0 +1,171 @@
+#lang ivy1.7
+
+# include ip
+include udp
+
+object ip = {
+    type endpoint
+}
+
+type data
+
+type message
+
+action event(msg:message,src:ip.endpoint,dst:ip.endpoint) = {
+    require false
+}
+
+object request = {
+    variant this of message = struct {
+        content : data
+    }
+}
+
+object response = {
+    variant this of message = struct {
+        content : data
+    }
+}
+
+isolate protocol = {
+
+    relation request_sent(X:data,S:ip.endpoint,D:ip.endpoint)
+    relation response_sent(X:data,S:ip.endpoint,D:ip.endpoint)
+
+    after init {
+        request_sent(X,S,D) := false;
+        response_sent(X,S,D) := false;
+    }
+
+
+    action request_event(src:ip.endpoint,dst:ip.endpoint,msg:request)
+    action response_event(src:ip.endpoint,dst:ip.endpoint,msg:response)
+
+    after request_event {
+        request_sent(msg.content,src,dst) := true
+    }
+
+    around response_event {
+        require request_sent(msg.content,dst,src);
+	...
+        response_sent(msg.content,src,dst) := true
+    }
+
+    invariant response_sent(X,S,D) -> request_sent(X,D,S)
+
+}
+
+# var some_requested : bool
+
+# after init {
+#     some_requested := false;
+# }
+
+# after message_event {
+#     if msg isa request {
+#         some_requested := true
+#     } else {
+#         ensure some_requested
+#     }
+# }
+
+# invariant request_sent(X,S,D) -> some_requested
+
+# export message_event
+
+isolate service = {
+
+    isolate net = {
+
+        action recv(dst:ip.endpoint,src:ip.endpoint,v:message)
+        action send(src:ip.endpoint,dst:ip.endpoint,v:message)
+
+
+        specification {
+            relation sent(X:message,S:ip.endpoint,D:ip.endpoint)
+
+            after init {
+	        sent(X,S,D) := false
+	    }
+    
+	    before send {
+	        sent(v,src,dst) := true
+	    }
+	    before recv {
+	        require sent(v,src,dst)
+	    }
+        }
+
+        implementation {
+
+            type pkt = struct {
+                src : ip.endpoint,
+                payload : message
+            }
+
+            instance low : udp_simple(ip.endpoint,pkt)
+
+            implement send {
+                var p : pkt;
+                p.src := src;
+                p.payload := v;
+                call low.send(src,dst,p)
+            }
+
+            implement low.recv(dst:ip.endpoint,v:pkt) {
+                call recv(dst,v.src,v.payload)
+            }
+        }
+
+        private {
+            invariant low.spec.sent(P,D) -> sent(payload(P),src(P),D)
+        }
+    }
+
+    action client_request(self:ip.endpoint,dst:ip.endpoint,content:data)
+    action client_response(self:ip.endpoint,content:data)
+
+    specification {
+        var request_pending(S:ip.endpoint) : bool
+        var request_content(S:ip.endpoint) : data
+
+        before client_request {
+            require ~request_pending(self);
+            request_pending(self) := true;
+            request_content(self) := content;
+        }
+
+        before client_response {
+            require request_pending(self);
+            require content = request_content(self);
+#             request_pending := false;
+        }
+    }
+
+    implementation {
+        implement client_request {
+            var m : request;
+            m.content := content;
+            call net.send(self,dst,m);
+            call protocol.request_event(self,dst,m);
+        }
+        implement net.recv(self:ip.endpoint,src:ip.endpoint,m:message) {
+            if some (req:request) m *> req {
+                var resp : response;
+                resp.content := req.content;
+                call net.send(self,src,resp);
+                call protocol.response_event(self,src,resp)
+            } else if some (resp:response) m *> resp {
+                call client_response(self,resp.content);
+            }
+        }
+    }
+
+    private {
+        invariant net.sent(M,S,D) & M *> (R:request) -> protocol.request_sent(request.content(R),S,D)
+        invariant net.sent(M,S,D) & M *> (R:response) -> protocol.response_sent(response.content(R),S,D)
+        invariant protocol.request_sent(X,S,D) -> request_pending(S) & request_content(S) = X
+    }
+} with protocol   
+
+export service.client_request

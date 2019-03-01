@@ -336,4 +336,7 @@ module iterable = {
     trusted isolate iso = this
     attribute cardinality = size
 
+    # When testing, use the integer implementation.
+
+    attribute test = impl
 }

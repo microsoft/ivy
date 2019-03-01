@@ -1,0 +1,18 @@
+#lang ivy1.7
+
+type t
+
+
+relation r(X:t,Y:t)
+
+definition r(X,Y) = (X = Y)
+theorem [foo] {property exists Y. r(X,Y)}
+
+
+action a(x:t) = {
+    var y : t;
+    assert exists Z. r(y,Z) proof assume foo with X=y
+
+}
+
+export a

@@ -1,0 +1,31 @@
+#lang ivy1.7
+
+
+type t
+
+var q : t
+relation z(T:t)
+
+type s = struct {
+    f1 : bool,
+    f2 : bool
+}
+
+action foo(x:bool, y:s)
+
+function inv(X:bool) : bool
+definition inv(X) = ~X
+
+before foo {
+#    z(q) := ~z(q);
+    var yy := y;
+    require yy.f1 = (inv(y.f2) & z(q));
+}
+
+interpret t -> bv[1]
+
+action foo1(x:bool, y:s) = {
+    call foo(x,y)
+}
+
+export foo1

@@ -1,0 +1,519 @@
+#lang ivy1.7
+
+# This is an implementation of the generic TLS interface based on the picotls library.
+# The parameters are:
+#
+#     cid : the type of connection ids
+#     index : an unbounded sequence type
+#     bytes : a type of byte arrays indexed by `index`
+#     extens : a type of lists of extensions
+#     lower : the lower interface
+#     upper : the upper interface
+#
+
+module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
+
+    # Link the gnutls library
+
+    attribute libspec = "picotls-core,picotls-minicrypto,picotls-openssl,ssl,crypto,dl"
+    
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+    object cid_map = {}     # map from cid's to connections
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    extern "C" {
+    #include "picotls.h"
+    #include "picotls/openssl.h"
+    #include "picotls/minicrypto.h"
+    }
+
+    // TODO: put any forward class definitions here
+
+    class tls_callbacks;
+    class picotls_connection;
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+
+    // This structure holds all the callbacks. These are functions
+    // that are called synchronously.
+
+    struct tls_callbacks {
+        %`lower.send` ls;
+        %`upper.recv` ur;
+        %`upper.alert` ua;
+        %`upper.keys_established` use;
+    tls_callbacks(
+        const %`lower.send` ls,
+        const %`upper.recv` ur,
+        const %`upper.alert` ua,
+        const %`upper.keys_established` use
+    )
+    : ls(ls), ur(ur), ua(ua), use(use) {}
+    };
+
+    /* Per epoch crypto context. There are four such contexts:
+     * 0: Initial context, with encryption based on a version dependent key,
+     * 1: 0-RTT context
+     * 2: Handshake context
+     * 3: Application data
+     */
+    struct quic_crypto_context_t {
+        void* aead_encrypt;
+        void* aead_decrypt;
+        void* pn_enc; /* Used for PN encryption */
+        void* pn_dec; /* Used for PN decryption */
+        quic_crypto_context_t() {
+           aead_encrypt = aead_decrypt = pn_enc = pn_dec = 0;
+        }
+    };
+
+    // Structure to hold state of a tls session
+
+    struct picotls_connection {
+        `cid` id;
+        ptls_t *gs;
+        tls_callbacks cb;
+        ptls_handshake_properties_t *hsp;
+        std::vector<char> input;
+        int handshake_status;
+        std::vector<quic_crypto_context_t> crypto_context;
+        bool is_server;
+
+        picotls_connection(`cid` id, ptls_t *gs, tls_callbacks cb,
+            ptls_handshake_properties_t *hsp, bool is_server)
+            : id(id),gs(gs),cb(cb),hsp(hsp),is_server(is_server) {
+            handshake_status = 0;
+            crypto_context.resize(4);
+        }
+    };
+
+    int tls_collect_extensions_cb(ptls_t* tls, struct st_ptls_handshake_properties_t* properties, uint16_t type)
+    {
+        return type & 0xff00 == 0xff00;
+    }
+
+    int tls_collected_extensions_cb(ptls_t* tls, ptls_handshake_properties_t* properties,
+    ptls_raw_extension_t* slots)
+    {
+        // TODO: do something with incoming extensions
+        return 0;
+    }
+
+    // These are some parameters defined byt the QUIC-TLS standard. They
+    // don't really belong here, but then again, QUIC is currently the only
+    // existing client of this TLS interface.
+
+    #define QUIC_LABEL_QUIC_BASE "tls13 quic "
+    #define QUIC_LABEL_PN "pn"
+    #define QUIC_LABEL_INITIAL_CLIENT "client in"
+    #define QUIC_LABEL_INITIAL_SERVER "server in"
+
+    // The following mess is to get the traffic keys from picotls
+
+    void *aead_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        return ptls_aead_new(cipher->aead, cipher->hash, is_enc, secret, QUIC_LABEL_QUIC_BASE);
+    }
+
+    void *pn_enc_from_secret(ptls_cipher_suite_t * cipher, int is_enc, const void *secret)
+    {
+        uint8_t key[PTLS_MAX_SECRET_SIZE];
+
+        ptls_hkdf_expand_label(cipher->hash, key, 
+                               cipher->aead->ctr_cipher->key_size,
+                               ptls_iovec_init(secret, cipher->hash->digest_size), 
+                               "quic hp",
+                               ptls_iovec_init(NULL, 0),
+                               NULL);
+
+        return ptls_cipher_new(cipher->aead->ctr_cipher, is_enc, key);
+    }
+
+    void quic_set_key_from_secret(ptls_cipher_suite_t * cipher, int is_enc, quic_crypto_context_t * ctx, const void *secret)
+    {
+        if (is_enc) {
+             ctx->aead_encrypt = aead_from_secret(cipher, is_enc, secret);
+             ctx->pn_enc =  pn_enc_from_secret(cipher, is_enc, secret);
+        } else {
+            ctx->aead_decrypt = aead_from_secret(cipher, is_enc, secret);
+            ctx->pn_dec = pn_enc_from_secret(cipher, is_enc, secret);
+        }
+    }
+
+    int quic_update_traffic_key_callback(ptls_update_traffic_key_t * self, ptls_t *tls, int is_enc, size_t epoch, const void *secret)
+    {
+        picotls_connection* cnx = (picotls_connection*)*ptls_get_data_ptr(tls);
+        ptls_cipher_suite_t * cipher = ptls_get_cipher(tls);
+        quic_set_key_from_secret(cipher, is_enc, &cnx->crypto_context[epoch], secret);
+        if (cnx->crypto_context[epoch].aead_encrypt && cnx->crypto_context[epoch].aead_decrypt) {
+            cnx->cb.use(cnx->id,epoch);
+        }
+        return 0;
+    }
+
+    // This additional mess sets the initial traffic keys
+
+
+    void bail(int ret, const char *msg) {
+        if (ret) {
+            std::cerr << msg;
+            exit(1);
+        }
+    }
+
+    void vec_to_ptls_iovec(ptls_iovec_t &res, const `bytes` &vec) {
+        res.base = new uint8_t[vec.size()];
+        std::copy(vec.begin(),vec.end(),res.base);
+        res.len = vec.size();
+    }    
+
+    int setup_initial_traffic_keys(picotls_connection *session,
+                                   const `bytes` &salt_vec,
+                                   const `bytes` &ikm_vec)
+    {
+        int ret = 0;
+        uint8_t master_secret[256]; /* secret_max */
+        ptls_cipher_suite_t cipher = { 0, &ptls_openssl_aes128gcm, &ptls_openssl_sha256 };
+        ptls_iovec_t salt;
+        ptls_iovec_t ikm;
+        ptls_iovec_t prk;
+        uint8_t client_secret[256];
+        uint8_t server_secret[256];
+        uint8_t *secret1, *secret2;
+
+        vec_to_ptls_iovec(salt,salt_vec);
+        vec_to_ptls_iovec(ikm,ikm_vec);
+        ret = ptls_hkdf_extract(cipher.hash, master_secret, salt, ikm);
+        bail(ret,"tls: failed to set up initial master secret\n");
+        prk.base = master_secret;
+        prk.len = cipher.hash->digest_size;
+        ret = ptls_hkdf_expand_label(cipher.hash, client_secret, cipher.hash->digest_size,
+            prk, QUIC_LABEL_INITIAL_CLIENT, ptls_iovec_init(NULL, 0),NULL);
+            // QUIC_LABEL_QUIC_BASE);
+        bail(ret,"tls: failed to set up initial client secret\n");
+        ret = ptls_hkdf_expand_label(cipher.hash, server_secret, cipher.hash->digest_size,
+            prk, QUIC_LABEL_INITIAL_SERVER, ptls_iovec_init(NULL, 0),NULL);
+            // QUIC_LABEL_QUIC_BASE);
+        bail(ret,"tls: failed to set up initial server secret\n");
+        quic_set_key_from_secret(&cipher, session->is_server, &session->crypto_context[0], server_secret);
+        quic_set_key_from_secret(&cipher, !session->is_server, &session->crypto_context[0], client_secret);
+    }
+
+    void encrypt_symm(ptls_cipher_context_t *pn_enc, const `bytes` &clear, const `bytes` &iv, `bytes` &cipher) {
+        std::vector<uint8_t> bytes;
+        bytes.resize(iv.size());
+        std::copy(iv.begin(),iv.end(),bytes.begin());
+        ptls_cipher_init(pn_enc, &bytes[0]);
+        std::vector<uint8_t> input, output;
+        input.resize(clear.size());
+        std::copy(clear.begin(),clear.end(),input.begin());
+        output.resize(clear.size());
+        ptls_cipher_encrypt(pn_enc, &output[0], &input[0], input.size());
+        cipher.resize(output.size());
+        std::copy(output.begin(),output.end(),cipher.begin());
+    }
+
+
+    // Some parameters for picotls as used by picoquic.
+
+    ptls_key_exchange_algorithm_t *picotls_key_exchanges[] = 
+        { &ptls_openssl_secp256r1, &ptls_minicrypto_x25519, NULL };
+
+    ptls_cipher_suite_t *picotls_cipher_suites[] = { 
+        &ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
+        &ptls_minicrypto_chacha20poly1305sha256, NULL };
+
+    // Here we process handshake data on a TLS connection. The in_epoch is a picotls
+    // epoch. For the initial client handshake, input is null.
+
+    int picotls_do_handshake(picotls_connection *s, size_t in_epoch, void *input, size_t inlen ) {
+        size_t epoch_offsets[5] = { 0, 0, 0, 0, 0 };
+        struct st_ptls_buffer_t sendbuf;
+        ptls_buffer_init(&sendbuf, (void *)"", 0);
+        int ret = ptls_handle_message(s->gs, &sendbuf, epoch_offsets, in_epoch, input, inlen, s->hsp);
+        if (ret == PTLS_ERROR_IN_PROGRESS) {
+//            std::cerr << "PICOTLS RETURNED PTLS_ERROR_IN_PROGRESS\n";
+        } else if (ret != 0) {
+            std::cerr << "PICOTLS RETURNED ERROR: " << ret << "\n";
+        }
+
+        // Any generated bytes go to the lower send callback (even in case of error).
+
+        if (sendbuf.off > 0) {
+            `bytes` bytes;
+            bytes.resize(sendbuf.off);
+            std::copy(sendbuf.base,sendbuf.base+sendbuf.off,bytes.begin());
+            s->cb.ls(s->id,bytes);
+        }
+    }
+
+>>>
+
+# Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+# object, we declared it here anti-quoted. The plugs in the actual member name, which may
+# be any array if this is a parameterized instance.
+
+<<< member
+
+    hash_space::hash_map<`cid`,picotls_connection *> `cid_map`; // maps cid's to connections
+    tls_callbacks *`cb`;             // the callbacks to ivy
+
+>>>
+
+
+# Here, we put code to go in the initializer. If this is a
+# parameterized instance, then this code will be run in a loop, so we
+# have to be careful that any initialization of common objects is
+# idempotent.
+
+<<< init
+
+    // Create the callbacks. When you put an
+    // action in anti-quotes it creates a function object (a "thunk")
+    // that captures the instance environment, in this case including
+    // the instance's endpoint id "me".
+
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.keys_established`);
+
+>>>
+
+
+    object impl = {
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    implement create(c:cid, is_server:bool, e:extens) {
+        <<< impure
+            
+	// We create a new picootls session, and add an entry in the cid_map
+	// for it.
+
+        ptls_context_t* ctx;
+        ctx = new ptls_context_t;
+        memset(ctx, 0, sizeof(ptls_context_t));
+        ctx->random_bytes = ptls_openssl_random_bytes;
+        ctx->key_exchanges = picotls_key_exchanges; 
+        ctx->cipher_suites = picotls_cipher_suites; 
+        ctx->send_change_cipher_spec = 0;
+        // ctx->hkdf_label_prefix = QUIC_LABEL_QUIC_BASE;
+        ctx->hkdf_label_prefix__obsolete = NULL;
+        ctx->update_traffic_key = new ptls_update_traffic_key_t;
+        ctx->update_traffic_key->cb = quic_update_traffic_key_callback;
+        ctx->get_time = &ptls_get_time;
+        ctx->ticket_lifetime = 100000; /* 100,000 seconds, a bit more than one day */
+        ctx->require_dhe_on_psk = 1;
+        ctx->max_early_data_size = 0xFFFFFFFF;
+        ctx->omit_end_of_early_data = 1;
+        ptls_handshake_properties_t *handshake_properties = new ptls_handshake_properties_t; 
+        memset(handshake_properties, 0, sizeof(ptls_handshake_properties_t));
+        handshake_properties->collect_extension = tls_collect_extensions_cb;
+        handshake_properties->collected_extensions = tls_collected_extensions_cb;
+        
+        ptls_iovec_t *alpn_vec = new(ptls_iovec_t);  // TODO: will leak this
+        alpn_vec->base = (uint8_t*)"hq-17";
+        alpn_vec->len = strlen((char *)(alpn_vec->base));
+        handshake_properties->client.negotiated_protocols.count = 1;
+        handshake_properties->client.negotiated_protocols.list = alpn_vec;
+
+        // add the extensions
+
+        ptls_raw_extension_t *ptls_exts = new ptls_raw_extension_t[e.size()+1];
+        for (unsigned i = 0; i < e.size(); i++) {
+            `exten_ser` ser;
+            __ser(ser,e[i]);
+            unsigned etype = (((unsigned char)(ser.res[0])) << 8) + ((unsigned char)(ser.res[1]));
+            unsigned len = (((unsigned char)(ser.res[2])) << 8) + ((unsigned char)(ser.res[3]));
+            unsigned char *data = new unsigned char[ser.res.size()-4];
+            std::copy(ser.res.begin()+4,ser.res.end(),data);
+            ptls_exts[i].type = etype;
+            ptls_exts[i].data.base = data;
+            ptls_exts[i].data.len = len;
+            // int eres = gnutls_session_ext_register (session, "ext_name", etype,
+            //   GNUTLS_EXT_APPLICATION, gnutls_ext_supp_recv_params,
+            //   gnutls_ext_supp_send_params, 0,0,0,0);
+            // if (eres != GNUTLS_E_SUCCESS) {
+            //     std::cerr << "gnutls_session_ext_register\n";
+            //     exit(1);
+            // }
+        }
+        ptls_exts[e.size()].type = 0xffff;
+        ptls_exts[e.size()].data.base = NULL;
+        ptls_exts[e.size()].data.len = 0;
+        handshake_properties->additional_extensions = ptls_exts;
+        
+        ptls_t *session;
+        session = ptls_new(ctx,is_server ? 1 : 0);
+        picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties,is_server);
+        *ptls_get_data_ptr(session) = s;        
+
+	`cid_map`[c] = s;
+	
+        // Start the handshake. The in_epoch is zero for "initial".
+
+        picotls_do_handshake(s,0,0,0);
+        >>>
+    }
+
+
+    # Destroy frees a cid
+    
+    implement destroy(c:cid) {
+	<<< impure
+
+	// TODO: actually delete everything here
+	`cid_map`.erase(c);
+
+	>>>
+
+    }
+
+    # Set the initial key material.
+
+    implement set_initial_keys(c:cid,salt:bytes,ikm:bytes) {
+        <<< impure
+        
+	picotls_connection *s = `cid_map`[c];
+        setup_initial_traffic_keys(s,salt,ikm);
+        
+        >>>
+    }
+
+    # Get the cipher initial value size
+
+    implement iv_size(c:cid,l:level) returns (sz:index) {
+        <<< impure
+        
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        if (!pn_enc)
+            pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        if (!pn_enc) {
+            std::cerr << "cipher for level " << l << " is not set\n";
+            sz = 0;
+        }
+        else sz = pn_enc->algo->iv_size;
+
+        >>>
+    }
+
+    implement encrypt_cipher(c:cid,l:level,clear:bytes,iv:bytes,recv:bool) returns (cipher:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc;
+        if (recv) pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        else pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_enc);
+        encrypt_symm(pn_enc,clear,iv,cipher);
+
+        >>>
+    }
+
+    implement decrypt_cipher(c:cid,l:level,cipher:bytes,iv:bytes) returns (clear:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_cipher_context_t *pn_enc = (ptls_cipher_context_t *)(s->crypto_context[l].pn_dec);
+        encrypt_symm(pn_enc,cipher,iv,clear);
+
+        >>>
+    }
+
+    implement encrypt_aead(c:cid,l:level,clear:bytes,seq:seq_num,ad:bytes) returns (cipher:bytes) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_aead_context_t *aead = (ptls_aead_context_t *)(s->crypto_context[l].aead_encrypt);
+        uint32_t checksum_length = aead->algo->tag_size;
+        std::vector<uint8_t> bytes;
+        bytes.resize(ad.size());
+        std::copy(ad.begin(),ad.end(),bytes.begin());
+        std::vector<uint8_t> input, output;
+        input.resize(clear.size());
+        std::copy(clear.begin(),clear.end(),input.begin());
+        output.resize(clear.size() + checksum_length);
+        size_t encrypted = ptls_aead_encrypt(aead,
+          &output[0], &input[0], input.size(), seq,
+          &bytes[0], bytes.size());
+        cipher.resize(output.size());
+        std::copy(output.begin(),output.end(),cipher.begin());
+        
+        >>>
+    }
+
+    implement decrypt_aead(c:cid,l:level,cipher:bytes,seq:seq_num,ad:bytes)
+    returns (res:decrypt_result) {
+        <<< impure
+
+	picotls_connection *s = `cid_map`[c];
+        ptls_aead_context_t *aead = (ptls_aead_context_t *)(s->crypto_context[l].aead_decrypt);
+        uint32_t checksum_length = aead->algo->tag_size;
+        std::vector<uint8_t> bytes;
+        bytes.resize(ad.size());
+        std::copy(ad.begin(),ad.end(),bytes.begin());
+        std::vector<uint8_t> input, output;
+        input.resize(cipher.size());
+        std::copy(cipher.begin(),cipher.end(),input.begin());
+        output.resize(cipher.size() - checksum_length);
+        size_t decrypted = ptls_aead_decrypt(aead,
+          &output[0], &input[0], input.size(), seq,
+          &bytes[0], bytes.size());
+        res.ok = decrypted < input.size();
+        if (res.ok) {
+            res.data.resize(output.size());
+            std::copy(output.begin(),output.end(),res.data.begin());
+        }
+        >>>
+    }
+
+
+    # upper.send is called with application data to be transmitted to the peer.
+
+    implement upper.send(c:cid,data:bytes) {
+        <<< impure
+        // TODO: implement this
+        >>>
+    }
+
+    # lower.recv is called with data received from the peer on the lower interface.
+
+    implement lower.recv(c:cid,data:bytes) {
+        <<< impure
+	picotls_connection *s = `cid_map`[c];
+        std::vector<char> &input = s->input;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    input.push_back(data[i]);
+	}
+        // TODO: make the epoch a parameter of this call
+        // For now, we assume that the epochs come in order
+        size_t in_epoch = ptls_get_read_epoch(s->gs);
+        picotls_do_handshake(s,in_epoch,&(s->input[0]),s->input.size());
+        s->input.clear();
+        >>>
+    }
+
+    
+    trusted isolate iso = this
+
+    attribute test = impl
+}
+}

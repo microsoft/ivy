@@ -1367,13 +1367,13 @@ instantiator = None
 
 def definition_instances(fmla):
     if instantiator != None:
-        gts = ground_apps_ast(fmla)
+        gts = apps_ast(fmla)
         return instantiator(gts)
     return Clauses([])
 
 def unfold_definitions_clauses(clauses):
     if instantiator != None:
-        gts = ground_apps_clauses(clauses)
+        gts = apps_clauses(clauses)
         insts = instantiator(gts)
         if insts.fmlas:
             clauses = and_clauses(clauses,insts)
@@ -1387,7 +1387,7 @@ def dual_clauses(clauses, skolemizer=None):
     clauses = substitute_clauses(clauses,sksubs)
     fmla = negate(clauses_to_formula(clauses))
     if instantiator != None:
-        gts = ground_apps_clauses(clauses)
+        gts = apps_clauses(clauses)
         insts = instantiator(gts)
         fmla = And(fmla,clauses_to_formula(insts))
     return formula_to_clauses(fmla)
@@ -1399,7 +1399,7 @@ def dual_formula(fmla, skolemizer=None):
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     fmla = negate(substitute_ast(fmla,sksubs))
     if instantiator != None:
-        gts = ground_apps_ast(fmla)
+        gts = apps_ast(fmla)
         insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
     return fmla
@@ -1414,7 +1414,7 @@ def skolemize_formula(fmla, skolemizer=None):
     sksubs = dict((v.rep,skolemizer(v)) for v in vs)
     fmla = substitute_ast(fmla,sksubs)
     if instantiator != None:
-        gts = ground_apps_ast(fmla)
+        gts = apps_ast(fmla)
         insts = clauses_to_formula(instantiator(gts))
         fmla = And(fmla,insts)
     return fmla

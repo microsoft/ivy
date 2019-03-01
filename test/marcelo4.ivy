@@ -1,0 +1,17 @@
+#lang ivy1.7
+
+type key
+type value
+
+object noparam = {
+    action caller(n:key) = {
+              var q := parametrized.implicit_value(n);
+    }
+    export caller
+}
+
+
+isolate parametrized(n:key) = {
+    individual implicit_value: value
+} with noparam(n)
+

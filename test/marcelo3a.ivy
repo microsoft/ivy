@@ -1,0 +1,34 @@
+#lang ivy1.7
+
+type node
+isolate nset = {
+    type this
+    relation member(N:node, S:this)
+    individual emptyset : nset
+    invariant ~member(N, emptyset)
+    implementation {
+
+        relation _member(N:node, S:this)
+        definition member(N, S) = _member(N, S)
+        after init {
+            _member(N, emptyset) := false;
+        }
+    }
+
+    specification {
+        after init {
+           ensure ~member(N, emptyset)
+        }
+    }
+}
+with node
+
+object localstate = {
+    individual my_voters : nset
+    invariant ~nset.member(VOTER, my_voters) 
+    after init {
+        my_voters := nset.emptyset;
+    }
+} #localstate
+
+isolate ilocalstate = localstate with nset, node

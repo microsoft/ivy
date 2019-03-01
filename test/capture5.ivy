@@ -1,0 +1,22 @@
+#lang ivy1.7
+
+type t
+relation p(X:t)
+
+axiom [foo] {
+    individual x:t
+    individual y:t
+    property p(x)
+    property p(y)
+}
+
+theorem [bar] {
+    individual x:t
+    individual y:t
+    property p(y)
+    property p(x)
+}
+proof
+    apply foo with y = x, x = y;
+    showgoals
+

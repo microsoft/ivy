@@ -1,0 +1,13 @@
+#lang ivy1.7
+
+module mod = {
+    object obj = {
+        type foo
+    }
+}
+
+instantiate mod
+
+object obj = { ...
+   var x : foo
+}

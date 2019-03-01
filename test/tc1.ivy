@@ -1,0 +1,209 @@
+#lang ivy1.7
+
+# This is an example of an ADT for doing proofs about directed trees
+# using the transitive closure encoding. It isn't really complete, but
+# gives some idea how we can use manual instantiations in cases where
+# we have to go outside the deciable theory. In this case, we need
+# some manual proof effort because the definition of transitive
+# closure is not expressible in first-order logic. We also wind up
+# with one funciton cycle to deal with. Remarkably, only two
+# manual proofs are needed and they are ony one line each.
+
+module tree_tc(t) = {
+
+    # This module provides a simple interface for manipulating
+    # directed trees. It has methods for adding an edge, testing
+    # the successor relation, and determining whcih one node reaches
+    # anopther (in other words the decendant relation). 
+
+    action add(x:t,y:t)
+    action succ(x:t,y:t) returns (r:bool)
+    action reaches(x:t,y:t) returns (r:bool)
+
+    specification {
+
+        # The specification is written entirely in terms of `tc`,
+        # which tracks the transitive closure of the successor
+        # relation. 
+
+	relation tc(X:t,Y:t)
+
+        # Since initially, the tree is empty, initially tc is empty.
+
+	after init {
+	    tc(X,Y) := false
+	}
+
+	# We require that adding an edge preserve the shape as an
+	# oriented tree.  The transitive closure is updated so that x
+	# and everything that previously reached x now reaches y and
+	# everything y previously reached. This is the usualy encoding
+	# of the tree add operations using transitive closure.
+
+	around add {
+	    require x ~= y;                # no trivial cycles added
+	    require ~tc(y,x);              # no non-trivial cycles added
+	    require ~(tc(Z,x) & tc(Z,y));  # no reconvergence added
+	    require ~(tc(x,Z) & tc(Z,y));  # no reconvergence added
+	    ...
+	    tc(X,Y) := tc(X,Y) | (X = x | tc(X,x)) & (Y = y | tc(y,Y))
+	}
+
+        # The successor relation has to be computed indirectly using
+        # from tc. That is, y is a successor of x if x reaches y and
+        # there is nothing else between x and y (that is, the
+        # successor relation is the set of non-composite edges of tc).
+        # We write the two direction of the iff separately, since one
+        # direction requires additional proof. That is, we need to
+        # know that every edge in tc is either a tree edge, or a
+        # composition of two other edges. This is the 'pre fixed
+        # point' property of transitive closure, which you can see
+        # below.  Since it has a function cycle, we have to manually
+        # instantiate it here. 
+
+	after succ {
+	    ensure r -> (tc(x,y) & ~(tc(x,Z) & tc(Z,y)));
+	    ensure (tc(x,y) & ~exists Z. tc(x,Z) & tc(Z,y)) -> r
+            proof {
+                assume pre_fp with X=x,Y=y
+            }
+	}
+
+        # In this encoding, computing the `reaches` relation is
+        # trivial.
+
+	after reaches {
+	    ensure r = tc(x,y)
+	}
+
+	# These invariants state that tc is the transitive closure of
+	# a tree.  Treeness means there are no cycles, and the
+	# ancestors of every node are totally ordered.
+
+	invariant ~tc(X,X)
+	invariant tc(X,Y) & tc(Z,Y) -> (X = Z | tc(X,Z) | tc(Z,X))
+
+    }
+
+    implementation {
+
+        # The implementation uses the actual tree relation, of which
+        # `tc` above is the transitive closure.
+
+	relation tree(X:t,Y:t)
+
+        # We want to define a relation ttc as the true transitive
+        # closure of 'tree'. A nice way to do this is as a least fixed
+        # point, essentially a Horn definition. Such a definition might
+        # look like this if we had such a syntax:
+        #
+	# lfp ttc(X,Y) = tree(X,Y) | exists Z. (ttc(X,Z) & ttc(Z,Y))
+        #
+        # However, since Horn definitions aren't implemented yet,
+        # we'll just write here the axioms that the Horn definition
+        # would generate.
+        #
+        # We declare a relation ttc.
+        
+	relation ttc(X:t,Y:t)
+
+	# This axiom says that ttc is a post fixed point
+        
+	axiom (tree(X,Y) | ttc(X,Z) & ttc(Z,Y)) -> ttc(X,Y) 
+
+        # This schema says that ttc is a pre fixed point. It is a
+        # schema because of the forbidden quantifier alternation.
+        # Essentialy, for any arc in `ttc`, this lets us split cases
+        # on whether it is tree edge or a composite edge.
+
+        schema pre_fp = {
+            property ttc(X,Y) -> (tree(X,Y) | exists Z. (ttc(X,Z) & ttc(Z,Y)))
+        }
+        
+	# This schema says that ttc is the *least* fixed point. That
+        # is for any fixed point r, ttc is stronger than r. We have to
+        # state this is a schema and instantiate it manually because
+        # it isn't first order.
+
+	schema lep = {
+	    relation r(X:t,Y:t)
+	    property forall X,Y. ((tree(X,Y) | exists Z. (r(X,Z) & r(Z,Y))) -> r(X,Y))
+	    property ttc(X,Y) -> r(X,Y)
+	}
+	    
+        # With `ttc` defined in terms of `tree`, we can now define our
+        # interface implementations. Notice that `reaches` here uses
+        # `ttc`, which is not computable. For a real implementation,
+        # we would need to use, say, DFS.
+
+	after init {
+	    tree(X,Y) := false;
+	}
+
+	implement add {
+	    tree(x,y) := true;
+	}
+
+	implement succ {
+	    r := tree(x,y);
+	}
+
+	implement reaches {
+	    r := ttc(x,y);
+	}
+
+    }
+
+    # The representation invariant is that the abstract `tc` is equal
+    # to the true transitive closure of `tree`, and that `tree` is the
+    # set of non-composite edges in tc.
+
+    private {
+
+        # We state the two directions of equivalence as separate invariants,
+        # since the proofs are different.
+        
+        # The tc -> ttc direction only needs the fact that tc is a
+        # post fixed point. Because this has no quantifier
+        # alternation, Z3 can get the proof without any help.
+        
+	invariant [fwd] tc(X,Y) -> ttc(X,Y)
+
+        # For ttc -> tc, we need the fact the ttc is the *least* fixed
+        # point.  Notice that this invariant is an instance of the lep
+        # schema. All we need to say is 'apply lep'. Ivy will infer
+        # the match r(X,Y) = tc(X,Y).  This leaves the proof goal that
+        # tc is a post fixed point, which Z3 can prove. Have a look at
+        # the output to see the proof goal Ivy generates.
+        
+	invariant [rev] ttc(X,Y) -> tc(X,Y)
+	proof {
+            apply lep;  showgoals
+        }
+
+        # There is actually a subtle issue in the above proof. That
+        # is, we have to show that `rev` is established initially and
+        # is preserved by every exported action. We might want a
+        # separate proof in every case, but here the same argument
+        # works for all cases. Right now there is not a machanism to
+        # provide a different proof in every case.
+
+        # With the above invariant, Z3 can prove that 'tree' is the
+        # set of non-composite edges of tc. It suffices to show that
+        # no tree edge is a composite edge in `tc`. The other
+        # direction is a consequence the fact that `tc` is a post
+        # fixed point, so we need not prove it as an invariant.
+
+        invariant ~(tree(X,Y) & tc(X,Z) & tc(Z,Y))
+
+    }
+    
+    isolate iso = this
+
+}
+
+type t
+instance tr : tree_tc(t)
+export tr.add
+export tr.succ
+export tr.reaches

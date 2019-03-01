@@ -1,7 +1,7 @@
 #
 # Copyright (c) Microsoft Corporation. All Rights Reserved.
 #
-from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula
+from ivy_logic import Variable,Constant,Atom,Literal,App,sig,Iff,And,Or,Not,Implies,EnumeratedSort,Ite,Definition, is_atom, equals, Equals, Symbol,ast_match_lists, is_in_logic, Exists, RelationSort, is_boolean, is_app, is_eq, pto, close_formula,symbol_is_polymorphic,is_interpreted_symbol 
 
 from ivy_logic_utils import to_clauses, formula_to_clauses, substitute_constants_clause,\
     substitute_clause, substitute_ast, used_symbols_clauses, used_symbols_ast, rename_clauses, subst_both_clauses,\
@@ -197,6 +197,12 @@ class Action(AST):
         if to_hide:
              update = hide(to_hide,update)
         return update
+    def copy_formals(self,res):
+        if hasattr(self,'formal_params'):
+            res.formal_params = self.formal_params
+        if hasattr(self,'formal_returns'):
+            res.formal_returns = self.formal_returns
+        return res
     def assert_to_assume(self,kinds):
         args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
@@ -240,6 +246,11 @@ class Action(AST):
             if isinstance(a,Action):
                 for c in a.iter_subactions():
                     yield c
+    def iter_internal_defines(self):
+        for a in self.args:
+            if isinstance(a,Action):
+                for c in a.iter_internal_defines():
+                    yield c
     def decompose(self,pre,post,fail=False):
         return [(pre,[self],post)]
     def modifies(self):
@@ -262,7 +273,7 @@ class AssumeAction(Action):
 
 class AssertAction(Action):
     def __init__(self,*args):
-        assert len(args) == 1
+        assert len(args) <= 2
         self.args = args
     sort_infer_root = True
     def name(self):
@@ -279,7 +290,8 @@ class AssertAction(Action):
         cl = Clauses(cl.fmlas,cl.defs,EmptyAnnotation())
         return ([],true_clauses(annot = EmptyAnnotation()),cl)
     def assert_to_assume(self,kinds):
-        if type(self) not in kinds:
+        mykind = self.kind if hasattr(self,'kind') else type(self)
+        if mykind not in kinds:
             return Action.assert_to_assume(self,kinds)
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
@@ -299,6 +311,13 @@ class EnsuresAction(AssertAction):
 
 class RequiresAction(AssertAction):
     pass
+
+class SubgoalAction(AssertAction):
+    def clone(self,args):
+        res = AssertAction.clone(self,args)
+        if hasattr(self,'kind'):
+            res.kind = self.kind
+        return res
 
 def equiv_ast(ast1,ast2):
     if is_individual_ast(ast1): # ast2 had better be the same!
@@ -661,6 +680,8 @@ class Sequence(Action):
             thing = op.int_update(domain,pvars);
 #            print "op: {}, thing[2].annot: {}".format(op,thing[2].annot)
             update = compose_updates(update,axioms,thing)
+            if hasattr(op,'lineno') and update[1].annot is not None:
+                update[1].annot.lineno = op.lineno
         return update
     def __call__(self,interpreter):
         for op in self.args:
@@ -789,7 +810,18 @@ class IfAction(Action):
             res =  ite_action(self.args[0],upds[0],upds[1],domain.relations)
             return res
         if_part,else_part = (a.int_update(domain,pvars) for a in self.subactions())
-        return join_action(if_part,else_part,domain.relations)
+
+        res = join_action(if_part,else_part,domain.relations)
+        # Hack: the ite annotation comes out reversed. Fix it.
+        for i in range(1,3):
+            x = res[i].annot
+            if isinstance(x,IteAnnotation):
+                res[i].annot = IteAnnotation(Not(x.cond),x.elseb,x.thenb)
+
+        # tricky: "else" branch is first in the join because the annotation
+        # for join is of the form "if v then second arg else firs arg"
+        #res = join_action(else_part,if_part,domain.relations)
+        return res
     def decompose(self,pre,post,fail=False):
         return [(pre,[a],post) for a in self.subactions()]
     def get_cond(self):
@@ -890,6 +922,9 @@ class WhileAction(Action):
         cardsort = card(idx_sort)
         if cardsort is None:
             raise IvyError(self,'cannot determine an iteration bound for loop over {}'.format(idx_sort))
+        if cardsort > 100:
+            assert False
+            raise IvyError(self,'cowardly refusing to unroll loop over {} {} times'.format(idx_sort,cardsort))
         res = AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
             res = IfAction(self.args[0],Sequence(body or self.args[1],res))
@@ -940,6 +975,60 @@ class LetAction(Action):
         res = subst_action(update,subst)
 #        print "let res: {}".format(res)
         return res
+
+# Havoc all of the non-specification mutable symbols
+
+class CrashAction(Action):
+    def name(self):
+        return 'crash'
+    def __str__(self):
+        return 'crash {}'.format(self.args[0])
+    def modifies(self,domain=None):
+        if domain is None:
+            domain = ivy_module.module
+        lhs = self.args[0]
+        n = lhs.rep
+        dfnd = [ldf.formula.defines().name for ldf in domain.definitions]
+        def recur(n,res):
+            if n in domain.hierarchy:
+                for child in domain.hierarchy[n]:
+                    cname = iu.compose_names(n,child)
+                    if child != "spec" and iu.compose_names(cname,"spec") not in domain.attributes:
+                        recur(cname,res)
+            else:
+                if n in domain.sig.symbols and n not in dfnd:
+                    for sym in domain.sig.all_symbols_named(n):
+                        if not symbol_is_polymorphic(sym) and not is_interpreted_symbol(sym):
+                            res.append(sym)
+        syms = []
+        recur(n,syms)
+        return syms
+    def action_update(self,domain,pvars):
+
+        syms = self.modifies(domain)
+        havocs = []
+        for sym in syms:
+            if len(sym.sort.dom) < len(self.args[0].args) or not all(a.sort == s for a,s in zip(self.args[0].args,sym.sort.dom)):
+                raise iu.IvyError(self,'action "{}" cannot be applied to {} because of argument mismatch'.format(self,sym))
+            args = self.args[0].args + [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(sym.sort.dom[len(self.args[0].args):])]
+            havocs.append(HavocAction(sym(*args)))
+
+        seq = Sequence(*havocs)
+        return seq.int_update(domain,pvars)
+            
+# Assign a thunk to a local variable. This action doesn't need an update method because it
+# is desugared. 
+
+class ThunkAction(Action):
+    def name(self):
+        return 'thunk'
+    def __str__(self):
+        return ('thunk [' + str(self.args[0]) + '] ' + str(self.args[1]) + ' : ' + str(self.args[2]) + ' := ' + str(self.args[3]) + 
+                (' ; ' + str(self.args[4]) if len(self.args) > 4 else ''))
+    def iter_internal_defines(self):
+        lineno = self.lineno if hasattr(self,'lineno') else None
+        yield (self.args[0].rep,lineno)
+        yield (iu.compose_names(self.args[0].rep,'run'),lineno)
 
 class NativeAction(Action):
     """ Quote native code in an action """
@@ -1038,7 +1127,11 @@ class CallAction(Action):
         return res
     def prefix_calls(self,pref):
         res = CallAction(*([self.args[0].prefix(pref)] + self.args[1:]))
-        res.lineno = self.lineno
+        if hasattr(self,'lineno'):
+            res.lineno = self.lineno
+        else: 
+            pass
+#            print 'no lineno in prefix_calls: {}'.format(self)
         if hasattr(self,'formal_params'):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
@@ -1109,7 +1202,12 @@ def concat_actions(*actions):
     return Sequence(*(a for al in als for a in al))
 
 def apply_mixin(decl,action1,action2):
+    if not hasattr(action1,'lineno'):
+        print action1
+        print type(action1)
     assert hasattr(action1,'lineno')
+    if not hasattr(action2,'lineno'):
+        print action2
     assert  hasattr(action2,'lineno')
     name1,name2 = (a.relname for a in decl.args)
     if len(action1.formal_params) != len(action2.formal_params):
@@ -1216,7 +1314,7 @@ class ComposeAnnotation(Annotation):
     def __init__(self,*args):
         self.args = args
     def __str__(self):
-        return 'Compose(' + ','.join(str(a) for a in self.args) + ')'
+        return (str(self.lineno) if hasattr(self,'lineno') else '') + 'Compose(' + ','.join(str(a) for a in self.args) + ')'
 
 class RenameAnnotation(Annotation):
     def __init__(self,arg,map):
@@ -1256,85 +1354,100 @@ def unite_annot(annot):
     res.append((annot.cond,annot.thenb))
     return res
 
+class AnnotationError(Exception):
+    pass
 
 def match_annotation(action,annot,handler):
     def recur(action,annot,env,pos=None):
-        if isinstance(annot,RenameAnnotation):
-            save = dict()
-            for x,y in annot.map.iteritems():
-                if x in env:
-                    save[x] = env[x]
-                env[x] = env.get(y,y)
-            recur(action,annot.arg,env,pos)
-            env.update(save)
-            return
-        if isinstance(action,Sequence):
-            if pos is None:
-                pos = len(action.args)
-            if pos == 0:
-                assert isinstance(annot,EmptyAnnotation),annot
+
+        def show_me():
+            print 'lineno: {} annot: {} pos: {}'.format(action.lineno if hasattr(action,'lineno') else None,annot,pos)
+
+        try:
+            if isinstance(annot,RenameAnnotation):
+                save = dict()
+                for x,y in annot.map.iteritems():
+                    if x in env:
+                        save[x] = env[x]
+                    env[x] = env.get(y,y)
+                recur(action,annot.arg,env,pos)
+                env.update(save)
                 return
-            if isinstance(annot,IteAnnotation):
-                # This means a failure may occur here
+            if isinstance(action,Sequence):
+                if pos is None:
+                    pos = len(action.args)
+                if pos == 0:
+                    if not isinstance(annot,EmptyAnnotation):
+                        raise AnnotationError()
+                    return
+                if isinstance(annot,IteAnnotation):
+                    # This means a failure may occur here
+                    rncond = env.get(annot.cond,annot.cond)
+                    cond = handler.eval(rncond)
+                    if cond:
+                        annot = annot.thenb
+                    else:
+                        recur(action,annot.elseb,env,pos=pos-1)
+                        return
+                if not isinstance(annot,ComposeAnnotation):
+                        raise AnnotationError()
+                recur(action,annot.args[0],env,pos-1)
+                recur(action.args[pos-1],annot.args[1],env)
+                return
+            if isinstance(action,IfAction):
+                assert isinstance(annot,IteAnnotation),annot
+                is_some = isinstance(action.args[0],ivy_ast.Some)
                 rncond = env.get(annot.cond,annot.cond)
-                cond = handler.eval(rncond)
+                try:
+                    cond = handler.eval(rncond)
+                except KeyError:
+                    print '{}skipping conditional'.format(action.lineno)
+                    iu.dbg('str_map(env)')
+                    iu.dbg('env.get(annot.cond,annot.cond)')
+                    return
                 if cond:
-                    annot = annot.thenb
+                    code = action.args[1]
+                    if is_some:
+                        code = Sequence(AssumeAction(And()),code)
+                    recur(code,annot.thenb,env)
                 else:
-                    recur(action,annot.elseb,env,pos=pos-1)
-                    return
-            if not isinstance(annot,ComposeAnnotation):
-                    iu.dbg('len(action.args)')
-                    iu.dbg('pos')
-                    iu.dbg('annot')
-            assert isinstance(annot,ComposeAnnotation)
-            recur(action,annot.args[0],env,pos-1)
-            recur(action.args[pos-1],annot.args[1],env)
-            return
-        if isinstance(action,IfAction):
-            assert isinstance(annot,IteAnnotation),annot
-            rncond = env.get(annot.cond,annot.cond)
-            try:
-                cond = handler.eval(rncond)
-            except KeyError:
-                print '{}skipping conditional'.format(action.lineno)
-                iu.dbg('str_map(env)')
-                iu.dbg('env.get(annot.cond,annot.cond)')
+                    if len(action.args) > 2:
+                        code = action.args[2]
+                        if is_some:
+                            code = Sequence(AssumeAction(And()),code)
+                        recur(code,annot.elseb,env)
                 return
-            if cond:
-                recur(action.args[1],annot.thenb,env)
-            else:
-                if len(action.args) > 2:
-                    recur(action.args[2],annot.elseb,env)
-            return
-        if isinstance(action,ChoiceAction):
-            assert isinstance(annot,IteAnnotation)
-            annots = unite_annot(annot)
-            assert len(annots) == len(action.args)
-            for act,(cond,ann) in reversed(zip(action.args,annots)):
-                if handler.eval(cond):
-                    recur(act,ann,env)
-                    return
-            assert False,'problem in match_annotation'
-        if isinstance(action,CallAction):
+            if isinstance(action,ChoiceAction):
+                assert isinstance(annot,IteAnnotation)
+                annots = unite_annot(annot)
+                assert len(annots) == len(action.args)
+                for act,(cond,ann) in reversed(zip(action.args,annots)):
+                    if handler.eval(cond):
+                        recur(act,ann,env)
+                        return
+                assert False,'problem in match_annotation'
+            if isinstance(action,CallAction):
+                handler.handle(action,env)
+                callee = ivy_module.module.actions[action.args[0].rep]
+                seq = Sequence(*([Sequence() for x in callee.formal_params]
+                                 + [callee] 
+                                 + [Sequence() for x in callee.formal_returns]))
+                recur(seq,annot,env)
+                return
+            if isinstance(action,LocalAction):
+                recur(action.args[-1],annot,env)
+                return
+            if isinstance(action,WhileAction):
+                recur(action.expand(ivy_module.module,[]),annot,env)
+                return
+            if hasattr(action,'failed_action'):
+    #            iu.dbg('annot')
+    #            iu.dbg('action.failed_action()')
+                recur(action.failed_action(),annot,env)
+                return
             handler.handle(action,env)
-            callee = ivy_module.module.actions[action.args[0].rep]
-            seq = Sequence(*([Sequence() for x in callee.formal_params]
-                             + [callee] 
-                             + [Sequence() for x in callee.formal_returns]))
-            recur(seq,annot,env)
-            return
-        if isinstance(action,LocalAction):
-            recur(action.args[-1],annot,env)
-            return
-        if isinstance(action,WhileAction):
-            recur(action.expand(ivy_module.module,[]),annot,env)
-            return
-        if hasattr(action,'failed_action'):
-#            iu.dbg('annot')
-#            iu.dbg('action.failed_action()')
-            recur(action.failed_action(),annot,env)
-            return
-        handler.handle(action,env)
+        except AnnotationError:
+            show_me()
+            raise AnnotationError()
     recur(action,annot,dict())
     

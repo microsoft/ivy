@@ -668,7 +668,7 @@ def exclusivity(sort,variants):
     def pto(s):
         return Symbol('*>',RelationSort([sort,s]))
     excs = [partial_function(pto(s)) for s in variants]
-    for s in enumerate(variants):
+    for s in variants:
         x,y,z = [Variable(n,s) for n,s in [('X',sort),('Y',sort),('Z',s)]]
         excs.append(Implies(And(pto(s)(x,z),pto(s)(y,z)),Equals(x,y)))
     for i1,s1 in enumerate(variants):
@@ -907,6 +907,14 @@ class Sig(object):
             return self.contains_symbol(sort_or_symbol)
         return self.sorts.get(sort_or_symbol.name,None) == sort_or_symbol
 
+    def all_symbols_named(self,name):
+        if name not in self.symbols:
+            return []
+        sort = self.symbols[name].sort
+        if isinstance(sort,UnionSort):
+            return [Symbol(name,s) for s in sort.sorts]
+        return [Symbol(name,sort)]
+
     def __str__(self):
         return sig_to_str(self)
 
@@ -1014,7 +1022,18 @@ polymorphic_symbols_list = [
     ('l2s_a', [alpha, lg.Boolean]),
 ]
 
-polymorphic_symbols = dict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
+# Tricky: since the bfe operator is parameterized, we add instances of it to
+# the polymorphic_symbols table on demand.
+
+class PolySymsDict(dict):
+    def __contains__(self,name):
+        return dict.__contains__(self,name) or name.startswith('bfe[')
+    def __getitem__(self,name):
+        if name.startswith('bfe[') and not dict.__contains__(self,name):
+            dict.__setitem__(self,name,lg.Const(name,lg.FunctionSort(alpha,beta)))
+        return dict.__getitem__(self,name)
+
+polymorphic_symbols = PolySymsDict((x,lg.Const(x,lg.FunctionSort(*y) if len(y) > 1 else y[0]))
                            for x,y in polymorphic_symbols_list)
 
 polymorphic_macros_map = {
@@ -1282,7 +1301,7 @@ def apply_drop_annotations(self,inferred_sort,annotated_vars):
     name = self.func.name
     if name in polymorphic_symbols:
         arg0 = self.args[0].drop_annotations(inferred_sort and self.sort != lg.Boolean,annotated_vars)
-        rest = [arg.drop_annotations(True,annotated_vars) for arg in self.args[1:]]
+        rest = [arg.drop_annotations(name != '*>',annotated_vars) for arg in self.args[1:]]
         return self.clone([arg0]+rest)
     return self.clone([arg.drop_annotations(True,annotated_vars) for arg in self.args])
 

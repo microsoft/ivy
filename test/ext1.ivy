@@ -1,0 +1,20 @@
+#lang ivy1.7
+
+include order
+include collections
+
+type t
+instance idx : unbounded_sequence
+instance arr : array(idx,t)
+
+var x : arr
+var y : arr
+
+axiom x.end = y.end & forall I. 0 <= I & I < x.end -> x.value(I) = y.value(I)
+
+property x = y
+proof assume arr.spec.extensionality with X = x, Y = y
+
+
+
+

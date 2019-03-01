@@ -22,6 +22,8 @@ precedence = (
     ('left', 'TIMES'),
     ('left', 'DIV'),
     ('left', 'DOLLAR'),
+    ('left', 'OLD'),
+    ('left', 'DOT'),
 )
 
 from ivy_logic_parser import *

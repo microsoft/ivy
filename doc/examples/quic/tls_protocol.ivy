@@ -1,0 +1,49 @@
+#lang ivy1.7
+#
+# TLS protocol
+# ------------
+#
+# This document describes the TLS protocol version 1.2.
+#
+# References
+# ==========
+#
+
+include tls_record
+include tls_deser
+include deserializer
+include ip
+
+# TLS object
+# ==========
+
+object tls = { ...
+
+# Record parser
+# =============
+
+    instance handshakes : vector(handshake)
+    instance handshake_parser : deserializer(stream_pos,stream_data,handshakes,tls_deser)
+
+# Protocol event
+# ==============
+
+    action handshake_event(src : ip.endpoint, dst : ip.endpoint, h : handshake)
+
+    # Handshake data event
+    # ====================
+    #
+    # This event represents the transfer of raw TLS handshake data from a source
+    # to a destination endpoint. It is redundant with `handshake_event` above,
+    # but we are using it temporarily because we don't trust the handshake
+    # message serializer.
+
+    action handshake_data_event(src : ip.endpoint, dst : ip.endpoint, data:stream_data)
+    
+}
+
+# For the moment, we don't monitor TLS, just output the records.
+
+import tls.handshake_event
+
+    

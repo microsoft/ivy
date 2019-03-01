@@ -1,0 +1,18 @@
+#lang ivy1.6
+
+type q
+
+object marcelo[class](self:marcelo[class].t) = {
+        type t
+        destructor foo : q
+        action hello(x:q) = {
+	    foo := x
+        }
+}
+
+alias marcelo = marcelo[class].t
+
+action world = {
+        var x:marcelo;
+        call x.hello(0)
+}

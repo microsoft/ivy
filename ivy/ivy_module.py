@@ -62,7 +62,8 @@ class Module(object):
         self.natives = [] # list of NativeDef
         self.native_definitions = [] # list of definitions whose rhs is NativeExpr
         self.initializers = [] # list of name,action pairs
-        self.params = []
+        self.params = [] # list of symbol
+        self.param_defaults = [] # list of string or None
         self.ghost_sorts = set() # set of sort names
         self.native_types = {} # map from sort names to ivy_ast.NativeType
         self.sort_order = [] # list of sorts names in order declared
@@ -71,12 +72,15 @@ class Module(object):
         self.before_export = {} # map from string to action
         self.attributes = {} # map from name to atom
         self.variants = defaultdict(list) # map from sort name to list of sort
+        self.supertypes = defaultdict(list) # map from sort name to sort
         self.ext_preconds = {} # map from action name to formula
         self.proofs = [] # list of pair (labeled formula, proof)
         self.named = [] # list of pair (labeled formula, atom)
         self.subgoals = [] # (labeled formula * labeled formula list) list
         self.isolate_info = None # IsolateInfo or None
         self.conj_actions = dict() # map from conj names to action name list
+        self.conj_subgoals = None # None or labeled formula list
+        self.assumed_invariants = [] # labeled_formula_list
 
         
         self.sig = il.sig.copy() # capture the current signature
@@ -112,6 +116,8 @@ class Module(object):
             pref,suff = string.rsplit(name,iu.ivy_compose_character,1)
             self.add_to_hierarchy(pref)
             self.hierarchy[pref].add(suff)
+        else:
+            self.hierarchy['this'].add(name)
 
     def add_object(self,name):
         assert not isinstance(name,ivy_ast.This)
@@ -155,12 +161,17 @@ class Module(object):
                 if il.is_epr(ea):
                     theory.append(ea)
         # exclusivity axioms for variants
+        theory.extend(self.variant_axioms())
+        self.theory = lu.Clauses(theory)
+
+    def variant_axioms(self):
+        theory = []
         for sort in sorted(self.variants):
             sort_variants = self.variants[sort]
-            if any(v.name in self.sig.sorts for v in sort_variants):
+            if any(v.name in self.sig.sorts for v in sort_variants) and sort in self.sig.sorts:
                 ea = il.exclusivity(self.sig.sorts[sort],sort_variants)
                 theory.append(ea) # these are always in EPR
-        self.theory = lu.Clauses(theory)
+        return theory
 
 
     def theory_context(self):
@@ -301,8 +312,9 @@ def instantiate_non_epr(non_epr,ground_terms):
                 ldf,cnst = non_epr[term.rep]
                 subst = dict((v,t) for v,t in zip(ldf.formula.args[0].args,term.args)
                              if not isinstance(v,il.Variable))
-                inst = lu.substitute_constants_ast(cnst,subst)
-                theory.append(inst)
+                if all(lu.is_ground_ast(x) for x in subst.values()):
+                       inst = lu.substitute_constants_ast(cnst,subst)
+                       theory.append(inst)
 #                iu.dbg('inst')
                 matched.add(term)
     return lu.Clauses(theory)
@@ -344,12 +356,14 @@ def relevant_definitions(symbols):
     
 def sort_dependencies(mod,sortname):
     if sortname in mod.sort_destructors:
-        for destr in mod.sort_destructors[sortname]:
-            return [s.name for s in destr.sort.dom[1:] + (destr.sort.rng,)]
-    if sortname in mod.interps:
-        t = mod.interps[sortname]
+        return [s.name for destr in mod.sort_destructors[sortname]
+                for s in destr.sort.dom[1:] + (destr.sort.rng,)]
+    if sortname in mod.native_types:
+        t = mod.native_types[sortname]
         if isinstance(t,ivy_ast.NativeType):
             return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
+    if sortname in mod.variants:
+        return [s.name for s in mod.variants[sortname]]
     return []
 
 # Holds info about isolate for user consumption

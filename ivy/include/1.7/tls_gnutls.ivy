@@ -1,0 +1,369 @@
+#lang ivy1.7
+
+# This is an implementation of the generic TLS interface based on the gnutls library.
+# The parameters are:
+#
+#     cid : the type of connection ids
+#     index : an unbounded sequence type
+#     bytes : a type of byte arrays indexed by `index`
+#     extens : a type of lists of extensions
+#     lower : the lower interface
+#     upper : the upper interface
+#
+
+module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
+
+    # Link the gnutls library
+
+    attribute libspec = "gnutls"
+    
+
+    # These empty objects are used to hold C++ values.
+
+    object cb = {}          # struct holding the callbacks
+    object cid_map = {}     # map from cid's to connections
+    
+# This code goes in the C++ header file, ahead of the ivy object declaration.
+# Here, we put declarations (perhaps forward) of any auxiliary classes we need).
+# We need to be careful that the names of these don't clash with other modules.
+# However, duplicates are removed, so we don't have to worry about multiple instances
+# of this module clashing.
+
+<<< header
+
+    #include "gnutls/gnutls.h"
+
+    // TODO: put any forward class definitions here
+
+    class tls_callbacks;
+    class gnutls_connection;
+
+
+>>>
+
+# This code goes in the C++ implementation file. Here, we put implementations of
+# the classes declared in the header, and auxiliary functions. 
+
+<<< impl
+
+    // HACK HACK HACK HACK HACK
+
+    // Here we have stolen some internal struct definitions from gnutls to allow
+    // us to go in and hack the record encryption. This is needed for QUIC version 13
+    // and later. Eventually it would be good to have gnutls API calls to directly
+    // read and write handshake messages. 
+
+    typedef struct {
+            unsigned int entity;	/* GNUTLS_SERVER or GNUTLS_CLIENT */
+
+            /* The epoch used to read and write */
+            uint16_t epoch_read;
+            uint16_t epoch_write;
+
+            /* The epoch that the next handshake will initialize. */
+            uint16_t epoch_next;
+
+            /* The epoch at index 0 of record_parameters. */
+            uint16_t epoch_min;
+    } security_parameters_st;
+
+    struct gnutls_session_int {
+            security_parameters_st security_parameters;
+    };
+
+    // This structure holds all the callbacks. These are functions
+    // that are called synchronously.
+
+    struct tls_callbacks {
+        %`lower.send` ls;
+        %`upper.recv` ur;
+        %`upper.alert` ua;
+        %`upper.session_established` use;
+    tls_callbacks(
+        const %`lower.send` ls,
+        const %`upper.recv` ur,
+        const %`upper.alert` ua,
+        const %`upper.session_established` use
+    )
+    : ls(ls), ur(ur), ua(ua), use(use) {}
+    };
+
+    // Structure to hold state of a tls session
+
+    struct gnutls_connection {
+        `cid` id;
+        gnutls_session_t gs;
+        tls_callbacks cb;
+        std::vector<char> input;
+        int handshake_status;
+        gnutls_connection(`cid` id, gnutls_session_t gs, tls_callbacks cb) : id(id),gs(gs),cb(cb) {
+            handshake_status = 0;
+        }
+    };
+
+    // Handle callback from gnutls to send data
+
+    ssize_t gnutls_session_push_func(gnutls_transport_ptr_t ptr, const void* data, size_t len) {
+        gnutls_connection *s = (gnutls_connection *) ptr;
+        `cid` c = s->id;
+        unsigned char *d = (unsigned char *)data;
+        `bytes` bytes;
+        bytes.resize(len);
+        std::copy(d,d+len,bytes.begin());
+        s->cb.ls(c,bytes);
+        return len;
+    }
+
+    // Handle callback from gnutls to recv data
+
+    ssize_t gnutls_session_pull_func(gnutls_transport_ptr_t ptr, void* data, size_t len){
+        gnutls_connection *s = (gnutls_connection *) ptr;
+        `cid` c = s->id;
+        std::vector<char> &input = s->input;
+        size_t res = input.size();
+        if (len < res)
+            res = len;
+        if (res == 0) {
+            errno = EAGAIN;
+            return -1;
+        }
+        char *d = (char *)data;
+        for (size_t i = 0; i < res; i++) {
+            d[i] = input[i];
+        }
+        input.erase(input.begin(),input.begin()+res);
+        return res;
+    }
+
+   // Start or resume handshake
+
+   void gnutls_do_handshake(gnutls_connection *s) {
+       // HACK HACK HACK HACK
+       // set the read and write epochs to zero to hopefully disable encryption of records
+       // s->gs->security_parameters.epoch_read = 0;
+       // s->gs->security_parameters.epoch_write = 0;
+       s->handshake_status = gnutls_handshake(s->gs);
+        if (s->handshake_status != GNUTLS_E_SUCCESS &&
+            s->handshake_status != GNUTLS_E_AGAIN) {
+            std::cerr << "gnutls_handshake returned error\n";
+            exit(1);
+        }
+    }
+
+    // This is horrible, but it can't be helped, because the gnutls
+    // callbacks for external extensions don't have parameters.
+
+    hash_space::hash_map<gnutls_session_t,std::vector<std::vector<unsigned char> > > gnutls_ext_data_map;
+
+    // Send extension data
+
+    int gnutls_ext_supp_recv_params(gnutls_session_t session, const unsigned char *data, size_t _data_size) {
+        const unsigned char *d = (const unsigned char *) data;
+        std::vector<unsigned char> v;
+        v.resize(_data_size);
+        std::copy(d,d+_data_size,v.begin());
+        gnutls_ext_data_map[session].push_back(v);
+        return _data_size;
+    }
+
+    // Receive extension data
+
+    int gnutls_ext_supp_send_params(gnutls_session_t session, gnutls_buffer_t buf) {
+        std::vector<std::vector<unsigned char> > &datas = gnutls_ext_data_map[session];
+        std::vector<unsigned char> v = datas.front();
+        int len = v.size();
+        if (gnutls_buffer_append_data(buf, &v[0], len) < 0) {
+            std::cerr << "gnutls_buffer_append_data returned error\n";
+            exit(1);
+        }
+        datas.erase(datas.begin());
+        return len;
+    }
+
+>>>
+
+# Here we put any new members of the ivy C++ class. If we have allocated a per-instance
+# object, we declared it here anti-quoted. The plugs in the actual member name, which may
+# be any array if this is a parameterized instance.
+
+<<< member
+
+    hash_space::hash_map<`cid`,gnutls_connection *> `cid_map`; // maps cid's to connections
+    tls_callbacks *`cb`;             // the callbacks to ivy
+
+>>>
+
+
+# Here, we put code to go in the initializer. If this is a
+# parameterized instance, then this code will be run in a loop, so we
+# have to be careful that any initialization of common objects is
+# idempotent.
+
+<<< init
+
+    // Create the callbacks. When you put an
+    // action in anti-quotes it creates a function object (a "thunk")
+    // that captures the instance environment, in this case including
+    // the instance's endpoint id "me".
+
+    `cb` = new tls_callbacks(`lower.send`,`upper.recv`,`upper.alert`,`upper.session_established`);
+
+>>>
+
+
+    object impl = {
+
+    # These are the implementations of the interface calls. These
+    # operations are synchronous.
+
+    # close the socket
+
+    implement create(c:cid, is_server:bool, e:extens) {
+        <<< impure
+            
+	// We create a new gnutls session, and add an entry in the cid_map
+	// for it.
+
+        gnutls_session_t session;
+        if (gnutls_init (& session, (is_server ? GNUTLS_SERVER : GNUTLS_CLIENT) | GNUTLS_NONBLOCK) != GNUTLS_E_SUCCESS) {
+            std::cout << "gnutls_init failed\n";
+            exit(1);
+        }
+        gnutls_connection *s = new gnutls_connection(c,session,*`cb`);
+        gnutls_transport_ptr_t ptr = (gnutls_transport_ptr_t) s;
+        gnutls_transport_set_ptr (session, ptr);
+        gnutls_transport_set_push_function (session, gnutls_session_push_func);
+        gnutls_transport_set_pull_function (session, gnutls_session_pull_func);
+        const char *errpos;
+        int pres = gnutls_priority_set_direct (session,"NORMAL:-VERS-ALL:+VERS-TLS1.3:+VERS-TLS1.2:+ANON-ECDH:+ANON-DH:+AES-128-GCM:+AES-256-GCM:+AES-128-CCM:+AES-256-CCM:+SHA256",&errpos);
+        if (pres != GNUTLS_E_SUCCESS) {
+            std::cerr << "set_default_priority returned error\n";
+            exit(1);
+        }
+        if (is_server) {
+            gnutls_anon_server_credentials_t scred;
+            int crres = gnutls_anon_allocate_server_credentials (&scred);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "anon_allocate_server_credentials returned error\n";
+                exit(1);
+            }
+            int pres = gnutls_anon_set_server_known_dh_params (scred, GNUTLS_SEC_PARAM_HIGH);
+            if (pres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_anon_set_server_known_dh_params returned error\n";
+                exit(1);
+            }
+            int cres = gnutls_credentials_set (session, GNUTLS_CRD_ANON, scred);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_credentials_set returned error\n";
+                exit(1);
+            }
+        }
+        else {
+            gnutls_anon_client_credentials_t cred;
+            int crres = gnutls_anon_allocate_client_credentials (&cred);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "anon_allocate_client_credentials returned error\n";
+                exit(1);
+            }
+            int cres = gnutls_credentials_set (session, GNUTLS_CRD_ANON, cred);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_credentials_set returned error\n";
+                exit(1);
+            }
+            gnutls_certificate_credentials_t cred2;
+            crres = gnutls_certificate_allocate_credentials(&cred2);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_certificate_allocate_credentials returned error\n";
+                exit(1);
+            }
+            crres = gnutls_certificate_set_x509_key_file2 (cred2, "leaf_cert.pem", "leaf_cert.key", GNUTLS_X509_FMT_PEM, 0, 0);
+            if (crres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_certificate_set_x509_key_file2 returned error\n";
+                exit(1);
+            }
+            cres = gnutls_credentials_set (session, GNUTLS_CRD_CERTIFICATE, cred2);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_credentials_set returned error\n";
+                exit(1);
+            }
+            cres = gnutls_server_name_set (session, GNUTLS_NAME_DNS, "localhost", 9);
+            if (cres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_server_name_set returned error\n";
+                exit(1);
+            }
+            
+        }
+
+        // Register the extensions
+
+        for (unsigned i = 0; i < e.size(); i++) {
+            `exten_ser` ser;
+            __ser(ser,e[i]);
+            unsigned etype = (((unsigned char)(ser.res[0])) << 8) + ((unsigned char)(ser.res[1]));
+            unsigned len = (((unsigned char)(ser.res[2])) << 8) + ((unsigned char)(ser.res[3]));
+            std::vector< unsigned char > data;
+            data.resize(ser.res.size()-4);
+            std::copy(ser.res.begin()+4,ser.res.end(),data.begin());
+            gnutls_ext_data_map[session].push_back(data);
+            int eres = gnutls_session_ext_register (session, "ext_name", etype,
+              GNUTLS_EXT_APPLICATION, gnutls_ext_supp_recv_params,
+              gnutls_ext_supp_send_params, 0,0,0,0);
+            if (eres != GNUTLS_E_SUCCESS) {
+                std::cerr << "gnutls_session_ext_register\n";
+                exit(1);
+            }
+        }
+
+	`cid_map`[c] = s;
+	
+        // Start the handshake. This returns, sitting status EAGAIN when input
+        // would block. 
+
+        gnutls_do_handshake(s);
+
+        >>>
+    }
+
+
+    # Destroy frees a cid
+    
+    implement destroy(c:cid) {
+	<<< impure
+
+	// TODO: actually delete everything here
+	`cid_map`.erase(c);
+
+	>>>
+
+    }
+
+    # upper.send is called with application data to be transmitted to the peer.
+
+    implement upper.send(c:cid,data:bytes) {
+        <<< impure
+        // TODO: implement this
+        >>>
+    }
+
+    # lower.recv is called with data received from the peer on the lower interface.
+
+    implement lower.recv(c:cid,data:bytes) {
+        <<< impure
+	gnutls_connection *s = `cid_map`[c];
+        std::vector<char> &input = s->input;
+	for (unsigned i = 0; i < data.size(); i++) {
+	    input.push_back(data[i]);
+	}
+        // Resume handshake if needed
+        if (s->handshake_status == GNUTLS_E_AGAIN) {
+            gnutls_do_handshake(s);
+        }
+        >>>
+    }
+
+    
+    trusted isolate iso = this
+
+    attribute test = impl
+}
+}

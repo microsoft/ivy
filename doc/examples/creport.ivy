@@ -1,0 +1,622 @@
+#lang ivy1.7
+
+# 
+# This is an attempt to build creport on top of window_adt.
+#
+
+# In this example, we implement a "sliding window" as an abstract datatype.
+# This is similar to the sliding window module described in `window.ivy`,
+# but since it is a datatype, we can treat our sliding windows as values, passing
+# them over the network.
+#
+# As before, the window is an array that stores a range of values from
+# an unbounded sequence. The window provides an operation `trim` that
+# moves the window offset forward, forgetting the values between the
+# old and new offsets. This structure might be useful for keeping a
+# log of events that is occasionally truncated at the beginning, or
+# for maintaining a window of packets in an ordered transport
+# protocol.
+#
+# Also as before, from the point of view of decidability, the main
+# problem that we need to solve is hiding the arithmetic needed to
+# express the representation invariant. That is, if `s` is our
+# sequence, `w` is the window and `T` is the offset of the window,
+# then we want to say "for all positions `I` in the sequence, if `I >=
+# T` then `s[I] = w[I-T]`". Unfortunately, this use of arithmetic
+# would put us outside the decidable fragment, since we are applying
+# subtraction to universally quantified variables. Thus, we will hide
+# the function `I-T` in an isolate, using an uninterpreted relation to
+# represent it and proving just the properties of this relation needed
+# to implement our window operations.
+#
+# However, for an abstract datatype, we have an additional problem,
+# which is that we have to define an abstraction function (that is, a
+# map from concrete values to abstract values. In this case, this is
+# given by a relation `value(W,I,V)` that tells us wheter window `W`
+# has value `V` at position `I`. To make things a little harder, we
+# add a special value `none` to indiciate positions outside the window.
+# That is, we require that `value(W,I,none)` holds when `I` is outside
+# the range of window `W`.
+#
+# References
+# ----------
+#
+# We will need the `order` and `collections` libraries for arrays.  We
+# also use `deduction` to manually prove a property of the shift relation (see below).
+
+include order
+include collections
+include deduction
+
+#
+# Shift relation
+# --------------
+#
+# In order to "slide" the window, we need a relation that describes a
+# "shift" in the sequence. The module `shift_theory` below provides a
+# relation `r(T,X,Y)` that holds when X = Y + T. The idea is that `T`
+# is the amount of left-shift, `X` is an element of the original
+# sequence, and `Y` is the corresponding element of the shifted
+# sequence.
+#
+# The module provides an action `f` that, given `T,X`, returns Y. This
+# action can be used to find an element in the shifted sequence. By hiding
+# the arithmetic in this action, we can avoid using arithmetic in the
+# sliding window implementation. The action `b` provides the inverse of `f`.
+#
+# The module takes a parameter `idx` which must be is an ordered
+# sequence type.
+
+module shift_theory(idx) = {
+
+    # The interface provides the shift relation `r` an an action `f`
+    # that computes the shift (that is, subtracts t from x, to get the
+    # position of `x` relative to offset `t`) and an action `b` that
+    # computes the inverse of `f`.
+
+    relation r(T : idx, X : idx, Y : idx)
+    action f(t:idx,x:idx) returns (y:idx)
+    action b(t:idx,x:idx) returns (y:idx)
+
+    specification {
+
+        # We need the following properties of the `r` relation:
+        #
+        # 1. It is a partial function from `X` to `Y`
+        # 2. It is a partial function from `Y` to `X`
+        # 3. It is increasing in `X`
+        # 4. It is decreasing in `T`
+        # 5. It is preserved by successor
+        # 6. For `T = 0`, it is the identity relation
+        # 7. Indices are non-negative, so `Y <= X` and `T <= X`.
+        #
+        # Property 2 isn't actually needed, but it might be helpful in
+        # other uses of this module. Several of these properties were
+        # added in response to counterexamples in verifying the
+        # sliding window implementation below.
+        
+
+	property r(T,X,Y) & r(T,X,Y1) -> Y = Y1
+	property r(T,X,Y) & r(T,X1,Y) -> X = X1
+	property r(T,X1,Y1) & r(T,X2,Y2) & X1 < X2 -> Y1 < Y2
+	property r(T1,X,Y1) & r(T2,X,Y2) & T1 < T2 -> Y2 < Y1
+        property r(T,X1,Y1) & idx.succ(X1,X2) & idx.succ(Y1,Y2) -> r(T,X2,Y2)
+        property r(0,X,X)
+        property r(X,X,0)
+        property r(T,X,Y) -> Y <= X & T <= X
+
+        # As we will see, to get the `none` values in the abstract semantics,
+        # we also need the property that every `X` greater than or equal to the
+        # offset `T` has a corresponding shifted value `Y`. Because `X` and `Y`
+        # are both of type `idx`, this AE quantifier alternation creates a function
+        # cycle. For this reason, we state the property as a theorem that must
+        # be manually applied. The proof is similar to the proof of the corresponding
+        # propery in the index reversal theory of `list_reverse.ivy`. That is,
+        # we first remove the premise of the implication with `introImp`, then
+        # we manually witness the existential quantifier. In this case, the witness
+        # is the shifted value of `X`, which is `X-T`. 
+
+        theorem [total] {property X >= T -> exists Y. r(T,X,Y)}
+        proof {
+            apply introImp;
+            apply introE with witness = X - T
+        }
+
+        # The specs of actions `f` and `b` are easy to give in terms of the
+        # shift relation `r`.
+
+	around f {
+           require t <= x;
+            ...
+	   ensure r(t,x,y)
+	}
+
+	after b {
+	   ensure r(t,y,x)
+	}
+
+    } # end specification section
+
+    # The definition of `r` and the implemenations of `f` and `b` are
+    # also easy to give using arithmetic operations. The implmentation
+    # hides these arithmetic operators, so we don't have to reason with
+    # arithmetic in our window implemenation.
+    
+    implementation {
+        definition r(T,X,Y) = (X = Y + T)
+        implement f {
+            y := x - t
+        }
+        implement b {
+            y := x + t
+        }
+    }
+
+    # We say `with idx.impl` to use the implementation of `idx` using
+    # the natural number theory, which is needed to prove the above
+    # properties. Note it's very important *not* to say `with idx`
+    # here, since the specification of `idx` (see order.ivy) contains
+    # various universally quantified properties that, when mixed with
+    # arithmetic, would put us outside the decidable fragment.
+
+    isolate iso = this with idx.impl
+}
+
+# This module implements the sliding window ADT. It takes three parameters:
+#
+# - `domain`: the index type
+# - `range` : the value type
+# - `none`  : the special value indicating `out of range`
+
+module window(domain,range,none) = {
+    
+    type this
+
+    # We provde several relations defining the abstract semantics of
+    # windows: The `value` relation is described above. The `begin`
+    # and `end` relations tell us the beginning index (i.e., the
+    # offset) and the ending index (i.e., one past the last position
+    # in the window).
+    
+    relation value(S:this,D:domain,R:range)
+    relation begin(S:this,D:domain)
+    relation end(S:this,D:domain)
+
+    # Action `empty` returns an empty window (with offset `i`)
+
+    action empty(i:domain) returns (w:this)
+
+    # Action `read` returns the value in a given position.
+
+    action read(w:this, i:domain) returns (v:range)
+
+    # Action `set` modifies a window so that position `i` has value `v`.
+
+    action set(w:this, i:domain, v:range) returns (w:this)
+
+    # Action `trim` moves the offset position forward, erasing data.
+
+    action trim(w:this, i:domain) returns (w:this)
+
+    # Action `getBegin` gets the beginning position
+
+    action getBegin(w:this) returns (i:domain)
+
+    # Action `getEnd` gets the ending position
+
+    action getEnd(w:this) returns (i:domain)
+
+    specification {	
+
+        around set {
+            require v ~= none;
+            require exists I. begin(w, I) & I <= i;
+	    ...
+            ensure begin(w,I) <-> begin(old w,I);
+            ensure I = i -> (value(w, I, V) <-> V = v);
+            ensure I ~= i -> (value(old w, I, V) <-> value(w, I, V));
+            ensure end(w,I) -> i < I;
+        }
+
+	around read {
+            require exists I. begin(w, I) & I <= i;
+            ...
+            ensure value(w, i, v);
+        }
+
+        around trim {
+            require exists I. begin(w, I) & I <= i;
+            ...
+            ensure begin(w, I) <-> I = i;
+            ensure i <= I -> (value(old w, I, V) <-> value(w, I, V))
+            proof {
+                assume shift.total with T = i, X = I;
+                assume shift.total with T = offset(old w), X = I
+            };
+            ensure I < i -> (value(w, I, V) <-> V = none);
+        }
+
+        after empty {
+            ensure value(w, I, V) <-> V = none
+            proof assume shift.total with T = i, X = I;
+            ensure begin(w, I) <-> I = i;
+        }
+
+        after getBegin {
+            ensure begin(w, i); 
+        }
+
+        after getEnd {
+            ensure end(w,i);
+        }
+
+        # We also specify a few useful properties of the abstract
+        # semantics.
+
+        property value(W, I, V1) & value(W, I, V2) -> V1 = V2
+        property value(W, I, V) -> 0 <= I
+	property begin(W, I) & begin(W, I2) -> I = I2
+        property begin(W, I) & I1 < I -> value(W,I1,none)
+	property end(W, IE) & I >= IE  -> value(W, I, none)
+        proof assume shift.total with T = offset(W), X = I
+        property begin(W,I) & end(W,J) -> I <= J
+    }
+
+    implementation {
+
+        # The implemention uses an array to represent the elements in
+        # the window and a number to represent the offset. These two
+        # fields are declared as destructors of the type. 
+
+        instance shift : shift_theory(slot)
+        instance arr : array(domain,range)
+        destructor elems(W:this) : arr
+        destructor offset(W:this) : domain
+
+        property X < offset(W) -> value(W,X,none)
+        property shift.r(offset(W),X,Y) & Y < elems(W).end -> value(W,X,elems(W).value(Y))
+#        property shift.r(offset(W),X,Y) & Y >= elems(W).end -> value(W,X,none)
+        property value(W, I, V1) & value(W, I, V2) -> V1 = V2
+        property value(W, I, V) -> 0 <= I
+            
+        # We now have to give the definitions of the abstraction
+        # functions.  Notice the definition of `value` has an
+        # existential quantifier.  That is, we have value `V` at
+        # position `X` if there *exists* a shifted position `Y` with
+        # value `V` in the array. This would introduce a function
+        # cycle, so we play a trick that is common for ADT's: we use a
+        # macro to define the abstraction function. The lower case
+        # parameters are instantiated by matching against occurrences
+        # of `value` in whatever property we are trying to prove. This saves
+        # us some effort compared to fully manual instantation.
+
+        definition value(w:this,x:domain,V:range) =
+                  (exists Y. shift.r(offset(w),x,Y) &
+                        (V = elems(w).value(Y) if Y < elems(w).end else none))
+                  | x < offset(w) & V = none
+
+        definition begin(W,I) = (I = offset(W))
+        definition end(W,I) = shift.r(offset(W),I,elems(W).end)
+
+        # Now we can implement our actions. For the `set` action, we have to
+        # check whether the index to be written is beyond the array end and
+        # and resize the array accordingly. Notice when we resize, we fill in
+        # the gap with `none`.
+
+        implement set {
+	    var index := shift.f(offset(w), i);
+	    if w.elems.end <= index {
+		w.elems := w.elems.resize(index.next, none);
+	    };
+            w.elems := w.elems.set(index, v);
+        }
+
+        # For `read`, we also check the array index and return `none`
+        # if it is out of bounds.
+        
+        implement read {
+            var index := shift.f(offset(w),i);
+	    v := none if (index >= w.elems.end) else w.elems.value(index)
+        }
+        
+        # Trim is a bit tricky. We shift the values down in a loop,
+        # then resize the array appropriately and set the new
+        # offset. We treat the case where the new offset is beyond the
+        # end of the window specially.
+
+        # A difficulty in the proof is to deal with positions beyond
+        # the end of the array. That is, suppose `X` is a position
+        # beyond the end. We can assume that on entry,
+        # `value(w,X,none)` holds. By the definition of `value`, we
+        # know there is a corresponding shifted position `X` that is
+        # beyond the end of the array. We now have to prove that on
+        # exit we still have `value(w,X,none)`. However, the offset of
+        # `w` has changed, and as a result nothing tells us that a
+        # shifted psoition `X` still exists. To get this fact, we have
+        # to instantiate theorem `total` in the shift theory. This is
+        # done manually in the proof of the postcondition of `trim`
+        # above.
+
+        # Often, when we really need a function from type `t` to type
+        # `t` to be total, the easiest option is to state totality as
+        # a theorem and manually instantiate it for the required
+        # domain value. Often this isn't necessary because the domain
+        # value of interest is a ground term (for example, a program
+        # variable), in which case we can get the value of the
+        # function by calling an appropriate action. Here, though, it
+        # is a universally quantified variable, which requires us to
+        # do some manual instantiation.
+
+        implement trim {
+            var bound := shift.b(offset(w),w.elems.end);
+            var j := i;
+            if j < bound {
+                while j < bound
+                invariant i <= j & j <= bound
+                invariant shift.r(offset(old w),bound,old w.elems.end)
+                invariant j <= X & X < bound & shift.r(offset(old w),X,Y) -> value(old w,X,w.elems.value(Y))
+                invariant X < j & shift.r(i,X,Y) -> value(old w,X,w.elems.value(Y))
+                invariant w.offset <= j & w.offset = offset(old w)
+                invariant w.elems.end = elems(old w).end
+#		invariant shift.r(i,j,X) -> X < w.elems.end
+                {
+                    w.elems := w.elems.set(shift.f(i,j),w.elems.value(shift.f(w.offset,j)));
+                    j := j.next;
+                };
+                w.elems := w.elems.resize(shift.f(i,bound),0);
+                w.offset := i
+            }
+            else {
+		assume false;
+                w.elems := arr.empty;
+                w.offset := i;
+	    };
+	    bound := shift.b(offset(w),w.elems.end)  # just for a witness
+        }
+
+        implement empty {
+            w.offset := i;
+            w.elems := arr.empty
+        }
+        
+        implement getBegin {
+            i := w.offset
+        }
+
+        implement getEnd {
+            i := shift.b(w.offset,w.elems.end)
+        }
+
+    }
+
+    isolate iso = this with domain
+}
+
+module creport(slot,view,operation,none,noneop) = {
+
+    type this
+
+    # We provde several relations defining the abstract semantics of
+    # windows: The `value` relation is described above. The `begin`
+    # and `end` relations tell us the beginning index (i.e., the
+    # offset) and the ending index (i.e., one past the last position
+    # in the window).
+    
+    relation value(W:this, I:slot, V:view, O:operation)
+    relation value_lt(W:this, I:slot, V:view)
+    relation value_lte(W:this, I:slot, V:view)
+
+    relation begin(W:this, I:slot)
+    relation end(W:this, I:slot)
+ 
+    action set(w:this, i:slot, v:view, o:operation) returns (w:this)
+    action read(w:this, i:slot) returns (v:view, o:operation)
+    action trim(w:this, i:slot) returns (w:this)
+    action empty(i:slot) returns (w:this)
+    action merge(w: this, max_w: this) returns (max_w: this)
+    action getBegin(w:this) returns (i:slot)
+    action getEnd(w:this) returns (i:slot)
+
+    specification {	
+
+        around set {
+            require v ~= none;
+            require exists I. begin(w, I) & I <= i;
+	    ...
+            ensure true;
+            ensure begin(w,I) <-> begin(old w,I);
+            ensure value(w, I, V, O) <-> (I = i & V = v & O = o) | (I ~= i & value(old w, I, V, O));
+#            ensure value_lt(w, I, V) <-> (I ~= i & value_lt(old w, I, V)) | (I = i & v < V);
+#            ensure value_lte(w, I, V) <-> (I ~= i & value_lte(old w, I, V)) | (I = i & v <= V);
+        }
+
+	around read {
+            require exists I. begin(w, I) & I <= i;
+            ...
+            ensure value(w, i, v, o);
+        }
+
+        around trim {
+            require exists I. begin(w, I) & I <= i;
+            ...
+            ensure begin(w, I) <-> I = i;
+            ensure value(w, I, V, O) <-> (i <= I & value(old w, I, V, O)) | (I < i & V = none & O = noneop);
+        }
+
+        after empty {
+            ensure value(w, I, V, O) <-> V = none & O = noneop;
+            ensure begin(w, i);
+        }
+
+        around merge {
+            require begin(w, I) <-> begin(max_w, I);
+            require forall I. exists V, O. value(w, I, V, O);
+            require forall I. exists V, O. value(old max_w, I, V, O);
+            ...
+            ensure value(max_w, I, V, O) <-> (value(old max_w, I, V, O) &  value_lte(w, I, V) ) | 
+                                             (value(w, I, V, O) & value_lt(old max_w, I, V) );
+            ensure value_lt(max_w, I, V) <-> value_lt(old max_w, I, V) & value_lt(old w, I, V);
+            ensure value_lte(max_w, I, V) <-> value_lte(old max_w, I, V) & value_lte(old w, I, V);
+            ensure value(max_w, I, VM, OM) & value(old max_w, I, V1, O1) & value(w, I, V2, O2) -> (VM = V1 | VM = V2);
+            ensure value(max_w, I, VM, OM) & value(old max_w, I, V1, O1) & value(w, I, V2, O2) -> ~(VM < V1) & ~(VM < V2);
+
+            # this property is abstraction-breaking -- skipping it
+
+            # ensure shift.r(offset(max_w), I, Y) & offset(max_w) <= I & I < bound(max_w) -> value(max_w, I, maxview(content(max_w).value(Y)), maxop(content(max_w).value(Y)));
+
+            # I think this propert could be proved, though it should be restated in terms
+            # of the interface predicate `end`.
+
+            # ensure bound(max_w) >= bound(old max_w);
+
+            # This property isn't actually true in this implementation, since we
+            # don't know that the window `w` doesn't contain trailing `none` values.
+            # Do we need this property? If so, we have to change the implementation or
+            # carry a representation invariant.
+            
+            # ensure bound(max_w) >= bound(w);
+
+            # This is provable, but are you sure you want it as a post-condition? It
+            # could instead be stated as a property, since it is always true.
+
+            # ensure forall I. exists V, O. value(max_w, I, V, O);
+
+            ensure begin(max_w, I) <-> begin(old max_w, I);
+        }
+
+        after getBegin {
+            ensure begin(w, i); 
+        }
+
+        after getEnd {
+            ensure end(w,i);
+        }
+
+        # Trick: adding an empty proof here causes this property to be used as
+        # an assumption when checking the later properties. 
+        property value(W, I, V1, O1) & value(W, I, V2, O2) -> V1 = V2 & O1 = O2
+        proof {}
+
+        property value(W, I, V, O) -> 0 <= I
+	property begin(W, I) & begin(W, I2) -> I = I2
+	property value(W, I, V, O) -> (V2 > V <-> value_lt(W, I, V2))
+	property value_lt(W, I, V) & V < V2 -> value_lt(W, I, V2)
+        property value(W, I, V, O) -> (V2 >= V <-> value_lte(W, I, V2))
+	property value_lte(W, I, V) & V < V2 -> value_lte(W, I, V2)
+	property end(W, IE) & I >= IE  -> value(W, I, none, noneop)
+    }
+
+    implementation {
+        
+        type record = struct {
+            vw : view,
+            op : operation
+        }
+
+        # Another dirty trick: a constructor function for record would create a
+        # function cycle. For this reason we instead use a constructor axiom
+        # that we can apply to construct structures from given arguments.
+        # We should have a nice syntax for the following, but for now this is
+        # the only way.
+
+        property exists R. (vw(R) = none & op(R) = noneop) named nonerec
+        proof apply record.constructor
+        
+        instance win : window(slot,record,nonerec)
+
+        destructor rep(W:this) : win
+
+        definition value(w:this,i:slot,v:view,o:operation) =
+            exists X. (vw(X) = v & op(X) = o & w.rep.value(i,X))
+        definition begin(W,I) = win.begin(rep(W),I)
+        definition end(W,I) = win.end(rep(W),I)
+
+	definition value_lt(w:this,i:slot,v:view) =
+            exists V1,O. (value(w, i, V1, O) & V1 < v)
+	definition value_lte(w:this,i:slot,v:view) =
+            exists V1,O. (value(w, i, V1, O) & V1 <= v)
+
+        implement read {
+            var d := w.rep.read(i);
+            v := d.vw;
+            o := d.op
+        }
+
+        implement set {
+            var d : record;
+            d.vw := v;
+            d.op := o;
+            w.rep := w.rep.set(i,d);
+        }
+
+        implement trim {
+            w.rep := w.rep.trim(i)
+        }
+
+        implement empty {
+            w.rep := win.empty(i)
+        }
+
+        implement getBegin {
+            i := w.rep.getBegin
+        }
+
+        implement getEnd {
+            i := w.rep.getEnd
+        }
+
+
+        implement merge {
+	    var beg := getBegin(w);
+            var end := getEnd(w);
+            var i := beg;
+            while i < end
+            invariant beg <= i & begin(max_w,beg)
+            invariant I < i -> (value(max_w, I, V, O) <-> (value(old max_w, I, V, O) &  value_lte(w, I, V) ) | 
+                                                          (value(w, I, V, O) & value_lt(old max_w, I, V) ))
+            invariant i <= I -> (value(max_w, I, V, O) <-> value(old max_w, I, V, O))
+            {
+                var wv:view;
+                var wo:operation;
+                var max_wv:view;
+                var max_wo:operation;
+                (wv,wo) := read(w,i);
+                call max_wv,max_wo := read(max_w,i);
+                if wv > max_wv {
+                    max_w := max_w.set(i,wv,wo)
+                };
+		i := i.next;
+            }
+        }
+    }
+
+    isolate iso = this with slot,view
+
+}
+
+# To test our module, with instantiate it with appropriate types and
+# export its actions to the environment.
+
+instance slot : unbounded_sequence
+
+# `view` is an uninterpreted totally ordered type
+
+trusted isolate view = {
+    type this
+    instantiate totally_ordered(this)
+    var none : this
+    property none <= X
+}
+    
+type operation
+individual noneop : operation
+
+instance foo : creport(slot,view,operation,view.none,noneop)
+
+export foo.read
+export foo.set
+export foo.trim
+export foo.getBegin
+export foo.getEnd
+export foo.empty
+export foo.merge

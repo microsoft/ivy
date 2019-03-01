@@ -1,5 +1,7 @@
 #lang ivy
 
+include order
+
 ################################################################################
 #
 # Arrays
@@ -12,7 +14,6 @@
 #
 # The implementation of this type requires that domain.t be
 # interpreted as 'int'.
-
 
 module array(domain,range) = {
 
@@ -41,6 +42,9 @@ module array(domain,range) = {
     # add one element to the array
     action append(a:t,v:range) returns (a:t)
 
+    # extend an array by another arrary (i.e., concatenate the arrays)
+    action extend(a:t,b:t) returns (a:t)
+
     ########################################
     # Representation
     #
@@ -48,8 +52,13 @@ module array(domain,range) = {
     # gives the value that x maps to in a.
 
     function begin(A:t) : domain
+    definition begin(A) = 0
     function end(A:t) : domain
     function value(A:t,X:domain) : range
+
+    # Extract an array segment
+
+    function segment(A:t, LO:domain, HI:domain) : t
 
     ########################################
     # Specification
@@ -60,7 +69,7 @@ module array(domain,range) = {
 
     object spec = {
 
-        definition begin(X) = 0
+#        definition begin(X) = 0
 
 	property end(X) >= 0
 
@@ -171,6 +180,30 @@ module array(domain,range) = {
             >>>
         }
 
+	implement extend {
+	    <<<
+                for (unsigned i = 0; i < `b`.size(); i++)
+	            `a`.push_back(`b`[i]);
+            >>>
+        }
+
+        <<< impl
+        template <typename T>
+        T __array_segment(const T &a, long long lo, long long hi) {
+            T res;
+            lo = (lo < 0) ? 0 : lo;
+            hi = (hi > a.size()) ? a.size() : hi;
+            if (hi > lo) {
+                res.resize(hi-lo);
+                std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            }
+            return res;
+        }
+        >>>
+
+	definition segment(a:t,lo:domain,hi:domain) = 
+	<<< __array_segment(a,lo,hi) >>>
+
 	<<< impl
 	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
 	        s << '[';
@@ -184,7 +217,7 @@ module array(domain,range) = {
             }
 
 	    template <>
-	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.atom.size()) 
 	            throw out_of_bounds(idx);
@@ -260,6 +293,38 @@ module array(domain,range) = {
 }
 
 ################################################################################
+# 
+# Use of the type array[domain][range], where domain and range are
+# types, implicitly creates an instance of array(domain,range) called
+# array[domain][range].
+#
+
+autoinstance array[domain][range] : array(domain,range)
+
+################################################################################
+#
+# Vector types
+#
+# A vector is the same as an array, except that the domain type is implicitly
+# an instance of `unbounded sequence`.
+#
+
+module vector(range) = {
+    
+    instance domain : unbounded_sequence
+    
+    instantiate array(domain,range)
+}
+
+################################################################################
+# 
+# Use of the type vector[range], where range is a type, implicitly
+# creates an instance of vector(range) called vector[range].
+#
+
+autoinstance vector[range] : vector(range)
+
+################################################################################
 #
 # Option types
 #
@@ -283,6 +348,14 @@ module option(range_t) = {
 
     interpret domain_t -> bv[1]
 }
+
+################################################################################
+# 
+# Use of the type option[range], where range is a type, implicitly
+# creates an instance of option(range) called option[range].
+#
+
+autoinstance option[range] : option(range)
 
 ################################################################################
 #
@@ -309,7 +382,7 @@ module null_type(range_t,null_value) = {
 	}
 
 	template <>
-	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	`t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	    ivy_value &arg = args[idx];
 	    if (arg.fields.size()) 
 		throw out_of_bounds(idx);
@@ -538,7 +611,7 @@ module path(domain,range) = {
             }
 
 	    template <>
-	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, int bound) {
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
 	        ivy_value &arg = args[idx];
 	        if (arg.fields.size()) 
 	            throw out_of_bounds(idx);
@@ -728,10 +801,14 @@ module partial_function(dom,rng) = {
 	implement lemma(x:dom) {
 	    assume pre(x) -> exists Y. map(x,Y)
 	}
+
+        explicit invariant [img] pre(X) -> exists Y. map(X,Y)
+
     }
 
     conjecture map(K,L) & map(K,M) -> L = M
 
+    trusted isolate iso = this
 }
 
 ################################################################################

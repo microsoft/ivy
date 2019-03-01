@@ -226,6 +226,22 @@ class SourceFile(object):
 
 filename = None
 
+class WorkingDir(object):
+    """ Context Manager that temporarily sets the working directory.
+    """
+
+    def __init__(self,fname):
+        self.fname = fname
+
+    def __enter__(self):
+        self.oldf = os.getcwd()
+        os.chdir(self.fname)
+        return self
+
+    def __exit__(self,exc_type, exc_val, exc_tb):
+        os.chdir(self.oldf)
+        return False # don't block any exceptions
+
 
 def Location(filename=None,line=None):
     return LocationTuple([filename,line])
@@ -475,10 +491,10 @@ def cycle(arcs,first=lambda x:x[0],second=lambda x:x[1]):
         if dfs(first(arc)):
             end = second(path[0])
             fpath = []
-            for arc in reversed(path):
+            for arc in path:
                 fpath.append(arc)
                 if first(arc) == end:
-                    return fpath
+                    return reversed(fpath)
             assert False
     return None
 
@@ -583,6 +599,30 @@ def parent_child_name(name):
     if len(parts) == 2:
         return parts
     return ['this',name]
+
+def extract_parameters_name(name):
+    parms = []
+    pos = len(name) - 1
+    while pos >= 0 and name[pos] == ']':
+        end = pos
+        pos -= 1
+        count = 1
+        while pos >= 0 and count > 0:
+            if name[pos] == '[':
+                count -= 1
+            elif name[pos] == ']':
+                count += 1
+            pos -= 1
+        if pos >= 0:
+            parms.append(name[pos+2:end])
+    if pos >= 0:
+        parms.reverse()
+        return (name[:pos+1],parms)
+    # name is malformed, just return it
+    return (name,[])
+
+def add_params_name(name,parms):
+    return name + ''.join(('[' + p + ']') for p in parms) 
 
 def pretty(s,max_lines=None):
     lines = s.replace(';',';\n').replace('{','{\n').replace('}','\n}').split('\n')

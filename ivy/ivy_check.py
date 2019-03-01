@@ -19,6 +19,7 @@ import ivy_theory as ith
 import ivy_transrel as itr
 import ivy_solver as islv
 import ivy_fragment as ifc
+import ivy_proof
 
 import sys
 from collections import defaultdict
@@ -29,6 +30,7 @@ checked_action = iu.Parameter("action","")
 opt_trusted = iu.BooleanParameter("trusted",False)
 opt_mc = iu.BooleanParameter("mc",False)
 opt_trace = iu.BooleanParameter("trace",False)
+opt_separate = iu.BooleanParameter("separate",None)
 
 def display_cex(msg,ag):
     if diagnose.get():
@@ -315,13 +317,14 @@ def check_fcs_in_state(mod,ag,post,fcs):
     return not any(fc.failed for fc in fcs)
 
 def check_conjs_in_state(mod,ag,post,indent=8):
+    conjs = mod.conj_subgoals if mod.conj_subgoals is not None else mod.labeled_conjs
     check_lineno = act.checked_assert.get()
     if check_lineno == "":
         check_lineno = None
     if check_lineno is not None:
-        lcs = [sub for sub in mod.labeled_conjs if sub.lineno == check_lineno]
+        lcs = [sub for sub in conjs if sub.lineno == check_lineno]
     else:
-        lcs = mod.labeled_conjs
+        lcs = conjs
     return check_fcs_in_state(mod,ag,post,[ConjChecker(c,indent) for c in lcs])
 
 def check_safety_in_state(mod,ag,post,report_pass=True):
@@ -329,11 +332,27 @@ def check_safety_in_state(mod,ag,post,report_pass=True):
 
 opt_summary = iu.BooleanParameter("summary",False)
 
-# This gets the pre-state for inductive checks
+# This gets the pre-state for inductive checks. Only implicit conjectures are used.
 
 def get_conjs(mod):
-    fmlas = [lf.formula for lf in mod.labeled_conjs]
+    fmlas = [lf.formula for lf in mod.labeled_conjs if not lf.explicit]
     return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
+
+def apply_conj_proofs(mod):
+    # Apply any proof tactics to the conjs to get the conj_subgoals.
+
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
+    pmap = dict((lf.id,p) for lf,p in mod.proofs)
+    conjs = []
+    for lf in mod.labeled_conjs:
+        if lf.id in pmap:
+            proof = pmap[lf.id]
+            subgoals = pc.admit_proposition(lf,proof)
+            subgoals = map(ivy_compiler.theorem_to_property,subgoals)
+            conjs.extend(subgoals)
+        else:
+            conjs.append(lf)
+    mod.conj_subgoals = conjs
 
 
 def summarize_isolate(mod):
@@ -386,6 +405,8 @@ def summarize_isolate(mod):
         for lf in mod.labeled_conjs:
             print pretty_lf(lf)
 
+    apply_conj_proofs(mod)
+    
     if mod.isolate_info.implementations:
         print "\n    The following action implementations are present:"
         for mixer,mixee,action in sorted(mod.isolate_info.implementations,key=lambda x: x[0]):
@@ -561,6 +582,61 @@ def check_isolate():
                 act.checked_assert.value = old_checked_assert
 
 
+def all_assert_linenos():
+    mod = im.module
+    all = []
+    for actname,action in mod.actions.iteritems():
+        guarantees = [sub.lineno for sub in action.iter_subactions()
+                      if isinstance(sub,(act.AssertAction,act.Ranking))]
+        all.extend(guarantees)
+    all.extend(lf.lineno for lf in mod.labeled_conjs)
+    seen = set()
+    res = []
+    for lineno in all:
+        if not lineno in seen:
+            res.append(lineno)
+            seen.add(lineno)
+    check_lineno = act.checked_assert.get()
+    if check_lineno:
+        if check_lineno in seen:
+            return [check_lineno]
+        raise iu.IvyError(None,'There is no assertion at the specified line')
+    return res
+
+def get_isolate_attr(isolate,attr,default=None):
+    if isolate is None:
+        return default
+    attr = iu.compose_names(isolate,attr)
+    if attr not in im.module.attributes:
+        return default
+    return im.module.attributes[attr].rep
+
+def check_separately(isolate):
+    if opt_separate.get() is not None:
+        return opt_separate.get()
+    return get_isolate_attr(isolate,'separate','false') == 'true'
+
+def mc_isolate(isolate):
+    if im.module.labeled_props:
+        raise IvyError(im.module.labeled_props[0],'model checking not supported for property yet')
+    import ivy_mc
+    if not check_separately(isolate):
+        with im.module.theory_context():
+            ivy_mc.check_isolate()
+        return
+    for lineno in all_assert_linenos():
+        with im.module.copy():
+            old_checked_assert = act.checked_assert.get()
+            act.checked_assert.value = lineno
+            with im.module.theory_context():
+                ivy_mc.check_isolate()
+            act.checked_assert.value = old_checked_assert
+    
+def get_isolate_method(isolate):
+    if opt_mc.get():
+        return 'mc'
+    return get_isolate_attr(isolate,'method','ic')
+
 
 def check_module():
     # If user specifies an isolate, check it. Else, if any isolates
@@ -593,10 +669,8 @@ def check_module():
             ivy_isolate.create_isolate(isolate) # ,ext='ext'
             if opt_trusted.get():
                 continue
-            if opt_mc.get():
-                import ivy_mc
-                with im.module.theory_context():
-                    ivy_mc.check_isolate()
+            if get_isolate_method(isolate) == 'mc':
+                mc_isolate(isolate)
             else:
                 check_isolate()
     print ''

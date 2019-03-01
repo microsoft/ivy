@@ -1,0 +1,8 @@
+#lang ivy1.7
+
+object foo = {
+    object obj = {
+        type foo
+    }
+}
+

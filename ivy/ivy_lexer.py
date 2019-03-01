@@ -37,6 +37,7 @@ tokens = (
    'NATIVEQUOTE',
    'PTO',
    'DOLLAR',
+   'CARET',
 )
 
 reserved = all_reserved = {
@@ -138,6 +139,10 @@ reserved = all_reserved = {
    'showgoals' : 'SHOWGOALS',
    'defergoal' : 'DEFERGOAL',
    'spoil' : 'SPOIL',
+   'explicit' : 'EXPLICIT',
+   'thunk' : 'THUNK',
+    'isa' : 'ISA',
+   'autoinstance' : 'AUTOINSTANCE',
 }
 
 tokens += tuple(all_reserved.values())
@@ -171,6 +176,7 @@ t_COLON = r':'
 t_DOTS = r'\.\.'
 t_DOTDOTDOT = r'\.\.\.'
 t_DOLLAR = r'\$'
+t_CARET = r'\^'
 
 t_ignore  = ' \t\r'
 t_ignore_COMMENT = r'\#.*'
@@ -245,11 +251,11 @@ class LexerVersion(object):
                 if s in reserved:
                     del reserved[s]
         if self.version <= [1,6]:
-            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply','theorem','showgoals','spoil']:
+            for s in ['decreases','specification','implementation','require','ensure','around','parameter','apply','theorem','showgoals','spoil','explicit','thunk','isa','autoinstance']:
                 if s in reserved:
                     del reserved[s]
         else:
-            for s in ['requires','ensures']:
+            for s in ['requires','ensures','method']:
                 if s in reserved:
                     del reserved[s]
 

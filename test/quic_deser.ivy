@@ -1,0 +1,58 @@
+#lang ivy1.7
+
+# a fake deserializer for quic
+
+object quic_deser = {}
+
+<<< member
+
+    class `quic_deser`;
+
+>>>
+
+<<< impl
+
+    class `quic_deser` : public ivy_binary_deser {
+        enum {quic_s_init,
+              quic_s_type,
+              quic_s_cid,
+              quic_s_version,
+              quic_s_pkt_num,
+              quic_s_payload,
+              quic_s_done} state;
+        bool long_format;
+        char hdr_type;
+
+    public:
+        quic_deser(const std::vector<char> &inp) : ivy_binary_deser(inp),state(quic_s_init) {
+            pos = 42; // skip 42 bytes of IP and UDP header
+        }
+        virtual void  get(long long &res) {
+            if (state == quic_s_init) {
+                getn(res,1);
+                long_format = (res & 0x80) ? true : false;
+                hdr_type = res & 0x7f;
+                res = long_format;
+                state = quic_s_type;
+            } else if (state == quic_s_type) {
+                res = hdr_type;
+                state = quic_s_cid;
+            } else if (state == quic_s_cid) { 
+                ivy_binary_deser::get(res);
+                state = quic_s_version;
+            } else if (state == quic_s_version) {
+                if (long_format)
+                    ivy_binary_deser::getn(res,4);
+                else
+                    res = 0;
+                state = quic_s_pkt_num;
+            } else if (state == quic_s_pkt_num) {
+                ivy_binary_deser::getn(res,(long_format || (hdr_type & 0x1f) == 0x1d) ? 4 : (hdr_type & 0x1f) == 0x1e ? 2 : 1);
+                state = quic_s_done;
+            }
+            else throw deser_err();
+        }
+        ~quic_deser(){}
+    };
+
+>>>

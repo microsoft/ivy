@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+type t
+
+var x : t
+
+invariant x = 0
+
+after init {
+    x := 0
+}
+
+action a  = {
+  x := (x + 1) - 1
+}
+
+interpret t -> bv[2]
+
+export a

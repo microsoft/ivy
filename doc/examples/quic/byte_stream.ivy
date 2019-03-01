@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+# Byte streams
+# ============
+#
+
+include collections
+
+# A byte is a vector of eight bits.
+
+type byte
+interpret byte -> bv[8]
+
+# A byte stream is an unbounded sequence of bytes of type `stream_data`,
+# indexed by type `stream_pos`.
+
+instance stream_pos : unbounded_sequence         # stream position values
+instance stream_data : array(stream_pos,byte)    # stream data
+

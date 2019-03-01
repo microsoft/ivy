@@ -1,0 +1,12 @@
+#lang ivy1.7
+
+type t
+
+relation r(X:t,Y:t)
+
+definition r(X,Y) = (Y = X + 1)
+
+axiom  r(X,Y) <-> r(Y,X)
+
+property false
+

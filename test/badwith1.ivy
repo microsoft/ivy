@@ -1,0 +1,4 @@
+#lang ivy1.7
+
+isolate foo = {
+} with xxx

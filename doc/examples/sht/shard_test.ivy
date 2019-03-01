@@ -1,0 +1,23 @@
+#lang ivy1.6
+
+include key
+include shard
+
+
+type data
+
+instance shrd : table_shard(key,data)
+
+isolate iso_key = key with impl
+isolate iso_key_iter = key.iter with impl
+
+object impl = {
+    interpret key.t -> bv[16]
+}
+
+
+export shrd.kvt.empty
+export shrd.kvt.get_key
+export shrd.kvt.get_value
+export shrd.kvt.append_pair
+

@@ -1,0 +1,9 @@
+#lang ivy1.6
+
+include collections
+
+type t
+interpret t -> bv[8]
+
+instance arr : array(t,t)
+

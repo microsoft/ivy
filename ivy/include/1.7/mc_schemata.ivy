@@ -1,0 +1,156 @@
+#lang ivy1.7
+
+schema trans1 = {
+    type t
+    function x : t
+    function z : t
+    property x = X & z = X -> x = z
+}
+
+schema trans2 = {
+    type t
+    function x : t
+    property Y = X  -> (x = X <-> x = Y)
+}
+
+schema contra = {
+    type t
+    function x : t
+    property Y ~= X -> ~(x = X & x = Y)
+}
+
+schema cong1 = {
+    type t
+    type u
+    function x : t
+    function y : u
+    function f1(X:t) : u
+    property (f1(X) = y <-> f1(x) = y) | x ~= X 
+}
+
+schema cong1b = {
+    type t
+    type u_finite
+    function x : t
+    function f2(X:t) : u_finite
+    property (f2(X) = f2(x)) | x ~= X 
+}
+
+schema cong2 = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function y : u
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = y <-> f1(x1,x2) = y) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong2b = {
+    type t1
+    type t2
+    type u
+    function x1 : t1
+    function x2 : t2
+    function f1(X1:t1,X2:t2) : u
+    property (f1(X1,X2) = f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+}
+
+schema cong3 = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = y <-> f1(x1,x2,x3) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong3b = {
+    type t1
+    type t2
+    type t3
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function f1(X1:t1,X2:t2,X3:t3) : u
+    property (f1(X1,X2,X3) = f1(x1,x2,x3)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3
+}
+
+schema cong4 = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function y : u
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = y <-> f1(x1,x2,x3,x4) = y) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
+
+schema cong4b = {
+    type t1
+    type t2
+    type t3
+    type t4
+    type u
+    function x1 : t1
+    function x2 : t2
+    function x3 : t3
+    function x4 : t4
+    function f1(X1:t1,X2:t2,X3:t3,X4:t4) : u
+    property (f1(X1,X2,X3,X4) = f1(x1,x2,x3,x4)) | x1 ~= X1 | x2 ~= X2 | x3 ~= X3 | x4 ~= X4
+}
+
+module total_order_schemata(t) = {
+
+    schema lt1 = {
+        function x1 : t
+        property ~(X < Y & Y < x1 & x1 < X)
+    }
+
+    schema lt2 = {
+        function x1 : t
+        property ~(~(X < Y) & ~(x1 < X) & x1 < Y)
+    }
+
+    schema lt3 = {
+        function x1 : t
+        property Y = X  -> (x1 < X <-> x1 < Y)
+    }
+
+    schema lt4 = {
+        type t1
+        type t2
+        function x1 : t1
+        function x2 : t2
+        function x : t
+        function f1(X1:t1,X2:t2) : t
+        property (x < f1(X1,X2) <-> x < f1(x1,x2)) | x1 ~= X1 | x2 ~= X2
+    }
+
+    schema lt5 = {
+        function x1 : t
+        property X = x1 -> ~(X < x1) & ~(x1 < X)
+    }
+
+    schema lt6 = {
+        type t1
+        type t2
+        function x1 : t1
+        function x2 : t2
+        function x : t
+        function f1(X1:t1,X2:t2) : t
+        property (f1(X1,X2) = 0 <-> f1(x1,x2) = 0) | x1 ~= X1 | x2 ~= X2
+    }
+
+}

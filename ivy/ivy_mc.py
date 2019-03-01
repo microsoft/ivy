@@ -14,7 +14,9 @@ import tempfile
 import subprocess
 from collections import defaultdict
 import itertools
+import sys
 
+logfile = None
 
 def get_truth(digits,idx,syms):
     if (len(digits) != len(syms)):
@@ -218,7 +220,6 @@ def ceillog2(n):
     return bits
 
 def get_encoding_bits(sort):
-#    iu.dbg('sort')
     interp = thy.get_sort_theory(sort)
     if il.is_enumerated_sort(interp):
         n = ceillog2(len(interp.defines()))
@@ -245,7 +246,7 @@ def encode_vars(syms,encoding):
 
 class Encoder(object):
     def __init__(self,inputs,latches,outputs):
-#        iu.dbg('inputs')
+#        iu.dbg('[(str(inp),str(inp.sort)) for inp in inputs]')
 #        iu.dbg('latches')
 #        iu.dbg('outputs')
         self.inputs = inputs
@@ -392,7 +393,8 @@ class Encoder(object):
         return res
 
     def encode_equality(self,sort,*eterms):
-        n = len(sort.defines()) if il.is_enumerated_sort(sort) else 2**len(eterms[0])
+        interp = thy.get_sort_theory(sort)
+        n = len(interp.defines()) if il.is_enumerated_sort(interp) else 2**len(eterms[0])
         bits = ceillog2(n)
         eqs = self.sub.andl(*[self.sub.iff(x,y) for x,y in zip(*eterms)])
         alt = self.sub.andl(*[self.gebin(e,n-1) for e in eterms])
@@ -447,7 +449,7 @@ class Encoder(object):
         interp = thy.get_sort_theory(v.sort)
         if il.is_enumerated_sort(interp):
             num = self.bindec(bits)
-            vals = v.sort.defines()
+            vals = interp.defines()
             val = vals[num] if num < len(vals) else vals[-1]
             val = il.Symbol(val,v.sort)
         elif isinstance(interp,thy.BitVectorTheory):
@@ -489,6 +491,19 @@ def is_finite_sort(sort):
             isinstance(interp,thy.BitVectorTheory) or
             il.is_boolean_sort(interp))
 
+def sort_values(sort):
+    interp = thy.get_sort_theory(sort)
+    if il.is_enumerated_sort(interp):
+        return [il.Symbol(s,sort) for s in interp.extension]
+    if isinstance(interp,thy.BitVectorTheory):
+        if interp.bits > 8:
+            raise iu.IvyError(None,'Cowardly refusing to enumerate the type bv[{}]'.format(interp.bits))
+        return [il.Symbol(str(i),sort) for i in range(2**interp.bits)]  
+    if il.is_boolean_sort(interp):
+        return [il.Or(),il.And()]
+    assert False,sort
+    
+
 # Expand the axiom schemata into axioms, for a given collection of
 # function and constant symbols.
 
@@ -506,6 +521,8 @@ class Match(object):
             del self.map[x]
     def unify(self,x,y):
         if x not in self.map:
+            if x.name.endswith('_finite') and not is_finite_sort(y):
+                return False  # 
             self.add(x,y)
             return True
         return self.map[x] == y
@@ -598,9 +615,12 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
 
     # Expand the axioms schemata into axioms
 
+    print 'Expanding schemata...'
     axioms = mod.labeled_axioms + expand_schemata(mod,sort_constants,funs)
     for a in axioms:
-        print 'axiom {}'.format(a)
+        logfile.write('axiom {}\n'.format(a))
+
+    print 'Instantiating axioms...'
 
     # Get all the triggers. For now only automatic triggers
 
@@ -674,7 +694,7 @@ def instantiate_axioms(mod,stvars,trans,invariant,sort_constants,funs):
         recur(f)
                     
     for f in inst_list:
-        print '    {}'.format(f)
+        logfile.write('    {}\n'.format(f))
     return inst_list
 
 
@@ -808,13 +828,17 @@ class Qelim(object):
         self.syms[expr] = res
         self.syms_ctr += 1
         return res
+    def get_consts(self,sort,sort_constants):
+        if is_finite_sort(sort):   # enumerate quantifiers over finite sorts
+            return sort_values(sort)
+        return sort_constants[sort]
     def qe(self,expr,sort_constants):
         if il.is_quantifier(expr):
             old = self.syms.get(expr,None)
             if old is not None:
                 return old
             res = self.fresh(expr)
-            consts = [sort_constants[x.sort] for x in expr.variables]
+            consts = [self.get_consts(x.sort,sort_constants) for x in expr.variables]
             values = itertools.product(*consts)
             maps = [dict(zip(expr.variables,v)) for v in values]
             insts = [normalize(il.substitute(expr.body,m)) for m in maps]
@@ -824,6 +848,8 @@ class Qelim(object):
                 c = il.Implies(res,inst) if il.is_forall(expr) else il.Implies(inst,res)
                 self.fmlas.append(c)
             return res
+        if il.is_macro(expr):
+            return self.qe(il.expand_macro(expr),sort_constants)
         return clone_normal(expr,[self.qe(e,sort_constants) for e in expr.args])
     def __call__(self,trans,invariant,indhyps):
         # apply to the transition relation
@@ -928,15 +954,24 @@ def match_annotation(action,annot,handler):
         handler.handle(action,env)
     recur(action,annot,dict())
     
+def checked(thing):
+    return ia.checked_assert.value in ["",thing.lineno]
 
 def add_err_flag(action,erf,errconds):
     if isinstance(action,ia.AssertAction):
-        errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
-        res = ia.AssignAction(erf,il.Or(erf,errcond))
-        errconds.append(errcond)
-        res.lineno = action.lineno
-        return res
-    if isinstance(action,ia.AssumeAction):
+        if checked(action):
+            print "{}Model checking guarantee".format(action.lineno)
+            errcond = ilu.dual_formula(il.drop_universals(action.args[0]))
+            res = ia.AssignAction(erf,il.Or(erf,errcond))
+            errconds.append(errcond)
+            res.lineno = action.lineno
+            return res
+        if isinstance(action,ia.SubgoalAction):
+#            print "skipping subgoal at line {}".format(action.lineno)
+            return ia.Sequence()
+    if isinstance(action,ia.AssumeAction) or isinstance(action,ia.AssertAction):
+        if isinstance(action,ia.AssertAction):
+            print "assuming assertion at line {}".format(action.lineno)
         res = ia.AssumeAction(il.Or(erf,action.args[0])) 
         res.lineno = action.lineno
         return res
@@ -956,6 +991,67 @@ def add_err_flag_mod(mod,erf,errconds):
         new_action.formal_returns = action.formal_returns
         mod.actions[actname] = new_action
        
+# This translates finite function applications to table lookups.  This
+# is preferable to using axioms if the argument types are large, since
+# it prevents copying the argument expressions. Also, the result is a
+# circuit (as opposed to a set of constraints) which might be helpful
+# to ABC.
+
+
+def to_table_lookup(trans,invariant):
+    new_defs = []
+    global to_table_lookup_counter
+    to_table_lookup_counter = 0
+    
+    def arg_sym(sort):
+        global to_table_lookup_counter
+        res = il.Symbol('__arg[{}]'.format(to_table_lookup_counter),sort)
+        to_table_lookup_counter += 1
+        return res
+
+    def recur(expr):
+        if (il.is_app(expr) and len(expr.args) > 0 and
+            not il.is_interpreted_symbol(expr.func) and
+            all(is_finite_sort(a.sort) for a in expr.args)):
+            
+            argsyms = []
+            consts = []
+            for x in expr.args:
+                cs = sort_values(x.sort)
+                if x in cs:
+                    argsyms.append(x)
+                    consts.append([x])
+                else:
+                    consts.append(cs)
+                    if il.is_constant(x):
+                        argsyms.append(x)
+                    else:
+                        sym = arg_sym(x.sort)
+                        argsyms.append(sym)
+                        new_defs.append(il.Definition(sym,recur(x)))
+            values = list(itertools.product(*consts))
+            res = (expr.rep)(*values[0])
+            for v in values[1:]:
+                res = il.Ite(il.And(*[il.Equals(x,y) for x,y in zip(argsyms,v)]),(expr.rep)(*v),res)
+            return res
+        return expr.clone(map(recur,expr.args))
+
+
+    # skip this step if there aren't any finite-domain functions
+    if not any(il.is_function_sort(func.sort) and len(func.sort.dom) > 0 and not il.is_interpreted_symbol(func) and
+               all(is_finite_sort(sort) for sort in func.sort.dom) for func in il.all_symbols()):
+        return trans,invariant
+
+    defs = [recur(df) for df in trans.defs]
+    fmlas = [recur(fmla) for fmla in trans.fmlas]
+    trans = ilu.Clauses(fmlas,defs + new_defs)
+    new_defs = []
+    invariant = recur(invariant)
+    if new_defs:
+        invariant = il.Implies(il.And(*[df.to_constraint() for df in new_defs]),invariant)
+    return trans,invariant
+
+
 def to_aiger(mod,ext_act):
 
     erf = il.Symbol('err_flag',il.find_sort('bool'))
@@ -978,6 +1074,10 @@ def to_aiger(mod,ext_act):
     pmap = dict((lf.id,p) for lf,p in mod.proofs)
     conjs = []
     for lf in mod.labeled_conjs:
+        if not checked(lf):
+#            print 'skipping {}'.format(lf)
+            continue
+        print "{}Model checking invariant".format(lf.lineno)
         if lf.id in pmap:
             proof = pmap[lf.id]
             subgoals = pc.admit_proposition(lf,proof)
@@ -1026,7 +1126,6 @@ def to_aiger(mod,ext_act):
 #   funs = ilu.used_symbols_clauses(trans)
     funs.update(ilu.used_symbols_ast(invariant))
     funs = set(sym for sym in funs if  il.is_function_sort(sym.sort))
-    iu.dbg('[str(fun) for fun in funs]')
 
     # Propositionally abstract
 
@@ -1054,11 +1153,12 @@ def to_aiger(mod,ext_act):
 
     from_asserts = il.And(*[il.Equals(x,x) for x in ilu.used_symbols_ast(il.And(*errconds)) if
                             tr.is_skolem(x) and not il.is_function_sort(x.sort)])
-    iu.dbg('from_asserts')
+#    iu.dbg('from_asserts')
     invar_syms.update(ilu.used_symbols_ast(from_asserts))
     sort_constants = mine_constants(mod,trans,il.And(invariant,from_asserts))
     sort_constants2 = mine_constants2(mod,trans,invariant)
-    print '\ninstantiations:'
+    print '\nInstantiating quantifiers (see {} for instantiations)...'.format(logfile_name)
+    logfile.write('\ninstantiations:\n')
     trans,invariant = Qelim(sort_constants,sort_constants2)(trans,invariant,indhyps)
     
     
@@ -1078,6 +1178,10 @@ def to_aiger(mod,ext_act):
     ax_def = il.Definition(ax_var,ax_conj)
     invariant = il.Implies(ax_var,invariant)
     trans = ilu.Clauses(trans.fmlas+[ax_var],trans.defs+[ax_def])
+
+    # step 4b: handle the finite-domain functions specially
+
+    trans,invariant= to_table_lookup(trans,invariant)
     
     # step 5: eliminate all non-propositional atoms by replacing with fresh booleans
     # An atom with next-state symbols is converted to a next-state symbol if possible
@@ -1087,6 +1191,8 @@ def to_aiger(mod,ext_act):
     global prop_abs_ctr  # sigh -- python lameness
     prop_abs_ctr = 0   # counter for fresh symbols
     new_stvars = []    # list of fresh symbols
+    finite_syms = []   # list of symbols not abstracted
+    finite_syms_set = set()
 
     # get the propositional abstraction of an atom
     def new_prop(expr):
@@ -1111,10 +1217,16 @@ def to_aiger(mod,ext_act):
     global mk_prop_fmlas
     mk_prop_fmlas = []
     def mk_prop_abs(expr):
-        if il.is_quantifier(expr) or len(expr.args) > 0 and any(not is_finite_sort(a.sort) for a in expr.args):
+        if (il.is_quantifier(expr) or
+            len(expr.args) > 0 and (
+                any(not is_finite_sort(a.sort) for a in expr.args)
+                or il.is_app(expr) and not il.is_interpreted_symbol(expr.func))):
             return new_prop(expr)
+        if (il.is_constant(expr) and not il.is_numeral(expr)
+            and expr not in il.sig.constructors and expr not in finite_syms_set and not tr.is_skolem(expr)):
+            finite_syms_set.add(expr)
+            finite_syms.append(expr)
         return expr.clone(map(mk_prop_abs,expr.args))
-
     
     # apply propositional abstraction to the transition relation
     new_defs = map(mk_prop_abs,trans.defs)
@@ -1128,10 +1240,10 @@ def to_aiger(mod,ext_act):
     def is_immutable_expr(expr):
         res = not any(my_is_skolem(sym) or tr.is_new(sym) or sym in stvarset for sym in ilu.used_symbols_ast(expr))
         return res
-    for expr,v in prop_abs.iteritems():
+    for expr,v in itertools.chain(prop_abs.iteritems(),((x,x) for x in finite_syms)):
         if is_immutable_expr(expr):
             new_stvars.append(v)
-            print 'new state: {}'.format(expr)
+            logfile.write('new state: {}\n'.format(expr))
             new_defs.append(il.Definition(tr.new(v),v))
 
     trans = ilu.Clauses(new_fmlas+mk_prop_fmlas,new_defs)
@@ -1260,13 +1372,15 @@ class AigerMatchHandler(object):
             if all(x in inv_env or not my_is_skolem(x) and
                    not tr.is_new(x) and x not in env for x in ilu.used_symbols_ast(decd)):
                 expr = ilu.rename_ast(decd,inv_env)
+                if il.is_constant(expr) and expr in il.sig.constructors:
+                    return
                 if not (expr in self.current and self.current[expr] == val):
                     print '        {} = {}'.format(expr,val)
                     self.current[expr] = val
 
         if hasattr(action,'lineno'):
 #            print '        env: {}'.format('{'+','.join('{}:{}'.format(x,y) for x,y in env.iteritems())+'}')
-            inv_env = dict((y,x) for x,y in env.iteritems())
+            inv_env = dict((y,x) for x,y in env.iteritems() if not my_is_skolem(x))
             for v in self.aiger.inputs:
                 if v in self.decoder:
                     show_sym(v,self.decoder[v],self.aiger.get_sym(v))
@@ -1352,6 +1466,15 @@ class ABCModelChecker(ModelChecker):
 
 def check_isolate():
     
+    print
+    print 80*'*'
+    print
+
+    global logfile,logfile_name
+    if logfile is None:
+        logfile_name = 'ivy_mc.log'
+        logfile = open(logfile_name,'w')
+
     mod = im.module
 
     # build up a single action that does both initialization and all external actions
@@ -1399,7 +1522,7 @@ def check_isolate():
     texts = []
     while True:
         text = p.stdout.read(256)
-        print text,
+        sys.stdout.write(text)
         texts.append(text)
         if len(text) < 256:
             break
@@ -1418,17 +1541,15 @@ def check_isolate():
         print '\nPASS'
     else:
         print '\nFAIL'
+        print
+        print 'Counterexample trace follows...'
+        print 80*'*'
         tr = aiger_witness_to_ivy_trace(aiger,outfilename,action,stvarset,ext_act,annot,cnsts,decoder)        
-        # import tk_ui as ui
-        # iu.set_parameters({'mode':'induction'})
-        # gui = ui.new_ui()
-        # agui = gui.add(tr)
-        # gui.tk.update_idletasks() # so that dialog is on top of main window
-        # gui.tk.mainloop()
-        # exit(1)
-
+        print
+        print 80*'*'
+        exit(0)
         
-    exit(0)
+    
 
 
     

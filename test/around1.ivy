@@ -1,0 +1,22 @@
+#lang ivy1.7
+
+isolate foo = {
+
+    action a(x:bool) returns (y:bool)
+
+    specification {
+        around a {
+            require x;
+            ...
+            ensure y
+        }
+    }
+
+    implementation {
+        implement a {
+            y := x
+        }
+    }
+}
+
+export foo.a

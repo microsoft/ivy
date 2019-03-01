@@ -1,0 +1,12 @@
+#lang ivy1.7
+
+type t
+function f(X:t) : t
+function g(X:t) : t
+
+# axiom f(g(X)) = 0
+
+axiom f(g(X)) = 0 
+axiom g(X) = 0
+
+property false

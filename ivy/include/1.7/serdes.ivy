@@ -1,0 +1,74 @@
+#lang ivy
+
+# Standard serializers and deserializers
+# --------------------------------------
+#
+# Ivy provides standard binary serializers and deserializers that can
+# be used, for example, to transfer data structures over a network,
+# read and write files, and so on. The format is unspecified, and may
+# change from one version of ivy to the next.
+#
+
+# The standard serializer
+# =======================
+
+object std_serializer = {}
+
+# The standard deserializer
+# =========================
+
+object std_deserializer = {}
+
+# Applying a serializer/deserializer
+# ==================================
+#
+# The module `serdes` takes four parameters:
+#
+# - `data`: the type of data to be serialized/deserialized
+# - `bytes`: a byte array type
+# - `serializer`: the serializer (e.g., `std_serializer`)
+# - `deserializer`: the deserializer (e.g., `std_deserializer`)
+
+module serdes(data,bytes,serializer,deserializer) = {
+    action to_bytes(x:data) returns(y:bytes)
+    action from_bytes(y:bytes) returns(x:data)
+
+    implementation {
+	implement to_bytes {
+	    <<<
+	    `serializer` ser;
+	    __ser(ser,x);
+	    y.resize(ser.res.size());
+	    for (unsigned i = 0; i < ser.res.size(); i++)
+	        y[i] = (unsigned char) ser.res[i];
+//	    std::copy(ser.res.begin(),ser.res.end(),y.begin());
+	    >>>
+	}
+	implement from_bytes {
+	    <<<
+	    std::vector<char> buf(y.size());
+	    std::copy(y.begin(),y.end(),buf.begin());
+	    `deserializer` des(buf);
+	    __deser(des,x);
+	    >>>
+	}
+    }
+
+    isolate iso = this
+    attribute test = impl
+}
+
+<<< header
+
+    class ivy_binary_ser;
+    class ivy_binary_deser;
+
+>>>
+
+<<< member
+
+    typedef ivy_binary_ser `std_serializer`;
+    typedef ivy_binary_deser `std_deserializer`;
+
+>>>
+

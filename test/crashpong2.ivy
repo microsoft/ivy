@@ -1,0 +1,254 @@
+#lang ivy1.7
+
+module file(data,cont) = {
+    action write(d:data)
+    action read returns (d:data)
+    action sync(c:cont)
+    action synced(c:cont)
+
+    specification {
+        var contents : data
+        relation pending(C:cont)
+        
+        after init {
+            pending(C) := false;
+        }
+
+        before write {
+            contents := d;
+        }
+
+        after read {
+            ensure d = contents
+        }
+
+        before sync {
+            require ~pending(c);
+            pending(c) := true;
+        }
+
+        before synced {
+            require pending(c);
+            pending(c) := false;
+        }
+    }
+    implementation {
+        object fildes = {}
+        <<< member
+            int `fildes`;
+        >>>
+        <<< init
+            {
+		std::string pathname = "`this`.log";
+		int f = ::open(pathname.c_str(),O_RDWR|O_CREAT|O_TRUNC,0666);
+		if (f < 0) {
+		    perror("cannot open file to write");
+		}
+		`fildes` = f;
+	    }
+        >>>
+        implement write {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            ivy_binary_ser sr;
+            __ser(sr,d);
+            if (::write(`fildes`,&sr.res[0],sr.res.size()) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            if (::ftruncate(`fildes`,sr.res.size()) < 0) {
+                perror("cannot truncate file");
+            }
+        >>>
+        }
+        implement read {
+        <<<
+            if (::lseek(`fildes`,0,SEEK_SET) < 0) {
+                perror("cannot seek to beginning of file");
+            }
+            std::vector<char> buf;
+            ivy_socket_deser ds(`fildes`,buf);  // initializer deserializer with zero bytes
+            try {
+                __deser(ds,d);            // read the message
+            } 
+
+            // If file has bad syntax, something really terrible happened so we give up
+
+            catch (deser_err &){
+                std::cerr << "syntax error in log file";
+                exit(1);
+            }
+        >>>
+        }
+        <<< impl
+            template<typename cont, typename cbtype> class sync_reader : public reader {
+                cont c;
+                cbtype cb;
+                int fd;
+                ivy_class *ivy;
+            public:
+                sync_reader(cont c, int fd, cbtype cb, ivy_class *ivy) : c(c), fd(fd), cb(cb), ivy(ivy) {}
+                int fdes() {return fd;}
+                void read() {
+                    ivy->__lock();
+                    if (::fsync(fd) < 0)
+                        { perror("failed to sync file"); }
+                    fd = -1;
+                    cb(c);
+                    ivy->__unlock();
+                }  
+            };
+        >>>
+        implement sync {
+        <<<
+            install_reader(new sync_reader<`cont`,%`synced`>(c,`fildes`,`synced`, this));
+        >>>
+        }
+        action handle_synced(c:cont) = {
+            call synced(c)
+        }
+
+    }
+    trusted isolate iso = this 
+}
+
+object intf = {
+    action ping
+    action pong
+}
+
+type side_t = {left,right}
+
+object spec = {
+    individual side : side_t
+
+    after init {
+        side := left
+    }
+
+    before intf.ping {
+	assert side = left;
+	side := right
+    }
+
+    before intf.pong {
+	assert side = right;
+	side := left
+    }
+}
+
+type cbtype  # call-back parameter
+action run(c:cbtype)  # just to override
+
+object left_player = {
+
+    individual ball : bool
+
+    instance backup : file(bool,cbtype)
+
+    after init {
+        ball := true;
+        call backup.write(ball)
+    }
+
+    variant cb of cbtype          # create a variant for our callback
+
+    action async = {
+	if ball {
+	    ball := false;
+            call backup.write(ball);
+            var c : cb;           # create a callback
+            var c2 : cbtype := c;
+            call backup.sync(c2);  # sync will run the callback when done
+	}
+    }
+
+    # When disk sync is done, we run this:
+
+    action run(c:cb) = {
+        assume exists C:cbtype. C *> c & backup.pending(C);
+        call intf.ping;
+    }
+    
+    implement backup.synced(c:cbtype) {
+        call c.run
+    }
+
+    implement intf.pong {
+	ball := true;
+        call backup.write(ball)  # don't sync here, since it's ok to lose ball
+    }
+
+    action crash = *
+
+    after crash {
+        ball := backup.read;
+    }
+
+    conjecture left_player.ball -> spec.side = left
+    conjecture ball <-> backup.contents
+    conjecture backup.pending(C) -> spec.side = left & ~ball & exists D:cb. C *> D
+    conjecture backup.pending(C1) & backup.pending(C2) -> C1 = C2
+}
+
+object right_player = {
+    individual ball : bool
+
+    instance backup : file(bool,cbtype)
+
+    after init {
+        ball := false;
+        call backup.write(ball)
+    }
+
+    variant cb of cbtype          # create a variant for our callback
+
+    action async = {
+	if ball {
+	    ball := false;
+            call backup.write(ball);
+            var c : cb;           # create a callback
+            call backup.sync(c);  # sync will run the callback when done
+	}
+    }
+        
+    implement backup.synced(c:cbtype) {
+        call c.run
+    }
+
+    # When disk sync is done, we run this:
+
+    action run(c:cb) = {
+        assume exists C:cbtype. C *> c & backup.pending(C);
+        call intf.pong;
+    }
+
+    implement intf.ping {
+	ball := true;
+        call backup.write(ball) # don't sync here, since it's ok to lose ball
+    }
+
+    action crash = *
+
+    after crash {
+        ball := backup.read;
+    }
+
+    conjecture right_player.ball -> spec.side = right
+    conjecture ball <-> backup.contents
+    conjecture backup.pending(C) -> spec.side = right & ~ball & exists D:cb. C *> D
+    conjecture backup.pending(C1) & backup.pending(C2) -> C1 = C2
+    
+}
+
+
+export left_player.async
+export right_player.async
+export left_player.crash
+export right_player.crash
+
+isolate iso_l = left_player with spec
+isolate iso_r = right_player with spec
+
+extract iso_impl = this

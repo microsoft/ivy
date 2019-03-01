@@ -1,0 +1,27 @@
+#lang ivy1.5
+
+type foo
+type bar
+
+module mod(me) = {
+  relation r
+  individual x:foo
+  init x = me
+
+  action thing(y:foo) = {
+    x := me
+  }
+
+  action set_me(y:foo) = {
+    x := y;
+    r := true
+  }
+
+  conjecture r -> x = me
+}
+
+instance inst(X:foo) : mod(X)
+
+isolate iso(me:foo) = inst(me)
+
+export inst.set_me
