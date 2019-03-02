@@ -85,7 +85,7 @@ def compile_args(self):
         return [a.compile() for a in self.args]
 
 for fc,tc in op_pairs:
-    fc.cmpl = lambda self,tc=tc: tc(*compile_args(self))
+    fc.cmpl = lambda self,tc=tc: tc(*compile_args(self),ref=self.get_lineno())
 
 
 class Context(object):
@@ -304,7 +304,8 @@ def compile_app(self,old=False):
                 sym = ivy_logic.Symbol(sym.name,variable_sort(self))
     if sym is not None:
         sym = old_sym(sym,old)
-        return (sym)(*args)
+        res = (sym)(*args,ref=self.get_lineno())
+        return res
     res = compile_field_reference(self.rep,args,self.lineno,old=old)
     return res
     
@@ -349,12 +350,13 @@ ivy_ast.NativeExpr.cmpl = cmpl_native_expr
 ivy_ast.App.cmpl = ivy_ast.Atom.cmpl = compile_app
 
 def compile_isa(self):
+    lineno = self.get_lineno()
     lhs = self.args[0].compile()
     rhs = cmpl_sort(self.args[1].relname)
     vars = variables_ast(lhs)
     rn = UniqueRenamer(used=[v.name for v in vars])
-    v = ivy_logic.Variable(rn('V'),rhs)
-    res = ivy_logic.Exists([v],ivy_logic.pto(lhs.sort,rhs)(lhs,v))
+    v = ivy_logic.Variable(rn('V'),rhs,ref=lineno)
+    res = ivy_logic.Exists([v],ivy_logic.pto(lhs.sort,rhs)(lhs,v,ref=lineno),ref=lineno)
     return res
     
 ivy_ast.Isa.cmpl = compile_isa
@@ -367,13 +369,13 @@ def compile_variable(self):
         sort = variable_sort(self)
     if ivy_logic.is_topsort(sort):
         sort = variable_context.map.get(self.rep,sort)
-    return ivy_logic.Variable(self.rep,sort)
+    return ivy_logic.Variable(self.rep,sort,ref=self.get_lineno())
 
 ivy_ast.Variable.cmpl = compile_variable
 
-ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name)
+ivy_ast.ConstantSort.cmpl = lambda self,name: ivy_logic.ConstantSort(name,ref=self.get_lineno())
 
-ivy_ast.EnumeratedSort.cmpl = lambda self,name: ivy_logic.EnumeratedSort(name,self.extension)
+ivy_ast.EnumeratedSort.cmpl = lambda self,name: ivy_logic.EnumeratedSort(name,self.extension,ref=self.get_lineno())
 
 SymbolList.cmpl = lambda self: self.clone([find_symbol(s) for s in self.symbols])
 
@@ -383,14 +385,15 @@ def cquant(q):
 def compile_quantifier(self):
     bounds = [ivy_logic.Variable(v.rep,variable_sort(v)) for v in self.bounds]
     with VariableContext(bounds):
-        return cquant(self)(bounds,self.args[0].compile())
+        return cquant(self)(bounds,self.args[0].compile(),ref=self.get_lineno())
 
 ivy_ast.Quantifier.cmpl = compile_quantifier
 
 ivy_ast.NamedBinder.cmpl = lambda self: ivy_logic.NamedBinder(
     self.name,
     [v.compile() for v in self.bounds],
-    self.args[0].compile()
+    self.args[0].compile(),
+    ref = self.get_lineno()
 )
 
 ivy_ast.LabeledFormula.cmpl = lambda self: self.clone([self.label,

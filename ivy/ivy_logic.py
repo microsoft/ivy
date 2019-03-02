@@ -139,23 +139,23 @@ Symbol.relname = property(lambda self: self)
 #Symbol.__hash__ = lambda self: hash(self.name)
 #Symbol.__eq__ = lambda self,other: (type(self) == type(other) and self.name == other.name)
 
-Symbol.rename = lambda self,rn: Symbol(rn(self.name),self.sort)
-Symbol.prefix = lambda self,s:  Symbol(s+self.name,self.sort)
+Symbol.rename = lambda self,rn: Symbol(rn(self.name),self.sort,ref=self.ref)
+Symbol.prefix = lambda self,s:  Symbol(s+self.name,self.sort,ref=self.ref)
 Symbol.startswith = lambda self,s: self.name.startswith(s)
-Symbol.suffix = lambda self,s: Symbol(self.name+s,self.sort)
+Symbol.suffix = lambda self,s: Symbol(self.name+s,self.sort,ref=self.ref)
 Symbol.endswith = lambda self,s: self.name.endswith(s)
-Symbol.drop_prefix = lambda self,s: Symbol(self.name[len(s):],self.sort)
-Symbol.drop_suffix = lambda self,s: Symbol(self.name[0,-len(s)],self.sort)
+Symbol.drop_prefix = lambda self,s: Symbol(self.name[len(s):],self.sort,ref=self.ref)
+Symbol.drop_suffix = lambda self,s: Symbol(self.name[0,-len(s)],self.sort,ref=self.ref)
 Symbol.contains = lambda self,s: (s in self.name)
 Symbol.skolem = lambda self: self.prefix('__')
 Symbol.is_skolem = lambda self: self.contains('__')
 Symbol.deskolem = lambda self,s: self.drop_prefix('__')
-Symbol.__call__ = lambda self,*args: App(self,*args) if len(args) > 0 or isinstance(self.sort,FunctionSort) else self
+Symbol.__call__ = lambda self,*args,**kwargs: App(self,*args,**kwargs) if len(args) > 0 or isinstance(self.sort,FunctionSort) else self
 Symbol.is_relation = lambda self: isinstance(self.sort.rng,lg.BooleanSort)
 Symbol.args = property(lambda self : [])
 Symbol.is_numeral  = lambda self : is_numeral_name(self.name)
 Symbol.clone = lambda self,args : self
-Symbol.resort = lambda self,sort : Symbol(self.name,sort)
+Symbol.resort = lambda self,sort : Symbol(self.name,sort,ref=self.ref)
 
 BooleanSort = lg.BooleanSort
 
@@ -164,7 +164,7 @@ class AST(object):
     Base class for abstract syntax.
     """
     def clone(self,args):
-       return type(self)(*args)
+       return type(self)(*args,ref=self.ref)
 #
 #    def __eq__(self,other):
 #        return type(self) == type(other) and self.args == other.args
@@ -187,9 +187,10 @@ class Let(AST):
         return res
 
 class Some(AST):
-    def __init__(self,*args):
+    def __init__(self,*args,**kwargs):
         assert len(args) >= 2
         self.args = args
+        self.ref = kwargs.get('ref',None)
     def __str__(self):
         res = 'some ' + str(self.args[0]) + '. ' + str(self.args[1])
         if len(self.args) >= 3:
@@ -209,16 +210,17 @@ class Some(AST):
     def variables(self):
         return [self.args[0]]
     def clone_binder(self,vs,body):
-        return Some(*(vs+self.args[1:]))
+        return Some(*(vs+self.args[1:]),ref=self.ref)
 
 
 class Definition(AST):
     """
     Formula of the form p(X,...,Z) <-> fmla[X,...,Z]
     """
-    def __init__(self,*args):
+    def __init__(self,*args,**kwargs):
         assert len(args) == 2
         self.args = args
+        self.ref = kwargs.get('ref',None)
     def __str__(self):
         return ' = '.join([repr(x) for x in self.args])
     def defines(self):
@@ -255,15 +257,15 @@ lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, 
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
-    cls.clone = lambda self,args: type(self)(*args)
+    cls.clone = lambda self,args: type(self)(*args,ref=self.ref)
 
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
-    cls.clone = lambda self,args: type(self)(self.variables,*args)
+    cls.clone = lambda self,args: type(self)(self.variables,*args,ref=self.ref)
 
-lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args)
+lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args,ref=self.ref)
 lg.NamedBinder.rep = property(lambda self: self)
 
-lg.Apply.clone = lambda self,args: type(self)(self.func, *args)
+lg.Apply.clone = lambda self,args: type(self)(self.func, *args, ref=self.ref)
 lg.Apply.args = property(lambda self: self.terms)
 lg.Apply.rep = property(lambda self: self.func)
 lg.Apply.relname = property(lambda self: self.func)
@@ -596,7 +598,7 @@ def is_binder(term):
     return isinstance(term, (lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder, Some))
 
 for b in [lg.ForAll,lg.Exists,lg.Lambda]:
-    b.clone_binder = lambda self, variables, body, b = b: b(variables,body)
+    b.clone_binder = lambda self, variables, body, b = b: b(variables,body,ref=self.ref)
 
 lg.NamedBinder.clone_binder = lambda self, variables, body: lg.NamedBinder(self.name,variables,body)
 
@@ -682,8 +684,8 @@ Variable.args = property(lambda self: [])
 Variable.clone = lambda self,args: self
 Variable.rep = property(lambda self: self.name)
 Variable.__call__ = lambda self,*args: App(self,*args) if isinstance(self.sort,FunctionSort) else self
-Variable.rename = lambda self,name: Variable(name if isinstance(name,str) else name(self.name),self.sort)
-Variable.resort = lambda self,sort : Variable(self.name,sort)
+Variable.rename = lambda self,name: Variable(name if isinstance(name,str) else name(self.name),self.sort,ref=self.ref)
+Variable.resort = lambda self,sort : Variable(self.name,sort,ref=self.ref)
 
 
 class Literal(AST):
@@ -691,10 +693,11 @@ class Literal(AST):
     Either a positive or negative atomic formula. Literals are not
     formulas! Use Not(Atom(...)) to get a formula.
     """
-    def __init__(self, polarity, atom):
+    def __init__(self, polarity, atom, **kwargs):
 #        assert isinstance(atom,Atom) or isinstance(atom,And) and len(atom.args) == 0
         self.polarity = polarity
         self.atom = atom
+        self.ref = kwargs.get('ref',None)
     def __repr__(self):
         return "Literal({!r},{!r})".format(self.polarity,self.atom)
     def __str__(self):
@@ -706,7 +709,7 @@ class Literal(AST):
         """
         return Literal(1 - self.polarity, self.atom)
     def clone(self,args):
-        return Literal(self.polarity,*args)
+        return Literal(self.polarity,*args,ref=self.ref)
     def __eq__(self,other):
         return type(self) == type(other) and self.polarity == other.polarity and self.args == other.args
     @property
@@ -1084,8 +1087,8 @@ equals = Symbol('=',RelationSort([lg.TopSort(),lg.TopSort()]))
 
 lg.Eq.relname = property(lambda self: equals)
 
-def Equals(x,y):
-    return lg.Eq(x,y)
+def Equals(x,y,**kwargs):
+    return lg.Eq(x,y,**kwargs)
 
 def is_eq(ast):
     return isinstance(ast,lg.Eq)
@@ -1546,7 +1549,7 @@ class VariableUniqifier(object):
         if is_binder(fmla):
             # save the old bindings
             obs = [(v,vmap[v]) for v in fmla.variables if v in vmap]
-            newvars = tuple(Variable(self.rn(v.name),v.sort) for v in fmla.variables)
+            newvars = tuple(v.rename(self.rn) for v in fmla.variables)
             vmap.update(zip(fmla.variables,newvars))
             self.invmap.update(zip(newvars,fmla.variables))
             try:
@@ -1559,14 +1562,20 @@ class VariableUniqifier(object):
             return res
         if is_variable(fmla):
             if fmla not in vmap:
-                newv = Variable(self.rn(fmla.name),fmla.sort)
+                newv = fmla.rename(self.rn)
                 vmap[fmla] = newv
                 self.invmap[newv] = fmla
             return vmap[fmla]
         args = [self.rec(f,vmap) for f in fmla.args]
         return fmla.clone(args)
     def undo(self,fmla):
-        return lu.substitute(fmla,self.invmap)
+        if is_binder(fmla):
+            newvars = tuple(self.invmap.get(v,v) for v in fmla.variables)
+            return fmla.clone_binder(newvars,self.undo(fmla.body))
+        if is_variable(fmla):
+            return self.invmap.get(fmla,fmla)
+        return fmla.clone(map(self.undo,fmla.args))
+        
 
 def alpha_avoid(fmla,vs):
     """ Alpha-convert a formula so that bound variable names do not clash with vs. """

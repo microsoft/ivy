@@ -407,14 +407,14 @@ def get_node_sort(n):
 
 def report_arc(arc):
     v,anode,fmla,lineno = arc[0:4]
-    res = '\n' + str(lineno) + str(fmla)
+    res = '\n' + str(fmla.ref or lineno) + str(var_uniq.undo(fmla))
     if len(arc) > 4:
         idx = arc[4]
         term = fmla.args[idx]
         res += '\n    (position {} is a function from '.format(idx) + str(get_node_sort(v)) + ' to ' + str(term.sort) + ')'
         if term in skolem_map:
             sm = skolem_map[term]
-            res += '\n    ' + str(sm[1].lineno) + 'skolem function defined by:\n         ' + str(sm[0])  
+            res += '\n    ' + str(sm[0].ref or sm[1].lineno) + 'skolem function defined by:\n         ' + str(var_uniq.undo(sm[0]))  
     return res
 
 def report_cycle(cycle):
@@ -434,9 +434,10 @@ def report_interp_over_var(fmla,lineno,node):
         if n is node:
             if v in universally_quantified_variables:
                 lf = universally_quantified_variables[v]
-                var_msg = '\n{}The quantified variable is {}'.format(lf.lineno,var_uniq.undo(v))
+                var_msg = '\n{}The quantified variable is {}'.format(v.ref or lf.lineno,var_uniq.undo(v))
+    iu.dbg('fmla.ref')
     report_feu_error('An interpreted symbol is applied to a universally quantified variable:\n'+
-                     '{}{}'.format(lineno,var_uniq.undo(fmla))+var_msg)
+                     '{}{}'.format(fmla.ref or lineno,var_uniq.undo(fmla))+var_msg)
 
 def check_feu(assumes,asserts,macros):
     """ Take a list of assumes, assert and macros, and determines
@@ -536,7 +537,7 @@ def get_assumes_and_asserts(preconds_only):
 
     for ldf in im.module.labeled_axioms:
         if not ldf.temporal:
-            # print 'axiom : {}'.format(ldf.formula)
+#            print 'axiom : {} {}'.format(ldf.formula.ref,ldf.formula)
             assumes.append((ldf.formula,ldf))
 
     for ldf in im.module.labeled_props:

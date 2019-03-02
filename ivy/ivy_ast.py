@@ -21,6 +21,8 @@ class AST(object):
        if hasattr(self,'lineno'):
            res.lineno = self.lineno
        return res
+    def get_lineno(self):
+       return self.lineno if hasattr(self,'lineno') else None
 
 class Symbol(AST):
     def __init__(self,rep,sort):

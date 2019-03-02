@@ -34,7 +34,7 @@ def _itemgetter(x):
 _class_template = '''\
 class {typename}(object):
 
-    __slots__ = ('_tup')
+    __slots__ = ('_tup','_ref')
 
     _meta_fields = {meta_field_names!r}
     _sub_fields = {sub_field_names!r}
@@ -52,8 +52,9 @@ class {typename}(object):
         """
         return args
 
-    def __init__(self, {meta_arg_list_with_defaults}{sub_arg_list}):
-        self._tup = tuple(type(self)._preprocess_({meta_arg_list}{sub_arg_list}))
+    def __init__(self, {constructor_arg_list}):
+        self._tup = tuple(type(self)._preprocess_({tuple_arg_list}))
+        self._ref = kwargs.get('ref',None)
 
     def __repr__(self):
         """Return a nicely formatted representation string"""
@@ -108,6 +109,10 @@ class {typename}(object):
     def __setstate__(self, state):
         self._tup = state['_tup']
 
+    @property
+    def ref(self):
+        return self._ref
+
 {field_defs}
 '''
 
@@ -137,9 +142,9 @@ def recstruct(typename, meta_field_names, sub_field_names, verbose=False):
     # Validate the field names.
 
     meta_field_names = _preprocess_names(meta_field_names)
-    meta_arg_list_with_defaults = ''.join(x + ', ' for x in meta_field_names)
+    meta_arg_list_with_defaults = tuple(meta_field_names)
     meta_field_names = [s.split('=')[0] for s in meta_field_names] #strip off default values
-    meta_arg_list = ''.join(x + ', ' for x in meta_field_names)
+    meta_arg_list = tuple(meta_field_names)
     sub_field_names = _preprocess_names(sub_field_names)
     names = [typename] + meta_field_names
     if len(sub_field_names) > 0 and sub_field_names[-1][0] == '*':
@@ -168,7 +173,8 @@ def recstruct(typename, meta_field_names, sub_field_names, verbose=False):
     # Fill-in the class template
 
     n_meta = len(meta_field_names)
-    sub_arg_list = ', '.join(sub_field_names)
+    constructor_arg_list = ', '.join(meta_arg_list_with_defaults+tuple(sub_field_names)+('**kwargs',))
+    tuple_arg_list = ', '.join(meta_arg_list+tuple(sub_field_names))
     field_defs = '\n'.join(
         [_meta_field_template.format(index=index, name=name)
          for index, name in enumerate(meta_field_names)] +
@@ -184,9 +190,8 @@ def recstruct(typename, meta_field_names, sub_field_names, verbose=False):
         meta_field_names=meta_field_names,
         sub_field_names=sub_field_names,
         n_meta=n_meta,
-        meta_arg_list=meta_arg_list,
-        meta_arg_list_with_defaults=meta_arg_list_with_defaults,
-        sub_arg_list=sub_arg_list,
+        constructor_arg_list = constructor_arg_list,
+        tuple_arg_list = tuple_arg_list,
         field_defs=field_defs,
     )
 

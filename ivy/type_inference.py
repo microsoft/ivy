@@ -157,7 +157,7 @@ def infer_sorts(t, env=None):
         else:
             s = env[t.name]
             unify(s, t.sort)
-        return s, lambda: type(t)(t.name, convert_from_sortvars(s))
+        return s, lambda: type(t)(t.name, convert_from_sortvars(s),ref=t.ref)
 
     elif type(t) is Apply:
         func_s, func_t = infer_sorts(t.func, env)
@@ -168,13 +168,13 @@ def infer_sorts(t, env=None):
         unify(func_s, FunctionSort(*sorts))
         return sorts[-1], lambda: Apply(func_t(), *(
             x() for x in terms_t
-        ))
+        ),ref=t.ref)
 
     elif type(t) is Eq:
         s1, t1 = infer_sorts(t.t1, env)
         s2, t2 = infer_sorts(t.t2, env)
         unify(s1, s2)
-        return Boolean, lambda: Eq(t1(), t2())
+        return Boolean, lambda: Eq(t1(), t2(),ref=t.ref)
 
     elif type(t) is Ite:
         s_cond, t_cond = infer_sorts(t.cond, env)
@@ -182,7 +182,7 @@ def infer_sorts(t, env=None):
         s_else, t_else = infer_sorts(t.t_else, env)
         unify(s_cond, Boolean)
         unify(s_then, s_else)
-        return s_then, lambda: Ite(t_cond(), t_then(), t_else())
+        return s_then, lambda: Ite(t_cond(), t_then(), t_else(),ref=t.ref)
 
     elif type(t) in (Not, And, Or, Implies, Iff):
         xys = [infer_sorts(tt, env) for tt in t]
@@ -192,7 +192,7 @@ def infer_sorts(t, env=None):
             unify(s, Boolean)
         return Boolean, lambda: type(t)(*[
             x() for x in terms_t
-        ])
+        ],ref=t.ref)
 
     elif type(t) in (ForAll, Exists):
         # create a copy of the environment and shadow that quantified
@@ -204,7 +204,7 @@ def infer_sorts(t, env=None):
         unify(body_s, Boolean)
         return Boolean, lambda: type(t)(
             [x() for x in vars_t],
-            body_t(),
+            body_t(),ref=t.ref
         )
 
     elif type(t) is NamedBinder:
@@ -221,7 +221,7 @@ def infer_sorts(t, env=None):
             lambda: NamedBinder(
                 t.name,
                 [x() for x in vars_t],
-                body_t(),
+                body_t(),ref=t.ref
             )
         )
 
