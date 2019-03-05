@@ -86,7 +86,7 @@ instance tls_extensions : vector(tls.extension)
 # HACK: we fix the initial client transport parameters here
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff000011;
+    tp.initial_version := 0xff000012;
     var imsdbl : initial_max_stream_data_bidi_local;
     imsdbl.stream_pos_32 := 0x2000; # 2;  # TEMPORARY: was 0x2000
     var imd : initial_max_data;
@@ -228,7 +228,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
             require ~cid_dst_to_src_set(pkt.hdr_cid) -> pkt.dst_cid = server_cid
         }
     };
-    require pkt.hdr_long -> pkt.hdr_version = 0xff000011
+    require pkt.hdr_long -> pkt.hdr_version = 0xff000012
 }
 
 # Hook up to the remote server
@@ -262,6 +262,27 @@ after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     salt := salt.append(0x5e);
     salt := salt.append(0x09);
     salt := salt.append(0xa0);
+
+    # salt := salt.append(0xef);
+    # salt := salt.append(0x4f);
+    # salt := salt.append(0xb0);
+    # salt := salt.append(0xab);
+    # salt := salt.append(0xb4);
+    # salt := salt.append(0x74);
+    # salt := salt.append(0x70);
+    # salt := salt.append(0xc4);
+    # salt := salt.append(0x1b);
+    # salt := salt.append(0xef);
+    # salt := salt.append(0xcf);
+    # salt := salt.append(0x80);
+    # salt := salt.append(0x31);
+    # salt := salt.append(0x33);
+    # salt := salt.append(0x4f);
+    # salt := salt.append(0xae);
+    # salt := salt.append(0x48);
+    # salt := salt.append(0x5e);
+    # salt := salt.append(0x09);
+    # salt := salt.append(0xa0);
     call botan.upper.set_initial_keys(0,salt,ikm);
 }
 
@@ -486,6 +507,8 @@ before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,ds
     if _generating {
         require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
+    } else {
+        require false
     }
 }
 
