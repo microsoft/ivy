@@ -260,7 +260,7 @@ object impl(me:host) = {
 #ifdef _WIN32
 		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
 #else
-		     { std::cerr << "sendto failed\n"; exit(1); }
+		     { perror("sendto failed"); exit(1); }
 #endif
 	>>>
     }

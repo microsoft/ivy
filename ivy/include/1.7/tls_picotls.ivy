@@ -363,6 +363,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         
         ptls_t *session;
         session = ptls_new(ctx,is_server ? 1 : 0);
+        ptls_set_server_name(session, "servername", strlen("servername"));
         picotls_connection *s = new picotls_connection(c,session,*`cb`,handshake_properties,is_server);
         *ptls_get_data_ptr(session) = s;        
 

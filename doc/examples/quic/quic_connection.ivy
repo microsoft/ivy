@@ -1230,9 +1230,8 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
             require ~conn_closed(scid);  # [2]
-            require get_stream_role(f.id) = role.server <-> is_client(scid);  # [4]
 
-            var kind := get_stream_kind(f.id);
+            var kind := bidir;
             if ~ (max_stream_set(dcid,kind) & f.id < max_stream(dcid,kind)) {
                 max_stream_set(dcid,kind) := true;
                 max_stream(dcid,kind) := f.id; #  [1]

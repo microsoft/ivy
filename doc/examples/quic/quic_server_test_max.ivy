@@ -19,7 +19,7 @@ attribute frame.max_data.handle.weight = "0.02"
 #export frame.application_close.handle
 #attribute frame.application_close.handle.weight = "0.02"
 
-# export frame.stop_sending.handle
+export frame.stop_sending.handle
 
 before frame.max_stream_data.handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
     if _generating {
