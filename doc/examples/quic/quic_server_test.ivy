@@ -508,7 +508,7 @@ before frame.connection_close.handle(f:frame.connection_close,src:ip.endpoint,ds
         require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
     } else {
-        require false
+        require f.err_code = 0
     }
 }
 
