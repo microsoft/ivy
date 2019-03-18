@@ -364,7 +364,9 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
         while idx < pkts.end {
             var ppkt := pkts.value(idx);
             var rnum := reference_pkt_num(ppkt);
+            call show_stream(ppkt);
             var res := prot.decrypt(client.tls_id,rnum,ppkt);
+            call show_stream(res.data);
             if res.ok {
                 var pkt := pkt_serdes.from_bytes(res.data);
 	        call show_packet(src,dst,pkt);
