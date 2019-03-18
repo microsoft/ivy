@@ -922,6 +922,9 @@ object frame = {
 #   and the connection between source and destination must not be initializing [10].
 #
 # - The 1rtt keys have been established [11].
+#
+# - If the sender as reset the stream to a given length, then the
+#   end of the stream frame data must not exceed the reset length [13].
 
 # Effects:
 #
@@ -963,6 +966,7 @@ object frame = {
 #            require ~stream_reset(dcid,f.id);  # [7]
             require conn_seen(scid);  # [9]
             require ((offset) + (f.length)) <= stream_max_data(dcid,f.id);  # [2]
+            require stream_reset(dcid,f.id) -> ((offset) + (f.length)) <= stream_length(dcid,f.id);  # [13]
             require stream_id_allowed(dcid,f.id);  # [6]
 	    ...
             stream_seen(dcid,f.id) := true;
