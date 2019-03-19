@@ -4307,7 +4307,11 @@ def emit_repl_boilerplate3test(header,impl,classname):
 
 """)
     totalweight = 0.0
+    num_public_actions = 0
     for actname in sorted(im.module.public_actions):
+        if actname == 'ext:_finalize':
+            continue
+        num_public_actions += 1
         action = im.module.actions[actname]
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
         aname = (actname[4:] if actname.startswith('ext:') else actname) +'.weight'
@@ -4324,8 +4328,12 @@ def emit_repl_boilerplate3test(header,impl,classname):
         impl.append("        weights.push_back({});\n".format(aval))
         totalweight += aval
     impl.append("        double totalweight = {};\n".format(totalweight))
-    impl.append("        int num_gens = {};\n".format(len(im.module.public_actions)))
+    impl.append("        int num_gens = {};\n".format(num_public_actions))
             
+    print 'public_actions: {}'.format([x for x in im.module.public_actions])
+    final_code = 'ivy.__lock(); ivy.ext___finalize(); ivy.__unlock();' if 'ext:_finalize' in im.module.public_actions else ''
+    print 'final_code: {}'.format(final_code)
+    
     impl.append("""
 
 #ifdef _WIN32
@@ -4439,6 +4447,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             }
         }            
     }
+    FINALIZE
 #ifdef _WIN32
                 Sleep(final_ms);  // HACK: wait for late responses
 #endif
@@ -4451,7 +4460,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
     timers.clear();
 
 
-""".replace('classname',classname))
+""".replace('classname',classname).replace('FINALIZE',final_code))
 
 def emit_boilerplate1(header,impl,classname):
     header.append("""

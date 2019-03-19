@@ -613,6 +613,17 @@ export tls_recv_event
 # export frame.connection_close.handle
 #export frame.max_stream_data.handle
 
+# Final check
+#
+# When the test is complete, the tester calls the special action `_finalize`.
+# We use this action to make some heuristic checks, for example that some
+# data was actually received from the server. We can add advice to this
+# action with additional checks.
+
+export action _finalize = {
+    require conn_total_data(the_cid) > 0;
+}
+
 attribute radix=16       # print in hex
 
 interpret cid -> intbv[1][13][2]
