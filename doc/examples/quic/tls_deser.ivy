@@ -6,11 +6,13 @@ include tls_record
 
 object tls_deser = {}
 object tls_ser = {}
+object tls_ser_server = {}
 
 <<< member
 
     class `tls_deser`;
     class `tls_ser`;
+    class `tls_ser_server`;
 
 >>>
 
@@ -328,6 +330,15 @@ object tls_ser = {}
         }
     };
 
+    struct `tls_ser_server` : public tls_ser {
+        // This version of the serializer uses the server format. The only difference is
+        // that the QUIC_extension structure has an extra field "versions".
+
+        tls_ser_server() {
+          in_encrypted_extensions = -1; 
+        }
+    
+    };
 >>>
 
 <<< init

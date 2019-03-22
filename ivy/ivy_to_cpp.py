@@ -4330,9 +4330,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
     impl.append("        double totalweight = {};\n".format(totalweight))
     impl.append("        int num_gens = {};\n".format(num_public_actions))
             
-    print 'public_actions: {}'.format([x for x in im.module.public_actions])
     final_code = 'ivy.__lock(); ivy.ext___finalize(); ivy.__unlock();' if 'ext:_finalize' in im.module.public_actions else ''
-    print 'final_code: {}'.format(final_code)
     
     impl.append("""
 

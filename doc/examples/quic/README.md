@@ -342,6 +342,10 @@ Linux build instructions for Chromium:
 
     https://chromium.googlesource.com/chromium/src/+/master/docs/linux_build_instructions.md
 
+To run a picoquic client instance
+
+    ~/projects/picoquic/picoquicdemo -v ff000012 localhost 4443
+
 TODO list
 =========
 

@@ -50,7 +50,7 @@ pat = '*'
 time = 100
 
 # server_addr=0xc0a80101 client_addr=0xc0a80102
-ivy_options = {'server_addr':None,'client_addr':None}
+ivy_options = {'server_addr':None,'client_addr':None,'max_stream_data':None}
 
 for arg in sys.argv[1:]:
     vals = arg.split('=')

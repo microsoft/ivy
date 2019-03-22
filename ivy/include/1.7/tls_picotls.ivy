@@ -320,7 +320,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         ctx->update_traffic_key = new ptls_update_traffic_key_t;
         ctx->update_traffic_key->cb = quic_update_traffic_key_callback;
         ctx->get_time = &ptls_get_time;
-        ctx->ticket_lifetime = 100000; /* 100,000 seconds, a bit more than one day */
+        ctx->ticket_lifetime = 0; // no ticket? was: 100000; /* 100,000 seconds, a bit more than one day */
         ctx->require_dhe_on_psk = 1;
         ctx->max_early_data_size = 0xFFFFFFFF;
         ctx->omit_end_of_early_data = 1;
@@ -369,9 +369,10 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
 	`cid_map`[c] = s;
 	
-        // Start the handshake. The in_epoch is zero for "initial".
+        // Start the handshake if we are the client. The in_epoch is zero for "initial".
 
-        picotls_do_handshake(s,0,0,0);
+        if (!is_server) 
+            picotls_do_handshake(s,0,0,0);
         >>>
     }
 

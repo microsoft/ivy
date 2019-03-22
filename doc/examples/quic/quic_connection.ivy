@@ -175,9 +175,8 @@ relation established_handshake_keys(C:cid)
 # ------------------
 
 # - For each aid C,and stream id S, `stream_seen(C,S)`
-#   indicates that a stream frame for stream id S
-#   has been sent to C. TODO: change this so it uses the source aid,
-#   not the destination cid.
+#   indicates that a stream has been opened by aid C.
+#   
 #
 # - For each aid C,and stream id S, `max_stream_data_val(C,S)`
 #   indicates the maximum number of bytes that may be sent on stream
@@ -360,30 +359,46 @@ after init {
 # ======================
 #
 # This event corresponds to transfer of application data to QUIC to
-# be transmitted.
+# be transmitted. The data is copied into the sent stream at the given position.
+# This allows the sending application to provide data out of order. 
 #
 # Requirements
 #
-# - None
+# - If the data overwites existing data in the stream, then it must
+#   agree with that data [2]. 
+#
+# - Writing non-empty data to a closed stream is not allowed [4].
 #
 # Effects
 #
-# - The data bytes are appended to `stream_app_data(C,S)` where `C` is
+# - The data bytes are copied at position `pos` into `stream_app_data(C,S)` where `C` is
 #   the cid and `S` is the stream id.
 #
+# - The stream data length is updated to reflect the new data [1].
+#
+# - If `close` is true, the stream is marked as finished [3]. 
+#
 
-action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, close : bool)
+action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, pos : stream_pos, close : bool)
 
 after app_send_event {
-    require ~(data.end > 0 & stream_app_data_finished(dcid,s));
+    require ~(data.end > 0 & stream_app_data_finished(dcid,s));  # [4]
+    var end := stream_app_data(dcid,s).end;
+    if end < pos + data.end {
+        end := pos + data.end
+    };
+    stream_app_data(dcid,s) := stream_app_data(dcid,s).resize(end,0);  # [1]
     var idx := data.begin;
     while idx < data.end {
-	stream_app_data(dcid,s) := stream_app_data(dcid,s).append(data.value(idx));
-        stream_app_data_end(dcid,s) := stream_app_data(dcid,s).end;
+        var val := stream_app_data(dcid,s).value(pos + idx);
+        # TODO: using zero as a "null" value is not correct here -- need a data structure to capture the known intervals!
+        require val ~= 0 ->  data.value(idx) = val;  # [2]
+	stream_app_data(dcid,s) := stream_app_data(dcid,s).set(pos+idx,data.value(idx));
 	idx := idx.next
     };
+    stream_app_data_end(dcid,s) := end;  # [1]
     if close {
-        stream_app_data_finished(dcid,s) := true;
+        stream_app_data_finished(dcid,s) := true;  # [3]
     }
 }
 
@@ -969,7 +984,7 @@ object frame = {
             require stream_reset(dcid,f.id) -> ((offset) + (f.length)) <= stream_length(dcid,f.id);  # [13]
             require stream_id_allowed(dcid,f.id);  # [6]
 	    ...
-            stream_seen(dcid,f.id) := true;
+            stream_seen(scid,f.id) := true;
             var offset := f.offset if f.off else 0;
             var length := offset + f.length;
             # require stream_finished(dcid,f.id) -> length <= stream_length(dcid,f.id);  # [5]
@@ -1050,19 +1065,20 @@ action stream_id_allowed(dcid:cid,id:stream_id) returns (ok:bool) = {
     ok := false;
     var tp := trans_params(dcid);
     var kind := get_stream_kind(id);
+    var idhi : stream_id := id / 4;
     if ~(is_client(dcid) <-> get_stream_role(id) = role.client) {  # if stream remotely initiated
         if kind = unidir {
             if initial_max_stream_id_uni.is_set(tp) {
-                ok := id < (initial_max_stream_id_uni.value(tp).stream_id_16) * 4  # [3]
+                ok := idhi < (initial_max_stream_id_uni.value(tp).stream_id_16)  # [3]
             }
         } else {
             if initial_max_stream_id_bidi.is_set(tp) {
-                ok := id < (initial_max_stream_id_bidi.value(tp).stream_id_16) * 4;  # [4]
+                ok := idhi < (initial_max_stream_id_bidi.value(tp).stream_id_16);  # [4]
             }
         };
-        ok := ok | max_stream_set(dcid,kind) & id < max_stream(dcid,kind) * 4
+        ok := ok | max_stream_set(dcid,kind) & idhi < max_stream(dcid,kind)
     }
-    else ok := true # TODO: locally initiated streams must have been seen!
+    else ok := stream_seen(dcid, id) # TODO: locally initiated streams must have been seen!
 }
 
 # The procedure computes the maximum number of additional bytes that a given
@@ -1499,6 +1515,16 @@ object frame = { ...
 
 # Path challenge frames are used to request verification of ownership
 # of an endpoint by a peer.
+#
+# A pending path challenge value me not be retransmitted [1]. That is,
+# according to quic-transport-draft-18, section 13.2:
+#
+#     PATH_CHALLENGE frames include a different payload each time they are sent.
+#
+# Notice that we do allow a PATH_CHALLENGE payload to be re-used after
+# it is responded to, on the theory that this is a new challenge and
+# not a retransmission, however, it is unclear that this is the
+# intention of the standard.
 
 object frame = { ...
     object path_challenge = { ...
@@ -1508,6 +1534,7 @@ object frame = { ...
             require e = encryption_level.other & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require f.data.end = 8;
+            require ~path_challenge_pending(dcid,f.data);
             ...
             path_challenge_pending(dcid,f.data) := true;
             call enqueue_frame(src,scid,f,e,true);
