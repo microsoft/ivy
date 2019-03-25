@@ -610,7 +610,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
     var hdr_type_bits : type_bits := bvand(pkt.hdr_type,0x30);
     # TEMPORARY
-    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0x7c) = 0x40; # assume fixed bit is 1, S,R,K = 0
+    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0x5c) = 0x40; # assume fixed bit is 1, R,K = 0
     require pkt.hdr_long -> bvand(pkt.hdr_type,0x4c) = 0x40; # assume fixed bit is 1, R = 0
     require ~pkt.hdr_long -> (pkt.dcid = 5 & pkt.scid = 0);
     require pkt.hdr_long -> (pkt.dcid > 0 & pkt.scid > 0);
