@@ -63,6 +63,7 @@ parameter the_cid : cid = 0xd
 parameter server_addr : ip.addr = 0x7f000001
 parameter server_port : ip.port = 4443
 parameter max_stream_data : stream_pos = 0x2000
+parameter initial_max_streams_bidi : stream_id = 2
 
 # read a data file to send to client (it sends the same response to every request!)
 
@@ -100,7 +101,7 @@ action make_transport_parameters returns (tp:quic_transport_parameters) = {
     # but some clients don't handle this correctly, so we put all parameters in.
     # Remove the following to test this client behavior.
     var imsib : initial_max_stream_id_bidi;
-    imsib.stream_id_16 := 2;
+    imsib.stream_id_16 := initial_max_streams_bidi;
     tp.transport_parameters := tp.transport_parameters.append(imsib);
 }
 
@@ -227,36 +228,45 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 # of bytes. Note, the "salt" is specified in QUIC-TLS version 15, and is
 # unchanged in version 16.
 
+var initial_keys_set : bool
+after init {
+    initial_keys_set := false;
+}
+
 action on_initial_request(src:ip.endpoint,dst:ip.endpoint,spkt: stream_data) = {
     client.ep := src; # TODO: migration?
-    var lens := spkt.value(5);
-    var dcil : stream_pos := bfe[4][7](lens);
-    dcil := dcil + 3 if dcil ~= 0 else 0;
-    var ikm := spkt.segment(6,6+dcil);
-    var salt : stream_data := stream_data.empty;
+    if ~initial_keys_set {
+        var lens := spkt.value(5);
+        var dcil : stream_pos := bfe[4][7](lens);
+        dcil := dcil + 3 if dcil ~= 0 else 0;
+        var ikm := spkt.segment(6,6+dcil);
+        var salt : stream_data := stream_data.empty;
 
-    salt := salt.append(0xef);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xb0);
-    salt := salt.append(0xab);
-    salt := salt.append(0xb4);
-    salt := salt.append(0x74);
-    salt := salt.append(0x70);
-    salt := salt.append(0xc4);
-    salt := salt.append(0x1b);
-    salt := salt.append(0xef);
-    salt := salt.append(0xcf);
-    salt := salt.append(0x80);
-    salt := salt.append(0x31);
-    salt := salt.append(0x33);
-    salt := salt.append(0x4f);
-    salt := salt.append(0xae);
-    salt := salt.append(0x48);
-    salt := salt.append(0x5e);
-    salt := salt.append(0x09);
-    salt := salt.append(0xa0);
-    call botan.upper.set_initial_keys(0,salt,ikm);
+        salt := salt.append(0xef);
+        salt := salt.append(0x4f);
+        salt := salt.append(0xb0);
+        salt := salt.append(0xab);
+        salt := salt.append(0xb4);
+        salt := salt.append(0x74);
+        salt := salt.append(0x70);
+        salt := salt.append(0xc4);
+        salt := salt.append(0x1b);
+        salt := salt.append(0xef);
+        salt := salt.append(0xcf);
+        salt := salt.append(0x80);
+        salt := salt.append(0x31);
+        salt := salt.append(0x33);
+        salt := salt.append(0x4f);
+        salt := salt.append(0xae);
+        salt := salt.append(0x48);
+        salt := salt.append(0x5e);
+        salt := salt.append(0x09);
+        salt := salt.append(0xa0);
+        call botan.upper.set_initial_keys(0,salt,ikm);
+        initial_keys_set := true;
+    }
 }
+
 
 action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
     <<<
@@ -347,7 +357,7 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
 	        call show_packet(src,dst,pkt);
 	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on client side
 	        call packet_event(src,dst,pkt);
-                if bvand(ppkt.value(0),0xf0) = 0xc0 {
+                if bvand(ppkt.value(0),0xf0) = 0xc0 & ~cid_dst_to_src_set(the_cid) {
                     call open_connection(dst,src,the_cid,pkt.hdr_cid);  # [1]
                 }
             }

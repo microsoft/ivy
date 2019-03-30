@@ -177,7 +177,7 @@ after init {
 # transmitted via a generated crypto frame event. 
 
 implement botan.lower.send(tls_id:botan.id,bytes:stream_data,lev:botan.lower.level) {
-    var e := encryption_level.initial if lev = 0 else (encryption_level.handshake if lev = 2 else encryption_level.rtt1);
+    var e := encryption_level.initial if lev = 0 else (encryption_level.handshake if lev = 2 else encryption_level.other);
     if tls_id = client.tls_id {
         call tls_send_event(client.ep, server.ep, the_cid, 0, bytes,
                             crypto_data_end(the_cid,client.enc_level),e);

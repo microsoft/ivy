@@ -16,7 +16,13 @@ servers = [
     ['winquic',['..','true']],
 ]
 
-tests = [
+clients = [
+    ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo -v ff000012 localhost 4443']],
+    ['quant',['..','/home/mcmillan/projects/quant/Debug/bin/client -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
+    ['winquic',['..','true']],
+]
+
+server_tests = [
     ['..',
       [
           ['quic_server_test_stream','test_completed'],
@@ -27,6 +33,15 @@ tests = [
     ],
 ]
 
+client_tests = [
+    ['..',
+      [
+          ['quic_client_test_max','test_completed'],
+      ]
+    ],
+]
+
+
 import sys
 def usage():
     print """usage:
@@ -34,7 +49,7 @@ def usage():
 options:
     dir=<output directory to create>
     iters=<number of iterations>
-    server={{picoquic,quant,winquic}}
+    {{client,server}}={{picoquic,quant,winquic}}
     test=<test name pattern>
     stats={{true,false}}
     run={{true,false}}
@@ -48,9 +63,10 @@ getstats = False
 run = True
 pat = '*'
 time = 100
+test_client = False
 
 # server_addr=0xc0a80101 client_addr=0xc0a80102
-ivy_options = {'server_addr':None,'client_addr':None,'max_stream_data':None}
+ivy_options = {'server_addr':None,'client_addr':None,'max_stream_data':None,'initial_max_streams_bidi':None}
 
 for arg in sys.argv[1:]:
     vals = arg.split('=')
@@ -66,6 +82,9 @@ for arg in sys.argv[1:]:
             usage()
     elif name == 'server':
         server_name = val
+    elif name == 'client':
+        server_name = val
+        test_client = True
     elif name == 'stats':
         if val not in ['true','false']:
             usage()
@@ -109,17 +128,17 @@ except OSError:
 # extra_args = ['server_addr=0xc0a80101','client_addr=0xc0a80102'] if server_name == 'winquic' else []
 extra_args = [oname+'='+oval for oname,oval in ivy_options.iteritems() if oval is not None]
 
-svrd = dict(servers)
+svrd = dict(clients if test_client else servers)
 if server_name not in svrd:
-    sys.stderr.write('unknown server: {}\n'.format(server_name))
+    sys.stderr.write('unknown implementation: {}\n'.format(server_name))
     exit(1)
 server_dir,server_cmd = svrd[server_name]
 
 if not run:
     server_cmd = 'true'
 
-print 'server directory: {}'.format(server_dir)
-print 'server command: {}'.format(server_cmd)
+print 'implementation directory: {}'.format(server_dir)
+print 'implementation command: {}'.format(server_cmd)
 
 
 def open_out(name):
@@ -154,10 +173,13 @@ class Test(object):
         with open_out(self.name+str(seq)+'.out') as out:
             with open_out(self.name+str(seq)+'.err') as err:
                 with open_out(self.name+str(seq)+'.iev') as iev:
-                    server = subprocess.Popen(server_cmd.split(),
+                    scmd = 'sleep 1; ' + server_cmd if test_client else server_cmd.split() 
+                    print 'implementation command: {}'.format(scmd)
+                    server = subprocess.Popen(scmd,
                                               cwd=server_dir,
                                               stdout=out,
-                                              stderr=err)
+                                              stderr=err,
+                                              shell=test_client)
                     print 'server pid: {}'.format(server.pid)
                     try:
                         ok = self.expect(seq,iev)
@@ -215,7 +237,7 @@ class Test(object):
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return ' '.join(['timeout {} ./build/{} seed={} the_cid={} server_cid={} client_port={} client_port_alt={}'.format(time,self.name,seq,2*seq,2*seq+1,2*seq+4987,2*seq+4988)] + extra_args)
+        return ' '.join(['timeout {} ./build/{} seed={} the_cid={} {}'.format(time,self.name,seq,2*seq,'' if test_client else 'server_cid={} client_port={} client_port_alt={}'.format(2*seq+1,2*seq+4987,2*seq+4988))] + extra_args)
 
 all_tests = []
 
@@ -227,7 +249,7 @@ def get_tests(cls,arr):
 
     
 try:
-    get_tests(IvyTest,tests)
+    get_tests(IvyTest,client_tests if test_client else server_tests)
 
     num_failures = 0
     for test in all_tests:

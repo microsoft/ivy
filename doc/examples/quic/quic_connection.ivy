@@ -99,6 +99,10 @@ include quic_transport_parameters
 #
 # - The function `conn_total_data(C)` represents the total number of stream
 #   bytes received by aid `C`.
+#
+# - The relation `pkt_has_close(C,L,N)` is true if packet number `N` sent 
+#   by aid `C` contained a CONNECTION_CLOSE frame.
+#
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
@@ -116,6 +120,7 @@ relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
 function hi_non_probing(C:cid) : pkt_num
 relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 function conn_total_data(C:cid) : stream_pos
+relation pkt_has_close(C:cid,L:encryption_level,N:pkt_num)
 
 # TLS handshake protocol state
 # ----------------------------
@@ -223,6 +228,12 @@ relation established_handshake_keys(C:cid)
 #   frames at aid `C` contains a non-probing frame. This is a frame
 #   other than path challenge, new connection id and padding.
 #
+# - The relation `queued_non_ack(C)` indicates that one or more of the queued
+#   frames at aid `C` is not an ACK frame.
+#
+# - The relation `queued_close(C)` indicates that one or more of the queued
+#   frames at aid `C` is a CONNECTION_CLOSE or APPLICATION_CLOSE frame.
+#
 # - The function num_queued_frames(C:cid) gives the number of frames
 #   queue at aid `C`.
 #
@@ -245,6 +256,8 @@ function queued_frames(C:cid) : frame.arr
 function queued_level(C:cid) : encryption_level
 relation queued_hello(C:cid)
 relation queued_non_probing(C:cid)
+relation queued_non_ack(C:cid)
+relation queued_close(C:cid)
 function num_queued_frames(C:cid) : frame.idx
 relation path_challenge_pending(C:cid,D:stream_data)
 
@@ -288,6 +301,7 @@ after init {
     conn_closed(C) := false;
     sent_pkt(C,L,N) := false;
     acked_pkt(C,L,N) := false;
+    pkt_has_close(C,L,N) := false;
     max_acked(C,L) := 0;
     ack_credit(C) := 0;
     trans_params_set(C:cid) := false;
@@ -300,6 +314,8 @@ after init {
     stream_app_pos(C,S) := 0;
     queued_hello(C) := false;
     queued_non_probing(C) := false;
+    queued_non_ack(C) := false;
+    queued_close(C) := false;
     conn_enc_level(E,C) := encryption_level.initial;
     established_1rtt_keys(C:cid) := false;
     established_handshake_keys(C:cid) := false;
@@ -382,10 +398,11 @@ after init {
 action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid, s : stream_id, data : stream_data, pos : stream_pos, close : bool)
 
 after app_send_event {
-    require ~(data.end > 0 & stream_app_data_finished(dcid,s));  # [4]
+    var send_end := pos + data.end;
+    require ~(send_end > stream_app_data_end(dcid,s) & stream_app_data_finished(dcid,s));  # [4]
     var end := stream_app_data(dcid,s).end;
-    if end < pos + data.end {
-        end := pos + data.end
+    if end < send_end {
+        end := send_end
     };
     stream_app_data(dcid,s) := stream_app_data(dcid,s).resize(end,0);  # [1]
     var idx := data.begin;
@@ -714,8 +731,21 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         } else {
             hi_non_probing_endpoint(scid,src) := true;
         }
-    }
+    };
 
+    # TEMPORARY: do not apply ack-onlty rule to generated packets
+    # This can be removed when we have a frame queue per encryption level
+
+    require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
+
+    # QUESTION: THis sentence is from draft-18 section 13.1: "An
+    #   endpoint MUST NOT send a packet containing only an ACK frame
+    #   in response to a packet containing only ACK or PADDING frames,
+    #   even if there are packet gaps which precede the received
+    #   packet." Do we interpret this to mean that an ack-only packet
+    #   cannot ack *only* ack-only packets?  Or that an ack-only
+    #   packet cannot ack *any* ack-only packets?
+    
     ...
 
     # TEMPORARY: The following are repeated because currently locals defined in
@@ -752,13 +782,18 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # An ack-only packet must be in response to a non-ack-only packet
 
-    var ack_only := forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
-                                 (pkt.payload.value(I) isa frame.ack);
-    if ack_only {
-#	require ack_credit(scid) > 0;  # [5]
-	ack_credit(scid) := ack_credit(scid) - 1;
-    } else {
+    if queued_non_ack(scid) {
 	ack_credit(dcid) := ack_credit(dcid) + 1;
+    } else {
+	ack_credit(scid) := ack_credit(scid) - 1;
+    };
+
+    # If the packet contains a close frame, then set `pkt_has_close`
+
+    var e := queued_level(scid);
+    var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
+    if queued_close(scid) {
+        pkt_has_close(scid,e,pnum) := true;
     };
 
     # The queued frames are deleted
@@ -766,6 +801,8 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     queued_frames(scid) := frame.arr.empty;
     queued_hello(scid) := false;
     queued_non_probing(scid) := false;
+    queued_non_ack(scid) := false;
+    queued_close(scid) := false;
     num_queued_frames(scid) := 0;
 }
 
@@ -837,8 +874,13 @@ action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level, pro
     queued_level(scid) := e;
     if ~probing {
         queued_non_probing(scid) := true;
+    };
+    if ~(f isa frame.ack) {
+        queued_non_ack(scid) := true;
+    };
+    if (f isa frame.connection_close) | (f isa frame.application_close) {
+        queued_close(scid) := true;
     }
-    
 }
 
 # #### Ack handler
@@ -896,6 +938,7 @@ object frame = {
 		var jdx := last;
 		while jdx <= upper {
                     require sent_pkt(dcid,e,jdx);  # [1]
+                    require ~pkt_has_close(dcid,e,jdx);
                     if ~acked_pkt(dcid,e,jdx) {
                         some_new_ack := true;
                     };
@@ -1048,7 +1091,7 @@ action stream_max_data(dcid:cid,id:stream_id) returns (max:stream_pos) = {
 }
 
 #
-# Whether a give stream can be opened by a peer of a given aid is
+# Whether a given stream can be opened by a peer of a given aid is
 # computed by the following procedure. The id of a remotely initiated
 # stream must be less than the maximum of:
 #
@@ -1174,11 +1217,10 @@ object frame = { ...
             require ~conn_closed(scid);  # [5]
             require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
             require stream_length(dcid,f.id) <= f.final_offset;  # [1]
-            var kind := get_stream_kind(f.id);
-            require max_stream_set(dcid,kind) -> f.id <= max_stream(dcid,kind);  # [4]
             require (stream_reset(dcid,f.id) | stream_finished(dcid,f.id)) -> stream_length(dcid,f.id) = f.final_offset;
             stream_reset(dcid,f.id) := true;  # [2]
             stream_length(dcid,f.id) := f.final_offset;  #[3]
+            require stream_id_allowed(dcid,f.id);  # [4]
 	    ...
             call enqueue_frame(src,scid,f,e,false);
         }
@@ -1210,8 +1252,7 @@ object frame = { ...
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~conn_closed(scid);  # [5]
             require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
-            var kind := get_stream_kind(f.id);
-            require max_stream_set(dcid,kind) -> f.id <= max_stream(dcid,kind);  # [4]
+            require stream_id_allowed(dcid,f.id);  # [4]
 	    ...
             call enqueue_frame(src,scid,f,e,false);
         }
@@ -1706,6 +1747,7 @@ action map_cids(dcid:cid,scid:cid) = {
 #
 # - A connection must have been requested [1].
 # - The two cids must not be previously associated to any peer [2]. 
+# - Gives one ack credit to the server for the initial packet
 
 action open_connection(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
 
@@ -1715,6 +1757,7 @@ around open_connection {
     ...
     call map_cids(scid,dcid);
     call map_cids(dcid,scid);
+    ack_credit(scid) := ack_credit(scid) + 1;
 }
 
 # Requirements:
