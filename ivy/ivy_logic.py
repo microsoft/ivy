@@ -1399,6 +1399,8 @@ def is_numeral(term):
     return isinstance(term,Symbol) and term.is_numeral()
 
 def is_interpreted_symbol(s):
+    if symbol_is_polymorphic(s) and len(s.sort.dom) == 0:
+        print s
     return is_numeral(s) and is_interpreted_sort(s.sort) or symbol_is_polymorphic(s) and is_interpreted_sort(s.sort.dom[0])
 
 def is_deterministic_fmla(f):
@@ -1416,6 +1418,9 @@ def sym_decl_to_str(sym):
     if not sort.is_relational():
         res += ' : {}'.format(sort.rng)
     return res
+
+def typed_sym_to_str(sym):
+    return str(sym.name) + ':' + str(sym.sort)
 
 def sig_to_str(self):
     res = ''

@@ -152,8 +152,17 @@ class ProofChecker(object):
                 return self.if_tactic(decls,proof)
             elif isinstance(proof,ia.NullTactic):
                 return decls
+            elif isinstance(proof,ia.TacticTactic):
+                return self.tactic_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
 
+    def tactic_tactic(self,decls,proof):
+        tn = proof.tactic_name
+        if tn not in registered_tactics:
+            raise IvyError(proof,'unknown tactic: {}'.format(proof.tn))
+        tactic = registered_tactics[tn]
+        return tactic(decls,proof)
+    
     def compose_proofs(self,decls,proofs):
         for proof in proofs:
             decls = self.apply_proof(decls,proof)
@@ -369,7 +378,6 @@ def normalize_goal(x):
     if goal_is_defn(x):
         return x
     return clone_goal(x,map(normalize_goal,goal_prems(x)),il.normalize_ops(goal_conc(x)))
-
 
 def get_unprovided_defns(g1,g2):
     defns = goal_defns(g2)
@@ -1032,3 +1040,8 @@ class RemoveSymbols(object):
         for sym in self.saved:
             self.symset.add(sym)
         return False # don't block any exceptions
+
+registered_tactics = dict()
+
+def register_tactic(name,tactic):
+    registered_tactics[name] = tactic

@@ -20,6 +20,7 @@ import ivy_transrel as itr
 import ivy_solver as islv
 import ivy_fragment as ifc
 import ivy_proof
+import ivy_temporal as itmp
 
 import sys
 from collections import defaultdict
@@ -92,23 +93,35 @@ def has_temporal_stuff(f):
 
     
 def check_temporals():
-    props = im.module.labeled_props
+    mod = im.module
+    props = mod.labeled_props
     proved = []
     for prop in props:
+        print '\n    The following temporal property is being proved:\n'
+        print pretty_lf(prop)
         if prop.temporal:
-            from ivy_l2s import l2s
-            mod = im.module.copy()
-            mod.labeled_axioms.extend(proved)
-            mod.labeled_props = []
-            l2s(mod, prop)
-            mod.concept_spaces = []
-            mod.update_conjs()
-            with mod:
-                check_isolate()
+            pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
+            pmap = dict((prop.id,p) for prop,p in mod.proofs)
+            if prop.id in pmap:
+                proof = pmap[prop.id]
+                model = itmp.normal_program_from_module(im.module)
+                goal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
+                subgoals = pc.admit_proposition(goal,proof)
+            check_subgoals(subgoals)
+        else:
+            conjs.append(prop)
+
+            # from ivy_l2s import l2s
+            # mod = im.module.copy()
+            # mod.labeled_axioms.extend(proved)
+            # mod.labeled_props = []
+            # l2s(mod, prop)
+            # mod.concept_spaces = []
+            # mod.update_conjs()
+            # with mod:
+            #     check_isolate()
+
         proved.append(prop)
-    # filter out any temporal stuff from conjectures and concept spaces
-    im.module.labeled_conjs = [x for x in im.module.labeled_conjs if not has_temporal_stuff(x.formula)]
-    im.module.concept_spaces = [x for x in im.module.concept_spaces if not has_temporal_stuff(x[1])]
 
 
 def usage():
@@ -391,8 +404,8 @@ def summarize_isolate(mod):
             for lf in schema_instances + mod.labeled_props:
                 print pretty_lf(lf)
 
-    # after checking properties, make them axioms
-    im.module.labeled_axioms.extend(im.module.labeled_props)
+    # after checking properties, make them axioms, except temporals
+    im.module.labeled_axioms.extend(p for p in im.module.labeled_props if not p.temporal)
     im.module.update_theory()
 
 
@@ -532,16 +545,17 @@ def summarize_isolate(mod):
 def check_isolate():
     temporals = [p for p in im.module.labeled_props if p.temporal]
     mod = im.module
-    if temporals:
-        if len(temporals) > 1:
-            raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
-        from ivy_l2s import l2s
-        l2s(mod, temporals[0])
-        mod.concept_spaces = []
-        mod.update_conjs()
+    # if temporals:
+    #     if len(temporals) > 1:
+    #         raise IvyError(None,'multiple temporal properties in an isolate not supported yet')
+    #     from ivy_l2s import l2s
+    #     l2s(mod, temporals[0])
+    #     mod.concept_spaces = []
+    #     mod.update_conjs()
     ifc.check_fragment()
     with im.module.theory_context():
         summarize_isolate(mod)
+        check_temporals()
         return
         check_properties()
         some_temporals = any(p.temporal for p in im.module.labeled_props)
@@ -581,6 +595,42 @@ def check_isolate():
                     check_conjectures('Consecution','These conjectures are not inductive.',ag,ag.states[-1])
                 act.checked_assert.value = old_checked_assert
 
+
+# This is a little bit backward. When faced with a subgoal from the prover,
+# we check it by constructing fake isolate.
+                
+def check_subgoals(goals):
+    mod = im.module
+    for goal in goals:
+        conc = ivy_proof.goal_conc(goal)
+        if isinstance(conc,itmp.TemporalModels):
+            model = conc.model
+            fmla = conc.fmla
+            if not lg.is_true(fmla):
+                raise IvyError(goal,
+                  """The temporal subgoal {} has not been reduced to an invariance property. 
+                     Try using a tactic such as l2s.""")
+            mod = im.module.copy()
+            # mod.labeled_axioms.extend(proved)
+            mod.labeled_props = []
+            mod.concept_spaces = []
+            mod.labeled_conjs = model.invars
+            mod.public_actions = set(model.calls)
+            mod.actions = model.binding_map
+            mod.initializers = [('init',model.init)]
+        else:
+            goal = ivy_compiler.theorem_to_property(goal)
+            mod = im.module.copy()
+            # mod.labeled_axioms.extend(proved)
+            mod.labeled_props = [goal]
+            mod.concept_spaces = []
+            mod.conjs = []
+            mod.public_actions = set()
+            mod.actions = dict()
+            mod.initializers = []
+        with mod:
+            check_isolate()
+                
 
 def all_assert_linenos():
     mod = im.module

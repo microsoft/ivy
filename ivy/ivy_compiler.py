@@ -900,6 +900,11 @@ def compile_if_tactic(self):
     
 ivy_ast.IfTactic.compile = compile_if_tactic
 
+def compile_tactic_tactic(self):
+    return self.clone(self.args)
+    
+ivy_ast.TacticTactic.compile = compile_tactic_tactic
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
@@ -1678,7 +1683,9 @@ def check_properties(mod):
     prover = ivy_proof.ProofChecker(mod.labeled_axioms,mod.definitions,mod.schemata)
 
     for prop in props:
-        if prop.id in pmap:
+        if prop.temporal:
+            mod.labeled_props.append(prop)
+        elif prop.id in pmap:
 #            print 'checking {}...'.format(prop.label)
             subgoals = prover.admit_proposition(prop,pmap[prop.id])
             prop = named_trans(prop)
@@ -1702,7 +1709,6 @@ def check_properties(mod):
                     else:
                         mod.labeled_props.append(prop)
             mod.subgoals.append((prop,subgoals))
-        # elif prop.temporal:
         #     from ivy_l2s import l2s
         #     print "=================" + "\n" * 10
         #     l2s(mod, prop)

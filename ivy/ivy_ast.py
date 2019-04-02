@@ -22,6 +22,11 @@ class AST(object):
            res.lineno = self.lineno
        return res
 
+def copy_attrs(ast1,ast2):
+    if hasattr(ast1,'lineno'):
+        ast2.lineno = ast1.lineno
+    
+   
 class Symbol(AST):
     def __init__(self,rep,sort):
         assert isinstance(rep,str)
@@ -704,6 +709,21 @@ class IfTactic(AST):
         self.args = args
     def __str__(self):
         return 'if ' + str(self.args[0]) + ' { ' + str(self.args[1]) + ' } else { ' + str(self.args[2]) + ' }'
+
+
+class TacticTactic(AST):
+    @property
+    def tactic_name(self):
+        return self.args[0].rep
+    @property
+    def tactic_decls(self):
+        return self.args[1].args
+    def __str__(self):
+        res = 'tactic ' + str(self.args[0]) + str(self.args[1])
+
+class TacticWith(AST):
+    def __str__(self):
+        res = (' with ' + ' '.join(str(x) for x in self.args[1].args)) if self.args[1].args > 0 else ''
 
 class ComposeTactics(AST):
     def __str__(self):
