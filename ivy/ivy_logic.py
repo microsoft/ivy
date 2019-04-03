@@ -606,6 +606,14 @@ def is_named_binder(term):
 def is_temporal(term):
     return isinstance(term, (lg.Globally, lg.Eventually))
 
+def has_temporal(fmla):
+    return is_temporal(fmla) or any(has_temporal(x) for x in fmla.args)
+
+# A formula is a Gprop if it is of the form Globally(phi) where phi does not have temporal
+# operators.
+def is_gprop(fmla):
+    return isinstance(fmla,lg.Globally) and not has_temporal(fmla.args[0])
+    
 def quantifier_vars(term):
     return term.variables
 
@@ -1332,6 +1340,7 @@ def default_drop_annotations(self,inferred_sort,annotated_vars):
 
 for cls in [lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, Definition]: # should binder be here?
     cls.drop_annotations = default_drop_annotations
+
 
 def pretty_fmla(self):
     d = self.drop_annotations(False,set())

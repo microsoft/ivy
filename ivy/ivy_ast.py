@@ -574,6 +574,13 @@ class LabeledFormula(AST):
         res.explicit = self.explicit
         return res
 
+    def clone_with_fresh_id(self,args):
+        global lf_counter
+        res = AST.clone(self,args)
+        res.temporal = self.temporal
+        res.explicit = self.explicit
+        return res
+
 class LabeledDecl(Decl):
     def defines(self):
         if iu.get_numeric_version() <= [1,6]:

@@ -103,7 +103,7 @@ class ActionTerm(ia.AST):
     def clone(self,args):
         """ clone relaces the statement in an action """
         res = ActionTerm(self.inputs,self.outputs,args[0])
-        copy_attributes(self,res)
+        ia.copy_attrs(self,res)
         return res
     def __str__(self):
         res = 'action'
@@ -131,9 +131,9 @@ class ActionTermBinding(ia.AST):
         """ the only subterm is the statement """
         return [self.stmt]
     def clone(self,args):
-        """ clone relaces the statement in an action """
-        res = ActionTerm(self.inputs,self.outputs,args[0])
-        copy_attributes(self,res)
+        """ clone relaces the action in a binding """
+        res = ActionTermBinding(self.name,args[0])
+        ia.copy_attrs(self,res)
         return res
     def __str__(self):
         return '{} = {}'.format(self.name,self.action)
@@ -213,7 +213,7 @@ def normal_program_from_module(mod):
 # The formula phi and the auxiliary invariants auxi are added to the model as invariants,
 # and the conclusion is converted to "true".
 
-def invariance_tactic(goals,proof):
+def invariance_tactic(prover,goals,proof):
     goal = goals[0]                  # pick up the first proof goal
     conc = ipr.goal_conc(goal)       # get its conclusion
     if not isinstance(conc,TemporalModels):
@@ -233,22 +233,57 @@ def invariance_tactic(goals,proof):
     invars = [inv.compile() for inv in proof.tactic_decls]
 
     # Add the invariant phi to the list
-    invars.append(ipr.make_goal(goal.lineno,goal.label,[],invar))
+    invars.append(ipr.clone_goal(goal,[],invar))
 
     # Add the invariant list to the model
     model = model.clone([])
     model.invars = model.invars + invars
     
+    # Get all the implicit globally properties from the proof
+    # environment, and make them assume statements at the beginnings
+    # of the actions.
+
+    gprops = [x for x in prover.axioms if not x.explicit and x.temporal and il.is_gprop(x.formula)]
+    if len(gprops) > 0:
+        assumes = [gprop_to_assume(x) for x in gprops]
+        model.bindings = [b.clone([prefix_action(b.action,assumes)]) for b in model.bindings]
+
     # Change the conclusion formula to M |= true
     conc = TemporalModels(model,il.And())
 
     # Build the new goal
-    goal = ipr.make_goal(goal.lineno,goal.label,ipr.goal_prems(goal),conc)
+    goal = ipr.clone_goal(goal,ipr.goal_prems(goal),conc)
 
     # Return the new goal stack
 
-    return [goal] + goals[1:]
+    goals = [goal] + goals[1:]
+    return goals
+
+#    return implicit_tactic(prover,goals,None)
+
+def gprop_to_assume(gprop):
+    res = iact.AssumeAction(gprop.formula.args[0])
+    res.lineno = gprop.lineno
+    return res
+
+def prefix_action(self,stmts):
+    return self.clone([iact.prefix_action(self.stmt,stmts)])
 
 # Register the invariance tactic
 
 ipr.register_tactic('invariance',invariance_tactic)
+
+
+# This tactic brings in all of the implicit properties from the proof environment
+# into the current goal.
+
+# TODO: pull in implicit definitions
+
+def implicit_tactic(prover,goals,proof):
+    implicit_axioms = [x for x in prover.axioms if not x.explicit]
+    print 'temporal axioms: {}'.format([x.temporal for x in implicit_axioms])
+    goal,goals = goals[0],goals[1:]
+    goal = ipr.goal_prefix_prems(goal,implicit_axioms,goal.lineno)
+    return [goal]+goals
+
+    

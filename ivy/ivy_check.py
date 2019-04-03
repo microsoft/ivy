@@ -21,6 +21,7 @@ import ivy_solver as islv
 import ivy_fragment as ifc
 import ivy_proof
 import ivy_temporal as itmp
+import ivy_printer
 
 import sys
 from collections import defaultdict
@@ -92,36 +93,32 @@ def has_temporal_stuff(f):
     return any(True for x in lut.temporals_ast(f)) or any(True for x in lut.named_binders_ast(f))
 
     
+# This is a little tricky. We know that the current module is a valid abstraction of the
+# program, thus module |= prop implies prop. We tell the prover to trust us and admit
+# prop if module |= prop holds.
+
 def check_temporals():
     mod = im.module
     props = mod.labeled_props
-    proved = []
+    pmap = dict((prop.id,p) for prop,p in mod.proofs)
+    pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
     for prop in props:
         print '\n    The following temporal property is being proved:\n'
         print pretty_lf(prop)
         if prop.temporal:
-            pc = ivy_proof.ProofChecker(mod.labeled_axioms+mod.assumed_invariants,mod.definitions,mod.schemata)
-            pmap = dict((prop.id,p) for prop,p in mod.proofs)
-            if prop.id in pmap:
-                proof = pmap[prop.id]
-                model = itmp.normal_program_from_module(im.module)
-                goal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
-                subgoals = pc.admit_proposition(goal,proof)
+            proof = pmap.get(prop.id,None)
+            model = itmp.normal_program_from_module(im.module)
+            subgoal = prop.clone([prop.args[0],itmp.TemporalModels(model,prop.args[1])])
+            subgoals = [subgoal]
+            subgoals = pc.admit_proposition(prop,proof,subgoals)
             check_subgoals(subgoals)
-        else:
-            conjs.append(prop)
+            
+        # else:
+        #     # Non-temporal properties have already been proved, so just
+        #     # admit them here without proof (in other words, ignore the
+        #     # generated subgoals).
 
-            # from ivy_l2s import l2s
-            # mod = im.module.copy()
-            # mod.labeled_axioms.extend(proved)
-            # mod.labeled_props = []
-            # l2s(mod, prop)
-            # mod.concept_spaces = []
-            # mod.update_conjs()
-            # with mod:
-            #     check_isolate()
-
-        proved.append(prop)
+        #     pc.admit_proposition(prop,ivy_ast.ComposeTactics())
 
 
 def usage():
@@ -602,6 +599,7 @@ def check_isolate():
 def check_subgoals(goals):
     mod = im.module
     for goal in goals:
+        # print 'goal: {}'.format(goal)
         conc = ivy_proof.goal_conc(goal)
         if isinstance(conc,itmp.TemporalModels):
             model = conc.model
@@ -618,6 +616,11 @@ def check_subgoals(goals):
             mod.public_actions = set(model.calls)
             mod.actions = model.binding_map
             mod.initializers = [('init',model.init)]
+            mod.labeled_axioms = list(mod.labeled_axioms)
+            for prem in ivy_proof.goal_prems(goal):
+                if prem.temporal:
+                    mod.labeled_axioms.append(prem)
+            # ivy_printer.print_module(mod)
         else:
             goal = ivy_compiler.theorem_to_property(goal)
             mod = im.module.copy()

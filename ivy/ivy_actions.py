@@ -1267,6 +1267,17 @@ def call_set(action_name,env):
     res = set()
     call_set_rec(action_name,env,res)
     return sorted(res)
+
+# adds a list of statements at the beginning of an action.
+
+def prefix_action(self,stmts):
+    res = Sequence(*(stmts + [self]))
+    if hasattr(self,'formal_params'):
+        res.formal_params = self.formal_params
+    if hasattr(self,'formal_returns'):
+        res.formal_returns = self.formal_returns
+    res.lineno = self.lineno    
+    return res
     
 # Annotations let us reconstruct an execution trace from a satisfying assignment.
 # They contain two kinds of information:
