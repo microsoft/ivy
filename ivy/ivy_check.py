@@ -345,7 +345,7 @@ opt_summary = iu.BooleanParameter("summary",False)
 # This gets the pre-state for inductive checks. Only implicit conjectures are used.
 
 def get_conjs(mod):
-    fmlas = [lf.formula for lf in mod.labeled_conjs if not lf.explicit]
+    fmlas = [lf.formula for lf in mod.labeled_conjs + mod.assumed_invariants if not lf.explicit]
     return lut.Clauses(fmlas,annot=act.EmptyAnnotation())
 
 def apply_conj_proofs(mod):
@@ -617,6 +617,7 @@ def check_subgoals(goals):
             mod.actions = model.binding_map
             mod.initializers = [('init',model.init)]
             mod.labeled_axioms = list(mod.labeled_axioms)
+            mod.assumed_invars = model.asms
             for prem in ivy_proof.goal_prems(goal):
                 if prem.temporal:
                     mod.labeled_axioms.append(prem)

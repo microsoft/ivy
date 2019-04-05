@@ -1149,6 +1149,8 @@ class ActionDef(Definition):
             res.formal_params = [rewrite_param(p,rewrite) for p in self.formal_params]
         if hasattr(self,'formal_returns'):
             res.formal_returns = [rewrite_param(p,rewrite) for p in self.formal_returns]
+        if hasattr(self,'labels'):
+            res.labels = labels
         return res
     def formals(self):
         return ([s.drop_prefix('fml:') for s in self.formal_params],

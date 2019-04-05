@@ -202,38 +202,28 @@ class Action(AST):
             res.formal_params = self.formal_params
         if hasattr(self,'formal_returns'):
             res.formal_returns = self.formal_returns
+        if hasattr(self,'labels'):
+            res.labels = self.labels
         return res
     def assert_to_assume(self,kinds):
         args = [a.assert_to_assume(kinds) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def drop_invariants(self):
         args = [a.drop_invariants() if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def prefix_calls(self,pref):
         args = [a.prefix_calls(pref) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def unroll_loops(self,card):
         args = [a.unroll_loops(card) if isinstance(a,Action) else a for a in self.args]
         res = self.clone(args)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def iter_calls(self):
         for a in self.args:
@@ -255,7 +245,7 @@ class Action(AST):
         return [(pre,[self],post)]
     def modifies(self):
         return []
-
+        
 
 class AssumeAction(Action):
     def __init__(self,*args):
@@ -295,10 +285,7 @@ class AssertAction(Action):
             return Action.assert_to_assume(self,kinds)
         res = AssumeAction(*self.args)
         ivy_ast.copy_attributes_ast(self,res)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     
 # Prior to version 1.7, Ensures is always verified
@@ -894,17 +881,11 @@ class WhileAction(Action):
         return self.expand(ivy_module.module,[]).decompose(pre,post,fail)
     def assert_to_assume(self,kinds):
         res = self.clone([self.args[0]]+[x.assert_to_assume(kinds) for x in self.args[1:]])
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def drop_invariants(self):
         res = self.clone(self.args[:2])
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
     def unroll_loops(self,card):
         body = self.args[1].unroll_loops(card)
@@ -928,10 +909,7 @@ class WhileAction(Action):
         res = AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
             res = IfAction(self.args[0],Sequence(body or self.args[1],res))
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res
             
 
@@ -1132,10 +1110,7 @@ class CallAction(Action):
         else: 
             pass
 #            print 'no lineno in prefix_calls: {}'.format(self)
-        if hasattr(self,'formal_params'):
-            res.formal_params = self.formal_params
-        if hasattr(self,'formal_returns'):
-            res.formal_returns = self.formal_returns
+        self.copy_formals(res)
         return res        
     def callee(self):
         return self.args[0].relname
@@ -1272,13 +1247,20 @@ def call_set(action_name,env):
 
 def prefix_action(self,stmts):
     res = Sequence(*(stmts + [self]))
-    if hasattr(self,'formal_params'):
-        res.formal_params = self.formal_params
-    if hasattr(self,'formal_returns'):
-        res.formal_returns = self.formal_returns
+    self.copy_formals(res)
     res.lineno = self.lineno    
     return res
     
+# adds a list of statements at the end of an action.
+
+def postfix_action(self,stmts):
+    if len(stmts) == 0:
+        return self
+    res = Sequence(*([self] + stmts))
+    self.copy_formals(res)
+    res.lineno = self.lineno    
+    return res
+
 # Annotations let us reconstruct an execution trace from a satisfying assignment.
 # They contain two kinds of information:
 

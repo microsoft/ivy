@@ -222,28 +222,32 @@ class Not(recstruct('Not', [], ['body'])):
             return 'Not({})'.format(self.body)
 
 
-class Globally(recstruct('Globally', [], ['body'])):
+class Globally(recstruct('Globally', ['environ'], ['body'])):
     __slots__ = ()
     sort = Boolean
     @classmethod
-    def _preprocess_(cls, body):
+    def _preprocess_(cls, environ, body):
+        assert environ is None or isinstance(environ,str)
         if body.sort not in (Boolean, TopS):
             raise SortError("Globally body must be Boolean: {}".format(body))
-        return (body,)
+        return environ,body
     def __str__(self):
-        return 'Globally({})'.format(self.body)
+        environ = self.environ
+        return 'globally{}({})'.format('' if environ is None else '['+str(environ)+']',self.body)
 
 
-class Eventually(recstruct('Eventually', [], ['body'])):
+class Eventually(recstruct('Eventually', ['environ'], ['body'])):
     __slots__ = ()
     sort = Boolean
     @classmethod
-    def _preprocess_(cls, body):
+    def _preprocess_(cls, environ, body):
+        assert environ is None or isinstance(environ,str)
         if body.sort not in (Boolean, TopS):
             raise SortError("Eventually body must be Boolean: {}".format(body))
-        return (body,)
+        return environ,body
     def __str__(self):
-        return 'Eventually({})'.format(self.body)
+        environ = self.environ
+        return 'eventually{}({})'.format('' if environ is None else '['+str(environ)+']',self.body)
 
 
 class And(recstruct('And', [], ['*terms'])):

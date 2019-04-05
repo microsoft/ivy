@@ -251,7 +251,7 @@ class DefinitionSchema(Definition):
     pass
 
 
-lg_ops = [lg.Eq, lg.Not, lg.Globally, lg.Eventually, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]
+lg_ops = [lg.Eq, lg.Not, lg.And, lg.Or, lg.Implies, lg.Iff, lg.Ite, lg.ForAll, lg.Exists, lg.Lambda, lg.NamedBinder]
 
 for cls in lg_ops:
     cls.args = property(lambda self: [ a for a in self])
@@ -259,6 +259,10 @@ for cls in lg_ops:
 
 for cls in [lg.ForAll, lg.Exists, lg.Lambda]:
     cls.clone = lambda self,args: type(self)(self.variables,*args)
+
+for cls in [lg.Globally, lg.Eventually]:
+    cls.args = property(lambda self: [ a for a in self])
+    cls.clone = lambda self,args: type(self)(self.environ,*args)
 
 lg.NamedBinder.clone = lambda self,args: lg.NamedBinder(self.name, self.variables, *args)
 lg.NamedBinder.rep = property(lambda self: self)
@@ -1246,12 +1250,16 @@ lg.Or.ugly = lambda self: nary_ugly('|',self.args) if self.args else 'false'
 lg.Not.ugly = lambda self: (nary_ugly('~=',self.body.args,parens=False)
                                if type(self.body) is lg.Eq
                                else '~{}'.format(self.body.ugly()))
-lg.Globally.ugly = lambda self: ('globally {}'.format(self.body.ugly()))
-lg.Eventually.ugly = lambda self: ('eventually {}'.format(self.body.ugly()))
+lg.Globally.ugly = lambda self: ('globally{} {}'.format(ugly_environ(self),self.body.ugly()))
+lg.Eventually.ugly = lambda self: ('eventually{} {}'.format(ugly_environ(self),self.body.ugly()))
 lg.Implies.ugly = lambda self: nary_ugly('->',self.args,parens=False)
 lg.Iff.ugly = lambda self: nary_ugly('<->',self.args,parens=False)
 lg.Ite.ugly = lambda self:  '({} if {} else {})'.format(*[self.args[idx].ugly() for idx in (1,0,2)])
 Definition.ugly = lambda self: nary_ugly('=',self.args,parens=False)
+
+def ugly_environ(self):
+    environ = self.environ
+    return '' if environ is None else '['+str(environ)+']'
 
 lg.Apply.ugly = app_ugly
 

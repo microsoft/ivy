@@ -71,8 +71,8 @@ op_pairs = [
     (ivy_ast.And,ivy_logic.And),
     (ivy_ast.Or,ivy_logic.Or),
     (ivy_ast.Not,ivy_logic.Not),
-    (ivy_ast.Globally,ivy_logic.Globally),
-    (ivy_ast.Eventually,ivy_logic.Eventually),
+    (ivy_ast.Globally,lambda x: ivy_logic.Globally(None,x)),
+    (ivy_ast.Eventually,lambda x: ivy_logic.Eventually(None,x)),
     (ivy_ast.And,ivy_logic.And),
     (ivy_ast.Definition,ivy_logic.Definition),
     (ivy_ast.Implies,ivy_logic.Implies),
@@ -1757,6 +1757,7 @@ def compile_theories(mod,**kwargs):
 # exported by its most nearly containing isolate. This is only needed
 # from version 1.7, where we introduce the concept of object
 # invariant.
+#
 
 def create_conj_actions(mod):
     if iu.version_le(iu.get_string_version(),"1.6"):
@@ -1804,6 +1805,44 @@ def create_conj_actions(mod):
                                     if action in set(iu.reachable([victim],lambda x: cg[x])) and action != victim:
                                         raise IvyError(conj, "isolate {} depends on invariant {} which might not hold because action {} is called from within action {}, which invalidates the invariant.".format(ison,conj.label.rep,victim,action))
                 
+# This handles the modular semantics of temporal properties. Each
+# temporal operator is labeled with an isolate (which could be
+# 'this'). If the user does not give a label for an operator, then the
+# isolate in which the property is verified is used. For now, it is an
+# error if the property is verified in more than one
+# isolate. Additionally, we label each action with the list of
+# isolates in which is is present [1]. The modular semantics says that
+# a temporal operator refers only to time instants when execution is
+# *not* in the indicated isolate. In particular, this means that
+# "temporal property globally p" has the same semantics as "invariant
+# p".
+#
+# TODO: this does not handle temporal axioms.
+
+def handle_temporals(mod):
+    imap = iso.get_isolate_map(mod,verified=True,present=False)
+    new_props = []
+    for prop in mod.labeled_props:
+        isonames = imap[prop.name]
+        assert len(isonames) > 0  # should at least be verified in isolate 'this'!
+        if len(isonames) > 1:
+            raise IvyError(prop,'Temporal propery belongs to moe than one isolate: {}'.format(','.join(str(x) for x in isonames)))
+        new_props.append(prop.clone([prop.label,label_temporal(prop.formula,isonames[0])]))
+    mod.labeled_props = new_props
+    imap = iso.get_isolate_map(mod,verified=True,present=True)
+    for actname,action in mod.actions.iteritems():
+        action.labels = imap[actname]
+
+def label_temporal(fmla,label):
+    if ivy_logic.is_temporal(fmla):
+        return type(fmla)(label,fmla.body)
+    return fmla.clone([label_temporal(x,label) for x in fmla.args])
+        
+def add_action_label(action,label):
+    if not hasattr(action,'labels'):
+        action.labels = []
+    action.labels.append(label)
+
 def show_call_graph(cg):
     for caller,callees in cg.iteritems():
         print '{} -> {}'.format(caller,','.join(callees))
@@ -1852,6 +1891,7 @@ def ivy_compile(decls,mod=None,create_isolate=True,**kwargs):
         check_definitions(mod)
         check_properties(mod)
         create_conj_actions(mod)
+        handle_temporals(mod)
         if create_isolate:
             iso.create_isolate(isolate.get(),mod,**kwargs)
             im.module.labeled_axioms.extend(im.module.labeled_props)
