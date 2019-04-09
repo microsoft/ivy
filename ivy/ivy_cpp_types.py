@@ -184,7 +184,7 @@ class IntBV(XBV):
         """ bits is the number of bits in the bit vector representation """
         add_once_global("""
     struct IntClass {
-        IntClass(){}
+        IntClass() : val(0) {}
         IntClass(long long val) : val(val) {}
         long long val;
         size_t __hash() const {return val;}

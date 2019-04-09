@@ -53,6 +53,13 @@ include quic_transport_parameters
 #
 # - For each aid C, `conn_closed(C)` is true if C is in the closed state.
 #
+# - For each aid C, `conn_draining(C)` is true if C is in the draining state.
+#
+# - For each aid C, `draining_pkt_sent(C)` is true if the single
+#   packet allowed to be sent in transition to the draining state has been sent.
+#   This one packet must contain a connection_close frame with error code 0.
+#   TODO: we don't check the error code.
+#
 # - For each endpoint aid C, last_pkt_num(C,L) represents the
 #   number of the latest packet sent by C in encryption level L.
 #
@@ -106,6 +113,8 @@ include quic_transport_parameters
 
 relation conn_seen(C:cid)
 relation conn_closed(C:cid)
+relation conn_draining(C:cid)
+relation draining_pkt_sent(C:cid)
 function last_pkt_num(C:cid,L:encryption_level) : pkt_num
 relation sent_pkt(C:cid,L:encryption_level,N:pkt_num)
 relation acked_pkt(C:cid,L:encryption_level,N:pkt_num)
@@ -299,6 +308,8 @@ after init {
     conn_seen(C) := false;
     last_pkt_num(C,L) := 0;
     conn_closed(C) := false;
+    conn_draining(C) := false;
+    draining_pkt_sent(C) := false;
     sent_pkt(C,L,N) := false;
     acked_pkt(C,L,N) := false;
     pkt_has_close(C,L,N) := false;
@@ -645,9 +656,12 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     # On long headers, both cids are given. Record the correspondence.
     # If the scid has been mapped, make sure it maps to the dcid.
+    # However, this requirement does not apply to initial client hello
+    # packets.
 
     if pkt.hdr_long {
-        require cid_dst_to_src_set(scid) -> cid_dst_to_src(scid) = dcid
+        require cid_dst_to_src_set(scid) ->
+              (cid_dst_to_src(scid) = dcid | (queued_hello(scid) & is_client(scid)))
     }
 
     # On short headers, the scid is not given, so we use the recorded value
@@ -746,6 +760,13 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     #   cannot ack *only* ack-only packets?  Or that an ack-only
     #   packet cannot ack *any* ack-only packets?
     
+    # If the sender is in the draining state, this is the draining packet.
+    # Make sure that a draining packet has not previously been sent and
+    # that the packet contains a connection_close frame;
+
+    if conn_draining(scid) {
+        require ~draining_pkt_sent(scid) & queued_close(scid);
+    };
     ...
 
     # TEMPORARY: The following are repeated because currently locals defined in
@@ -794,6 +815,12 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
     if queued_close(scid) {
         pkt_has_close(scid,e,pnum) := true;
+    };
+
+    # If the sender is in the draining state, this is the draining packet.
+
+    if conn_draining(scid) {
+        draining_pkt_sent(scid) := true
     };
 
     # The queued frames are deleted
@@ -906,6 +933,11 @@ action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level, pro
 #   where `C` is the *source* of the acknowledged packet (not of the Ack)
 #   and `N` is the packet number [2].
 # - The greatest acked packet is also tracked in `max_acked(C,e)` [3]
+#
+# - If a packet with a connection_close frame of either type is acknowledged
+#   the sending aid enters the draining state. Note that observing the ack of
+#   a connection close frame is the only way we can detect that it was received.
+#   
 
 # TEMPORARY: use this to enforce new acks in testing
 
@@ -938,7 +970,9 @@ object frame = {
 		var jdx := last;
 		while jdx <= upper {
                     require sent_pkt(dcid,e,jdx);  # [1]
-                    require ~pkt_has_close(dcid,e,jdx);
+                    if pkt_has_close(dcid,e,jdx) {
+                        conn_draining(scid) := true  # [5]
+                    };
                     if ~acked_pkt(dcid,e,jdx) {
                         some_new_ack := true;
                     };
