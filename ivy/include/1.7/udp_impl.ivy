@@ -28,9 +28,11 @@ module udp_impl(host,pkt,ser,des) = {
 
 <<< header
 
-    #include <netinet/udp.h>
     #include <list>
+    #ifndef _WIN32
+    #include <netinet/udp.h>
     #include <semaphore.h>
+    #endif
 
     class udp_listener;   // class of threads that listen for connections
     class udp_callbacks;  // class holding callbacks to ivy

@@ -15,7 +15,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
     # Link the gnutls library
 
-    attribute libspec = "picotls-core,picotls-minicrypto,picotls-openssl,ssl,crypto,dl"
+    attribute libspec = "picotls-core,picotls-minicrypto,picotls-openssl,ssl,crypto,dl,picotls.lib,libcrypto.lib,libssl.lib,cifra.lib,bcrypt.lib"
     
 
     # These empty objects are used to hold C++ values.
@@ -32,6 +32,9 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 <<< header
 
     extern "C" {
+    #ifdef _WIN32
+    #include "../picotlsvs/picotls/wincompat.h"
+    #endif
     #include "picotls.h"
     #include "picotls/openssl.h"
     #include "picotls/minicrypto.h"
@@ -216,6 +219,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
         bail(ret,"tls: failed to set up initial server secret\n");
         quic_set_key_from_secret(&cipher, session->is_server, &session->crypto_context[0], server_secret);
         quic_set_key_from_secret(&cipher, !session->is_server, &session->crypto_context[0], client_secret);
+	return ret;
     }
 
     void encrypt_symm(ptls_cipher_context_t *pn_enc, const `bytes` &clear, const `bytes` &iv, `bytes` &cipher) {
@@ -269,6 +273,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
                 }
             }
         }
+	return ret;
     }
 
     static int set_sign_certificate_from_key(EVP_PKEY* pkey, ptls_context_t* ctx)

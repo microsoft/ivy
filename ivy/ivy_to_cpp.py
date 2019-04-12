@@ -1640,6 +1640,10 @@ def module_to_cpp_class(classname,basename):
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = ivy_cpp.context.globals.code
+    import platform
+    if platform.system() == 'Windows':
+        header.append('#define WIN32_LEAN_AND_MEAN\n')
+        header.append("#include <windows.h>\n")
     header.append("#define _HAS_ITERATOR_DEBUGGING 0\n")
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
@@ -1693,7 +1697,7 @@ def module_to_cpp_class(classname,basename):
 """)
     header.append("""
 #ifdef _WIN32
-    std::vector<DWORD> thread_ids;\n
+    std::vector<HANDLE> thread_ids;\n
 #else
     std::vector<pthread_t> thread_ids;\n
 #endif
@@ -1780,11 +1784,11 @@ DWORD WINAPI ReaderThreadFunction( LPVOID lpParam )
 
 DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
 {
-    timer *cr = (reader *) lpParam;
+    timer *cr = (timer *) lpParam;
     while (true) {
-        int ms = timer->ms_delay();
+        int ms = cr->ms_delay();
         Sleep(ms);
-        timer->timeout(ms);
+        cr->timeout(ms);
     }
     return 0;
 } 
@@ -1832,7 +1836,7 @@ void CLASSNAME::install_reader(reader *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_reader, r);
@@ -1863,7 +1867,7 @@ void CLASSNAME::install_timer(timer *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_timer, r);
@@ -1905,7 +1909,7 @@ void CLASSNAME::install_thread(reader *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_reader, r);
@@ -2573,8 +2577,14 @@ class z3_thunk : public thunk<D,R> {
     impl.append("""CLASSNAME::~CLASSNAME(){
     __lock(); // otherwise, thread may die holding lock!
     for (unsigned i = 0; i < thread_ids.size(); i++){
+#ifdef _WIN32
+       // No idea how to cancel a thread on Windows. We just suspend it
+       // so it can't cause any harm as we destruct this object.
+       SuspendThread(thread_ids[i]);
+#else
         pthread_cancel(thread_ids[i]);
         pthread_join(thread_ids[i],NULL);
+#endif
     }
     __unlock();
 }
@@ -4647,7 +4657,7 @@ public:
             return ctx.bv_val(value,range.bv_size());
         if (range.is_int())
             return ctx.int_val(value);
-        return enum_values.find(range)->second[value]();
+        return enum_values.find(range)->second[(int)value]();
     }
 
     z3::expr int_to_z3(const z3::sort &range, const std::string& value) {
@@ -5028,21 +5038,32 @@ def main_int(is_ivyc):
                     for x,y in im.module.attributes.iteritems():
                         p,c = iu.parent_child_name(x)
                         if c == 'libspec':
-                            libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(','))
+                            if platform.system() == 'Windows':
+                                libspec += ''.join(' {}'.format(ll) for ll in y.rep.strip('"').split(',') if ll.endswith('.lib'))
+                            else:
+                                libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(',') if not ll.endswith('.lib'))
                     if platform.system() == 'Windows':
                         if 'Z3DIR' in os.environ:
-                            z3incspec = '/I %Z3DIR%\\include'
-                            z3libspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                            incspec = '/I %Z3DIR%\\include'
+                            libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
                         else:
                             import z3
                             z3path = os.path.dirname(os.path.abspath(z3.__file__))
-                            z3incspec = '/I {}'.format(z3path)
-                            z3libspec = '/LIBPATH:{}'.format(z3path)
+                            incspec = '/I {}'.format(z3path)
+                            libpspec = '/LIBPATH:{}'.format(z3path)
+                        for lib in libs:
+                            _incdir = lib[1] if len(lib) >= 2 else []
+                            _libdir = lib[2] if len(lib) >= 3 else []
+                            _incdir = [_incdir] if isinstance(_incdir,str) else _incdir
+                            _libdir = [_libdir] if isinstance(_libdir,str) else _libdir
+                            incspec += ''.join(' /I {} '.format(d) for d in _incdir)
+                            libpspec += ''.join(' /LIBPATH:{} '.format(d) for d in _libdir)
                         vsdir = find_vs()
                         if opt_compiler.get() != 'g++':
-                            cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(vsdir,basename)
+                            cmd = '"{}\\VC\\vcvarsall.bat" amd64& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(vsdir,basename)
                             if target.get() in ['gen','test']:
-                                cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,z3incspec,basename,z3libspec)
+                                cmd = '"{}\\VC\\vcvarsall.bat" amd64& cl /MDd /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,incspec,basename,libpspec)
+                            cmd += libspec
                         else:
                             cmd = "g++ {} -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(gpp11_spec,basename,basename)
                             if target.get() in ['gen','test']:

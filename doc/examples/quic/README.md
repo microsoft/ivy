@@ -102,8 +102,12 @@ the link above and follow the README.
 
 ### Picotls
 
-The testers make use of the `picotls` implementation of TLS. Install it
-according to the instructions [here](https://github.com/h2o/picotls). 
+The testers make use of the `picotls` implementation of TLS. Install
+it according to the instructions
+[here](https://github.com/h2o/picotls).  Window instructions are
+[here](https://github.com/h2o/picotls/blob/master/WindowsPort.md).
+OpenSSL binaries for Windows can be found
+[here](https://slproweb.com/products/Win32OpenSSL.html).
 
 Then you need to tell the Ivy compiler where to find the `picotls`
 library and headers (unless you copy them to standard locations). Use
