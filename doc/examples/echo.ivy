@@ -2,18 +2,17 @@
 
 # include ip
 include udp
+include order
 
 object ip = {
+#    instance endpoint : iterable
     type endpoint
+    interpret endpoint -> bv[1]
 }
 
 type data
 
 type message
-
-action event(msg:message,src:ip.endpoint,dst:ip.endpoint) = {
-    require false
-}
 
 object request = {
     variant this of message = struct {
@@ -27,32 +26,38 @@ object response = {
     }
 }
 
+type pkt = struct {
+    src : ip.endpoint,
+    payload : message
+}
+
 isolate protocol = {
-
-    relation request_sent(X:data,S:ip.endpoint,D:ip.endpoint)
-    relation response_sent(X:data,S:ip.endpoint,D:ip.endpoint)
-
-    after init {
-        request_sent(X,S,D) := false;
-        response_sent(X,S,D) := false;
-    }
-
 
     action request_event(src:ip.endpoint,dst:ip.endpoint,msg:request)
     action response_event(src:ip.endpoint,dst:ip.endpoint,msg:response)
 
-    after request_event {
-        request_sent(msg.content,src,dst) := true
+    specification {
+        relation request_sent(X:data,S:ip.endpoint,D:ip.endpoint)
+        relation response_sent(X:data,S:ip.endpoint,D:ip.endpoint)
+
+        after init {
+            request_sent(X,S,D) := false;
+            response_sent(X,S,D) := false;
+        }
+
+
+        after request_event {
+            request_sent(msg.content,src,dst) := true
+        }
+
+        around response_event {
+            require request_sent(msg.content,dst,src);
+            ...
+            response_sent(msg.content,src,dst) := true
+        }
+
+        invariant response_sent(X,S,D) -> request_sent(X,D,S)
     }
-
-    around response_event {
-        require request_sent(msg.content,dst,src);
-	...
-        response_sent(msg.content,src,dst) := true
-    }
-
-    invariant response_sent(X,S,D) -> request_sent(X,D,S)
-
 }
 
 # var some_requested : bool
@@ -97,11 +102,6 @@ isolate service = {
         }
 
         implementation {
-
-            type pkt = struct {
-                src : ip.endpoint,
-                payload : message
-            }
 
             instance low : udp_simple(ip.endpoint,pkt)
 
@@ -169,3 +169,6 @@ isolate service = {
 } with protocol   
 
 export service.client_request
+import service.client_response
+
+extract process(self:ip.endpoint) = service(self)
