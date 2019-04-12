@@ -1053,7 +1053,16 @@ def emit_action_gen(header,impl,name,action,classname):
     for sym in to_decl:
         emit_decl(impl,sym)
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')))
+    import platform
+    if platform.system() == 'Windows':
+        winfmla = slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','')
+        impl.append('std::string winfmla = "(assert ";\n');
+        for winline in winfmla.split('\n'):
+            impl.append('winfmla.append("{} ");\n'.format(winline))
+        impl.append('winfmla.append(")");\n')
+        impl.append('add(winfmla);\n')
+    else:
+        impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')))
 #    impl.append('__ivy_modelfile << slvr << std::endl;\n')
     indent_level -= 1
     impl.append("}\n");

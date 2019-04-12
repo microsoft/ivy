@@ -104,20 +104,38 @@ the link above and follow the README.
 
 The testers make use of the `picotls` implementation of TLS. Install
 it according to the instructions
-[here](https://github.com/h2o/picotls).  Window instructions are
+[here](https://github.com/h2o/picotls). 
+
+Windows: Instructions for installing picotls on Windows are
 [here](https://github.com/h2o/picotls/blob/master/WindowsPort.md).
 OpenSSL binaries for Windows can be found
 [here](https://slproweb.com/products/Win32OpenSSL.html).
+These OpenSSL binaries are missing a file `include/ms/applink.c` that
+you will have to get from the OpenSSL source repository.
+You also need to copy the libcrypto DLL into this directory:
 
-Then you need to tell the Ivy compiler where to find the `picotls`
-library and headers (unless you copy them to standard locations). Use
-this command, where `PICOTLS_DIR` is the directory in which `picotls`
-was built:
+    copy c:\OpenSSL-Win64\bin\libcrypto-1_1-x64.dll
+
+Continuing with general instructions:  Then you need to tell the Ivy
+compiler where to find the `picotls` library and headers (unless you
+copy them to standard locations). Use this command, where
+`PICOTLS_DIR` is the directory in which `picotls` was built:
 
 
     $ ivy_libs add picotls $PICOTLS_DIR .
     
 Notice the dot in the above, which is essential.
+
+### Make a build and a temp directory
+
+If there's no directory `build` in this directory, make one now:
+
+    $ mkdir build
+    $ mkdir temp
+
+### Install some packages
+
+    $ pip install pexpect
 
 ### Build the Ivy packet monitor
 
@@ -139,7 +157,7 @@ traffic for the server. The most basic one is
     ivyc target=test quic_server_test_stream.ivy
 
 If successful, this will produce a binary file
-`quic_server_test_stream`.
+`build/quic_server_test_stream`.
 
 
 Implementations of QUIC

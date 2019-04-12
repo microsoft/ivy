@@ -7,8 +7,17 @@ import imp
 import subprocess
 import re
 import time
+import signal
 
-spawn = pexpect.spawn
+
+import platform
+
+# On Windows, pexpect doesn't implement 'spawn'.
+if platform.system() == 'Windows':
+    from pexpect.popen_spawn import PopenSpawn
+    spawn = PopenSpawn
+else:
+    spawn = pexpect.spawn
 
 servers = [
     ['picoquic',['/home/mcmillan/projects/picoquic','./picoquicdemo']],
@@ -173,71 +182,87 @@ class Test(object):
         with open_out(self.name+str(seq)+'.out') as out:
             with open_out(self.name+str(seq)+'.err') as err:
                 with open_out(self.name+str(seq)+'.iev') as iev:
-                    scmd = 'sleep 1; ' + server_cmd if test_client else server_cmd.split() 
-                    print 'implementation command: {}'.format(scmd)
-                    server = subprocess.Popen(scmd,
-                                              cwd=server_dir,
-                                              stdout=out,
-                                              stderr=err,
-                                              shell=test_client)
-                    print 'server pid: {}'.format(server.pid)
+                    if run:
+                        scmd = 'sleep 1; ' + server_cmd if test_client else server_cmd.split() 
+                        print 'implementation command: {}'.format(scmd)
+                        server = subprocess.Popen(scmd,
+                                                  cwd=server_dir,
+                                                  stdout=out,
+                                                  stderr=err,
+                                                  shell=test_client)
+                        print 'server pid: {}'.format(server.pid)
                     try:
                         ok = self.expect(seq,iev)
                     except KeyboardInterrupt:
-                        server.terminate()
+                        if run:
+                            server.terminate()
                         raise KeyboardInterrupt
-                    server.terminate()
-                    retcode = server.wait()
-                    if retcode != -15 and retcode != 0:  # if not exit on SIGTERM...
-                        iev.write('server_return_code({})\n'.format(retcode))
-                        print "server return code: {}".format(retcode)
-                        return False
+                    if run:
+                        server.terminate()
+                        retcode = server.wait()
+                        if retcode != -15 and retcode != 0:  # if not exit on SIGTERM...
+                            iev.write('server_return_code({})\n'.format(retcode))
+                            print "server return code: {}".format(retcode)
+                            return False
                     return ok
             
     def expect(self,seq,iev):
         command = self.command(seq)
         print command
-        oldcwd = os.getcwd()
-        os.chdir(self.dir)
-        proc = subprocess.Popen(command,stdout=iev,shell=True)
-        os.chdir(oldcwd)
-        try:
-            retcode = proc.wait()
-        except KeyboardInterrupt:
-            print 'terminating client process {}'.format(proc.pid)
-            proc.terminate()
-            raise KeyboardInterrupt
-        if retcode == 124:
-            print 'timeout'
-            iev.write('timeout\n')
+        if platform.system() != 'Windows':
+            oldcwd = os.getcwd()
+            os.chdir(self.dir)
+            proc = subprocess.Popen(command,stdout=iev,shell=True)
+            os.chdir(oldcwd)
+            try:
+                retcode = proc.wait()
+            except KeyboardInterrupt:
+                print 'terminating client process {}'.format(proc.pid)
+                proc.terminate()
+                raise KeyboardInterrupt
+            if retcode == 124:
+                print 'timeout'
+                iev.write('timeout\n')
+                sleep()
+                return False
+            if retcode != 0:
+                iev.write('ivy_return_code({})\n'.format(retcode))
+                print 'client return code: {}'.format(retcode)
             sleep()
-            return False
-        if retcode != 0:
-            iev.write('ivy_return_code({})\n'.format(retcode))
-            print 'client return code: {}'.format(retcode)
-        sleep()
-        return retcode == 0
-#             oldcwd = os.getcwd()
-#             os.chdir(self.dir)
-#             child = spawn(command)
-#             os.chdir(oldcwd)
-#             child.logfile = iev
-#             try:
-#                 child.expect(self.res,timeout=None)
-#                 return True
-#             except pexpect.EOF:
-# #                print child.before
-#                 return False
-#             except pexpect.exceptions.TIMEOUT:
-#                 print 'timeout'
-#                 return False
+            return retcode == 0
+        else:
+            oldcwd = os.getcwd()
+            os.chdir(self.dir)
+            child = spawn(command)
+            os.chdir(oldcwd)
+            child.logfile = iev
+            try:
+                child.expect(self.res,timeout=100)
+                child.close()
+                print "tester exit status: {}".format(child.exitstatus)
+                print "tester signal status: {}".format(child.signalstatus)
+                return True
+            except pexpect.EOF:
+                print child.before
+                return False
+            except pexpect.exceptions.TIMEOUT:
+                print 'timeout'
+                child.terminate()
+                child.close()
+                return False
+            except KeyboardInterrupt:
+                print 'terminating tester process'
+                child.kill(signal.SIGINT)
+                child.close()
+                raise KeyboardInterrupt
     def preprocess_commands(self):
         return []
         
 class IvyTest(Test):
     def command(self,seq):
         import platform
-        return ' '.join(['timeout {} ./build/{} seed={} the_cid={} {}'.format(time,self.name,seq,2*seq,'' if test_client else 'server_cid={} client_port={} client_port_alt={}'.format(2*seq+1,2*seq+4987,2*seq+4988))] + extra_args)
+        timeout_cmd = '' if platform.system() == 'Windows' else 'timeout {} '.format(time)
+        return ' '.join(['{}./build/{} seed={} the_cid={} {}'.format(timeout_cmd,self.name,seq,2*seq,'' if test_client else 'server_cid={} client_port={} client_port_alt={}'.format(2*seq+1,2*seq+4987,2*seq+4988))] + extra_args)
 
 all_tests = []
 
