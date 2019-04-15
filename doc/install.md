@@ -199,7 +199,7 @@ somewhere in your emacs load path and add the following code to your
 <a name="windowsnotes"></a> Windows notes
 -------------
 
-Installing on Windows can be a bit challenging, but here are a few
+Installing on from source on Windows can be a bit challenging, but here are a few
 suggestions that may get you through it.
 
 ### Installing Python and Python packages
@@ -209,25 +209,24 @@ need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
 
 ### Installing Z3
 
-After installing Z3, you need to make sure Python can find it. You can try setting
-the `PYTHONPATH` environment variable to point to the Z3 `python` directory. It might
-help to make sure Z3 is installed in a directory without spaces in the name. As a
-last resort, you can just copy the `python/z3` directory into your Python installation.
-If you installed Python in `c:/Python27`, then copy it into:
-
-    c:/Python27/lib/site-packages/z3
+Install Z3 using the instructions [here](https://github.com/Z3Prover/z3/wiki/Using-Z3Py-on-Windows).
+We will assume that you havce installed Z3 in `c:\z3`. If not, modify the instructions below accordingly.
+Make sure to follow the instructions on setting the environmenet variables `PATH` and `PYTHONPATH`.
+In addition, set environment variable `Z3DIR` to `c:\z3`.
 
 If things are installed correctly, the following should produce no errors:
 
     > python
     >>> import z3
-    >>> z3.init('libz3.dll')
 
 ### Installing Graphviz
 
-Get `graphviz-2.38` from [graphviz.org](http://graphviz.org). This site is often down,
-so you may have to be patient. Versions downloaded from alternative sites may be broken.
-Install into some directory without spaces in the name, for example `c:/Graphviz`.
+You only need graphviz to use the Ivy GUI. For normal verification and
+testing tasks, you don't need this.  Get `graphviz-2.38` from
+[graphviz.org](http://graphviz.org). This site is often down, so you
+may have to be patient. Versions downloaded from alternative sites may
+be broken.  Install into some directory without spaces in the name,
+for example `c:/Graphviz`.
 
 ### Using scripts
 
@@ -238,38 +237,26 @@ by default. Try installing the `tarjan` and `ply` packages like this:
     > pip install tarjan
     > pip install ply
 
-### Installing Pygraphviz
-
-You can try installing `pygraphviz` like this:
-
-    > pip install pygraphviz
-
-However, this is likely to fail as `pip` will not find the graphviz
-headers and libraries. As an alternative, download the release 1.3 of
-`pygraphviz` from
-[here](https://github.com/pygraphviz/pygraphviz/releases). After unpacking
-the sources, do this:
-
-    > cd pygraphviz-pygraphviz-1.3
-    > python setup.py install --include-path=c:/Graphviz/include --library-path=c:/Graphviz/lib/debug/lib
-
-This tells explicitly where you installed the graphviz headers and libraries. If this seems to
-work, you can test it like this:
-
-    > python
-    >>> import pygraphviz.agraph
-
 ### Installing Ivy
 
 Now you can now try to install Ivy, like this:
 
+    > cd c:\
     > git clone https://github.com/Microsoft/ivy.git
     > cd ivy
-    > python setup.py install
+    > python setup.py develop
 
-If you have put `c:/Python27/Scripts` in your `PATH`, you should now be able to run IVy like this:
+Using the `develop` command instead of `install` is helpful, since you
+then don't have to install again after each time you modify the code
+or pull a new version.  If you have put `c:/Python27/Scripts` in your
+`PATH`, you should now be able to run IVy like this:
 
     > ivy ui=cti doc/examples/client_server_example.ivy
+
+To be able to compile Ivy programs or Ivy testers, you also need to
+have some verison of Visual Studio installed. At a minimum you need the
+command line build tools for C++ installed. You can get them free of charge
+[here](https://visualstudio.microsoft.com/downloads/). 
 
 <a name="macnotes"></a> Mac notes
 --------------------------------
