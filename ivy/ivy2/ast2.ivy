@@ -4,7 +4,15 @@ include order
 include string
 
 instance pos : unbounded_sequence
-type char
+
+object char = {
+    type this
+    type kinds = {alphanum,bracket,other}
+    function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
+    function kind(X:char) = alphanum if is_alphanum(X:char)
+                            else (bracket if (X = 40 | X = 41) else other)
+}
+    
 instance str : string(pos,char)
 
 object str = { ...
@@ -41,27 +49,34 @@ action add(x:expr,y:expr) returns (res:expr) = {
     res := s;
 }
 
-action encode(e:expr,b:str) returns (b:str)
+type verb
+
+action encode(e:expr,b:str,prio:verb) returns (b:str)
 
 object symbol = { ...    
-    action encode(s:symbol,b:str) returns (b:str) = {
+    action encode(s:symbol,b:str,prio:verb) returns (b:str) = {
 	b := s.name.encode(b);
     }
 }
 
 object plus = { ...    
-    action encode(s:plus,b:str) returns (b:str) = {
-	b := s.lhs.encode(b);
+    action encode(s:plus,b:str,prio:verb) returns (b:str) = {
+	if 0 < prio {
+	    b := b.extend("(");
+	};	    
+	b := s.lhs.encode(b,0);
 	b := b.extend(" + ");
-	b := s.rhs.encode(b);
+	b := s.rhs.encode(b,1);
+	if 0 < prio {
+	    b := b.extend(")");
+	}	    
     }
 }
 
 action enc(e:expr) returns (s:str) = {
-    s := e.encode(s);
+    s := e.encode(s,0);
 }
 
-function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
 
 action lex(b:str,p:pos) returns (tok:str,p:pos) = {
     while p < b.end & b.value(p) = 32 {
@@ -69,7 +84,7 @@ action lex(b:str,p:pos) returns (tok:str,p:pos) = {
     };
     var start := p;
     var last : char := 32;
-    while p < b.end & b.value(p) ~= 32 & (last = 32 | (is_alphanum(b.value(p)) <-> is_alphanum(last))) {
+    while p < b.end & b.value(p) ~= 32 & (last = 32 | (char.kind(b.value(p)) = char.kind(last))) & char.kind(last) ~= char.bracket {
 	last := b.value(p);
 	p := p.next;
     };
@@ -100,10 +115,11 @@ action parse_symbol(st : pstate) returns(st : pstate, res:expr) = {
     }
 }
 
-action parse_expr(st : pstate) returns(st : pstate, res:expr) = {
+
+action parse_expr(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
     if st.tok = "(" {
 	st := st.consume;
-	(st,res) := parse_expr(st);
+	(st,res) := parse_expr(st,0);
 	if st.tok = ")" {
 	    st := st.consume;
 	} else {
@@ -112,10 +128,10 @@ action parse_expr(st : pstate) returns(st : pstate, res:expr) = {
     } else {
 	(st,res) := parse_symbol(st);
     };
-    while st.ok & st.tok = "+" {
+    while st.ok & st.tok = "+" & prio < 1 {
 	st := st.consume;
 	var arg : expr;
-	(st,arg) := parse_expr(st);
+	(st,arg) := parse_expr(st,1);
 	if st.ok {
 	    res := add(res,arg);
 	}
@@ -131,10 +147,15 @@ action start_state(s:str) returns (st:pstate) = {
 action dec(s:str) returns (e:expr) = {
     var st := start_state(s);
     st := st.consume;
-    (st,e) := parse_expr(st);
-    if ~st.ok {
+    (st,e) := parse_expr(st,0);
+    if ~st.ok | st.tok.end ~= 0 {
 	call parse_error(st.p,st.tok);
     }
+}
+
+action encdec(s:str) returns (res:str) = {
+    var e := dec(s);
+    res := enc(e)
 }
 
 action parse_error(p:pos,tok:str)
@@ -143,4 +164,5 @@ export sym
 export add
 export enc
 export dec
+export encdec
 import parse_error
