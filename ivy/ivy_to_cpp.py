@@ -346,6 +346,8 @@ class ReturnRefType(object): # return by reference in argument position "pos"
         self.pos = pos
     def make(self,t):
         return 'void'
+    def __repr__(self):
+        return "ReturnRefType({})".format(self.pos)
 
 def ctype(sort,classname=None,ptype=None):
     ptype = ptype or ValueType()
@@ -1280,7 +1282,6 @@ def annotate_action(name,action):
         else:
             thing = ValueType()
         action.return_types.append(thing)
-#    action.return_types = [return_type(idx,p) for idx,p in enumerate(action.formal_returns)]
 
 def get_param_types(name,action):
     if not hasattr(action,"param_types"):
@@ -1311,9 +1312,9 @@ def emit_param_decls_with_inouts(header,name,params,classname,ptypes,returns,ret
     extra_params = []
     extra_ptypes = []
     for (r,rp) in zip(returns,return_ptypes):
-        if isinstance(rp,ReturnRefType) and rp.pos > len(params):
+        if isinstance(rp,ReturnRefType) and rp.pos >= len(params):
             extra_params.append(r)
-            extra_ptypes.append(rp)
+            extra_ptypes.append(RefType())
     emit_param_decls(header,name,params+extra_params,classname=classname,ptypes=ptypes+extra_ptypes)
 
 def emit_method_decl(header,name,action,body=False,classname=None,inline=False):
@@ -1331,7 +1332,7 @@ def emit_method_decl(header,name,action,body=False,classname=None,inline=False):
     else:
         header.append(ctype(rs[0].sort,classname=classname,ptype=rtypes[0]) + ' ')
     if len(rs) > 1:
-        if any(not isinstance(p,ReturnRefType) for p in rtypes):
+        if any(not isinstance(p,ReturnRefType) for p in rtypes[1:]):
             raise iu.IvyError(action,'cannot handle multiple output in exported actions: {}'.format(name))
     if body and not inline:
         header.append(classname + '::')
@@ -1373,7 +1374,8 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
         trace_action(code,name,action)
         if opt_trace.get():
             code_line(code,'__ivy_out ' + number_format + ' << "{" << std::endl')
-    if len(action.formal_returns) == 1:
+    pt,rt = get_param_types(name,action)
+    if len(action.formal_returns) >= 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
         p = action.formal_returns[0]
         if p not in action.formal_params:
@@ -1384,7 +1386,6 @@ def emit_some_action(header,impl,name,action,classname,inline=False):
     if name in import_callers:
         if opt_trace.get():
             code_line(code,'__ivy_out ' + number_format + ' << "}" << std::endl')
-    pt,rt = get_param_types(name,action)
     if len(action.formal_returns) >= 1 and not isinstance(rt[0],ReturnRefType):
         indent(code)
         code.append('return ' + varname(action.formal_returns[0].name) + ';\n')
@@ -2656,9 +2657,7 @@ class z3_thunk : public thunk<D,R> {
         arcs = [(x,s) for s in im.module.sort_order for x in im.sort_dependencies(im.module,s,with_variants=True)]
         variant_of = set((x.name,y) for y,l in im.module.variants.iteritems() for x in l)
         arcs = [a for a in arcs if a in variant_of]
-        print 'arcs : {}'.format(arcs)
         inline_sort_order = iu.topological_sort(im.module.sort_order,arcs)
-        print 'inline_sort_order: {}'.format(inline_sort_order)
         for sort_name in inline_sort_order:
             if sort_name in im.module.variants:
                 sort = im.module.sig.sorts[sort_name] 
@@ -3832,18 +3831,19 @@ def emit_call(self,header):
     code = []
     indent(code)
     retvals = []
-    args = self.args[0].args
+    args = list(self.args[0].args)
     nargs = len(args)
     name = self.args[0].rep
     action = im.module.actions[name]
+    fmls = list(action.formal_params)
     if len(self.args) >= 2:
         pt,rt = get_param_types(name,action)
         for rpos in range(len(rt)):
+            rv = self.args[1 + rpos]
             pos = rt[rpos].pos if isinstance(rt[rpos],ReturnRefType) else None
             if pos is not None:
                 if pos < nargs:
                     iparg = self.args[0].args[pos]
-                    rv = self.args[1 + rpos]
                     if (iparg != rv or
                         any(j != pos and may_alias(arg,iparg) for j,arg in enumerate(self.args[0].args))):
                         retval = new_temp(header,rv.sort)
@@ -3854,12 +3854,13 @@ def emit_call(self,header):
                         args = [il.Symbol(retval,self.args[1].sort) if idx == pos else a for idx,a in enumerate(args)]
                 else:
                     args.append(self.args[1+rpos])
-            else:
-                self.args[1].emit(header,code)
-                code.append(' = ')
+                    fmls.append(rv)
+        if not isinstance(rt[0],ReturnRefType):
+            self.args[1].emit(header,code)
+            code.append(' = ')
     code.append(varname(str(self.args[0].rep)) + '(')
     first = True
-    for p,fml in zip(args,action.formal_params):
+    for p,fml in zip(args,fmls):
         if not first:
             code.append(', ')
         lsort,rsort = fml.sort,p.sort

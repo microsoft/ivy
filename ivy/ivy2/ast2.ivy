@@ -64,10 +64,10 @@ action enc(e:expr) returns (s:str) = {
 function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
 
 action lex(b:str,p:pos) returns (tok:str,p:pos) = {
-    var start := p;
     while p < b.end & b.value(p) = 32 {
 	p := p.next
     };
+    var start := p;
     var last : char := 32;
     while p < b.end & b.value(p) ~= 32 & (last = 32 | (is_alphanum(b.value(p)) <-> is_alphanum(last))) {
 	last := b.value(p);
@@ -111,12 +111,13 @@ action parse_expr(st : pstate) returns(st : pstate, res:expr) = {
 	}
     } else {
 	(st,res) := parse_symbol(st);
-	while st.ok & st.tok = "+" {
-	    var arg : expr;
-	    (st,arg) := parse_expr(st);
-	    if st.ok {
-		res := add(res,arg);
-	    }
+    };
+    while st.ok & st.tok = "+" {
+	st := st.consume;
+	var arg : expr;
+	(st,arg) := parse_expr(st);
+	if st.ok {
+	    res := add(res,arg);
 	}
     }
 }
