@@ -1,0 +1,145 @@
+#lang ivy1.7
+
+include order
+include string
+
+instance pos : unbounded_sequence
+type char
+instance str : string(pos,char)
+
+object str = { ...
+    action encode(s:this,b:str) returns (b:str) = {
+	b := b.extend(s)
+    }    
+}
+
+type expr
+
+object symbol = {
+    variant this of expr = struct {
+	name : str
+    }
+}
+
+object plus = {
+    variant this of expr = struct {
+	lhs : expr,
+	rhs : expr
+    }
+}
+
+action sym(name:str) returns (res:expr) = {
+    var s:symbol;
+    s.name := name;
+    res := s
+}
+
+action add(x:expr,y:expr) returns (res:expr) = {
+    var s:plus;
+    s.lhs := x;
+    s.rhs := y;
+    res := s;
+}
+
+action encode(e:expr,b:str) returns (b:str)
+
+object symbol = { ...    
+    action encode(s:symbol,b:str) returns (b:str) = {
+	b := s.name.encode(b);
+    }
+}
+
+object plus = { ...    
+    action encode(s:plus,b:str) returns (b:str) = {
+	b := s.lhs.encode(b);
+	b := b.extend(" + ");
+	b := s.rhs.encode(b);
+    }
+}
+
+action enc(e:expr) returns (s:str) = {
+    s := e.encode(s);
+}
+
+function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
+
+action lex(b:str,p:pos) returns (tok:str,p:pos) = {
+    var start := p;
+    while p < b.end & b.value(p) = 32 {
+	p := p.next
+    };
+    var last : char := 32;
+    while p < b.end & b.value(p) ~= 32 & (last = 32 | (is_alphanum(b.value(p)) <-> is_alphanum(last))) {
+	last := b.value(p);
+	p := p.next;
+    };
+    tok := b.segment(start,p);
+}
+
+object pstate = {
+    type this = struct {
+	b:str,
+	p:pos,
+	tok:str,
+	ok:bool
+    }
+    action consume(st:pstate) returns(st:pstate) = {
+	(st.tok,st.p) := lex(st.b,st.p);
+    }	
+}
+
+action parse_symbol(st : pstate) returns(st : pstate, res:expr) = {
+    if st.ok & st.tok.end ~= 0 {
+	var s : symbol;
+	s.name := st.tok;
+	res := s;
+	st := st.consume;
+    }
+    else {
+	st.ok := false;
+    }
+}
+
+action parse_expr(st : pstate) returns(st : pstate, res:expr) = {
+    if st.tok = "(" {
+	st := st.consume;
+	(st,res) := parse_expr(st);
+	if st.tok = ")" {
+	    st := st.consume;
+	} else {
+	    st.ok := false;
+	}
+    } else {
+	(st,res) := parse_symbol(st);
+	while st.ok & st.tok = "+" {
+	    var arg : expr;
+	    (st,arg) := parse_expr(st);
+	    if st.ok {
+		res := add(res,arg);
+	    }
+	}
+    }
+}
+
+action start_state(s:str) returns (st:pstate) = {
+    st.b := s;
+    st.p := s.begin;
+    st.ok := true;
+}
+
+action dec(s:str) returns (e:expr) = {
+    var st := start_state(s);
+    st := st.consume;
+    (st,e) := parse_expr(st);
+    if ~st.ok {
+	call parse_error(st.p,st.tok);
+    }
+}
+
+action parse_error(p:pos,tok:str)
+
+export sym
+export add
+export enc
+export dec
+import parse_error

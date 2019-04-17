@@ -784,19 +784,22 @@ def empty_clone(action):
     res.formal_returns = action.formal_returns
     return res
 
-def collect_sort_destructors(sort,res):
+def collect_sort_destructors(sort,res,memo):
+    if sort.name in memo:
+        return
+    memo.add(sort.name)
     if sort.name in im.module.sort_destructors:
         for dstr in im.module.sort_destructors[sort.name]:
             res.add(dstr)
-            collect_relevant_destructors(dstr,res)
+            collect_relevant_destructors(dstr,res,memo)
     elif sort.name in im.module.variants:
         for sort2 in im.module.variants[sort.name]:
-            collect_sort_destructors(sort2,res)
+            collect_sort_destructors(sort2,res,memo)
 
-def collect_relevant_destructors(sym,res):
+def collect_relevant_destructors(sym,res,memo):
     if not hasattr(sym.sort,'rng'):
         return 
-    collect_sort_destructors(sym.sort.rng,res)
+    collect_sort_destructors(sym.sort.rng,res,memo)
 
            
 def add_extern_precond(mod,subaction,preconds):
@@ -1095,7 +1098,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
     follow_definitions(mod.definitions,all_syms)
     if opt_keep_destructors.get():
         for sym in list(all_syms):
-            collect_relevant_destructors(sym,all_syms)
+            collect_relevant_destructors(sym,all_syms,set())
 
     # check that any dropped axioms do not refer to the isolate's signature
 
@@ -1161,7 +1164,7 @@ def isolate_component(mod,isolate_name,extra_with=[],extra_strip=None,after_init
 
     if opt_keep_destructors.get():
         for sym in list(all_syms):
-            collect_relevant_destructors(sym,all_syms)
+            collect_relevant_destructors(sym,all_syms,set())
     
     if filter_symbols.get() or cone_of_influence.get():
         old_syms = list(mod.sig.all_symbols())

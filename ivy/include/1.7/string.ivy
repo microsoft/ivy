@@ -1,0 +1,335 @@
+#lang ivy
+
+include order
+
+################################################################################
+#
+# Strings
+#
+# String types represent maps from an interval [0,end) of a type
+# "domain" to a type "range".  An string type thing can be created
+# like this:
+#
+#    instance thing : string(domain,range)
+#
+# The implementation of this type requires that both domain an
+# range interpreted as numeric types. In particular the range
+# type will be interpreted representing unicode code points.
+# The primary difference between string and array is the
+# textual format. 
+
+
+module string(domain,range) = {
+
+    type this
+    alias t = this
+
+    # return an empty string
+
+    action empty returns (a:t)
+
+    # return an string with end=s and all values mapped to y
+    action create(s:domain,y:range) returns (a:t)
+
+    # mutate an string a so that x in [0,end) maps to y
+    action set(a:t,x:domain,y:range) returns (a:t)
+
+    # get the value y such that x in [0,end) maps to y in string a
+    action get(a:t,x:domain) returns (y:range) 
+
+    # get the value of end
+    action size(a:t) returns (s:domain)
+    
+    # change the size of the string
+    action resize(a:t,s:domain,v:range) returns (a:t)
+
+    # add one element to the string
+    action append(a:t,v:range) returns (a:t)
+
+    # extend an string by another string (i.e., concatenate the strings)
+    action extend(a:t,b:t) returns (a:t)
+
+    ########################################
+    # Representation
+    #
+    # Function "end" gives the end value of an string while value(a,x)
+    # gives the value that x maps to in a.
+
+    function begin(A:t) : domain
+    definition begin(A) = 0
+    function end(A:t) : domain
+    function value(A:t,X:domain) : range
+
+    # Extract a string segment
+
+    function segment(A:t, LO:domain, HI:domain) : t
+
+    ########################################
+    # Specification
+    #
+    # Notice that get and set have the precondition that x is in
+    # [0,end).
+
+
+    object spec = {
+
+#        definition begin(X) = 0
+
+	property end(X) >= 0
+
+	after empty {
+	    assert end(a) = 0
+	}
+	before create {
+	    assert 0 <= s
+	}
+	after create {
+	    assert end(a) = s & value(a,X) = y
+	}
+        before set {
+	    assert 0 <= x & x < end(a)
+	}	       	 
+	after set {
+            assert end(a) = end(old a);
+	    assert value(a,X) = y if X = x else value(old a,X)
+	}
+	before get {
+	    assert 0 <= x & x < end(a)
+	}
+	after get {
+	    assert value(a,x) = y
+	}
+	after size {
+	    assert s = end(a)
+	}
+	after resize {
+	    assert end(a) = s;
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert end(old a) <= X & X < s -> value(a,X) = v
+	}
+	after append {
+	    assert end(a) > end(old a) & ~(end(old a) < X & X < end(a));
+#            assert domain.succ(end(old a),end(a));
+	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
+	    assert value(a,end(old a)) = v
+	}
+
+        theorem extensionality = {
+            property end(X) = end(Y) & forall I. 0 <= I & I < end(X) -> value(X,I) = value(Y,I)
+            property X:t = Y
+        }
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< std::vector<`range`> >>>
+
+	definition value(a:t,i:domain) = <<< (0 <= `i` && `i` < `a`.size()) ? `a`[`i`] : val >>>
+
+	definition end(a:t) = <<< `a`.size() >>>
+
+	implement create {
+	    <<<
+	        `a`.resize(`s`);
+	        for (unsigned i = 0; i < `s`; i++)
+	            `a`[i] = y;
+	    >>>
+	}
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        if (0 <= `x` && `x` < (`domain`)`a`.size()) 
+	            `y` = `a`[`x`];
+	    >>>
+	}
+
+	implement size {
+	    <<<
+	        `s` = (`domain`) `a`.size();
+	    >>>
+	}
+
+	implement resize {
+	    <<<
+	        unsigned __old_size = `a`.size();
+	        `a`.resize(`s`);
+	        for (unsigned i = __old_size; i < (unsigned)`s`; i++)
+	            `a`[i] = v;
+            >>>
+        }
+
+	implement append {
+	    <<<
+	        `a`.push_back(`v`);
+            >>>
+        }
+
+	implement extend {
+	    <<<
+                for (unsigned i = 0; i < `b`.size(); i++)
+	            `a`.push_back(`b`[i]);
+            >>>
+        }
+
+        <<< impl
+        template <typename T>
+        T __string_segment(const T &a, long long lo, long long hi) {
+            T res;
+            lo = (lo < 0) ? 0 : lo;
+            hi = (hi > a.size()) ? a.size() : hi;
+            if (hi > lo) {
+                res.resize(hi-lo);
+                std::copy(a.begin()+lo,a.begin()+hi,res.begin());
+            }
+            return res;
+        }
+        >>>
+
+	definition segment(a:t,lo:domain,hi:domain) = 
+	<<< __string_segment(a,lo,hi) >>>
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '"';
+		for (unsigned i = 0; i < a.size(); i++) {
+		    s << (char)a[i];
+		}
+	        s << '"';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	         if (args[idx].fields.size())
+                     throw out_of_bounds(idx);
+	         `t` res;
+	         const std::string &s = args[idx].atom;
+	         for (unsigned __idx = 0; __idx < s.size(); __idx++)
+	             res.push_back(s[__idx]);
+	         return res;
+	    }
+
+	    template <>
+	    `t` __lit<`t`>(const char *c) {
+	         `t` res;
+	         const std::string &s = c;
+	         for (unsigned __idx = 0; __idx < s.size(); __idx++)
+	             res.push_back(s[__idx]);
+	         return res;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    res.resize(res.size()+1);
+	            __deser(inp,res.back());
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+	        for (unsigned i = 0; i < (unsigned)sz; i++) {
+		    res.open_list_elem();
+	            __ser(res,inp[i]);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+	    #ifdef Z3PP_H_
+	    template <>
+            z3::expr __to_solver(gen& g, const z3::expr& z3val, `t`& val) {
+	        z3::expr z3end = g.apply("`end`",z3val);
+	        z3::expr __ret = z3end  == g.int_to_z3(z3end.get_sort(),val.size());
+	        unsigned __sz = val.size();
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __ret = __ret && __to_solver(g,g.apply("`value`",z3val,g.int_to_z3(g.sort("`domain`"),__i)),val[__i]);
+                return __ret;
+            }
+
+	    template <>
+	    void  __from_solver<`t`>( gen &g, const  z3::expr &v,`t` &res){
+	        `domain` __end;
+	        __from_solver(g,g.apply("`end`",v),__end);
+	        unsigned __sz = (unsigned) __end;
+	        res.resize(__sz);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+		    __from_solver(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)),res[__i]);
+	    }
+
+	    template <>
+	    void  __randomize<`t`>( gen &g, const  z3::expr &v){
+	        unsigned __sz = rand() % 4;
+                z3::expr val_expr = g.int_to_z3(g.sort("`domain`"),__sz);
+                z3::expr pred =  g.apply("`end`",v) == val_expr;
+                g.add_alit(pred);
+	        for (unsigned __i = 0; __i < __sz; ++__i)
+	            __randomize<`range`>(g,g.apply("`value`",v,g.int_to_z3(g.sort("`domain`"),__i)));
+	    }
+	    #endif
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+
+    attribute test = impl
+}
+
+################################################################################
+# 
+# Use of the type string[domain][range], where domain and range are
+# types, implicitly creates an instance of string(domain,range) called
+# string[domain][range].
+#
+
+autoinstance string[domain][range] : string(domain,range)
+
+################################################################################
+#
+# Vector types
+#
+# A vector is the same as an string, except that the domain type is implicitly
+# an instance of `unbounded sequence`.
+#
+
+module char_vector(range) = {
+    
+    instance domain : unbounded_sequence
+    
+    instantiate string(domain,range)
+}
+
+################################################################################
+# 
+# Use of the type vector[range], where range is a type, implicitly
+# creates an instance of vector(range) called vector[range].
+#
+
+autoinstance char_vector[range] : vector(range)
+

@@ -1443,7 +1443,10 @@ def check_instantiations(mod,decls):
 
 
 def create_sort_order(mod):
-    arcs = [(x,s) for s in mod.sort_order for x in im.sort_dependencies(mod,s)]
+    arcs = [(x,s) for s in mod.sort_order for x in im.sort_dependencies(mod,s,with_variants=False)]
+    # # Remove arcs for recursive types. The first variant can't be recursive.
+    # variant_of = set((x.name,y) for y,l in mod.variants.iteritems() for x in l[1:])
+    # arcs = [a for a in arcs if a in variant_of]
     # do nothing if sccs already sorted
     number = dict((x,i) for i,x in enumerate(mod.sort_order))
     if all(x == 'bool' or number[x] < number[y] for x,y in arcs):

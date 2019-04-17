@@ -1,0 +1,37 @@
+#lang ivy1.7
+
+include string
+
+instance pos : unbounded_sequence
+type char
+
+instance str : string(pos,char)
+
+type expr
+
+variant symbol of expr = struct {
+    name : str
+}
+
+variant plus of expr = struct {
+    lhs : expr,
+    rhs : expr
+}
+
+action sym(name:str) returns (res:expr) = {
+    var s:symbol;
+    s.name := name;
+    res := s
+}
+
+action add(x:expr,y:expr) returns (res:expr) = {
+    var s:plus;
+    s.lhs := x;
+    s.rhs := y;
+    res := s;
+}
+
+
+export sym
+export add
+

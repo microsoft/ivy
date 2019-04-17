@@ -354,7 +354,7 @@ def relevant_definitions(symbols):
     rch = set(iu.reachable(symbols,lambda sym: lu.symbols_ast(dfn_map[sym]) if sym in dfn_map else []))
     return [ldf for ldf in module.definitions if ldf.formula.defines() in rch]
     
-def sort_dependencies(mod,sortname):
+def sort_dependencies(mod,sortname,with_variants=True):
     if sortname in mod.sort_destructors:
         return [s.name for destr in mod.sort_destructors[sortname]
                 for s in destr.sort.dom[1:] + (destr.sort.rng,)]
@@ -362,7 +362,7 @@ def sort_dependencies(mod,sortname):
         t = mod.native_types[sortname]
         if isinstance(t,ivy_ast.NativeType):
             return [s.rep for s in t.args[1:] if s.rep in mod.sig.sorts]
-    if sortname in mod.variants:
+    if with_variants and sortname in mod.variants:
         return [s.name for s in mod.variants[sortname]]
     return []
 
