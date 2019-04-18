@@ -60,6 +60,13 @@ module array(domain,range) = {
 
     function segment(A:t, LO:domain, HI:domain) : t
 
+    # Extract the last element, if there is one
+
+    action back(a:t) returns (res:range)
+
+    # remove the last element if there is one
+    action pop_back(a:t) returns (a:t)
+
     ########################################
     # Specification
     #
@@ -98,7 +105,7 @@ module array(domain,range) = {
 	after size {
 	    assert s = end(a)
 	}
-	after resize {
+	after resize{
 	    assert end(a) = s;
 	    assert 0 <= X & X < end(old a) -> value(a,X) = value(old a,X);
 	    assert end(old a) <= X & X < s -> value(a,X) = v
@@ -134,7 +141,7 @@ module array(domain,range) = {
 
 	implement create {
 	    <<<
-	        `a`.resize(`s`);
+	        `a`.resize`s`);
 	        for (unsigned i = 0; i < `s`; i++)
 	            `a`[i] = y;
 	    >>>
@@ -173,6 +180,18 @@ module array(domain,range) = {
 	            `a`[i] = v;
             >>>
         }
+
+        implement back {
+	    res := a.value(a.end.prev)
+	}
+
+        implement pop_back {
+	    <<<
+	        if (`a`.size() > 0) {
+	            a.pop_back();
+	        }
+            >>>
+	}
 
 	implement append {
 	    <<<

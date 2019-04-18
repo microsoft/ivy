@@ -3026,6 +3026,7 @@ class z3_thunk : public thunk<D,R> {
                     impl.append('    ivy._generating = false;\n')
                     emit_repl_boilerplate3test(header,impl,classname)
                 else:
+                    impl.append("    ivy.__init();\n");
                     if im.module.public_actions:
                         emit_repl_boilerplate3(header,impl,classname)
                     else:
