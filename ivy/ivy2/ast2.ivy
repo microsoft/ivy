@@ -20,6 +20,7 @@ object pretty = {
 
     type token = struct {
 	pair : bool,
+        tdepth : pos,
 	first : str,
 	second : pos
     }
@@ -41,7 +42,8 @@ object pretty = {
 	states : vector[state],
 	stack : vector[pos],
 	output : str,
-	space : pos
+	space : pos,
+        depth : pos
     }
     
     action make(maxline:pos,indent:pos) returns (res:this) = {
@@ -63,7 +65,7 @@ object pretty = {
                 self.output := self.output.extend(tok.first);
                 self.space := self.space - tok.first.end
 	    } else {
-                self.space := self.stack.back - self.indent;
+                self.space := self.maxline - tok.tdepth * self.indent;
                 self := self.do_indent
 	    }
 	} else {
@@ -90,12 +92,12 @@ object pretty = {
                 self.tokens := self.tokens.set(at.prev,newtok)
 	    }
 	};
-	self.st.total := self.st.total + len
     }
 	
     action extend(self:this, string:str) returns (self:this) = {
 	var tok : token;
 	tok.pair := false;
+        tok.tdepth := self.depth;
 	tok.first := string;
 	if true & string = self.whitespace {   # true = breakable
 	    tok.pair := true;
@@ -104,26 +106,30 @@ object pretty = {
 	    self := add_length(self,string.end,self.tokens.end)
 	};
         self.tokens := self.tokens.append(tok);
+	self.st.total := self.st.total + string.end
     }    
 
     action nest(self:this) returns (self:this) = {
-	self := self.print_tokens;
         self.stack := self.stack.append(self.space);
 	self.states := self.states.append(self.st);
         self.st.total := 0;
-	self.st.begin := self.tokens.end
+	self.st.begin := self.tokens.end;
+        self.depth := self.depth + 1
     }
 
     action unnest(self:this) returns (self:this) = {
 	var oldst := self.st;
 	# Tricky: don't count any terminal white space in length of scope
-	if self.tokens.end > oldst.begin & self.tokens.back.pair {
-	    oldst.total := oldst.total - self.tokens.back.second
-	};
+#	if self.tokens.end > oldst.begin & self.tokens.back.pair {
+#	    oldst.total := oldst.total - self.tokens.back.second;
+#            self.tokens.end > oldst.begin & self.tokens.back.pair
+#	};
 	self.stack := self.stack.pop_back;
 	self.st := self.states.back;
 	self.states := self.states.pop_back;
 	self := self.add_length(oldst.total,oldst.begin);
+	self.st.total := self.st.total + oldst.total;
+        self.depth := self.depth - 1
     }
 
 }
@@ -292,10 +298,36 @@ export pretty.make
 export pretty.extend
 export pretty.print_tokens
 
+action pr(max:pos,s:str) returns (res:str) = {
+    var p := pretty.make(max,4);
+    var st := start_state(s);
+    st := st.consume;
+    while st.tok.end > 0 {
+	if st.tok = "(" {
+	    p := p.nest
+	};
+	p := p.extend(st.tok);
+	if st.tok = ")" {
+	    p := p.unnest
+	};
+#	call show_pretty(p);
+	if st.b.value(st.p) = 32 {
+	    p := p.extend(" ");
+#	    call show_pretty(p);
+	};
+	st := st.consume
+    };
+
+    p := p.print_tokens;
+    res := p.output
+}
+
+export pr
+
 # after init {
 
 #     var p := pretty.make(11,4);
-#     var st := start_state("(fooooooo + (bar + baaaaaz))");
+#     var st := start_state("fooooooo + (bar + baaaaaz)");
 #     st := st.consume;
 #     while st.tok.end > 0 {
 # 	if st.tok = "(" {
