@@ -16,8 +16,120 @@ object char = {
     
 instance str : string(pos,char)
 
+object pretty = {
+
+    type token = struct {
+	pair : bool,
+	first : str,
+	second : pos
+    }
+
+    var foo : vector[token]
+
+    type state = struct {
+	begin : vector[token].domain,
+	total : pos
+    }
+    
+
+    type this = struct {
+        tokens : vector[token],
+	st : state,
+        maxline : pos,
+	indent : pos,
+	whitespace : str,
+	states : vector[state],
+	stack : vector[pos],
+	output : str,
+	space : pos
+    }
+    
+    action make(maxline:pos,indent:pos) returns (res:this) = {
+	res.maxline := maxline;
+	res.indent := indent;
+	res.whitespace := " ";
+	res.space := maxline;
+	res.stack := res.stack.append(maxline);
+    }
+
+    action do_indent (self:this) returns (self:this) = {
+	self.output := self.output.append(10);  # newline
+	self.output := self.output.resize(self.output.end+(self.maxline-self.space),32);  # spaces
+    }
+
+    action print (self:this,tok:token) returns (self:this) = {
+	if tok.pair {
+	    if tok.second <= self.space | self.space = self.maxline {
+                self.output := self.output.extend(tok.first);
+                self.space := self.space - tok.first.end
+	    } else {
+                self.space := self.stack.back - self.indent;
+                self := self.do_indent
+	    }
+	} else {
+            self.output := self.output.extend(tok.first);
+            self.space := self.space - tok.first.end
+	}
+    }
+
+    action print_tokens (self:this) returns (self:this) = {
+	var idx := self.tokens.begin;
+	while idx < self.tokens.end {
+	    self := self.print(self.tokens.value(idx));
+	    idx := idx.next
+	};
+	self.tokens := vector[token].empty;
+    }
+
+    action add_length(self:this, len:pos, at:vector[token].domain) returns (self:this) = {
+        if at > self.st.begin {
+            var prev := self.tokens.value(at.prev);
+            if prev.pair {
+		var newtok := prev;
+		newtok.second := newtok.second + len;
+                self.tokens := self.tokens.set(at.prev,newtok)
+	    }
+	};
+	self.st.total := self.st.total + len
+    }
+	
+    action extend(self:this, string:str) returns (self:this) = {
+	var tok : token;
+	tok.pair := false;
+	tok.first := string;
+	if true & string = self.whitespace {   # true = breakable
+	    tok.pair := true;
+	    tok.second := string.end;
+	} else {
+	    self := add_length(self,string.end,self.tokens.end)
+	};
+        self.tokens := self.tokens.append(tok);
+    }    
+
+    action nest(self:this) returns (self:this) = {
+	self := self.print_tokens;
+        self.stack := self.stack.append(self.space);
+	self.states := self.states.append(self.st);
+        self.st.total := 0;
+	self.st.begin := self.tokens.end
+    }
+
+    action unnest(self:this) returns (self:this) = {
+	var oldst := self.st;
+	# Tricky: don't count any terminal white space in length of scope
+	if self.tokens.end > oldst.begin & self.tokens.back.pair {
+	    oldst.total := oldst.total - self.tokens.back.second
+	};
+	self.stack := self.stack.pop_back;
+	self.st := self.states.back;
+	self.states := self.states.pop_back;
+	self := self.add_length(oldst.total,oldst.begin);
+    }
+
+}
+
 object str = { ...
-    action encode(s:this,b:str) returns (b:str) = {
+    action encode(s:this,b:pretty) returns (b:pretty) = {
 	b := b.extend(s)
     }    
 }
@@ -52,30 +164,37 @@ action add(x:expr,y:expr) returns (res:expr) = {
 
 type verb
 
-action encode(e:expr,b:str,prio:verb) returns (b:str)
+action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
 
 object symbol = { ...    
-    action encode(s:symbol,b:str,prio:verb) returns (b:str) = {
+    action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
 	b := s.name.encode(b);
     }
 }
 
 object plus = { ...    
-    action encode(s:plus,b:str,prio:verb) returns (b:str) = {
+    action encode(s:plus,b:pretty,prio:verb) returns (b:pretty) = {
 	if 0 < prio {
+	    b := b.nest;
 	    b := b.extend("(");
 	};	    
 	b := s.lhs.encode(b,0);
-	b := b.extend(" + ");
+	b := b.extend(" ");
+	b := b.extend("+");
+	b := b.extend(" ");
 	b := s.rhs.encode(b,1);
 	if 0 < prio {
 	    b := b.extend(")");
+	    b := b.unnest
 	}	    
     }
 }
 
 action enc(e:expr) returns (s:str) = {
-    s := e.encode(s,0);
+    var p := pretty.make(15,4);
+    p := e.encode(p,0);
+    p := p.print_tokens;
+    s := p.output
 }
 
 
@@ -168,153 +287,35 @@ export dec
 export encdec
 import parse_error
 
-object pretty = {
-
-    type token = struct {
-	pair : bool,
-	first : str,
-	second : pos
-    }
-
-    type state = struct {
-        tokens : vector[token],
-	total : pos
-    }
-    
-
-    type this = struct {
-	st : state,
-        maxline : pos,
-	indent : pos,
-	whitespace : str,
-	begins : vector[char],
-	ends : vector[char],
-	states : vector[state],
-	stack : vector[pos],
-	output : str,
-	space : pos
-    }
-    
-    action make(maxline:pos,indent:pos) returns (res:this) = {
-	res.maxline := maxline;
-	res.indent := indent;
-	res.whitespace := " ";
-	res.begins := res.begins.append(40);
-	res.ends := res.ends.append(41);
-	res.space := maxline;
-	res.stack := res.stack.append(maxline);
-    }
-
-    action do_indent (self:this) returns (self:this) = {
-	self.output := self.output.append(10);  # newline
-	self.output := self.output.resize(self.output.end+(self.maxline-self.space),32);  # spaces
-    }
-
-    action print (self:this,tok:token) returns (self:this) = {
-	if tok.pair {
-	    if tok.second <= self.space | self.space = self.maxline {
-                self.output := self.output.extend(tok.first);
-                self.space := self.space - tok.first.end
-	    } else {
-                self.space := self.stack.back - self.indent;
-                self := self.do_indent
-	    }
-	} else {
-            self.output := self.output.extend(tok.first);
-            self.space := self.space - tok.first.end
-	}
-    }
-
-    action print_tokens (self:this) returns (self:this) = {
-	var idx := self.st.tokens.begin;
-	while idx < self.st.tokens.end {
-	    self := self.print(self.st.tokens.value(idx));
-	    idx := idx.next
-	};
-	self.st.tokens := vector[token].empty;
-    }
-
-    action append(self:this, tok:token, l:pos) returns (self:this) = {
-        if self.st.tokens.end > 0 {
-            var prev := self.st.tokens.value(self.st.tokens.end.prev);
-            if prev.pair {
-		var newtok := prev;
-		newtok.second := newtok.second + l;
-                self.st.tokens := self.st.tokens.set(self.st.tokens.end.prev,newtok)
-	    }
-	};
-	if tok.pair {
-	    self := self.print_tokens
-	};
-        self.st.tokens := self.st.tokens.append(tok);
-        self.st.total := self.st.total + l
-    }
-
-    action write(self:this, string:str) returns (self:this) = {
-	var tok : token;
-	tok.pair := false;
-	tok.first := string;
-	if true & string = self.whitespace {   # true = breakable
-	    tok.pair := true;
-	    tok.second := string.end;
-	};
-        self := self.append(tok,string.end)
-    }    
-
-    action nest(self:this) returns (self:this) = {
-	self := self.print_tokens;
-        self.stack := self.stack.append(self.space);
-	self.states := self.states.append(self.st);
-        self.st.total := 0
-    }
-
-    action unnest(self:this) returns (self:this) = {
-        if self.st.tokens.end > 0 & self.st.tokens.back.pair {
-	    var last_tok := self.st.tokens.back;
-	    self.st.tokens := self.st.tokens.pop_back;
-	    self := self.print_tokens;
-	    self.stack := self.stack.pop_back;
-	    self.st := self.states.back;
-	    self.states := self.states.pop_back;
-	    self := self.append(last_tok,last_tok.second);
-	} else {
-	    self := self.print_tokens;
-	    self.stack := self.stack.pop_back;
-	    self.st := self.states.back;
-	    self.states := self.states.pop_back;
-	}	    
-    }
-
-}
 
 export pretty.make
-export pretty.write
+export pretty.extend
 export pretty.print_tokens
 
-after init {
+# after init {
 
-    var p := pretty.make(11,4);
-    var st := start_state("(fooooooo + (bar + baaaaaz))");
-    st := st.consume;
-    while st.tok.end > 0 {
-	if st.tok = "(" {
-	    p := p.nest
-	};
-	p := p.write(st.tok);
-	if st.tok = ")" {
-	    p := p.unnest
-	};
-	call show_pretty(p);
-	if st.b.value(st.p) = 32 {
-	    p := p.write(" ");
-	    call show_pretty(p);
-	};
-	st := st.consume
-    };
+#     var p := pretty.make(11,4);
+#     var st := start_state("(fooooooo + (bar + baaaaaz))");
+#     st := st.consume;
+#     while st.tok.end > 0 {
+# 	if st.tok = "(" {
+# 	    p := p.nest
+# 	};
+# 	p := p.extend(st.tok);
+# 	if st.tok = ")" {
+# 	    p := p.unnest
+# 	};
+# 	call show_pretty(p);
+# 	if st.b.value(st.p) = 32 {
+# 	    p := p.extend(" ");
+# 	    call show_pretty(p);
+# 	};
+# 	st := st.consume
+#     };
 
-    p := p.print_tokens;
-    call show_pretty(p);
+#     p := p.print_tokens;
+#     call show_pretty(p);
     
-}
+# }
 
 import action show_pretty(p:pretty)
