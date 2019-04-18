@@ -10,8 +10,9 @@ object char = {
     type this
     type kinds = {alphanum,bracket,other}
     function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
+    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125)
     function kind(X:char) = alphanum if is_alphanum(X:char)
-                            else (bracket if (X = 40 | X = 41) else other)
+                            else (bracket if is_bracket(X) else other)
 }
     
 instance str : string(pos,char)
@@ -109,6 +110,15 @@ object pretty = {
 	self.st.total := self.st.total + string.end
     }    
 
+    action newline(self:this) returns (self:this) = {
+	var tok : token;
+	tok.pair := true;
+        tok.tdepth := self.depth;
+        tok.second := self.maxline + 1;
+        self.tokens := self.tokens.append(tok);
+    }        
+        
+
     action nest(self:this) returns (self:this) = {
         self.stack := self.stack.append(self.space);
 	self.states := self.states.append(self.st);
@@ -140,70 +150,6 @@ object str = { ...
     }    
 }
 
-type expr
-
-object symbol = {
-    variant this of expr = struct {
-	name : str
-    }
-}
-
-object plus = {
-    variant this of expr = struct {
-	lhs : expr,
-	rhs : expr
-    }
-}
-
-action sym(name:str) returns (res:expr) = {
-    var s:symbol;
-    s.name := name;
-    res := s
-}
-
-action add(x:expr,y:expr) returns (res:expr) = {
-    var s:plus;
-    s.lhs := x;
-    s.rhs := y;
-    res := s;
-}
-
-type verb
-
-action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
-
-object symbol = { ...    
-    action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
-	b := s.name.encode(b);
-    }
-}
-
-object plus = { ...    
-    action encode(s:plus,b:pretty,prio:verb) returns (b:pretty) = {
-	if 0 < prio {
-	    b := b.nest;
-	    b := b.extend("(");
-	};	    
-	b := s.lhs.encode(b,0);
-	b := b.extend(" ");
-	b := b.extend("+");
-	b := b.extend(" ");
-	b := s.rhs.encode(b,1);
-	if 0 < prio {
-	    b := b.extend(")");
-	    b := b.unnest
-	}	    
-    }
-}
-
-action enc(e:expr) returns (s:str) = {
-    var p := pretty.make(15,4);
-    p := e.encode(p,0);
-    p := p.print_tokens;
-    s := p.output
-}
-
-
 action lex(b:str,p:pos) returns (tok:str,p:pos) = {
     while p < b.end & b.value(p) = 32 {
 	p := p.next
@@ -229,68 +175,244 @@ object pstate = {
     }	
 }
 
-action parse_symbol(st : pstate) returns(st : pstate, res:expr) = {
-    if st.ok & st.tok.end ~= 0 {
-	var s : symbol;
-	s.name := st.tok;
-	res := s;
-	st := st.consume;
-    }
-    else {
-	st.ok := false;
-    }
-}
-
-
-action parse_expr(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
-    if st.tok = "(" {
-	st := st.consume;
-	(st,res) := parse_expr(st,0);
-	if st.tok = ")" {
-	    st := st.consume;
-	} else {
-	    st.ok := false;
-	}
-    } else {
-	(st,res) := parse_symbol(st);
-    };
-    while st.ok & st.tok = "+" & prio < 1 {
-	st := st.consume;
-	var arg : expr;
-	(st,arg) := parse_expr(st,1);
-	if st.ok {
-	    res := add(res,arg);
-	}
-    }
-}
-
 action start_state(s:str) returns (st:pstate) = {
     st.b := s;
     st.p := s.begin;
     st.ok := true;
 }
 
-action dec(s:str) returns (e:expr) = {
-    var st := start_state(s);
-    st := st.consume;
-    (st,e) := parse_expr(st,0);
-    if ~st.ok | st.tok.end ~= 0 {
-	call parse_error(st.p,st.tok);
+type verb
+function str_to_verb(X:str) : verb
+function verb_to_prio(X:verb) : verb
+
+after init {
+    str_to_verb(X) := 0
+}
+
+
+module genbinop(expr,arg) = {
+    variant this of expr = struct {
+	lhs : arg,
+	rhs : arg
+    }
+
+    action make(x:arg,y:arg) returns (res:expr) = {
+        var s:this;
+        s.lhs := x;
+        s.rhs := y;
+        res := s;
     }
 }
 
-action encdec(s:str) returns (res:str) = {
-    var e := dec(s);
-    res := enc(e)
+module binop (expr,optok,vrb,prio) = {
+
+    instantiate genbinop(expr,expr)
+    
+    after init {
+        str_to_verb(optok) := vrb;
+        verb_to_prio(vrb) := prio
+    }
+
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+	if vrb < prio {
+	    b := b.nest;
+	    b := b.extend("(");
+	};	    
+	b := s.lhs.encode(b,vrb);
+	b := b.extend(" ");
+	b := b.extend(optok);
+	b := b.extend(" ");
+	b := s.rhs.encode(b,vrb+1);
+	if vrb < prio {
+	    b := b.extend(")");
+	    b := b.unnest
+	}	    
+    }
 }
+
+module parse_intf(expr) = {
+
+    action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
+
+    action enc(e:expr) returns (s:str) = {
+        var p := pretty.make(15,4);
+        p := e.encode(p,0);
+        p := p.print_tokens;
+        s := p.output
+    }
+
+    action dec(s:str) returns (e:expr) = {
+        var st := start_state(s);
+        st := st.consume;
+        (st,e) := expr.parse(st,0);
+        if ~st.ok | st.tok.end ~= 0 {
+            call parse_error(st.p,st.tok);
+        }
+    }
+
+    action encdec(s:str) returns (res:str) = {
+        var e := dec(s);
+        res := enc(e)
+    }
+}
+
+
+object expr = {
+    type this
+    instantiate parse_intf(expr)
+}
+
+    
+object symbol = {
+    variant this of expr = struct {
+	name : str
+    }
+    action make(name:str) returns (res:expr) = {
+        var s:symbol;
+        s.name := name;
+        res := s
+    }
+    action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
+	b := s.name.encode(b);
+    }
+    action parse(st : pstate) returns(st : pstate, res:expr) = {
+        if st.ok & st.tok.end ~= 0 {
+	    var s : symbol;
+	    s.name := st.tok;
+	    res := s;
+	    st := st.consume;
+        }
+        else {
+	    st.ok := false;
+        }
+    }
+}
+
+
+instance plus : binop(expr,"+",1,1)
+instance times : binop(expr,"*",2,2)
+
+
+object expr = { ...
+
+    action parse(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
+        if st.tok = "(" {
+            st := st.consume;
+            (st,res) := parse(st,0);
+            if st.ok & st.tok = ")" {
+                st := st.consume;
+            } else {
+                st.ok := false;
+            }
+        } else {
+            (st,res) := symbol.parse(st);
+        };
+        var vrb := str_to_verb(st.tok);
+        while st.ok & vrb > 0 & prio < verb_to_prio(vrb) {
+            st := st.consume;
+            var arg : expr;
+            (st,arg) := parse(st,vrb);
+            if st.ok {
+                if vrb = 1 {
+                    res := plus.make(res,arg);
+                }
+                else if vrb = 2 {
+                    res := times.make(res,arg);
+                }                
+            };
+            vrb := str_to_verb(st.tok);
+        }
+    }
+}
+
+
+
+object stmt = {
+    type this
+    instantiate parse_intf(stmt)
+}
+
+object asgn = {
+    instantiate genbinop(stmt,expr)
+
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := b.nest;
+	b := s.lhs.encode(b,0);
+	b := b.extend(" ");
+	b := b.extend(":=");
+	b := b.extend(" ");
+	b := s.rhs.encode(b,0);
+	b := b.extend(";");
+        b := b.unnest;
+    }
+}
+
+object sequence = {
+    instantiate genbinop(stmt,stmt)
+
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+	if 0 < prio {
+	    b := b.nest;
+	    b := b.extend("{");
+            b := b.newline;
+	};	    
+	b := s.lhs.encode(b,1);
+        b := b.newline;
+#	b := b.extend(" ");
+	b := s.rhs.encode(b,0);
+	if 0 < prio {
+	    b := b.unnest;
+            b := b.newline;
+	    b := b.extend("}");
+	}	    
+    }
+}
+
+object stmt = { ...
+    action parse(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+        if st.tok = "{" {
+            st := st.consume;
+            (st,res) := parse(st,0);
+            if st.ok & st.tok = "}" {
+                st := st.consume;
+            } else {
+                st.ok := false;
+            }
+        } else {
+            var s : asgn;
+            (st,s.lhs) := expr.parse(st,3);
+            if st.ok & st.tok = ":=" {
+                st := st.consume;
+                (st,s.rhs) := expr.parse(st,0);
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := st.tok = "}";  # allow to omit final semicolon
+                }
+            } else {
+                st.ok := false;
+            };
+            res := s;
+        };
+        if st.ok & st.tok.end > 0 & st.tok ~= "}" {
+            var sq : sequence;
+            sq.lhs := res;
+            (st,sq.rhs) := stmt.parse(st,0);
+            res := sq;
+        }
+    }
+}
+
+
 
 action parse_error(p:pos,tok:str)
 
-export sym
-export add
-export enc
-export dec
-export encdec
+export expr.enc
+export expr.dec
+export expr.encdec
+export stmt.enc
+export stmt.dec
+export stmt.encdec
 import parse_error
 
 
