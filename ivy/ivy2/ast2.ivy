@@ -336,6 +336,11 @@ object asgn = {
     instantiate genbinop(stmt,expr)
 
     action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+	if 1 < prio {
+	    b := b.nest;
+	    b := b.extend("{");
+            b := b.newline;
+	};	    
         b := b.nest;
 	b := s.lhs.encode(b,0);
 	b := b.extend(" ");
@@ -344,6 +349,11 @@ object asgn = {
 	b := s.rhs.encode(b,0);
 	b := b.extend(";");
         b := b.unnest;
+	if 1 < prio {
+	    b := b.unnest;
+            b := b.newline;
+	    b := b.extend("}");
+	}	    
     }
 }
 
@@ -358,13 +368,55 @@ object sequence = {
 	};	    
 	b := s.lhs.encode(b,1);
         b := b.newline;
-#	b := b.extend(" ");
 	b := s.rhs.encode(b,0);
 	if 0 < prio {
 	    b := b.unnest;
             b := b.newline;
 	    b := b.extend("}");
 	}	    
+    }
+}
+
+object skipst = {
+    variant this of stmt = struct {
+    }
+
+    action make returns (res:stmt) = {
+        var s:this;
+        res := s;
+    }
+    
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+    }
+}
+
+object ifst = {
+    variant this of stmt = struct {
+	cond : expr,
+	thenst : stmt,
+	elsest : stmt
+    }
+
+    action make(cond:expr,thenst:stmt,elsest:stmt) returns (res:stmt) = {
+        var s:this;
+        s.cond := cond;
+        s.thenst := elsest;
+        s.elsest := elsest;
+        res := s;
+    }
+    
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := b.extend("if");
+        b := b.extend(" ");
+	b := s.cond.encode(b,0);
+        b := b.extend(" ");
+	b := s.thenst.encode(b,2);
+        if ~(s.elsest isa skipst) {
+            b := b.extend(" ");
+            b := b.extend("else");
+            b := b.extend(" ");
+            b := s.elsest.encode(b,2);
+        }
     }
 }
 
@@ -378,7 +430,29 @@ object stmt = { ...
             } else {
                 st.ok := false;
             }
-        } else {
+        } else if st.tok = "if" {
+            st := st.consume;
+            var s : ifst;
+            (st,s.cond) := expr.parse(st,0);
+            if st.ok & st.tok = "{" {
+                (st,s.thenst) := stmt.parse(st,1);
+                if st.ok & st.tok = "else" {
+                    st := st.consume;
+                    if st.ok & (st.tok = "{" | st.tok = "if") {
+                        (st,s.elsest) := stmt.parse(st,1);
+                    } else {
+                        st.ok := false;
+                    }
+                } else {
+                    s.elsest := skipst.make
+                }
+            }
+            else {
+                st.ok := false;
+            };
+            res := s;
+        }
+        else {
             var s : asgn;
             (st,s.lhs) := expr.parse(st,3);
             if st.ok & st.tok = ":=" {
@@ -394,7 +468,7 @@ object stmt = { ...
             };
             res := s;
         };
-        if st.ok & st.tok.end > 0 & st.tok ~= "}" {
+        if st.ok & prio = 0 & st.tok.end > 0 & st.tok ~= "}" {
             var sq : sequence;
             sq.lhs := res;
             (st,sq.rhs) := stmt.parse(st,0);
