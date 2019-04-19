@@ -10,7 +10,7 @@ object char = {
     type this
     type kinds = {alphanum,bracket,other}
     function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
-    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59)
+    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59 | X = 44)
     function kind(X:char) = alphanum if is_alphanum(X:char)
                             else (bracket if is_bracket(X) else other)
 }
@@ -156,7 +156,10 @@ action lex(b:str,p:pos) returns (tok:str,p:pos) = {
     };
     var start := p;
     var last : char := 32;
-    while p < b.end & b.value(p) ~= 32 & (last = 32 | (char.kind(b.value(p)) = char.kind(last))) & char.kind(last) ~= char.bracket {
+    while p < b.end & b.value(p) ~= 32
+        & (last = 32 | (char.kind(b.value(p)) = char.kind(last)))
+        & char.kind(last) ~= char.bracket
+    {
 	last := b.value(p);
 	p := p.next;
     };
@@ -484,6 +487,70 @@ object stmt = { ...
     }
 }
 
+object decl = {
+    type this
+    instantiate parse_intf(stmt)
+}
+
+module tuple(t,lb,rb) = {
+    action encode(s:vector[t],b:pretty,prio:verb) returns (b:pretty) = {
+        if s.end > 0 {
+            b := b.extend(" ");
+            b := b.extend(lb);
+            b := s.value(0).encode(b,0);
+            var idx := s.begin.next;
+            while idx < s.end {
+                b := b.extend(",");
+                b := s.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+            b := b.extend(rb);
+        }
+    }
+}
+
+object expr = { ...
+    instance tup : tuple(expr,"(",")")
+}
+
+object actdc = {
+    variant this of decl = struct {
+	name : expr,
+        inputs : vector[expr]
+        outputs : vector[expr]
+        body : stmt
+    }
+
+    action make(name : expr,
+        inputs : vector[expr]
+        outputs : vector[expr]
+        body : stmt) returns (res:decl) =
+    {
+        var s:this;
+        s.name := name;
+        s.inputs := inputs;
+        s.outputs := outputs;
+        s.body := body;
+        res := s;
+    }
+    
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := b.extend("action");
+        b := b.extend(" ");
+	b := s.name.encode(b,0);
+        b := expr.tup.encode(s.inputs,b,prio);
+        if s.outputs.end > 0 {
+            b := b.extend(" ");
+            b := b.extend("returns");
+            b := expr.tup.encode(s.outputs,b,prio);
+        }
+        b := b.extend(" ");
+        b := b.extend("=");
+        b := b.extend(" ");
+	b := s.body.encode(b,2);
+    }
+
+}
 
 
 action parse_error(p:pos,tok:str)
