@@ -568,9 +568,45 @@ object actdc = {
 
 }
 
+object groupdc = {
+    variant this of decl = struct {
+        decls : vector[decl]
+    }
+
+    action make(decls : vector[decl]) returns (res:decl) =
+    {
+        var s:this;
+        s.decls := decls;
+        res := s;
+    }
+    
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+	b := b.nest;
+	b := b.extend("{");
+        var idx := s.decls.begin;
+        while idx < s.decls.end {
+            b := b.newline;
+	    b := s.decls.value(0).encode(b,0);
+            idx := idx.next;
+        };
+	b := b.unnest;
+        b := b.newline;
+	b := b.extend("}");
+    }	    
+}
+
 object decl = { ...
     action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
-        if st.tok = "action" {
+        if st.tok = "{" {
+            st := st.consume;
+            var s : groupdc;
+            (st,s.decls) := parse_list(st,0);
+            if st.tok = "}" {
+                st := st.consume;
+            } else {st.ok := false};
+            res := s
+        }
+        else if st.tok = "action" {
             st := st.consume;
             var s : actdc;
             (st,s.name) := expr.parse(st,0);
@@ -589,6 +625,13 @@ object decl = { ...
             } else {st.ok := false};
             res := s
         } else {st.ok := false}
+    }
+    action parse_list(st : pstate, prio:verb) returns(st : pstate, res:vector[decl]) = {
+        while st.ok & st.tok.end > 0 & st.tok ~= "}" {
+            var s : decl;
+            (st,s) := parse(st,0);
+            res := res.append(s);
+        }
     }
 }
 
