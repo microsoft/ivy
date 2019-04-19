@@ -10,7 +10,7 @@ object char = {
     type this
     type kinds = {alphanum,bracket,other}
     function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
-    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125)
+    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59)
     function kind(X:char) = alphanum if is_alphanum(X:char)
                             else (bracket if is_bracket(X) else other)
 }
@@ -387,6 +387,8 @@ object skipst = {
     }
     
     action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := b.extend("{");
+        b := b.extend("}")
     }
 }
 
@@ -422,6 +424,9 @@ object ifst = {
 
 object stmt = { ...
     action parse(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+        while st.tok = ";" {
+            st := st.consume;
+        };
         if st.tok = "{" {
             st := st.consume;
             (st,res) := parse(st,0);
@@ -451,6 +456,8 @@ object stmt = { ...
                 st.ok := false;
             };
             res := s;
+        } else if st.tok = "}" {
+            res := skipst.make;
         }
         else {
             var s : asgn;
