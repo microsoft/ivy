@@ -489,7 +489,7 @@ object stmt = { ...
 
 object decl = {
     type this
-    instantiate parse_intf(stmt)
+    instantiate parse_intf(decl)
 }
 
 module tuple(t,lb,rb) = {
@@ -507,6 +507,22 @@ module tuple(t,lb,rb) = {
             b := b.extend(rb);
         }
     }
+    action parse(st : pstate, prio:verb) returns(st : pstate, res:vector[t]) = {
+        if st.tok = "(" {
+            st := st.consume;
+            var s : expr;
+            (st,s) := expr.parse(st,0);
+            res := res.append(s);
+            while st.ok & st.tok = "," {
+                st := st.consume;
+                (st,s) := expr.parse(st,0);
+                res := res.append(s);
+            };
+            if st.ok & st.tok = ")" {
+                st := st.consume;
+            } else {st.ok := false}
+        } else {st.ok := false}
+    }
 }
 
 object expr = { ...
@@ -516,15 +532,13 @@ object expr = { ...
 object actdc = {
     variant this of decl = struct {
 	name : expr,
-        inputs : vector[expr]
-        outputs : vector[expr]
+        inputs : vector[expr],
+        outputs : vector[expr],
         body : stmt
     }
 
-    action make(name : expr,
-        inputs : vector[expr]
-        outputs : vector[expr]
-        body : stmt) returns (res:decl) =
+    action make(name : expr,inputs : vector[expr],outputs : vector[expr],body : stmt)
+        returns (res:decl) =
     {
         var s:this;
         s.name := name;
@@ -535,6 +549,7 @@ object actdc = {
     }
     
     action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := b.nest;
         b := b.extend("action");
         b := b.extend(" ");
 	b := s.name.encode(b,0);
@@ -543,7 +558,8 @@ object actdc = {
             b := b.extend(" ");
             b := b.extend("returns");
             b := expr.tup.encode(s.outputs,b,prio);
-        }
+        };
+        b := b.unnest;
         b := b.extend(" ");
         b := b.extend("=");
         b := b.extend(" ");
@@ -552,6 +568,29 @@ object actdc = {
 
 }
 
+object decl = { ...
+    action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
+        if st.tok = "action" {
+            st := st.consume;
+            var s : actdc;
+            (st,s.name) := expr.parse(st,0);
+            if st.ok & st.tok = "(" {
+                (st,s.inputs) := expr.tup.parse(st,0);
+            };
+            if st.ok & st.tok = "returns" {
+                st := st.consume;
+                (st,s.outputs) := expr.tup.parse(st,0);
+            };
+            if st.ok & st.tok = "=" {
+                st := st.consume;
+                if st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false}
+            } else {st.ok := false};
+            res := s
+        } else {st.ok := false}
+    }
+}
 
 action parse_error(p:pos,tok:str)
 
@@ -561,6 +600,9 @@ export expr.encdec
 export stmt.enc
 export stmt.dec
 export stmt.encdec
+export decl.enc
+export decl.dec
+export decl.encdec
 import parse_error
 
 
