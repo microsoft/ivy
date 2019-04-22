@@ -900,6 +900,20 @@ def compile_if_tactic(self):
     
 ivy_ast.IfTactic.compile = compile_if_tactic
 
+def compile_property_tactic(self):
+    with top_sort_as_default():
+        prop = self.args[0].compile()
+    name = self.args[1]
+    if not isinstance(name,ivy_ast.NoneAST):
+        with ivy_logic.UnsortedContext():
+            args = [arg.compile() for arg in name.args]
+        name = name.clone(args)
+    proof = self.args[2].compile()
+    return self.clone([prop,name,proof])
+        
+ivy_ast.PropertyTactic.compile = compile_property_tactic
+
+
 def resolve_alias(name): 
     if name in im.module.aliases:
         return im.module.aliases[name]
