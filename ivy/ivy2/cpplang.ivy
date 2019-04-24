@@ -24,13 +24,13 @@ object cpp = {
 
         instance tup : tuple(simpletype,"(",")",verb)
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s._type.encode(b,0);
             b := b.extend(" ");
             b := s.name.encode(b,99);
         }
         
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:simpletype) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:simpletype) = {
             (st,res._type) := symbol.parse(st);
             if st.ok {
                 (st,res.name) := symbol.parse(st);
@@ -43,12 +43,12 @@ object cpp = {
             base : simpletype,
             args : vector[simpletype]
         }
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.base.encode(b,0);
             b := b.extend(" ");
             b := simpletype.tup.encode(s.args,b,0);
         }
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:functype) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:functype) = {
             (st,res.base) := simpletype.parse(st,prio);
             if st.ok {
                 (st,res.args) := simpletype.tup.parse(st,prio);
@@ -73,7 +73,7 @@ object cpp = {
         }
        
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
             b := s.vtype.encode(b,prio);
             b := b.extend(";");
@@ -96,7 +96,7 @@ object cpp = {
             res := s;
         }
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
             b := b.extend("return");
             b := b.extend(" ");
@@ -109,7 +109,7 @@ object cpp = {
     object stmt = { ...
 
         
-        action parse_lang_stmt(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+        action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             var lhs : expr;
             var ann : annot;
             (st,ann) := st.get_ann;
@@ -155,7 +155,7 @@ object cpp = {
             ftype : functype,
             ann : annot
         }
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
             b := s.ftype.encode(b,0);
@@ -171,7 +171,7 @@ object cpp = {
             body : stmt,
             ann : annot
         }
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
             b := s.ftype.encode(b,0);
@@ -182,7 +182,7 @@ object cpp = {
     }
 
     object decl = { ...
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             var ann : annot;
             (st,ann) := st.get_ann;
             var f : functype;
@@ -203,7 +203,7 @@ object cpp = {
 
         var foo : vector[decl]  # workaround
 
-        action parse_list(st : pstate, prio:verb) returns(st : pstate, res:vector[decl]) = {
+        action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
             while st.ok & st.tok.end > 0 & st.tok ~= "}" {
                 var s : decl;
                 (st,s) := parse(st,0);

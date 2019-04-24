@@ -42,15 +42,20 @@ object ivy = { ...
         instantiate generic_to_cpp(ivy.symbol,cpp.symbol,cpp.expr)
         action to_cpp_int(s:symbol) returns (res:cpp.symbol) = {
             res.name := s.name;
+            res.vrb := cpp.str_to_verb(res.name);
         }
     }
 
-    object plus = { ...
-        instantiate binary_op_to_cpp(ivy.plus,cpp.plus,cpp.expr)
-    }
-
-    object times = { ...
-        instantiate binary_op_to_cpp(ivy.times,cpp.times,cpp.expr)
+    object app = { ...
+        instantiate generic_to_cpp(ivy.app,cpp.app,cpp.expr)
+        action to_cpp_int(s:app) returns (res:cpp.app) = {
+            res.func := s.func.to_cpp;
+            var idx := s.args.begin;
+            while idx < s.args.end {
+                res.args := res.args.append(s.args.value(idx).to_cpp);
+                idx := idx.next
+            }
+        }
     }
 
     object stmt = { ...

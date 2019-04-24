@@ -349,7 +349,7 @@ action lex(st:pstate) returns (st:pstate) = {
 #
 
 module tuple(t,lb,rb,verb) = {
-    action encode(s:vector[t],b:pretty,prio:verb) returns (b:pretty) = {
+    action encode(s:vector[t],b:pretty,prio:priority) returns (b:pretty) = {
         if s.end > 0 {
             b := b.extend(" ");
             b := b.extend(lb);
@@ -363,7 +363,7 @@ module tuple(t,lb,rb,verb) = {
             b := b.extend(rb);
         }
     }
-    action parse(st : pstate, prio:verb) returns(st : pstate, res:vector[t]) = {
+    action parse(st : pstate, prio:priority) returns(st : pstate, res:vector[t]) = {
         if st.tok = "(" {
             st := st.consume;
             var s : t;

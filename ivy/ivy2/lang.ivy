@@ -12,16 +12,59 @@ include syntax
 # required around the condition in an if/else statement.
 #
 
+# The type `priority` is used to represent the binding strength of
+# operators, with stronger-binding operators having higher priority.
+# For example, `*` has a higher priority that `+`. Priorities are used
+# both to resolve ambiguous parses and to elide perenthese when
+# printing.
+
+type priority
+
+# The `verb` type is an enumeration of the built-in symbols in the
+# language.  This is used to avoid comparison of quoted strings
+# representing the names of these symbols. Each verb also has a
+# corresponding priority.  The verb corresponding to a symbol name is
+# added as a meta-field to the symbol, in which case the string name
+# can be empty (the value `none` is used for non-built-in symbols).
+#
+# - `str_to_verb` stores the map from string symbol names to verbs
+# - `verb_to_str` is the inverse map
+# - `verb_to_prio` gives the priority of a verb
 
 module verb_base = {
-    type verb
+    object verb = {
+        type this = { none, plus, times, colon, app }
+    }
+    
     function str_to_verb(X:str) : verb
-    function verb_to_prio(X:verb) : verb
+    function verb_to_str(X:verb) : str
+    function verb_to_prio(X:verb) : priority
 
     after init {
-        str_to_verb(X) := 0
+        str_to_verb(X) := verb.none
     }
 }
+
+module built_in (optok,vrb,opprio) = {
+    after init {
+        str_to_verb(optok) := vrb;
+        verb_to_str(vrb) := optok; 
+        verb_to_prio(vrb) := opprio
+    }
+}
+
+module built_in_binary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio)
+
+    action make(lhs:expr,rhs:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.make(optok,ann);
+        s.args := s.args.append(lhs);
+        s.args := s.args.append(rhs);
+        s.ann := ann;
+        res := s
+    }
+}    
 
 module genbinop(expr,arg) = {
     variant this of expr = struct {
@@ -39,38 +82,11 @@ module genbinop(expr,arg) = {
     }
 }
 
-module binop (expr,optok,vrb,prio) = {
-
-    instantiate genbinop(expr,expr)
-    
-    after init {
-        str_to_verb(optok) := vrb;
-        verb_to_prio(vrb) := prio
-    }
-
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-        b := s.ann.encode(b);
-	if vrb < prio {
-	    b := b.nest;
-	    b := b.extend("(");
-	};	    
-	b := s.lhs.encode(b,vrb);
-	b := b.extend(" ");
-	b := b.extend(optok);
-	b := b.extend(" ");
-	b := s.rhs.encode(b,vrb+1);
-	if vrb < prio {
-	    b := b.extend(")");
-	    b := b.unnest
-	}	    
-    }
-}
-
 import action parse_error(p:pos,tok:str)
 
 module parse_intf(expr) = {
 
-    action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
+    action encode(e:expr,b:pretty,prio:priority) returns (b:pretty)
 
     action enc(e:expr) returns (s:str) = {
         var p := pretty.make(15,4);
@@ -99,21 +115,25 @@ module expr_base = {
     object expr = {
         type this
         instantiate parse_intf(expr)
+        action get_verb(s:this) returns (vrb:verb) = {
+            vrb := verb.none;
+        }
     }
-
 
     object symbol = {
         variant this of expr = struct {
             name : str,
+            vrb : verb,
             ann : annot
         }
         action make(name:str,ann:annot) returns (res:expr) = {
             var s:symbol;
             s.name := name;
+            s.vrb := str_to_verb(name);
             s.ann := ann;
             res := s
         }
-        action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:symbol,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := s.name.encode(b);
         }
@@ -129,18 +149,65 @@ module expr_base = {
                 st.ok := false;
             }
         }
+        action get_verb(s:symbol) returns (res:verb) = {
+            res := s.vrb;
+        }
+    }
+
+    object app = {
+        variant this of expr = struct {
+            func : expr,
+            args : vector[expr],
+            ann : annot
+        }
+        action make(func:expr,args:vector[expr],ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := args;
+            s.ann := ann;
+            res := s
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            var vrb := s.func.get_verb;
+            if vrb ~= verb.none {
+                var opprio := verb_to_prio(vrb);
+                if opprio < prio {
+                    b := b.nest;
+                    b := b.extend("(");
+                };	    
+                b := s.args.value(0).encode(b,opprio);
+                b := b.extend(" ");
+                b := b.extend(verb_to_str(vrb));
+                b := b.extend(" ");
+                b := s.args.value(1).encode(b,opprio+1);
+                if opprio < prio {
+                    b := b.extend(")");
+                    b := b.unnest
+                }
+            } else {
+                b := b.nest;
+                b := s.func.encode(b,99);
+                b := expr.tup.encode(s.args,b,0);
+                b := b.unnest;
+            }
+        }
     }
 
 
-    instance plus : binop(expr,"+",1,1)
-    instance times : binop(expr,"*",2,2)
+    instance plus : built_in_binary("+",verb.plus,1)
+    instance times : built_in_binary("*",verb.times,2)
 
+    # Treat '(' as a builtin operator for function application. The
+    # real operator is '', but '(' will work.
+
+    instantiate built_in("(",verb.app,99)        
 
     object expr = { ...
 
         var foo : vector[expr]  # workaround
 
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:expr) = {
             if st.tok = "(" {
                 st := st.consume;
                 (st,res) := parse(st,0);
@@ -153,20 +220,21 @@ module expr_base = {
                 (st,res) := symbol.parse(st);
             };
             var vrb := str_to_verb(st.tok);
-            while st.ok & vrb > 0 & prio < verb_to_prio(vrb) {
-                st := st.consume;
-                var arg : expr;
-                (st,arg) := parse(st,vrb);
-                if st.ok {
-                    var ann : annot;
-                    (st,ann) := st.get_ann;
-                    if vrb = 1 {
-                        res := plus.make(res,arg,ann);
-                    }
-                    else if vrb = 2 {
-                        res := times.make(res,arg,ann);
-                    }                
+            while st.ok & vrb ~= verb.none & prio < verb_to_prio(vrb) {
+                var s : app;
+                (st,s.ann) := st.get_ann;
+                if vrb = verb.app {
+                    s.func := res;
+                    (st,s.args) := tup.parse(st,0);
+                } else {
+                    s.func := symbol.make(st.tok,s.ann);
+                    st := st.consume;
+                    s.args := s.args.append(res);
+                    var arg : expr;
+                    (st,arg) := parse(st,verb_to_prio(vrb));
+                    s.args := s.args.append(arg);
                 };
+                res := s;
                 vrb := str_to_verb(st.tok);
             }
         }
@@ -176,7 +244,7 @@ module expr_base = {
 }
 
 module generic_stmt_encode(stmt_prio) = {
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+    action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
         b := s.ann.encode(b);
         if stmt_prio < prio {
             b := b.nest;
@@ -203,7 +271,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
         instantiate genbinop(stmt,expr)
         instantiate generic_stmt_encode(1)
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
             b := s.lhs.encode(b,0);
             b := b.extend(" ");
@@ -219,7 +287,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
         instantiate genbinop(stmt,stmt)
         instantiate generic_stmt_encode(0)
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.lhs.encode(b,1);
             b := b.newline;
             b := s.rhs.encode(b,0);
@@ -237,7 +305,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
             res := s;
         }
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.extend("{");
             b := b.extend("}")
@@ -264,7 +332,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
             res := s;
         }
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.extend("if");
             b := b.extend(" ");
             if cppstyle {
@@ -286,7 +354,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
     }
 
     object stmt = { ...
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             while st.tok = ";" {
                 st := st.consume;
             };
@@ -364,7 +432,7 @@ module decl_base(expr,stmt) = {
             res := s;
         }
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
             b := b.extend("action");

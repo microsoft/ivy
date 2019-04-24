@@ -8,6 +8,8 @@ object ivy = {
     instantiate stmt_base(expr,":=",false)
     instantiate decl_base(expr,stmt)
 
+    instance colon : built_in_binary(":",verb.colon,50)
+
     # Here, we parse statements specific to Ivy: var and assign.
     
     object varst = {
@@ -25,7 +27,7 @@ object ivy = {
 
         instantiate generic_stmt_encode(1)
 
-        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
             b := b.extend("var");
@@ -39,7 +41,7 @@ object ivy = {
     object stmt = { ...
 
 
-        action parse_lang_stmt(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+        action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             if st.tok = "var" {
                 st := st.consume;
                 var s : varst;
@@ -84,7 +86,7 @@ object ivy = {
             res := s;
         }
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
             b := b.extend("{");
             var idx := s.decls.begin;
@@ -100,7 +102,7 @@ object ivy = {
     }
 
     object decl = { ...
-        action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
                 st := st.consume;
                 var s : groupdc;
@@ -131,7 +133,7 @@ object ivy = {
                 res := s
             } else {st.ok := false}
         }
-        action parse_list(st : pstate, prio:verb) returns(st : pstate, res:vector[decl]) = {
+        action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
             while st.ok & st.tok.end > 0 & st.tok ~= "}" {
                 var s : decl;
                 (st,s) := parse(st,0);
