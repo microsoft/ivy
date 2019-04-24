@@ -56,33 +56,58 @@ object cpp = {
         }
     }
 
+    object varst = {
+        variant this of stmt = struct {
+            vtype : simpletype,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(_type:expr, name:expr, ann:annot) returns (res:stmt) = {
+            var s : this;
+            s.vtype._type := _type;
+            s.vtype.name := name;
+            s.ann := ann;
+            res := s;
+        }
+       
+
+        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := b.nest;
+            b := s.vtype.encode(b,prio);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+    }
+
+    object retst = {
+        variant this of stmt = struct {
+            val : expr,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(val:expr, ann:annot) returns (res:stmt) = {
+            var s : this;
+            s.val := val;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("return");
+            b := b.extend(" ");
+            b := s.val.encode(b,prio);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+    }
+
     object stmt = { ...
 
-        object varst = {
-            variant this of stmt = struct {
-                vtype : simpletype,
-                ann : annot
-            }
-
-            action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-                b := s.ann.encode(b);
-                if 0 < prio {
-                    b := b.nest;
-                    b := b.extend("{");
-                    b := b.newline;
-                };	    
-                b := s.ann.encode(b);
-                b := b.nest;
-                b := s.vtype.encode(b,prio);
-                b := b.extend(";");
-                b := b.unnest;
-                if 1 < prio {
-                    b := b.unnest;
-                    b := b.newline;
-                    b := b.extend("}");
-                };	    
-            }
-        }
         
         action parse_lang_stmt(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
             var lhs : expr;
@@ -186,6 +211,24 @@ object cpp = {
             }
         }
     }
+
+    action namedtype(name:str,ann : annot) returns(res:expr) = {
+        var s : symbol;
+        s.name := name;
+        s.ann.line := ann.line;
+        res := s;
+    }
+
+    action inttype(ann : annot) returns(res:expr) = {
+        res := namedtype("int",ann);
+    }
+
+    action voidtype(ann : annot) returns(res:expr) = {
+        res := namedtype("void",ann);
+    }
+
+
+
 }
 
 export cpp.expr.enc
@@ -198,42 +241,14 @@ export cpp.decl.enc
 export cpp.decl.dec
 export cpp.decl.encdec
 
-import parse_error
 
+# export pretty.make
+# export pretty.extend
+# export pretty.flush
 
-export pretty.make
-export pretty.extend
-export pretty.flush
-
-action pr(max:pos,s:str) returns (res:str) = {
-    var p := pretty.make(max,4);
-    var st := pstate.make(s);
-    while st.tok.end > 0 {
-	if st.tok = "(" {
-	    p := p.nest
-	};
-	p := p.extend(st.tok);
-	if st.tok = ")" {
-	    p := p.unnest
-	};
-#	call show_pretty(p);
-	if st.b.value(st.p) = 32 {
-	    p := p.extend(" ");
-#	    call show_pretty(p);
-	};
-	st := st.consume
-    };
-
-    p := p.flush;
-    res := p.output
-}
-
-export pr
-
-# after init {
-
-#     var p := pretty.make(11,4);
-#     var st := pstate.make("fooooooo + (bar + baaaaaz)");
+# action pr(max:pos,s:str) returns (res:str) = {
+#     var p := pretty.make(max,4);
+#     var st := pstate.make(s);
 #     while st.tok.end > 0 {
 # 	if st.tok = "(" {
 # 	    p := p.nest
@@ -242,17 +257,43 @@ export pr
 # 	if st.tok = ")" {
 # 	    p := p.unnest
 # 	};
-# 	call show_pretty(p);
+# #	call show_pretty(p);
 # 	if st.b.value(st.p) = 32 {
 # 	    p := p.extend(" ");
-# 	    call show_pretty(p);
+# #	    call show_pretty(p);
 # 	};
 # 	st := st.consume
 #     };
 
 #     p := p.flush;
-#     call show_pretty(p);
-    
+#     res := p.output
 # }
 
-import action show_pretty(p:pretty)
+# export pr
+
+# # after init {
+
+# #     var p := pretty.make(11,4);
+# #     var st := pstate.make("fooooooo + (bar + baaaaaz)");
+# #     while st.tok.end > 0 {
+# # 	if st.tok = "(" {
+# # 	    p := p.nest
+# # 	};
+# # 	p := p.extend(st.tok);
+# # 	if st.tok = ")" {
+# # 	    p := p.unnest
+# # 	};
+# # 	call show_pretty(p);
+# # 	if st.b.value(st.p) = 32 {
+# # 	    p := p.extend(" ");
+# # 	    call show_pretty(p);
+# # 	};
+# # 	st := st.consume
+# #     };
+
+# #     p := p.flush;
+# #     call show_pretty(p);
+    
+# # }
+
+# import action show_pretty(p:pretty)

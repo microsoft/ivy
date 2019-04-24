@@ -66,7 +66,7 @@ module binop (expr,optok,vrb,prio) = {
     }
 }
 
-action parse_error(p:pos,tok:str)
+import action parse_error(p:pos,tok:str)
 
 module parse_intf(expr) = {
 
@@ -175,6 +175,23 @@ module expr_base = {
     }
 }
 
+module generic_stmt_encode(stmt_prio) = {
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := s.ann.encode(b);
+        if stmt_prio < prio {
+            b := b.nest;
+            b := b.extend("{");
+            b := b.newline;
+        };	    
+        b := s.encode_int(b,prio);
+        if stmt_prio < prio {
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("}");
+        }	    
+    }
+}
+
 module stmt_base(expr,asgntok,cppstyle) = {
 
     object stmt = {
@@ -184,14 +201,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
 
     object asgn = {
         instantiate genbinop(stmt,expr)
+        instantiate generic_stmt_encode(1)
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-            b := s.ann.encode(b);
-            if 1 < prio {
-                b := b.nest;
-                b := b.extend("{");
-                b := b.newline;
-            };	    
+        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
             b := b.nest;
             b := s.lhs.encode(b,0);
             b := b.extend(" ");
@@ -200,32 +212,17 @@ module stmt_base(expr,asgntok,cppstyle) = {
             b := s.rhs.encode(b,0);
             b := b.extend(";");
             b := b.unnest;
-            if 1 < prio {
-                b := b.unnest;
-                b := b.newline;
-                b := b.extend("}");
-            }	    
         }
     }
 
     object sequence = {
         instantiate genbinop(stmt,stmt)
+        instantiate generic_stmt_encode(0)
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-            b := s.ann.encode(b);
-            if 0 < prio {
-                b := b.nest;
-                b := b.extend("{");
-                b := b.newline;
-            };	    
+        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
             b := s.lhs.encode(b,1);
             b := b.newline;
             b := s.rhs.encode(b,0);
-            if 0 < prio {
-                b := b.unnest;
-                b := b.newline;
-                b := b.extend("}");
-            }	    
         }
     }
 
@@ -256,6 +253,8 @@ module stmt_base(expr,asgntok,cppstyle) = {
             ann : annot
         }
 
+        instantiate generic_stmt_encode(1)
+
         action make(cond:expr,thenst:stmt,elsest:stmt,ann:annot) returns (res:stmt) = {
             var s:this;
             s.cond := cond;
@@ -265,13 +264,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
             res := s;
         }
 
-        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-            b := s.ann.encode(b);
-            if 1 < prio {
-                b := b.nest;
-                b := b.extend("{");
-                b := b.newline;
-            };	    
+        action encode_int(s:this,b:pretty,prio:verb) returns (b:pretty) = {
             b := b.extend("if");
             b := b.extend(" ");
             if cppstyle {
@@ -289,11 +282,6 @@ module stmt_base(expr,asgntok,cppstyle) = {
                 b := b.extend(" ");
                 b := s.elsest.encode(b,2);
             };
-            if 0 < prio {
-                b := b.unnest;
-                b := b.newline;
-                b := b.extend("}");
-            }	    
         }
     }
 
@@ -361,7 +349,8 @@ module decl_base(expr,stmt) = {
             name : expr,
             inputs : vector[expr],
             outputs : vector[expr],
-            body : stmt
+            body : stmt,
+            ann : annot
         }
 
         action make(name : expr,inputs : vector[expr],outputs : vector[expr],body : stmt)
@@ -376,6 +365,7 @@ module decl_base(expr,stmt) = {
         }
 
         action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
             b := b.nest;
             b := b.extend("action");
             b := b.extend(" ");
