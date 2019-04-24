@@ -1,0 +1,396 @@
+#lang ivy1.7
+
+include syntax
+
+# Common language traits between Ivy and C++
+# ------------------------------------------
+#
+# This file contains a number of modules that are used in common
+# between the Ivy and C++ languages.  Some of these modules have
+# parameters that can vary the syntax, for example, by selecting
+# the assignment or equality operator, or whether parentheses are
+# required around the condition in an if/else statement.
+#
+
+
+module verb_base = {
+    type verb
+    function str_to_verb(X:str) : verb
+    function verb_to_prio(X:verb) : verb
+
+    after init {
+        str_to_verb(X) := 0
+    }
+}
+
+module genbinop(expr,arg) = {
+    variant this of expr = struct {
+	lhs : arg,
+	rhs : arg,
+        ann : annot
+    }
+
+    action make(x:arg,y:arg,ann:annot) returns (res:expr) = {
+        var s:this;
+        s.lhs := x;
+        s.rhs := y;
+        s.ann := ann;
+        res := s;
+    }
+}
+
+module binop (expr,optok,vrb,prio) = {
+
+    instantiate genbinop(expr,expr)
+    
+    after init {
+        str_to_verb(optok) := vrb;
+        verb_to_prio(vrb) := prio
+    }
+
+    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+        b := s.ann.encode(b);
+	if vrb < prio {
+	    b := b.nest;
+	    b := b.extend("(");
+	};	    
+	b := s.lhs.encode(b,vrb);
+	b := b.extend(" ");
+	b := b.extend(optok);
+	b := b.extend(" ");
+	b := s.rhs.encode(b,vrb+1);
+	if vrb < prio {
+	    b := b.extend(")");
+	    b := b.unnest
+	}	    
+    }
+}
+
+action parse_error(p:pos,tok:str)
+
+module parse_intf(expr) = {
+
+    action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
+
+    action enc(e:expr) returns (s:str) = {
+        var p := pretty.make(15,4);
+        p := e.encode(p,0);
+        p := p.flush;
+        s := p.output
+    }
+
+    action dec(s:str) returns (e:expr) = {
+        var st := pstate.make(s);
+        (st,e) := expr.parse(st,0);
+        if ~st.ok | st.tok.end ~= 0 {
+            call parse_error(st.ann.line,st.tok);
+        }
+    }
+
+    action encdec(s:str) returns (res:str) = {
+        var e := dec(s);
+        res := enc(e)
+    }
+}
+
+
+module expr_base = {
+
+    object expr = {
+        type this
+        instantiate parse_intf(expr)
+    }
+
+
+    object symbol = {
+        variant this of expr = struct {
+            name : str,
+            ann : annot
+        }
+        action make(name:str,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := name;
+            s.ann := ann;
+            res := s
+        }
+        action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := s.name.encode(b);
+        }
+        action parse(st : pstate) returns(st : pstate, res:expr) = {
+            if st.ok & st.tok.end ~= 0 {
+                var s : symbol;
+                s.name := st.tok;
+                (st,s.ann) := st.get_ann;
+                res := s;
+                st := st.consume;
+            }
+            else {
+                st.ok := false;
+            }
+        }
+    }
+
+
+    instance plus : binop(expr,"+",1,1)
+    instance times : binop(expr,"*",2,2)
+
+
+    object expr = { ...
+
+        var foo : vector[expr]  # workaround
+
+        action parse(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
+            if st.tok = "(" {
+                st := st.consume;
+                (st,res) := parse(st,0);
+                if st.ok & st.tok = ")" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                }
+            } else {
+                (st,res) := symbol.parse(st);
+            };
+            var vrb := str_to_verb(st.tok);
+            while st.ok & vrb > 0 & prio < verb_to_prio(vrb) {
+                st := st.consume;
+                var arg : expr;
+                (st,arg) := parse(st,vrb);
+                if st.ok {
+                    var ann : annot;
+                    (st,ann) := st.get_ann;
+                    if vrb = 1 {
+                        res := plus.make(res,arg,ann);
+                    }
+                    else if vrb = 2 {
+                        res := times.make(res,arg,ann);
+                    }                
+                };
+                vrb := str_to_verb(st.tok);
+            }
+        }
+
+        instance tup : tuple(expr,"(",")",verb)
+    }
+}
+
+module stmt_base(expr,asgntok,cppstyle) = {
+
+    object stmt = {
+        type this
+        instantiate parse_intf(stmt)
+    }
+
+    object asgn = {
+        instantiate genbinop(stmt,expr)
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            if 1 < prio {
+                b := b.nest;
+                b := b.extend("{");
+                b := b.newline;
+            };	    
+            b := b.nest;
+            b := s.lhs.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend(asgntok);
+            b := b.extend(" ");
+            b := s.rhs.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            if 1 < prio {
+                b := b.unnest;
+                b := b.newline;
+                b := b.extend("}");
+            }	    
+        }
+    }
+
+    object sequence = {
+        instantiate genbinop(stmt,stmt)
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            if 0 < prio {
+                b := b.nest;
+                b := b.extend("{");
+                b := b.newline;
+            };	    
+            b := s.lhs.encode(b,1);
+            b := b.newline;
+            b := s.rhs.encode(b,0);
+            if 0 < prio {
+                b := b.unnest;
+                b := b.newline;
+                b := b.extend("}");
+            }	    
+        }
+    }
+
+    object skipst = {
+        variant this of stmt = struct {
+            ann : annot
+        }
+
+        action make (ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.extend("{");
+            b := b.extend("}")
+        }
+    }
+
+
+    object ifst = {
+        variant this of stmt = struct {
+            cond : expr,
+            thenst : stmt,
+            elsest : stmt,
+            ann : annot
+        }
+
+        action make(cond:expr,thenst:stmt,elsest:stmt,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.cond := cond;
+            s.thenst := elsest;
+            s.elsest := elsest;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            if 1 < prio {
+                b := b.nest;
+                b := b.extend("{");
+                b := b.newline;
+            };	    
+            b := b.extend("if");
+            b := b.extend(" ");
+            if cppstyle {
+                b := b.extend("(");
+            };
+            b := s.cond.encode(b,0);
+            if cppstyle {
+                b := b.extend(")");
+            };
+            b := b.extend(" ");
+            b := s.thenst.encode(b,2);
+            if ~(s.elsest isa skipst) {
+                b := b.extend(" ");
+                b := b.extend("else");
+                b := b.extend(" ");
+                b := s.elsest.encode(b,2);
+            };
+            if 0 < prio {
+                b := b.unnest;
+                b := b.newline;
+                b := b.extend("}");
+            }	    
+        }
+    }
+
+    object stmt = { ...
+        action parse(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+            while st.tok = ";" {
+                st := st.consume;
+            };
+            if st.tok = "{" {
+                st := st.consume;
+                (st,res) := parse(st,0);
+                if st.ok & st.tok = "}" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                }
+            } else if st.tok = "if" {
+                st := st.consume;
+                var s : ifst;
+                (st,s.ann) := st.get_ann;
+                (st,s.cond) := expr.parse(st,0);
+                if st.ok & st.tok = "{" {
+                    (st,s.thenst) := stmt.parse(st,1);
+                    if st.ok & st.tok = "else" {
+                        st := st.consume;
+                        if st.ok & (st.tok = "{" | st.tok = "if") {
+                            (st,s.elsest) := stmt.parse(st,1);
+                        } else {
+                            st.ok := false;
+                        }
+                    } else {
+                        var ann : annot; # missing else doesn't print, so don't annotate
+                        s.elsest := skipst.make(ann)
+                    }
+                }
+                else {
+                    st.ok := false;
+                };
+                res := s;
+            } else if st.tok = "}" {
+                var ann : annot;
+                (st,ann) := st.get_ann;
+                res := skipst.make(ann);
+            } else {
+                (st,res) := stmt.parse_lang_stmt(st,prio);
+            };
+            if st.ok & prio = 0 & st.tok.end > 0 & st.tok ~= "}" {
+                var sq : sequence;
+                sq.lhs := res;
+                (st,sq.rhs) := stmt.parse(st,0);
+                res := sq;
+            }
+        }
+    }
+}
+
+module decl_base(expr,stmt) = {
+    object decl = {
+        type this
+        instantiate parse_intf(decl)
+    }
+
+    object actdc = {
+        variant this of decl = struct {
+            name : expr,
+            inputs : vector[expr],
+            outputs : vector[expr],
+            body : stmt
+        }
+
+        action make(name : expr,inputs : vector[expr],outputs : vector[expr],body : stmt)
+            returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.inputs := inputs;
+            s.outputs := outputs;
+            s.body := body;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("action");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := expr.tup.encode(s.inputs,b,prio);
+            if s.outputs.end > 0 {
+                b := b.extend(" ");
+                b := b.extend("returns");
+                b := expr.tup.encode(s.outputs,b,prio);
+            };
+            b := b.unnest;
+            b := b.extend(" ");
+            b := b.extend("=");
+            b := b.extend(" ");
+            b := s.body.encode(b,2);
+        }
+    }
+}

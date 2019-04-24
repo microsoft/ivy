@@ -291,6 +291,10 @@ def old_sym(sym,old):
     return sym.prefix('old_') if old else sym
 
 def compile_app(self,old=False):
+    if self.rep == "true" or self.rep == "false":
+        if len(self.args) > 0:
+            raise IvyError(self,"{} is not a function".format(self.rep))
+        return ivy_logic.And() if self.rep == "true" else ivy_logic.Or()
     with ReturnContext(None):
         args = [a.compile() for a in self.args]
     # handle action calls in rhs of assignment

@@ -675,6 +675,16 @@ def p_pname_this(p):
     p[0] = App(This())
     p[0].lineno = get_lineno(p,1)
 
+def p_pname_true(p):
+    'pname : TRUE'
+    p[0] = Atom('true')
+    p[0].lineno = get_lineno(p,1)
+
+def p_pname_false(p):
+    'pname : FALSE'
+    p[0] = Atom('false')
+    p[0].lineno = get_lineno(p,1)
+
 def p_pnames(p):
     'pnames : '
     p[0] = []

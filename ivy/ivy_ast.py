@@ -1253,7 +1253,10 @@ def subst_subscripts_comp(s,subst):
         if len(g) > 1:
             raise iu.IvyError(None,'cannot substitute "this" for {} in {}'.format(g[0],s))
         return pref
-    res =  pref + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+    try:
+        res =  pref + ''.join(('[' + str_subst(x[1:-1],subst) + ']' if x.startswith('[') else x) for x in g[1:])
+    except:
+        print "s: {} subst : {}".format(s,subst)
 #    print "res: {}".format(res)
     return res
 

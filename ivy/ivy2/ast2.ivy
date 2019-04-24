@@ -1,662 +1,174 @@
 #lang ivy1.7
 
-include order
-include string
-include collections
+include lang
 
-instance pos : unbounded_sequence
+object ivy = {
+    instantiate verb_base
+    instantiate expr_base
+    instantiate stmt_base(expr,":=",false)
+    instantiate decl_base(expr,stmt)
 
-object char = {
-    type this
-    type kinds = {alphanum,bracket,other}
-    function is_alphanum(X:char) = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
-    function is_bracket(X:char) = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59 | X = 44)
-    function kind(X:char) = alphanum if is_alphanum(X:char)
-                            else (bracket if is_bracket(X) else other)
-}
+    # Here, we parse statements specific to Ivy: var and assign.
     
-instance str : string(pos,char)
+    object stmt = { ...
 
-object pretty = {
-
-    type token = struct {
-	pair : bool,
-        tdepth : pos,
-	first : str,
-	second : pos
-    }
-
-    var foo : vector[token]
-
-    type state = struct {
-	begin : vector[token].domain,
-	total : pos
-    }
-    
-
-    type this = struct {
-        tokens : vector[token],
-	st : state,
-        maxline : pos,
-	indent : pos,
-	whitespace : str,
-	states : vector[state],
-	stack : vector[pos],
-	output : str,
-	space : pos,
-        depth : pos
-    }
-    
-    action make(maxline:pos,indent:pos) returns (res:this) = {
-	res.maxline := maxline;
-	res.indent := indent;
-	res.whitespace := " ";
-	res.space := maxline;
-	res.stack := res.stack.append(maxline);
-    }
-
-    action do_indent (self:this) returns (self:this) = {
-	self.output := self.output.append(10);  # newline
-	self.output := self.output.resize(self.output.end+(self.maxline-self.space),32);  # spaces
-    }
-
-    action print (self:this,tok:token) returns (self:this) = {
-	if tok.pair {
-	    if tok.second <= self.space | self.space = self.maxline {
-                self.output := self.output.extend(tok.first);
-                self.space := self.space - tok.first.end
-	    } else {
-                self.space := self.maxline - tok.tdepth * self.indent;
-                self := self.do_indent
-	    }
-	} else {
-            self.output := self.output.extend(tok.first);
-            self.space := self.space - tok.first.end
-	}
-    }
-
-    action print_tokens (self:this) returns (self:this) = {
-	var idx := self.tokens.begin;
-	while idx < self.tokens.end {
-	    self := self.print(self.tokens.value(idx));
-	    idx := idx.next
-	};
-	self.tokens := vector[token].empty;
-    }
-
-    action add_length(self:this, len:pos, at:vector[token].domain) returns (self:this) = {
-        if at > self.st.begin {
-            var prev := self.tokens.value(at.prev);
-            if prev.pair {
-		var newtok := prev;
-		newtok.second := newtok.second + len;
-                self.tokens := self.tokens.set(at.prev,newtok)
-	    }
-	};
-    }
-	
-    action extend(self:this, string:str) returns (self:this) = {
-	var tok : token;
-	tok.pair := false;
-        tok.tdepth := self.depth;
-	tok.first := string;
-	if true & string = self.whitespace {   # true = breakable
-	    tok.pair := true;
-	    tok.second := string.end;
-	} else {
-	    self := add_length(self,string.end,self.tokens.end)
-	};
-        self.tokens := self.tokens.append(tok);
-	self.st.total := self.st.total + string.end
-    }    
-
-    action newline(self:this) returns (self:this) = {
-	var tok : token;
-	tok.pair := true;
-        tok.tdepth := self.depth;
-        tok.second := self.maxline + 1;
-        self.tokens := self.tokens.append(tok);
-    }        
-        
-
-    action nest(self:this) returns (self:this) = {
-        self.stack := self.stack.append(self.space);
-	self.states := self.states.append(self.st);
-        self.st.total := 0;
-	self.st.begin := self.tokens.end;
-        self.depth := self.depth + 1
-    }
-
-    action unnest(self:this) returns (self:this) = {
-	var oldst := self.st;
-	# Tricky: don't count any terminal white space in length of scope
-#	if self.tokens.end > oldst.begin & self.tokens.back.pair {
-#	    oldst.total := oldst.total - self.tokens.back.second;
-#            self.tokens.end > oldst.begin & self.tokens.back.pair
-#	};
-	self.stack := self.stack.pop_back;
-	self.st := self.states.back;
-	self.states := self.states.pop_back;
-	self := self.add_length(oldst.total,oldst.begin);
-	self.st.total := self.st.total + oldst.total;
-        self.depth := self.depth - 1
-    }
-
-}
-
-object str = { ...
-    action encode(s:this,b:pretty) returns (b:pretty) = {
-	b := b.extend(s)
-    }    
-}
-
-action lex(b:str,p:pos) returns (tok:str,p:pos) = {
-    while p < b.end & b.value(p) = 32 {
-	p := p.next
-    };
-    var start := p;
-    var last : char := 32;
-    while p < b.end & b.value(p) ~= 32
-        & (last = 32 | (char.kind(b.value(p)) = char.kind(last)))
-        & char.kind(last) ~= char.bracket
-    {
-	last := b.value(p);
-	p := p.next;
-    };
-    tok := b.segment(start,p);
-}
-
-object pstate = {
-    type this = struct {
-	b:str,
-	p:pos,
-	tok:str,
-	ok:bool
-    }
-    action consume(st:pstate) returns(st:pstate) = {
-	(st.tok,st.p) := lex(st.b,st.p);
-    }	
-}
-
-action start_state(s:str) returns (st:pstate) = {
-    st.b := s;
-    st.p := s.begin;
-    st.ok := true;
-}
-
-type verb
-function str_to_verb(X:str) : verb
-function verb_to_prio(X:verb) : verb
-
-after init {
-    str_to_verb(X) := 0
-}
-
-
-module genbinop(expr,arg) = {
-    variant this of expr = struct {
-	lhs : arg,
-	rhs : arg
-    }
-
-    action make(x:arg,y:arg) returns (res:expr) = {
-        var s:this;
-        s.lhs := x;
-        s.rhs := y;
-        res := s;
-    }
-}
-
-module binop (expr,optok,vrb,prio) = {
-
-    instantiate genbinop(expr,expr)
-    
-    after init {
-        str_to_verb(optok) := vrb;
-        verb_to_prio(vrb) := prio
-    }
-
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-	if vrb < prio {
-	    b := b.nest;
-	    b := b.extend("(");
-	};	    
-	b := s.lhs.encode(b,vrb);
-	b := b.extend(" ");
-	b := b.extend(optok);
-	b := b.extend(" ");
-	b := s.rhs.encode(b,vrb+1);
-	if vrb < prio {
-	    b := b.extend(")");
-	    b := b.unnest
-	}	    
-    }
-}
-
-module parse_intf(expr) = {
-
-    action encode(e:expr,b:pretty,prio:verb) returns (b:pretty)
-
-    action enc(e:expr) returns (s:str) = {
-        var p := pretty.make(15,4);
-        p := e.encode(p,0);
-        p := p.print_tokens;
-        s := p.output
-    }
-
-    action dec(s:str) returns (e:expr) = {
-        var st := start_state(s);
-        st := st.consume;
-        (st,e) := expr.parse(st,0);
-        if ~st.ok | st.tok.end ~= 0 {
-            call parse_error(st.p,st.tok);
-        }
-    }
-
-    action encdec(s:str) returns (res:str) = {
-        var e := dec(s);
-        res := enc(e)
-    }
-}
-
-
-object expr = {
-    type this
-    instantiate parse_intf(expr)
-}
-
-    
-object symbol = {
-    variant this of expr = struct {
-	name : str
-    }
-    action make(name:str) returns (res:expr) = {
-        var s:symbol;
-        s.name := name;
-        res := s
-    }
-    action encode(s:symbol,b:pretty,prio:verb) returns (b:pretty) = {
-	b := s.name.encode(b);
-    }
-    action parse(st : pstate) returns(st : pstate, res:expr) = {
-        if st.ok & st.tok.end ~= 0 {
-	    var s : symbol;
-	    s.name := st.tok;
-	    res := s;
-	    st := st.consume;
-        }
-        else {
-	    st.ok := false;
-        }
-    }
-}
-
-
-instance plus : binop(expr,"+",1,1)
-instance times : binop(expr,"*",2,2)
-
-
-object expr = { ...
-
-    action parse(st : pstate, prio:verb) returns(st : pstate, res:expr) = {
-        if st.tok = "(" {
-            st := st.consume;
-            (st,res) := parse(st,0);
-            if st.ok & st.tok = ")" {
-                st := st.consume;
-            } else {
-                st.ok := false;
+        object varst = {
+            variant this of stmt = struct {
+                name : expr,
+                ann : annot
             }
-        } else {
-            (st,res) := symbol.parse(st);
-        };
-        var vrb := str_to_verb(st.tok);
-        while st.ok & vrb > 0 & prio < verb_to_prio(vrb) {
-            st := st.consume;
-            var arg : expr;
-            (st,arg) := parse(st,vrb);
-            if st.ok {
-                if vrb = 1 {
-                    res := plus.make(res,arg);
-                }
-                else if vrb = 2 {
-                    res := times.make(res,arg);
-                }                
-            };
-            vrb := str_to_verb(st.tok);
-        }
-    }
-}
 
-
-
-object stmt = {
-    type this
-    instantiate parse_intf(stmt)
-}
-
-object asgn = {
-    instantiate genbinop(stmt,expr)
-
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-	if 1 < prio {
-	    b := b.nest;
-	    b := b.extend("{");
-            b := b.newline;
-	};	    
-        b := b.nest;
-	b := s.lhs.encode(b,0);
-	b := b.extend(" ");
-	b := b.extend(":=");
-	b := b.extend(" ");
-	b := s.rhs.encode(b,0);
-	b := b.extend(";");
-        b := b.unnest;
-	if 1 < prio {
-	    b := b.unnest;
-            b := b.newline;
-	    b := b.extend("}");
-	}	    
-    }
-}
-
-object sequence = {
-    instantiate genbinop(stmt,stmt)
-
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-	if 0 < prio {
-	    b := b.nest;
-	    b := b.extend("{");
-            b := b.newline;
-	};	    
-	b := s.lhs.encode(b,1);
-        b := b.newline;
-	b := s.rhs.encode(b,0);
-	if 0 < prio {
-	    b := b.unnest;
-            b := b.newline;
-	    b := b.extend("}");
-	}	    
-    }
-}
-
-object skipst = {
-    variant this of stmt = struct {
-    }
-
-    action make returns (res:stmt) = {
-        var s:this;
-        res := s;
-    }
-    
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-        b := b.extend("{");
-        b := b.extend("}")
-    }
-}
-
-object ifst = {
-    variant this of stmt = struct {
-	cond : expr,
-	thenst : stmt,
-	elsest : stmt
-    }
-
-    action make(cond:expr,thenst:stmt,elsest:stmt) returns (res:stmt) = {
-        var s:this;
-        s.cond := cond;
-        s.thenst := elsest;
-        s.elsest := elsest;
-        res := s;
-    }
-    
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-        b := b.extend("if");
-        b := b.extend(" ");
-	b := s.cond.encode(b,0);
-        b := b.extend(" ");
-	b := s.thenst.encode(b,2);
-        if ~(s.elsest isa skipst) {
-            b := b.extend(" ");
-            b := b.extend("else");
-            b := b.extend(" ");
-            b := s.elsest.encode(b,2);
-        }
-    }
-}
-
-object stmt = { ...
-    action parse(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
-        while st.tok = ";" {
-            st := st.consume;
-        };
-        if st.tok = "{" {
-            st := st.consume;
-            (st,res) := parse(st,0);
-            if st.ok & st.tok = "}" {
-                st := st.consume;
-            } else {
-                st.ok := false;
+            action make (name:expr,ann:annot) returns (res:stmt) = {
+                var s:this;
+                s.name := name;
+                s.ann := ann;
+                res := s;
             }
-        } else if st.tok = "if" {
-            st := st.consume;
-            var s : ifst;
-            (st,s.cond) := expr.parse(st,0);
-            if st.ok & st.tok = "{" {
-                (st,s.thenst) := stmt.parse(st,1);
-                if st.ok & st.tok = "else" {
-                    st := st.consume;
-                    if st.ok & (st.tok = "{" | st.tok = "if") {
-                        (st,s.elsest) := stmt.parse(st,1);
-                    } else {
-                        st.ok := false;
-                    }
-                } else {
-                    s.elsest := skipst.make
-                }
+
+            action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+                b := s.ann.encode(b);
+                if 0 < prio {
+                    b := b.nest;
+                    b := b.extend("{");
+                    b := b.newline;
+                };	    
+                b := s.ann.encode(b);
+                b := b.nest;
+                b := b.extend("var");
+                b := b.extend(" ");
+                b := s.name.encode(b,0);
+                b := b.extend(";");
+                b := b.unnest;
+                if 1 < prio {
+                    b := b.unnest;
+                    b := b.newline;
+                    b := b.extend("}");
+                };	    
             }
-            else {
-                st.ok := false;
-            };
-            res := s;
-        } else if st.tok = "}" {
-            res := skipst.make;
         }
-        else {
-            var s : asgn;
-            (st,s.lhs) := expr.parse(st,3);
-            if st.ok & st.tok = ":=" {
+
+
+        action parse_lang_stmt(st : pstate, prio:verb) returns(st : pstate, res:stmt) = {
+            if st.tok = "var" {
                 st := st.consume;
-                (st,s.rhs) := expr.parse(st,0);
+                var s : varst;
+                (st,s.ann) := st.get_ann;
+                (st,s.name) := expr.parse(st,0);
                 if st.ok & st.tok = ";" {
                     st := st.consume;
                 } else {
                     st.ok := st.tok = "}";  # allow to omit final semicolon
-                }
+                };
+                res := s;
             } else {
-                st.ok := false;
-            };
-            res := s;
-        };
-        if st.ok & prio = 0 & st.tok.end > 0 & st.tok ~= "}" {
-            var sq : sequence;
-            sq.lhs := res;
-            (st,sq.rhs) := stmt.parse(st,0);
-            res := sq;
+                var s : asgn;
+                (st,s.ann) := st.get_ann;
+                (st,s.lhs) := expr.parse(st,3);
+                if st.ok & st.tok = ":=" {
+                    st := st.consume;
+                    (st,s.rhs) := expr.parse(st,0);
+                    if st.ok & st.tok = ";" {
+                        st := st.consume;
+                    } else {
+                        st.ok := st.tok = "}";  # allow to omit final semicolon
+                    }
+                }
+                else {
+                    st.ok := false;
+                };
+                res := s;
+            }
         }
     }
-}
 
-object decl = {
-    type this
-    instantiate parse_intf(decl)
-}
+    object groupdc = {
+        variant this of decl = struct {
+            decls : vector[decl]
+        }
 
-module tuple(t,lb,rb) = {
-    action encode(s:vector[t],b:pretty,prio:verb) returns (b:pretty) = {
-        if s.end > 0 {
-            b := b.extend(" ");
-            b := b.extend(lb);
-            b := s.value(0).encode(b,0);
-            var idx := s.begin.next;
-            while idx < s.end {
-                b := b.extend(",");
-                b := s.value(idx).encode(b,0);
+        action make(decls : vector[decl]) returns (res:decl) =
+        {
+            var s:this;
+            s.decls := decls;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("{");
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                b := b.newline;
+                b := s.decls.value(0).encode(b,0);
                 idx := idx.next;
             };
-            b := b.extend(rb);
-        }
-    }
-    action parse(st : pstate, prio:verb) returns(st : pstate, res:vector[t]) = {
-        if st.tok = "(" {
-            st := st.consume;
-            var s : expr;
-            (st,s) := expr.parse(st,0);
-            res := res.append(s);
-            while st.ok & st.tok = "," {
-                st := st.consume;
-                (st,s) := expr.parse(st,0);
-                res := res.append(s);
-            };
-            if st.ok & st.tok = ")" {
-                st := st.consume;
-            } else {st.ok := false}
-        } else {st.ok := false}
-    }
-}
-
-object expr = { ...
-    instance tup : tuple(expr,"(",")")
-}
-
-object actdc = {
-    variant this of decl = struct {
-	name : expr,
-        inputs : vector[expr],
-        outputs : vector[expr],
-        body : stmt
-    }
-
-    action make(name : expr,inputs : vector[expr],outputs : vector[expr],body : stmt)
-        returns (res:decl) =
-    {
-        var s:this;
-        s.name := name;
-        s.inputs := inputs;
-        s.outputs := outputs;
-        s.body := body;
-        res := s;
-    }
-    
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-        b := b.nest;
-        b := b.extend("action");
-        b := b.extend(" ");
-	b := s.name.encode(b,0);
-        b := expr.tup.encode(s.inputs,b,prio);
-        if s.outputs.end > 0 {
-            b := b.extend(" ");
-            b := b.extend("returns");
-            b := expr.tup.encode(s.outputs,b,prio);
-        };
-        b := b.unnest;
-        b := b.extend(" ");
-        b := b.extend("=");
-        b := b.extend(" ");
-	b := s.body.encode(b,2);
-    }
-
-}
-
-object groupdc = {
-    variant this of decl = struct {
-        decls : vector[decl]
-    }
-
-    action make(decls : vector[decl]) returns (res:decl) =
-    {
-        var s:this;
-        s.decls := decls;
-        res := s;
-    }
-    
-    action encode(s:this,b:pretty,prio:verb) returns (b:pretty) = {
-	b := b.nest;
-	b := b.extend("{");
-        var idx := s.decls.begin;
-        while idx < s.decls.end {
+            b := b.unnest;
             b := b.newline;
-	    b := s.decls.value(0).encode(b,0);
-            idx := idx.next;
-        };
-	b := b.unnest;
-        b := b.newline;
-	b := b.extend("}");
-    }	    
-}
-
-object decl = { ...
-    action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
-        if st.tok = "{" {
-            st := st.consume;
-            var s : groupdc;
-            (st,s.decls) := parse_list(st,0);
-            if st.tok = "}" {
-                st := st.consume;
-            } else {st.ok := false};
-            res := s
-        }
-        else if st.tok = "action" {
-            st := st.consume;
-            var s : actdc;
-            (st,s.name) := expr.parse(st,0);
-            if st.ok & st.tok = "(" {
-                (st,s.inputs) := expr.tup.parse(st,0);
-            };
-            if st.ok & st.tok = "returns" {
-                st := st.consume;
-                (st,s.outputs) := expr.tup.parse(st,0);
-            };
-            if st.ok & st.tok = "=" {
-                st := st.consume;
-                if st.tok = "{" {
-                    (st,s.body) := stmt.parse(st,1);
-                } else {st.ok := false}
-            } else {st.ok := false};
-            res := s
-        } else {st.ok := false}
+            b := b.extend("}");
+        }	    
     }
-    action parse_list(st : pstate, prio:verb) returns(st : pstate, res:vector[decl]) = {
-        while st.ok & st.tok.end > 0 & st.tok ~= "}" {
-            var s : decl;
-            (st,s) := parse(st,0);
-            res := res.append(s);
+
+    object decl = { ...
+        action parse(st : pstate, prio:verb) returns(st : pstate, res:decl) = {
+            if st.tok = "{" {
+                st := st.consume;
+                var s : groupdc;
+                (st,s.decls) := parse_list(st,0);
+                if st.tok = "}" {
+                    st := st.consume;
+                } else {st.ok := false};
+                res := s
+            }
+            else if st.tok = "action" {
+                st := st.consume;
+                var s : actdc;
+                (st,s.name) := expr.parse(st,0);
+                if st.ok & st.tok = "(" {
+                    (st,s.inputs) := expr.tup.parse(st,0);
+                };
+                if st.ok & st.tok = "returns" {
+                    st := st.consume;
+                    (st,s.outputs) := expr.tup.parse(st,0);
+                };
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    if st.tok = "{" {
+                        (st,s.body) := stmt.parse(st,1);
+                    } else {st.ok := false}
+                } else {st.ok := false};
+                res := s
+            } else {st.ok := false}
+        }
+        action parse_list(st : pstate, prio:verb) returns(st : pstate, res:vector[decl]) = {
+            while st.ok & st.tok.end > 0 & st.tok ~= "}" {
+                var s : decl;
+                (st,s) := parse(st,0);
+                res := res.append(s);
+            }
         }
     }
 }
 
-action parse_error(p:pos,tok:str)
+export ivy.expr.enc
+export ivy.expr.dec
+export ivy.expr.encdec
+export ivy.stmt.enc
+export ivy.stmt.dec
+export ivy.stmt.encdec
+export ivy.decl.enc
+export ivy.decl.dec
+export ivy.decl.encdec
 
-export expr.enc
-export expr.dec
-export expr.encdec
-export stmt.enc
-export stmt.dec
-export stmt.encdec
-export decl.enc
-export decl.dec
-export decl.encdec
 import parse_error
 
 
 export pretty.make
 export pretty.extend
-export pretty.print_tokens
+export pretty.flush
 
 action pr(max:pos,s:str) returns (res:str) = {
     var p := pretty.make(max,4);
-    var st := start_state(s);
-    st := st.consume;
+    var st := pstate.make(s);
     while st.tok.end > 0 {
 	if st.tok = "(" {
 	    p := p.nest
@@ -673,7 +185,7 @@ action pr(max:pos,s:str) returns (res:str) = {
 	st := st.consume
     };
 
-    p := p.print_tokens;
+    p := p.flush;
     res := p.output
 }
 
@@ -682,8 +194,7 @@ export pr
 # after init {
 
 #     var p := pretty.make(11,4);
-#     var st := start_state("fooooooo + (bar + baaaaaz)");
-#     st := st.consume;
+#     var st := pstate.make("fooooooo + (bar + baaaaaz)");
 #     while st.tok.end > 0 {
 # 	if st.tok = "(" {
 # 	    p := p.nest
@@ -700,7 +211,7 @@ export pr
 # 	st := st.consume
 #     };
 
-#     p := p.print_tokens;
+#     p := p.flush;
 #     call show_pretty(p);
     
 # }

@@ -4159,8 +4159,16 @@ ivy_value parse_value(const std::string& cmd, int &pos) {
     else if (pos < cmd.size() && cmd[pos] == '"') {
         pos++;
         res.atom = "";
-        while (pos < cmd.size() && cmd[pos] != '"')
-            res.atom.push_back(cmd[pos++]);
+        while (pos < cmd.size() && cmd[pos] != '"') {
+            char c = cmd[pos++];
+            if (c == '\\\\') {
+                if (pos == cmd.size())
+                    throw_syntax(pos);
+                c = cmd[pos++];
+                c = (c == 'n') ? 10 : (c == 'r') ? 13 : (c == 't') ? 9 : c;
+            }
+            res.atom.push_back(c);
+        }
         if(pos == cmd.size())
             throw_syntax(pos);
         pos++;
