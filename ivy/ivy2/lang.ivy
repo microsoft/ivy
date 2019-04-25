@@ -33,7 +33,7 @@ type priority
 
 module verb_base = {
     object verb = {
-        type this = { none, plus, times, colon, app }
+        type this = { none, arrow, plus, times, colon, app }
     }
     
     function str_to_verb(X:str) : verb
@@ -64,6 +64,7 @@ module built_in_binary (optok,vrb,opprio) = {
         s.ann := ann;
         res := s
     }
+
 }    
 
 module genbinop(expr,arg) = {
@@ -117,6 +118,9 @@ module expr_base = {
         instantiate parse_intf(expr)
         action get_verb(s:this) returns (vrb:verb) = {
             vrb := verb.none;
+        }
+        action is(s:this,vrb:verb) returns (res:bool) = {
+            res := false;
         }
     }
 
@@ -192,11 +196,58 @@ module expr_base = {
                 b := b.unnest;
             }
         }
+        action is(s:this,vrb:verb) returns (res:bool) = {
+            res := s.func.get_verb = vrb;
+        }
     }
 
+    # Variables are used internally as placeholders but
+    # are not intended to be parsed or printed out.
 
-    instance plus : built_in_binary("+",verb.plus,1)
-    instance times : built_in_binary("*",verb.times,2)
+    object variable = {
+        variant this of expr = struct {
+            idx : pos,
+            ann : annot
+        }
+        
+        action make(idx:pos) returns (res:expr) = {
+            var s:this;
+            s.idx := idx;
+            res := s
+        }
+    }
+    
+    object pi = {
+        variant this of expr = struct {
+            vars : vector[expr],
+            body : expr
+        }
+
+        action make (vars:vector[expr], body:expr,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.vars := vars;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("pi");
+            b := b.extend(" ");
+            b := expr.tup.encode(s.vars,b,0);
+            b := b.extend(".");
+            b := b.extend(" ");
+            b := s.body.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+        
+    }
+
+    instance arrow : built_in_binary("->",verb.arrow,5)
+    instance plus : built_in_binary("+",verb.plus,10)
+    instance times : built_in_binary("*",verb.times,11)
 
     # Treat '(' as a builtin operator for function application. The
     # real operator is '', but '(' will work.

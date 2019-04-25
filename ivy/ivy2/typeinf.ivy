@@ -1,0 +1,75 @@
+#lang ivy1.7
+
+include ivylang
+
+module union_find(t) = {
+
+    function map(X:t) : t
+
+    action clear = {
+        map(X) := X;
+    }
+
+    action find(x:t) returns(x:t) = {
+        var rep := map(x);
+        if rep ~= x {
+            rep := find(rep);
+            map(x) := rep;
+            x := rep;
+        }
+    }
+
+    action unify(x:t,y:t) = {
+        x := find(x);
+        y := find(y);
+        if x ~= y {
+            map(x) := y
+        }
+    }
+}
+
+module vargen = {
+    var counter : pos;
+    action clear = {
+        counter := 0;
+    }
+    action make returns (res:expr) = {
+        res := variable.make(counter);
+        counter := counter.next
+    }
+}
+
+object ivy = { ...
+
+
+    object expr { ...
+        action type_decorate(e:this,vg:vargen) returns (e:this,vg:vargen)
+    }
+
+    object app { ...
+        
+        action type_decorate(e:this,vg:vargen) returns (res:expr,vg:vargen) = {
+            var dvars:vector[expr];
+            var newargs : vector[expr];
+            var idx := args.begin;
+            while idx < args.end {
+                var v := vg.make;
+                var arg : expr;
+                (arg,vg) := type_decorate(e.args.value(idx),vg);
+                dvars := dvars.append(v);
+                newargs := newargs.append(colon.make(arg,v))
+            }
+            var rvar := vg.make;
+            var ann;  # null annotation
+            var fty := arrow.make(times.fold_left(dvars,ann),rvar);
+            (e.func,vg) := type_decorate(e.func,vg);
+            res := e;
+        }
+    }
+
+    
+        
+    object typeinfer = {
+
+        instance uf : union_find(pos)
+        instance vg : vargen

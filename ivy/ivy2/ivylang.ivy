@@ -10,6 +10,34 @@ object ivy = {
 
     instance colon : built_in_binary(":",verb.colon,50)
 
+    object pi = {
+        variant this of expr = struct {
+            vars : vector[expr],
+            body : expr
+        }
+
+        action make (vars:vector[expr], body:expr,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.vars := vars;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("pi");
+            b := b.extend(" ");
+            b := expr.tup.encode(s.vars,b,0);
+            b := b.extend(".");
+            b := b.extend(" ");
+            b := s.body.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+        
+    }
+
     # Here, we parse statements specific to Ivy: var and assign.
     
     object varst = {
