@@ -5444,7 +5444,7 @@ namespace hash_space {
             const Value *operator->() const { return &(operator*()); }
 
             const_iterator &operator++() {
-                Entry *old = ent;
+                const Entry *old = ent;
                 ent = ent->next;
                 if (!ent) {
                     size_t bucket = tab->get_bucket(old->val);
@@ -5714,6 +5714,20 @@ namespace hash_space {
 	hashtable<std::pair<Key,Value>,Key,HashFun,proj1<Key,Value>,EqFun>::
         lookup(kvp,true)->val.second;
     }
+    };
+
+    template <typename D,typename R>
+        class hash<hash_map<D,R> > {
+    public:
+        size_t operator()(const hash_map<D,R> &p) const {
+            hash<D > h1;
+            hash<R > h2;
+            size_t res = 0;
+            
+            for (typename hash_map<D,R>::const_iterator it=p.begin(), en=p.end(); it!=en; ++it)
+                res += (h1(it->first)+h2(it->second));
+            return res;
+        }
     };
 
 }

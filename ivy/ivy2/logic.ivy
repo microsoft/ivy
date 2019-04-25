@@ -1,0 +1,46 @@
+#lang ivy1.7
+
+include ivylang
+include hash
+
+# Beta reduction
+
+object ivy = { ...
+
+    instance symeval : hash_map(symbol,expr)
+    instance vareval : hash_map(variable,expr)
+
+    object expr = { ...
+	action reduce(e:this,smap:symeval,vmap:vareval) returns (res:expr)
+    }
+
+    object symbol = { ...
+	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
+	    var e : expr;
+	    e := s;
+	    res := smap.get(s,e);
+	}
+    }	
+	    
+    object variable = { ...
+	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
+	    var e : expr;
+	    e := s;
+	    res := vmap.get(s,e);
+	}
+    }	
+	    
+    object app = { ...
+	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
+	    s.func := s.func.reduce(smap,vmap);
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		s.args := s.args.set(idx,s.args.value(0).reduce(smap,vmap));
+	    };
+	    res := s;
+	}
+    }
+}
+
+
+export ivy.app.reduce

@@ -220,10 +220,11 @@ module expr_base = {
     object pi = {
         variant this of expr = struct {
             vars : vector[expr],
-            body : expr
+            body : expr,
+	    ann : annot
         }
 
-        action make (vars:vector[expr], body:expr,ann:annot) returns (res:stmt) = {
+        action make (vars:vector[expr], body:expr,ann:annot) returns (res:expr) = {
             var s:this;
             s.vars := vars;
             s.ann := ann;

@@ -1,0 +1,145 @@
+#lang ivy
+
+################################################################################
+#
+# Hash maps
+#
+# Hash maps represent partial maps from any type "domain" to any type "range".
+#
+#    instance thing : hash_map(domain,range)
+#
+# 
+
+module hash_map(domain,range) = {
+
+    type this
+    alias t = this
+
+    # return an empty map
+
+    action empty returns (a:t)
+
+    # mutate an map a so that x in maps to y
+    action set(a:t,x:domain,y:range) returns (a:t)
+
+    # get the value y such that x maps to z in a, else
+    # leave y unchanged.
+    action get(a:t,x:domain,y:range) returns (y:range) 
+
+
+    ########################################
+    # Specification
+    #
+
+
+    specification {
+
+	relation present(A:t,X:domain)
+	function value(A:t,X:domain):range
+
+
+	after empty {
+	    assert ~present(a,X)
+	}
+	after set {
+            assert present(a,x);
+	    assert value(a,X) = y if X = x else value(old a,X)
+	}
+	after get {
+	    assert (value(a,x) = y) if present(a,x) else (y = old y)
+	}
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< hash_space::hash_map<`domain`,`range`> >>>
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement set {
+	    <<<
+	        `a`[`x`] = `y`;
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        `t`::const_iterator it = `a`.find(x);
+  	        if (it != `a`.end())
+		    y = it->second;
+	    >>>
+	}
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '[';
+		for (`t`::const_iterator it = a.begin(), en = a.end(); it != en; ++it) {
+		    if (it != a.begin())
+		        s << ',';
+		    s << "[" << it->first << "," << it->second << "]";
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+		for (unsigned i = 0; i < arg.fields.size(); i++) {
+		    if (arg.fields[i].fields.size() != 2)
+		        throw out_of_bounds(idx);
+		    a[_arg<`domain`>(arg.fields[i].fields,0,0)] = _arg<`range`>(arg.fields[i].fields,1,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    `domain` x;
+	            __deser(inp,x);
+                    `range` y;
+	            __deser(inp,y);
+                    res[x] = y;
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+		for (`t`::const_iterator it = inp.begin(), en = inp.end(); it != en; ++it) {
+		    res.open_list_elem();
+	            __ser(res,it->first);
+	            __ser(res,it->second);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+
+    attribute test = impl
+}
+
