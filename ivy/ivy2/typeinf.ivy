@@ -19,7 +19,7 @@ object ivy = { ...
     }
     
     after init {
-        call set_built_in_type(verb.plus,"alpha + alpha -> alpha");
+        call set_built_in_type(verb.plus,"alpha * alpha -> alpha");
         call set_built_in_type(verb.times,"alpha * alpha -> alpha");
         call set_built_in_type(verb.arrow,"bool * bool -> bool");
     }
