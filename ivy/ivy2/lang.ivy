@@ -65,6 +65,17 @@ module built_in_binary (optok,vrb,opprio) = {
         res := s
     }
 
+    action fold_left(args:vector[expr],ann:annot) returns (res:expr) = {
+        if args.end > 0 {
+            res := args.value(0);
+            var idx := args.begin.next;
+            while idx < args.end {
+                res := make(res,args.value(idx),ann);
+                idx := idx.next;
+            }
+        }
+    }
+
 }    
 
 module genbinop(expr,arg) = {
@@ -111,7 +122,52 @@ module parse_intf(expr) = {
 }
 
 
+
 module expr_base = {
+
+    # Identifiers of type `ident` are use as names. They don't have
+    # annotations, so they can be hashed and compared for equality.
+
+    object ident = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+    }
+    
+    # String identifiers are used for all symbols occurring in the
+    # source, including operators like `+` and `&`. 
+        
+    object strident = {
+        variant this of ident = struct {
+            val : str
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend(s.val)
+        }
+        action make(val:str) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+            res := s
+        }
+    }
+
+    # Numerical identifiers are used as temporaries internally. They
+    # are printed as decimal number in brackets.
+
+    object numident = {
+        variant this of ident = struct {
+            val : pos
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("[");
+            b := b.extend(s.val.to_str);
+            b := b.extend("]");
+        }
+        action make(val:pos) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+            res := s
+        }
+    }
 
     object expr = {
         type this
@@ -122,29 +178,38 @@ module expr_base = {
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := false;
         }
+        action get_arg(s:this,p:vector[expr].domain) returns (res:expr)
+        action get_name(s:this) returns (res:ident)
     }
 
     object symbol = {
         variant this of expr = struct {
-            name : str,
+            name : ident,
             vrb : verb,
             ann : annot
         }
         action make(name:str,ann:annot) returns (res:expr) = {
             var s:symbol;
-            s.name := name;
+            s.name := strident.make(name);
             s.vrb := str_to_verb(name);
+            s.ann := ann;
+            res := s
+        }
+        action makenum(num:pos,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := numident.make(num);
+            s.vrb := verb.none;
             s.ann := ann;
             res := s
         }
         action encode(s:symbol,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
-            b := s.name.encode(b);
+            b := s.name.encode(b,0);
         }
         action parse(st : pstate) returns(st : pstate, res:expr) = {
             if st.ok & st.tok.end ~= 0 {
                 var s : symbol;
-                s.name := st.tok;
+                s.name := strident.make(st.tok);
                 (st,s.ann) := st.get_ann;
                 res := s;
                 st := st.consume;
@@ -155,6 +220,9 @@ module expr_base = {
         }
         action get_verb(s:symbol) returns (res:verb) = {
             res := s.vrb;
+        }
+        action get_name(s:this) returns (res:ident) = {
+            res := s.name
         }
     }
 
@@ -198,6 +266,9 @@ module expr_base = {
         }
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := s.func.get_verb = vrb;
+        }
+        action get_arg(s:this,p:vector[expr].domain) returns (res:expr) = {
+            res := s.args.value(p)
         }
     }
 

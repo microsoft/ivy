@@ -381,3 +381,60 @@ module tuple(t,lb,rb,verb) = {
     }
 }
 
+# Number/string conversions
+
+module numconv(str) = {
+    action to_str(x:this) returns (res:str) = {
+        if (x < 0) {
+            res := res.extend("-");
+            x := 0 - x;
+        };
+        if x = 0 {
+            res := res.extend("0");
+        } else {
+            var tmp : str;
+            while x > 0 {
+                var y := x - x / 10;
+
+                # workaround: v1.7 compiler can't cast between numeric types
+
+                var digit:char := 48;
+                while y > 0 {
+                    y := y - 1;
+                    digit := digit + 1;
+                };
+                tmp := tmp.append(digit);
+                x := x / 10;
+            };
+            var idx := tmp.begin;
+            while idx < tmp.end {
+                res := res.append(tmp.value(idx));
+                idx := idx.next;
+            }
+        }
+    }
+    action from_str(x:str) returns (res:this) = {
+        var idx := x.begin;
+        var neg := false;
+        if idx < x.end & x.value(idx) = 45 {
+            neg := true;
+            idx := idx.next;
+        };
+        while idx < x.end {
+            res := res * 10;
+            var digit := x.value(idx);
+
+            # workaround: v1.7 compiler can't cast between numeric types
+
+            while digit > 48 {
+                digit := digit - 1;
+                x := x + 1;
+            };
+            idx := idx.next;
+        }
+    }
+}
+
+object pos = { ...
+    instantiate numconv(str)
+}

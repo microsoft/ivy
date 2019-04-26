@@ -5730,6 +5730,18 @@ namespace hash_space {
         }
     };
 
+    template <typename D,typename R>
+    inline bool operator ==(const hash_map<D,R> &s, const hash_map<D,R> &t){
+        for (typename hash_map<D,R>::const_iterator it=s.begin(), en=s.end(); it!=en; ++it) {
+            typename hash_map<D,R>::const_iterator it2 = t.find(it->first);
+            if (it2 == t.end() || !(it->second == it2->second)) return false;
+        }
+        for (typename hash_map<D,R>::const_iterator it=t.begin(), en=t.end(); it!=en; ++it) {
+            typename hash_map<D,R>::const_iterator it2 = s.find(it->first);
+            if (it2 == t.end() || !(it->second == it2->second)) return false;
+        }
+        return true;
+    }
 }
 #endif
 """

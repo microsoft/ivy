@@ -1,75 +1,183 @@
 #lang ivy1.7
 
 include ivylang
+include hash
+include logic
 
 module union_find(t) = {
 
-    function map(X:t) : t
-
-    action clear = {
-        map(X) := X;
-    }
-
-    action find(x:t) returns(x:t) = {
-        var rep := map(x);
-        if rep ~= x {
-            rep := find(rep);
-            map(x) := rep;
-            x := rep;
-        }
-    }
-
-    action unify(x:t,y:t) = {
-        x := find(x);
-        y := find(y);
-        if x ~= y {
-            map(x) := y
-        }
-    }
-}
-
-module vargen = {
-    var counter : pos;
-    action clear = {
-        counter := 0;
-    }
-    action make returns (res:expr) = {
-        res := variable.make(counter);
-        counter := counter.next
-    }
 }
 
 object ivy = { ...
 
 
-    object expr { ...
-        action type_decorate(e:this,vg:vargen) returns (e:this,vg:vargen)
-    }
+    object decost = {
 
-    object app { ...
+        instance map : hash_map(ident,expr)
+
+        type this = struct {
+            counter : pos,
+            m : map,
+            ok : bool
+        }
+
+        action make returns (res:this) = {
+            res.ok := true;
+        }
+
+        action newvar(s:this,ann:annot) returns (s:this,res:expr) = {
+            res := symbol.makenum(s.counter,ann);
+            s.counter := s.counter.next
+        }
         
-        action type_decorate(e:this,vg:vargen) returns (res:expr,vg:vargen) = {
-            var dvars:vector[expr];
-            var newargs : vector[expr];
-            var idx := args.begin;
-            while idx < args.end {
-                var v := vg.make;
-                var arg : expr;
-                (arg,vg) := type_decorate(e.args.value(idx),vg);
-                dvars := dvars.append(v);
-                newargs := newargs.append(colon.make(arg,v))
+        action find(st:this,x:expr) returns(st:this,res:expr) = {
+            res := x;
+            if x isa symbol {
+                var nx := x.get_name;
+                res := st.m.get(nx,res);
+                if res ~= x {
+                    (st,res) := st.find(res);
+                    st.m := st.m.set(nx,res);
+                }
+            };
+        }
+
+        action unify(st:this,x:expr,y:expr) returns (st:this) = {
+            (st,x) := st.find(x);
+            (st,y) := st.find(y);
+            if x isa symbol {
+                var nx := x.get_name;
+                if nx isa numident {
+                    if y.occurs(nx) {
+                        st.ok := false;
+                    } else {
+                        st.m := st.m.set(nx,y);
+                    }
+                } else {
+                    if y isa symbol {
+                        var ny := y.get_name;
+                        if ny isa numident {
+                            st := st.unify(y,x);
+                        } else {
+                            st.ok := st.ok & (nx = ny);
+                        }
+                    } else {
+                        st.ok := false
+                    }
+                }
+            } else if y isa symbol {
+                st := st.unify(y,x);
+            } else {
+                if x.is(verb.times) & y.is(verb.times)
+                   | x.is(verb.arrow) & y.is(verb.arrow) {
+                    st := st.unify(x.get_arg(0),y.get_arg(0));
+                    if st.ok {
+                        st := st.unify(x.get_arg(1),y.get_arg(1));
+                    }
+                } else {
+                    st.ok := false;
+                }
             }
-            var rvar := vg.make;
-            var ann;  # null annotation
-            var fty := arrow.make(times.fold_left(dvars,ann),rvar);
-            (e.func,vg) := type_decorate(e.func,vg);
-            res := e;
         }
     }
 
-    
-        
-    object typeinfer = {
+    action type_error(e:expr,t1:expr,t2:expr) = {
+        call report_type_error(e.enc,t1.enc,t2.enc)
+    }
 
-        instance uf : union_find(pos)
-        instance vg : vargen
+    import action report_type_error(s1:str,s2:str,s3:str)
+
+    object expr = { ...
+        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost)
+        action type_fillin(e:this,st:decost) returns (res:expr,st:decost)
+    }
+
+    object symbol = { ...
+        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost) = {
+            (st,ty) := st.newvar(e.ann);
+            res := colon.make(e,ty,e.ann);
+        }
+        action type_fillin(e:this,st:decost) returns (res:expr,st:decost) = {
+            var ee : expr := e;
+            (st,res) := st.find(ee);  # workaround
+            if res ~= ee {
+                (res,st) := res.type_fillin(st)
+            }
+        }
+    }
+    
+    object app = { ...
+        
+        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost) = {
+            var arg : expr;
+            var argty : expr;
+            if e.is(verb.colon) {
+                (res,argty,st) := e.args.value(0).type_decorate(st);
+                ty := e.args.value(1);
+                st := st.unify(argty,ty);
+                if ~st.ok {
+                    call type_error(e,ty,argty)
+                }
+            } else {
+                var argtys : vector[expr];
+                var newargs : vector[expr];
+                var idx := e.args.begin;
+                while idx < e.args.end {
+                    (arg,argty,st) := e.args.value(idx).type_decorate(st);
+                    argtys := argtys.append(argty);
+                    newargs := newargs.append(arg);
+                    idx := idx.next
+                };
+                (st,ty) := st.newvar(e.ann);
+                var fty := arrow.make(times.fold_left(argtys,e.ann),ty,e.ann);
+                (arg,argty,st) := e.func.type_decorate(st);
+                st := st.unify(argty,fty);
+                if ~st.ok {
+                    call type_error(e,argty,fty)
+                };
+                res := app.make(arg,newargs,e.ann);
+            }
+        }
+        action type_fillin(e:this,st:decost) returns (res:expr,st:decost) = {
+            var func : expr;
+            (func,st) := e.func.type_fillin(st);
+            var newargs : vector[expr];
+            var idx := e.args.begin;
+            while idx < e.args.end {
+                var arg : expr;
+                (arg,st) := e.args.value(idx).type_fillin(st);
+                newargs := newargs.append(arg);
+                idx := idx.next
+            };
+            if e.is(verb.colon) {
+                if newargs.value(1).has_numident {
+                    call cannot_infer(e,newargs.value(1));
+                    st.ok := false
+                }
+            };
+            res := app.make(func,newargs,e.ann);
+        }
+    }
+
+    action cannot_infer(e:expr,t:expr) = {
+        call report_cannot_infer(e.enc,t.enc)
+    }
+
+    import action report_cannot_infer(s1:str,s2:str)
+
+    type thing = struct {
+        out:str,
+        st:decost
+    }
+    
+    export action testdeco(inp:str) returns (res:thing) = {
+        var e := expr.dec(inp);
+        var ty : expr;
+        res.st := decost.make;
+        (e,ty,res.st) := e.type_decorate(res.st);
+        (e,res.st) := e.type_fillin(res.st);
+        res.out := expr.enc(e);
+    }
+
+}
+

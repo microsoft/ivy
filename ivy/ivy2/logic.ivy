@@ -7,40 +7,61 @@ include hash
 
 object ivy = { ...
 
-    instance symeval : hash_map(symbol,expr)
-    instance vareval : hash_map(variable,expr)
+    instance symeval : hash_map(ident,expr)
 
     object expr = { ...
-	action reduce(e:this,smap:symeval,vmap:vareval) returns (res:expr)
+	action reduce(e:this,smap:symeval) returns (res:expr)
+        action occurs(e:this,n:ident) returns (res:bool) = {
+            res := false
+        }
+        action has_numident(e:this) returns (res:bool) = {
+            res := false
+        }
     }
 
     object symbol = { ...
-	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
+	action reduce(s:this,smap:symeval) returns (res:expr) = {
 	    var e : expr;
 	    e := s;
-	    res := smap.get(s,e);
+	    res := smap.get(s.name,e);
 	}
+        action occurs(e:this,n:ident) returns (res:bool) = {
+            res := (e.name = n)
+        }
+        action has_numident(e:this) returns (res:bool) = {
+            res := e.name isa numident;
+        }
     }	
-	    
-    object variable = { ...
-	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
-	    var e : expr;
-	    e := s;
-	    res := vmap.get(s,e);
-	}
-    }	
-	    
+	    	    
     object app = { ...
-	action reduce(s:this,smap:symeval,vmap:vareval) returns (res:expr) = {
-	    s.func := s.func.reduce(smap,vmap);
+	action reduce(s:this,smap:symeval) returns (res:expr) = {
+	    s.func := s.func.reduce(smap);
 	    var idx := s.args.begin;
 	    while idx < s.args.end {
-		s.args := s.args.set(idx,s.args.value(0).reduce(smap,vmap));
+		s.args := s.args.set(idx,s.args.value(0).reduce(smap));
+                idx := idx.next;
 	    };
 	    res := s;
 	}
+        action occurs(s:this,n:ident) returns (res:bool) = {
+            res := s.func.occurs(n);
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		res := res | s.args.value(idx).occurs(n);
+                idx := idx.next;
+	    }
+        }
+        action has_numident(s:this) returns (res:bool) = {
+            res := s.func.has_numident;
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		res := res | s.args.value(idx).has_numident;
+                idx := idx.next;
+	    }
+        }
     }
 }
 
-
 export ivy.app.reduce
+
+
