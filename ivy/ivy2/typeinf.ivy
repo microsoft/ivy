@@ -10,7 +10,20 @@ module union_find(t) = {
 
 object ivy = { ...
 
+    # This function gives the types of the builtin-in symbols
 
+    function optypes(X:verb) : expr
+
+    action set_built_in_type(vrb:verb,ty:str) = {
+        optypes(vrb) := expr.dec(ty);
+    }
+    
+    after init {
+        call set_built_in_type(verb.plus,"alpha + alpha -> alpha");
+        call set_built_in_type(verb.times,"alpha * alpha -> alpha");
+        call set_built_in_type(verb.arrow,"bool * bool -> bool");
+    }
+    
     object decost = {
 
         instance map : hash_map(ident,expr)
@@ -88,31 +101,42 @@ object ivy = { ...
     import action report_type_error(s1:str,s2:str,s3:str)
 
     object expr = { ...
-        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost)
-        action type_fillin(e:this,st:decost) returns (res:expr,st:decost)
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost)
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost)
     }
 
     object symbol = { ...
-        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost) = {
-            (st,ty) := st.newvar(e.ann);
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
+            if e.vrb ~= verb.none {
+                var mm : symeval;
+                var v : expr;
+                (st,v) := st.newvar(e.ann);
+                mm := mm.set(strident.make("alpha"),v);
+                (st,v) := st.newvar(e.ann);
+                mm := mm.set(strident.make("beta"),v);
+                ty := optypes(e.vrb).reduce(mm);
+            } else {
+                (st,ty) := st.newvar(e.ann);
+                ty := m.get(e.name,ty);
+            };
             res := colon.make(e,ty,e.ann);
         }
-        action type_fillin(e:this,st:decost) returns (res:expr,st:decost) = {
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost) = {
             var ee : expr := e;
             (st,res) := st.find(ee);  # workaround
             if res ~= ee {
-                (res,st) := res.type_fillin(st)
+                (res,st) := res.type_fill_in(st)
             }
         }
     }
     
     object app = { ...
         
-        action type_decorate(e:this,st:decost) returns (res:expr,ty:expr,st:decost) = {
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
             var arg : expr;
             var argty : expr;
             if e.is(verb.colon) {
-                (res,argty,st) := e.args.value(0).type_decorate(st);
+                (res,argty,st) := e.args.value(0).type_decorate(st,m);
                 ty := e.args.value(1);
                 st := st.unify(argty,ty);
                 if ~st.ok {
@@ -123,14 +147,14 @@ object ivy = { ...
                 var newargs : vector[expr];
                 var idx := e.args.begin;
                 while idx < e.args.end {
-                    (arg,argty,st) := e.args.value(idx).type_decorate(st);
+                    (arg,argty,st) := e.args.value(idx).type_decorate(st,m);
                     argtys := argtys.append(argty);
                     newargs := newargs.append(arg);
                     idx := idx.next
                 };
                 (st,ty) := st.newvar(e.ann);
                 var fty := arrow.make(times.fold_left(argtys,e.ann),ty,e.ann);
-                (arg,argty,st) := e.func.type_decorate(st);
+                (arg,argty,st) := e.func.type_decorate(st,m);
                 st := st.unify(argty,fty);
                 if ~st.ok {
                     call type_error(e,argty,fty)
@@ -138,14 +162,14 @@ object ivy = { ...
                 res := app.make(arg,newargs,e.ann);
             }
         }
-        action type_fillin(e:this,st:decost) returns (res:expr,st:decost) = {
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost) = {
             var func : expr;
-            (func,st) := e.func.type_fillin(st);
+            (func,st) := e.func.type_fill_in(st);
             var newargs : vector[expr];
             var idx := e.args.begin;
             while idx < e.args.end {
                 var arg : expr;
-                (arg,st) := e.args.value(idx).type_fillin(st);
+                (arg,st) := e.args.value(idx).type_fill_in(st);
                 newargs := newargs.append(arg);
                 idx := idx.next
             };
@@ -173,9 +197,11 @@ object ivy = { ...
     export action testdeco(inp:str) returns (res:thing) = {
         var e := expr.dec(inp);
         var ty : expr;
+        var m : symeval;
+        m := m.set(strident.make("foo"),expr.dec("t"));
         res.st := decost.make;
-        (e,ty,res.st) := e.type_decorate(res.st);
-        (e,res.st) := e.type_fillin(res.st);
+        (e,ty,res.st) := e.type_decorate(res.st,m);
+        (e,res.st) := e.type_fill_in(res.st);
         res.out := expr.enc(e);
     }
 
