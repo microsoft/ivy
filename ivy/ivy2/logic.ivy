@@ -38,7 +38,7 @@ object ivy = { ...
 	    s.func := s.func.reduce(smap);
 	    var idx := s.args.begin;
 	    while idx < s.args.end {
-		s.args := s.args.set(idx,s.args.value(0).reduce(smap));
+		s.args := s.args.set(idx,s.args.value(idx).reduce(smap));
                 idx := idx.next;
 	    };
 	    res := s;

@@ -1,12 +1,31 @@
 #lang ivy1.7
 
+#
+# Ivy uses Hindley-Milner style type inference a the level of
+# statements. This is used to fill in the omitted types of the
+# polymorphic symbols (including built-in operators and numerals, as
+# well as bound variables.
+#
+# Two basic services are provided here:
+#
+#     action type_infer(es : vector[expr], tc : symeval) returns (es : vector[expr], err : error)
+#
+# This action adds type decorations to all sub-expressions of a vector
+# of expressions, in a type contec `tc`. The type context is a map
+# from names to types.  The possible errors return are `type_clash`
+# and `untyped`.
+#
+#     action type_elide(es : vector[expr], tc : symeval) returns (es : vector[expr])
+#
+# This action removes type decorations that can be inferred from a
+# vector of expressions. This is usually done before printing the
+# expressions to improve readability.
+# 
+
 include ivylang
 include hash
 include logic
 
-module union_find(t) = {
-
-}
 
 object ivy = { ...
 
@@ -14,16 +33,48 @@ object ivy = { ...
 
     function optypes(X:verb) : expr
 
-    action set_built_in_type(vrb:verb,ty:str) = {
+    # The predicates determine for a given verb what type inferences we can
+    # rely on when eliding type decorations:
+    #
+    # Verb is monomorphic:
+    
+    relation verb_mono(X:verb)
+    
+    # Input types determine output types:
+
+    relation verb_in_to_out(X:verb)
+    
+    # Output type determines input types:
+
+    relation verb_out_to_in(X:verb)
+    
+    # First input type determines all:
+
+    relation verb_first_to_in(X:verb)
+    
+    action set_built_in_type(vrb:verb,ty:str,m:bool,io:bool,oi:bool,fi:bool) = {
         optypes(vrb) := expr.dec(ty);
+        verb_mono(vrb) := m;
+        verb_in_to_out(vrb) := io;
+        verb_out_to_in(vrb) := oi;
+        verb_first_to_in(vrb) := fi;
     }
     
     after init {
-        call set_built_in_type(verb.plus,"alpha * alpha -> alpha");
-        call set_built_in_type(verb.times,"alpha * alpha -> alpha");
-        call set_built_in_type(verb.arrow,"bool * bool -> bool");
+        call set_built_in_type(verb.none,"alpha",true,true,true,true);
+        call set_built_in_type(verb.plus,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.times,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.arrow,"bool * bool -> bool",true,true,true,true);
     }
     
+
+    # Returns `true` if the type of a the first inpt of a given verb determines
+    # the type of the re
+
+    action verb_det_type(vrb:verb) returns (res:bool) = {
+        res := true;
+    }
+
     object decost = {
 
         instance map : hash_map(ident,expr)
@@ -94,6 +145,13 @@ object ivy = { ...
         }
     }
 
+    object elidest = {
+        instance map : hash_map(ident,bool)
+        type this = struct {
+            seen : map
+        }
+    }
+
     action type_error(e:expr,t1:expr,t2:expr) = {
         call report_type_error(e.enc,t1.enc,t2.enc)
     }
@@ -103,6 +161,7 @@ object ivy = { ...
     object expr = { ...
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost)
         action type_fill_in(e:this,st:decost) returns (res:expr,st:decost)
+        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest)
     }
 
     object symbol = { ...
@@ -114,7 +173,10 @@ object ivy = { ...
                 mm := mm.set(strident.make("alpha"),v);
                 (st,v) := st.newvar(e.ann);
                 mm := mm.set(strident.make("beta"),v);
-                ty := optypes(e.vrb).reduce(mm);
+                ty := optypes(e.vrb);
+                call show(ty);
+                ty := ty.reduce(mm);
+                call show(ty)
             } else {
                 (st,ty) := st.newvar(e.ann);
                 ty := m.get(e.name,ty);
@@ -128,8 +190,13 @@ object ivy = { ...
                 (res,st) := res.type_fill_in(st)
             }
         }
+        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+            res := e;
+        }
     }
     
+    import action show(e:expr)
+
     object app = { ...
         
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
@@ -162,6 +229,7 @@ object ivy = { ...
                 res := app.make(arg,newargs,e.ann);
             }
         }
+
         action type_fill_in(e:this,st:decost) returns (res:expr,st:decost) = {
             var func : expr;
             (func,st) := e.func.type_fill_in(st);
@@ -180,6 +248,42 @@ object ivy = { ...
                 }
             };
             res := app.make(func,newargs,e.ann);
+        }
+
+        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+            if e.is(verb.colon) {
+                var arg := e.args.value(0);
+                (res,st) := arg.type_elide_int(b,m,st);
+                if ~b {
+                    if arg isa app {
+                        b := verb_in_to_out(arg.app_verb);
+                    } else {
+                        b := verb_mono(arg.get_verb) &
+                        (st.seen.get(arg.get_name,false) | m.mem(arg.get_name));
+                    }
+                };
+                if ~b {
+                    res := colon.make(res,e.args.value(1),e.ann)
+                };
+                if arg isa symbol {
+                    st.seen := st.seen.set(arg.get_name,true);
+                }
+            } else {
+                var func : expr;
+                (func,st) := e.func.type_elide_int(true,m,st);
+                var vrb := e.func.get_verb;
+                b := b & verb_out_to_in(vrb) | verb_mono(vrb); 
+                var newargs : vector[expr];
+                var idx := e.args.begin;
+                while idx < e.args.end {
+                    var arg : expr;
+                    var ba := b | verb_first_to_in(vrb) & idx > 0;
+                    (arg,st) := e.args.value(idx).type_elide_int(ba,m,st);
+                    newargs := newargs.append(arg);
+                    idx := idx.next
+                };
+                res := app.make(func,newargs,e.ann);
+            }
         }
     }
 
@@ -205,5 +309,14 @@ object ivy = { ...
         res.out := expr.enc(e);
     }
 
+    export action testelide(inp:str) returns (res:str) = {
+        var e := expr.dec(inp);
+        var ty : expr;
+        var m : symeval;
+        m := m.set(strident.make("foo"),expr.dec("t"));
+        var st : elidest;
+        (e,st) := e.type_elide_int(false,m,st);
+        res := expr.enc(e);
+    }
 }
 

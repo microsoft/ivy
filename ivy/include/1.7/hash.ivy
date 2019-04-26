@@ -26,6 +26,8 @@ module hash_map(domain,range) = {
     # leave y unchanged.
     action get(a:t,x:domain,y:range) returns (y:range) 
 
+    # return true if x maps to some value
+    action mem(a:t,x:domain) returns (res:bool) 
 
     ########################################
     # Specification
@@ -47,6 +49,9 @@ module hash_map(domain,range) = {
 	}
 	after get {
 	    assert (value(a,x) = y) if present(a,x) else (y = old y)
+	}
+	after mem {
+	    assert res <-> present(a,x)
 	}
     }
 
@@ -78,6 +83,13 @@ module hash_map(domain,range) = {
 	        `t`::const_iterator it = `a`.find(x);
   	        if (it != `a`.end())
 		    y = it->second;
+	    >>>
+	}
+
+	implement mem {
+	    <<<
+	        `t`::const_iterator it = `a`.find(x);
+                res = (it != `a`.end());
 	    >>>
 	}
 

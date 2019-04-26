@@ -180,6 +180,7 @@ module expr_base = {
         }
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr)
         action get_name(s:this) returns (res:ident)
+        action app_verb(s:this) returns (res:verb)
     }
 
     object symbol = {
@@ -266,6 +267,9 @@ module expr_base = {
         }
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := s.func.get_verb = vrb;
+        }
+        action app_verb(s:this) returns (res:verb) = {
+            res := s.func.get_verb
         }
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr) = {
             res := s.args.value(p)
