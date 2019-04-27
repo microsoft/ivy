@@ -38,11 +38,23 @@ object ivy = { ...
         action to_cpp(s:expr) returns (res:cpp.expr)
     }
     
+    object ident = { ...
+        action to_cpp(s:this) returns (res:cpp.ident)
+    }
+
+    object strident = { ...
+        action to_cpp(s:this) returns (res:cpp.ident) = {
+            var t : cpp.strident;
+            t.val := s.val;
+            res := t
+        }
+    }
+
     object symbol = { ...
         instantiate generic_to_cpp(ivy.symbol,cpp.symbol,cpp.expr)
         action to_cpp_int(s:symbol) returns (res:cpp.symbol) = {
-            res.name := s.name;
-            res.vrb := cpp.str_to_verb(res.name);
+            res.name := s.name.to_cpp;
+            res.vrb := cpp.str_to_verb(res.name.to_str);
         }
     }
 
@@ -106,9 +118,11 @@ object ivy = { ...
             res.ftype.base.name := s.name.to_cpp;
             var idx := s.inputs.begin;
             while idx < s.inputs.end {
+                var arg := s.inputs.value(idx);
                 var argt : cpp.simpletype;
-                argt._type := cpp.inttype(s.ann);
-                argt.name := s.inputs.value(idx).to_cpp;
+                argt._type := arg.get_arg(1).to_cpp;
+                argt.name := arg.get_arg(0).to_cpp;
+                call show_simpltype(argt);
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
@@ -121,6 +135,8 @@ object ivy = { ...
             res.body := body
         }
     }
+
+    import action show_simpltype(argt:cpp.simpletype)
 
     object expr = { ...
         instantiate test_to_cpp(ivy.expr,cpp.expr)

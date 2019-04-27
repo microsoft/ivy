@@ -150,6 +150,23 @@ object cpp = {
     }        
 
 
+    object typedecl = {
+        variant this of decl = struct {
+            ttype : simpletype,
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("typedef");
+            b := b.extend(" ");
+            b := s.ttype.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+    }
+
     object funcdecl = {
         variant this of decl = struct {
             ftype : functype,
@@ -185,19 +202,32 @@ object cpp = {
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             var ann : annot;
             (st,ann) := st.get_ann;
-            var f : functype;
-            (st,f) := functype.parse(st,prio);
-            if st.ok & st.tok = ";" {
-                var s : funcdecl;
-                s.ftype := f;
-                s.ann := ann;
-                res := s;
-            } else if st.ok & st.tok = "{" {
-                var s : funcimpl;
-                s.ftype := f;
-                s.ann := ann;
-                (st,s.body) := stmt.parse(st,0);
-                res := s;
+            if st.tok = "typedef" {
+                var t : typedecl;
+                (st,t.ttype) := simpletype.parse(st,0);
+                t.ann := ann;
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                };
+                res := t;
+            } else {
+                var f : functype;
+                (st,f) := functype.parse(st,prio);
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                    var s : funcdecl;
+                    s.ftype := f;
+                    s.ann := ann;
+                    res := s;
+                } else if st.ok & st.tok = "{" {
+                    var s : funcimpl;
+                    s.ftype := f;
+                    s.ann := ann;
+                    (st,s.body) := stmt.parse(st,0);
+                    res := s;
+                }
             }
         }
 
@@ -212,7 +242,7 @@ object cpp = {
         }
     }
 
-    action namedtype(name:str,ann : annot) returns(res:expr) = {
+    action namedtype(name:ident,ann : annot) returns(res:expr) = {
         var s : symbol;
         s.name := name;
         s.ann.line := ann.line;
@@ -220,11 +250,11 @@ object cpp = {
     }
 
     action inttype(ann : annot) returns(res:expr) = {
-        res := namedtype("int",ann);
+        res := namedtype(strident.make("int"),ann);
     }
 
     action voidtype(ann : annot) returns(res:expr) = {
-        res := namedtype("void",ann);
+        res := namedtype(strident.make("void"),ann);
     }
 
 

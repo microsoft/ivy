@@ -93,7 +93,7 @@ object ivy = {
             var idx := s.decls.begin;
             while idx < s.decls.end {
                 b := b.newline;
-                b := s.decls.value(0).encode(b,0);
+                b := s.decls.value(idx).encode(b,0);
                 idx := idx.next;
             };
             b := b.unnest;
@@ -101,6 +101,52 @@ object ivy = {
             b := b.extend("}");
         }	    
     }
+
+    object typedc = {
+        variant this of decl = struct {
+            sort : expr,
+            ann : annot
+        }
+
+        action make(sort:expr) returns (res:decl) =
+        {
+            var s:this;
+            s.sort := sort;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("type");
+            b := b.extend(" ");
+            b := s.sort.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }        
+
+    object vardc = {
+        variant this of decl = struct {
+            typing : expr,
+            ann : annot
+        }
+
+        action make(typing:expr) returns (res:decl) =
+        {
+            var s:this;
+            s.typing := typing;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("var");
+            b := b.extend(" ");
+            b := s.typing.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }        
 
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
@@ -131,6 +177,18 @@ object ivy = {
                         (st,s.body) := stmt.parse(st,1);
                     } else {st.ok := false}
                 } else {st.ok := false};
+                res := s
+            } else if st.tok = "type" {
+                st := st.consume;
+                var s : typedc;
+                (st,s.ann) := st.get_ann;
+                (st,s.sort) := symbol.parse(st);
+                res := s
+            } else if st.tok = "var" {
+                st := st.consume;
+                var s : vardc;
+                (st,s.ann) := st.get_ann;
+                (st,s.typing) := symbol.parse(st);
                 res := s
             } else {st.ok := false}
         }

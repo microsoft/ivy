@@ -131,6 +131,7 @@ module expr_base = {
     object ident = {
         type this
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        action to_str(s:this) returns (res:str)
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -147,6 +148,9 @@ module expr_base = {
             var s : this;
             s.val := val;
             res := s
+        }
+        action to_str(s:this) returns (res:str) = {
+            res := s.val
         }
     }
 
