@@ -100,8 +100,8 @@ object ivy = { ...
     object varst = { ...
         instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
         action to_cpp_int(s:varst) returns (res:cpp.varst) = {
-            res.vtype._type := cpp.inttype(s.ann);
-            res.vtype.name := s.name.to_cpp;
+            res.vtype._type := s.name.get_arg(1).to_cpp;
+            res.vtype.name := s.name.get_arg(0).to_cpp;
         }
     }
 
@@ -114,7 +114,7 @@ object ivy = { ...
         action to_cpp_int(s:actdc) returns (res:cpp.funcimpl) = {
             var has_output := s.outputs.end > 0;
             res.ftype.base._type :=
-                cpp.inttype(s.ann) if has_output else cpp.voidtype(s.ann);
+                s.outputs.value(0).get_arg(1).to_cpp if has_output else cpp.voidtype(s.ann);
             res.ftype.base.name := s.name.to_cpp;
             var idx := s.inputs.begin;
             while idx < s.inputs.end {
@@ -122,13 +122,12 @@ object ivy = { ...
                 var argt : cpp.simpletype;
                 argt._type := arg.get_arg(1).to_cpp;
                 argt.name := arg.get_arg(0).to_cpp;
-                call show_simpltype(argt);
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
             var body := s.body.to_cpp;
             if has_output {
-                var rvar := s.outputs.value(0).to_cpp;
+                var rvar := s.outputs.value(0).get_arg(0).to_cpp;
                 body := cpp.sequence.make(body,cpp.retst.make(rvar,s.ann),s.ann);
                 body := cpp.sequence.make(cpp.varst.make(res.ftype.base._type,rvar,s.ann),body,s.ann);
             };
@@ -136,7 +135,21 @@ object ivy = { ...
         }
     }
 
-    import action show_simpltype(argt:cpp.simpletype)
+    object typedc = { ...
+        instantiate generic_to_cpp(this,cpp.typedecl,cpp.decl)
+	action to_cpp_int(s:typedc) returns (res:cpp.typedecl) = {
+	    res.ttype._type := cpp.inttype(s.ann);
+	    res.ttype.name := s.sort.to_cpp;
+	}
+    }
+	
+    object vardc = { ...
+        instantiate generic_to_cpp(this,cpp.vardecl,cpp.decl)
+	action to_cpp_int(s:vardc) returns (res:cpp.vardecl) = {
+	    res.vtype._type := s.typing.get_arg(0).to_cpp;
+	    res.vtype.name := s.typing.get_arg(1).to_cpp;
+	}
+    }
 
     object expr = { ...
         instantiate test_to_cpp(ivy.expr,cpp.expr)

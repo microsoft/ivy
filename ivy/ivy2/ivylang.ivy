@@ -163,7 +163,7 @@ object ivy = {
                 st := st.consume;
                 var s : actdc;
                 (st,s.ann) := st.get_ann;
-                (st,s.name) := expr.parse(st,0);
+                (st,s.name) := symbol.parse(st);
                 if st.ok & st.tok = "(" {
                     (st,s.inputs) := expr.tup.parse(st,0);
                 };
@@ -188,7 +188,7 @@ object ivy = {
                 st := st.consume;
                 var s : vardc;
                 (st,s.ann) := st.get_ann;
-                (st,s.typing) := symbol.parse(st);
+                (st,s.typing) := expr.parse(st,0);
                 res := s
             } else {st.ok := false}
         }

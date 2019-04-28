@@ -48,8 +48,8 @@ object cpp = {
             b := b.extend(" ");
             b := simpletype.tup.encode(s.args,b,0);
         }
-        action parse(st : pstate, prio:priority) returns(st : pstate, res:functype) = {
-            (st,res.base) := simpletype.parse(st,prio);
+        action parse(st : pstate, base : simpletype, prio:priority) returns(st : pstate, res:functype) = {
+            res.base := base;
             if st.ok {
                 (st,res.args) := simpletype.tup.parse(st,prio);
             }
@@ -167,6 +167,21 @@ object cpp = {
         }
     }
 
+    object vardecl = {
+        variant this of decl = struct {
+            vtype : simpletype,
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := s.vtype.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+    }
+
     object funcdecl = {
         variant this of decl = struct {
             ftype : functype,
@@ -213,21 +228,37 @@ object cpp = {
                 };
                 res := t;
             } else {
-                var f : functype;
-                (st,f) := functype.parse(st,prio);
-                if st.ok & st.tok = ";" {
-                    st := st.consume;
-                    var s : funcdecl;
-                    s.ftype := f;
-                    s.ann := ann;
-                    res := s;
-                } else if st.ok & st.tok = "{" {
-                    var s : funcimpl;
-                    s.ftype := f;
-                    s.ann := ann;
-                    (st,s.body) := stmt.parse(st,0);
-                    res := s;
-                }
+		var t : simpletype;
+		(st,t) := simpletype.parse(st,prio);
+		if st.ok & st.tok = "(" {
+                    var f : functype;
+                    (st,f) := functype.parse(st,t,prio);
+                    if st.ok & st.tok = ";" {
+			st := st.consume;
+			var s : funcdecl;
+			s.ftype := f;
+			s.ann := ann;
+			res := s;
+                    } else if st.ok & st.tok = "{" {
+			var s : funcimpl;
+			s.ftype := f;
+			s.ann := ann;
+			(st,s.body) := stmt.parse(st,0);
+			res := s;
+		    } else {
+			st.ok := false;
+		    }
+                } else {
+                    if st.ok & st.tok = ";" {
+			st := st.consume;
+			var s : vardecl;
+			s.vtype := t;
+			s.ann := ann;
+			res := s;
+		    } else {
+			st.ok := false;
+		    }
+		}
             }
         }
 
