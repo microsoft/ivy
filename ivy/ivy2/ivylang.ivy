@@ -200,6 +200,9 @@ object ivy = {
             }
         }
     }
+
+    instantiate prog_base
+
 }
 
 export ivy.expr.enc
@@ -211,6 +214,9 @@ export ivy.stmt.encdec
 export ivy.decl.enc
 export ivy.decl.dec
 export ivy.decl.encdec
+export ivy.prog.enc
+export ivy.prog.dec
+export ivy.prog.encdec
 
 import parse_error
 

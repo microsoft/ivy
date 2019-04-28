@@ -218,6 +218,7 @@ object cpp = {
             var ann : annot;
             (st,ann) := st.get_ann;
             if st.tok = "typedef" {
+                st := st.consume;
                 var t : typedecl;
                 (st,t.ttype) := simpletype.parse(st,0);
                 t.ann := ann;
@@ -273,6 +274,8 @@ object cpp = {
         }
     }
 
+    instantiate prog_base
+
     action namedtype(name:ident,ann : annot) returns(res:expr) = {
         var s : symbol;
         s.name := name;
@@ -301,6 +304,9 @@ export cpp.stmt.encdec
 export cpp.decl.enc
 export cpp.decl.dec
 export cpp.decl.encdec
+export cpp.prog.enc
+export cpp.prog.dec
+export cpp.prog.encdec
 
 
 # export pretty.make

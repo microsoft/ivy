@@ -583,3 +583,37 @@ module decl_base(expr,stmt) = {
         }
     }
 }
+    
+module prog_base = {
+    object prog = {
+    type this = struct {
+		decls : vector[decl]
+	    }
+	instantiate parse_intf(this)
+
+	action make(decls : vector[decl]) returns (res:prog) =
+	{
+	    var s:this;
+	    s.decls := decls;
+	    res := s;
+	}
+
+	implement encode(s:this,b:pretty,prio:priority) returns (b:pretty)  {
+	    var idx := s.decls.begin;
+	    while idx < s.decls.end {
+		b := b.newline;
+		b := s.decls.value(idx).encode(b,0);
+		idx := idx.next;
+	    };
+	}	    
+
+	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
+	    while st.tok.end > 0 {
+		var dcl : decl;
+		(st,dcl) := decl.parse(st,0);
+		res.decls := res.decls.append(dcl);
+	    }
+	}
+    }
+}
+

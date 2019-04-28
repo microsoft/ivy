@@ -151,6 +151,17 @@ object ivy = { ...
 	}
     }
 
+    object prog = { ...
+	action to_cpp(s:this) returns (res:cpp.prog) = {
+	    var idx := s.decls.begin;
+	    while idx < s.decls.end {
+		res.decls := res.decls.append(s.decls.value(idx).to_cpp);
+		idx := idx.next
+	    }
+	}
+    }
+	
+
     object expr = { ...
         instantiate test_to_cpp(ivy.expr,cpp.expr)
     }
