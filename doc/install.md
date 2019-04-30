@@ -113,13 +113,33 @@ installation instructions:
 
 #### Z3
 
-Follow the instructions [here](https://github.com/Z3Prover/z3) to
-install Z3. You can test whether Z3 is correctly installed running this:
+On Ubuntu Linux, download this file:
+
+    https://github.com/Z3Prover/z3/releases/download/z3-4.6.0/z3-4.6.0-x64-ubuntu-16.04.zip
+    
+Don't get a later version because there are incompatible changes in
+Z3's API after this version. Now do this:
+
+    cd ~
+    unzip Downloads/z3-4.6.0-x64-ubuntu-16.04.zip
+
+Put these commands in your .profile:
+
+    export PYTHONPATH=~/z3-4.6.0-x64-ubuntu-16.04/bin/python:$PYTHONPATH
+    export PATH=~/z3-4.6.0-x64-ubuntu-16.04/bin/python:$PATH
+
+Put this command in your .bashrc:
+
+    export LD_LIBRARY_PATH=~/z3-4.6.0-x64-ubuntu-16.04/bin:$LD_LIBRARY_PATH
+    
+Now test your installation like this:
 
     $ python
     >>> import z3
 
-If you want to install Z3 in a virtual environment, you can install Z3
+If you don't get an error message, Z3 may be installed.
+
+If this doesn't work, download the version 4.6.0 source code and follow the instructions for compiling and installing. If you want to install Z3 in a virtual environment, you can install Z3
 like this:
 
     $ make install PREFIX=/path/to/ivy_env
