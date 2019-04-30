@@ -264,6 +264,8 @@ object ivy = { ...
 	
     # Translate a local variable declaration to C++. 
 
+    import action show_ident(id:ident)
+
     object vardc = { ...
         instantiate generic_to_cpp(this,cpp.vardecl,cpp.decl)
 	action to_cpp_int(s:vardc,st:tocppst) returns (res:cpp.vardecl,st:tocppst) = {
@@ -277,7 +279,9 @@ object ivy = { ...
         action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
             if s.is_destructor {
                 var dom := times.unfold_left(s.typing.get_arg(1).get_arg(0));
-                st := st.add_member(dom.value(0).get_name,s);
+                var type_ident := dom.value(0).get_name;
+                call show_ident(type_ident);
+                st := st.add_member(type_ident,s);
             }
         }
 

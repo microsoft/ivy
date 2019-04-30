@@ -83,6 +83,7 @@ object ivy = { ...
     object vardc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res.is_destructor := s.is_destructor;
             (res.typing,st) := s.typing.flat(st);
 	}
     }
