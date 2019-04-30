@@ -1,0 +1,100 @@
+#lang ivy1.7
+
+# The flattening pass lowers module instantiations and
+# and `.` operators.
+
+include ivylang
+
+
+module generic_flat(ivytype,ivyclass) = {
+    action flat(s:ivytype,st:flatst) returns (res:ivyclass,st:flatst) = {
+        var t : ivytype;
+        (t,st) := s.flat_int(st);
+        t.ann := s.ann;
+        res := t
+    }
+}
+
+object ivy = { ...
+
+    object flatst = {
+        type this
+    }
+
+    object expr = { ...
+        action flat(s:this,st:flatst) returns (s:expr,st:flatst)
+    }
+
+    action applydot(arg:expr,member:ident) returns (res:expr) = {
+        var name := dotident.make(arg.get_name,member.to_str);
+        res := symbol.make(name,arg.get_ann);
+    }
+    
+    object app = { ...
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
+            var arg0 : expr;
+            (arg0,st) := s.args.value(0).flat(st);
+            if s.is(verb.dot) & (s.args.value(0) isa symbol) & (s.args.value(1) isa symbol) {
+                res := applydot(arg0,s.args.value(1).get_name)
+            } else {
+                var arg1 : expr;
+                (arg1,st) := s.args.value(1).flat(st);
+                res := app.make2(s.func,arg0,arg1,s.ann);
+            }
+        }
+    }
+
+    object stmt = { ...
+        action flat(s:this,st:flatst) returns (s:this,st:flatst)
+    }
+    
+    object decl = { ...
+        action flat(s:decl,st:flatst) returns (res:decl,st:flatst)
+    }
+
+    action flat_exprvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e : expr;
+            (e,st) := es.value(idx).flat(st);
+            es := es.set(idx,e);
+        }
+    }
+
+    object actdc = { ...
+        instantiate generic_flat(this,decl)
+        action flat_int(s:actdc,st:flatst) returns (res:this,st:flatst) = {
+            (res.name,st) := s.name.flat(st);
+            (res.inputs,st) := flat_exprvec(s.inputs,st);
+            (res.outputs,st) := flat_exprvec(s.outputs,st);
+            (res.body,st) := s.body.flat(st);
+        }
+    }
+
+    object typedc = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            (res.sort,st) := s.sort.flat(st);
+	}
+    }
+	
+    object vardc = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            (res.typing,st) := s.typing.flat(st);
+	}
+    }
+
+    object prog = { ...
+        action flat(p:prog,st:flatst) returns (p:prog,st:flatst) = {
+            var idx := p.decls.begin;
+            var decls : vector[decl];
+            while idx < p.decls.end {
+                var d : decl;
+                (d,st) := p.decls.value(idx).flat(st);
+                decls := decls.append(d);
+                idx := idx.next;
+            }
+        }
+    }
+}

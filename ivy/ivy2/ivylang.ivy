@@ -3,16 +3,31 @@
 include lang
 
 object ivy = {
+
+    # Here, we instantiate the Ivy language traits that are in common
+    # with C++.
+
     instantiate verb_base
-    instantiate expr_base
+    instantiate expr_base(false)
     instantiate stmt_base(expr,":=",false)
     instantiate decl_base(expr,stmt)
 
+    # Now we have the operators that are unique to Ivy.
+    #
+    # The binary `:` operator is used to represent a type
+    # judgement.
+
     instance colon : built_in_binary(":",verb.colon,50)
 
-
-    # Here, we parse statements specific to Ivy: var and assign.
+    # The dot is used to introduce members of namespaces
     
+    instance dot : built_in_binary(".",verb.dot,100)
+
+    # Here, we have statements specific to Ivy and the Ivy statement
+    # parser.
+    
+    # The object `varst` represents the `var` statement.
+
     object varst = {
         variant this of stmt = struct {
             name : expr,
@@ -41,7 +56,6 @@ object ivy = {
 
     object stmt = { ...
 
-
         action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             if st.tok = "var" {
                 st := st.consume;
@@ -66,9 +80,12 @@ object ivy = {
                     } else {
                         st.ok := st.tok = "}";  # allow to omit final semicolon
                     }
-                }
-                else {
-                    st.ok := false;
+                } else if st.ok & st.tok = ";" {
+                    st := st.consume;
+                    s.rhs := s.lhs;
+                    s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+                } else {
+                    st.ok := st.tok = "}";  # allow to omit final semicolon
                 };
                 res := s;
             }
@@ -163,7 +180,7 @@ object ivy = {
                 st := st.consume;
                 var s : actdc;
                 (st,s.ann) := st.get_ann;
-                (st,s.name) := symbol.parse(st);
+                (st,s.name) := expr.parse(st,99);
                 if st.ok & st.tok = "(" {
                     (st,s.inputs) := expr.tup.parse(st,0);
                 };
@@ -173,16 +190,17 @@ object ivy = {
                 };
                 if st.ok & st.tok = "=" {
                     st := st.consume;
+                    s.has_body := true;
                     if st.tok = "{" {
                         (st,s.body) := stmt.parse(st,1);
                     } else {st.ok := false}
-                } else {st.ok := false};
+                };
                 res := s
             } else if st.tok = "type" {
                 st := st.consume;
                 var s : typedc;
                 (st,s.ann) := st.get_ann;
-                (st,s.sort) := symbol.parse(st);
+                (st,s.sort) := expr.parse(st,0);
                 res := s
             } else if st.tok = "var" {
                 st := st.consume;

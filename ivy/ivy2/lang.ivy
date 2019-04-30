@@ -31,9 +31,13 @@ type priority
 # - `verb_to_str` is the inverse map
 # - `verb_to_prio` gives the priority of a verb
 
+# The verb `empty` represents the empty tuple, of type `unit`. Neither
+# of these is available in the source lanuage, but they are used
+# internally.
+
 module verb_base = {
     object verb = {
-        type this = { none, arrow, plus, times, colon, app }
+        type this = { none, arrow, plus, times, colon, app, empty, dot }
     }
     
     function str_to_verb(X:str) : verb
@@ -58,7 +62,7 @@ module built_in_binary (optok,vrb,opprio) = {
 
     action make(lhs:expr,rhs:expr,ann:annot) returns (res:expr) = {
         var s:app;
-        s.func := symbol.make(optok,ann);
+        s.func := symbol.makestr(optok,ann);
         s.args := s.args.append(lhs);
         s.args := s.args.append(rhs);
         s.ann := ann;
@@ -78,6 +82,15 @@ module built_in_binary (optok,vrb,opprio) = {
 
 }    
 
+module built_in_const (optok,vrb) = {
+    instantiate built_in(optok,vrb,0)
+
+    action make(ann:annot) returns (res:expr) = {
+        res := symbol.makestr(optok,ann);
+    }
+}
+    
+    
 module genbinop(expr,arg) = {
     variant this of expr = struct {
 	lhs : arg,
@@ -123,7 +136,7 @@ module parse_intf(expr) = {
 
 
 
-module expr_base = {
+module expr_base(cppstyle) = {
 
     # Identifiers of type `ident` are use as names. They don't have
     # annotations, so they can be hashed and compared for equality.
@@ -132,6 +145,8 @@ module expr_base = {
         type this
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
         action to_str(s:this) returns (res:str)
+        action get_namesp(s:this) returns (res:ident)
+        action get_member(s:this) returns (res:str)
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -173,6 +188,37 @@ module expr_base = {
         }
     }
 
+    # Dotted identifiers are used to represent members of a namespace.
+        
+    object dotident = {
+        variant this of ident = struct {
+            namesp : ident,
+            member : str
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.namesp.encode(b,0);
+            b := b.extend("::" if cppstyle else ".");
+            b := b.extend(s.member)
+        }
+        action make(namesp:ident,member:str) returns (res:ident) = {
+            var s : this;
+            s.namesp := namesp;
+            s.member := member;
+            res := s
+        }
+        action to_str(s:this) returns (res:str) = {
+            res := s.namesp.to_str;
+            res := res.extend(".");
+            res := res.extend(s.member);
+        }
+        action get_namesp(s:this) returns (res:ident) = {
+            res := s.namesp;
+        }
+        action get_member(s:this) returns (res:str) = {
+            res := s.member;
+        }
+    }
+
     object expr = {
         type this
         instantiate parse_intf(expr)
@@ -185,6 +231,7 @@ module expr_base = {
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr)
         action get_name(s:this) returns (res:ident)
         action app_verb(s:this) returns (res:verb)
+        action get_ann(s:this) returns (res:annot)
     }
 
     object symbol = {
@@ -193,7 +240,14 @@ module expr_base = {
             vrb : verb,
             ann : annot
         }
-        action make(name:str,ann:annot) returns (res:expr) = {
+        action make(name:ident,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := name;
+            s.vrb := verb.none;
+            s.ann := ann;
+            res := s
+        }
+        action makestr(name:str,ann:annot) returns (res:expr) = {
             var s:symbol;
             s.name := strident.make(name);
             s.vrb := str_to_verb(name);
@@ -229,6 +283,9 @@ module expr_base = {
         action get_name(s:this) returns (res:ident) = {
             res := s.name
         }
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
+        }
     }
 
     object app = {
@@ -241,6 +298,21 @@ module expr_base = {
             var s:app;
             s.func := func;
             s.args := args;
+            s.ann := ann;
+            res := s
+        }
+        action make1(func:expr,arg0:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := s.args.append(arg0);
+            s.ann := ann;
+            res := s
+        }
+        action make2(func:expr,arg0:expr,arg1:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := s.args.append(arg0);
+            s.args := s.args.append(arg1);
             s.ann := ann;
             res := s
         }
@@ -277,6 +349,9 @@ module expr_base = {
         }
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr) = {
             res := s.args.value(p)
+        }
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
         }
     }
 
@@ -328,9 +403,10 @@ module expr_base = {
     instance arrow : built_in_binary("->",verb.arrow,5)
     instance plus : built_in_binary("+",verb.plus,10)
     instance times : built_in_binary("*",verb.times,11)
+    instance empty : built_in_const("()",verb.empty)
 
-    # Treat '(' as a builtin operator for function application. The
-    # real operator is '', but '(' will work.
+    # Treat open paren as a builtin operator for function application. The
+    # real operator is the empty string, but open paren will work.
 
     instantiate built_in("(",verb.app,99)        
 
@@ -358,7 +434,7 @@ module expr_base = {
                     s.func := res;
                     (st,s.args) := tup.parse(st,0);
                 } else {
-                    s.func := symbol.make(st.tok,s.ann);
+                    s.func := symbol.makestr(st.tok,s.ann);
                     st := st.consume;
                     s.args := s.args.append(res);
                     var arg : expr;
@@ -404,10 +480,12 @@ module stmt_base(expr,asgntok,cppstyle) = {
 
         action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
-            b := s.lhs.encode(b,0);
-            b := b.extend(" ");
-            b := b.extend(asgntok);
-            b := b.extend(" ");
+            if s.lhs.get_verb ~= verb.empty {
+                b := s.lhs.encode(b,0);
+                b := b.extend(" ");
+                b := b.extend(asgntok);
+                b := b.extend(" ");
+            };
             b := s.rhs.encode(b,0);
             b := b.extend(";");
             b := b.unnest;
@@ -548,17 +626,20 @@ module decl_base(expr,stmt) = {
             name : expr,
             inputs : vector[expr],
             outputs : vector[expr],
+            has_body : bool,
             body : stmt,
             ann : annot
         }
 
-        action make(name : expr,inputs : vector[expr],outputs : vector[expr],body : stmt)
+        action make(name : expr, inputs : vector[expr], outputs : vector[expr], has_body:bool,
+                    body : stmt)
             returns (res:decl) =
         {
             var s:this;
             s.name := name;
             s.inputs := inputs;
             s.outputs := outputs;
+            s.has_body := has_body;
             s.body := body;
             res := s;
         }
@@ -576,11 +657,28 @@ module decl_base(expr,stmt) = {
                 b := expr.tup.encode(s.outputs,b,prio);
             };
             b := b.unnest;
-            b := b.extend(" ");
-            b := b.extend("=");
-            b := b.extend(" ");
-            b := s.body.encode(b,2);
+            if s.has_body {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.body.encode(b,2);
+            }
         }
+
+        # A member is a action of the form `action type.member(x:type,...)`
+
+        action is_member(s:this) returns (res:bool) = {
+            res := s.name.get_name isa dotident
+            & s.inputs.end > 0
+            & s.member_type = s.name.get_name.get_namesp;
+        }
+
+        # If this is a member action, return the type it is a member of.
+
+        action member_type(s:this) returns (res:ident) = {
+            res := s.inputs.value(0).get_arg(1).get_name;
+        }
+
     }
 }
     

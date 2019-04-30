@@ -206,7 +206,9 @@ object str = { ...
 # about the textual location of the object, and also any comments that
 # precede it. This allows error messages to refer to the source text,
 # and also allows code to be emitted including the original source
-# comments. The type `annot` represents annotations.
+# comments. The type `annot` represents annotations. The `strip`
+# operator removes comments from an annotation, keeping the source
+# reference.
 
 object annot = {
     type this = struct {
@@ -224,7 +226,9 @@ object annot = {
             idx := idx.next;
         }
     }    
-    
+    action strip(s:this) returns (s:this) = {
+        s.comments := vector[str].empty;
+    }
 }
 
 # Parser state
