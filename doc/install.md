@@ -111,38 +111,49 @@ installation instructions:
     $ cd ivy_env
     $ . bin/activate
 
+#### GCC
+
+You need to have a C++ compiler installed. If you don't already have one, do this:
+
+    sudo apt-get install g++
+
 #### Z3
 
 On Ubuntu Linux, download this file:
 
-    https://github.com/Z3Prover/z3/releases/download/z3-4.6.0/z3-4.6.0-x64-ubuntu-16.04.zip
+    https://github.com/Z3Prover/z3/archive/z3-4.6.0.tar.gz
     
 Don't get a later version because there are incompatible changes in
-Z3's API after this version. Now do this:
+Z3's API after this version. Now, if you don't mind doing a system-wide
+instalaltion of Z3, do this:
 
     cd ~
-    unzip Downloads/z3-4.6.0-x64-ubuntu-16.04.zip
-
-Put these commands in your .profile:
-
-    export PYTHONPATH=~/z3-4.6.0-x64-ubuntu-16.04/bin/python:$PYTHONPATH
-    export PATH=~/z3-4.6.0-x64-ubuntu-16.04/bin/python:$PATH
-
-Put this command in your .bashrc:
-
-    export LD_LIBRARY_PATH=~/z3-4.6.0-x64-ubuntu-16.04/bin:$LD_LIBRARY_PATH
+    tar xzf Downloads/z3-4.6.0.tar.gz
+    cd z3-4.6.0
+    python scripts/mk_make.py --prefix=/usr/local --python --pypkgdir=/usr/local/lib/python2.7/site-packages
+    cd build
+    make -j 4
+    sudo make install
+    
+Note, the `-j 4` tells make to use four CPU's. You can use another number if you want.
     
 Now test your installation like this:
 
     $ python
     >>> import z3
 
-If you don't get an error message, Z3 may be installed.
+If you don't get an error message, Z3 may be installed. If you do get
+an error message, it definitely isn't.
 
-If this doesn't work, download the version 4.6.0 source code and follow the instructions for compiling and installing. If you want to install Z3 in a virtual environment, you can install Z3
-like this:
+If you don't want to do a system-wide installation, you can find some
+instructions
+[here](http://www.cs.utexas.edu/users/moore/acl2/manuals/current/manual/index-seo.php/SMT____Z3-INSTALLATION). If
+you follow these instructions, then also do this:
 
-    $ make install PREFIX=/path/to/ivy_env
+    export Z3DIR=$HOME/usr
+    
+and put the above command in your .profile as well.
+
 
 #### Python packages
 
