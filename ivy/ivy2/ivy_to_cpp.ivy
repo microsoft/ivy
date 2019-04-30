@@ -242,6 +242,7 @@ object ivy = { ...
                 var d : cpp.decl;
                 (d,st) := members.value(idx).to_cpp(st);
                 res.members := res.members.append(d);
+                idx := idx.next
             }
 	}
     }
@@ -289,6 +290,10 @@ object ivy = { ...
 
     object decl = { ...
         instantiate test_to_cpp(ivy.decl,cpp.decl)
+    }
+
+    object prog = { ...
+        instantiate test_to_cpp(ivy.prog,cpp.prog)
     }
 }
 

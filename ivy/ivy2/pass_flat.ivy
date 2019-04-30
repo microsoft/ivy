@@ -58,6 +58,7 @@ object ivy = { ...
             var e : expr;
             (e,st) := es.value(idx).flat(st);
             es := es.set(idx,e);
+            idx := idx.next;
         }
     }
 
@@ -94,7 +95,8 @@ object ivy = { ...
                 (d,st) := p.decls.value(idx).flat(st);
                 decls := decls.append(d);
                 idx := idx.next;
-            }
+            };
+            p.decls := decls;
         }
     }
 }

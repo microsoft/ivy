@@ -706,7 +706,7 @@ module prog_base = {
 	}	    
 
 	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
-	    while st.tok.end > 0 {
+	    while st.ok & st.tok.end > 0 {
 		var dcl : decl;
 		(st,dcl) := decl.parse(st,0);
 		res.decls := res.decls.append(dcl);

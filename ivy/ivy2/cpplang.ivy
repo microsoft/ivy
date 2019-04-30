@@ -46,7 +46,11 @@ object cpp = {
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.base.encode(b,0);
             b := b.extend(" ");
-            b := simpletype.tup.encode(s.args,b,0);
+            if s.args.end > 0 {
+                b := simpletype.tup.encode(s.args,b,0);
+            } else {
+                b := b.extend("()");
+            }
         }
         action parse(st : pstate, base : simpletype, prio:priority) returns(st : pstate, res:functype) = {
             res.base := base;
