@@ -19,10 +19,6 @@ object ivy = {
 
     instance colon : built_in_binary(":",verb.colon,50)
 
-    # The dot is used to introduce members of namespaces
-    
-    instance dot : built_in_binary(".",verb.dot,100)
-
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
     
@@ -145,6 +141,7 @@ object ivy = {
     object vardc = {
         variant this of decl = struct {
             typing : expr,
+            is_destructor : bool,
             ann : annot
         }
 
@@ -157,7 +154,7 @@ object ivy = {
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
-            b := b.extend("var");
+            b := b.extend("destructor" if s.is_destructor else "var");
             b := b.extend(" ");
             b := s.typing.encode(b,0);
             b := b.unnest;
@@ -202,9 +199,10 @@ object ivy = {
                 (st,s.ann) := st.get_ann;
                 (st,s.sort) := expr.parse(st,0);
                 res := s
-            } else if st.tok = "var" {
-                st := st.consume;
+            } else if st.tok = "var" | st.tok = "destructor" {
                 var s : vardc;
+                s.is_destructor := (st.tok = "destructor");
+                st := st.consume;
                 (st,s.ann) := st.get_ann;
                 (st,s.typing) := expr.parse(st,0);
                 res := s

@@ -69,6 +69,9 @@ module built_in_binary (optok,vrb,opprio) = {
         res := s
     }
 
+    # Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
+    # xn`, where `*` is a binary operator that associates to the left.
+
     action fold_left(args:vector[expr],ann:annot) returns (res:expr) = {
         if args.end > 0 {
             res := args.value(0);
@@ -80,6 +83,19 @@ module built_in_binary (optok,vrb,opprio) = {
         }
     }
 
+    # Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
+    # where `*` is a binary operator that associates to the left.
+
+    action unfold_left(e:expr) returns (args:vector[expr]) = {
+        var b := e.is(vrb);  # workaround
+        while b {
+            args := args.append(e.get_arg(1));
+            e := e.get_arg(0);
+            b := e.is(vrb);
+        };
+        args := args.append(e);
+        args := args.reverse;
+    }
 }    
 
 module built_in_const (optok,vrb) = {
@@ -404,6 +420,10 @@ module expr_base(cppstyle) = {
     instance plus : built_in_binary("+",verb.plus,10)
     instance times : built_in_binary("*",verb.times,11)
     instance empty : built_in_const("()",verb.empty)
+
+    # The dot is used to introduce members of namespaces
+    
+    instance dot : built_in_binary(".",verb.dot,100)
 
     # Treat open paren as a builtin operator for function application. The
     # real operator is the empty string, but open paren will work.

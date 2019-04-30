@@ -80,6 +80,15 @@ object ivy = { ...
         }
     }
         
+    # In context of class declarations, identifiers are declared
+    # without their namespaces.
+
+    action name_in_context(name:expr,st:tocppst) returns(name:expr) = {
+        if st.in_class {
+	    name := symbol.makestr(name.get_name.get_member,name.get_ann);
+	};
+    }
+
     object ident = { ...
         action to_cpp(s:this) returns (res:cpp.ident)
     }
@@ -186,10 +195,7 @@ object ivy = { ...
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
-	    var name := s.name; 
-	    if st.in_class {
-		name := symbol.makestr(name.get_name.get_member,name.get_ann);
-	    };
+	    var name := name_in_context(s.name,st); 
             (res.ftype.base.name,st) := name.to_cpp(st);
             var idx := s.inputs.begin;
             st.is_member := s.is_member;
@@ -256,13 +262,29 @@ object ivy = { ...
 	}
     }
 	
+    # Translate a local variable declaration to C++. 
+
     object vardc = { ...
         instantiate generic_to_cpp(this,cpp.vardecl,cpp.decl)
 	action to_cpp_int(s:vardc,st:tocppst) returns (res:cpp.vardecl,st:tocppst) = {
-	    (res.vtype._type,st) := s.typing.get_arg(0).to_cpp(st);
-	    (res.vtype.name,st) := s.typing.get_arg(1).to_cpp(st);
+            var name := name_in_context(s.typing.get_arg(0),st);
+	    (res.vtype._type,st) := s.typing.get_arg(1).to_cpp(st);
+	    (res.vtype.name,st) := name.to_cpp(st);
 	}
+
+        # A type destructor is translated to a data member of the class;
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            if s.is_destructor {
+                var dom := times.unfold_left(s.typing.get_arg(1).get_arg(0));
+                st := st.add_member(dom.value(0).get_name,s);
+            }
+        }
+
+
     }
+
+    # Translate an Ivy program to C++. 
 
     object prog = { ...
 	action to_cpp(s:this,st:tocppst) returns (res:cpp.prog,st:tocppst) = {

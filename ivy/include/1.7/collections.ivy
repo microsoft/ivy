@@ -67,6 +67,10 @@ module array(domain,range) = {
     # remove the last element if there is one
     action pop_back(a:t) returns (a:t)
 
+    # reverse an array
+    action reverse(a:t) returns (a:t)
+    
+
     ########################################
     # Specification
     #
@@ -204,6 +208,15 @@ module array(domain,range) = {
                 for (unsigned i = 0; i < `b`.size(); i++)
 	            `a`.push_back(`b`[i]);
             >>>
+        }
+
+        implement reverse {
+	    <<<
+                for (unsigned i = 0; i < `a`.size()/2; i++) {
+                    std::swap(`a`[i],`a`[`a`.size()-i-1]);
+                }
+            >>>
+            
         }
 
         <<< impl
