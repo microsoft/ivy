@@ -239,6 +239,7 @@ object cpp = {
                 b := b.nest;
                 var idx := s.members.begin;
                 while idx < s.members.end {
+                    b := b.newline;
                     b := s.members.value(idx).encode(b,0);
                     idx := idx.next;
                 };

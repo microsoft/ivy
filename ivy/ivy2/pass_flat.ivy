@@ -68,6 +68,7 @@ object ivy = { ...
             (res.name,st) := s.name.flat(st);
             (res.inputs,st) := flat_exprvec(s.inputs,st);
             (res.outputs,st) := flat_exprvec(s.outputs,st);
+	    res.has_body := s.has_body;
             (res.body,st) := s.body.flat(st);
         }
     }

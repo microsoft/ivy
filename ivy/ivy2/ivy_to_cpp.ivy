@@ -67,8 +67,11 @@ object ivy = { ...
 
             # The name of the "this" parameter in a member
 
-            this_ident : ident
+            this_ident : ident,
 
+	    # True if we are in a class declaration
+
+	    in_class : bool
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -183,7 +186,11 @@ object ivy = { ...
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
-            (res.ftype.base.name,st) := s.name.to_cpp(st);
+	    var name := s.name; 
+	    if st.in_class {
+		name := symbol.makestr(name.get_name.get_member,name.get_ann);
+	    };
+            (res.ftype.base.name,st) := name.to_cpp(st);
             var idx := s.inputs.begin;
             st.is_member := s.is_member;
             if st.is_member {
@@ -238,12 +245,14 @@ object ivy = { ...
             (res.name,st) := s.sort.to_cpp(st);
             res.has_members := true;  # This is not a forward declaration
             var idx := members.begin;
+	    st.in_class := true;
             while idx < members.end {
                 var d : cpp.decl;
                 (d,st) := members.value(idx).to_cpp(st);
                 res.members := res.members.append(d);
                 idx := idx.next
-            }
+            };
+	    st.in_class := false;
 	}
     }
 	
