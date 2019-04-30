@@ -137,6 +137,16 @@ instalaltion of Z3, do this:
     
 Note, the `-j 4` tells make to use four CPU's. You can use another number if you want.
     
+Do this:
+
+    export LD_LIBRARY_PATH=/usr/local/lib:
+    
+and put the above command in `~/.bash` as well. Also, do this:
+
+    export PYTHONPATH=/usr/local/lib/python2.7/site-packages:$PYTHONPATH
+    
+and put the above command in `~/.profile` as well.
+
 Now test your installation like this:
 
     $ python
