@@ -52,6 +52,7 @@ object ivy = { ...
 
 
     instance ident_to_declvec : hash_map(ident,vector[decl])
+    instance ident_to_cppclass : hash_map(ident,expr)
 
     object tocppst = {
         type this = struct {
@@ -60,6 +61,10 @@ object ivy = { ...
             # member actions.
 
             members : ident_to_declvec,
+
+            # Maps types to their C++ superclasses
+
+            cppclasses : ident_to_cppclass,
 
             # True if we are emitting a member action
 
@@ -274,6 +279,12 @@ object ivy = { ...
 	action to_cpp_int(s:typedc,st:tocppst) returns (res:cpp.structdecl,st:tocppst) = {
             var members := st.members.get(s.sort.get_name,vector[decl].empty);
             (res.name,st) := s.sort.to_cpp(st);
+            if st.cppclasses.mem(s.sort.get_name) {
+                res.has_super := true;
+                var dflt : expr;  # workaround
+                var itype := st.cppclasses.get(s.sort.get_name,dflt);
+                (res.super,st) := itype.to_cpp(st)
+            };
             res.has_members := true;  # This is not a forward declaration
             var idx := members.begin;
 	    st.in_class := true;
@@ -329,6 +340,24 @@ object ivy = { ...
 	}
     }
     
+    # Translate an interpret declaration to C++. 
+
+    object interpdc = { ...
+
+        # An interpret declararation determines the C++ superclass of the type.
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            st.cppclasses := st.cppclasses.set(s.itype.get_name,s.ctype);
+        }
+
+        # Interpret declarations are never emitted
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
+        }
+
+    }
+
     # Translate an Ivy program to C++. 
 
     object prog = { ...

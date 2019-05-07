@@ -95,6 +95,13 @@ object ivy = { ...
 	}
     }
 
+    object interpdc = { ...
+        instantiate generic_flat(this,decl)
+	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+	}
+    }
+
     object prog = { ...
         action flat(p:prog,st:flatst) returns (p:prog,st:flatst) = {
             var idx := p.decls.begin;

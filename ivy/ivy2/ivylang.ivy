@@ -185,6 +185,35 @@ object ivy = {
     }
         
 
+    object interpdc = {
+        variant this of decl = struct {
+            itype : expr,
+            ctype : expr,
+            ann : annot
+        }
+        
+        action make(itype : expr, ctype : expr, ann : annot) returns (res:decl) =
+        {
+            var s:this;
+            s.itype := itype;
+            s.ctype := ctype;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("interpret");
+            b := b.extend(" ");
+            b := s.itype.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("->");
+            b := b.extend(" ");
+            b := s.ctype.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }
+
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
@@ -238,9 +267,19 @@ object ivy = {
                     st := st.consume;
                 } else { st.ok := false };
                 res := s
-            }
-                
-            else {st.ok := false}
+            } else if st.tok = "interpret" {
+                var s : interpdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.ok & st.tok.end > 0 {  # double quote
+                    (st,s.itype) := expr.parse(st,5);  # priority of arrow
+                    if st.ok & st.tok = "->" {
+                        st := st.consume;
+                        (st,s.ctype) := expr.parse(st,0); 
+                    } else { st.ok := false };
+                } else { st.ok := false };
+                res := s
+            } else {st.ok := false}
         }
         action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
             while st.ok & st.tok.end > 0 & st.tok ~= "}" {
