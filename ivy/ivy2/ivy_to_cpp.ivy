@@ -89,6 +89,21 @@ object ivy = { ...
 	};
     }
 
+    # Curry a function type, that is, translate type `t1 * ... tn -> s` to
+    # type t1 -> (t2 * ... * tn -> s).
+
+    object expr = { ...
+        action curry(ty:expr) returns (ty:expr) = {
+            var dom := times.unfold_left(ty.get_arg(0));
+            var dom2 := dom.segment(1,dom.end);
+            var rng := ty.get_arg(1);
+            var ty2 :=
+                rng if dom2.end = 0
+                else arrow.make(times.fold_left(dom2,ty.get_arg(0).get_ann),rng,ty.get_ann);
+            ty := arrow.make(dom.value(0),ty2,ty.get_ann.strip)
+        }
+    }
+    
     object ident = { ...
         action to_cpp(s:this) returns (res:cpp.ident)
     }
@@ -178,6 +193,9 @@ object ivy = { ...
     object decl = { ...
         action to_cpp(s:this,st:tocppst) returns (res:cpp.decl,st:tocppst)
         action reg_member(s:this,st:tocppst) returns (st:tocppst)
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := true;
+        }
     }
 
     object actdc = { ...
@@ -238,6 +256,13 @@ object ivy = { ...
                 st := st.add_member(s.member_type,actd);
             }
         }
+
+        # An action declaration is not emitted if it is a member and
+        # does not have a body.
+
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := ~s.is_member | s.has_body;
+        }
     }
 
     # Translate a type declaration to C++. All Ivy types translate to
@@ -264,13 +289,15 @@ object ivy = { ...
 	
     # Translate a local variable declaration to C++. 
 
-    import action show_ident(id:ident)
-
     object vardc = { ...
         instantiate generic_to_cpp(this,cpp.vardecl,cpp.decl)
 	action to_cpp_int(s:vardc,st:tocppst) returns (res:cpp.vardecl,st:tocppst) = {
             var name := name_in_context(s.typing.get_arg(0),st);
-	    (res.vtype._type,st) := s.typing.get_arg(1).to_cpp(st);
+            var ty := s.typing.get_arg(1);
+            if s.is_destructor {
+                ty := ty.curry.get_arg(1);
+            };
+	    (res.vtype._type,st) := ty.to_cpp(st);
 	    (res.vtype.name,st) := name.to_cpp(st);
 	}
 
@@ -280,14 +307,28 @@ object ivy = { ...
             if s.is_destructor {
                 var dom := times.unfold_left(s.typing.get_arg(1).get_arg(0));
                 var type_ident := dom.value(0).get_name;
-                call show_ident(type_ident);
                 st := st.add_member(type_ident,s);
             }
         }
 
+        # An variable declaration is not emitted if it is a destructor.
+
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := ~s.is_destructor;
+        }
 
     }
 
+    # Translate a header declaration to C++
+
+    object header = { ...
+        instantiate generic_to_cpp(this,cpp.header,cpp.decl)
+        
+	action to_cpp_int(s:this,st:tocppst) returns (res:cpp.header,st:tocppst) = {
+            res.filename := s.filename
+	}
+    }
+    
     # Translate an Ivy program to C++. 
 
     object prog = { ...
@@ -305,9 +346,11 @@ object ivy = { ...
             
             idx := s.decls.begin;
 	    while idx < s.decls.end {
-                var d : cpp.decl;
-                (d,st) := s.decls.value(idx).to_cpp(st);
-		res.decls := res.decls.append(d);
+                if s.decls.value(idx).emitted(st) {
+                    var d : cpp.decl;
+                    (d,st) := s.decls.value(idx).to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
 		idx := idx.next
 	    }
 	}

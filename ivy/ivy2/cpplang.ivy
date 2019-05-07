@@ -154,6 +154,27 @@ object cpp = {
     }        
 
 
+    object header = {
+        variant this of decl = struct {
+            filename : str,
+            ann : annot
+        }
+        action make(filename:str) returns (res:decl) =
+        {
+            var s:this;
+            s.filename := filename;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("#include ");
+            b := b.extend(s.filename);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }
+
     object typedecl = {
         variant this of decl = struct {
             ttype : simpletype,
@@ -296,6 +317,16 @@ object cpp = {
                     st.ok := false;
                 };
                 res := t;
+            } else if st.tok = "#" {
+                var s : header;
+                st := st.consume;
+                if st.ok & st.tok = "include" {
+                    st := st.consume;
+                    if st.ok & st.tok.end > 0 & st.tok.value(0) = 34 {  # double quote
+                        s.filename := st.tok;
+                        st := st.consume;
+                    } else { st.ok := false }
+                } else { st.ok := false }
             } else {
 		var t : simpletype;
 		(st,t) := simpletype.parse(st,prio);

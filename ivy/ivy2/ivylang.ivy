@@ -162,6 +162,29 @@ object ivy = {
         }	    
     }        
 
+    object header = {
+        variant this of decl = struct {
+            filename : str,
+            ann : annot
+        }
+        action make(filename:str) returns (res:decl) =
+        {
+            var s:this;
+            s.filename := filename;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("header");
+            b := b.extend(" ");
+            b := b.extend(s.filename);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }
+        
+
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
@@ -206,7 +229,18 @@ object ivy = {
                 (st,s.ann) := st.get_ann;
                 (st,s.typing) := expr.parse(st,0);
                 res := s
-            } else {st.ok := false}
+            } else if st.tok = "header" {
+                var s : header;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.ok & st.tok.end > 0 & st.tok.value(0) = 34 {  # double quote
+                    s.filename := st.tok;
+                    st := st.consume;
+                } else { st.ok := false };
+                res := s
+            }
+                
+            else {st.ok := false}
         }
         action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
             while st.ok & st.tok.end > 0 & st.tok ~= "}" {

@@ -280,11 +280,20 @@ object pstate = {
 # - A singleton characeter in the bracket set
 # - A maximal sequence of characters in the alphanumeric set
 # - A maximal sequence of characters in the punctuation set
+# - A string literal
 #
 # Tokens may be separated by whitespace, which consists of space,
 # tab, carriage return and newline characters as well as comments. A
 # comment is a hash character up to and including the next newline or
 # the end of stream, whichever comes first.
+#
+# A string literal consists of printing characters enclosed in double
+# quote characters. The following escape sequences are recognized:
+#
+# - \n : newline character
+#
+# A backslash followed by any other printing character is interpreted
+# as that character. 
 #
 # Any non-printing character other than carriage return and newline
 # is considered a syntax error.
@@ -324,22 +333,60 @@ action get_annot(st:pstate) returns (st:pstate) = {
     }
 }
 
+
+action read_string_literal(st:pstate) returns (st:pstate) = {
+    st.tok := "";
+    st.tok := st.tok.append(34);  # workaround
+    st.p := st.p.next;
+    while st.ok & st.p < st.b.end & st.b.value(st.p) ~= 34 {
+        var chr := st.b.value(st.p);
+        if chr = 92 {  # backslash
+	    st.p := st.p.next;
+            if st.p < st.b.end {
+                chr := st.b.value(st.p);
+                if chr = 110 {  # \n
+                    st.tok := st.tok.append(10);  # newline
+	            st.p := st.p.next;
+                } else if ~chr.non_printing {
+                    st.tok := st.tok.append(chr);  # newline
+	            st.p := st.p.next;
+                } else {
+                    st.ok := false;
+                };
+            } else { st.ok := false }
+        } else {
+            if ~chr.non_printing {
+                st.tok := st.tok.append(chr);
+	        st.p := st.p.next;
+            } else { st.ok := false } 
+        } 
+    }; 
+    if st.ok & st.p < st.b.end {
+        st.tok := st.tok.append(34);  # double quote
+	st.p := st.p.next;
+    } else { st.ok := false }
+}
+
 action lex(st:pstate) returns (st:pstate) = {
     # Get the next lexical token in the stream
     st := get_annot(st);
     var start := st.p;
-    var last : char := 32;
-    while st.p < st.b.end & st.b.value(st.p) ~= 32
-        & (last = 32 | (char.kind(st.b.value(st.p)) = char.kind(last)))
-        & char.kind(last) ~= char.bracket
-    {
-	last := st.b.value(st.p);
-        if last.non_printing {
-            st.ok := false;
+    if st.p < st.b.end & st.b.value(st.p) = 34 { # double quote
+        st := read_string_literal(st);
+    } else {
+        var last : char := 32;
+        while st.p < st.b.end & st.b.value(st.p) ~= 32
+            & (last = 32 | (char.kind(st.b.value(st.p)) = char.kind(last)))
+            & char.kind(last) ~= char.bracket
+        {
+            last := st.b.value(st.p);
+            if last.non_printing {
+                st.ok := false;
+            };
+            st.p := st.p.next;
         };
-	st.p := st.p.next;
-    };
-    st.tok := st.b.segment(start,st.p);
+        st.tok := st.b.segment(start,st.p);
+    }
 }
 
 # Tuples
