@@ -214,6 +214,34 @@ object ivy = {
         }	    
     }
 
+    object includedc = {
+        variant this of decl = struct {
+            file : expr,
+            ann : annot
+        }
+        action make(file:expr) returns (res:decl) =
+        {
+            var s:this;
+            s.file := file;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("include");
+            b := b.extend(" ");
+            b := s.file.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+
+        action get_expr(s:this) returns (res:expr) = {
+            res := s.file
+        }
+
+    }
+        
+
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
@@ -278,6 +306,12 @@ object ivy = {
                         (st,s.ctype) := expr.parse(st,0); 
                     } else { st.ok := false };
                 } else { st.ok := false };
+                res := s
+            } else if st.tok = "include" {
+                var s : includedc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.file) := expr.parse(st,0);
                 res := s
             } else {st.ok := false}
         }

@@ -16,6 +16,19 @@ object ivy = { ...
             b := b.extend("unknown error")
         }
     }
+    
+    var errors : vector[error]
+
+    # Reports an error and returns
+
+    action report_error(e:error) = {
+        var b : pretty;
+        b := e.encode(b);
+        b := b.flush;
+        call show(b.output);
+    }
+
+    import action show(msg:str)
 
     # - Error `type_clash(e,t1,t2)` indicates that in sub-expression `e`,
     #   types `t1` and `t2` could not be unified.
@@ -69,5 +82,23 @@ object ivy = { ...
         }
     }
 
+    # - Error `file_not_found(n)` indicates that file named `n` was not found.
 
+    object file_not_found = {
+        variant this of error = struct {
+            n : str
+        }
+        action make(n:str) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("File not found:");
+            b := b.extend(" ");
+            b := b.extend(e.n);
+            b := b.newline;
+        }
+    }
+
+
+    
 }

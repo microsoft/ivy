@@ -639,6 +639,7 @@ module decl_base(expr,stmt) = {
     object decl = {
         type this
         instantiate parse_intf(decl)
+        action get_expr(s:this) returns (res:expr)
     }
 
     object actdc = {

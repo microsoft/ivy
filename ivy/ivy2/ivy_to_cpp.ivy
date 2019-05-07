@@ -3,7 +3,9 @@
 include ivylang
 include cpplang
 include hash
+include reader
 include pass_flat
+include reader
 
 module generic_to_cpp(ivytype,cpptype,cppclass) = {
     action to_cpp(s:ivytype,st:tocppst) returns (res:cppclass,st:tocppst) = {
