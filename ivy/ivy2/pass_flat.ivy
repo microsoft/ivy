@@ -4,21 +4,66 @@
 # and `.` operators.
 
 include ivylang
+include logic
 
 
 module generic_flat(ivytype,ivyclass) = {
-    action flat(s:ivytype,st:flatst) returns (res:ivyclass,st:flatst) = {
+    action flat(s:ivytype,st:flatst) returns (st:flatst) = {
         var t : ivytype;
         (t,st) := s.flat_int(st);
         t.ann := s.ann;
-        res := t
+        st.decls := st.decls.append(t);
+    }
+}
+
+# A `def_map` is a map from identifiers to a range type. I has the same
+# interface as `hash_map`, plus an action `get_def` that looks up the value of
+# an identifier and reports an error if it is not found.
+
+module def_map(range) = {
+    instantiate hash_map(ident,range)
+    action get_def(m:this,x:ident,ann:annot) returns (y:range) = {
+        if ~m.mem(x) {
+            call report_error(undefined.make(x),ann);
+        } else {
+            y := m.get(x,y)
+        }
     }
 }
 
 object ivy = { ...
 
+
+    instance ident_to_moduledc : def_map(moduledc)
+    
     object flatst = {
-        type this
+        type this = struct {
+
+            # Accumulated declarations
+
+            decls : vector[decl],
+
+            # The module parameter valuations
+
+            prmvals : symeval,
+
+            # The module declarations, by name
+
+            moddecls : ident_to_moduledc
+
+        }
+    }
+
+    action prm_map(fml:vector[expr],act:vector[expr],ann:annot) returns (res:symeval) = {
+        if fml.end ~= act.end {
+            call report_error(wrong_number_params.make(fml.end),ann);
+        } else {
+            var idx := fml.begin;
+            while idx < fml.end {
+                res := res.set(fml.value(idx).get_name,act.value(idx));
+                idx := idx.next;
+            }
+        }
     }
 
     object expr = { ...
@@ -30,6 +75,13 @@ object ivy = { ...
         res := symbol.make(name,arg.get_ann);
     }
     
+    object symbol = { ...
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
+            var dflt : expr := s;  # workaround
+            res := st.prmvals.get(s.get_name,dflt);
+        }
+    }
+
     object app = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var arg0 : expr;
@@ -49,7 +101,7 @@ object ivy = { ...
     }
     
     object decl = { ...
-        action flat(s:decl,st:flatst) returns (res:decl,st:flatst)
+        action flat(s:decl,st:flatst) returns (st:flatst)
     }
 
     action flat_exprvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
@@ -98,21 +150,50 @@ object ivy = { ...
     object interpdc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
-            res := s;
+            (res.itype,st) := s.itype.flat(st);
+            (res.ctype,st) := s.ctype.flat(st);
 	}
+    }
+
+    object moduledc = { ...
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            st.moddecls := st.moddecls.set(s.name.get_name,s);
+	}
+    }
+
+    object instantiatedc = { ...
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var name : expr;
+            var prms : vector[expr];
+            (name,st) := s.name.flat(st);
+            (prms,st) := flat_exprvec(s.prms,st);
+            var mod := st.moddecls.get_def(name.get_name,s.ann);
+            var old_prmvals := st.prmvals;
+            st.prmvals := prm_map(mod.prms,prms,s.ann);
+            st := mod.body.flat(st);
+            st.prmvals := old_prmvals;
+        }
+    }
+
+    object groupdc = { ...
+	action flat(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.decls.begin;
+            var decls : vector[decl];
+            while idx < s.decls.end {
+                st := s.decls.value(idx).flat(st);
+                idx := idx.next;
+            };
+        }
     }
 
     object prog = { ...
         action flat(p:prog,st:flatst) returns (p:prog,st:flatst) = {
             var idx := p.decls.begin;
-            var decls : vector[decl];
             while idx < p.decls.end {
-                var d : decl;
-                (d,st) := p.decls.value(idx).flat(st);
-                decls := decls.append(d);
+                st := p.decls.value(idx).flat(st);
                 idx := idx.next;
             };
-            p.decls := decls;
+            p.decls := st.decls;
         }
     }
 }

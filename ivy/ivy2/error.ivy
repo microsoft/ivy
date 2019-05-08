@@ -21,7 +21,7 @@ object ivy = { ...
 
     # Reports an error and returns
 
-    action report_error(e:error) = {
+    action report_error(e:error,ann:annot) = {
         var b : pretty;
         b := e.encode(b);
         b := b.flush;
@@ -100,5 +100,36 @@ object ivy = { ...
     }
 
 
+    # - Error `undefined(n)` indicates that identifier `n` is undefined
+
+    object undefined = {
+        variant this of error = struct {
+            n : ident
+        }
+        action make(n:ident) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Undefined:");
+            b := b.extend(" ");
+            b := e.n.encode(b,0);
+            b := b.newline;
+        }
+    }
     
+    # - Error `wrong_number_params(n)` indicates that `n` parameters were expected,
+    #   but a different number was given.
+
+    object wrong_number_params = {
+        variant this of error = struct {
+            n : vector[expr].domain
+        }
+        action make(n:vector[expr].domain) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Wrong number of parameters given.");
+            b := b.newline;
+        }
+    }
 }

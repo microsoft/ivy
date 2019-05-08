@@ -385,7 +385,33 @@ object ivy = { ...
 		idx := idx.next
 	    }
 	}
+
+        export action file_to_cpp(name:str) returns(res:str) = {
+
+            # Read the program
+
+            var ann : annot;
+            var p := prog.read_file(name,ann);
+
+            # Flattening pass
+
+            var fst : flatst;
+            (p,fst) := p.flat(fst);
+
+            res := p.enc
+
+            # # Translate to C++
+
+            # var cppexpr : cpp.prog;
+            # var st : tocppst;
+            # (cppexpr,st) := p.to_cpp(st);
+
+            # # Pretty-print the C++
+
+            # res := cppexpr.enc
+        }
     }
+
 	
 
     object expr = { ...
@@ -397,12 +423,5 @@ object ivy = { ...
     }
 
 
-    object decl = { ...
-        instantiate test_to_cpp(ivy.decl,cpp.decl)
-    }
-
-    object prog = { ...
-        instantiate test_to_cpp(ivy.prog,cpp.prog)
-    }
 }
 

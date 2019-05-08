@@ -90,7 +90,8 @@ object ivy = {
 
     object groupdc = {
         variant this of decl = struct {
-            decls : vector[decl]
+            decls : vector[decl],
+            ann : annot
         }
 
         action make(decls : vector[decl]) returns (res:decl) =
@@ -239,14 +240,78 @@ object ivy = {
             res := s.file
         }
 
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
+        }
     }
         
+    object moduledc = {
+        variant this of decl = struct {
+            name : expr,
+            prms : vector[expr],
+            body : decl,
+            ann : annot
+        }
+        action make(name : expr, prms : vector[expr], body : decl) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.prms := prms;
+            s.body := body;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("module");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.extend(" ");
+            b := b.extend("=");
+            b := b.extend(" ");
+            b := s.body.encode(b,2);
+        }	    
+
+    }
+        
+    object instantiatedc = {
+        variant this of decl = struct {
+            name : expr,
+            prms : vector[expr],
+            ann : annot
+        }
+        action make(name : expr, prms : vector[expr]) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.prms := prms;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("instantiate");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.newline
+        }	    
+
+    }
 
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
                 st := st.consume;
                 var s : groupdc;
+                (st,s.ann) := st.get_ann;
                 (st,s.decls) := parse_list(st,0);
                 if st.tok = "}" {
                     st := st.consume;
@@ -312,6 +377,28 @@ object ivy = {
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
                 (st,s.file) := expr.parse(st,0);
+                res := s
+            } else if st.tok = "module" {
+                var s : moduledc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);  # allow dot operator, not application
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,0);
+                };
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    (st,s.body) := decl.parse(st,0);
+                } else { st.ok := false };
+                res := s;
+            } else if st.tok = "instantiate" {
+                var s : instantiatedc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,0);
+                };
                 res := s
             } else {st.ok := false}
         }

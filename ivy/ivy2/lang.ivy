@@ -248,6 +248,8 @@ module expr_base(cppstyle) = {
         action get_name(s:this) returns (res:ident)
         action app_verb(s:this) returns (res:verb)
         action get_ann(s:this) returns (res:annot)
+        action get_func(s:this) returns (res:expr) 
+        action get_args(s:this) returns (res:vector[expr])
     }
 
     object symbol = {
@@ -362,6 +364,12 @@ module expr_base(cppstyle) = {
         }
         action app_verb(s:this) returns (res:verb) = {
             res := s.func.get_verb
+        }
+        action get_func(s:this) returns (res:expr) = {
+            res := s.func
+        }
+        action get_args(s:this) returns (res:vector[expr]) = {
+            res := s.args
         }
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr) = {
             res := s.args.value(p)
@@ -640,6 +648,7 @@ module decl_base(expr,stmt) = {
         type this
         instantiate parse_intf(decl)
         action get_expr(s:this) returns (res:expr)
+        action get_ann(s:this) returns (res:annot)
     }
 
     object actdc = {

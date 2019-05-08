@@ -1110,6 +1110,7 @@ class CallAction(Action):
         if len(formal_params) != len(actual_params):
             raise IvyError(self,"wrong number of input parameters");
         if len(formal_returns) != len(actual_returns):
+            print self
             raise IvyError(self,"wrong number of output parameters");
         for x,y in zip(formal_params,actual_params):
             if x.sort != y.sort and not domain.is_variant(x.sort,y.sort):
