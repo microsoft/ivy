@@ -98,8 +98,15 @@ notes below.
 #### Python 2.7
 
 Get it from [here](https://www.python.org/downloads) or as part of
-your Linux distribution. You should make sure to get the `pip`
-utility.  This is standard on versions from 2.7.9.
+your Linux distribution. On Ubuntu, do this:
+
+    sudo apt-get install python
+
+You should make sure to get the `pip` utility.  This is standard on
+python versions from 2.7.9. If `which pip` doesn't produce any result,
+do this:
+
+    sudo apt-get install python-pip
 
 You can install IVy in a python virtual environment if you don't want
 to pollute your local python setup. If you want to use a virtual
