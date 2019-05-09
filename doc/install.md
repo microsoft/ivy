@@ -132,7 +132,7 @@ On Ubuntu Linux, download this file:
     
 Don't get a later version because there are incompatible changes in
 Z3's API after this version. Now, if you don't mind doing a system-wide
-instalaltion of Z3, do this:
+installation of Z3, do this:
 
     cd ~
     tar xzf Downloads/z3-4.6.0.tar.gz
@@ -148,7 +148,7 @@ Do this:
 
     export LD_LIBRARY_PATH=/usr/local/lib:
     
-and put the above command in `~/.bash` as well. Also, do this:
+and put the above command in `~/.bashrc` as well. Also, do this:
 
     export PYTHONPATH=/usr/local/lib/python2.7/site-packages:$PYTHONPATH
     
