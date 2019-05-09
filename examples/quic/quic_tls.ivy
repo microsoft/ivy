@@ -1,0 +1,39 @@
+#lang ivy1.7
+
+# QUIC/TLS interface
+# ==================
+#
+# This document describes the interface between the QUIC protocol and TLS.
+#
+
+include tls_record
+
+object quic_tls = {
+
+    type transport_parameter
+
+    object initial_max_stream_data = {
+        variant this of transport_parameter
+         initial_max_data(1),
+         initial_max_stream_id_bidi(2),
+         idle_timeout(3),
+         omit_connection_id(4),
+         max_packet_size(5),
+         stateless_reset_token(6),
+         ack_delay_exponent(7),
+         initial_max_stream_id_uni(8),
+         (65535)
+
+    object 
+
+    object transport_params = {
+        variant this of tls.extension = {
+
+
+    # Extract the QUIC transport parameters from a TLS  message
+
+    action extract_transport_params (msg : stream_data) returns (res:stream_data) {
+        
+    }
+}
+

@@ -1,0 +1,151 @@
+
+Terminology
+-----------
+
+An *endpoint* is consists of a protocol, a network address and a
+port. Endpoints uniquely identify entities in the protocol.
+
+A *connection* is a form of session that may be established between
+two enpoints, one having the role of *client* and the other of
+*server*. It is unclear whether a given client/server pair may have
+multipl connections established simultaneously.
+
+A *cid* is a connection identifier. Connection identifiers are
+uniquely associated to connections and are not reused. The exception
+is that the first cid sent by a client in an Initial packet may be
+replaced by ther server with a different cid, which is used by all
+subsequent packets associated with the connection.
+
+
+Common types
+------------
+
+This section describes the common types used by the protocol specification.
+
+### Connection identifiers
+
+The type `cid` represents a cid as a 64-bit unsigned integer.
+
+```
+type cid
+
+```
+### Application identifiers
+
+An application identifier (aid) is a unique identifier for an
+application endpoint, that is, one of the two communicating
+applications in a QUIC connection, either at the server or the
+client end of the connection. For now we identify an aid with a
+cid, in particular, the first cid used by the given application
+endpoint. Thus, the type aid is an alias for cid. TODO: this will
+have to change for endpoints that use zero-length cid's, since the
+cid's in this acse are not unique. 
+
+```
+alias aid = cid
+
+```
+### Protocol verion numbers
+
+The type `version` represents a protocol version as a 32-bit unsigned number.
+
+```
+type version 
+
+```
+### Packet numbers
+
+The type `pkt_num` represents a packet number as a 64-bit unsigned number.
+
+```
+type pkt_num
+
+```
+### Time values
+
+The type `microsecs` represents a time value in
+microseconds. Currently this type is uninterpreted.
+
+```
+type microsecs
+
+```
+The type error code is a two-byte code for an error
+
+```
+type error_code
+
+```
+A stream kind is either unidirectional (`unidir`) or bidirectional (`bidir`)
+
+```
+type stream_kind = {unidir,bidir}
+
+```
+Single bit values
+
+```
+object bit = {
+    type this
+    interpret bit -> bv[1]
+    individual zero:bit
+    individual one:bit
+    definition zero = 0
+    definition one = 1
+}
+
+```
+roles
+
+```
+object role = {
+    type this = {client,server}
+}
+
+```
+encryption levels
+
+```
+object encryption_level = {
+    type this = {initial,handshake,other}
+    action next(e:this) returns (e:this) = {
+        if e = initial {
+            e := handshake;
+        } else {
+            e := other;
+        }
+    }
+}
+
+```
+### Packet type bits
+
+The type `type_bits` represents the packet type as a 7-bit unsigned integer.
+
+```
+type type_bits
+interpret type_bits -> bv[7]
+
+```
+This type represents the length of a connection id in bytes
+
+```
+type cid_length
+interpret cid_length -> bv[4]
+
+```
+Connection id sequence numbers
+
+```
+type cid_seq
+interpret cid_seq -> bv[8]
+
+```
+Stateless reset tokens
+
+```
+type reset_token
+interpret reset_token -> bv[31]
+
+
+```

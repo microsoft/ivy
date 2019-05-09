@@ -1,0 +1,57 @@
+#lang ivy1.7
+
+include pcap
+include order
+include quic_packet
+include quic_connection
+include quic_deser
+include quic_interp
+include quic_infer
+
+# This is a monitor that reads a file of QUIC packets in pcap format
+# and tracks the protocol, checking that the packet sequence satisfies
+# the protocol specification
+
+# Compile the monitor like this:
+#
+#     ivyc quic_monitor.ivy
+#
+# Run it like this:
+#
+#     ./quic_monitor file.pcap
+#
+# where `file.pcap` is a file of captured packets in pcap format. The
+# monitor assumes that *only* QUIC packets are present in the file,
+# so must be captured on a virtual network or appropriately filtered.
+# 
+#
+
+# Instantiate a pcap file reader with our packet type and deserializer
+
+instance pc : pcap(quic_packet,quic_deser)
+
+# Print a packet on stdout. In the compiled REPL importing `show_packet`
+# causes calls to be logged to stdout.
+
+action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
+import show_packet
+
+# The wire specification monitors this action.
+
+action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
+
+# This is a ghost action representing a TLS send event.
+
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data) = {}
+
+# For each packet read, first print out the packet, then infer any TLS
+# events, then verify the packet.
+
+implement pc.handle(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
+    call show_packet(src,dst,pkt);        # print the packet
+    call infer_tls_events(src,dst,pkt);   # infer any TLS events
+    call packet_event(src,dst,pkt);       # monitor the protocol
+}
+
+attribute radix=16       # print in hex
+

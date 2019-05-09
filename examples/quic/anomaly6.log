@@ -1,0 +1,244 @@
+ic/picoquic/picosocks.c:641 [picoquic_send_through_server_sockets]: Could not send packet on UDP socket[1]= 22!
+
+ic/picoquic/picosocks.c:643 [picoquic_send_through_server_sockets]: Dest address length: 16, family: 2.
+
+Starting PicoQUIC server on port 4443, server name = ::, just_once = 0, hrr= 0
+2: Receiving packet type: 2 (initial), S0, Version ff00000e,
+2:     <0000000000000002>, <000000000000000d>, Seq: 0, pl: 1171
+2:     Decrypted 1171 bytes
+2:     Crypto HS frame, offset 0, length 398: 0100018a0303597a...
+2:     padding, 769 bytes
+
+2: 0.002063 : Connection established, state = 11, from length: 16
+2: Client address: 127.0.0.1, port 31507
+2: Received SNI: localhost
+2: ALPN not received.
+2: Did not receive transport parameter TLS extension.
+aead_checksum_length = 16
+2: Sending packet type: 2 (initial), S0, Version ff00000e,
+2:     <000000000000000d>, <5e3a165e29f559a4>, Seq: 0, pl: 132
+2:     Prepared 132 bytes
+2:     ACK (nb=0), 0
+2:     Crypto HS frame, offset 0, length 123: 02000077030392b0...
+
+aead_checksum_length = 16
+2: Sending packet type: 4 (handshake), S0, Version ff00000e,
+2:     <000000000000000d>, <5e3a165e29f559a4>, Seq: 0, pl: 1031
+2:     Prepared 1031 bytes
+2:     Crypto HS frame, offset 0, length 1027: 0800000600040000...
+
+2: Connection state = 6
+aead_checksum_length = 16
+2: Sending packet type: 4 (handshake), S0, Version ff00000e,
+2:     <000000000000000d>, <5e3a165e29f559a4>, Seq: 1, pl: 132
+2:     Prepared 132 bytes
+2:     Crypto HS frame, offset 1027, length 127: 80f8264dd7c86943...
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 0 (0)
+2:     Prepared 141 bytes
+2:     Crypto HS frame, offset 0, length 137: 04000085000186a0...
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 1 (1)
+2:     Prepared 1411 bytes
+2:     ping, 1 bytes
+2:     padding, 1410 bytes
+
+2: Receiving packet type: 2 (initial), S0, Version ff00000e,
+2:     <5e3a165e29f559a4>, <000000000000000d>, Seq: 4, pl: 1170
+2:     Decrypted 1170 bytes
+2:     ACK (nb=0), 0
+2:     padding, 1165 bytes
+
+2: Receiving packet type: 4 (handshake), S0, Version ff00000e,
+2:     <5e3a165e29f559a4>, <000000000000000d>, Seq: 0, pl: 55
+2:     Decrypted 55 bytes
+2:     Crypto HS frame, offset 0, length 52: 1400003029635576...
+
+aead_checksum_length = 16
+2: Sending packet type: 4 (handshake), S0, Version ff00000e,
+2:     <000000000000000d>, <5e3a165e29f559a4>, Seq: 2, pl: 5
+2:     Prepared 5 bytes
+2:     ACK (nb=0), 0
+
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 0 (0)
+2:     Decrypted 33 bytes
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     RESET STREAM 4, Error 0x000083ab, Offset 0x2.
+2:     ACK (nb=0), 0
+2:     MAX STREAM ID: 0.
+2:     padding, 16 bytes
+
+2: 0.580449 : Server CB, Stream: 4, 1 bytes, fin=0 (no event)
+2: Server CB, Stream: 4, Partial command: ð
+quic/picoquic/quicctx.c:1272 [picoquic_connection_error]: Protocol error (4)
+oquic/picoquic/packet.c:1340 [picoquic_incoming_segment]: Packet (0) dropped, t: 6, e: 3, pc: 0, pn: 0, l: 62, ret : 415
+
+2: 0.580471 : Server CB, Stream: 4, 0 bytes, fin=2 (stream reset)
+2: Server CB, Reset Stream: 4, resetting the local stream.
+2: 0.580587 : Server CB, Stream: 0, 0 bytes, fin=5 (connection close)
+oquic/picoquic/packet.c:1340 [picoquic_incoming_segment]: Packet (0) dropped, t: 4, e: 2, pc: 1, pn: 2, l: 49, ret : 404
+
+oquic/picoquic/packet.c:1340 [picoquic_incoming_segment]: Packet (0) dropped, t: 4, e: 2, pc: 1, pn: 4, l: 49, ret : 404
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 2 (2)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 4 (4)
+2:     Decrypted 23 bytes
+2:     MAX STREAM ID: 7.
+2:     ACK (nb=0), 2
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 3 (3)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 5 (5)
+2:     Decrypted 60 bytes
+2:     MAX STREAM ID: 7.
+2:     MAX STREAM ID: 5.
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     RESET STREAM 4, Error 0x0000da2c, Offset 0x2.
+2:     ACK (nb=0), 3
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     RESET STREAM 4, Error 0x00004202, Offset 0x2.
+2:     RESET STREAM 4, Error 0x00000cee, Offset 0x2.
+2:     RESET STREAM 4, Error 0x00006448, Offset 0x2.
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 4 (4)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 1 (1)
+2:     Decrypted 56 bytes
+2:     MAX STREAM ID: 5.
+2:     MAX STREAM ID: 6.
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     RESET STREAM 4, Error 0x00007c03, Offset 0x2.
+2:     ACK (nb=0), 4
+2:     MAX STREAM ID: 6.
+2:     MAX STREAM ID: 2.
+2:     MAX STREAM ID: 6.
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 5 (5)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 4 (handshake), S0, Version ff00000e,
+2:     <5e3a165e29f559a4>, <000000000000000d>, Seq: 2, pl: 5
+2:     Decrypted 5 bytes
+2:     ACK (nb=0), 0
+
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 2 (2)
+2:     Decrypted 43 bytes
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     MAX STREAM ID: 7.
+2:     RESET STREAM 4, Error 0x000049b6, Offset 0x2.
+2:     RESET STREAM 4, Error 0x000049a6, Offset 0x2.
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 6 (6)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 4 (handshake), S0, Version ff00000e,
+2:     <5e3a165e29f559a4>, <000000000000000d>, Seq: 4, pl: 5
+2:     Decrypted 5 bytes
+2:     ACK (nb=0), 2
+
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 6 (6)
+2:     Decrypted 43 bytes
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     ACK (nb=0), 6
+2:     ACK (nb=0), 5
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     MAX STREAM ID: 4.
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 7 (7)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 3 (3)
+2:     Decrypted 21 bytes
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Senoquic/picoquic/packet.c:1340 [picoquic_incoming_segment]: Packet (0) dropped, t: 4, e: 2, pc: 1, pn: 1, l: 49, ret : 404
+
+ding packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 8 (8)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 6 (1rtt protected phi0), S0,
+2:     <5e3a165e29f559a4>, Seq: 7 (7)
+2:     Decrypted 33 bytes
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     MAX STREAM ID: 5.
+2:     Stream 4, offset 0, length 1, fin = 0: f0
+2:     padding, 16 bytes
+
+aead_checksum_length = 16
+2: Sending packet type: 6 (1rtt protected phi0), S0,
+2:     <000000000000000d>, Seq: 9 (9)
+2:     Prepared 5 bytes
+2:     connection_close, Error 0x0004, Offending frame 6
+Reason length 0
+
+2: Connection state = 16
+2: Receiving packet type: 4 (handshake), S0, Version ff00000e,
+2:     <5e3a165e29f559a4>, <000000000000000d>, Seq: 1, pl: 5
+2:     Decrypted 5 bytes
+2:     ACK (nb=0), 1
+
+2: 5.804932 : Closed. Retrans= 0, spurious= 0, max sp gap = 0, max sp delay = 0

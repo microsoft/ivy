@@ -1,0 +1,3 @@
+Starting PicoQUIC server on port 4443, server name = ::, just_once = 0, hrr= 0
+Server exit, ret = -1
+Server exit with code = -1

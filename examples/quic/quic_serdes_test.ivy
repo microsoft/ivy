@@ -1,0 +1,80 @@
+#lang ivy1.7
+
+# This is a tester for the QUIC packet serializer and deserializer
+
+# References
+# ==========
+
+include byte_stream
+include quic_packet
+include serdes
+include quic_ser
+include quic_deser
+include quic_interp
+include ip
+
+# This object applies the QUIC serializer and deserializer
+
+instance sd : serdes(quic_packet,stream_data,quic_ser,quic_deser)
+
+# We read a sequence of `show_packet` events, serialize and deserialize
+# the packets, check that the result equals the original. As a side effect
+# we output `round_trip_packet` events to see the results.
+
+action show_packet(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
+    call round_trip_packet(pkt);
+    var bytes := sd.to_bytes(pkt);
+    call show_bytes(bytes);
+    var pkt2 := sd.from_bytes(bytes);
+    call round_trip_packet(pkt2);
+    assert pkt2 = pkt;
+}
+
+before show_packet {
+    assert pkt.hdr_pkt_num <= 0xff;
+    assert ~pkt.hdr_long -> (pkt.dcid = 5 & pkt.scid = 0 & pkt.hdr_cid = 0);
+    assert pkt.hdr_long -> (pkt.dcid > 0 & pkt.scid > 0);
+    assert pkt.hdr_token_length = pkt.hdr_token.end;
+    assert pkt.hdr_token_length ~= 0 -> (pkt.hdr_long & pkt.hdr_type = 0x7f);
+    var idx := pkt.payload.begin;
+    while idx < pkt.payload.end {
+	var f := pkt.payload.value(idx);
+        assert
+	(exists (X:frame.stream) (f *> X)) |
+        (exists (X:frame.crypto) (f *> X)) |
+	(exists (X:frame.ack) f *> X) |
+	(exists (X:frame.rst_stream) f *> X) |
+	(exists (X:frame.max_stream_id) f *> X) |
+	(exists (X:frame.connection_close) f *> X) |
+	(exists (X:frame.max_stream_data) f *> X) |
+	(exists (X:frame.stream_id_blocked) f *> X);
+	
+	if some (a:frame.ack) pkt.payload.value(idx) *> a {
+	    assert a.ack_blocks.end > 0 & a.ack_blocks.value(0).gap = 0;
+	};
+	if some (s:frame.stream) pkt.payload.value(idx) *> s {
+	    assert s.len & s.length = s.data.end;
+	};
+	if some (c:frame.connection_close) pkt.payload.value(idx) *> c {
+	    assert c.reason_phrase_length = c.reason_phrase.end;
+	};
+	if some (cf:frame.crypto) pkt.payload.value(idx) *> cf {
+	    assert cf.length = cf.data.end;
+	};
+	idx := idx.next;
+    }
+}
+
+import action show_bytes(bytes:stream_data)
+action round_trip_packet(pkt:quic_packet) = { <<<
+    std::cout << pkt << std::endl;
+    >>> }
+
+export show_packet
+#import round_trip_packet
+
+
+attribute radix=16
+attribute frame.idx.cardinality = 2
+
+

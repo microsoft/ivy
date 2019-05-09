@@ -1,0 +1,161 @@
+[0m[0m0.037[0m [44m [0m [35mq_init[30m [34mquic.c:507 [0mquant/socket 0.0.16/153c932 with libev/epoll 4.22 ready
+[0m      [44m [0m [35mq_init[30m [34mquic.c:508 [0msubmit bug reports at https://github.com/NTAP/quant/issues
+[0m[0m0.039[0m [46m [0m [35mq_init[30m [34mquic.c:527 [0mdebug build, storing fuzzer corpus data
+[0m      [42m [0m [35mq_bind[30m [34mquic.c:362 [0mbinding serv socket on port 4443
+[0m      [46m [0m [35minit_rec[30m [34mrecovery.c:527 [0min_flight[0m=0, [32mcwnd[0m=12000, ssthresh[0m=0, srtt[0m=0.000000, rttvar[0m=0.000000
+[0m      [42m [0m [35mnew_conn[30m [34mconn.c:1285 [0mserv conn ? on port 4443 created
+[0m      [42m [0m [35mnew_conn[30m [34mconn.c:1287 [0mserv conn ? state conn_clsd -> [31mconn_idle[0m
+[0m      [43m [0m [35mq_bind[30m [34mquic.c:364 [0mbound serv socket on port 4443
+[0m      [42m [0m [35mmain[30m [34mserver.c:239 [0mserver waiting on lo port 4443
+[0m[0m0.167[0m [46m [0m [35mrx_pkts[30m [34mconn.c:892 [0mnew serv conn on port 4443 from 127.0.0.1:4988 w/cid=0:000000000000000b
+[0m      [46m [0m [35minit_rec[30m [34mrecovery.c:527 [0min_flight[0m=0, cwnd[0m=12000, ssthresh[0m=0, srtt[0m=0.000000, rttvar[0m=0.000000
+[0m      [42m [0m [35mnew_conn[30m [34mconn.c:1285 [0mserv conn 0:000000000000000b on port 4443 created
+[0m      [42m [0m [35mnew_conn[30m [34mconn.c:1287 [0mserv conn 0:000000000000000b state conn_clsd -> [31mconn_idle[0m
+[0m[1m0.167[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:121 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=1216 0xff=[34mInitial [0mvers=0xff00000f dcid=000000000000000b scid=000000000000000d tok= len=1207 nr=[34m0
+[0m      [44m [0m [35mrx_pkt[30m [34mconn.c:655 [0msupporting clnt-requested vers 0xff00000f
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:118 [0m[1m[34mCRYPTO[0m 0x18 off=0 len=243 [seq]
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=939
+[0m      [42m [0m [35mrx_pkt[30m [34mconn.c:680 [0mserv conn 0:000000000000000b state conn_idle -> [31mconn_opng[0m
+[0m      [46m [0m [35mupdate_act_scid[30m [34mconn.c:478 [0mhshk switch to scid 0:50d86e911e7dd444 for serv conn (was 0:000000000000000b)
+[0m      [44m [0m [35mon_ch[30m [34mtls.c:306 [0m	SNI = 
+[0m      [43m [0m [35mon_ch[30m [34mtls.c:309 [0m	ALPN = 
+[0m      [44m [0m [35mchk_tp[30m [34mtls.c:471 [0m	initial_max_stream_data_bidi_local = 8192
+[0m      [44m [0m [35mchk_tp[30m [34mtls.c:483 [0m	initial_max_data = 16384
+[0m      [44m [0m [35mchk_tp[30m [34mtls.c:500 [0m	idle_timeout = 60
+[0m      [44m [0m [35mchk_tp[30m [34mtls.c:478 [0m	initial_max_stream_data_bidi_remote = 8192
+[0m      [44m [0m [35mchk_tp[30m [34mtls.c:465 [0m	initial_max_stream_data_uni = 8192
+[0m[0m0.170[0m [42m [0m [35mrx_crypto[30m [34mconn.c:558 [0mserv conn 0:50d86e911e7dd444 state conn_opng -> [31mconn_estb[0m
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:50d86e911e7dd444 strm [1m[33m-4[0m w/1 pkt in queue
+[0m      [46m [0m [35menc_pkt[30m [34mpkt.c:393 [0mhshk switch to scid 0:2f9df622def4c125 for serv conn (was 0:50d86e911e7dd444)
+[0m      [46m [0m [35mupdate_act_scid[30m [34mconn.c:478 [0mhshk switch to scid 0:2f9df622def4c125 for serv conn (was 0:50d86e911e7dd444)
+[0m[1m0.170[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:174 [0m[1m[32mTX[0m to=0.0.0.0:0 0xff=[32mInitial [0mvers=0xff00000f dcid=000000000000000d scid=2f9df622def4c125 tok=19fef4900ccd5c6f1d04cd87b22537df525432226834feb58a9abb4358ea44ea50d86e911e7dd444 len=0 nr=[32m0
+[0m      [44m [0m [35menc_ack_frame[30m [34mframe.c:1170 [0m[1m[32mACK[0m lg=[34m0[0m delay=0 (0 usec) cnt=0 block=0 [[34m0[0m]
+[0m      [44m [0m [35menc_padding_frame[30m [34mframe.c:1098 [0m[1m[32mPADDING[0m len=97
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:118 [0m[1m[32mCRYPTO[0m 0x18 off=0 len=155 
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[32min_flight[0m=299, [32mcwnd[0m=12000, ssthresh[0m=0, srtt[0m=0.000000, rttvar[0m=0.000000
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 0 unacked: *[32m0[0m 
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:2f9df622def4c125 strm [1m[33m-2[0m w/2 pkts in queue
+[0m[1m0.171[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:184 [0m[1m[32mTX[0m to=0.0.0.0:0 0xfd=[32mHandshake [0mvers=0xff00000f dcid=000000000000000d scid=2f9df622def4c125 len=0 nr=[32m0
+[0m      [44m [0m [35menc_padding_frame[30m [34mframe.c:1098 [0m[1m[32mPADDING[0m len=103
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:118 [0m[1m[32mCRYPTO[0m 0x18 off=0 len=1108 
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[32min_flight[0m=1551, cwnd[0m=12000, ssthresh[0m=0, srtt[0m=0.000000, rttvar[0m=0.000000
+[0m[1m0.171[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:184 [0m[1m[32mTX[0m to=0.0.0.0:0 0xfd=[32mHandshake [0mvers=0xff00000f dcid=000000000000000d scid=2f9df622def4c125 len=0 nr=[32m1
+[0m      [44m [0m [35menc_padding_frame[30m [34mframe.c:1098 [0m[1m[32mPADDING[0m len=103
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:118 [0m[1m[32mCRYPTO[0m 0x18 off=1108 len=292 
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[32min_flight[0m=1987, cwnd[0m=12000, ssthresh[0m=0, srtt[0m=0.000000, rttvar[0m=0.000000
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 0 unacked: *[32m0[0m 
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 2 unacked: *[32m0[0m *[32m1[0m 
+[0m      [42m [0m [35mcoalesce[30m [34mpkt.c:223 [0mcoalescing 0xfd len 436 behind 0xff len 299
+[0m[1m0.289[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:121 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=1216 0xff=[34mInitial [0mvers=0xff00000f dcid=2f9df622def4c125 scid=000000000000000d tok= len=1207 nr=[34m4
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m0[0m delay=0 (0 usec) cnt=0 block=0 [[32m0[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[32min_flight[0m=1987, [32mcwnd[0m=12000, ssthresh[0m=0, [32msrtt[0m=0.122098, [32mrttvar[0m=0.061049
+[0m      [42m [0m [35mon_pkt_acked[30m [34mrecovery.c:474 [0mstream [1m[33m-4[0m fully acked
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=1181
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:2f9df622def4c125 strm [1m[33m-2[0m w/2 pkts in queue
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 2 unacked: *[32m0[0m *[32m1[0m 
+[0m[1m0.541[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:131 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=104 0xfd=[34mHandshake [0mvers=0xff00000f dcid=2f9df622def4c125 scid=000000000000000d len=96 nr=[34m0
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:118 [0m[1m[34mCRYPTO[0m 0x18 off=0 len=52 [seq]
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m1[0m delay=0 (0 usec) cnt=0 block=0 [[32m1[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[31min_flight[0m=1688, cwnd[0m=12000, ssthresh[0m=0, [32msrtt[0m=0.153531, [32mrttvar[0m=0.108653
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:2f9df622def4c125 strm [1m[33m-2[0m w/2 pkts in queue
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 2 unacked: *[32m0[0m 
+[0m[1m0.541[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:192 [0m[1m[32mTX[0m to=127.0.0.1:4988 0x35=[32mShort [0mkyph=0 dcid=000000000000000d nr=[32m0
+[0m      [44m [0m [35menc_new_token_frame[30m [34mframe.c:1497 [0m[1m[32mNEW_TOKEN[0m len=40 tok=19fef4900ccd5c6f1d04cd87b22537df525432226834feb58a9abb4358ea44ea50d86e911e7dd444
+[0m      [44m [0m [35menc_new_cid_frame[30m [34mframe.c:1476 [0m[1m[32mNEW_CONNECTION_ID[0m seq=1 len=8 cid=1:4ed37e52a8726af1 tok=c8e5e9838812047977c9ad1dc428a3c0
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[31min_flight[0m=1347, [32mcwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.153531, [32mrttvar[0m=0.108653
+[0m[0m0.566[0m [42m [0m [35mack_alarm[30m [34mpn.c:56 [0mACK timer fired on serv conn 0:2f9df622def4c125 epoch 2
+[0m[1m0.566[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:184 [0m[1m[32mTX[0m to=0.0.0.0:0 0xfd=[32mHandshake [0mvers=0xff00000f dcid=000000000000000d scid=2f9df622def4c125 len=0 nr=[32m2
+[0m      [44m [0m [35menc_ack_frame[30m [34mframe.c:1170 [0m[1m[32mACK[0m lg=[34m0[0m delay=3214 (25712 usec) cnt=0 block=0 [[34m0[0m]
+[0m[1m0.676[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:131 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=49 0xfd=[34mHandshake [0mvers=0xff00000f dcid=2f9df622def4c125 scid=000000000000000d len=41 nr=[34m1
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m0[0m delay=0 (0 usec) cnt=0 block=0 [[32m0[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[31min_flight[0m=1347, [32mcwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.197972, [32mrttvar[0m=0.170371
+[0m      [42m [0m [35mon_pkt_acked[30m [34mrecovery.c:474 [0mstream [1m[33m-2[0m fully acked
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m[0m0.857[0m [46m [0m [35mrx_pkts[30m [34mconn.c:926 [0mpkt came from new peer 127.0.0.1:4987, probing
+[0m[1m0.857[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:139 [0m[1m[34mRX[0m from=127.0.0.1:4987 len=52 0x30=[34mShort [0mkyph=0 dcid=2f9df622def4c125 nr=[34m0
+[0m      [42m [0m [35mnew_stream[30m [34mstream.c:101 [0mserv conn 0:2f9df622def4c125 strm [1m[33m4[0m (bidir, clnt) state strm_idle -> [33mstrm_open[0m
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:113 [0m[1m[34mSTREAM[0m 0x16=LEN|OFF id=[1m[33m4[0m/20 off=0/65535 len=7 coff=7/393210 [seq]
+[0m      [42m [0m [35mdec_frames[30m [34mframe.c:906 [0maddtl stream or crypto frame at pos 24, copy
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:113 [0m[1m[34mSTREAM[0m 0x16=LEN|OFF id=[1m[33m4[0m/20 off=7/65535 len=8 coff=15/393210 [seq]
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m      [42m [0m [35mrx[30m [34mconn.c:1040 [0mq_rx_ready(0, 0) done, exiting event loop
+[0m      [43m [0m [35mq_rx_ready[30m [34mquic.c:667 [0mserv conn 0:2f9df622def4c125 ready to rx
+[0m      [43m [0m [35mq_read[30m [34mquic.c:312 [0mblocking read on serv conn 0:2f9df622def4c125
+[0m      [43m [0m [35mq_read[30m [34mquic.c:335 [0mread 15 bytes on serv conn 0:2f9df622def4c125 strm [1m[33m4[0m
+[0m      [44m [0m [35mserve_cb[30m [34mserver.c:110 [0mconn 0:2f9df622def4c125 str 4 serving URL /5
+[0m      [43m [0m [35mq_write[30m [34mquic.c:271 [0mwriting 5 bytes in 1 buf on serv conn 0:2f9df622def4c125 strm [1m[33m4[0m 
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:2f9df622def4c125 strm [1m[33m4[0m w/1 pkt in queue
+[0m[1m0.857[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:192 [0m[1m[32mTX[0m to=127.0.0.1:4987 0x32=[32mShort [0mkyph=0 dcid=000000000000000d nr=[32m1
+[0m      [44m [0m [35menc_ack_frame[30m [34mframe.c:1170 [0m[1m[32mACK[0m lg=[34m0[0m delay=60 (480 usec) cnt=0 block=0 [[34m0[0m]
+[0m      [44m [0m [35menc_path_challenge_frame[30m [34mframe.c:1447 [0m[1m[32mPATH_CHALLENGE[0m data=72f9c8cabbe5382b
+[0m      [44m [0m [35menc_padding_frame[30m [34mframe.c:1098 [0m[1m[32mPADDING[0m len=24
+[0m      [44m [0m [35mlog_stream_or_crypto_frame[30m [34mframe.c:113 [0m[1m[32mSTREAM[0m 0x12=LEN id=[1m[33m4[0m/20 off=0/8192 len=5 coff=0/16384 
+[0m      [44m [0m [35menc_path_challenge_frame[30m [34mframe.c:1447 [0m[1m[32mPATH_CHALLENGE[0m data=72f9c8cabbe5382b
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[31min_flight[0m=173, cwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.197972, [32mrttvar[0m=0.170371
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 1/3 unacked: [32m0[0m *[32m1[0m 
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 2 unacked: ([32m2[0m) 
+[0m[1m0.858[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:192 [0m[1m[32mTX[0m to=0.0.0.0:0 0x31=[32mShort [0mkyph=0 dcid=000000000000000d nr=[32m2
+[0m      [44m [0m [35menc_ack_frame[30m [34mframe.c:1170 [0m[1m[32mACK[0m lg=[34m0[0m delay=60 (480 usec) cnt=0 block=0 [[34m0[0m]
+[0m      [44m [0m [35menc_path_challenge_frame[30m [34mframe.c:1447 [0m[1m[32mPATH_CHALLENGE[0m data=72f9c8cabbe5382b
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[32min_flight[0m=213, cwnd[0m=12436, ssthresh[0m=0, srtt[0m=0.197972, rttvar[0m=0.170371
+[0m[0m1.076[0m [46m [0m [35mrx_pkts[30m [34mconn.c:926 [0mpkt came from new peer 127.0.0.1:4988, probing
+[0m[1m1.076[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:139 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=34 0x30=[34mShort [0mkyph=0 dcid=2f9df622def4c125 nr=[34m4
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m0[0m delay=0 (0 usec) cnt=0 block=0 [[32m0[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[31min_flight[0m=213, cwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.240117, [32mrttvar[0m=0.212069
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m      [42m [0m [35mtx[30m [34mconn.c:429 [0mdata TX on serv conn 0:2f9df622def4c125 strm [1m[33m4[0m w/1 pkt in queue
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 1/3 unacked: *[32m1[0m [32m2[0m 
+[0m      [42m [0m [35mlog_sent_pkts[30m [34mconn.c:229 [0mepoch 2 unacked: ([32m2[0m) 
+[0m[1m1.076[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:192 [0m[1m[32mTX[0m to=127.0.0.1:4988 0x36=[32mShort [0mkyph=0 dcid=000000000000000d nr=[32m3
+[0m      [44m [0m [35menc_path_challenge_frame[30m [34mframe.c:1447 [0m[1m[32mPATH_CHALLENGE[0m data=cc2239551e5b35cd
+[0m      [46m [0m [35mon_pkt_sent[30m [34mrecovery.c:284 [0m[31min_flight[0m=153, cwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.240117, [32mrttvar[0m=0.212069
+[0m[1m1.290[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:131 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=67 0xfd=[34mHandshake [0mvers=0xff00000f dcid=2f9df622def4c125 scid=000000000000000d len=59 nr=[34m2
+[0m      [44m [0m [35mdec_close_frame[30m [34mframe.c:507 [0m[1m[34mCONNECTION_CLOSE[0m err=[31m0xb470 [0mframe=0x6e9 rlen=1 reason=[31m£[0m
+[0m      [42m [0m [35mdec_close_frame[30m [34mframe.c:516 [0mserv conn 0:2f9df622def4c125 state conn_estb -> [31mconn_drng[0m
+[0m      [42m [0m [35menter_closing[30m [34mconn.c:1151 [0mclosing/draining alarm in 1.568626 sec on serv conn 0:2f9df622def4c125
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m2[0m delay=0 (0 usec) cnt=0 block=0 [[32m2[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[31min_flight[0m=153, cwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.300611, [32mrttvar[0m=0.280040
+[0m      [44m [0m [35mdec_close_frame[30m [34mframe.c:507 [0m[1m[34mCONNECTION_CLOSE[0m err=[31m0x3b45 [0mframe=0x6f6a rlen=3 reason=[31m£±Œ[0m
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m[0m1.513[0m [46m [0m [35mrx_pkts[30m [34mconn.c:926 [0mpkt came from new peer 127.0.0.1:4987, probing
+[0m[1m1.513[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:139 [0m[1m[34mRX[0m from=127.0.0.1:4987 len=43 0x30=[34mShort [0mkyph=0 dcid=2f9df622def4c125 nr=[34m10
+[0m      [44m [0m [35mdec_path_response_frame[30m [34mframe.c:735 [0m[1m[34mPATH_RESPONSE[0m data=cc2239551e5b35cd
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m3[0m delay=0 (0 usec) cnt=0 block=0 [[32m3[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0min_flight[0m=153, cwnd[0m=12436, ssthresh[0m=0, [32msrtt[0m=0.317649, [31mrttvar[0m=0.244105
+[0m      [43m [0m [35mdetect_lost_pkts[30m [34mrecovery.c:153 [0mpkt [32m1[0m considered lost
+[0m      [46m [0m [35mdetect_lost_pkts[30m [34mrecovery.c:160 [0m[32min_flight[0m=40, [32mcwnd[0m=12471, ssthresh[0m=0, [32msrtt[0m=0.317649, [32mrttvar[0m=0.244105
+[0m      [43m [0m [35mdetect_lost_pkts[30m [34mrecovery.c:153 [0mpkt [32m2[0m considered lost
+[0m      [46m [0m [35mdetect_lost_pkts[30m [34mrecovery.c:160 [0m[31min_flight[0m=0, cwnd[0m=12471, ssthresh[0m=0, srtt[0m=0.317649, rttvar[0m=0.244105
+[0m      [46m [0m [35mdetect_lost_pkts[30m [34mrecovery.c:183 [0min_flight[0m=0, [32mcwnd[0m=6235, [32mssthresh[0m=6235, [32msrtt[0m=0.317649, [32mrttvar[0m=0.244105
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m[0m1.795[0m [46m [0m [35mrx_pkts[30m [34mconn.c:926 [0mpkt came from new peer 127.0.0.1:4988, probing
+[0m[1m1.795[0m [46m [0m [35mlog_pkt[30m [34mpkt.c:139 [0m[1m[34mRX[0m from=127.0.0.1:4988 len=48 0x30=[34mShort [0mkyph=0 dcid=2f9df622def4c125 nr=[34m5
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m1[0m delay=0 (0 usec) cnt=0 block=0 [[32m1[0m]
+[0m      [46m [0m [35mupdate_rtt[30m [34mrecovery.c:318 [0m[31min_flight[0m=0, [31mcwnd[0m=6235, [32mssthresh[0m=6235, [32msrtt[0m=0.395123, [32mrttvar[0m=0.338028
+[0m      [42m [0m [35mon_pkt_acked[30m [34mrecovery.c:474 [0mstream [1m[33m4[0m fully acked
+[0m      [42m [0m [35mon_pkt_acked[30m [34mrecovery.c:477 [0mq_write(c, s) done, exiting event loop
+[0m      [44m [0m [35mdec_ack_frame[30m [34mframe.c:391 [0m[1m[34mACK[0m lg=[32m2[0m delay=0 (0 usec) cnt=0 block=0 [[32m2[0m]
+[0m      [44m [0m [35mdec_path_response_frame[30m [34mframe.c:735 [0m[1m[34mPATH_RESPONSE[0m data=72f9c8cabbe5382b
+[0m      [44m [0m [35mdec_frames[30m [34mframe.c:894 [0m[1m[34mPADDING[0m len=15
+[0m      [43m [0m [35mq_write[30m [34mquic.c:293 [0mwrote 5 bytes on serv conn 0:2f9df622def4c125 strm [1m[33m4[0m 
+[0m      [44m [0m [35mserve_cb[30m [34mserver.c:110 [0mconn 0:2f9df622def4c125 str 4 serving URL /3
+[0m      [41m [0m [35mq_write[30m [34mquic.c:263 [0mASAN:DEADLYSIGNAL
+=================================================================
+==14948==ERROR: AddressSanitizer: SEGV on unknown address 0x0000e8754fe0 (pc 0x7f6eb86d0e32 bp 0x7ffc791cdba0 sp 0x7ffc791cd2b8 T0)
+==14948==The signal is caused by a READ memory access.
+    #0 0x7f6eb86d0e31  (/usr/lib/x86_64-linux-gnu/libasan.so.4+0xfce31)
+    #1 0x7f6eb864831f  (/usr/lib/x86_64-linux-gnu/libasan.so.4+0x7431f)
+    #2 0x7f6eb8648f65 in __interceptor_vfprintf (/usr/lib/x86_64-linux-gnu/libasan.so.4+0x74f65)
+    #3 0x55a9e84cde65 in util_warn_valist /home/mcmillan/projects/quant/Debug/external/warp-prefix/src/warp/lib/src/util.c:323
+    #4 0x55a9e84ce111 in util_warn /home/mcmillan/projects/quant/Debug/external/warp-prefix/src/warp/lib/src/util.c:345
+    #5 0x55a9e83bd39f in q_write /home/mcmillan/projects/quant/lib/src/quic.c:262
+    #6 0x55a9e83b06cb in serve_cb /home/mcmillan/projects/quant/bin/server.c:139
+    #7 0x7f6eb83cbe49 in http_parser_execute /home/mcmillan/projects/http-parser/http_parser.c:1075
+    #8 0x55a9e83b24b6 in main /home/mcmillan/projects/quant/bin/server.c:277
+    #9 0x7f6eb649bb96 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x21b96)
+    #10 0x55a9e83af929 in _start (/home/mcmillan/projects/quant/Debug/bin/server+0x1a8929)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV (/usr/lib/x86_64-linux-gnu/libasan.so.4+0xfce31) 
+==14948==ABORTING

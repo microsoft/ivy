@@ -1,4 +1,4 @@
-#lang ivy1.6
+#lang ivy1.7
 
 type a  # network addresses
 type p  # packets
