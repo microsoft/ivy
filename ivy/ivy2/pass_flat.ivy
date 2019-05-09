@@ -80,7 +80,12 @@ object ivy = { ...
 
             # True if we are defining an identifier
 
-            defining : bool
+            defining : bool,
+
+            # True if we are on rhs of a dot operator
+
+            dot_rhs : bool
+
         }
     }
 
@@ -118,13 +123,17 @@ object ivy = { ...
         action prefix(s:this,pref:ident) returns (s:ident) = {
             s := dotident.make(pref,s.to_str);
         }
-        action flat(s:this,st:flatst) returns (res:ident) = {
-            res := st.prmvals.get(s,s);
-            if st.has_root {
-                if st.defining {
-                    res := s.prefix(st.root)
-                } else {
-                    res := find_ident(st.root,res,st);
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            if rhs {
+                res := s
+            } else {
+                res := st.prmvals.get(s,s);
+                if st.has_root {
+                    if st.defining {
+                        res := s.prefix(st.root)
+                    } else {
+                        res := find_ident(st.root,res,st);
+                    }
                 }
             }
         }
@@ -134,8 +143,8 @@ object ivy = { ...
         action prefix(s:this,pref:ident) returns (res:ident) = {
             res := dotident.make(s.namesp.prefix(pref),s.member);
         }
-        action flat(s:this,st:flatst) returns (res:ident) = {
-            res := dotident.make(s.namesp.flat(st),s.member);
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            res := dotident.make(s.namesp.flat(rhs,st),s.member);
         }
     } 
 
@@ -143,14 +152,15 @@ object ivy = { ...
         action prefix(s:this,pref:ident) returns (res:ident) = {
             res := subsident.make(s.namesp.prefix(pref),s.subscrs);
         }
-        action flat(s:this,st:flatst) returns (res:ident) = {
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
             var f := s;
-            f.namesp := f.namesp.flat(st);
+            f.namesp := f.namesp.flat(rhs,st);
             var idx := f.subscrs.begin;
             while idx < f.subscrs.end {
                 var s := f.subscrs.value(idx);
-                s := s.flat(st);
+                s := s.flat(false,st);
                 f.subscrs := f.subscrs.set(idx,s);
+                idx := idx.next
             };         
             res := f
         }
@@ -168,7 +178,7 @@ object ivy = { ...
         
     action add_def(s:expr,st:flatst) returns (st:flatst) = {
         st.defining := true;
-        var id := s.get_name.flat(st);
+        var id := s.get_name.flat(false,st);
         st.defining := false;
         st.defs := st.defs.set(id,true);
     }
@@ -177,7 +187,7 @@ object ivy = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var f := s;
             if ~st.locals.get(f.name,false) {
-                f.name := f.name.flat(st);
+                f.name := f.name.flat(false,st);
             };
             res := f
         }
@@ -188,7 +198,7 @@ object ivy = { ...
             var arg0 : expr;
             (arg0,st) := s.args.value(0).flat(st);
             if s.is(verb.dot) & (s.args.value(0) isa symbol) & (s.args.value(1) isa symbol) {
-                res := applydot(arg0,s.args.value(1).get_name)
+                res := applydot(arg0,s.args.value(1).get_name.flat(true,st))
             } else {
                 var arg1 : expr;
                 (arg1,st) := s.args.value(1).flat(st);
