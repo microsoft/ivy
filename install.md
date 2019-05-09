@@ -98,8 +98,15 @@ notes below.
 #### Python 2.7
 
 Get it from [here](https://www.python.org/downloads) or as part of
-your Linux distribution. You should make sure to get the `pip`
-utility.  This is standard on versions from 2.7.9.
+your Linux distribution. On Ubuntu, do this:
+
+    sudo apt-get install python
+
+You should make sure to get the `pip` utility.  This is standard on
+python versions from 2.7.9. If `which pip` doesn't produce any result,
+do this:
+
+    sudo apt-get install python-pip
 
 You can install IVy in a python virtual environment if you don't want
 to pollute your local python setup. If you want to use a virtual
@@ -111,18 +118,59 @@ installation instructions:
     $ cd ivy_env
     $ . bin/activate
 
+#### GCC
+
+You need to have a C++ compiler installed. If you don't already have one, do this:
+
+    sudo apt-get install g++
+
 #### Z3
 
-Follow the instructions [here](https://github.com/Z3Prover/z3) to
-install Z3. You can test whether Z3 is correctly installed running this:
+On Ubuntu Linux, download this file:
+
+    https://github.com/Z3Prover/z3/archive/z3-4.6.0.tar.gz
+    
+Don't get a later version because there are incompatible changes in
+Z3's API after this version. Now, if you don't mind doing a system-wide
+installation of Z3, do this:
+
+    cd ~
+    tar xzf Downloads/z3-4.6.0.tar.gz
+    cd z3-4.6.0
+    python scripts/mk_make.py --prefix=/usr/local --python --pypkgdir=/usr/local/lib/python2.7/site-packages
+    cd build
+    make -j 4
+    sudo make install
+    
+Note, the `-j 4` tells make to use four CPU's. You can use another number if you want.
+    
+Do this:
+
+    export LD_LIBRARY_PATH=/usr/local/lib:
+    
+and put the above command in `~/.bashrc` as well. Also, do this:
+
+    export PYTHONPATH=/usr/local/lib/python2.7/site-packages:$PYTHONPATH
+    
+and put the above command in `~/.profile` as well.
+
+Now test your installation like this:
 
     $ python
     >>> import z3
 
-If you want to install Z3 in a virtual environment, you can install Z3
-like this:
+If you don't get an error message, Z3 may be installed. If you do get
+an error message, it definitely isn't.
 
-    $ make install PREFIX=/path/to/ivy_env
+If you don't want to do a system-wide installation, you can find some
+instructions
+[here](http://www.cs.utexas.edu/users/moore/acl2/manuals/current/manual/index-seo.php/SMT____Z3-INSTALLATION). If
+you follow these instructions, then also do this:
+
+    export Z3DIR=$HOME/usr
+    
+and put the above command in your .profile as well.
+
 
 #### Python packages
 
