@@ -16,6 +16,15 @@ module generic_flat(ivytype,ivyclass) = {
     }
 }
 
+module generic_flat_stmt(ivytype,ivyclass) = {
+    action flat(s:ivytype,st:flatst) returns (res:ivyclass,st:flatst) = {
+        var t : ivytype;
+        (t,st) := s.flat_int(st);
+        t.ann := s.ann;
+        res := t;
+    }
+}
+
 # A `def_map` is a map from identifiers to a range type. I has the same
 # interface as `hash_map`, plus an action `get_def` that looks up the value of
 # an identifier and reports an error if it is not found.
@@ -35,6 +44,8 @@ object ivy = { ...
 
 
     instance ident_to_moduledc : def_map(moduledc)
+    instance ident_to_ident : hash_map(ident,ident)
+    instance ident_set : hash_map(ident,bool)
     
     object flatst = {
         type this = struct {
@@ -45,22 +56,41 @@ object ivy = { ...
 
             # The module parameter valuations
 
-            prmvals : symeval,
+            prmvals : ident_to_ident,
 
             # The module declarations, by name
 
-            moddecls : ident_to_moduledc
+            moddecls : ident_to_moduledc,
 
+            # The set of defined identifiers
+
+            defs : ident_set,
+            
+            # True if the hierarchy root is set
+
+            has_root : bool,
+
+            # The current hierarchy root
+
+            root : ident,
+
+            # The current local variables
+
+            locals : ident_set,
+
+            # True if we are defining an identifier
+
+            defining : bool
         }
     }
 
-    action prm_map(fml:vector[expr],act:vector[expr],ann:annot) returns (res:symeval) = {
+    action prm_map(fml:vector[expr],act:vector[expr],ann:annot) returns (res:ident_to_ident) = {
         if fml.end ~= act.end {
             call report_error(wrong_number_params.make(fml.end),ann);
         } else {
             var idx := fml.begin;
             while idx < fml.end {
-                res := res.set(fml.value(idx).get_name,act.value(idx));
+                res := res.set(fml.value(idx).get_name,act.value(idx).get_name);
                 idx := idx.next;
             }
         }
@@ -71,14 +101,85 @@ object ivy = { ...
     }
 
     action applydot(arg:expr,member:ident) returns (res:expr) = {
-        var name := dotident.make(arg.get_name,member.to_str);
+        var name := member.prefix(arg.get_name);
         res := symbol.make(name,arg.get_ann);
     }
     
+    action find_ident(root:ident,s:ident,st:flatst) returns (s:ident) = {
+        var cand := s.prefix(root);
+        if st.defs.mem(cand) {
+            s := cand
+        } else if root isa dotident {
+            s := find_ident(root.get_namesp,s,st)
+        }
+    }
+
+    object ident = { ...
+        action prefix(s:this,pref:ident) returns (s:ident) = {
+            s := dotident.make(pref,s.to_str);
+        }
+        action flat(s:this,st:flatst) returns (res:ident) = {
+            res := st.prmvals.get(s,s);
+            if st.has_root {
+                if st.defining {
+                    res := s.prefix(st.root)
+                } else {
+                    res := find_ident(st.root,res,st);
+                }
+            }
+        }
+    }
+
+    object dotident = { ...
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(s.namesp.prefix(pref),s.member);
+        }
+        action flat(s:this,st:flatst) returns (res:ident) = {
+            res := dotident.make(s.namesp.flat(st),s.member);
+        }
+    } 
+
+    object subsident = { ...
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := subsident.make(s.namesp.prefix(pref),s.subscrs);
+        }
+        action flat(s:this,st:flatst) returns (res:ident) = {
+            var f := s;
+            f.namesp := f.namesp.flat(st);
+            var idx := f.subscrs.begin;
+            while idx < f.subscrs.end {
+                var s := f.subscrs.value(idx);
+                s := s.flat(st);
+                f.subscrs := f.subscrs.set(idx,s);
+            };         
+            res := f
+        }
+    } 
+
+    object expr = { ...
+        action prefix(s:this,pref:ident) returns (res:expr)
+    }
+
+    object symbol = { ...
+        action prefix(s:this,pref:ident) returns (res:expr) = {
+            res := symbol.make(s.get_name.prefix(pref),s.get_ann);
+        }
+    }
+        
+    action add_def(s:expr,st:flatst) returns (st:flatst) = {
+        st.defining := true;
+        var id := s.get_name.flat(st);
+        st.defining := false;
+        st.defs := st.defs.set(id,true);
+    }
+
     object symbol = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
-            var dflt : expr := s;  # workaround
-            res := st.prmvals.get(s.get_name,dflt);
+            var f := s;
+            if ~st.locals.get(f.name,false) {
+                f.name := f.name.flat(st);
+            };
+            res := f
         }
     }
 
@@ -97,31 +198,122 @@ object ivy = { ...
     }
 
     object stmt = { ...
-        action flat(s:this,st:flatst) returns (s:this,st:flatst)
+        action flat(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s
+        }
+        action get_ident(s:this) returns (res:ident)
+    }
+
+    object asgn = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.lhs,st) := res.lhs.flat(st);
+            (res.rhs,st) := res.rhs.flat(st);
+        }
+    }
+
+    object sequence = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.lhs,st) := res.lhs.flat(st);
+            if res.lhs isa varst {
+                var id := res.lhs.get_ident;
+                var old_local := st.locals.get(id,false);
+                st.locals := st.locals.set(id,true);
+                (res.rhs,st) := res.rhs.flat(st);
+                st.locals := st.locals.set(id,old_local);
+            } else {
+                (res.rhs,st) := res.rhs.flat(st);
+            }
+        }
+    }
+
+    object ifst = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.cond,st) := res.cond.flat(st);
+            (res.thenst,st) := res.thenst.flat(st);
+            (res.elsest,st) := res.elsest.flat(st);
+        }
+    }
+
+    action flat_formal(s:expr,st:flatst) returns (res:expr,st:flatst) = {
+        res := s;
+        if res.is(verb.colon) {
+            var ty : expr;
+            (ty,st) := res.get_arg(1).flat(st);
+            res := colon.make(res.get_arg(0),ty,res.get_ann)
+        }
     }
     
+    action formal_ident(s:expr) returns (res:ident) = {
+        res := s.get_arg(0).get_name if (s.is(verb.colon)) else s.get_name
+    }
+
+    object varst = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.name,st) := flat_formal(res.name,st);
+        }
+        action get_ident(s:this) returns (res:ident) = {
+            res := formal_ident(s.name)
+        }
+    }
+
     object decl = { ...
-        action flat(s:decl,st:flatst) returns (st:flatst)
+        action flat(s:this,st:flatst) returns (st:flatst)
+        action defd(s:this,st:flatst) returns (st:flatst)
     }
 
     action flat_exprvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
         var idx := es.begin;
         while idx < es.end {
-            var e : expr;
-            (e,st) := es.value(idx).flat(st);
+            var e := es.value(idx);
+            (e,st) := e.flat(st);
             es := es.set(idx,e);
             idx := idx.next;
         }
     }
 
+    action flat_formalvec(es:vector[expr],st:flatst) returns (es:vector[expr],st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+            (e,st) := flat_formal(e,st);
+            es := es.set(idx,e);
+            idx := idx.next;
+        }
+    }
+
+    action local_vec(es:vector[expr],val:bool,st:flatst) returns (st:flatst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+            st.locals := st.locals.set(formal_ident(e),val);
+            idx := idx.next;
+        }
+    }
+
+
     object actdc = { ...
         instantiate generic_flat(this,decl)
         action flat_int(s:actdc,st:flatst) returns (res:this,st:flatst) = {
             (res.name,st) := s.name.flat(st);
-            (res.inputs,st) := flat_exprvec(s.inputs,st);
-            (res.outputs,st) := flat_exprvec(s.outputs,st);
+            (res.inputs,st) := flat_formalvec(s.inputs,st);
+            (res.outputs,st) := flat_formalvec(s.outputs,st);
+            st := local_vec(res.inputs,true,st);
+            st := local_vec(res.outputs,true,st);
 	    res.has_body := s.has_body;
             (res.body,st) := s.body.flat(st);
+            st := local_vec(res.inputs,false,st);
+            st := local_vec(res.outputs,false,st);
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.name,st);
         }
     }
 
@@ -130,6 +322,9 @@ object ivy = { ...
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             (res.sort,st) := s.sort.flat(st);
 	}
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.sort,st);
+        }
     }
 	
     object vardc = { ...
@@ -138,6 +333,9 @@ object ivy = { ...
             res.is_destructor := s.is_destructor;
             (res.typing,st) := s.typing.flat(st);
 	}
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.typing.get_arg(0),st);
+        }
     }
 
     object header = { ...
@@ -156,39 +354,114 @@ object ivy = { ...
     }
 
     object moduledc = { ...
-        action flat(s:this,st:flatst) returns (st:flatst) = {
+        action defd(s:this,st:flatst) returns (st:flatst) = {
             st.moddecls := st.moddecls.set(s.name.get_name,s);
-	}
+            st := add_def(s.name,st);
+        }
     }
 
     object instantiatedc = { ...
-        action flat(s:this,st:flatst) returns (st:flatst) = {
+        action setup(s:this,st:flatst) returns (mod:moduledc,st:flatst) = {
             var name : expr;
             var prms : vector[expr];
             (name,st) := s.name.flat(st);
             (prms,st) := flat_exprvec(s.prms,st);
-            var mod := st.moddecls.get_def(name.get_name,s.ann);
-            var old_prmvals := st.prmvals;
+            mod := st.moddecls.get_def(name.get_name,s.ann);
             st.prmvals := prm_map(mod.prms,prms,s.ann);
+        }
+
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var mod : moduledc;
+            var old_prmvals := st.prmvals;
+            (mod,st) := s.setup(st);
             st := mod.body.flat(st);
             st.prmvals := old_prmvals;
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var mod : moduledc;
+            var old_prmvals := st.prmvals;
+            (mod,st) := s.setup(st);
+            st := mod.body.defd(st);
+            st.prmvals := old_prmvals;
+        }
+    }
+
+    action set_root(st:flatst,s:expr) returns (st:flatst) = {
+        st.root := s.get_name.prefix(st.root) if st.has_root else s.get_name;
+        st.has_root := true;
+    }
+
+    object objectdc = { ...
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var old_has_root := st.has_root;
+            var old_root := st.root;
+            st := set_root(st,s.name);
+            st := s.body.flat(st);
+            st.has_root := old_has_root;
+            st.root := old_root;
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            st := add_def(s.name,st);
+            var old_has_root := st.has_root;
+            var old_root := st.root;
+            st := set_root(st,s.name);
+            st := s.body.defd(st);
+            st.has_root := old_has_root;
+            st.root := old_root;
+        }
+    }
+
+    object instancedc = { ...
+        action desugar(s:this) returns (res:decl) = {
+            var body := instantiatedc.make(s.modname,s.prms,s.ann);
+            res := objectdc.make(s.objname,body,s.ann);
+        }
+        
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var ds := desugar(s);  # workaround
+            st := ds.flat(st);
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var ds := desugar(s);  # workaround
+            st := ds.defd(st);
         }
     }
 
     object groupdc = { ...
 	action flat(s:this,st:flatst) returns (st:flatst) = {
             var idx := s.decls.begin;
-            var decls : vector[decl];
             while idx < s.decls.end {
                 st := s.decls.value(idx).flat(st);
                 idx := idx.next;
             };
         }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                st := s.decls.value(idx).defd(st);
+                idx := idx.next;
+            };
+        }
     }
 
+    import action show_defs(d:ident_set)
+
     object prog = { ...
+        
+
         action flat(p:prog,st:flatst) returns (p:prog,st:flatst) = {
+
+            # A pass to record all the defined identifiers
+            
             var idx := p.decls.begin;
+            while idx < p.decls.end {
+                st := p.decls.value(idx).defd(st);
+                idx := idx.next;
+            };
+
+            # A pass to flatten
+
+            idx := p.decls.begin;
             while idx < p.decls.end {
                 st := p.decls.value(idx).flat(st);
                 idx := idx.next;

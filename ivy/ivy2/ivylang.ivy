@@ -284,11 +284,12 @@ object ivy = {
             prms : vector[expr],
             ann : annot
         }
-        action make(name : expr, prms : vector[expr]) returns (res:decl) =
+        action make(name : expr, prms : vector[expr], ann:annot) returns (res:decl) =
         {
             var s:this;
             s.name := name;
             s.prms := prms;
+            s.ann := ann;
             res := s;
         }
 
@@ -297,6 +298,72 @@ object ivy = {
             b := b.extend("instantiate");
             b := b.extend(" ");
             b := s.name.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.newline
+        }	    
+
+    }
+
+    object objectdc = {
+        variant this of decl = struct {
+            name : expr,
+            body : decl,
+            ann : annot
+        }
+        action make(name : expr, body : decl, ann:annot) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.body := body;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("object");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.unnest;
+            b := b.extend(" ");
+            b := b.extend("=");
+            b := b.extend(" ");
+            b := s.body.encode(b,0);
+        }	    
+
+    }
+
+    # The declaration `instance x : y(p1...pn)` is a shorthand for
+    # `object x : { instantiate y(p1...pn) }`.
+
+    object instancedc = {
+        variant this of decl = struct {
+            objname : expr,
+            modname : expr,
+            prms : vector[expr],
+            ann : annot
+        }
+        action make(objname : expr, modname : expr, prms : vector[expr]) returns (res:decl) =
+        {
+            var s:this;
+            s.objname := objname;
+            s.modname := modname;
+            s.prms := prms;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("instance");
+            b := b.extend(" ");
+            b := s.objname.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend(":");
+            b := b.extend(" ");
+            b := s.modname.encode(b,0);
             if s.prms.end > 0 {
                 b := expr.tup.encode(s.prms,b,0)
             };
@@ -396,6 +463,33 @@ object ivy = {
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
                 (st,s.name) := expr.parse(st,99);
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "object" {
+                var s : objectdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                };
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := decl.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "instance" {
+                var s : instancedc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.objname) := expr.parse(st,99);
+                if st.ok & st.tok = ":" {
+                    st := st.consume;
+                };
+                if st.ok {
+                    (st,s.modname) := expr.parse(st,99)
+                };
                 if st.ok & st.tok = "(" {
                     (st,s.prms) := expr.tup.parse(st,0);
                 };

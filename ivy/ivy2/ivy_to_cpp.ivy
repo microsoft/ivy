@@ -132,6 +132,19 @@ object ivy = { ...
         }
     }
 
+    object subsident = { ...
+        action to_cpp(s:this) returns (res:cpp.ident) = {
+            var t : cpp.subsident;
+            t.namesp := s.namesp.to_cpp;
+            var idx := s.subscrs.begin;
+            while idx < s.subscrs.end {
+                t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp);
+                idx := idx.next
+            };
+            res := t
+        }
+    }
+
     object expr = { ...
         action to_cpp(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst)
     }
@@ -398,17 +411,15 @@ object ivy = { ...
             var fst : flatst;
             (p,fst) := p.flat(fst);
 
-            res := p.enc
+            # Translate to C++
 
-            # # Translate to C++
+            var cppexpr : cpp.prog;
+            var st : tocppst;
+            (cppexpr,st) := p.to_cpp(st);
 
-            # var cppexpr : cpp.prog;
-            # var st : tocppst;
-            # (cppexpr,st) := p.to_cpp(st);
+            # Pretty-print the C++
 
-            # # Pretty-print the C++
-
-            # res := cppexpr.enc
+            res := cppexpr.enc
         }
     }
 

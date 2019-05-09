@@ -130,7 +130,7 @@ module parse_intf(expr) = {
     action encode(e:expr,b:pretty,prio:priority) returns (b:pretty)
 
     action enc(e:expr) returns (s:str) = {
-        var p := pretty.make(15,4);
+        var p := pretty.make(100,4);
         p := e.encode(p,0);
         p := p.flush;
         s := p.output
@@ -163,6 +163,7 @@ module expr_base(cppstyle) = {
         action to_str(s:this) returns (res:str)
         action get_namesp(s:this) returns (res:ident)
         action get_member(s:this) returns (res:str)
+        action get_subscripts(s:this) returns (res:vector[ident])
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -235,6 +236,60 @@ module expr_base(cppstyle) = {
         }
     }
 
+    # Subscripted identifiers are used for templates
+        
+    object subsident = {
+        variant this of ident = struct {
+            namesp : ident,
+            subscrs : vector[ident]
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.namesp.encode(b,0);
+            if cppstyle {
+                b := b.extend("< ");
+                var idx := s.subscrs.begin;
+                while idx < s.subscrs.end {
+                    if idx > 0 {
+                        b := b.extend(",");
+                    };
+                    b := s.subscrs.value(idx).encode(b,0);
+                    idx := idx.next
+                };
+                b := b.extend(" >");
+            } else {
+                var idx := s.subscrs.begin;
+                while idx < s.subscrs.end {
+                    b := b.extend("[");
+                    b := s.subscrs.value(idx).encode(b,0);
+                    b := b.extend("]");
+                    idx := idx.next
+                }
+            }
+        }
+        action make(namesp:ident,subscrs:vector[ident]) returns (res:ident) = {
+            var s : this;
+            s.namesp := namesp;
+            s.subscrs := subscrs;
+            res := s
+        }
+        action to_str(s:this) returns (res:str) = {
+            res := s.namesp.to_str;
+            var idx := s.subscrs.begin;
+            while idx < s.subscrs.end {
+                res := res.extend("[");
+                res := res.extend(s.subscrs.value(idx).to_str);
+                res := res.extend("]");
+                idx := idx.next
+            }
+        }
+        action get_namesp(s:this) returns (res:ident) = {
+            res := s.namesp;
+        }
+        action get_subscripts(s:this) returns (res:vector[ident]) = {
+            res := s.subscrs;
+        }
+    }
+
     object expr = {
         type this
         instantiate parse_intf(expr)
@@ -288,8 +343,21 @@ module expr_base(cppstyle) = {
                 var s : symbol;
                 s.name := strident.make(st.tok);
                 (st,s.ann) := st.get_ann;
-                res := s;
                 st := st.consume;
+                var subscrs : vector[ident];
+                while st.ok & st.tok = "[" {
+                    st := st.consume;
+                    var subs : expr;
+                    (st,subs) := symbol.parse(st);
+                    if st.ok & st.tok = "]" {
+                        st := st.consume;
+                        subscrs := subscrs.append(subs.get_name);
+                    }
+                };
+                if subscrs.end > 0 {
+                    s.name := subsident.make(s.name,subscrs)
+                };
+                res := s;
             }
             else {
                 st.ok := false;
