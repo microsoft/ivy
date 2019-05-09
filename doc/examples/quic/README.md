@@ -131,7 +131,7 @@ Notice the dot in the above, which is essential.
 If there's no directory `build` in this directory, make one now:
 
     $ mkdir build
-    $ mkdir temp
+    $ mkdir test/temp
 
 ### Install some packages
 
@@ -318,17 +318,71 @@ If the specification is violated by the packet trace, the file will
 end with an error message indicating the requirement that was
 violated.
 
-Run the server tester
-=====================
+Run the server and client testers
+=================================
 
-In this directory, start the server using the instructions for that
-server implementation. Use port number 4443 on the loopack
-interface. Then use this command:
+First, set an envionment variable to tell the test script where to find
+your implementations of QUIC:
 
-    ./quic_server_test_stream > log.iev
+    export QUIC_IMPL_DIR=~
+    
+This is assuming you built the QUIC implementations in subdirectories
+of your home directory. If you put them somewhere else, adjust
+accordingly.
 
-See above for description of the output file log.iev. You can used the
-command line option `seed=<int>` to set the random seed.
+Do this to test the server implementation of picoquic:
+
+    $ cd test
+    $ python test.py iters=1 server=picoquic test=quic_server_stream
+    
+You may get output that looks something like this:
+
+    output directory: temp/175
+    ../quic_server_test_max (0) ...
+    server pid: 9410
+    timeout 20 ./build/quic_server_test_max seed=0 the_cid=0 server_cid=1 client_port=4987 client_port_alt=4988
+    quic_server_test.ivy: line 518: error: assumption failed
+    client return code: 1
+    FAIL
+    error: 1 tests(s) failed
+
+You can see here the output directory that was created and the command that was run. In this case the
+test reported a failure. You can look at the given source code line to see where the failure was. Looking
+in the output directory, we have the following:
+
+    $ ls temp/175
+    quic_server_test_stream0.err  quic_server_test_stream0.iev  quic_server_test_stream0.out
+
+For each test run (there was only one in our case), we have the log of
+ivy events (extension `.iev`) the standard output from the server
+(extension `.out`) and the standard error from the server (extension
+`.err`). You can use the ivy event viewer to look at the ivy event log:
+
+    $ ivy_ev_viewer temp/175/quic_server_test_stream0.iev
+    
+If you compiled other testers, you can adjust the `test` parameter of
+the test script.  To test a client, do this:
+
+    $ cd test
+    $ python test.py iters=1 client=picoquic test=quic_client_stream
+
+The test script has various parameters. Try this to get the usage summary:
+
+    $ python test.py help
+    usage:
+        test.py [option...]
+    options:
+        dir=<output directory to create>
+        iters=<number of iterations>
+        {client,server}={picoquic,quant,winquic}
+        test=<test name pattern>
+        stats={true,false}
+        run={true,false}
+
+With `run=false` the script does not actually run the server or
+client. You can run the the server or the client in another shell, or
+on another machine.
+
 
 View the log
 ============
