@@ -1,0 +1,27 @@
+#lang ivy1.7
+
+type t
+relation p(X:t)
+relation q(X:t)
+
+var a : t
+var b : bool
+var c : bool
+
+axiom p(a)
+
+relation r(X:t,Y:t)
+schema foo = {
+    property exists Y. r(X,Y)
+}
+
+axiom p(X) & r(X,Y) -> q(X)
+
+
+property exists Z. q(Z)
+proof {
+    property [baz] exists X. p(X) named y;
+    showgoals;
+    instantiate foo with X = y;
+    showgoals
+}

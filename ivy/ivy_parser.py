@@ -852,6 +852,13 @@ else:
         p[0] = AssumeTactic(a,p[3])
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_instantiate(p):
+        'proofstep : INSTANTIATE atype optrenaming'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(a,p[3])
+        p[0].lineno = get_lineno(p,1)
+
     def p_proofstep_showgoals(p):
         'proofstep : SHOWGOALS'
         p[0] = ShowGoalsTactic()
@@ -869,6 +876,15 @@ else:
         p[0] = SpoilTactic(a)
         p[0].lineno = get_lineno(p,1)
     
+    def p_proofstep_property(p):
+        'proofstep : opttemporal PROPERTY labeledfmla optskolem optproofgroup'
+        lf = addlabel(p[3],'prop')
+        prop = addtemporal(lf) if p[1] else check_non_temporal(lf)
+        name = p[4] if p[4] else NoneAST()
+        proof = p[5] if p[5] else NoneAST()
+        p[0] = PropertyTactic(prop,name,proof)
+        p[0].lineno = get_lineno(p,2)
+
 def p_match_defn(p):
     'match : defn'
     p[0] = p[1]
@@ -938,6 +954,13 @@ else:
         p[0] = AssumeTactic(*([a,p[3]]+p[5]))
         p[0].lineno = get_lineno(p,1)
 
+    def p_proofstep_instantiate_with_defns(p):
+        'proofstep : INSTANTIATE atype optrenaming WITH matches'
+        a = Atom(p[2])
+        a.lineno = get_lineno(p,2)
+        p[0] = AssumeTactic(*([a,p[3]]+p[5]))
+        p[0].lineno = get_lineno(p,1)
+
     def p_pflet_var_eq_fmla(p):
         'pflet : var EQ fmla'
         p[0] = Definition(p[1],check_non_temporal(p[3]))
@@ -991,6 +1014,14 @@ def p_optproof(p):
 
 def p_optproof_symbol(p):
     'optproof : PROOF proofstep'
+    p[0] = p[2]
+    
+def p_optproofgroup(p):
+    'optproofgroup :'
+    p[0] = None
+
+def p_optproofgroup_symbol(p):
+    'optproofgroup : PROOF proofgroup'
     p[0] = p[2]
     
 if iu.get_numeric_version() <= [1,6]:

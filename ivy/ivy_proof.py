@@ -152,6 +152,8 @@ class ProofChecker(object):
                 return self.if_tactic(decls,proof)
             elif isinstance(proof,ia.NullTactic):
                 return decls
+            elif isinstance(proof,ia.PropertyTactic):
+                return self.property_tactic(decls,proof)
             assert False,"unknown proof type {}".format(type(proof))
 
     def compose_proofs(self,decls,proofs):
@@ -178,6 +180,49 @@ class ProofChecker(object):
         subgoal = ia.LabeledFormula(decls[0].label,il.Implies(cond,decls[0].formula))
         subgoal.lineno = decls[0].lineno
         return attrib_goals(proof,[subgoal]) + decls[1:]
+
+    def property_tactic(self,decls,proof):
+        cut = proof.args[0]
+        goal = decls[0]
+        subgoal = goal_subst(goal,cut,cut.lineno)
+        lhs = proof.args[1]
+        if not isinstance(lhs,ia.NoneAST):
+            fmla = il.drop_universals(cut.formula)
+            if not il.is_exists(fmla) or len(fmla.variables) != 1:
+                raise IvyError(proof,'property is not existential')
+            evar = list(fmla.variables)[0]
+            rng = evar.sort
+            vmap = dict((x.name,x) for x in lu.variables_ast(fmla))
+            used = set()
+            args = lhs.args
+            targs = []
+            for a in args:
+                if a.name in used:
+                    raise IvyError(lhs,'repeat parameter: {}'.format(a.name))
+                used.add(a.name)
+                if a.name in vmap:
+                    v = vmap[a.name]
+                    targs.append(v)
+                    if not (il.is_topsort(a.sort) or a.sort != v.sort):
+                        raise IvyError(lhs,'bad sort for {}'.format(a.name))
+                else:
+                    if il.is_topsort(a.sort):
+                        raise IvyError(lhs,'cannot infer sort for {}'.format(a.name))
+                    targs.append(a)
+            for x in vmap:
+                if x not in used:
+                    raise IvyError(lhs,'{} must be a parameter of {}'.format(x,lhs.rep))
+            dom = [x.sort for x in targs]
+            sym = il.Symbol(lhs.rep,il.FuncConstSort(*(dom+[rng])))
+            if sym in self.stale or sym in goal_defns(goal):
+                raise iu.IvyError(lhs,'{} is not fresh'.format(sym))
+            term = sym(*targs) if targs else sym
+            fmla = lu.substitute_ast(fmla.body,{evar.name:term})
+            cut = clone_goal(cut,[],fmla)
+            goal = goal_add_prem(goal,ia.ConstantDecl(sym),goal.lineno)
+        
+        return [goal_add_prem(goal,cut,cut.lineno)] + decls[1:] + [subgoal]
+
 
     def setup_matching(self,decl,proof):
         schemaname = proof.schemaname()
