@@ -276,6 +276,36 @@ object cpp = {
         }
     }
         
+    object namespacedecl = {
+        variant this of decl = struct {
+            name : expr,
+            members : vector[decl],
+            ann : annot
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("namespace");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("{");
+            b := b.nest;
+            var idx := s.members.begin;
+            while idx < s.members.end {
+                b := b.newline;
+                b := s.members.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("}");
+            b := b.newline;
+        }
+    }
+        
 
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
@@ -315,6 +345,21 @@ object cpp = {
                     st := st.consume;
                 } else {
                     st.ok := false;
+                };
+                res := t;
+            } else if st.tok = "namespace" {
+                st := st.consume;
+                var t : namespacedecl;
+                (st,t.name) := symbol.parse(st);
+                t.ann := ann;
+                if st.ok & st.tok = "{" {
+                    st := st.consume;
+                    (st,t.members) := parse_list(st,0);
+                    if st.ok & st.tok = "}" {
+                        st := st.consume;
+                    } else {
+                        st.ok := false
+                    }
                 };
                 res := t;
             } else if st.tok = "#" {
