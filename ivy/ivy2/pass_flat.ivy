@@ -141,14 +141,18 @@ object ivy = { ...
                 s2.subscrs := s2.subscrs.set(idx,t);
                 idx := idx.next
             };         
-            res := s2;
-            if ~rhs {
-                res := st.prmvals.get(res,res);
-                if st.has_root {
-                    if st.defining {
-                        res := res.prefix(st.root)
-                    } else {
-                        res := find_ident(st.root,res,st);
+            if st.has_root & s2.val = "this" & s2.subscrs.end = 0 {
+                res := st.root
+            } else {
+                res := s2;
+                if ~rhs {
+                    res := st.prmvals.get(res,res);
+                    if st.has_root {
+                        if st.defining {
+                            res := res.prefix(st.root)
+                        } else {
+                            res := find_ident(st.root,res,st);
+                        }
                     }
                 }
             }
