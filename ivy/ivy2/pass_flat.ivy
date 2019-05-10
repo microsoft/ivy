@@ -120,17 +120,33 @@ object ivy = { ...
     }
 
     object ident = { ...
-        action prefix(s:this,pref:ident) returns (s:ident) = {
-            s := dotident.make(pref,s.to_str);
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := s
         }
         action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
-            if rhs {
-                res := s
-            } else {
-                res := st.prmvals.get(s,s);
+            res := s
+        }
+    }
+
+    object strident = { ...
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(pref,s);
+        }
+        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
+            var s2 := s;  # workaround
+            var idx := s2.subscrs.begin;
+            while idx < s2.subscrs.end {
+                var t := s2.subscrs.value(idx);
+                t := t.flat(false,st);
+                s2.subscrs := s2.subscrs.set(idx,t);
+                idx := idx.next
+            };         
+            res := s2;
+            if ~rhs {
+                res := st.prmvals.get(res,res);
                 if st.has_root {
                     if st.defining {
-                        res := s.prefix(st.root)
+                        res := res.prefix(st.root)
                     } else {
                         res := find_ident(st.root,res,st);
                     }

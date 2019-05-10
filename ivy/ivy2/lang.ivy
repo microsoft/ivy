@@ -162,7 +162,7 @@ module expr_base(cppstyle) = {
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
         action to_str(s:this) returns (res:str)
         action get_namesp(s:this) returns (res:ident)
-        action get_member(s:this) returns (res:str)
+        action get_member(s:this) returns (res:ident)
         action get_subscripts(s:this) returns (res:vector[ident])
     }
     
@@ -171,10 +171,33 @@ module expr_base(cppstyle) = {
         
     object strident = {
         variant this of ident = struct {
-            val : str
+            val : str,
+            subscrs : vector[ident]
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
-            b := b.extend(s.val)
+            b := b.extend(s.val);
+            if cppstyle {
+                if s.subscrs.end > 0 {
+                    b := b.extend("< ");
+                    var idx := s.subscrs.begin;
+                    while idx < s.subscrs.end {
+                        if idx > 0 {
+                            b := b.extend(",");
+                        };
+                        b := s.subscrs.value(idx).encode(b,0);
+                        idx := idx.next
+                    };
+                    b := b.extend(" >");
+                }
+            } else {
+                var idx := s.subscrs.begin;
+                while idx < s.subscrs.end {
+                    b := b.extend("[");
+                    b := s.subscrs.value(idx).encode(b,0);
+                    b := b.extend("]");
+                    idx := idx.next
+                }
+            }
         }
         action make(val:str) returns (res:ident) = {
             var s : this;
@@ -182,7 +205,14 @@ module expr_base(cppstyle) = {
             res := s
         }
         action to_str(s:this) returns (res:str) = {
-            res := s.val
+            res := s.val;
+            var idx := s.subscrs.begin;
+            while idx < s.subscrs.end {
+                res := res.extend("[");
+                res := res.extend(s.subscrs.value(idx).to_str);
+                res := res.extend("]");
+                idx := idx.next
+            }
         }
     }
 
@@ -210,14 +240,14 @@ module expr_base(cppstyle) = {
     object dotident = {
         variant this of ident = struct {
             namesp : ident,
-            member : str
+            member : strident
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.namesp.encode(b,0);
             b := b.extend("::" if cppstyle else ".");
-            b := b.extend(s.member)
+            b := s.member.encode(b,0)
         }
-        action make(namesp:ident,member:str) returns (res:ident) = {
+        action make(namesp:ident,member:strident) returns (res:ident) = {
             var s : this;
             s.namesp := namesp;
             s.member := member;
@@ -226,12 +256,12 @@ module expr_base(cppstyle) = {
         action to_str(s:this) returns (res:str) = {
             res := s.namesp.to_str;
             res := res.extend(".");
-            res := res.extend(s.member);
+            res := res.extend(s.member.to_str);
         }
         action get_namesp(s:this) returns (res:ident) = {
             res := s.namesp;
         }
-        action get_member(s:this) returns (res:str) = {
+        action get_member(s:this) returns (res:ident) = {
             res := s.member;
         }
     }
@@ -341,22 +371,21 @@ module expr_base(cppstyle) = {
         action parse(st : pstate) returns(st : pstate, res:expr) = {
             if st.ok & st.tok.end ~= 0 {
                 var s : symbol;
-                s.name := strident.make(st.tok);
+                var id : strident;
+                id.val := st.tok;
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
-                var subscrs : vector[ident];
                 while st.ok & st.tok = "[" {
                     st := st.consume;
                     var subs : expr;
                     (st,subs) := symbol.parse(st);
                     if st.ok & st.tok = "]" {
                         st := st.consume;
-                        subscrs := subscrs.append(subs.get_name);
+                        id.subscrs := id.subscrs.append(subs.get_name);
                     }
                 };
-                if subscrs.end > 0 {
-                    s.name := subsident.make(s.name,subscrs)
-                };
+                var x : ident := id;  # workaround
+                s.name := x;
                 res := s;
             }
             else {

@@ -78,7 +78,12 @@ object ivy = { ...
 
 	    # True if we are in a class declaration
 
-	    in_class : bool
+	    in_class : bool,
+
+            # True if we are only emitting prototypes
+
+            proto_only : bool
+
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -92,7 +97,7 @@ object ivy = { ...
 
     action name_in_context(name:expr,st:tocppst) returns(name:expr) = {
         if st.in_class {
-	    name := symbol.makestr(name.get_name.get_member,name.get_ann);
+	    name := symbol.make(name.get_name.get_member,name.get_ann);
 	};
     }
 
@@ -115,11 +120,20 @@ object ivy = { ...
         action to_cpp(s:this) returns (res:cpp.ident)
     }
 
+    action strident_to_cpp(s:strident) returns (t:cpp.strident) = {
+        t.val := s.val;
+        var idx := s.subscrs.begin;
+        while idx < s.subscrs.end {
+            t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp);
+            idx := idx.next
+        }
+    }
+
     object strident = { ...
         action to_cpp(s:this) returns (res:cpp.ident) = {
-            var t : cpp.strident;
-            t.val := s.val;
-            res := t
+            var x := strident_to_cpp(s); # workaround
+            var y : cpp.ident := x;
+            res := y;
         }
     }
 
@@ -127,7 +141,7 @@ object ivy = { ...
         action to_cpp(s:this) returns (res:cpp.ident) = {
             var t : cpp.dotident;
             t.namesp := s.namesp.to_cpp;
-            t.member := s.member;
+            t.member := strident_to_cpp(s.member);
             res := t
         }
     }
@@ -219,27 +233,27 @@ object ivy = { ...
     }
 
     object actdc = { ...
-        instantiate generic_to_cpp(this,cpp.funcdecl,cpp.decl)
-
-
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. If the action is a member action, we
         # drop the first input and replace it with `*this`.
         
-        action to_cpp_int(s:actdc,st:tocppst) returns (res:cpp.funcdecl,st:tocppst) = {
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.funcdecl;
+            res.ann := s.ann;
             var has_output := s.outputs.end > 0;
             if has_output {
                 (res.ftype.base._type,st) := s.outputs.value(0).get_arg(1).to_cpp(st);
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
-	    var name := name_in_context(s.name,st); 
+            var proto := ~s.has_body | st.proto_only;
+	    var name := member_name(s.name) if (proto | st.in_class) else s.name; 
             (res.ftype.base.name,st) := name.to_cpp(st);
             var idx := s.inputs.begin;
             st.is_member := s.is_member;
             if st.is_member {
                 idx := idx.next;   # skip the first input "this" if a member
-                st.this_ident := s.inputs.value(0).get_arg(1).get_name;
+                st.this_ident := s.inputs.value(0).get_arg(0).get_name;
             };
             while idx < s.inputs.end {
                 var arg := s.inputs.value(idx);
@@ -249,7 +263,7 @@ object ivy = { ...
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
-            res.has_body := s.has_body;
+            res.has_body := s.has_body & ~proto;
             if s.has_body {
                 var body :cpp.stmt;
                 (body,st) := s.body.to_cpp(st);
@@ -264,6 +278,10 @@ object ivy = { ...
                 }
             };
             st.is_member := false;
+            resd := res;
+            if ~st.in_class & proto {
+                resd := add_namespaces(resd,s.name.get_name);
+            }
         }
 
         # Here, we register actions as members of types. These will be emitted
@@ -281,19 +299,48 @@ object ivy = { ...
         # does not have a body.
 
         action emitted(s:this,st:tocppst) returns (res:bool) = {
-            res := ~s.is_member | s.has_body;
+            res := ~s.is_member | s.has_body & ~st.proto_only;
         }
     }
+
+    action add_namespaces_rec(d:cpp.decl,id:ident) returns(d:cpp.decl) = {
+        var nd : cpp.namespacedecl;
+        nd.ann := d.get_ann;
+        var name := id.get_member if (id isa dotident) else id;
+        nd.name := cpp.symbol.make(name.to_cpp,d.get_ann);
+        nd.members := nd.members.append(d);
+        d := nd;
+        if id isa dotident {
+            d := add_namespaces(d,id.get_namesp);
+        }
+    }
+
+    action add_namespaces(d:cpp.decl,id:ident) returns(d:cpp.decl) = {
+        if id isa dotident {
+            d := add_namespaces_rec(d,id.get_namesp);
+        }
+    }        
+
+    action member_name(s:expr) returns(s:expr) = {
+        if s.is(verb.colon) {
+            s := colon.make(member_name(s.get_arg(0)),s.get_arg(1),s.get_ann)
+        } else 
+        if (s.get_name) isa dotident {
+            s := symbol.make(s.get_name.get_member,s.get_ann)
+        }
+    }        
+
 
     # Translate a type declaration to C++. All Ivy types translate to
     # C++ structs.
 
     object typedc = { ...
-        instantiate generic_to_cpp(this,cpp.structdecl,cpp.decl)
-
-	action to_cpp_int(s:typedc,st:tocppst) returns (res:cpp.structdecl,st:tocppst) = {
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.structdecl;
+            res.ann := s.ann;
             var members := st.members.get(s.sort.get_name,vector[decl].empty);
-            (res.name,st) := s.sort.to_cpp(st);
+            var sort := member_name(s.sort);
+            (res.name,st) := sort.to_cpp(st);
             if st.cppclasses.mem(s.sort.get_name) {
                 res.has_super := true;
                 var dflt : expr;  # workaround
@@ -310,21 +357,28 @@ object ivy = { ...
                 idx := idx.next
             };
 	    st.in_class := false;
+            resd := res; # workaround
+            resd := add_namespaces(resd,s.sort.get_name); 
 	}
     }
 	
     # Translate a local variable declaration to C++. 
 
     object vardc = { ...
-        instantiate generic_to_cpp(this,cpp.vardecl,cpp.decl)
-	action to_cpp_int(s:vardc,st:tocppst) returns (res:cpp.vardecl,st:tocppst) = {
-            var name := name_in_context(s.typing.get_arg(0),st);
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
+            var res : cpp.vardecl;
+            res.ann := s.ann;
+            var name := member_name(s.typing.get_arg(0));
             var ty := s.typing.get_arg(1);
             if s.is_destructor {
                 ty := ty.curry.get_arg(1);
             };
 	    (res.vtype._type,st) := ty.to_cpp(st);
 	    (res.vtype.name,st) := name.to_cpp(st);
+            resd := res; # workaround
+            if ~st.in_class {
+                resd := add_namespaces(resd,s.typing.get_arg(0).get_name);
+            }
 	}
 
         # A type destructor is translated to a data member of the class;
@@ -346,7 +400,7 @@ object ivy = { ...
     }
 
     # Translate a header declaration to C++
-
+    
     object header = { ...
         instantiate generic_to_cpp(this,cpp.header,cpp.decl)
         
@@ -386,8 +440,9 @@ object ivy = { ...
 		idx := idx.next
 	    };
 
-            # Another pass to emit the C++ declarations
+            # Another pass to emit the C++ prototypes and class declarations
             
+            st.proto_only := true;
             idx := s.decls.begin;
 	    while idx < s.decls.end {
                 if s.decls.value(idx).emitted(st) {
@@ -396,7 +451,23 @@ object ivy = { ...
 		    res.decls := res.decls.append(d);
                 };
 		idx := idx.next
+	    };
+
+            # Another pass to emit the C++ function implementations
+            
+            st.proto_only := false;
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var ivyd := s.decls.value(idx);
+                if (ivyd isa actdc) & s.decls.value(idx).emitted(st) {
+                    var d : cpp.decl;
+                    (d,st) := ivyd.to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
+		idx := idx.next
 	    }
+            
+            
 	}
 
         export action file_to_cpp(name:str) returns(res:str) = {

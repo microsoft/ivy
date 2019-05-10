@@ -1117,6 +1117,10 @@ class CallAction(Action):
                 raise IvyError(self,"value for input parameter {} has wrong sort".format(x))
         for x,y in zip(formal_returns,actual_returns):
             if x.sort != y.sort and not domain.is_variant(y.sort,x.sort):
+                print y
+                print y.sort
+                print x.sort
+                print self
                 raise IvyError(self,"value for output parameter {} has wrong sort".format(x))
         input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
         output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]
