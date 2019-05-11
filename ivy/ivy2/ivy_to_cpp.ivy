@@ -6,6 +6,7 @@ include hash
 include reader
 include pass_flat
 include reader
+include analysis
 
 module generic_to_cpp(ivytype,cpptype,cppclass) = {
     action to_cpp(s:ivytype,st:tocppst) returns (res:cppclass,st:tocppst) = {
@@ -68,6 +69,10 @@ object ivy = { ...
 
             cppclasses : ident_to_cppclass,
 
+            # Identifiers of all objects
+
+            objects : ident_set,
+
             # True if we are emitting a member action
 
             is_member : bool,
@@ -82,7 +87,11 @@ object ivy = { ...
 
             # True if we are only emitting prototypes
 
-            proto_only : bool
+            proto_only : bool,
+
+            # The subtyping relation
+
+            subtype_rel : subtypes
 
         }
 
@@ -163,13 +172,29 @@ object ivy = { ...
         action to_cpp(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst)
     }
     
+    # When translating symbols to C++, we need to take care of name clashes between
+    # namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
+    # an object, we append `.__t` to the identifier of the type.
+
+    action fix_object_clash(id:ident,st:tocppst) returns (id:ident) = {
+        if st.objects.mem(id) {
+            var tok : strident;
+            tok.val := "__t";
+            id := dotident.make(id,tok);
+        }
+    }
+    
+    # Also, when compiling a class member function, the first argument is implicit, and
+    # is replaced in the C++ by `(*this)`.
+
     object symbol = { ...
         instantiate generic_to_cpp(ivy.symbol,cpp.symbol,cpp.expr)
         action to_cpp_int(s:symbol,st:tocppst) returns (res:cpp.symbol,st:tocppst) = {
             if st.is_member & s.name = st.this_ident {
                 res.name := cpp.strident.make("(*this)");
             } else {
-                res.name := s.name.to_cpp;
+                var id := fix_object_clash(s.name,st);
+                res.name := id.to_cpp;
             };
             res.vrb := cpp.str_to_verb(res.name.to_str);
         }
@@ -199,8 +224,23 @@ object ivy = { ...
         }
     }
 
+    action upcast(lhs:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+        (res,st) := rhs.to_cpp(st);
+        if lhs.is(verb.colon) & rhs.is(verb.colon) {
+            var lhsty := lhs.get_arg(1);
+            var rhsty := rhs.get_arg(1);
+            if st.subtype_rel.is_subtype(rhsty,lhsty) {
+                res := cpp.new.make(cpp.app.make1(rhsty,res,rhs.get_ann),rhs.get_ann);
+            }
+        }
+    }
+
     object asgn = { ...
-        instantiate binary_op_to_cpp(ivy.asgn,cpp.asgn,cpp.stmt)
+        instantiate generic_to_cpp(ivy.asgn,cpp.asgn,cpp.stmt)
+        action to_cpp_int(s:ivy.asgn,st:tocppst) returns (res:cpp.asgn,st:tocppst) = {
+            (res.lhs,st) := s.lhs.to_cpp(st);
+            (res.rhs,st) := upcast(s.lhs,s.rhs,st);
+        }
     }
 
     object sequence = { ...
@@ -219,7 +259,8 @@ object ivy = { ...
     object varst = { ...
         instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
         action to_cpp_int(s:varst,st:tocppst) returns (res:cpp.varst,st:tocppst) = {
-            (res.vtype._type,st) := s.name.get_arg(1).to_cpp(st);
+            var ty := fix_variant_type(s.name.get_arg(1),st);
+            (res.vtype._type,st) := ty.to_cpp(st);
             (res.vtype.name,st) := s.name.get_arg(0).to_cpp(st);
         }
     }
@@ -229,6 +270,24 @@ object ivy = { ...
         action reg_member(s:this,st:tocppst) returns (st:tocppst)
         action emitted(s:this,st:tocppst) returns (res:bool) = {
             res := true;
+        }
+    }
+
+    # The full name of a C++ function depends on whether it is a member function.
+    # If so, we find take the full name of the class and append the member name.
+    # The full name of the class can differ from the name of Ivy type because of
+    # object name clashes.
+
+    action full_action_name(name:expr,is_member : bool,st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+        if is_member {
+            var pref : ident := name.get_name.get_namesp;
+            var clsid := fix_object_clash(pref,st);
+            var funid := name.get_name.get_member.prefix(clsid);
+            res := cpp.symbol.make(funid.to_cpp,name.get_ann);
+        } else {
+            (res,st) := name.to_cpp(st) 
         }
     }
 
@@ -242,15 +301,18 @@ object ivy = { ...
             res.ann := s.ann;
             var has_output := s.outputs.end > 0;
             if has_output {
-                (res.ftype.base._type,st) := s.outputs.value(0).get_arg(1).to_cpp(st);
+                var ty := fix_variant_type(s.outputs.value(0).get_arg(1),st);
+                (res.ftype.base._type,st) := ty.to_cpp(st);
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
             var proto := ~s.has_body | st.proto_only;
-	    var name := member_name(s.name) if (proto | st.in_class) else s.name; 
-            (res.ftype.base.name,st) := name.to_cpp(st);
+            var is_member := s.is_member;
+            var full_name : cpp.expr;
+            (full_name,st) := full_action_name(s.name,is_member,st);
+	    res.ftype.base.name := member_name(full_name) if (proto | st.in_class) else full_name; 
             var idx := s.inputs.begin;
-            st.is_member := s.is_member;
+            st.is_member := is_member;
             if st.is_member {
                 idx := idx.next;   # skip the first input "this" if a member
                 st.this_ident := s.inputs.value(0).get_arg(0).get_name;
@@ -258,7 +320,8 @@ object ivy = { ...
             while idx < s.inputs.end {
                 var arg := s.inputs.value(idx);
                 var argt : cpp.simpletype;
-                (argt._type,st) := arg.get_arg(1).to_cpp(st);
+                var ty := fix_variant_type(arg.get_arg(1),st);
+                (argt._type,st) := ty.to_cpp(st);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
@@ -321,12 +384,9 @@ object ivy = { ...
         }
     }        
 
-    action member_name(s:expr) returns(s:expr) = {
-        if s.is(verb.colon) {
-            s := colon.make(member_name(s.get_arg(0)),s.get_arg(1),s.get_ann)
-        } else 
-        if (s.get_name) isa dotident {
-            s := symbol.make(s.get_name.get_member,s.get_ann)
+    action member_name(s:cpp.expr) returns(s:cpp.expr) = {
+        if (s.get_name) isa cpp.dotident {
+            s := cpp.symbol.make(s.get_name.get_member,s.get_ann)
         }
     }        
 
@@ -339,9 +399,13 @@ object ivy = { ...
             var res : cpp.structdecl;
             res.ann := s.ann;
             var members := st.members.get(s.sort.get_name,vector[decl].empty);
-            var sort := member_name(s.sort);
-            (res.name,st) := sort.to_cpp(st);
-            if st.cppclasses.mem(s.sort.get_name) {
+            var cls : cpp.expr;
+            (cls,st) := s.sort.to_cpp(st);
+            res.name := member_name(cls);
+            if s.has_super {
+                res.has_super := true;
+                (res.super,st) := s.super.to_cpp(st)
+            } else if st.cppclasses.mem(s.sort.get_name) {
                 res.has_super := true;
                 var dflt : expr;  # workaround
                 var itype := st.cppclasses.get(s.sort.get_name,dflt);
@@ -358,23 +422,39 @@ object ivy = { ...
             };
 	    st.in_class := false;
             resd := res; # workaround
-            resd := add_namespaces(resd,s.sort.get_name); 
+            resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 
 	}
     }
 	
+    # When storing values of variant types we use smart pointers. That is,
+    # type `t` becomes `unique_ptr<t>`.
+
+    action fix_variant_type(t:expr,st:tocppst) returns (t:expr) = {
+        if t isa symbol {
+            if st.subtype_rel.subtypes_of.mem(t.get_name) {
+                var s : strident;
+                s.val := "unique_ptr";
+                s.subscrs := s.subscrs.append(t.get_name);
+                t := symbol.make(s.prefix(strident.make("std")),t.get_ann);
+            }
+        }
+    }
+
     # Translate a local variable declaration to C++. 
 
     object vardc = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
             var res : cpp.vardecl;
             res.ann := s.ann;
-            var name := member_name(s.typing.get_arg(0));
             var ty := s.typing.get_arg(1);
             if s.is_destructor {
                 ty := ty.curry.get_arg(1);
             };
+            ty := fix_variant_type(ty,st);
 	    (res.vtype._type,st) := ty.to_cpp(st);
-	    (res.vtype.name,st) := name.to_cpp(st);
+            var name : cpp.expr;
+            (name,st) := s.typing.get_arg(0).to_cpp(st);
+            res.vtype.name := member_name(name);
             resd := res; # workaround
             if ~st.in_class {
                 resd := add_namespaces(resd,s.typing.get_arg(0).get_name);
@@ -420,6 +500,27 @@ object ivy = { ...
         }
 
         # Interpret declarations are never emitted
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
+        }
+
+    }
+
+    # Translate an object declaration to C++. 
+
+    object objectdc = { ...
+
+        # An object declaration corresponds to a namespace in C++. However,
+        # we emit namespace declarations for the object members, not here.
+        # Here, we just record the object identifiers, so we know when they
+        # clash with type identifiers.
+
+        action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+            st.objects := st.objects.set(s.name.get_name,true);
+        }
+
+        # Object declarations are never emitted
         
         action emitted(s:this,st:tocppst) returns (res:bool) = {
             res := false;
@@ -482,10 +583,17 @@ object ivy = { ...
             var fst : flatst;
             (p,fst) := p.flat(fst);
 
-            # Translate to C++
+            # Translation pass
 
             var cppexpr : cpp.prog;
             var st : tocppst;
+
+            # Get the subtyping relation
+            
+            st.subtype_rel := p.get_subtypes;
+
+            # Translate to C++
+
             (cppexpr,st) := p.to_cpp(st);
 
             # Pretty-print the C++

@@ -1,0 +1,43 @@
+#lang ivy1.7
+
+include ivylang
+include hash
+
+object ivy = { ...
+
+    instance ident_to_exprs : hash_rel(ident,expr)
+
+    # This analysis runs over a flat program and finds the subtype
+    # relations
+
+    object subtypes = {
+        type this = struct {
+            subtypes_of : ident_to_exprs,
+            supertype_of : symeval
+        }
+    }
+
+    object prog = { ...
+        action get_subtypes(p:this) returns (s:subtypes) = {
+            var idx := p.decls.begin;
+            while idx < p.decls.end {
+                s := p.decls.value(idx).build_subtypes(s);
+                idx := idx.next
+            }
+        }
+    }
+
+    object decl = { ...
+        action build_subtypes(s:decl,st:subtypes) returns (st:subtypes)
+    }
+
+    object typedc = { ...
+        action build_subtypes(s:this,st:subtypes) returns (st:subtypes) = {
+            if s.has_super {
+                st.subtypes_of := st.subtypes_of.add(s.super.get_name,s.sort);
+                st.supertype_of := st.supertype_of.set(s.sort.get_name,s.super);
+            }
+        }
+    }        
+            
+}

@@ -155,3 +155,155 @@ module hash_map(domain,range) = {
     attribute test = impl
 }
 
+################################################################################
+#
+# Hash relations
+#
+# Hash maps represent a relation from any type "domain" to any type "range".
+#
+#    instance thing : hash_rel(domain,range)
+#
+# 
+
+module hash_rel(domain,range) = {
+
+    type this
+    alias t = this
+
+    # return an empty map
+
+    action empty returns (a:t)
+
+    # mutate a relation map a so that x is related to y
+    action add(a:t,x:domain,y:range) returns (a:t)
+
+    # get a vector of values y such that x maps to y in a
+    
+    action get(a:t,x:domain) returns (res:vector[range]) 
+
+    # return true if x maps to some value
+    action mem(a:t,x:domain) returns (res:bool) 
+
+    ########################################
+    # Specification
+    #
+
+
+    specification {
+
+	relation rel(A:t,X:domain,Y:range)
+
+
+	after empty {
+	    assert ~rel(a,X,Y)
+	}
+	after add {
+	    assert rel(a,X,Y) <-> ((X=x & Y=y) | rel(old a,X,Y))
+	}
+	after get {
+	    assert (exists I. I < res.end & res.value(I) = Y) <-> rel(a,x,Y)
+	}
+	after mem {
+	    assert res <-> exists Y. rel(a,x,Y)
+	}
+    }
+
+    object impl = {
+
+	# object t_ = {}
+
+	# <<< member
+        #     class `t_` : std::vector<`range`> {};
+        # >>>
+
+	# interpret t -> <<< `t_` >>>
+
+	interpret t -> <<< hash_space::hash_map<`domain`,`vector[range]`> >>>
+
+	implement empty {
+	    <<<
+	    >>>
+	}
+
+	implement add {
+	    <<<
+	        `a`[`x`].push_back(`y`);
+	    >>>
+	}
+
+	implement get {
+	    <<<
+	        `t`::const_iterator it = `a`.find(x);
+  	        if (it != `a`.end())
+		    `res` = it->second;
+	    >>>
+	}
+
+	implement mem {
+	    <<<
+	        `t`::const_iterator it = `a`.find(x);
+                res = (it != `a`.end());
+	    >>>
+	}
+
+	<<< impl
+	    std::ostream &operator <<(std::ostream &s, const `t` &a) {
+	        s << '[';
+		for (`t`::const_iterator it = a.begin(), en = a.end(); it != en; ++it) {
+		    if (it != a.begin())
+		        s << ',';
+		    s << "[" << it->first << "," << it->second << "]";
+		}
+	        s << ']';
+		return s;
+            }
+
+	    template <>
+	    `t` _arg<`t`>(std::vector<ivy_value> &args, unsigned idx, long long bound) {
+	        ivy_value &arg = args[idx];
+	        if (arg.atom.size()) 
+	            throw out_of_bounds(idx);
+	        `t` a;
+		for (unsigned i = 0; i < arg.fields.size(); i++) {
+		    if (arg.fields[i].fields.size() != 2)
+		        throw out_of_bounds(idx);
+		    a[_arg<`domain`>(arg.fields[i].fields,0,0)] = _arg<`vector[range]`>(arg.fields[i].fields,1,0);
+	        }
+	        return a;
+	    }
+
+	    template <>
+	    void __deser<`t`>(ivy_deser &inp, `t` &res) {
+	        inp.open_list();
+	        while(inp.open_list_elem()) {
+		    `domain` x;
+	            __deser(inp,x);
+                    `vector[range]` y;
+	            __deser(inp,y);
+                    res[x] = y;
+		    inp.close_list_elem();
+                }
+		inp.close_list();
+	    }
+
+	    template <>
+	    void __ser<`t`>(ivy_ser &res, const `t` &inp) {
+	        int sz = inp.size();
+	        res.open_list(sz);
+		for (`t`::const_iterator it = inp.begin(), en = inp.end(); it != en; ++it) {
+		    res.open_list_elem();
+	            __ser(res,it->first);
+	            __ser(res,it->second);
+		    res.close_list_elem();
+                }
+	        res.close_list();
+	    }
+
+
+	>>>
+    }
+
+    trusted isolate iso = spec,impl
+
+    attribute test = impl
+}

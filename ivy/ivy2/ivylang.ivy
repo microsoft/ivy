@@ -119,6 +119,8 @@ object ivy = {
     object typedc = {
         variant this of decl = struct {
             sort : expr,
+            has_super : bool,
+            super : expr,
             ann : annot
         }
 
@@ -131,9 +133,15 @@ object ivy = {
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
-            b := b.extend("type");
+            b := b.extend("variant" if s.has_super else "type");
             b := b.extend(" ");
             b := s.sort.encode(b,0);
+            if s.has_super {
+                b := b.extend(" ");
+                b := b.extend("of");
+                b := b.extend(" ");
+                b := s.super.encode(b,0);
+            };
             b := b.unnest;
             b := b.newline;
         }	    
@@ -493,6 +501,17 @@ object ivy = {
                 if st.ok & st.tok = "(" {
                     (st,s.prms) := expr.tup.parse(st,0);
                 };
+                res := s
+            } else if st.tok = "variant" {
+                st := st.consume;
+                var s : typedc;
+                s.has_super := true;
+                (st,s.ann) := st.get_ann;
+                (st,s.sort) := expr.parse(st,0);
+                if st.ok & st.tok = "of" {
+                    st := st.consume
+                } else {st.ok := false};
+                (st,s.super) := expr.parse(st,0);
                 res := s
             } else {st.ok := false}
         }

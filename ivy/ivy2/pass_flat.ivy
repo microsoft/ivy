@@ -105,9 +105,19 @@ object ivy = { ...
         action flat(s:this,st:flatst) returns (s:expr,st:flatst)
     }
 
-    action applydot(arg:expr,member:ident) returns (res:expr) = {
+    # A dot operator has two possible interpretations: it indicates a
+    # member of an object, or an application of a destructor or member
+    # action. When defining a name, it is always the former. When not
+    # defining, we check whether the lhs of the dot is defined. If it is,
+    # we treat the dot as an object member reference.
+
+    action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
         var name := member.prefix(arg.get_name);
-        res := symbol.make(name,arg.get_ann);
+        if st.defining | st.defs.get(arg.get_name,false) {
+            res := symbol.make(name,ann);
+        } else {
+            res := dot.make(arg,symbol.make(member,ann),ann);
+        }
     }
     
     action find_ident(root:ident,s:ident,st:flatst) returns (s:ident) = {
@@ -218,11 +228,18 @@ object ivy = { ...
             var arg0 : expr;
             (arg0,st) := s.args.value(0).flat(st);
             if s.is(verb.dot) & (s.args.value(0) isa symbol) & (s.args.value(1) isa symbol) {
-                res := applydot(arg0,s.args.value(1).get_name.flat(true,st))
+                res := applydot(arg0,s.args.value(1).get_name.flat(true,st),s.ann,st)
             } else {
-                var arg1 : expr;
-                (arg1,st) := s.args.value(1).flat(st);
-                res := app.make2(s.func,arg0,arg1,s.ann);
+                var args : vector[expr];
+                args := args.append(arg0);
+                var idx := s.args.begin.next;
+                while idx < s.args.end {
+                    var arg : expr;
+                    (arg,st) := s.args.value(idx).flat(st);
+                    args := args.append(arg);
+                    idx := idx.next
+                };
+                res := app.make(s.func,args,s.ann);
             }
         }
     }
@@ -351,6 +368,10 @@ object ivy = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             (res.sort,st) := s.sort.flat(st);
+            res.has_super := s.has_super;
+            if res.has_super {
+                (res.super,st) := s.super.flat(st);
+            }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
             st := add_def(s.sort,st);
@@ -426,6 +447,10 @@ object ivy = { ...
             var old_has_root := st.has_root;
             var old_root := st.root;
             st := set_root(st,s.name);
+            var odc : objectdc;
+            odc.name := symbol.make(st.root,s.name.get_ann);
+            odc.ann := s.ann;
+            st.decls := st.decls.append(odc);
             st := s.body.flat(st);
             st.has_root := old_has_root;
             st.root := old_root;
