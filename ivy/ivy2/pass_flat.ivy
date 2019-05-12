@@ -5,7 +5,7 @@
 
 include ivylang
 include logic
-
+include error
 
 module generic_flat(ivytype,ivyclass) = {
     action flat(s:ivytype,st:flatst) returns (st:flatst) = {

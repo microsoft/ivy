@@ -15,6 +15,14 @@ object ivy = { ...
             subtypes_of : ident_to_exprs,
             supertype_of : symeval
         }
+	action is_subtype(s:this,sub:expr,super:expr) returns (res:bool) = {
+	    if sub isa symbol {
+		var name := sub.get_name;
+		if s.supertype_of.mem(name) {
+		    res := s.supertype_of.value(name).get_name = super.get_name
+		}
+	    }
+	}
     }
 
     object prog = { ...
@@ -40,4 +48,57 @@ object ivy = { ...
         }
     }        
             
+    # This analysis runs over a flat program and maps all the global
+    # identifiers to their types. For this purpose, actions are
+    # treated as if they were functions. 
+
+    object global_types = {
+        type this = struct {
+            type_of : symeval
+        }
+    }
+    
+    object prog = { ...
+        action get_global_types(p:this) returns (s:global_types) = {
+            var idx := p.decls.begin;
+	    while idx < p.decls.end {
+                s := p.decls.value(idx).build_global_types(s);
+                idx := idx.next
+            }
+        }
+    }
+
+    object decl = { ...
+        action build_global_types(s:decl,st:global_types) returns (st:global_types)
+    }
+
+    object vardc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+	    st.type_of := st.type_of.set(s.typing.get_arg(0).get_name,s.typing.get_arg(1));
+        }
+    }        
+
+    action get_formal_type(typings : vector[expr],ann:annot) returns (res:expr) = {
+	if typings.end = 0 {
+	    res := empty.make(ann);
+	} else {
+	    var tys : vector[expr];
+	    var idx := typings.begin;
+            while idx < typings.end {
+		var ty := typings.value(idx).get_arg(1);
+		tys := tys.append(ty);
+		idx := idx.next
+            };
+	    res := times.fold_left(tys,ann);
+	}
+    }
+
+    object actdc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+	    var inpty := get_formal_type(s.inputs,s.ann);
+	    var outty := get_formal_type(s.outputs,s.ann);
+	    var ty := arrow.make(inpty,outty,s.ann);
+	    st.type_of := st.type_of.set(s.name.get_name,ty);
+	}
+    }
 }

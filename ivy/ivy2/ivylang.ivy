@@ -48,6 +48,10 @@ object ivy = {
             b := b.extend(";");
             b := b.unnest;
         }
+
+	action get_expr(s:this) returns (res:expr) = {
+	    res := s.name;
+	}
     }
 
     object stmt = { ...

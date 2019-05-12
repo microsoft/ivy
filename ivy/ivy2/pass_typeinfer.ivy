@@ -1,0 +1,193 @@
+#lang ivy1.7
+
+# The typeinfer pass decorates the program with typings and raises type errors if
+# the program cannot be typed.
+
+include ivylang
+include logic
+include error
+include analysis
+include typeinf
+
+module generic_typeinfer(ivytype,ivyclass) = {
+    action typeinfer(s:ivytype,st:typeinferst) returns (res:ivyclass,st:typeinferst) = {
+        var t : ivytype;
+        (t,st) := s.typeinfer_int(st);
+        t.ann := s.ann;
+        res := t;
+    }
+}
+
+object ivy = { ...
+
+    # A `type_context` provides a map from type identifiers to types. It
+    # suports push and pop of typings.
+
+    object type_context = {
+	type stack_entry = struct {
+	    any : bool,
+	    val : expr
+	}
+	type this = struct {
+	    m : symeval,
+	    stack : vector[stack_entry]
+	}
+	action set(s:this,typing:expr) returns (s:this) = {
+	    s.m := s.m.set(typing.get_arg(0).get_name,typing.get_arg(1));
+	}
+	action push(s:this,typing:expr) returns (s:this) = {
+	    var id := typing.get_arg(0).get_name;
+	    var ent : stack_entry;
+	    ent.any := s.m.mem(id);
+	    if ent.any {
+		ent.val := s.m.get(id,ent.val);
+	    };
+	    s.stack := s.stack.append(ent);
+	    s.m := s.m.set(id,typing.get_arg(1));
+	}
+	action pop(s:this) returns (s:this) = {
+	    var ent := s.stack.back;
+	    s.stack := s.stack.pop_back;
+	    if ent.any {
+		s := s.set(ent.val);
+	    }
+
+	}
+    }
+
+    # This object represents the state of the typeinfer pass
+
+    object typeinferst = {
+        type this = struct {
+
+            # Type context
+
+            tc : type_context,
+
+	    # The subtyping relation
+	    
+            subtype_rel : subtypes
+	}
+
+    }
+    
+    object stmt = { ...
+        action typeinfer(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s
+        }
+    }
+
+    # Assignments. If both assigments are typed, just check for assignment
+    # compatibility. Otherwise unify the types of the lhs and rhs.
+
+    object asgn = { ...
+        instantiate generic_typeinfer(this,stmt)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+	    if res.lhs.is(verb.colon) & res.rhs.is(verb.colon) {
+		var lhsty := res.lhs.get_arg(1);
+		var rhsty := res.rhs.get_arg(1);
+		if ~(expr.eq(lhsty,rhsty) | st.subtype_rel.is_subtype(rhsty,lhsty)) {
+		    call report_error(type_conversion.make(res.rhs,rhsty,lhsty),res.ann);
+		}
+	    } else {
+		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
+	    }
+        }
+    }
+
+    object sequence = { ...
+        instantiate generic_typeinfer(this,stmt)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+            (res.lhs,st) := res.lhs.typeinfer(st);
+            if res.lhs isa varst {
+		st.tc := st.tc.push(res.lhs.get_expr);
+                (res.rhs,st) := res.rhs.typeinfer(st);
+		st.tc := st.tc.pop;
+            } else {
+                (res.rhs,st) := res.rhs.typeinfer(st);
+            }
+        }
+    }
+
+    # object ifst = { ...
+    #     instantiate generic_typeinfer(this,stmt)
+    #     action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+    #         res := s;
+    #         res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+    # 	    var ts : stmt;
+    # 	    (ts,st) := res.thenst.typeinfer(st);
+    #         res.thenst := ts;
+    # 	    var es : stmt;
+    # 	    (es,st) := res.elsest.typeinfer(st);
+    #         res.elsest := es;
+    #     }
+    # }
+
+    object decl = { ...
+        action typeinfer(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+	    res := s;
+	}
+    }
+
+
+    action setup_formals(es:vector[expr],val:bool,st:typeinferst) returns (st:typeinferst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+	    if val {
+		st.tc := st.tc.push(e);
+	    } else {
+		st.tc := st.tc.pop
+	    };
+	    idx := idx.next;
+        }
+    }
+
+
+    object actdc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:actdc,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res.name := s.name;
+            res.inputs := s.inputs;
+            res.outputs := s.outputs;
+            st := setup_formals(res.inputs,true,st);
+            st := setup_formals(res.outputs,true,st);
+	    res.has_body := s.has_body;
+            (res.body,st) := s.body.typeinfer(st);
+            st := setup_formals(res.inputs,false,st);
+            st := setup_formals(res.outputs,false,st);
+        }
+    }
+
+    object prog = { ...
+        
+
+        action typeinfer(p:prog) returns (p:prog) = {
+
+	    var st:typeinferst;
+
+	    # Get the subtype relation
+	    
+            st.subtype_rel := p.get_subtypes;
+
+	    # Get the global typing as initial typing context
+
+	    var gt := p.get_global_types;
+	    st.tc.m := gt.type_of;
+	    
+	    # TODO: bottom-up inference
+
+            # A pass to typeinfer types with Hindley-Milner
+
+            var idx := p.decls.begin;
+            while idx < p.decls.end {
+		var d : decl;
+                (d,st) := p.decls.value(idx).typeinfer(st);
+		p.decls := p.decls.set(idx,d);
+                idx := idx.next;
+            };
+        }
+    }
+}

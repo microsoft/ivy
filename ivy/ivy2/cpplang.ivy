@@ -14,6 +14,10 @@ object cpp = {
     instantiate expr_base(true)
     instantiate stmt_base(expr,"=",true)
 
+    # Operators specific to C++
+
+    instance new : built_in_unary("new",verb.new,100)
+
     # Here, we parse statements specific to C++
     
     object simpletype = {

@@ -67,6 +67,8 @@ module hash_map(domain,range) = {
 
 	interpret t -> <<< hash_space::hash_map<`domain`,`range`> >>>
 
+	definition value(a:t,i:domain) = <<< (`a`.find(`i`) != `a`.end()) ? (`a`.find(`i`)->second) : val >>>
+
 	implement empty {
 	    <<<
 	    >>>

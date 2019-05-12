@@ -223,7 +223,7 @@ module string(domain,range) = {
 	         if (args[idx].fields.size())
                      throw out_of_bounds(idx);
 	         `t` res;
-	         const std::string &s = args[idx].atom;
+	         std::string s = args[idx].atom;
 	         for (unsigned __idx = 0; __idx < s.size(); __idx++)
 	             res.push_back(s[__idx]);
 	         return res;
@@ -232,7 +232,7 @@ module string(domain,range) = {
 	    template <>
 	    `t` __lit<`t`>(const char *c) {
 	         `t` res;
-	         const std::string &s = c;
+	         std::string s = c;
 	         for (unsigned __idx = 0; __idx < s.size(); __idx++)
 	             res.push_back(s[__idx]);
 	         return res;

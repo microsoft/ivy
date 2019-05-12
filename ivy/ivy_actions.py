@@ -1199,6 +1199,7 @@ class TypeCheckConext(ActionContext):
         return res
 
 def type_check_action(action,domain,pvars = []):
+    return
     with TypeCheckConext(domain):
         action.int_update(domain,pvars)
 

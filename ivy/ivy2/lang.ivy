@@ -37,28 +37,42 @@ type priority
 
 module verb_base = {
     object verb = {
-        type this = { none, arrow, plus, times, colon, app, empty, dot }
+        type this = { none, arrow, plus, times, colon, app, empty, dot, new }
     }
     
     function str_to_verb(X:str) : verb
     function verb_to_str(X:verb) : str
     function verb_to_prio(X:verb) : priority
+    function verb_to_arity(X:verb) : pos
 
     after init {
         str_to_verb(X) := verb.none
     }
 }
 
-module built_in (optok,vrb,opprio) = {
+module built_in (optok,vrb,opprio,oparity) = {
     after init {
         str_to_verb(optok) := vrb;
         verb_to_str(vrb) := optok; 
-        verb_to_prio(vrb) := opprio
+        verb_to_prio(vrb) := opprio;
+	verb_to_arity(vrb) := oparity;
+    }
+}
+
+module built_in_unary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio,1)
+
+    action make(arg:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.makestr(optok,ann);
+        s.args := s.args.append(arg);
+        s.ann := ann;
+        res := s
     }
 }
 
 module built_in_binary (optok,vrb,opprio) = {
-    instantiate built_in(optok,vrb,opprio)
+    instantiate built_in(optok,vrb,opprio,2)
 
     action make(lhs:expr,rhs:expr,ann:annot) returns (res:expr) = {
         var s:app;
@@ -99,7 +113,7 @@ module built_in_binary (optok,vrb,opprio) = {
 }    
 
 module built_in_const (optok,vrb) = {
-    instantiate built_in(optok,vrb,0)
+    instantiate built_in(optok,vrb,0,0)
 
     action make(ann:annot) returns (res:expr) = {
         res := symbol.makestr(optok,ann);
@@ -335,6 +349,33 @@ module expr_base(cppstyle) = {
         action get_ann(s:this) returns (res:annot)
         action get_func(s:this) returns (res:expr) 
         action get_args(s:this) returns (res:vector[expr])
+
+	# Tests whether two expressions are syntacically equal,
+	# leaving aside annotations.
+
+	action eq(e1:expr,e2:expr) returns (res:bool) = {
+	    if e1 isa symbol {
+		if e2 isa symbol {
+		    res := (e1.get_name = e2.get_name);
+		}
+	    } else {
+		if eq(e1.get_func,e2.get_func) {
+		    var args1 := e1.get_args;
+		    var args2 := e2.get_args;
+		    if args1.end = args2.end {
+			res := true;
+			var idx := args1.begin;
+			while res & idx < args1.end {
+			    if ~eq(args1.value(idx),args2.value(idx)) {
+				res := false;
+			    };
+			    idx := idx.next;
+			}
+		    }
+		}
+	    }
+	}
+
     }
 
     object symbol = {
@@ -440,11 +481,17 @@ module expr_base(cppstyle) = {
                     b := b.nest;
                     b := b.extend("(");
                 };	    
-                b := s.args.value(0).encode(b,opprio);
-                b := b.extend(" ");
-                b := b.extend(verb_to_str(vrb));
-                b := b.extend(" ");
-                b := s.args.value(1).encode(b,opprio+1);
+		if s.args.end = 1 {
+                    b := b.extend(verb_to_str(vrb));
+                    b := b.extend(" ");
+                    b := s.args.value(0).encode(b,opprio);
+		} else {
+                    b := s.args.value(0).encode(b,opprio);
+                    b := b.extend(" ");
+                    b := b.extend(verb_to_str(vrb));
+                    b := b.extend(" ");
+                    b := s.args.value(1).encode(b,opprio+1);
+		};
                 if opprio < prio {
                     b := b.extend(")");
                     b := b.unnest
@@ -533,7 +580,7 @@ module expr_base(cppstyle) = {
     # Treat open paren as a builtin operator for function application. The
     # real operator is the empty string, but open paren will work.
 
-    instantiate built_in("(",verb.app,99)        
+    instantiate built_in("(",verb.app,99,1)        
 
     object expr = { ...
 
@@ -549,7 +596,18 @@ module expr_base(cppstyle) = {
                     st.ok := false;
                 }
             } else {
-                (st,res) := symbol.parse(st);
+		var vrb := str_to_verb(st.tok);
+		if  vrb ~= verb.none & verb_to_arity(vrb) = 1 {
+                    var s : app;
+                    s.func := symbol.makestr(st.tok,s.ann);
+                    st := st.consume;
+		    var arg : expr; 
+                    (st,arg) := parse(st,verb_to_prio(vrb));
+                    s.args := s.args.append(arg);
+		    res := s;
+		} else {
+		    (st,res) := symbol.parse(st);
+		}
             };
             var vrb := str_to_verb(st.tok);
             while st.ok & vrb ~= verb.none & prio < verb_to_prio(vrb) {
@@ -597,6 +655,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
     object stmt = {
         type this
         instantiate parse_intf(stmt)
+	action get_expr(s:this) returns (res:expr)
     }
 
     object asgn = {

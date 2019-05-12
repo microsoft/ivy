@@ -4,7 +4,7 @@
 # Ivy uses Hindley-Milner style type inference a the level of
 # statements. This is used to fill in the omitted types of the
 # polymorphic symbols (including built-in operators and numerals, as
-# well as bound variables.
+# well as bound variables).
 #
 # Two basic services are provided here:
 #
@@ -68,32 +68,51 @@ object ivy = { ...
     }
     
 
-    # Returns `true` if the type of a the first inpt of a given verb determines
-    # the type of the re
+    # Returns `true` if the type of a the first input of a given verb determines
+    # the type of the remaining inputs.
 
     action verb_det_type(vrb:verb) returns (res:bool) = {
         res := true;
     }
+
+    # This object represents the state of the type decorator
 
     object decost = {
 
         instance map : hash_map(ident,expr)
 
         type this = struct {
+
+	    # A counter for creating type variables
+	    
             counter : pos,
+
+	    # Maps types and type variables to their representatives
+	    
             m : map,
+
+	    # False if there has been a type error
+
             ok : bool
         }
+
+	# Make a new type decorator state
 
         action make returns (res:this) = {
             res.ok := true;
         }
+
+	# Make a new type variable
 
         action newvar(s:this,ann:annot) returns (s:this,res:expr) = {
             res := symbol.makenum(s.counter,ann);
             s.counter := s.counter.next
         }
         
+	# Find the representative of an expression. This has the
+	# side effect of shortening the path to the representative
+	# as in classic union/find.
+
         action find(st:this,x:expr) returns(st:this,res:expr) = {
             res := x;
             if x isa symbol {
@@ -105,6 +124,12 @@ object ivy = { ...
                 }
             };
         }
+
+	# Unify a pair of types. Sets ok to false if the types cannot
+	# be unified.
+
+	import action show_unifying(x:str,y:str)
+	import action show_ok(res:bool)
 
         action unify(st:this,x:expr,y:expr) returns (st:this) = {
             (st,x) := st.find(x);
@@ -141,9 +166,11 @@ object ivy = { ...
                 } else {
                     st.ok := false;
                 }
-            }
+            };
         }
     }
+
+    # State of the a type elider.
 
     object elidest = {
         instance map : hash_map(ident,bool)
@@ -152,11 +179,28 @@ object ivy = { ...
         }
     }
 
+    # Called in case of a type error. TODO: This just calls an
+    # import. Should create a proper error report.
+
     action type_error(e:expr,t1:expr,t2:expr) = {
         call report_type_error(e.enc,t1.enc,t2.enc)
     }
 
     import action report_type_error(s1:str,s2:str,s3:str)
+
+    # We implement three recursions over expressions:
+    #
+    # - `type_decorate`: This adds a typing to each subexpression that
+    #   may contain free type variables, and also unifies types.
+    #
+    # - `type_fill_in`: This fills in the values of the type variables
+    #    with their representative types. If any free type variables
+    #    remain, an error is reported.
+    #
+    # - `type_elide`: This removes typings that can be trivially
+    #    inferred.  This is useful to make printed expressions more
+    #    readable.
+
 
     object expr = { ...
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost)
@@ -174,9 +218,7 @@ object ivy = { ...
                 (st,v) := st.newvar(e.ann);
                 mm := mm.set(strident.make("beta"),v);
                 ty := optypes(e.vrb);
-                call show(ty);
                 ty := ty.reduce(mm);
-                call show(ty)
             } else {
                 (st,ty) := st.newvar(e.ann);
                 ty := m.get(e.name,ty);
@@ -195,8 +237,6 @@ object ivy = { ...
         }
     }
     
-    import action show(e:expr)
-
     object app = { ...
         
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
@@ -292,6 +332,55 @@ object ivy = { ...
     }
 
     import action report_cannot_infer(s1:str,s2:str)
+
+    # This takes a vector of expressions and a type context, returning
+    # the expressions with types inferred.
+
+    action type_infer_vec(es : vector[expr], tc : symeval) returns (es : vector[expr]) = {
+	var st := decost.make;
+	var idx := es.begin;
+	while idx < es.end {
+	    var e := es.value(idx);
+	    var ty : expr;  # ignored
+	    (e,ty,st) := e.type_decorate(st,tc);
+	    es := es.set(idx,e);
+	    idx := idx.next
+	};
+	idx := es.begin;
+	while idx < es.end {
+	    var e := es.value(idx);
+            (e,st) := e.type_fill_in(st);
+	    es := es.set(idx,e);
+	    idx := idx.next
+	}
+    }
+
+    action type_infer_known(e:expr, ty:expr, tc : symeval) returns (e : expr) = {
+	var st := decost.make;
+	var ty2 : expr;  # ignored
+	(e,ty2,st) := e.type_decorate(st,tc);
+	st := st.unify(ty,ty2);
+        if ~st.ok {
+            call type_error(e,ty,ty2)
+        };
+        (e,st) := e.type_fill_in(st);
+    }
+
+    # Unify the types of two expressions
+
+    action type_unify_exprs(e1:expr,e2:expr,tc:symeval) returns (e1:expr,e2:expr) = {
+	var st := decost.make;
+	var e1ty : expr;
+	(e1,e1ty,st) := e1.type_decorate(st,tc);
+	var e2ty : expr;
+	(e2,e2ty,st) := e2.type_decorate(st,tc);
+	st := st.unify(e1ty,e2ty);
+        if ~st.ok {
+            call type_error(e2,e1ty,e2ty)
+        };
+        (e1,st) := e1.type_fill_in(st);
+        (e2,st) := e2.type_fill_in(st);
+    }
 
     type thing = struct {
         out:str,

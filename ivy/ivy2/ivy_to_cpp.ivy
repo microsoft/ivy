@@ -3,9 +3,10 @@
 include ivylang
 include cpplang
 include hash
-include reader
+#include reader
 include pass_flat
-include reader
+include pass_typeinfer
+#include reader
 include analysis
 
 module generic_to_cpp(ivytype,cpptype,cppclass) = {
@@ -201,16 +202,34 @@ object ivy = { ...
     }
 
     object app = { ...
-        instantiate generic_to_cpp(ivy.app,cpp.app,cpp.expr)
-        action to_cpp_int(s:app,st:tocppst) returns (res:cpp.app,st:tocppst) = {
-            (res.func,st) := s.func.to_cpp(st);
-            var idx := s.args.begin;
-            while idx < s.args.end {
-                var arg : cpp.expr;
-                (arg,st) := s.args.value(idx).to_cpp(st);
-                res.args := res.args.append(arg);
-                idx := idx.next
-            }
+        action to_cpp(s:this,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+	    if s.is(verb.colon) {
+		(res,st) := s.args.value(0).to_cpp(st)
+	    } else {
+		var capp : cpp.app;
+		(capp.func,st) := s.func.to_cpp(st);
+		if s.func.is(verb.colon) {
+		    var ftype := s.func.get_arg(1);
+		    var argtys := arrow.unfold_left(ftype.get_arg(0));
+		    var idx := s.args.begin;
+		    while idx < s.args.end {
+			var arg : cpp.expr;
+			(arg,st) := upcast(argtys.value(idx),s.args.value(idx),st);
+			capp.args := capp.args.append(arg);
+			idx := idx.next
+		    }
+		} else {
+		    var idx := s.args.begin;
+		    while idx < s.args.end {
+			var arg : cpp.expr;
+			(arg,st) := s.args.value(idx).to_cpp(st);
+			capp.args := capp.args.append(arg);
+			idx := idx.next
+		    }
+		};
+		capp.ann := s.ann;
+		res := capp
+	    }
         }
     }
 
@@ -224,13 +243,14 @@ object ivy = { ...
         }
     }
 
-    action upcast(lhs:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+    action upcast(lhsty:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
         (res,st) := rhs.to_cpp(st);
-        if lhs.is(verb.colon) & rhs.is(verb.colon) {
-            var lhsty := lhs.get_arg(1);
+        if rhs.is(verb.colon) {
             var rhsty := rhs.get_arg(1);
             if st.subtype_rel.is_subtype(rhsty,lhsty) {
-                res := cpp.new.make(cpp.app.make1(rhsty,res,rhs.get_ann),rhs.get_ann);
+		var crhsty : cpp.expr;
+		(crhsty,st) := rhsty.to_cpp(st);
+                res := cpp.new.make(cpp.app.make1(crhsty,res,rhs.get_ann),rhs.get_ann);
             }
         }
     }
@@ -239,7 +259,11 @@ object ivy = { ...
         instantiate generic_to_cpp(ivy.asgn,cpp.asgn,cpp.stmt)
         action to_cpp_int(s:ivy.asgn,st:tocppst) returns (res:cpp.asgn,st:tocppst) = {
             (res.lhs,st) := s.lhs.to_cpp(st);
-            (res.rhs,st) := upcast(s.lhs,s.rhs,st);
+	    if s.lhs.is(verb.colon) {
+		(res.rhs,st) := upcast(s.lhs.get_arg(1),s.rhs,st)
+	    } else {
+		(res.rhs,st) := s.rhs.to_cpp(st)
+	    }
         }
     }
 
@@ -571,17 +595,26 @@ object ivy = { ...
             
 	}
 
+	import action show_prog(s:str)
+
         export action file_to_cpp(name:str) returns(res:str) = {
 
             # Read the program
 
             var ann : annot;
-            var p := prog.read_file(name,ann);
+#            var p := prog.read_file(name,ann);
+	    var p := prog.dec(name);
 
             # Flattening pass
 
             var fst : flatst;
             (p,fst) := p.flat(fst);
+
+	    # Type inference pass
+
+	    p := p.typeinfer;
+
+	    call show_prog(p.enc);
 
             # Translation pass
 
