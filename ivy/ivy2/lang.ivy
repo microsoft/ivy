@@ -568,7 +568,6 @@ module expr_base(cppstyle) = {
         
     }
 
-    instance arrow : built_in_binary("->",verb.arrow,5)
     instance plus : built_in_binary("+",verb.plus,10)
     instance times : built_in_binary("*",verb.times,11)
     instance empty : built_in_const("()",verb.empty)

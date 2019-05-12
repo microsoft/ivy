@@ -225,6 +225,19 @@ object ivy = { ...
 			(arg,st) := s.args.value(idx).to_cpp(st);
 			capp.args := capp.args.append(arg);
 			idx := idx.next
+		    };
+
+		    # If of the form (x:t).f, where t is a variant
+		    # type, convert to x->f.
+
+		    if s.func.get_verb = verb.dot {
+			var lhs := s.args.value(0);
+			if lhs.is(verb.colon) {
+			    var ty := lhs.get_arg(1);
+			    if is_variant_type(ty,st) {
+				capp.func := cpp.symbol.makestr("->",capp.func.get_ann)
+			    }
+			}
 		    }
 		};
 		capp.ann := s.ann;
@@ -450,17 +463,23 @@ object ivy = { ...
 	}
     }
 	
+    action is_variant_type(t:expr,st:tocppst) returns (res:bool) = {
+        if t isa symbol {
+            if st.subtype_rel.subtypes_of.mem(t.get_name) {
+		res := true;
+	    }
+	}
+    }
+
     # When storing values of variant types we use smart pointers. That is,
     # type `t` becomes `unique_ptr<t>`.
 
     action fix_variant_type(t:expr,st:tocppst) returns (t:expr) = {
-        if t isa symbol {
-            if st.subtype_rel.subtypes_of.mem(t.get_name) {
-                var s : strident;
-                s.val := "unique_ptr";
-                s.subscrs := s.subscrs.append(t.get_name);
-                t := symbol.make(s.prefix(strident.make("std")),t.get_ann);
-            }
+        if is_variant_type(t,st) {
+            var s : strident;
+            s.val := "unique_ptr";
+            s.subscrs := s.subscrs.append(t.get_name);
+            t := symbol.make(s.prefix(strident.make("std")),t.get_ann);
         }
     }
 

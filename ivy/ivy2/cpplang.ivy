@@ -18,6 +18,10 @@ object cpp = {
 
     instance new : built_in_unary("new",verb.new,100)
 
+    # Dereference arrow (same precedence as dot)
+    
+    instance arrow : built_in_binary("->",verb.arrow,100)
+
     # Here, we parse statements specific to C++
     
     object simpletype = {

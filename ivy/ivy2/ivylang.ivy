@@ -19,6 +19,10 @@ object ivy = {
 
     instance colon : built_in_binary(":",verb.colon,50)
 
+    # Type and implication arrow
+
+    instance arrow : built_in_binary("->",verb.arrow,5)
+
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
     
