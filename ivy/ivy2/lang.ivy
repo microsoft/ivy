@@ -358,7 +358,7 @@ module expr_base(cppstyle) = {
 		if e2 isa symbol {
 		    res := (e1.get_name = e2.get_name);
 		}
-	    } else {
+	    } else if e1 isa app {
 		if eq(e1.get_func,e2.get_func) {
 		    var args1 := e1.get_args;
 		    var args2 := e2.get_args;

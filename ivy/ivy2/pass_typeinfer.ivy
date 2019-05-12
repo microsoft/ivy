@@ -51,7 +51,6 @@ object ivy = { ...
 	    if ent.any {
 		s := s.set(ent.val);
 	    }
-
 	}
     }
 
@@ -77,6 +76,77 @@ object ivy = { ...
         }
     }
 
+    # Bottom up type inference
+
+    action bottom_up_type(e:expr,st:typeinferst, ok : bool) returns (e:expr, ok : bool) = {
+	if e isa symbol {
+	    if e.get_verb = verb.none {
+		var name := e.get_name;
+		if st.tc.m.mem(name) {
+		    e := colon.make(e,st.tc.m.value(name),e.get_ann)
+		} else {
+		    call report_error(undefined.make(name),e.get_ann)
+		}
+	    }
+	} else if e isa app {
+	    if e.is(verb.colon) {
+		var arg : expr;
+		(arg,ok) := bottom_up_type(e.get_arg(0),st,ok);
+		e := colon.make(arg,e.get_arg(1),e.get_ann)
+	    } else if e.is(verb.dot) {
+		var lhs : expr;
+		(lhs,ok) := bottom_up_type(e.get_arg(0),st,ok);
+		var rhs := e.get_arg(1);
+		e := dot.make(lhs,rhs,e.get_ann);
+		if lhs.is(verb.colon) {
+		    var ty := lhs.get_arg(1);
+		    if ty isa symbol {
+			var name := rhs.get_name.prefix(ty.get_name);
+			if st.tc.m.mem(name) {
+			    var fty := st.tc.m.value(name);
+			    rhs := colon.make(rhs,fty,rhs.get_ann);
+			    e := dot.make(lhs,rhs,e.get_ann);
+			    if fty.is(verb.arrow) {
+				e := colon.make(e,fty.get_arg(1),e.get_ann)
+			    }
+			} else {
+			    call report_error(undefined.make(name),e.get_ann);
+			    ok := false;
+			}
+		    } else {
+			call report_error(not_first_order.make(lhs,ty),lhs.get_ann);
+			ok := false;
+		    }
+		} else {
+		    call report_error(untyped.make(lhs,empty.make(lhs.get_ann)),lhs.get_ann);
+		    ok := false;
+		};
+	    } else {
+		var func : expr;
+		(func,ok) := bottom_up_type(e.get_func,st,ok);
+		var args : vector[expr];
+		(args,ok) := bottom_up_types(e.get_args,st,ok);
+		e := app.make(func,args,e.get_ann);
+		if func.is(verb.colon) {
+		    var ty := func.get_arg(1);
+		    if ty.is(verb.arrow) {
+			e := colon.make(e,ty.get_arg(1),e.get_ann)
+		    }
+		}
+	    }
+	}
+    }
+
+    action bottom_up_types(es:vector[expr],st:typeinferst,ok:bool) returns (es:vector[expr],ok:bool) = {
+	var idx := es.begin;
+	while idx < es.end {
+	    var e : expr;
+	    (e,ok) := bottom_up_type(es.value(idx),st,ok);
+	    es := es.set(idx,e);
+	    idx := idx.next
+	}
+    }
+
     # Assignments. If both assigments are typed, just check for assignment
     # compatibility. Otherwise unify the types of the lhs and rhs.
 
@@ -84,14 +154,19 @@ object ivy = { ...
         instantiate generic_typeinfer(this,stmt)
         action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
             res := s;
-	    if res.lhs.is(verb.colon) & res.rhs.is(verb.colon) {
-		var lhsty := res.lhs.get_arg(1);
-		var rhsty := res.rhs.get_arg(1);
-		if ~(expr.eq(lhsty,rhsty) | st.subtype_rel.is_subtype(rhsty,lhsty)) {
-		    call report_error(type_conversion.make(res.rhs,rhsty,lhsty),res.ann);
+	    var ok := true;
+	    (res.lhs,ok) := bottom_up_type(res.lhs,st,ok);
+	    (res.rhs,ok) := bottom_up_type(res.rhs,st,ok);
+	    if ok {  # avoid cascading errors
+		if res.lhs.is(verb.colon) & res.rhs.is(verb.colon) {
+		    var lhsty := res.lhs.get_arg(1);
+		    var rhsty := res.rhs.get_arg(1);
+		    if ~(expr.eq(lhsty,rhsty) | st.subtype_rel.is_subtype(rhsty,lhsty)) {
+			call report_error(type_conversion.make(res.rhs,rhsty,lhsty),res.ann);
+		    }
+		} else {
+		    (res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 		}
-	    } else {
-		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 	    }
         }
     }

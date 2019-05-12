@@ -93,8 +93,7 @@ object ivy = { ...
     object untyped = {
         variant this of error = struct {
             e : expr,
-            t1 : expr,
-            t2 : expr
+            t1 : expr
         }
         action make(e:expr,t1:expr) returns (res:this) = {
             res.e := e;
@@ -102,10 +101,37 @@ object ivy = { ...
         }
         action encode(e:this,b:pretty) returns (b:pretty) = {
             b := b.extend("Cannot infer the type of this term:");
+            b := b.extend(" ");
+            b := b.newline;
+            b := e.e.encode(b,0);
+	    if e.t1.get_verb ~= verb.empty {
+		b := b.extend(" ");
+		b := b.newline;
+		b := b.extend("Incomplete type:");
+		b := b.extend(" ");
+		b := e.t1.encode(b,0);
+	    }
+        }
+    }
+
+    # - Error `not_first_order(e,t1)` indicates that subexpression `e` should have
+    #   had first order type but instead had type `t1`.
+
+    object not_first_order = {
+        variant this of error = struct {
+            e : expr,
+            t1 : expr
+        }
+        action make(e:expr,t1:expr) returns (res:this) = {
+            res.e := e;
+            res.t1 := t1;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Expression should have simple type:");
             b := b.newline;
             b := e.e.encode(b,0);
             b := b.newline;
-            b := b.extend("Incomplete type:");
+            b := b.extend("Actual type:");
             b := b.extend(" ");
             b := e.t1.encode(b,0);
         }

@@ -74,7 +74,11 @@ object ivy = { ...
 
     object vardc = { ...
         action build_global_types(s:this,st:global_types) returns (st:global_types) = {
-	    st.type_of := st.type_of.set(s.typing.get_arg(0).get_name,s.typing.get_arg(1));
+	    var ty := s.typing.get_arg(1);
+	    if s.is_destructor {
+		ty := ty.curry;
+	    };
+	    st.type_of := st.type_of.set(s.typing.get_arg(0).get_name,ty);
         }
     }        
 
@@ -98,6 +102,9 @@ object ivy = { ...
 	    var inpty := get_formal_type(s.inputs,s.ann);
 	    var outty := get_formal_type(s.outputs,s.ann);
 	    var ty := arrow.make(inpty,outty,s.ann);
+	    if s.is_member {
+		ty := ty.curry;
+	    };
 	    st.type_of := st.type_of.set(s.name.get_name,ty);
 	}
     }

@@ -249,6 +249,19 @@ object ivy = { ...
                 if ~st.ok {
                     call type_error(e,ty,argty)
                 }
+            } else if e.is(verb.dot) { # dot operator acts like curried function application
+                var argty : expr;
+                var arg : expr;
+                (arg,argty,st) := e.get_arg(0).type_decorate(st,m);
+                (st,ty) := st.newvar(e.ann);
+                var fty := arrow.make(argty,ty,e.ann);
+		var func : expr;
+                (func,argty,st) := e.get_arg(1).type_decorate(st,m);
+                st := st.unify(argty,fty);
+                if ~st.ok {
+                    call type_error(e,argty,fty)
+                };
+                res := dot.make(arg,func,e.ann);
             } else {
                 var argtys : vector[expr];
                 var newargs : vector[expr];
