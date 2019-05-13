@@ -201,10 +201,45 @@ object ivy = { ...
         }
     }
 
+    action make_vector_type(ty:expr) returns (ty:expr) = {
+	var vid : strident;
+	vid.val := "vector";
+	vid.subscrs := vid.subscrs.append(ty.get_name);
+	var name := vid.prefix(strident.make("ivy"));
+	ty := symbol.make(name,ty.get_ann)
+    }
+
+    action make_md_vector_type(dom:vector[expr],rng:expr) returns (ty:expr) = {
+	var vid : strident;
+	vid.val := "vector";
+	vid.subscrs := vid.subscrs.append(rng.get_name);
+	var idx := dom.begin;
+	while idx < dom.end {
+	    vid.subscrs := vid.subscrs.append(dom.value(idx).get_name);
+	    idx := idx.next
+	};
+	var name := vid.prefix(strident.make("ivy"));
+	ty := symbol.make(name,ty.get_ann)
+    }
+
+    action function_type(ty:expr) returns (ty:expr) = {
+	if ty isa app {
+	    # TODO: verify the domain type is convertible to size_t
+	    # var cty := ty.curry;
+	    # var rng := function_type(cty.get_arg(1));
+	    # ty := make_vector_type(rng);
+	    ty := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1))
+	}
+    }
+
     object app = { ...
         action to_cpp(s:this,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
 	    if s.is(verb.colon) {
 		(res,st) := s.args.value(0).to_cpp(st)
+	    } else if s.is(verb.arrow) {
+		var tmp : expr := s;  # workaround
+		var fty := function_type(tmp);
+		(res,st) := fty.to_cpp(st)
 	    } else {
 		var capp : cpp.app;
 		(capp.func,st) := s.func.to_cpp(st);
