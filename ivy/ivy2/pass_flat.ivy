@@ -396,11 +396,16 @@ object ivy = { ...
 	}
     }
 
+    import action show_ctype(e:expr)
+
     object interpdc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             (res.itype,st) := s.itype.flat(st);
+	    st.defining := true;
             (res.ctype,st) := s.ctype.flat(st);
+	    st.defining := false;
+	    call show_ctype(res.ctype);
 	}
     }
 
