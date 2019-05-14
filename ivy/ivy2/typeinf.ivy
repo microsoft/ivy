@@ -65,6 +65,7 @@ object ivy = { ...
         call set_built_in_type(verb.plus,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.times,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.arrow,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.cast,"alpha -> beta",false,false,false,false);
     }
     
 
@@ -210,7 +211,7 @@ object ivy = { ...
 
     object symbol = { ...
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
-            if e.vrb ~= verb.none {
+            if e.vrb ~= verb.none & e.vrb ~= verb.numeral & e.vrb ~= verb.empty {
                 var mm : symeval;
                 var v : expr;
                 (st,v) := st.newvar(e.ann);
@@ -237,6 +238,8 @@ object ivy = { ...
         }
     }
     
+    import action show_expr(e:expr)
+
     object app = { ...
         
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
@@ -267,6 +270,7 @@ object ivy = { ...
                 var newargs : vector[expr];
                 var idx := e.args.begin;
                 while idx < e.args.end {
+                    call show_expr(e.args.value(idx));
                     (arg,argty,st) := e.args.value(idx).type_decorate(st,m);
                     argtys := argtys.append(argty);
                     newargs := newargs.append(arg);

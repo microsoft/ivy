@@ -3,10 +3,9 @@
 include ivylang
 include cpplang
 include hash
-#include reader
+include reader
 include pass_flat
 include pass_typeinfer
-#include reader
 include analysis
 
 module generic_to_cpp(ivytype,cpptype,cppclass) = {
@@ -209,37 +208,48 @@ object ivy = { ...
 	ty := symbol.make(name,ty.get_ann)
     }
 
-    action make_md_vector_type(dom:vector[expr],rng:expr) returns (ty:expr) = {
+    action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst) returns (ty:expr) = {
 	var vid : strident;
 	vid.val := "vector";
+        rng := fix_variant_type(rng,st);
 	vid.subscrs := vid.subscrs.append(rng.get_name);
 	var idx := dom.begin;
 	while idx < dom.end {
-	    vid.subscrs := vid.subscrs.append(dom.value(idx).get_name);
+            var ty := fix_variant_type(dom.value(idx),st);
+	    vid.subscrs := vid.subscrs.append(ty.get_name);
 	    idx := idx.next
 	};
 	var name := vid.prefix(strident.make("ivy"));
 	ty := symbol.make(name,ty.get_ann)
     }
 
-    action function_type(ty:expr) returns (ty:expr) = {
+    action function_type(ty:expr,st:tocppst) returns (ty:expr) = {
 	if ty isa app {
 	    # TODO: verify the domain type is convertible to size_t
 	    # var cty := ty.curry;
 	    # var rng := function_type(cty.get_arg(1));
 	    # ty := make_vector_type(rng);
-	    ty := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1))
+	    ty := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
 	}
     }
 
     object app = { ...
         action to_cpp(s:this,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
 	    if s.is(verb.colon) {
-		(res,st) := s.args.value(0).to_cpp(st)
+                var arg := s.args.value(0);
+		(res,st) := arg.to_cpp(st);
+                if (arg isa symbol) & arg.get_verb = verb.numeral {
+                    var ty : cpp.expr;
+		    (ty,st) := s.args.value(1).to_cpp(st);
+                    res := cpp.app.make1(ty,res,s.get_ann);
+                }
 	    } else if s.is(verb.arrow) {
 		var tmp : expr := s;  # workaround
-		var fty := function_type(tmp);
+		var fty := function_type(tmp,st);
 		(res,st) := fty.to_cpp(st)
+            } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.cast {
+                var ty := s.func.get_arg(1).get_arg(1);  # the range type of the cast operator
+                (res,st) := upcast(ty,s.args.value(0),st)
 	    } else {
 		var capp : cpp.app;
 		(capp.func,st) := s.func.to_cpp(st);
@@ -249,7 +259,8 @@ object ivy = { ...
 		    var idx := s.args.begin;
 		    while idx < s.args.end {
 			var arg : cpp.expr;
-			(arg,st) := upcast(argtys.value(idx),s.args.value(idx),st);
+                        (arg,st) := s.args.value(idx).to_cpp(st);
+#			(arg,st) := upcast(argtys.value(idx),s.args.value(idx),st);
 			capp.args := capp.args.append(arg);
 			idx := idx.next
 		    }
@@ -307,11 +318,12 @@ object ivy = { ...
         instantiate generic_to_cpp(ivy.asgn,cpp.asgn,cpp.stmt)
         action to_cpp_int(s:ivy.asgn,st:tocppst) returns (res:cpp.asgn,st:tocppst) = {
             (res.lhs,st) := s.lhs.to_cpp(st);
-	    if s.lhs.is(verb.colon) {
-		(res.rhs,st) := upcast(s.lhs.get_arg(1),s.rhs,st)
-	    } else {
-		(res.rhs,st) := s.rhs.to_cpp(st)
-	    }
+	    # if s.lhs.is(verb.colon) {
+	    #     (res.rhs,st) := upcast(s.lhs.get_arg(1),s.rhs,st)
+	    # } else {
+	    #     (res.rhs,st) := s.rhs.to_cpp(st)
+	    # }
+	    (res.rhs,st) := s.rhs.to_cpp(st)
         }
     }
 
@@ -431,10 +443,10 @@ object ivy = { ...
         }
 
         # An action declaration is not emitted if it is a member and
-        # does not have a body.
+        # does not have a body. External actions are never emitted.
 
         action emitted(s:this,st:tocppst) returns (res:bool) = {
-            res := ~s.is_member | s.has_body & ~st.proto_only;
+            res := (~s.is_member | s.has_body & ~st.proto_only) & s.kind ~= action_kind.external;
         }
     }
 
@@ -474,26 +486,36 @@ object ivy = { ...
             var cls : cpp.expr;
             (cls,st) := s.sort.to_cpp(st);
             res.name := member_name(cls);
-            if s.has_super {
-                res.has_super := true;
-                (res.super,st) := s.super.to_cpp(st)
-            } else if st.cppclasses.mem(s.sort.get_name) {
-                res.has_super := true;
+            if st.cppclasses.mem(s.sort.get_name) & members.end = 0 {
+                var td : cpp.typedecl;
+                td.ann := res.ann;
                 var dflt : expr;  # workaround
                 var itype := st.cppclasses.get(s.sort.get_name,dflt);
-                (res.super,st) := itype.to_cpp(st)
+                (td.ttype._type,st) := itype.to_cpp(st);
+                td.ttype.name := res.name;
+                resd := td;
+            } else {
+                if s.has_super {
+                    res.has_super := true;
+                    (res.super,st) := s.super.to_cpp(st)
+                } else if st.cppclasses.mem(s.sort.get_name) {
+                    res.has_super := true;
+                    var dflt : expr;  # workaround
+                    var itype := st.cppclasses.get(s.sort.get_name,dflt);
+                    (res.super,st) := itype.to_cpp(st)
+                };
+                res.has_members := true;  # This is not a forward declaration
+                var idx := members.begin;
+                st.in_class := true;
+                while idx < members.end {
+                    var d : cpp.decl;
+                    (d,st) := members.value(idx).to_cpp(st);
+                    res.members := res.members.append(d);
+                    idx := idx.next
+                };
+                st.in_class := false;
+                resd := res; 
             };
-            res.has_members := true;  # This is not a forward declaration
-            var idx := members.begin;
-	    st.in_class := true;
-            while idx < members.end {
-                var d : cpp.decl;
-                (d,st) := members.value(idx).to_cpp(st);
-                res.members := res.members.append(d);
-                idx := idx.next
-            };
-	    st.in_class := false;
-            resd := res; # workaround
             resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 
 	}
     }
@@ -609,9 +631,15 @@ object ivy = { ...
     # Translate an Ivy program to C++. 
 
     object prog = { ...
-	action to_cpp(s:this,st:tocppst) returns (res:cpp.prog,st:tocppst) = {
+	action to_cpp(s:this) returns (res:cpp.prog) = {
 
-            # Take a pass to register all of the type members
+            var st:tocppst;
+
+            # Get the subtyping relation
+            
+            st.subtype_rel := s.get_subtypes;
+
+            # A pass to register all of the type members
             
             var idx := s.decls.begin;
 	    while idx < s.decls.end {
@@ -619,7 +647,7 @@ object ivy = { ...
 		idx := idx.next
 	    };
 
-            # Another pass to emit the C++ prototypes and class declarations
+            # A pass to emit the C++ prototypes and class declarations
             
             st.proto_only := true;
             idx := s.decls.begin;
@@ -632,7 +660,7 @@ object ivy = { ...
 		idx := idx.next
 	    };
 
-            # Another pass to emit the C++ function implementations
+            # A pass to emit the C++ function implementations
             
             st.proto_only := false;
             idx := s.decls.begin;
@@ -651,18 +679,17 @@ object ivy = { ...
 
 	import action show_prog(s:str)
 
-        export action file_to_cpp(name:str) returns(res:str) = {
+        export action file_to_cpp(name:str) = {
 
             # Read the program
 
             var ann : annot;
-#            var p := prog.read_file(name,ann);
-	    var p := prog.dec(name);
+            var p := prog.read_file(name,ann);
+#	    var p := prog.dec(name);
 
             # Flattening pass
 
-            var fst : flatst;
-            (p,fst) := p.flat(fst);
+            p := p.flat;
 
 	    # Type inference pass
 
@@ -670,22 +697,14 @@ object ivy = { ...
 
 	    call show_prog(p.enc);
 
-            # Translation pass
-
-            var cppexpr : cpp.prog;
-            var st : tocppst;
-
-            # Get the subtyping relation
-            
-            st.subtype_rel := p.get_subtypes;
-
             # Translate to C++
 
-            (cppexpr,st) := p.to_cpp(st);
+            var cpp_prog := p.to_cpp;
 
             # Pretty-print the C++
 
-            res := cppexpr.enc
+            var cpp_name := path.change_extension(name,"cpp");
+            call write_file(cpp_name,cpp_prog.enc);
         }
     }
 

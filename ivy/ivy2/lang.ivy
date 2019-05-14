@@ -37,7 +37,7 @@ type priority
 
 module verb_base = {
     object verb = {
-        type this = { none, arrow, plus, times, colon, app, empty, dot, new }
+        type this = { none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast }
     }
     
     function str_to_verb(X:str) : verb
@@ -46,9 +46,25 @@ module verb_base = {
     function verb_to_arity(X:verb) : pos
 
     after init {
-        str_to_verb(X) := verb.none
+        str_to_verb(X) := verb.none;
+        verb_to_arity(verb.numeral) := 0;
     }
-}
+
+    # Numerals are symbols beginning with a digit. Otherwise we determine
+    # the verb of a symbol from its name by looking it up in
+    # `str_to_verb`. The default is `none`, which indicates a
+    # program-defined symbol.
+    
+    action verb_from_name(name:str) returns(vrb:verb) = {
+        if name.value(0).is_digit {
+            vrb := verb.numeral
+        } else {
+            vrb := str_to_verb(name);
+        }
+    }
+}        
+
+
 
 module built_in (optok,vrb,opprio,oparity) = {
     after init {
@@ -394,7 +410,7 @@ module expr_base(cppstyle) = {
         action makestr(name:str,ann:annot) returns (res:expr) = {
             var s:symbol;
             s.name := strident.make(name);
-            s.vrb := str_to_verb(name);
+            s.vrb := verb_from_name(name);
             s.ann := ann;
             res := s
         }
@@ -414,6 +430,7 @@ module expr_base(cppstyle) = {
                 var s : symbol;
                 var id : strident;
                 id.val := st.tok;
+                s.vrb := verb_from_name(st.tok);
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
                 while st.ok & st.tok = "[" {
@@ -806,9 +823,14 @@ module decl_base(expr,stmt) = {
         action get_ann(s:this) returns (res:annot)
     }
 
+    object action_kind = {
+        type this = {internal,external,imported,exported}
+    }
+
     object actdc = {
         variant this of decl = struct {
             name : expr,
+            kind : action_kind,
             inputs : vector[expr],
             outputs : vector[expr],
             has_body : bool,
@@ -832,6 +854,16 @@ module decl_base(expr,stmt) = {
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
+            if s.kind = action_kind.external {
+                b := b.extend("action");
+                b := b.extend(" ");
+            } else if s.kind = action_kind.imported {
+                b := b.extend("import");
+                b := b.extend(" ");
+            } else if s.kind = action_kind.exported {
+                b := b.extend("export");
+                b := b.extend(" ");
+            };
             b := b.extend("action");
             b := b.extend(" ");
             b := s.name.encode(b,0);

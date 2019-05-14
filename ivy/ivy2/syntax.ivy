@@ -24,7 +24,7 @@ object char = {
     type this
     type kinds = {alphanum,bracket,punct}
     function is_alphanum(X:char)
-        = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123)
+        = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123) | (X = 95)
     function is_bracket(X:char)
         = (X = 40 | X = 41 | X = 91 | X = 93 | X = 123 | X = 125 | X = 59 | X = 44)
     function is_white(X:char)
@@ -33,6 +33,7 @@ object char = {
         alphanum if is_alphanum(X:char)
         else (bracket if is_bracket(X) else punct)
     function non_printing(X:char) = (X < 32 | X = 127)
+    function is_digit(X:char) = (48 <= X & X < 58)
 }
     
 # Character strings

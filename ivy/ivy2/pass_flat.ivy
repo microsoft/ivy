@@ -227,7 +227,7 @@ object ivy = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var arg0 : expr;
             (arg0,st) := s.args.value(0).flat(st);
-            if s.is(verb.dot) & (s.args.value(0) isa symbol) & (s.args.value(1) isa symbol) {
+            if s.is(verb.dot) & (arg0 isa symbol) & (s.args.value(1) isa symbol) {
                 res := applydot(arg0,s.args.value(1).get_name.flat(true,st),s.ann,st)
             } else {
                 var args : vector[expr];
@@ -239,7 +239,9 @@ object ivy = { ...
                     args := args.append(arg);
                     idx := idx.next
                 };
-                res := app.make(s.func,args,s.ann);
+                var func : expr;
+                (func,st) := s.func.flat(st);
+                res := app.make(func,args,s.ann);
             }
         }
     }
@@ -350,6 +352,7 @@ object ivy = { ...
         instantiate generic_flat(this,decl)
         action flat_int(s:actdc,st:flatst) returns (res:this,st:flatst) = {
             (res.name,st) := s.name.flat(st);
+            res.kind := s.kind;
             (res.inputs,st) := flat_formalvec(s.inputs,st);
             (res.outputs,st) := flat_formalvec(s.outputs,st);
             st := local_vec(res.inputs,true,st);
@@ -509,9 +512,13 @@ object ivy = { ...
     object prog = { ...
         
 
-        action flat(p:prog,st:flatst) returns (p:prog,st:flatst) = {
+        action flat(p:prog) returns (p:prog) = {
+            var st:flatst;
 
-            # A pass to record all the defined identifiers
+            # A pass to record all the defined identifiers, We need to
+            # know which identifiers are defined to determine the
+            # scope of an object reference and to disambiguate
+            # hierarchical names from "dot" operators.
             
             var idx := p.decls.begin;
             while idx < p.decls.end {
@@ -519,7 +526,10 @@ object ivy = { ...
                 idx := idx.next;
             };
 
-            # A pass to flatten
+            # A pass to flatten. This pass expands module
+            # instantiations and expands hieracharical names of object
+            # members, so that all declarations are in global scope.
+            # Object declarations remain, but their bodies are empty.
 
             idx := p.decls.begin;
             while idx < p.decls.end {

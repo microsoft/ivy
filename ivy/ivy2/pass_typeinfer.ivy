@@ -87,7 +87,9 @@ object ivy = { ...
 		} else {
 		    call report_error(undefined.make(name),e.get_ann)
 		}
-	    }
+	    } else if e.get_verb = verb.empty {
+                e := colon.make(e,e,e.get_ann)
+            }
 	} else if e isa app {
 	    if e.is(verb.colon) {
 		var arg : expr;
@@ -125,7 +127,7 @@ object ivy = { ...
 		var func : expr;
 		(func,ok) := bottom_up_type(e.get_func,st,ok);
 		var args : vector[expr];
-		(args,ok) := bottom_up_types(e.get_args,st,ok);
+		(args,ok) := bottom_up_types(e.get_args,func,st,ok);
 		e := app.make(func,args,e.get_ann);
 		if func.is(verb.colon) {
 		    var ty := func.get_arg(1);
@@ -137,14 +139,49 @@ object ivy = { ...
 	}
     }
 
-    action bottom_up_types(es:vector[expr],st:typeinferst,ok:bool) returns (es:vector[expr],ok:bool) = {
+    # Bottom-up type inference for a vector of arguments `es` of a
+    # function `func`.  If `func` has a type, then we upcast the
+    # arguments to their expected types.  We don't worry about whether
+    # `func` takes the expect number of arguments here.  If it
+    # doesn't, type inference will fail later.
+
+    action bottom_up_types(es:vector[expr],func:expr,st:typeinferst,ok:bool)
+        returns (es:vector[expr],ok:bool) =
+    {
+        var argtypes : vector[expr];
+        if func.is(verb.colon) {
+            var ftype := func.get_arg(1);
+            if ftype.is(verb.arrow) {
+                argtypes := arrow.unfold_left(ftype.get_arg(0));
+            }
+        };
 	var idx := es.begin;
 	while idx < es.end {
 	    var e : expr;
 	    (e,ok) := bottom_up_type(es.value(idx),st,ok);
+            if idx < argtypes.end {
+                e := make_cast(argtypes.value(idx),e,st);
+            };
 	    es := es.set(idx,e);
 	    idx := idx.next
 	}
+    }
+
+    # Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
+    # used for assignments, and argument passing.
+
+    action make_cast(lhsty:expr,rhs:expr,st:typeinferst) returns (rhs:expr) = {
+	if rhs.is(verb.colon) {
+	    var rhsty := rhs.get_arg(1);
+            if ~expr.eq(lhsty,rhsty) {
+	        if ~( st.subtype_rel.is_subtype(rhsty,lhsty) ) {
+		    call report_error(type_conversion.make(rhs,rhsty,lhsty),rhs.get_ann);
+	        };
+                var castty := arrow.make(rhsty,lhsty,rhs.get_ann);
+                var castop := colon.make(symbol.makestr("cast",rhs.get_ann),castty,rhs.get_ann);
+                rhs := app.make1(castop,rhs,rhs.get_ann);
+            }
+        }
     }
 
     # Assignments. If both assigments are typed, just check for assignment
@@ -158,15 +195,10 @@ object ivy = { ...
 	    (res.lhs,ok) := bottom_up_type(res.lhs,st,ok);
 	    (res.rhs,ok) := bottom_up_type(res.rhs,st,ok);
 	    if ok {  # avoid cascading errors
-		if res.lhs.is(verb.colon) & res.rhs.is(verb.colon) {
-		    var lhsty := res.lhs.get_arg(1);
-		    var rhsty := res.rhs.get_arg(1);
-		    if ~(expr.eq(lhsty,rhsty) | st.subtype_rel.is_subtype(rhsty,lhsty)) {
-			call report_error(type_conversion.make(res.rhs,rhsty,lhsty),res.ann);
-		    }
-		} else {
-		    (res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
-		}
+                if res.lhs.is(verb.colon) { 
+                    res.rhs := make_cast(res.lhs.get_arg(1),res.rhs,st)  # upcast if needed
+                };
+		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 	    }
         }
     }
@@ -225,6 +257,7 @@ object ivy = { ...
         instantiate generic_typeinfer(this,decl)
         action typeinfer_int(s:actdc,st:typeinferst) returns (res:this,st:typeinferst) = {
             res.name := s.name;
+            res.kind := s.kind;
             res.inputs := s.inputs;
             res.outputs := s.outputs;
             st := setup_formals(res.inputs,true,st);

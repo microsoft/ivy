@@ -1,4 +1,6 @@
 #include <vector>
+#include <cstdint>
+#include <iostream>
 
 namespace ivy {
 
@@ -55,5 +57,33 @@ namespace ivy {
             return data[idx](parameters...);
         }
     };
+
+    template <unsigned N> struct bv;
+
+    template <typename T> struct native_int {
+        T value;
+        native_int() : value(0) {}
+        native_int(long long value) : value(value) {}
+        operator std::size_t() const {
+            return value;
+        }
+    };
+
+    template<typename T> T __num(long long x) {
+        T res;
+        res.value = x;
+        return res;
+    }
+
+    template<typename T>
+        static inline native_int<T> operator+(const native_int<T>& a,
+                                              const native_int<T>& b) {
+        return native_int<T>(a.value + b.value);
+    }
+
+    static inline void put(int c) {
+        std::cout.put(c);
+    }
+
 }
 

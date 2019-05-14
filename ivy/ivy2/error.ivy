@@ -154,6 +154,22 @@ object ivy = { ...
         }
     }
 
+    # - Error `cannot_write(n)` indicates that file named `n` cannot be written.
+
+    object cannot_write = {
+        variant this of error = struct {
+            n : str
+        }
+        action make(n:str) returns (res:this) = {
+            res.n := n;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Failed to write file:");
+            b := b.extend(" ");
+            b := b.extend(e.n);
+            b := b.newline;
+        }
+    }
 
     # - Error `undefined(n)` indicates that identifier `n` is undefined
 

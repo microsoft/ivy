@@ -99,9 +99,11 @@ object ivy = { ...
 
     object actdc = { ...
         action build_global_types(s:this,st:global_types) returns (st:global_types) = {
-	    var inpty := get_formal_type(s.inputs,s.ann);
-	    var outty := get_formal_type(s.outputs,s.ann);
-	    var ty := arrow.make(inpty,outty,s.ann);
+	    var ty := get_formal_type(s.outputs,s.ann);
+            if s.inputs.end > 0 {
+	        var inpty := get_formal_type(s.inputs,s.ann);
+	        ty := arrow.make(inpty,ty,s.ann)
+            };
 	    if s.is_member {
 		ty := ty.curry;
 	    };

@@ -23,6 +23,10 @@ object ivy = {
 
     instance arrow : built_in_binary("->",verb.arrow,5)
 
+    # Cast operator converts between types.
+
+    instance cast : built_in_unary("cast",verb.cast,1)
+
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
     
@@ -84,12 +88,14 @@ object ivy = {
                     } else {
                         st.ok := st.tok = "}";  # allow to omit final semicolon
                     }
-                } else if st.ok & st.tok = ";" {
-                    st := st.consume;
+                } else if st.ok & (st.tok = ";" | st.tok = "}") {
+                    if st.tok = ";" {
+                        st := st.consume;
+                    };
                     s.rhs := s.lhs;
                     s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
                 } else {
-                    st.ok := st.tok = "}";  # allow to omit final semicolon
+                    st.ok := false; 
                 };
                 res := s;
             }
@@ -389,6 +395,35 @@ object ivy = {
 
     }
 
+    action parse_action(st : pstate, prio:priority, kind:action_kind)
+        returns (st : pstate, res:decl) =
+    {
+        if st.tok = "action" {
+            st := st.consume;
+            var s : actdc;
+            s.kind := kind;
+            (st,s.ann) := st.get_ann;
+            (st,s.name) := expr.parse(st,99);
+            if st.ok & st.tok = "(" {
+                (st,s.inputs) := expr.tup.parse(st,0);
+            };
+            if st.ok & st.tok = "returns" {
+                st := st.consume;
+                (st,s.outputs) := expr.tup.parse(st,0);
+            };
+            if st.ok & st.tok = "=" {
+                st := st.consume;
+                s.has_body := true;
+                if st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false}
+            };
+            res := s
+        } else {
+            st.ok := false;
+        }
+    }
+
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             if st.tok = "{" {
@@ -402,25 +437,7 @@ object ivy = {
                 res := s
             }
             else if st.tok = "action" {
-                st := st.consume;
-                var s : actdc;
-                (st,s.ann) := st.get_ann;
-                (st,s.name) := expr.parse(st,99);
-                if st.ok & st.tok = "(" {
-                    (st,s.inputs) := expr.tup.parse(st,0);
-                };
-                if st.ok & st.tok = "returns" {
-                    st := st.consume;
-                    (st,s.outputs) := expr.tup.parse(st,0);
-                };
-                if st.ok & st.tok = "=" {
-                    st := st.consume;
-                    s.has_body := true;
-                    if st.tok = "{" {
-                        (st,s.body) := stmt.parse(st,1);
-                    } else {st.ok := false}
-                };
-                res := s
+                (st,res) := parse_action(st,prio,action_kind.internal)
             } else if st.tok = "type" {
                 st := st.consume;
                 var s : typedc;
@@ -521,6 +538,15 @@ object ivy = {
                 } else {st.ok := false};
                 (st,s.super) := expr.parse(st,0);
                 res := s
+            } else if st.tok = "extern" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.external);
+            } else if st.tok = "import" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.imported);
+            } else if st.tok = "export" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.exported);
             } else {st.ok := false}
         }
         action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
