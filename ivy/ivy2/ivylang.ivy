@@ -395,6 +395,27 @@ object ivy = {
 
     }
 
+    # The `init` declaration contains initialization code
+
+    object initdc = {
+        variant this of decl = struct {
+            body : stmt,
+            ann : annot
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("init");
+            b := b.extend(" ");
+            b := s.body.encode(b,1);
+            b := b.newline
+        }	    
+
+        action get_body(s:this) returns (res:stmt) = {
+            res := s.body
+        }
+    }
+    
+
     action parse_action(st : pstate, prio:priority, kind:action_kind)
         returns (st : pstate, res:decl) =
     {
@@ -547,6 +568,14 @@ object ivy = {
             } else if st.tok = "export" {
                 st := st.consume;
                 (st,res) := parse_action(st,prio,action_kind.exported);
+            } else if st.tok = "init" {
+                var s : initdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false};
+                res := s;
             } else {st.ok := false}
         }
         action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {

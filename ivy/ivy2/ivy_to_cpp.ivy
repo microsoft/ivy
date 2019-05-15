@@ -375,6 +375,15 @@ object ivy = { ...
         }
     }
 
+    action is_input_param(s:actdc,p:expr) returns (res:bool) = {
+        var idx := s.inputs.begin;
+        while ~res & idx < s.inputs.end {
+            res := expr.eq(s.inputs.value(idx),p);
+            idx := idx.next
+        }
+    }
+    
+
     object actdc = { ...
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. If the action is a member action, we
@@ -420,8 +429,10 @@ object ivy = { ...
                     (rvar,st) := s.outputs.value(0).get_arg(0).to_cpp(st);
                     var ret := cpp.retst.make(rvar,s.ann);
                     res.body := cpp.sequence.make(res.body,ret,s.ann);
-                    var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
-                    res.body := cpp.sequence.make(vs,res.body,s.ann);
+                    if ~is_input_param(s,s.outputs.value(0)) {
+                        var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
+                        res.body := cpp.sequence.make(vs,res.body,s.ann);
+                    }
                 }
             };
             st.is_member := false;
@@ -447,6 +458,15 @@ object ivy = { ...
 
         action emitted(s:this,st:tocppst) returns (res:bool) = {
             res := (~s.is_member | s.has_body & ~st.proto_only) & s.kind ~= action_kind.external;
+        }
+    }
+
+    # Init declarations are not emitted
+
+    object initdc = { ...
+        
+        action emitted(s:this,st:tocppst) returns (res:bool) = {
+            res := false;
         }
     }
 
@@ -672,9 +692,36 @@ object ivy = { ...
 		    res.decls := res.decls.append(d);
                 };
 		idx := idx.next
-	    }
+	    };
             
             
+            # Emit a main function by concatenating the init
+            # declaration bodies.
+
+            var main : cpp.funcdecl;
+            main.ftype.base._type := cpp.inttype(main.ann);
+            main.ftype.base.name := cpp.symbol.makestr("main",main.ann);
+            var mainarg0 : cpp.simpletype;
+            var mainarg1 : cpp.simpletype;
+            mainarg0._type := cpp.inttype(main.ann);
+            mainarg0.name := cpp.symbol.makestr("argc",main.ann);
+            mainarg1._type := cpp.symbol.makestr("char **",main.ann);
+            mainarg1.name := cpp.symbol.makestr("argv",main.ann);
+            main.ftype.args := main.ftype.args.append(mainarg0);
+            main.ftype.args := main.ftype.args.append(mainarg1);
+            main.has_body := true;
+            main.body := cpp.retst.make(cpp.symbol.makestr("0",main.ann),main.ann);
+            idx := s.decls.end;
+	    while idx > s.decls.begin {
+                idx := idx.prev;
+                var decl := s.decls.value(idx);
+                if decl isa initdc {
+                    var cbody : cpp.stmt;
+                    (cbody,st) := decl.get_body.to_cpp(st);
+                    main.body := cpp.sequence.make(cbody,main.body,decl.get_ann);
+                }
+            };
+            res.decls := res.decls.append(main);
 	}
 
 	import action show_prog(s:str)

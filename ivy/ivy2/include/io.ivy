@@ -1,0 +1,11 @@
+
+module stdio_string(str) = {
+
+    action write(s:string) = {
+        var idx := s.begin;
+        while idx < s.end {
+            ivy.put(cast(s.value(idx)));
+        }
+    }
+    
+}

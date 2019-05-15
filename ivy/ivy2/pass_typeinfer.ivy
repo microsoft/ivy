@@ -269,6 +269,13 @@ object ivy = { ...
         }
     }
 
+    object initdc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            (res.body,st) := s.body.typeinfer(st);
+        }
+    }
+
     object prog = { ...
         
 

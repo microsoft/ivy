@@ -1,0 +1,22 @@
+
+module ascii_string = {
+
+    type domain
+    interpret domain -> ivy.native_int[size_t]
+    type range
+    interpret range -> ivy.native_int[char]
+    type this
+    
+    destructor value : (this * domain -> range)
+    destructor end : (this -> domain)
+
+    action begin(s:this) returns (res:domain) = {
+        res := 0;
+    }
+
+    action append(s:this,c:range) returns (s:this) = {
+        s.value(s.end) := c;
+        s.end := s.end + 1;
+    }
+    
+}

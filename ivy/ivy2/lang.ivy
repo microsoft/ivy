@@ -821,6 +821,7 @@ module decl_base(expr,stmt) = {
         instantiate parse_intf(decl)
         action get_expr(s:this) returns (res:expr)
         action get_ann(s:this) returns (res:annot)
+        action get_body(s:this) returns (res:stmt)
     }
 
     object action_kind = {
@@ -855,7 +856,7 @@ module decl_base(expr,stmt) = {
             b := s.ann.encode(b);
             b := b.nest;
             if s.kind = action_kind.external {
-                b := b.extend("action");
+                b := b.extend("extern");
                 b := b.extend(" ");
             } else if s.kind = action_kind.imported {
                 b := b.extend("import");
@@ -896,6 +897,9 @@ module decl_base(expr,stmt) = {
             res := s.inputs.value(0).get_arg(1).get_name;
         }
 
+        action get_body(s:this) returns (res:stmt) = {
+            res := s.body
+        }
     }
 }
     

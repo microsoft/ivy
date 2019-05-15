@@ -82,6 +82,10 @@ object ivy = { ...
 
             defining : bool,
 
+            # True if we are on an absolute identifier
+
+            absolute : bool,
+
             # True if we are on rhs of a dot operator
 
             dot_rhs : bool
@@ -113,7 +117,7 @@ object ivy = { ...
 
     action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
         var name := member.prefix(arg.get_name);
-        if st.defining | st.defs.get(arg.get_name,false) {
+        if st.absolute | st.defining | st.defs.get(arg.get_name,false) {
             res := symbol.make(name,ann);
         } else {
             res := dot.make(arg,symbol.make(member,ann),ann);
@@ -367,6 +371,13 @@ object ivy = { ...
         }
     }
 
+    object initdc = { ...
+        instantiate generic_flat(this,decl)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            (res.body,st) := s.body.flat(st);
+        }
+    }
+
     object typedc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
@@ -405,9 +416,9 @@ object ivy = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             (res.itype,st) := s.itype.flat(st);
-	    st.defining := true;
+	    st.absolute := true;
             (res.ctype,st) := s.ctype.flat(st);
-	    st.defining := false;
+	    st.absolute := false;
 	    call show_ctype(res.ctype);
 	}
     }
