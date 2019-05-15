@@ -21,11 +21,16 @@ object ivy = {
 
     # Type and implication arrow
 
-    instance arrow : built_in_binary("->",verb.arrow,5)
+    instance arrow : built_in_binary("->",verb.arrow,2)
 
     # Cast operator converts between types.
 
     instance cast : built_in_unary("cast",verb.cast,1)
+
+    # The `=` and `~=` verbs are spelled differently in Ivy and C++
+    
+    instance notequals : built_in_binary("~=",verb.notequals,5)
+    instance not : built_in_unary("~",verb.not,15)
 
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
@@ -486,7 +491,7 @@ object ivy = {
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
                 if st.ok & st.tok.end > 0 {  # double quote
-                    (st,s.itype) := expr.parse(st,5);  # priority of arrow
+                    (st,s.itype) := expr.parse(st,verb_to_prio(verb.arrow));
                     if st.ok & st.tok = "->" {
                         st := st.consume;
                         (st,s.ctype) := expr.parse(st,0); 

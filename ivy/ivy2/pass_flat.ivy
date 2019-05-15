@@ -293,6 +293,15 @@ object ivy = { ...
         }
     }
 
+    object whilest = { ...
+        instantiate generic_flat_stmt(this,stmt)
+        action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+            res := s;
+            (res.cond,st) := res.cond.flat(st);
+            (res.body,st) := res.body.flat(st);
+        }
+    }
+
     action flat_formal(s:expr,st:flatst) returns (res:expr,st:flatst) = {
         res := s;
         if res.is(verb.colon) {
@@ -410,8 +419,6 @@ object ivy = { ...
 	}
     }
 
-    import action show_ctype(e:expr)
-
     object interpdc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
@@ -419,7 +426,6 @@ object ivy = { ...
 	    st.absolute := true;
             (res.ctype,st) := s.ctype.flat(st);
 	    st.absolute := false;
-	    call show_ctype(res.ctype);
 	}
     }
 

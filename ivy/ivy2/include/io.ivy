@@ -1,10 +1,12 @@
 
 module stdio_string(str) = {
 
-    action write(s:string) = {
-        var idx := s.begin;
+    action write(s:str) = {
+        var idx : str.domain;
+        idx := s.begin;
         while idx < s.end {
             ivy.put(cast(s.value(idx)));
+            idx := idx + 1;
         }
     }
     

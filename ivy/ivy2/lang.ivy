@@ -30,14 +30,20 @@ type priority
 # - `str_to_verb` stores the map from string symbol names to verbs
 # - `verb_to_str` is the inverse map
 # - `verb_to_prio` gives the priority of a verb
-
+#
 # The verb `empty` represents the empty tuple, of type `unit`. Neither
 # of these is available in the source lanuage, but they are used
 # internally.
+#
 
 module verb_base = {
     object verb = {
-        type this = { none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast }
+        type this =
+        {
+            none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
+            boolv, truev, falsev, and, or, not, iff, equals, notequals,
+            lt, leq, gt, geq, minus, div
+        }
     }
     
     function str_to_verb(X:str) : verb
@@ -516,7 +522,11 @@ module expr_base(cppstyle) = {
             } else {
                 b := b.nest;
                 b := s.func.encode(b,99);
-                b := expr.tup.encode(s.args,b,0);
+                if s.args.end = 0 {
+                    b := b.extend("()")
+                } else {
+                    b := expr.tup.encode(s.args,b,0);
+                };
                 b := b.unnest;
             }
         }
@@ -585,9 +595,25 @@ module expr_base(cppstyle) = {
         
     }
 
-    instance plus : built_in_binary("+",verb.plus,10)
-    instance times : built_in_binary("*",verb.times,11)
+
+    instance iff : built_in_binary("<->",verb.iff,2)
+    instance or : built_in_binary("|",verb.or,3)
+    instance and : built_in_binary("&",verb.and,4)
+    instance equals : built_in_binary("=",verb.equals,5)
+    instance lt : built_in_binary("<",verb.lt,6)
+    instance leq : built_in_binary("<=",verb.leq,6)
+    instance gt : built_in_binary(">",verb.gt,6)
+    instance geq : built_in_binary(">=",verb.geq,6)
+    instance plus : built_in_binary("+",verb.plus,12)
+    instance minus : built_in_binary("-",verb.minus,12)
+    instance times : built_in_binary("*",verb.times,13)
+    instance div : built_in_binary("/",verb.div,13)
+
     instance empty : built_in_const("()",verb.empty)
+    instance boolv : built_in_const("bool",verb.boolv)
+    instance truev : built_in_const("true",verb.truev)
+    instance falsev : built_in_const("false",verb.falsev)
+    
 
     # The dot is used to introduce members of namespaces
     
@@ -762,6 +788,38 @@ module stmt_base(expr,asgntok,cppstyle) = {
         }
     }
 
+    object whilest = {
+        variant this of stmt = struct {
+            cond : expr,
+            body : stmt,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(cond:expr,body:stmt,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.cond := cond;
+            s.body := body;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("while");
+            b := b.extend(" ");
+            if cppstyle {
+                b := b.extend("(");
+            };
+            b := s.cond.encode(b,0);
+            if cppstyle {
+                b := b.extend(")");
+            };
+            b := b.extend(" ");
+            b := s.body.encode(b,2);
+        }
+    }
+
     object stmt = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             while st.tok = ";" {
@@ -793,6 +851,18 @@ module stmt_base(expr,asgntok,cppstyle) = {
                         var ann : annot; # missing else doesn't print, so don't annotate
                         s.elsest := skipst.make(ann)
                     }
+                }
+                else {
+                    st.ok := false;
+                };
+                res := s;
+            } else if st.tok = "while" {
+                st := st.consume;
+                var s : whilest;
+                (st,s.ann) := st.get_ann;
+                (st,s.cond) := expr.parse(st,0);
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
                 }
                 else {
                     st.ok := false;

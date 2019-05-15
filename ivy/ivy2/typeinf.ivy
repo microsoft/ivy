@@ -63,9 +63,23 @@ object ivy = { ...
     after init {
         call set_built_in_type(verb.none,"alpha",true,true,true,true);
         call set_built_in_type(verb.plus,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.minus,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.times,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.div,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.arrow,"bool * bool -> bool",true,true,true,true);
         call set_built_in_type(verb.cast,"alpha -> beta",false,false,false,false);
+        call set_built_in_type(verb.truev,"bool",true,true,true,true);
+        call set_built_in_type(verb.falsev,"bool",true,true,true,true);
+        call set_built_in_type(verb.and,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.or,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.not,"bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.iff,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.equals,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.notequals,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.lt,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.leq,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.gt,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.geq,"alpha * alpha -> bool",false,false,false,true);
     }
     
 
@@ -238,8 +252,6 @@ object ivy = { ...
         }
     }
     
-    import action show_expr(e:expr)
-
     object app = { ...
         
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
@@ -270,7 +282,6 @@ object ivy = { ...
                 var newargs : vector[expr];
                 var idx := e.args.begin;
                 while idx < e.args.end {
-                    call show_expr(e.args.value(idx));
                     (arg,argty,st) := e.args.value(idx).type_decorate(st,m);
                     argtys := argtys.append(argty);
                     newargs := newargs.append(arg);

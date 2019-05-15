@@ -73,6 +73,10 @@ object ivy = { ...
 
             objects : ident_set,
 
+            # Types of global actions and variables
+
+            globals : global_types,
+
             # True if we are emitting a member action
 
             is_member : bool,
@@ -185,12 +189,18 @@ object ivy = { ...
     }
     
     # Also, when compiling a class member function, the first argument is implicit, and
-    # is replaced in the C++ by `(*this)`.
+    # is replaced in the C++ by `(*this)`. A few verbs are spelled differently in C++.
+    # We fix this here.
 
     object symbol = { ...
         instantiate generic_to_cpp(ivy.symbol,cpp.symbol,cpp.expr)
         action to_cpp_int(s:symbol,st:tocppst) returns (res:cpp.symbol,st:tocppst) = {
-            if st.is_member & s.name = st.this_ident {
+            var vrb := s.get_verb;
+            if vrb = verb.not {
+                res.name := cpp.strident.make("!")
+            } else if vrb = verb.notequals {
+                res.name := cpp.strident.make("!=")
+            } else if st.is_member & s.name = st.this_ident {
                 res.name := cpp.strident.make("(*this)");
             } else {
                 var id := fix_object_clash(s.name,st);
@@ -223,6 +233,12 @@ object ivy = { ...
 	ty := symbol.make(name,ty.get_ann)
     }
 
+    # Function types are handled specially, using C++ templates in the
+    # standard header. For now we have only a dense representation
+    # using `std::vector`. This works only when the domain types are
+    # convertible to `size_t`. We also need at least a hash table type
+    # here for sparse data.
+    
     action function_type(ty:expr,st:tocppst) returns (ty:expr) = {
 	if ty isa app {
 	    # TODO: verify the domain type is convertible to size_t
@@ -233,38 +249,56 @@ object ivy = { ...
 	}
     }
 
+    # Translate a function application to C++. 
+
     object app = { ...
         action to_cpp(s:this,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+
 	    if s.is(verb.colon) {
+                
+                # Generally, type decorations are not emitted to
+                # C++. However, in case of a numeral, we need to cast
+                # the numeral to the appropriate type.  Also, if a
+                # symbol an action and its type is not a function
+                # type, we have to add () for C++.
+
                 var arg := s.args.value(0);
 		(res,st) := arg.to_cpp(st);
-                if (arg isa symbol) & arg.get_verb = verb.numeral {
-                    var ty : cpp.expr;
-		    (ty,st) := s.args.value(1).to_cpp(st);
-                    res := cpp.app.make1(ty,res,s.get_ann);
+                if (arg isa symbol) {
+                    if arg.get_verb = verb.numeral {
+                        var ty : cpp.expr;
+		        (ty,st) := s.args.value(1).to_cpp(st);
+                        res := cpp.app.make1(ty,res,s.get_ann);
+                    } else if st.globals.is_action.mem(arg.get_name) {
+                        if ~(s.args.value(1).is(verb.arrow)) {
+                            var args : vector[cpp.expr];
+                            res := cpp.app.make(res,args,res.get_ann);
+                        }
+                    }
                 }
-	    } else if s.is(verb.arrow) {
+            } else if s.is(verb.arrow) {
+
+                # Function types need special translation to C++
+
 		var tmp : expr := s;  # workaround
 		var fty := function_type(tmp,st);
 		(res,st) := fty.to_cpp(st)
             } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.cast {
+
+                # A cast operator looks like (cast : (t->u))(x). This may indicate
+                # a need for an upcast in C++. 
+
                 var ty := s.func.get_arg(1).get_arg(1);  # the range type of the cast operator
                 (res,st) := upcast(ty,s.args.value(0),st)
 	    } else {
-		var capp : cpp.app;
+
+                # This is the normal case of function application. We
+                # translate the funciton and all the arguments and
+                # then apply.
+
+                var capp : cpp.app;
 		(capp.func,st) := s.func.to_cpp(st);
-		if s.func.is(verb.colon) {
-		    var ftype := s.func.get_arg(1);
-		    var argtys := arrow.unfold_left(ftype.get_arg(0));
-		    var idx := s.args.begin;
-		    while idx < s.args.end {
-			var arg : cpp.expr;
-                        (arg,st) := s.args.value(idx).to_cpp(st);
-#			(arg,st) := upcast(argtys.value(idx),s.args.value(idx),st);
-			capp.args := capp.args.append(arg);
-			idx := idx.next
-		    }
-		} else {
+                {
 		    var idx := s.args.begin;
 		    while idx < s.args.end {
 			var arg : cpp.expr;
@@ -274,7 +308,8 @@ object ivy = { ...
 		    };
 
 		    # If of the form (x:t).f, where t is a variant
-		    # type, convert to x->f.
+		    # type, convert to x->f, since variant types are
+		    # represented with smart pointers.
 
 		    if s.func.get_verb = verb.dot {
 			var lhs := s.args.value(0);
@@ -287,7 +322,24 @@ object ivy = { ...
 		    }
 		};
 		capp.ann := s.ann;
-		res := capp
+		res := capp;
+
+                # If of the form x.f where is a member action of input arity zero,
+                # add empty parentheses for C++.
+
+                if s.is(verb.dot) {
+                    var lhs := s.args.value(0);
+                    if lhs.is(verb.colon) {
+                        var ty := lhs.get_arg(1);
+                        var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+                        if st.globals.is_action.mem(fid) {
+                            if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
+                                var args : vector[cpp.expr];
+                                res := cpp.app.make(res,args,res.get_ann);
+                            }
+                        }
+                    }
+                }
 	    }
         }
     }
@@ -337,6 +389,14 @@ object ivy = { ...
             (res.cond,st) := s.cond.to_cpp(st);
             (res.thenst,st) := s.thenst.to_cpp(st);
             (res.elsest,st) := s.elsest.to_cpp(st);
+        }
+    }
+
+    object whilest = { ...
+        instantiate generic_to_cpp(this,cpp.whilest,cpp.stmt)
+        action to_cpp_int(s:this,st:tocppst) returns (res:cpp.whilest,st:tocppst) = {
+            (res.cond,st) := s.cond.to_cpp(st);
+            (res.body,st) := s.body.to_cpp(st);
         }
     }
 
@@ -658,6 +718,10 @@ object ivy = { ...
             # Get the subtyping relation
             
             st.subtype_rel := s.get_subtypes;
+
+            # Get the global typing
+
+            st.globals := s.get_global_types;
 
             # A pass to register all of the type members
             

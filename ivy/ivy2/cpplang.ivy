@@ -22,6 +22,11 @@ object cpp = {
     
     instance arrow : built_in_binary("->",verb.arrow,100)
 
+    # The `=` and `~=` verbs are spelled differently in Ivy and C++
+    
+    instance notequals : built_in_binary("!=",verb.notequals,5)
+    instance not : built_in_unary("!",verb.not,15)
+
     # Here, we parse statements specific to C++
     
     object simpletype = {

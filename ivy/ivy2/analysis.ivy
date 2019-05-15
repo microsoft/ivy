@@ -54,7 +54,8 @@ object ivy = { ...
 
     object global_types = {
         type this = struct {
-            type_of : symeval
+            type_of : symeval,
+            is_action : ident_set
         }
     }
     
@@ -108,6 +109,7 @@ object ivy = { ...
 		ty := ty.curry;
 	    };
 	    st.type_of := st.type_of.set(s.name.get_name,ty);
+            st.is_action := st.is_action.set(s.name.get_name,true);
 	}
     }
 }
