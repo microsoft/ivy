@@ -1,8 +1,39 @@
 #include <vector>
 #include <cstdint>
 #include <iostream>
+#include <unordered_map>
+#include <memory>
 
 namespace ivy {
+
+    // Here we have the C++ representations of Ivy types. Every C++ type
+    // used by Ivy provides certain traits:
+    //
+    // 1) A default constructor
+    // 2) A constructor from (signed or unsigned) long long.
+    // 3) A conversion to size_t
+    // 4) A static predicate __is_seq
+    // 5) A == overload
+    // 6) A != overload
+    // 7) A predicate __is_zero
+    // 8) A class __hash of hashers
+    //
+    // For numeric types, the constructor from long long gives the
+    // result of casting an integer to the type. For non-numeric
+    // types, it gives the same result as the default
+    // constructor. Conversion to size_t gives the result of casting
+    // to a 64-bit integer for numeric types and zero for non-numeric
+    // types. The __is_zero predicate returns true if the value
+    // is the default value. The __hash method returns a hash of
+    // the value of type size_t. We require that the hash of the default
+    // value (i.e., 0) is always zero.
+    // 
+    // The predicate __is_seq gives true for unsigned integer types.
+    
+
+    // This is the basic (signed) integer type. In principle, this
+    // should be implement with a multiprecision integer (e.g., GMP).
+    // For now, it is just a wrapper around long long.
 
     struct integer {
         long long value;
@@ -19,46 +50,314 @@ namespace ivy {
         operator std::size_t() const {
             return value;
         }
+        static bool __is_seq() {
+            return false;
+        }
+        bool operator==(const integer &other) const {
+            return value == other.value;
+        }
+        bool operator!=(const integer &other) const {
+            return value != other.value;
+        }
+        bool __is_zero() const {
+            return value == 0;
+        }
+        struct __hash {
+            size_t operator()(const integer &x) const {
+                return x.value;
+            }
+        };
     };
 
+    // This is the basic (unsigned) natural type. In principle, this
+    // should be implemented with a multiprecision integer (e.g., GMP).
+    // For now, it is just a wrapper around unsigned long long.
+
+    struct natural {
+        unsigned long long value;
+        natural() {
+            value = 0;
+        }
+        natural(unsigned long long v) {
+            value = v;
+        }
+        natural &operator =(unsigned long long v) {
+            value = v;
+            return *this;
+        }
+        operator std::size_t() const {
+            return value;
+        }
+        static bool __is_seq() {
+            return true;
+        }
+        bool operator==(const natural &other) const {
+            return value == other.value;
+        }
+        bool operator!=(const natural &other) const {
+            return value != other.value;
+        }
+        bool __is_zero() const {
+            return value == 0;
+        }
+        struct __hash {
+            size_t operator()(const natural &x) const {
+                return x.value;
+            }
+        };
+    };
+
+    // This is a variadic class template for representing Ivy
+    // functions. In addition to the standard traits, it provides:
+    //
+    // 1) const r operator() (d1,...,dn)
+    // 2) r operator() (d1,...,dn)
+    // 3) a static function resize(vector x, size_t size)
+    //
+    // where r is the range type of the function and d1,...,dn are
+    // the domain types. The first is for use of the function as
+    // an rvalue and the second is for use as an lvalue.
+    //
+    // For domain types that are sequences, this class dynamically
+    // determines whether to use a dense (vector) or sparse
+    // (unordered_map) representation. For purely dense
+    // representation, the overhead of a lookup is just the array
+    // bounds check.
+    //
+    // The resize operator converts to a vector representation of the
+    // given size. The value of the resulting function for inputs
+    // greater than size becomes the default value of the range type.
+    // That is, of `f` is a function over a sequence type,
+    // `resize(f,size)` is equivalent to:
+    //
+    //     lambda x. f(x) if x < size else f(x)
+    //
+    // and has the side effect of converting the representation to a
+    // pure vector. If `f` is a function over a non-sequence type, the
+    // result is `lambda x. 0`.
+    //
+    // The storage cost for this type is the cost of std::vector (usually
+    // a pointer plus a size_t) plus one pointer.
+    //
+    // The template represents a function `f` with a vector `data` and
+    // an optional unordered map `map`. To evaluate `f(x)`, when `x`
+    // is a sequence type, we first consult `data`. If `x` is in the
+    // range `[0..data.size())` we return `data[x]`. Failing this, we
+    // return `map[x]` (creating `map` if needed).  As an exception ,
+    // however, if `x = data.size()`, we increase the size of the
+    // `data` by one to accomodate the new value. This allows the
+    // vector to grow, provided values are appended sequentially. The
+    // `resize` function produces a pure vector of the given size, even
+    // if argument function is represented sparsely. 
+    //
+    // Functions of more than one argument are represented by currying.
+    
+    
     template <class T, class ... RestD> struct vector;
     
+    // This specialization represents the bases case: a function of
+    // one argument.
+
     template<class T, class PrimaryD > struct vector<T, PrimaryD>  {
         typedef std::vector<T> type;
         type data;
+        typedef std::unordered_map <PrimaryD,T,typename T:: __hash> map_type;
+        std::unique_ptr< map_type  > map;
+
+        vector () {
+        }
+
+        vector(long long v) {
+        }
+
+        operator std::size_t() const {
+            return 0;
+        }
+
+        static bool __is_seq() {
+            return false;
+        }
+
+        bool __value_eq(const PrimaryD &idx, const T &v) const {
+            if (PrimaryD::__is_seq() && idx < data.size()) {
+                return data[idx] == v;
+            }
+            if (map) {
+                auto it = map->find(idx);
+                if (it != map->end())
+                    return it->second == v;
+            }
+            return v.__is_zero();
+        }
+        
+        bool operator==(const vector &other) const {
+            if (PrimaryD::__is_seq()) {
+                for (size_t idx = 0; idx < data.size(); ++idx) {
+                    if (!other.__value_eq(idx,data[idx])) return false;
+                }
+                for (size_t idx = data.size(); idx < other.data.size(); ++idx) {
+                    if (!__value_eq(idx,other.data[idx])) return false;
+                }
+            }
+            if (map) {
+                for (auto it = map->begin(); it != map->end(); ++it) {
+                    const PrimaryD &idx = it->first;
+                    if (!PrimaryD::__is_seq() || idx >= data.size())
+                        if (!other.__value_eq(idx,it->second)) return false;
+                }
+            }
+            if (other.map) {
+                for (auto it = other.map->begin(); it != other.map->end(); ++it) {
+                    const PrimaryD &idx = it->first;
+                    if (!PrimaryD::__is_seq() || idx >= other.data.size())
+                        if (!__value_eq(idx,it->second)) return false;
+                }
+            }
+            return true;
+        }
+
+        bool operator!=(const vector &other) const {
+            return !((*this) == other);
+        }
+
+        bool __is_zero() const {
+            if (PrimaryD::__is_seq()) {
+                for (size_t idx = 0; idx < data.size(); ++idx) {
+                    if (!data[idx].__is_zero()) return false;
+                }
+            }
+            if (map) {
+                for (auto it = map->begin(); it != map->end(); ++it) {
+                    const PrimaryD &idx = it->first;
+                    if (!PrimaryD::__is_seq() || idx >= data.size())
+                        if (!it->second.__is_zero()) return false;
+                }
+            }                        
+            return true;
+        }
+
+
+        struct __hash {
+            size_t operator()(const vector &x) const {
+                size_t res = 0;
+                if (PrimaryD::__is_seq()) {
+                    for (size_t idx = 0; idx < x.data.size(); ++idx) {
+                        res += T::__hash(x.data[idx]);
+                    }
+                }
+                if (x.map) {
+                    for (auto it = x.map->begin(); it != x.map->end(); ++it) {
+                        const PrimaryD &idx = it->first;
+                        if (!PrimaryD::__is_seq() || idx >= x.data.size())
+                            res += T::__hash(it->second);
+                    }
+                }                    
+                return res;
+            }
+        };
+        
+
         const T& operator() (PrimaryD idx) const {
-            if (idx >= data.size()) {
-                data.resize(idx+1);
+            if (PrimaryD::__is_seq()) {
+                if (idx < data.size())
+                    return data[idx];
+                else if (idx == data.size()) {
+                    data.resize(idx+1);
+                    return data[idx];
+                }
             }
-            return data[idx];
+            if (!map) {
+                map = new map_type;
+            }
+            return (*map)[idx];
         }
+        
         T& operator() (PrimaryD idx) {
-            if (idx >= data.size()) {
-                data.resize(idx+1);
+            if (T::__is_seq()) {
+                if (idx < data.size())
+                    return data[idx];
+                else if (((size_t)idx) == data.size()) {
+                    data.resize(((size_t)idx)+1);
+                    return data[idx];
+                }
             }
-            return data[idx];
+            if (!map) {
+                map = std::unique_ptr< map_type  > (new map_type);
+            }
+            return (*map)[idx];
         }
+
+        static vector resize(const vector &x, size_t size) {
+            vector res;
+            if (T::__is_seq()) {
+                res.data.resize(size);
+                for (size_t idx = 0; idx < size; ++idx) {
+                    res.data[idx] = x(idx);
+                }
+            }
+            return res;
+        }
+
     };
+
+    // This specialization represents the recursive case: a function of more than
+    // one argument. 
 
     template<class T, class PrimaryD, class ... RestD > struct vector<T, PrimaryD, RestD...> {
         typedef typename vector<T, RestD...>::type OneDimensionDownVectorT;
-        typedef std::vector<OneDimensionDownVectorT> type;
+        typedef vector<OneDimensionDownVectorT,PrimaryD> type;
         type data;
-        const T& operator() (PrimaryD idx, RestD... parameters) const {
-            if (idx >= data.size()) {
-                data.resize(idx+1);
-            }
-            return data[idx](parameters...);
+
+        vector () {
         }
-        T& operator() (PrimaryD idx, RestD... parameters) {
-            if (idx >= data.size()) {
-                data.resize(idx+1);
+
+        vector(long long v) {
+        }
+
+        operator std::size_t() const {
+            return 0;
+        }
+
+        static bool __is_seq() {
+            return false;
+        }
+
+        bool operator==(const vector &other) const {
+            return data == other.data;
+        }
+
+        bool operator!=(const vector &other) const {
+            return data != other.data;
+        }
+
+        bool __is_zero() const {
+            return data.__is_zero();
+        }
+
+        struct __hash {
+            size_t operator()(const vector &x) const {
+                return type::__hash(x.data);
             }
-            return data[idx](parameters...);
+        };
+
+        const T& operator() (PrimaryD idx, RestD... parameters) const {
+            return data(idx)(parameters...);
+        }
+
+        T& operator() (PrimaryD idx, RestD... parameters) {
+            return data(idx)(parameters...);
+        }
+
+        static vector resize(const vector &x, size_t size) {
+            vector res;
+            res.data = x.data.resize(size);
+            return res;
         }
     };
 
-    template <unsigned N> struct bv;
+    // This template implements numeric types based on native C++
+    // numeric types. It provides the standard traits for Ivy values,
+    // plus overloads for the standard arithmetic operations.
 
     template <typename T> struct native_int {
         T value;
@@ -67,23 +366,53 @@ namespace ivy {
         operator std::size_t() const {
             return value;
         }
+        static bool __is_seq() {
+            return true;
+        }
+        bool operator==(const native_int &other) const {
+            return value == other.value;
+        }
+        bool operator!=(const native_int &other) const {
+            return value != other.value;
+        }
+        bool __is_zero() const {
+            return value == 0;
+        }
+        struct __hash {
+            size_t operator()(const native_int &x) const {
+                return x.value;
+            }
+        };
+        native_int operator+(const native_int & other) const {
+            return native_int(value + other.value);
+        }
+        native_int operator-(const native_int & other) const {
+            return native_int(value - other.value);
+        }
+        native_int operator*(const native_int & other) const {
+            return native_int(value * other.value);
+        }
+        native_int operator/(const native_int & other) const {
+            return native_int(value / other.value);
+        }
     };
 
-    template<typename T> T __num(long long x) {
-        T res;
-        res.value = x;
-        return res;
-    }
+    /* template<typename T> T __num(long long x) { */
+    /*     T res; */
+    /*     res.value = x; */
+    /*     return res; */
+    /* } */
 
-    template<typename T>
-        static inline native_int<T> operator+(const native_int<T>& a,
-                                              const native_int<T>& b) {
-        return native_int<T>(a.value + b.value);
-    }
+
+    // Put a character on standard out.
 
     static inline void put(int c) {
         std::cout.put(c);
     }
+
+    // This template is used by the compiler to build string literals
+    // of any type with string traits (that is, having array traits
+    // and a numeric domain type).
 
     template <class T> static inline T from_str(const char *s) {
         T x;
