@@ -85,5 +85,12 @@ namespace ivy {
         std::cout.put(c);
     }
 
+    template <class T> static inline T from_str(const char *s) {
+        T x;
+        for (const char *p = s; *p; ++p) {
+            x = x.append(*p);
+        }
+        return x;
+    }
 }
 

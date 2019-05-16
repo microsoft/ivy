@@ -1,13 +1,28 @@
+#lang ivy
 
-module stdio_string(str) = {
+#
+# This module provides various traits of input/output on streams and
+# files.
+#
 
-    action write(s:str) = {
-        var idx : str.domain;
-        idx := s.begin;
-        while idx < s.end {
-            ivy.put(cast(s.value(idx)));
-            idx := idx + 1;
+object io = {
+    
+    # The `stdio` module provides input/output on the standard
+    # streams, that is, standard input, standard output and standard
+    # error. It takes a parameter `str`, which is a type with string
+    # traits.
+
+    module stdio(str) = {
+
+        # The `write` action writes a string to standard output.
+
+        action write(s:str) = {
+            var idx : str.domain;
+            idx := s.begin;
+            while idx < s.end {
+                ivy.put(cast(s.value(idx)));
+                idx := idx + 1;
+            }
         }
     }
-    
 }

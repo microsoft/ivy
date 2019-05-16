@@ -163,7 +163,7 @@ object cpp = {
 
     object decl = {
         type this
-        instantiate parse_intf(decl)
+        instantiate parse_intf(decl,true)
         action get_ann(d:this) returns (res:annot)
     }        
 
@@ -445,7 +445,7 @@ object cpp = {
         }
     }
 
-    instantiate prog_base
+    instantiate prog_base(true)
 
     action namedtype(name:ident,ann : annot) returns(res:expr) = {
         var s : symbol;

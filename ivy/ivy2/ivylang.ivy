@@ -151,6 +151,7 @@ object ivy = {
         }
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
             b := b.nest;
             b := b.extend("variant" if s.has_super else "type");
             b := b.extend(" ");
@@ -592,7 +593,7 @@ object ivy = {
         }
     }
 
-    instantiate prog_base
+    instantiate prog_base(false)
 
 }
 

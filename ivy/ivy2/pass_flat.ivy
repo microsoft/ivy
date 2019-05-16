@@ -431,7 +431,11 @@ object ivy = { ...
 
     object moduledc = { ...
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st.moddecls := st.moddecls.set(s.name.get_name,s);
+            var name : expr;
+            st.defining := true;
+            (name,st) := s.name.flat(st);
+            st.defining := false;
+            st.moddecls := st.moddecls.set(name.get_name,s);
             st := add_def(s.name,st);
         }
     }

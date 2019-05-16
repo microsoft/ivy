@@ -1,3 +1,4 @@
+#lang ivy
 
 header "ivy.h"
 

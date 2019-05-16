@@ -42,7 +42,7 @@ module verb_base = {
         {
             none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
             boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div
+            lt, leq, gt, geq, minus, div, string
         }
     }
     
@@ -54,6 +54,7 @@ module verb_base = {
     after init {
         str_to_verb(X) := verb.none;
         verb_to_arity(verb.numeral) := 0;
+        verb_to_arity(verb.string) := 0;
     }
 
     # Numerals are symbols beginning with a digit. Otherwise we determine
@@ -64,6 +65,8 @@ module verb_base = {
     action verb_from_name(name:str) returns(vrb:verb) = {
         if name.value(0).is_digit {
             vrb := verb.numeral
+        } else if name.value(0) = 34 {  # double quote character
+            vrb := verb.string
         } else {
             vrb := str_to_verb(name);
         }
@@ -161,12 +164,13 @@ module genbinop(expr,arg) = {
 
 import action parse_error(p:pos,tok:str)
 
-module parse_intf(expr) = {
+module parse_intf(expr,cppstyle) = {
 
     action encode(e:expr,b:pretty,prio:priority) returns (b:pretty)
 
     action enc(e:expr) returns (s:str) = {
         var p := pretty.make(100,4);
+        p.cppstyle := cppstyle;
         p := e.encode(p,0);
         p := p.flush;
         s := p.output
@@ -358,7 +362,7 @@ module expr_base(cppstyle) = {
 
     object expr = {
         type this
-        instantiate parse_intf(expr)
+        instantiate parse_intf(expr,cppstyle)
         action get_verb(s:this) returns (vrb:verb) = {
             vrb := verb.none;
         }
@@ -696,7 +700,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
 
     object stmt = {
         type this
-        instantiate parse_intf(stmt)
+        instantiate parse_intf(stmt,cppstyle)
 	action get_expr(s:this) returns (res:expr)
     }
 
@@ -888,7 +892,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
 module decl_base(expr,stmt) = {
     object decl = {
         type this
-        instantiate parse_intf(decl)
+        instantiate parse_intf(decl,false)
         action get_expr(s:this) returns (res:expr)
         action get_ann(s:this) returns (res:annot)
         action get_body(s:this) returns (res:stmt)
@@ -973,12 +977,54 @@ module decl_base(expr,stmt) = {
     }
 }
     
-module prog_base = {
+module prog_base(cppstyle) = {
+
+    object version = {
+        type this = struct {
+            nums : vector[pos]
+        }
+        action encode(s:this,b:pretty) returns(b:pretty) = {
+            b := b.extend("#lang ivy");
+            var idx := s.nums.begin;
+            while idx < s.nums.end {
+                if idx > s.nums.begin {
+                    b := b.extend(".")
+                };
+                b := b.extend(s.nums.value(idx).to_str);
+                idx := idx.next
+            }
+        }
+	action parse(st : pstate, prio:priority) returns(st : pstate, res:this) = {
+            if st.ok & st.tok = "lang" {
+                st := st.consume;
+            } else {st.ok := false};
+            if st.ok & st.tok.segment(0,3) = "ivy" {
+                st.p := st.p - (st.tok.end - 3);  # re-read remainder of token for backward compat
+                st := st.consume;
+            };
+            if st.ok & st.tok.end > 0 & st.tok.value(0).is_digit {
+                res.nums := res.nums.append(pos.from_str(st.tok));
+                st := st.consume;
+                while st.ok & st.tok = "." {
+                    st := st.consume;
+                    if st.tok.end > 0 & st.tok.value(0).is_digit {
+                        res.nums := res.nums.append(pos.from_str(st.tok));
+                        st := st.consume;
+                    } else {st.ok := false;}
+                }
+            };
+            if st.tok.end > 0 {
+                st.ok := false;
+            }
+        }
+    }
+
     object prog = {
-    type this = struct {
-		decls : vector[decl]
-	    }
-	instantiate parse_intf(this)
+        type this = struct {
+            vers : version,
+	    decls : vector[decl]
+	}
+	instantiate parse_intf(this,cppstyle)
 
 	action make(decls : vector[decl]) returns (res:prog) =
 	{
@@ -988,6 +1034,10 @@ module prog_base = {
 	}
 
 	implement encode(s:this,b:pretty,prio:priority) returns (b:pretty)  {
+            if ~cppstyle {
+                b := s.vers.encode(b)
+            };
+            b := b.newline;
 	    var idx := s.decls.begin;
 	    while idx < s.decls.end {
 		b := b.newline;
@@ -996,7 +1046,17 @@ module prog_base = {
 	    };
 	}	    
 
+        # Note, the Ivy verison number is encoded in the first comment line
+
 	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
+            if ~cppstyle {
+                if st.ann.comments.end > 0 {
+                    var vst := pstate.make(st.ann.comments.value(0));
+                    (vst,res.vers) := version.parse(vst,0);
+                    st.ok := vst.ok;
+                    st.ann.comments := st.ann.comments.segment(1,st.ann.comments.end)
+                } else {st.ok := false};
+            };
 	    while st.ok & st.tok.end > 0 {
 		var dcl : decl;
 		(st,dcl) := decl.parse(st,0);

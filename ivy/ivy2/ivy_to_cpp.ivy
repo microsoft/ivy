@@ -249,6 +249,16 @@ object ivy = { ...
 	}
     }
 
+    # Make a C++ expression of the form `ivy::from_str<ty>(arg)`
+
+    action make_from_string(ty:cpp.expr,arg:cpp.expr,ann:annot) returns(res:cpp.expr) = {
+        var id : cpp.strident;
+        id.val := "from_str";
+        id.subscrs := id.subscrs.append(ty.get_name);
+        var name := cpp.dotident.make(cpp.strident.make("ivy"),id);
+        res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
+    }
+
     # Translate a function application to C++. 
 
     object app = { ...
@@ -258,9 +268,12 @@ object ivy = { ...
                 
                 # Generally, type decorations are not emitted to
                 # C++. However, in case of a numeral, we need to cast
-                # the numeral to the appropriate type.  Also, if a
-                # symbol an action and its type is not a function
-                # type, we have to add () for C++.
+                # the numeral to the appropriate type. If a string
+                # literal, we use the template function
+                # `ivy::from_str<t>` to convert to type `t`.
+                #
+                # If a symbol is an action and its type is not a
+                # function type, we have to add () for C++.
 
                 var arg := s.args.value(0);
 		(res,st) := arg.to_cpp(st);
@@ -269,6 +282,10 @@ object ivy = { ...
                         var ty : cpp.expr;
 		        (ty,st) := s.args.value(1).to_cpp(st);
                         res := cpp.app.make1(ty,res,s.get_ann);
+                    } else if arg.get_verb = verb.string {
+                        var ty : cpp.expr;
+                        (ty,st) := s.args.value(1).to_cpp(st);
+                        res := make_from_string(ty,res,s.get_ann);
                     } else if st.globals.is_action.mem(arg.get_name) {
                         if ~(s.args.value(1).is(verb.arrow)) {
                             var args : vector[cpp.expr];

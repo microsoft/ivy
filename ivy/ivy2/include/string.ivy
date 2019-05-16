@@ -1,22 +1,85 @@
+#lang ivy
 
-module ascii_string = {
+# This file provide various traits for defining character string types
+# and manipulating strings.
 
-    type domain
-    interpret domain -> ivy.native_int[size_t]
-    type range
-    interpret range -> ivy.native_int[char]
-    type this
-    
-    destructor value : (this * domain -> range)
-    destructor end : (this -> domain)
+# String types provide all the traits of arrays, that is:
+#
+# - A domain type `domain` (representing character positions)
+# - A range type `range` (representing characters)
+# - A destructor `value : (domain -> range)` giving the character at a postion
+# - A destructor `begin : domain` giving the beginning position (always 0)
+# - A destructor `end " domain` giving the ending position
+# - An action `empty` that returns an empty string
+# - An action `append` that appends a character to a string
+# - An action `extend` that append a string to a string
+# - An action `resize` that sets the length of the string
+# - An action `segment` that returns a substring,
+ 
 
-    action begin(s:this) returns (res:domain) = {
-        res := 0;
+object string = {
+
+    # The `ascii` module provides strings of ASCII characters
+    # represented internall using the C++ `char` type. That is, each
+    # character is represented by a single byte.
+
+    module ascii = {
+
+        # The domain type for ASCII strings is represented by the C++
+        # `size_t` type. This allows strings as large as available
+        # memory will allow.
+        
+        type domain
+        interpret domain -> ivy.native_int[size_t]
+
+        # The domain type for ASCII strings is represented by the C++
+        # `char` type. This allows code points in the range 0-127.
+        
+        type range
+        interpret range -> ivy.native_int[char]
+
+        # The type `this` represents strings
+
+        type this
+
+        # We have two destructors (fields) representing the string
+        # contents. The `value` field is represented using a dense
+        # encoding, which means the C++ type `std::vector<char>`.
+
+        destructor value : (this * domain -> range)
+        destructor end : (this -> domain)
+
+        # The `begin` action always returns 0.
+        
+        action begin(s:this) returns (res:domain) = {
+            res := 0;
+        }
+
+        # The `append` action appends one character `c` to a string.
+
+        action append(s:this,c:range) returns (s:this) = {
+            s.value(s.end) := c;
+            s.end := s.end + 1;
+        }
+
+        # The `extend` action appends a string `x` to a string `s`.
+        
+        action extend(s:this,x:this) returns (s:this) = {
+            var idx : domain;
+            idx := x.begin;
+            while idx < x.end {
+                s := s.append(x.value(idx));
+                idx := idx + 1;
+            }
+        }
+
+        # The `resize` action sets the end marker of the string. 
+
+        # extern action resize(s,end:domain) returns (s:this) = {
+        #     s.value := s.value.resize(end);
+        #     s.end := end;
+        # }
+
+        
     }
-
-    action append(s:this,c:range) returns (s:this) = {
-        s.value(s.end) := c;
-        s.end := s.end + 1;
-    }
-    
 }
