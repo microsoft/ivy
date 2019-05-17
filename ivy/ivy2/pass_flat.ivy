@@ -387,17 +387,117 @@ object ivy = { ...
         }
     }
 
+    object typespec = { ...
+        action flat(s:this,st:flatst) returns (res:typespec,st:flatst)
+        action defd(s:this,st:flatst) returns (st:flatst)
+        action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst)
+    }
+
+    object enumspec = { ...
+        action flat(s:this,st:flatst) returns (res:typespec,st:flatst) = {
+            var t := s;
+            var idx := t.constructors.begin;
+            while idx < t.constructors.end {
+                var e := t.constructors.value(idx);
+                (e,st) := e.flat(st);
+                t.constructors := t.constructors.set(idx,e);
+                idx := idx.next;
+            };
+            res := t;
+        }
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.constructors.begin;
+            while idx < s.constructors.end {
+                st := add_def(s.constructors.value(idx),st);
+                idx := idx.next;
+            }
+        }
+    }
+
+    action canon_typing(typing:expr) returns(typing:expr) = {
+        var lhs := typing.get_arg(0);
+        if lhs isa app {
+            var args := lhs.get_args;
+            var dom : vector[expr];
+            var idx := args.begin;
+            while idx < args.end {
+                dom := dom.append(args.value(idx).get_arg(1));
+                idx := idx.next
+            };
+            var domty := times.fold_left(dom,lhs.get_ann);
+            var ty := arrow.make(domty,typing.get_arg(1),typing.get_ann);
+            typing := colon.make(lhs.get_func,ty.uncurry,typing.get_ann)
+        }
+    }
+
+    object structspec = { ...
+        action defd(s:this,st:flatst) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+                var lhs := s.destructors.value(idx).get_arg(0);
+                if lhs isa app {
+                    lhs := lhs.get_func;
+                };
+                st := add_def(lhs,st);
+                idx := idx.next;
+            }
+        }
+        action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+                var e := s.destructors.value(idx);
+                (e,st) := e.flat(st);
+                e := canon_typing(e);
+                var fty := arrow.make(ty,e.get_arg(1),e.get_ann);
+                var typing := colon.make(e.get_arg(0),fty.uncurry,e.get_ann);
+                var dstr := vardc.make(typing,true,e.get_ann);
+                st.decls := st.decls.append(dstr);
+                idx := idx.next;
+            }
+        }
+    }
+
+    # Uncurry a function type, that is, translate type `t1 -> (t2 * ... * tn -> s)` to
+    # type `t1 * ... tn -> s`.
+
+    object expr = { ...
+        action uncurry(ty:expr) returns (ty:expr) = {
+            var dom := times.unfold_left(ty.get_arg(0));
+            var rng := ty.get_arg(1);
+            if rng.is(verb.arrow) {
+                var dom2 := times.unfold_left(rng.get_arg(0));
+                dom := dom.extend(dom2);
+                rng := rng.get_arg(1);
+            };
+            ty := arrow.make(times.fold_left(dom,ty.get_ann),rng,ty.get_ann);
+        }
+    }
+
     object typedc = { ...
-        instantiate generic_flat(this,decl)
-	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+        action flat(s:this,st:flatst) returns (st:flatst) = {
+            var res := s;
             (res.sort,st) := s.sort.flat(st);
             res.has_super := s.has_super;
             if res.has_super {
                 (res.super,st) := s.super.flat(st);
+            };
+            if res.has_spec {
+                if s.spec isa structspec {
+                    res.has_spec := false;  # will emit destructors
+                } else {
+                    (res.spec,st) := s.spec.flat(st);
+                }
+            };
+            st.decls := st.decls.append(res);
+            if s.has_spec {
+                st := s.spec.to_destrs(st,res.sort);
             }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
             st := add_def(s.sort,st);
+            if s.has_spec {
+                st := s.spec.defd(st);
+            }
         }
     }
 	

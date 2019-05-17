@@ -155,7 +155,7 @@ namespace ivy {
     
     template <class T, class ... RestD> struct vector;
     
-    // This specialization represents the bases case: a function of
+    // This specialization represents the base case: a function of
     // one argument.
 
     template<class T, class PrimaryD > struct vector<T, PrimaryD>  {
@@ -395,6 +395,36 @@ namespace ivy {
         native_int operator/(const native_int & other) const {
             return native_int(value / other.value);
         }
+    };
+
+    // This template implements enumerated types based on native C++
+    // enum types. It provides the standard traits for Ivy values.
+
+    template <typename T> struct native_enum {
+        T value;
+    native_enum() : value((T)0) {}
+    native_enum(long long value) : value((T)0) {}
+        native_enum(T value) : value(value) {}
+        operator std::size_t() const {
+            return (size_t)value;
+        }
+        static bool __is_seq() {
+            return true;
+        }
+        bool operator==(const native_enum &other) const {
+            return value == other.value;
+        }
+        bool operator!=(const native_enum &other) const {
+            return value != other.value;
+        }
+        bool __is_zero() const {
+            return value == (T)0;
+        }
+        struct __hash {
+            size_t operator()(const native_enum &x) const {
+                return (size_t)x.value;
+            }
+        };
     };
 
     /* template<typename T> T __num(long long x) { */

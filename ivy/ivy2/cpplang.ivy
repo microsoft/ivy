@@ -212,6 +212,31 @@ object cpp = {
         }
     }
 
+    instance curly_tup : tuple(expr,"{","}",verb)
+
+    object enumdecl = {
+        variant this of decl = struct {
+            name : expr,
+            elems : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("enum");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.extend(" ");
+            b := curly_tup.encode(s.elems,b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+
     object vardecl = {
         variant this of decl = struct {
             vtype : simpletype,
@@ -339,6 +364,22 @@ object cpp = {
     }
         
 
+    object groupdc = {
+        variant this of decl = struct {
+            decls : vector[decl],
+            ann : annot
+        }
+        
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                b := b.newline;
+                b := s.decls.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+        }	    
+    }
+
     object decl = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
             var ann : annot;
@@ -347,6 +388,18 @@ object cpp = {
                 st := st.consume;
                 var t : typedecl;
                 (st,t.ttype) := simpletype.parse(st,0);
+                t.ann := ann;
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                };
+                res := t;
+            } else if st.tok = "enum" {
+                st := st.consume;
+                var t : enumdecl;
+                (st,t.name) := symbol.parse(st);
+                (st,t.elems) := curly_tup.parse(st,0);
                 t.ann := ann;
                 if st.ok & st.tok = ";" {
                     st := st.consume;

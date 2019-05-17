@@ -572,6 +572,39 @@ object ivy = { ...
     }        
 
 
+    action enum_to_cpp(name:cpp.expr,spec:typespec,st:tocppst)
+        returns(res:cpp.decl,st:tocppst) =
+    {
+        var ed : cpp.enumdecl;
+        ed.ann := name.get_ann;
+        var enum_name : str;
+        enum_name := "__enum_";
+        enum_name := enum_name.extend(name.get_name.to_str);
+        ed.name := cpp.symbol.makestr(enum_name,ed.ann);
+        var cnstrs := spec.get_elems;
+        var idx := cnstrs.begin;
+        while idx < cnstrs.end {
+            var e : cpp.expr;
+            (e,st) := cnstrs.value(idx).to_cpp(st);
+            ed.elems := ed.elems.append(member_name(e));
+            idx := idx.next
+        };
+        var gd : cpp.groupdc;
+        gd.ann := name.get_ann;
+        gd.decls := gd.decls.append(ed);
+        var td : cpp.typedecl;
+        td.ann := gd.ann;
+	var vid : cpp.strident;
+	vid.val := "native_enum";
+	vid.subscrs := vid.subscrs.append(cpp.strident.make(enum_name));
+	var tname := cpp.dotident.make(cpp.strident.make("ivy"),vid);
+        td.ttype._type := cpp.symbol.make(tname,gd.ann);
+        td.ttype.name := name;
+        gd.decls := gd.decls.append(td);
+        res := gd;
+    }
+
+
     # Translate a type declaration to C++. All Ivy types translate to
     # C++ structs.
 
@@ -583,7 +616,11 @@ object ivy = { ...
             var cls : cpp.expr;
             (cls,st) := s.sort.to_cpp(st);
             res.name := member_name(cls);
-            if st.cppclasses.mem(s.sort.get_name) & members.end = 0 {
+            if s.has_spec & (s.spec isa enumspec) {
+                var td : cpp.decl;
+                (td,st) := enum_to_cpp(res.name,s.spec,st);
+                resd := td;
+            } else if st.cppclasses.mem(s.sort.get_name) & members.end = 0 {
                 var td : cpp.typedecl;
                 td.ann := res.ann;
                 var dflt : expr;  # workaround

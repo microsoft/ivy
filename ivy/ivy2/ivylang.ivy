@@ -135,11 +135,68 @@ object ivy = {
         }	    
     }
 
+    object typespec = {
+        type this
+
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:this) = {
+            if st.tok = "struct" {
+                var s : structspec;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.destructors) := curly_tup.parse(st,prio);
+                res := s;
+            } else {
+                var s : enumspec;
+                (st,s.ann) := st.get_ann;
+                (st,s.constructors) := curly_tup.parse(st,prio);
+                res := s;
+            }
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        action get_elems(s:this) returns (res:vector[expr])
+    }
+
+    instance curly_tup : tuple(expr,"{","}",verb)
+    
+    object enumspec = {
+        variant this of typespec = struct {
+            constructors : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := curly_tup.encode(s.constructors,b,prio);
+            b := b.unnest;
+        }	    
+        action get_elems(s:this) returns (res:vector[expr]) = {
+            res := s.constructors
+        }
+    }
+            
+    object structspec = {
+        variant this of typespec = struct {
+            destructors : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("struct");
+            b := b.extend(" ");
+            b := curly_tup.encode(s.destructors,b,prio);
+            b := b.unnest;
+        }	    
+        action get_elems(s:this) returns (res:vector[expr]) = {
+            res := s.destructors
+        }
+    }
+
     object typedc = {
         variant this of decl = struct {
             sort : expr,
             has_super : bool,
             super : expr,
+            has_spec : bool,
+            spec : typespec,
             ann : annot
         }
 
@@ -162,6 +219,12 @@ object ivy = {
                 b := b.extend(" ");
                 b := s.super.encode(b,0);
             };
+            if s.has_spec {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.spec.encode(b,0);
+            };
             b := b.unnest;
             b := b.newline;
         }	    
@@ -174,10 +237,12 @@ object ivy = {
             ann : annot
         }
 
-        action make(typing:expr) returns (res:decl) =
+        action make(typing:expr,is_destructor:bool,ann:annot) returns (res:decl) =
         {
             var s:this;
             s.typing := typing;
+            s.is_destructor := is_destructor;
+            s.ann := ann;
             res := s;
         }
 
@@ -469,7 +534,12 @@ object ivy = {
                 st := st.consume;
                 var s : typedc;
                 (st,s.ann) := st.get_ann;
-                (st,s.sort) := expr.parse(st,0);
+                (st,s.sort) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_spec := true;
+                    (st,s.spec) := typespec.parse(st,0);
+                };
                 res := s
             } else if st.tok = "var" | st.tok = "destructor" {
                 var s : vardc;
@@ -563,7 +633,12 @@ object ivy = {
                 if st.ok & st.tok = "of" {
                     st := st.consume
                 } else {st.ok := false};
-                (st,s.super) := expr.parse(st,0);
+                (st,s.super) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_spec := true;
+                    (st,s.spec) := typespec.parse(st,0);
+                };
                 res := s
             } else if st.tok = "extern" {
                 st := st.consume;

@@ -417,7 +417,7 @@ module tuple(t,lb,rb,verb) = {
         }
     }
     action parse(st : pstate, prio:priority) returns(st : pstate, res:vector[t]) = {
-        if st.tok = "(" {
+        if st.tok = lb {
             st := st.consume;
             var s : t;
             (st,s) := t.parse(st,0);
@@ -427,7 +427,7 @@ module tuple(t,lb,rb,verb) = {
                 (st,s) := t.parse(st,0);
                 res := res.append(s);
             };
-            if st.ok & st.tok = ")" {
+            if st.ok & st.tok = rb {
                 st := st.consume;
             } else {st.ok := false}
         } else {st.ok := false}
