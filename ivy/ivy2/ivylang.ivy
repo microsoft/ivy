@@ -27,8 +27,9 @@ object ivy = {
 
     instance cast : built_in_unary("cast",verb.cast,1)
 
-    # The `=` and `~=` verbs are spelled differently in Ivy and C++
+    # The `=`, `~=` and `~` verbs are spelled differently in Ivy and C++
     
+    instance equals : built_in_binary("=",verb.equals,5)
     instance notequals : built_in_binary("~=",verb.notequals,5)
     instance not : built_in_unary("~",verb.not,15)
 

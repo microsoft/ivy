@@ -24,22 +24,44 @@ object cpp = {
 
     # The `=` and `~=` verbs are spelled differently in Ivy and C++
     
+    instance equals : built_in_binary("==",verb.equals,5)
     instance notequals : built_in_binary("!=",verb.notequals,5)
     instance not : built_in_unary("!",verb.not,15)
+
+    # C++ can have applications to zero arguments
+
+    object app = { ...
+        action make0(func:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.ann := ann;
+            res := s
+        }
+    }
+
 
     # Here, we parse statements specific to C++
     
     object simpletype = {
         type this = struct {
             _type : expr,
-            name : expr
+            name : expr,
+            is_const : bool,
+            is_ref : bool
         }
 
         instance tup : tuple(simpletype,"(",")",verb)
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            if s.is_const {
+                b := b.extend("const");
+                b := b.extend(" ");
+            };
             b := s._type.encode(b,0);
             b := b.extend(" ");
+            if s.is_ref {
+                b := b.extend("&");
+            };
             b := s.name.encode(b,99);
         }
         
@@ -54,7 +76,8 @@ object cpp = {
     object functype = {
         type this = struct {
             base : simpletype,
-            args : vector[simpletype]
+            args : vector[simpletype],
+            is_const : bool
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.base.encode(b,0);
@@ -63,13 +86,21 @@ object cpp = {
                 b := simpletype.tup.encode(s.args,b,0);
             } else {
                 b := b.extend("()");
+            };
+            if s.is_const {
+                b := b.extend(" ");
+                b := b.extend("const");
             }
         }
         action parse(st : pstate, base : simpletype, prio:priority) returns(st : pstate, res:functype) = {
             res.base := base;
             if st.ok {
                 (st,res.args) := simpletype.tup.parse(st,prio);
-            }
+            };
+            if st.ok & st.tok = "const" {
+                res.is_const := true;
+                st := st.consume;
+            };
         }
     }
 
@@ -165,6 +196,8 @@ object cpp = {
         type this
         instantiate parse_intf(decl,true)
         action get_ann(d:this) returns (res:annot)
+        action get_name(d:this) returns (res:expr)
+        action get_type(d:this) returns (res:expr)
     }        
 
 
@@ -253,6 +286,12 @@ object cpp = {
         action get_ann(d:this) returns (res:annot) = {
             res := d.ann
         }
+        action get_name(d:this) returns (res:expr) = {
+            res := d.vtype.name;
+        }
+        action get_type(d:this) returns (res:expr) =  {
+            res := d.vtype._type;
+        }
     }
 
     object funcdecl = {
@@ -260,11 +299,16 @@ object cpp = {
             ftype : functype,
             has_body : bool,
             body : stmt,
+            is_static : bool,
             ann : annot
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
+            if s.is_static {
+                b := b.extend("static");
+                b := b.extend(" ");
+            };
             b := s.ftype.encode(b,0);
             if s.has_body {
                 b := b.unnest;
@@ -459,10 +503,16 @@ object cpp = {
                 } else { st.ok := false }
             } else {
 		var t : simpletype;
+                var is_static : bool;
+                if st.ok & st.tok = "static" {
+                    is_static := true;
+                    st := st.consume
+                };
 		(st,t) := simpletype.parse(st,prio);
 		if st.ok & st.tok = "(" {
 		    var s : funcdecl;
 		    s.ann := ann;
+                    s.is_static := is_static;
                     (st,s.ftype) := functype.parse(st,t,prio);
                     if st.ok & st.tok = ";" {
 			st := st.consume;
@@ -514,8 +564,6 @@ object cpp = {
     action voidtype(ann : annot) returns(res:expr) = {
         res := namedtype(strident.make("void"),ann);
     }
-
-
 
 }
 

@@ -198,6 +198,8 @@ object ivy = { ...
             var vrb := s.get_verb;
             if vrb = verb.not {
                 res.name := cpp.strident.make("!")
+            } else if vrb = verb.equals {
+                res.name := cpp.strident.make("==")
             } else if vrb = verb.notequals {
                 res.name := cpp.strident.make("!=")
             } else if st.is_member & s.name = st.this_ident {
@@ -572,9 +574,19 @@ object ivy = { ...
     }        
 
 
+    # Unfortunately, enumerated types can't be classes in C++.  To
+    # represent one an enumerated type `t`, we declared a C++ enum
+    # named `__enum_t`. We then instantiate a template
+    # `ivy::native_enum<__enum_t>` defined in the standard header.
+    # This wraps the enum in a class with the necessary standard
+    # traits.
+
     action enum_to_cpp(name:cpp.expr,spec:typespec,st:tocppst)
         returns(res:cpp.decl,st:tocppst) =
     {
+
+        # Delcare the enum `__enum_t`.
+
         var ed : cpp.enumdecl;
         ed.ann := name.get_ann;
         var enum_name : str;
@@ -592,6 +604,9 @@ object ivy = { ...
         var gd : cpp.groupdc;
         gd.ann := name.get_ann;
         gd.decls := gd.decls.append(ed);
+
+        # Instantiate the template `ivy::native_enum<__enum_t>`
+
         var td : cpp.typedecl;
         td.ann := gd.ann;
 	var vid : cpp.strident;
@@ -603,7 +618,208 @@ object ivy = { ...
         gd.decls := gd.decls.append(td);
         res := gd;
     }
+    
+    # All the delcared classes have to have certain standard traits.
+    # These are:
+    #
+    # (1) A default constructor
+    # (2) A constructor from (signed or unsigned) long long.
+    # (3) A conversion to size_t
+    # (4) A static predicate __is_seq
+    # (5) A == overload
+    # (6) A != overload
+    # (7) A predicate __is_zero
+    # (8) A class __hash of hashers
+    #
+    # Here, we add the standard traits to a C++ structure.
 
+    # Make a C++ constructor for a struct
+    # Default constructor does nothing:
+    #     name() {};
+
+    action make_cpp_cons(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+        s.ftype.base.name := t.name;
+        s.has_body := true;
+        s.body := cpp.skipst.make(t.ann);
+    }
+
+    # Numeric constructor does nothing (so that 0 gives default value):
+    #     name(long long) {};
+
+    action add_numeric_cons(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var ncons := make_cpp_cons(s);
+        var nconsarg0 : cpp.simpletype;
+        nconsarg0._type := cpp.symbol.makestr("long long",s.ann);
+        nconsarg0.name := cpp.symbol.makestr("value",ncons.ann);
+        ncons.ftype.args := ncons.ftype.args.append(nconsarg0);
+        s.members := s.members.append(ncons);
+    }
+        
+    # Conversion to size_t returns zero:
+    #     operator size_t() const { return 0; }
+    
+    action add_sizet_conv(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        
+        var tosizet : cpp.funcdecl;
+        tosizet.ftype.base.name := cpp.symbol.makestr("operator size_t",s.ann);
+        tosizet.ftype.is_const := true;
+        tosizet.has_body := true;
+        tosizet.body := cpp.retst.make(cpp.symbol.makestr("0",s.ann),s.ann);
+        s.members := s.members.append(tosizet);
+    }        
+
+    # __is_seq returns zero:
+    #     static bool __is_seq() {return false;}
+    
+    action add_is_seq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var isseq : cpp.funcdecl;
+        isseq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        isseq.ftype.base.name := cpp.symbol.makestr("__is_seq",s.ann);
+        isseq.is_static := true;
+        isseq.has_body := true;
+        isseq.body := cpp.retst.make(cpp.symbol.makestr("false",s.ann),s.ann);
+        s.members := s.members.append(isseq);
+    }
+
+    # Equality comparison yields member-wise equality: 
+    #     bool operator==(const name &other) const { return f1==other.f1 & ...; }
+    
+    action add_eq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var eq : cpp.funcdecl;
+        eq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        eq.ftype.base.name := cpp.symbol.makestr("operator ==",s.ann);
+        eq.ftype.is_const := true;
+        var eqarg0 : cpp.simpletype;
+        eqarg0._type := s.name;
+        eqarg0.is_const := true;
+        eqarg0.is_ref := true;
+        eqarg0.name := cpp.symbol.makestr("other",eq.ann);
+        eq.ftype.args := eq.ftype.args.append(eqarg0);
+        eq.has_body := true;
+        var eqs : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := cpp.dot.make(eqarg0.name,d.get_name,s.ann);
+                var e := cpp.equals.make(f0,f1,s.ann);
+                eqs := eqs.append(e);
+            };
+            idx := idx.next
+        };
+        var retexp := cpp.symbol.makestr("true",s.ann);
+        if eqs.end > 0 {
+            retexp := cpp.and.fold_left(eqs,s.ann);
+        };
+        eq.body := cpp.retst.make(retexp,s.ann);
+        s.members := s.members.append(eq);
+    }
+
+    # Disequality is just negation of equality
+    #     bool operator!=(const name &other) const { return !((*this)==other); }
+
+    action add_diseq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var diseq : cpp.funcdecl;
+        diseq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        diseq.ftype.base.name := cpp.symbol.makestr("operator !=",s.ann);
+        diseq.ftype.is_const := true;
+        var diseqarg0 : cpp.simpletype;
+        diseqarg0._type := s.name;
+        diseqarg0.is_const := true;
+        diseqarg0.is_ref := true;
+        diseqarg0.name := cpp.symbol.makestr("other",diseq.ann);
+        diseq.ftype.args := diseq.ftype.args.append(diseqarg0);
+        diseq.has_body := true;
+        var f0 := cpp.symbol.makestr("(*this)",s.ann);
+        var diseqret := cpp.not.make(cpp.equals.make(f0,diseqarg0.name,s.ann),s.ann);
+        diseq.body := cpp.retst.make(diseqret,s.ann);
+        s.members := s.members.append(diseq);
+    }
+    
+    # __is_zero is conjunction of __is_zero for members.
+    #    bool __is_zero() const { return f1.is_zero() & ...; }
+    
+    action add_is_zero_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        var iszero : cpp.funcdecl;
+        iszero.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        iszero.ftype.base.name := cpp.symbol.makestr("__is_zero",s.ann);
+        iszero.ftype.is_const := true;
+        iszero.has_body := true;
+        var iszeros : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := cpp.dot.make(d.get_name,iszero.ftype.base.name,s.ann);
+                var f2 : vector[cpp.expr];
+                var e := cpp.app.make(f1,f2,s.ann);
+                iszeros := iszeros.append(e);
+            };
+            idx := idx.next
+        };
+        var iszeroret := cpp.symbol.makestr("true",s.ann);
+        if iszeros.end > 0 {
+            iszeroret := cpp.and.fold_left(iszeros,s.ann);
+        };
+        iszero.body := cpp.retst.make(iszeroret,s.ann);
+        s.members := s.members.append(iszero);
+    }
+
+    action add_hasher(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        # Hash function adds has funciton of members:
+        #     struct __hash { size_t operator()(const name &x) {returns t1::__hash(f1) + ...; } };
+            
+        var hashstr : cpp.structdecl;
+        hashstr.ann := s.ann;
+        hashstr.name := cpp.symbol.makestr("__hash",s.ann);
+        hashstr.has_members := true;
+        var hash : cpp.funcdecl;
+        hash.ftype.base._type := cpp.symbol.makestr("size_t",s.ann);
+        hash.ftype.base.name := cpp.symbol.makestr("operator ()",s.ann);
+        hash.ftype.is_const := true;
+        var hasharg0 : cpp.simpletype;
+        hasharg0._type := s.name;
+        hasharg0.is_const := true;
+        hasharg0.is_ref := true;
+        hasharg0.name := cpp.symbol.makestr("x",hash.ann);
+        hash.ftype.args := hash.ftype.args.append(hasharg0);
+        hash.has_body := true;
+        var hashs : vector[cpp.expr];
+        var idx := s.members.begin;
+        while idx < s.members.end {
+            var d := s.members.value(idx);
+            if d isa cpp.vardecl {
+                var f0 := d.get_name;
+                var f1 := hashstr.name.prefix(d.get_type.get_name);
+                var f2 := cpp.dot.make(hasharg0.name,f0,s.ann);
+                var e := cpp.app.make1(cpp.app.make0(f1,s.ann),f2,s.ann);
+                hashs := hashs.append(e);
+            };
+            idx := idx.next
+        };
+        var hashret := cpp.symbol.makestr("0",s.ann);
+        if hashs.end > 0 {
+            hashret := cpp.plus.fold_left(hashs,s.ann);
+        };
+        hash.body := cpp.retst.make(hashret,s.ann);
+        hashstr.members := hashstr.members.append(hash);
+        s.members := s.members.append(hashstr);
+    }
+
+    action add_standard_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        s.members := s.members.append(make_cpp_cons(s));
+        s := add_numeric_cons(s);
+        s := add_sizet_conv(s);
+        s := add_is_seq_pred(s);
+        s := add_eq_pred(s);
+        s := add_diseq_pred(s);
+        s := add_is_zero_pred(s);
+        s := add_hasher(s);
+    }
 
     # Translate a type declaration to C++. All Ivy types translate to
     # C++ structs.
@@ -648,6 +864,7 @@ object ivy = { ...
                     idx := idx.next
                 };
                 st.in_class := false;
+                res := add_standard_traits(res);
                 resd := res; 
             };
             resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 

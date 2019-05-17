@@ -242,14 +242,17 @@ namespace ivy {
                 size_t res = 0;
                 if (PrimaryD::__is_seq()) {
                     for (size_t idx = 0; idx < x.data.size(); ++idx) {
-                        res += T::__hash(x.data[idx]);
+                        typename T::__hash h;
+                        res += h(x.data[idx]);
                     }
                 }
                 if (x.map) {
                     for (auto it = x.map->begin(); it != x.map->end(); ++it) {
                         const PrimaryD &idx = it->first;
-                        if (!PrimaryD::__is_seq() || idx >= x.data.size())
-                            res += T::__hash(it->second);
+                        if (!PrimaryD::__is_seq() || idx >= x.data.size()) {
+                            typename T::__hash h;
+                            res += h(it->second);
+                        }
                     }
                 }                    
                 return res;

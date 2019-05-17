@@ -204,6 +204,9 @@ module expr_base(cppstyle) = {
         action get_namesp(s:this) returns (res:ident)
         action get_member(s:this) returns (res:ident)
         action get_subscripts(s:this) returns (res:vector[ident])
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := s
+        }
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -254,6 +257,9 @@ module expr_base(cppstyle) = {
                 idx := idx.next
             }
         }
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(pref,s);
+        }
     }
 
     # Numerical identifiers are used as temporaries internally. They
@@ -303,6 +309,9 @@ module expr_base(cppstyle) = {
         }
         action get_member(s:this) returns (res:ident) = {
             res := s.member;
+        }
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(s.namesp.prefix(pref),s.member);
         }
     }
 
@@ -358,6 +367,9 @@ module expr_base(cppstyle) = {
         action get_subscripts(s:this) returns (res:vector[ident]) = {
             res := s.subscrs;
         }
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := subsident.make(s.namesp.prefix(pref),s.subscrs);
+        }
     }
 
     object expr = {
@@ -375,6 +387,7 @@ module expr_base(cppstyle) = {
         action get_ann(s:this) returns (res:annot)
         action get_func(s:this) returns (res:expr) 
         action get_args(s:this) returns (res:vector[expr])
+        action prefix(s:this,pref:ident) returns (res:expr)
 
 	# Tests whether two expressions are syntacically equal,
 	# leaving aside annotations.
@@ -468,6 +481,9 @@ module expr_base(cppstyle) = {
         }
         action get_ann(s:this) returns (res:annot) = {
             res := s.ann
+        }
+        action prefix(s:this,pref:ident) returns (res:expr) = {
+            res := symbol.make(s.get_name.prefix(pref),s.get_ann);
         }
     }
 
@@ -603,7 +619,6 @@ module expr_base(cppstyle) = {
     instance iff : built_in_binary("<->",verb.iff,2)
     instance or : built_in_binary("|",verb.or,3)
     instance and : built_in_binary("&",verb.and,4)
-    instance equals : built_in_binary("=",verb.equals,5)
     instance lt : built_in_binary("<",verb.lt,6)
     instance leq : built_in_binary("<=",verb.leq,6)
     instance gt : built_in_binary(">",verb.gt,6)
