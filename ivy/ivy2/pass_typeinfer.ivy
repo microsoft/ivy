@@ -84,9 +84,10 @@ object ivy = { ...
 		var name := e.get_name;
 		if st.tc.m.mem(name) {
 		    e := colon.make(e,st.tc.m.value(name),e.get_ann)
-		} else {
-		    call report_error(undefined.make(name),e.get_ann)
 		}
+#                else {
+#		    call report_error(undefined.make(name),e.get_ann)
+#		}
 	    } else if e.get_verb = verb.empty {
                 e := colon.make(e,e,e.get_ann)
             }
@@ -249,16 +250,17 @@ object ivy = { ...
 	}
     }
 
-
     action setup_formals(es:vector[expr],val:bool,st:typeinferst) returns (st:typeinferst) = {
         var idx := es.begin;
         while idx < es.end {
             var e := es.value(idx);
-	    if val {
-		st.tc := st.tc.push(e);
-	    } else {
-		st.tc := st.tc.pop
-	    };
+            if e.is(verb.colon) {
+	        if val {
+		    st.tc := st.tc.push(e);
+	        } else {
+		    st.tc := st.tc.pop
+	        };
+            };
 	    idx := idx.next;
         }
     }
@@ -284,6 +286,38 @@ object ivy = { ...
         instantiate generic_typeinfer(this,decl)
         action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
             (res.body,st) := s.body.typeinfer(st);
+        }
+    }
+
+    action get_func_params(typing:expr) returns (res:vector[expr]) = {
+        var ty := typing;
+        if ty.is(verb.colon) {
+            ty := ty.get_arg(0)
+        };
+        if ty isa app {
+            res := ty.get_args
+        }
+    }
+            
+
+    object vardc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+            if res.has_def {
+                var prms := get_func_params(res.typing);
+                st := setup_formals(prms,true,st);
+                var ok := true;
+	        (res.def,ok) := bottom_up_type(res.def,st,ok);
+                st := setup_formals(prms,false,st);
+	        if ok {  # avoid cascading errors
+                    if res.typing.is(verb.colon) { 
+                        res.def := make_cast(res.typing.get_arg(1),res.def,st)  # upcast if needed
+                    };
+		    (res.typing,res.def) := type_unify_exprs(res.typing,res.def,st.tc.m);
+                    st.tc := st.tc.set(canon_typing(res.typing));
+                }
+	    }
         }
     }
 

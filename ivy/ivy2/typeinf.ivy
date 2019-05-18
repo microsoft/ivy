@@ -106,6 +106,10 @@ object ivy = { ...
 	    
             m : map,
 
+            # Maps identifiers of symbols to their types
+
+            ty : symeval,
+
 	    # False if there has been a type error
 
             ok : bool
@@ -238,8 +242,13 @@ object ivy = { ...
                 ty := optypes(e.vrb);
                 ty := ty.reduce(mm);
             } else {
-                (st,ty) := st.newvar(e.ann);
-                ty := m.get(e.name,ty);
+                if st.ty.mem(e.name) {
+                    ty := st.ty.value(e.name);
+                } else {
+                    (st,ty) := st.newvar(e.ann);
+                    ty := m.get(e.name,ty);
+                    st.ty := st.ty.set(e.name,ty);
+                }
             };
             res := colon.make(e,ty,e.ann);
         }

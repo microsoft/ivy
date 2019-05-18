@@ -73,13 +73,60 @@ object ivy = { ...
         action build_global_types(s:decl,st:global_types) returns (st:global_types)
     }
 
+    # A complete typing looks like one of these:
+    #
+    # (1)  x:t
+    # (2)  f(x1:t1,...,xn:tn) : t
+    # (3)  (f : (t1*...*tn->t)(...) : u
+    # (4)  (f : (t1*...*tn->t)(...)
+    #
+    
+    action is_typing_complete(typing:expr) returns (res:bool) = {
+        if typing.is(verb.colon) {
+            var lhs := typing.get_arg(0);
+            if lhs isa symbol {
+                res := true;
+            } else if lhs isa app {
+                if lhs.get_func.is(verb.colon) {
+                    res := true;
+                } else {
+                    res := true;
+                    var args := lhs.get_args;
+                    var idx := args.begin;
+                    while idx < args.end {
+                        if ~args.value(idx).is(verb.colon) {
+                            res := false;
+                        };
+                        idx := idx.next
+                    }
+                }
+            }
+        } else {
+            if typing isa app {
+                if typing.get_func.is(verb.colon) {
+                    res := true
+                }
+            }
+        }
+    }
+
+    # For var declarations, we record only the complete typings. 
+    import action show_mystr(s:str)
+
+
     object vardc = { ...
         action build_global_types(s:this,st:global_types) returns (st:global_types) = {
-	    var ty := s.typing.get_arg(1);
-	    if s.is_destructor {
-		ty := ty.curry;
-	    };
-	    st.type_of := st.type_of.set(s.typing.get_arg(0).get_name,ty);
+            call show_mystr(s.typing.enc);
+            if is_typing_complete(s.typing) {
+                var typing := canon_typing(s.typing);
+                var thing := typing.enc;
+                call show_mystr(thing);
+	        var ty := typing.get_arg(1);
+	        if s.is_destructor {
+		    ty := ty.curry;
+	        };
+	        st.type_of := st.type_of.set(typing.get_arg(0).get_name,ty);
+            }
         }
     }        
 

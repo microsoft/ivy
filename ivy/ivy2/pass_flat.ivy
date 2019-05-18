@@ -394,18 +394,24 @@ object ivy = { ...
     }
 
     action canon_typing(typing:expr) returns(typing:expr) = {
-        var lhs := typing.get_arg(0);
-        if lhs isa app {
-            var args := lhs.get_args;
-            var dom : vector[expr];
-            var idx := args.begin;
-            while idx < args.end {
-                dom := dom.append(args.value(idx).get_arg(1));
-                idx := idx.next
-            };
-            var domty := times.fold_left(dom,lhs.get_ann);
-            var ty := arrow.make(domty,typing.get_arg(1),typing.get_ann);
-            typing := colon.make(lhs.get_func,ty.uncurry,typing.get_ann)
+        if typing.is(verb.colon) {
+            var lhs := typing.get_arg(0);
+            if lhs isa app {
+                var args := lhs.get_args;
+                var dom : vector[expr];
+                var idx := args.begin;
+                while idx < args.end {
+                    dom := dom.append(args.value(idx).get_arg(1));
+                    idx := idx.next
+                };
+                var domty := times.fold_left(dom,lhs.get_ann);
+                var ty := arrow.make(domty,typing.get_arg(1),typing.get_ann);
+                typing := colon.make(lhs.get_func,ty.uncurry,typing.get_ann)
+            }
+        } else {
+            if typing isa app {
+                typing := canon_typing(typing.get_func);
+            }
         }
     }
 
@@ -485,6 +491,10 @@ object ivy = { ...
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             res.is_destructor := s.is_destructor;
             (res.typing,st) := s.typing.flat(st);
+            res.has_def := s.has_def;
+            if res.has_def {
+                (res.def,st) := s.def.flat(st);
+            }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
             st := add_def(s.typing.get_arg(0),st);

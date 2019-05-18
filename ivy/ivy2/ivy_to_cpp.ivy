@@ -769,7 +769,7 @@ object ivy = { ...
 
     action add_hasher(s:cpp.structdecl) returns (s:cpp.structdecl) = {
 
-        # Hash function adds has funciton of members:
+        # Hash function adds hashes of members:
         #     struct __hash { size_t operator()(const name &x) {returns t1::__hash(f1) + ...; } };
             
         var hashstr : cpp.structdecl;
@@ -891,6 +891,41 @@ object ivy = { ...
         }
     }
 
+    # Translate a function definition to an action
+
+    object decl = { ...
+        action func_to_action(s : this) returns (res : decl) = {
+            res := s;
+        }
+    }   
+            
+    object vardc = { ...
+        action func_to_action(s : vardc) returns (dres : decl) = {
+            if s.has_def {
+                var res : actdc;
+                res.ann := s.ann;
+                var lhs := s.typing;
+                var ty : expr;
+                if lhs isa app {
+                    res.name := lhs.get_func.get_arg(0);
+                    res.inputs := lhs.get_args;
+                    ty := lhs.get_func.get_arg(1).get_arg(1);
+                } else if lhs isa symbol {
+                    res.name := lhs.get_arg(0);
+                    ty := lhs.get_arg(1);
+                };
+                var retv := symbol.makestr("__out",s.ann);
+                var retty := colon.make(retv,ty,s.ann);
+                res.outputs := res.outputs.append(retty);
+                res.has_body := true;
+                res.body := asgn.make(retty,s.def,s.ann);
+                dres := res;
+            } else {
+                dres := s;
+            }
+        }
+    }
+
     # Translate a local variable declaration to C++. 
 
     object vardc = { ...
@@ -982,8 +1017,8 @@ object ivy = { ...
     # Translate an Ivy program to C++. 
 
     object prog = { ...
-	action to_cpp(s:this) returns (res:cpp.prog) = {
-
+	action to_cpp(sp:this) returns (res:cpp.prog) = {
+            var s := sp;  # workaround
             var st:tocppst;
 
             # Get the subtyping relation
@@ -994,9 +1029,18 @@ object ivy = { ...
 
             st.globals := s.get_global_types;
 
+            # A pass to convert function defs to actions
+
+            var idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var d := s.decls.value(idx).func_to_action;
+                s.decls := s.decls.set(idx,d);
+		idx := idx.next
+	    };
+
             # A pass to register all of the type members
             
-            var idx := s.decls.begin;
+            idx := s.decls.begin;
 	    while idx < s.decls.end {
                 st := s.decls.value(idx).reg_member(st);
 		idx := idx.next

@@ -235,6 +235,8 @@ object ivy = {
         variant this of decl = struct {
             typing : expr,
             is_destructor : bool,
+            has_def : bool,
+            def : expr,
             ann : annot
         }
 
@@ -249,10 +251,17 @@ object ivy = {
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
-            b := b.extend("destructor" if s.is_destructor else "var");
+            b := b.extend("destructor" if s.is_destructor
+                          else ("function" if s.has_def else "var"));
             b := b.extend(" ");
             b := s.typing.encode(b,0);
             b := b.unnest;
+            if s.has_def {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.def.encode(b,0);
+            };
             b := b.newline;
         }	    
     }        
@@ -542,12 +551,17 @@ object ivy = {
                     (st,s.spec) := typespec.parse(st,0);
                 };
                 res := s
-            } else if st.tok = "var" | st.tok = "destructor" {
+            } else if st.tok = "var" | st.tok = "destructor" | st.tok = "function" {
                 var s : vardc;
                 s.is_destructor := (st.tok = "destructor");
                 st := st.consume;
                 (st,s.ann) := st.get_ann;
-                (st,s.typing) := expr.parse(st,0);
+                (st,s.typing) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_def := true;
+                    (st,s.def) := expr.parse(st,0);
+                };
                 res := s
             } else if st.tok = "header" {
                 var s : header;
