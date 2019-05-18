@@ -16,11 +16,16 @@
 # - An action `resize` that sets the length of the string
 # - An action `segment` that returns a substring,
  
+include collections
 
 object string = {
 
+    module this (domain,range) = {
+        instantiate array (domain,range)
+    }
+
     # The `ascii` module provides strings of ASCII characters
-    # represented internall using the C++ `char` type. That is, each
+    # represented internally using the C++ `char` type. That is, each
     # character is represented by a single byte.
 
     module ascii = {
@@ -38,48 +43,8 @@ object string = {
         type range
         interpret range -> ivy.native_int[char]
 
-        # The type `this` represents strings
+        instantiate array(domain,range)
 
-        type this
-
-        # We have two destructors (fields) representing the string
-        # contents. The `value` field is represented using a dense
-        # encoding, which means the C++ type `std::vector<char>`.
-
-        destructor value : (this * domain -> range)
-        destructor end : (this -> domain)
-
-        # The `begin` action always returns 0.
-        
-        action begin(s:this) returns (res:domain) = {
-            res := 0;
-        }
-
-        # The `append` action appends one character `c` to a string.
-
-        action append(s:this,c:range) returns (s:this) = {
-            s.value(s.end) := c;
-            s.end := s.end + 1;
-        }
-
-        # The `extend` action appends a string `x` to a string `s`.
-        
-        action extend(s:this,x:this) returns (s:this) = {
-            var idx : domain;
-            idx := x.begin;
-            while idx < x.end {
-                s := s.append(x.value(idx));
-                idx := idx + 1;
-            }
-        }
-
-        # The `resize` action sets the end marker of the string. 
-
-        # extern action resize(s,end:domain) returns (s:this) = {
-        #     s.value := s.value.resize(end);
-        #     s.end := end;
-        # }
-
-        
     }
+
 }

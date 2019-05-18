@@ -1,0 +1,48 @@
+#lang ivy
+
+module array(domain,range) = {
+
+    # The type `this` represents arrays
+
+    type this
+
+    # We have two destructors (fields) representing the array
+    # contents. The `value` field is represented using a dense
+    # encoding, which means the C++ type `std::vector<range>`.
+
+    destructor value : (this * domain -> range)
+    destructor end : (this -> domain)
+
+    # The `begin` action always returns 0.
+
+    action begin(s:this) returns (res:domain) = {
+        res := 0;
+    }
+
+    # The `append` action appends one character `c` to a array.
+
+    action append(s:this,c:range) returns (s:this) = {
+        s.value(s.end) := c;
+        s.end := s.end.next;
+    }
+
+    # The `extend` action appends a array `x` to a array `s`.
+
+    action extend(s:this,x:this) returns (s:this) = {
+        var idx : domain;
+        idx := x.begin;
+        while idx < x.end {
+            s := s.append(x.value(idx));
+            idx := idx.next;
+        }
+    }
+
+    # The `resize` action sets the end marker of the string. 
+    
+    # extern action resize(s,end:domain) returns (s:this) = {
+    #     s.value := s.value.resize(end);
+    #     s.end := end;
+    # }
+    
+
+}
