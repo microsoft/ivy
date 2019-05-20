@@ -3,7 +3,7 @@
 include ivylang
 include cpplang
 include hash
-#include reader
+include reader
 include pass_flat
 include pass_typeinfer
 include analysis
@@ -1110,8 +1110,8 @@ object ivy = { ...
             # Read the program
 
             var ann : annot;
-#            var p := prog.read_file(name,ann);
-	    var p := prog.dec(name);
+            var p := prog.read_file(name,ann);
+#	    var p := prog.dec(name);
 
             # Flattening pass
 
@@ -1129,8 +1129,8 @@ object ivy = { ...
 
             # Pretty-print the C++
 
-#            var cpp_name := path.change_extension(name,"cpp");
-#            call write_file(cpp_name,cpp_prog.enc);
+            var cpp_name := path.change_extension(name,"cpp");
+            call write_file(cpp_name,cpp_prog.enc);
         }
     }
 
