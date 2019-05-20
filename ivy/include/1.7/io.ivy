@@ -1,0 +1,87 @@
+#lang ivy
+
+module file_io(buf,name) = {
+
+    action read(fname:name, b:buf) returns (b:buf, ok : bool) = {
+
+        <<<
+
+        std::string fn;
+        for (size_t i = 0; i < fname.size(); i++)
+            fn.push_back(fname[i]);
+        int fd = ::open(fn.c_str(),0);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(2048);
+            int len;
+            while ((len = ::read(fd,&tmp[0],2048)) > 0) {
+                for (size_t i = 0; i < len; i++)
+                    b.push_back(tmp[i]);
+            }
+            ok = (len >= 0);
+            ::close(fd);
+        }
+        >>>
+    }
+
+    action write(fname:name, b:buf) returns (ok : bool) = {
+
+        <<<
+
+        std::string fn;
+        for (size_t i = 0; i < fname.size(); i++)
+            fn.push_back(fname[i]);
+        int fd = ::creat(fn.c_str(),0660);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(b.size());
+            for (size_t i = 0; i < tmp.size(); i++) {
+                tmp[i] = b[i];
+            }
+            ssize_t bytes = ::write(fd,&tmp[0],tmp.size());
+            ok = (bytes == tmp.size());
+            ::close(fd);
+        }
+        >>>
+    }
+
+
+    action exist(fname:name) returns (ok : bool) = {
+
+        <<<
+
+        std::string fn;
+        for (size_t i = 0; i < fname.size(); i++)
+        fn.push_back(fname[i]);
+        ok = ::access(fn.c_str(),F_OK) != -1;
+
+        >>>
+    }
+
+
+}
+
+module path_name(name) = {
+    action change_extension(path:name,ext:name) returns (path:name) = {
+        if path.end > 0 {
+            var idx := path.end.prev;
+            while idx > 0 & path.value(idx) ~= 46 {  # dot
+                idx := idx.prev;
+            };
+            if path.value(idx) = 46 {
+                path := path.segment(path.begin,idx);
+                path := path.extend(".");
+                path := path.extend(ext)
+            }
+        }
+    }
+
+    action concat(path1:name,path2:name) returns (path1:name) = {
+        path1 := path1.extend("/");
+        path1 := path1.extend(path2);
+    }
+}
