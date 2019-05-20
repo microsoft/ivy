@@ -52,6 +52,18 @@ module test_to_cpp(ivyclass,cppclass) = {
 }
 
 object ivy = { ...
+    
+    # The set of names reserved by C++. Ivy names that clash with these
+    # have to be changed.
+    
+    function cpp_reserved_word(X:str) : bool
+
+    after init {
+        cpp_reserved_word("bool") := true;
+        cpp_reserved_word("char") := true;
+        cpp_reserved_word("int") := true;
+        cpp_reserved_word("long") := true;
+    }
 
 
     instance ident_to_declvec : hash_map(ident,vector[decl])
@@ -95,8 +107,11 @@ object ivy = { ...
 
             # The subtyping relation
 
-            subtype_rel : subtypes
+            subtype_rel : subtypes,
 
+            # True if we are emitting a native C++ name
+
+            native : bool
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -130,42 +145,53 @@ object ivy = { ...
     }
     
     object ident = { ...
-        action to_cpp(s:this) returns (res:cpp.ident)
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident)
     }
 
-    action strident_to_cpp(s:strident) returns (t:cpp.strident) = {
-        t.val := s.val;
+    # In translating Ivy names to C++, we have to avoid clashes with C++
+    # reserved words like "char" and "bool". We do this by prepending "__".
+    # C++ names beginning with "__" are reserved for the compiler. If the
+    # `native` argument is true, we treate the identifier as a native C++
+    # name and do not perform this translation.
+
+    action strident_to_cpp(s:strident,native:bool) returns (t:cpp.strident) = {
+        if ~native & cpp_reserved_word(s.val) {
+            t.val := "__";
+            t.val := t.val.extend(s.val);
+        } else {
+            t.val := s.val;
+        };
         var idx := s.subscrs.begin;
         while idx < s.subscrs.end {
-            t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp);
+            t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp(native));
             idx := idx.next
         }
     }
 
     object strident = { ...
-        action to_cpp(s:this) returns (res:cpp.ident) = {
-            var x := strident_to_cpp(s); # workaround
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
+            var x := strident_to_cpp(s,native); # workaround
             var y : cpp.ident := x;
             res := y;
         }
     }
 
     object dotident = { ...
-        action to_cpp(s:this) returns (res:cpp.ident) = {
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
             var t : cpp.dotident;
-            t.namesp := s.namesp.to_cpp;
-            t.member := strident_to_cpp(s.member);
+            t.namesp := s.namesp.to_cpp(native);
+            t.member := strident_to_cpp(s.member,native);
             res := t
         }
     }
 
     object subsident = { ...
-        action to_cpp(s:this) returns (res:cpp.ident) = {
+        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
             var t : cpp.subsident;
-            t.namesp := s.namesp.to_cpp;
+            t.namesp := s.namesp.to_cpp(native);
             var idx := s.subscrs.begin;
             while idx < s.subscrs.end {
-                t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp);
+                t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp(native));
                 idx := idx.next
             };
             res := t
@@ -206,7 +232,7 @@ object ivy = { ...
                 res.name := cpp.strident.make("(*this)");
             } else {
                 var id := fix_object_clash(s.name,st);
-                res.name := id.to_cpp;
+                res.name := id.to_cpp(st.native);
             };
             res.vrb := cpp.str_to_verb(res.name.to_str);
         }
@@ -448,7 +474,7 @@ object ivy = { ...
             var pref : ident := name.get_name.get_namesp;
             var clsid := fix_object_clash(pref,st);
             var funid := name.get_name.get_member.prefix(clsid);
-            res := cpp.symbol.make(funid.to_cpp,name.get_ann);
+            res := cpp.symbol.make(funid.to_cpp(false),name.get_ann);
         } else {
             (res,st) := name.to_cpp(st) 
         }
@@ -553,7 +579,7 @@ object ivy = { ...
         var nd : cpp.namespacedecl;
         nd.ann := d.get_ann;
         var name := id.get_member if (id isa dotident) else id;
-        nd.name := cpp.symbol.make(name.to_cpp,d.get_ann);
+        nd.name := cpp.symbol.make(name.to_cpp(false),d.get_ann);
         nd.members := nd.members.append(d);
         d := nd;
         if id isa dotident {
@@ -809,6 +835,8 @@ object ivy = { ...
         s.members := s.members.append(hashstr);
     }
 
+    # Add the standard traits to a struct.
+
     action add_standard_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
 
         s.members := s.members.append(make_cpp_cons(s));
@@ -819,6 +847,79 @@ object ivy = { ...
         s := add_diseq_pred(s);
         s := add_is_zero_pred(s);
         s := add_hasher(s);
+    }
+
+    # Add a constructor that uses the base class constructor.
+    #
+    #     derived(t value) : base(value) {}
+    #     derived(const t& value) : base(value) {}
+    #
+    # The latter is produced if the `constref` parameter is true
+    
+    action add_derived_cons(s:cpp.structdecl,t:cpp.expr,constref:bool) returns (s:cpp.structdecl) = {
+        var dcons := make_cpp_cons(s);
+        var dconsarg0 : cpp.simpletype;
+        dconsarg0._type := t;
+        dconsarg0.name := cpp.symbol.makestr("value",dcons.ann);
+        dconsarg0.is_const := constref;
+        dconsarg0.is_ref := constref;
+        dcons.ftype.args := dcons.ftype.args.append(dconsarg0);
+        dcons.ftype.has_initializer := true;
+        dcons.ftype.initializer := cpp.app.make1(s.super,dconsarg0.name,s.ann);
+        s.members := s.members.append(dcons);
+    }
+
+    # Add a conversion of a derived struct to its base struct
+    #
+    #     operator base () const { return (*this); }
+    #
+
+    action add_base_conversion(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        
+        var abc : cpp.funcdecl;
+        var op : str;
+        op := op.extend("operator ");
+        op := op.extend(s.super.get_name.to_str);
+        abc.ftype.base.name := cpp.symbol.makestr(op,s.ann);
+        abc.ftype.is_const := true;
+        abc.has_body := true;
+        abc.body := cpp.retst.make(cpp.symbol.makestr("(*this)",s.ann),s.ann);
+        s.members := s.members.append(abc);
+    }        
+
+    # Subclasses of native c++ classes inherit the standard traits from those classes.
+    # In order to allow them to use the overloads of the native classes, we add this
+    # boilerplate to the class:
+    #
+    # struct ivytype : cpptype {
+    #    ivytype(long long value) : cpptype(value) {}
+    #    ivytype(const cpptype &x) : cpptype(x) {}
+    #    operator cpptype() { return (*this); }
+    #  };
+    #
+    # That is, we provide a constructor from the base class and a conversion to the
+    # base class. THe latte is used by the C++ compiler when interpreting an expression
+    # like `x+y`, where `x` and `y` are of the derived class. Since the only available
+    # conversion is to the base class, the `+` operator of the base class is used. On
+    # assignment, the constructor is used.
+
+    action add_derived_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+
+        s.members := s.members.append(make_cpp_cons(s));
+        s := add_derived_cons(s,cpp.symbol.makestr("long long",s.ann),false);
+        s := add_derived_cons(s,s.super,true);
+        s := add_base_conversion(s);
+    }
+
+
+    # Native types occur on the right-hand side of `interpret` declarations.
+    # They need special processing, because we do *not* want to avoid clashes
+    # with C++ reserved words.
+
+    action native_type_to_cpp(ty:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+        st.native := true;
+        (res,st) := ty.to_cpp(st);
+        st.native := false;
     }
 
     # Translate a type declaration to C++. All Ivy types translate to
@@ -841,7 +942,7 @@ object ivy = { ...
                 td.ann := res.ann;
                 var dflt : expr;  # workaround
                 var itype := st.cppclasses.get(s.sort.get_name,dflt);
-                (td.ttype._type,st) := itype.to_cpp(st);
+                (td.ttype._type,st) := native_type_to_cpp(itype,st);
                 td.ttype.name := res.name;
                 resd := td;
             } else {
@@ -852,7 +953,7 @@ object ivy = { ...
                     res.has_super := true;
                     var dflt : expr;  # workaround
                     var itype := st.cppclasses.get(s.sort.get_name,dflt);
-                    (res.super,st) := itype.to_cpp(st)
+                    (res.super,st) := native_type_to_cpp(itype,st);
                 };
                 res.has_members := true;  # This is not a forward declaration
                 var idx := members.begin;
@@ -864,7 +965,11 @@ object ivy = { ...
                     idx := idx.next
                 };
                 st.in_class := false;
-                res := add_standard_traits(res);
+                if res.has_super & ~s.has_super {  # derived from native
+                    res := add_derived_traits(res);
+                } else {
+                    res := add_standard_traits(res);
+                };
                 resd := res; 
             };
             resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 

@@ -1,0 +1,27 @@
+#lang ivy
+
+# This file contains modules to access system resources such as
+# processes and environment variables.
+
+# This module gives access to environement variable, where `str` is a
+# type with string traits.
+
+module environment(str) = {
+
+    # The `get` action gets the value of an environment variable
+    # `name` or returns the empty string if `name` is undefined.
+
+    action get(name:str) returns (res:str) = {
+        <<<
+        std::string tmp;
+        tmp.resize(name.size());
+        std::copy(name.begin(),name.end(),tmp.begin());
+        char *val = ::getenv(tmp.c_str());
+        if (val) {
+            tmp = val;
+            res.resize(tmp.size());
+            std::copy(tmp.begin(),tmp.end(),res.begin());
+        }
+        >>>
+    }
+}    

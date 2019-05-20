@@ -3,8 +3,9 @@
 include ivylang
 include io
 include error
+include sys
 
-parameter inc : str
+instance env : environment(str)
 
 object ivy = { ...
 
@@ -21,6 +22,7 @@ object ivy = { ...
     var include_path : vector[str]
 
     after init {
+        var inc := env.get("IVY_INCLUDE_PATH");
         var start := inc.begin;
         var idx := inc.begin;
         while idx < inc.end {
