@@ -1,0 +1,93 @@
+#lang ivy1.7
+
+include ivylang
+include io
+include error
+
+parameter inc : str
+
+object ivy = { ...
+
+    instance file : file_io(str,str)
+    
+    action write_file(name:str,buf:str) = {
+        var ok := file.write(name,buf);
+        if ~ok {
+            var ann : annot;
+            call report_error(cannot_write.make(name),ann);
+        }
+    }
+
+    var include_path : vector[str]
+
+    after init {
+        var start := inc.begin;
+        var idx := inc.begin;
+        while idx < inc.end {
+            if inc.value(idx) = 58 {  # colon
+                if idx > start {
+                    include_path := include_path.append(inc.segment(start,idx));
+                };
+                start := idx.next;
+            };
+            idx := idx.next
+        };
+        if idx > start {
+            include_path := include_path.append(inc.segment(start,idx));
+        }
+    }
+        
+        
+    object prog = { ...
+        
+        action find_include(name:str) returns (name:str) = {
+            name := name.extend(".ivy");
+            if ~file.exist(name) {
+                var idx := include_path.begin;
+                var found := false;
+                while ~found & idx < include_path.end {
+                    var pname := path.concat(include_path.value(idx),name);
+                    if file.exist(pname) {
+                        name := pname;
+                        found := true
+                    };
+                    idx := idx.next;
+                }
+            }
+        }
+
+        action read_file(name:str,ann:annot) returns (p:prog) = {
+            var text : str;
+            var ok : bool;
+            (text,ok) := file.read(name,text);
+            if ok {
+                p := prog.dec(text);
+                var idx := p.decls.begin;
+                while idx < p.decls.end {
+                    var d := p.decls.value(idx);
+                    if d isa includedc {
+                        var fname := find_include(d.get_expr.get_name.to_str);
+                        var subp := read_file(fname,d.get_ann);
+                        p.decls := p.decls.set(idx,groupdc.make(subp.decls))
+                    };
+                    idx := idx.next
+                }
+            } else {
+                var foo := file_not_found.make(name);
+                call report_error(foo,ann);
+            }
+        }
+        
+        export action test_read(name:str) returns (res:str) = {
+            var ann : annot;
+            var p := read_file(name,ann);
+            res := prog.enc(p);
+        }
+
+        
+        
+    }
+
+    instance path : path_name(str)
+
+}
