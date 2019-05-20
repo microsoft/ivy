@@ -486,6 +486,24 @@ object ivy = { ...
         }
     }
 	
+    # Get the symbol that is typed in a typing. Examples:
+    #
+    # - in `x : t`, the typed symbol is `x`
+    # - in `f(X:u) : t`, the typed symbol is `f`
+    # - in `f(X:u)` the typed symbol is `f'
+    
+    action get_typed_symbol(typing : expr) returns(res:expr) = {
+	if typing isa app {
+	    if typing.is(verb.colon) {
+		res := get_typed_symbol(typing.get_arg(0))
+	    } else {
+		res := get_typed_symbol(typing.get_func)
+	    }
+	} else {
+	    res := typing
+	}
+    }
+
     object vardc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
@@ -497,7 +515,7 @@ object ivy = { ...
             }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st := add_def(s.typing.get_arg(0),st);
+            st := add_def(get_typed_symbol(s.typing),st);
         }
     }
 
