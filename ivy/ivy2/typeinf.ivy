@@ -423,6 +423,30 @@ object ivy = { ...
         (e2,st) := e2.type_fill_in(st);
     }
 
+    # Get the type of an expression
+
+    object expr = { ...
+        action get_type(s:this) returns (res:expr)
+    }
+
+    action range_type(s:expr) returns (s:expr) = {
+        if s.is(verb.arrow) {
+            s := s.get_arg(1);
+        }
+    }
+
+    object app = { ...
+        action get_type(s:this) returns (res:expr) = {
+            if s.is(verb.colon) {
+                res := s.args.value(1);
+            } else if s.is(verb.dot) {
+                res := range_type(s.args.value(1).get_arg(1).get_arg(1));
+            } else {
+                res := range_type(s.func.get_arg(1).get_arg(1));
+            }
+        }
+    }
+
     type thing = struct {
         out:str,
         st:decost

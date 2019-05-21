@@ -3,12 +3,12 @@
 module unbounded_sequence = {
     type this
     interpret this -> ivy.native_int[size_t]
-
-    action next(x:this) returns (x:this) = {
-        x := x + 1;
+    
+    action next(x:this) returns (y:this) = {
+        y := x + 1;
     }
 
-    action prev(x:this) returns (x:this) = {
-        x := x - 1;
+    action prev(x:this) returns (y:this) = {
+        y := x - 1;
     }
 }

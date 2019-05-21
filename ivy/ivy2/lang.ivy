@@ -1105,7 +1105,7 @@ module prog_base(cppstyle) = {
 
         # Note, the Ivy verison number is encoded in the first comment line
 
-	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
+	action parse_to(st : pstate, prio:priority, res:prog) returns(st : pstate, res:prog) = {
             if ~cppstyle {
                 if st.ann.comments.end > 0 {
                     var vst := pstate.make(st.ann.comments.value(0));
@@ -1120,6 +1120,10 @@ module prog_base(cppstyle) = {
 		res.decls := res.decls.append(dcl);
 	    }
 	}
+
+	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
+            (st,res) := parse_to(st,prio,res);
+        }
     }
 }
 

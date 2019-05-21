@@ -139,6 +139,21 @@ object ivy = { ...
 	}
     }
 
+    object typedc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+            if s.has_spec {
+                if s.spec isa enumspec {
+                    var conss := s.spec.get_elems;
+                    var idx := conss.begin;
+                    while idx < conss.end {
+	                st.type_of := st.type_of.set(conss.value(idx).get_name,s.sort);
+                        idx := idx.next
+                    }
+                }
+            }
+        }
+    }
+
     object actdc = { ...
         action build_global_types(s:this,st:global_types) returns (st:global_types) = {
 	    var ty := get_formal_type(s.outputs,s.ann);

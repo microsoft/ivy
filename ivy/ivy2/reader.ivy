@@ -42,6 +42,10 @@ object ivy = { ...
         
     object prog = { ...
         
+        type readst = struct {
+            have_read : ident_set
+        }
+
         action find_include(name:str) returns (name:str) = {
             name := name.extend(".ivy");
             if ~file.exist(name) {
@@ -58,22 +62,27 @@ object ivy = { ...
             }
         }
 
-        action read_file(name:str,ann:annot) returns (p:prog) = {
+        action read_file_int(name:str,ann:annot,p:prog,rst:readst) returns (p:prog,rst:readst) = {
             var text : str;
             var ok : bool;
             (text,ok) := file.read(name,text);
             if ok {
                 var st := pstate.make(text);
-                (st,p) := prog.parse(st,0);
+                (st,p) := prog.parse_to(st,0,p);
                 ok := st.ok & st.tok.end = 0;
                 if ok {
                     var idx := p.decls.begin;
-                    while idx < p.decls.end & errors.end > 0{
+                    while idx < p.decls.end & errors.end = 0 {
                         var d := p.decls.value(idx);
                         if d isa includedc {
-                            var fname := find_include(d.get_expr.get_name.to_str);
-                            var subp := read_file(fname,d.get_ann);
-                            p.decls := p.decls.set(idx,groupdc.make(subp.decls))
+                            var iname := d.get_expr.get_name;
+                            if ~rst.have_read.mem(iname) {
+                                var fname := find_include(iname.to_str);
+                                var subp : prog;
+                                (subp,rst) := read_file_int(fname,d.get_ann,subp,rst);
+                                p.decls := p.decls.set(idx,groupdc.make(subp.decls));
+                                rst.have_read := rst.have_read.set(iname,true);
+                            }
                         };
                         idx := idx.next
                     }
@@ -87,9 +96,18 @@ object ivy = { ...
             }
         }
         
+        # Read the main file, named `name`. We prepend `include ivy`
+        # to the file, to cause the standard preamble to be read.
+
+        action read_file(name:str) returns (p:prog) = {
+            var ann:annot;
+            p.decls := p.decls.append(includedc.make(symbol.makestr("ivy",ann),ann));
+            var rst : readst;
+            (p,rst) := read_file_int(name,ann,p,rst);
+        }
+
         export action test_read(name:str) returns (res:str) = {
-            var ann : annot;
-            var p := read_file(name,ann);
+            var p := read_file(name);
             res := prog.enc(p);
         }
 

@@ -45,7 +45,6 @@ object ivy = { ...
 
     instance ident_to_moduledc : def_map(moduledc)
     instance ident_to_ident : hash_map(ident,ident)
-    instance ident_set : hash_map(ident,bool)
     
     object flatst = {
         type this = struct {

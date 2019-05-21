@@ -107,6 +107,39 @@ namespace ivy {
         };
     };
 
+    // This template represents a pointer to an object that may be
+    // null. When the pointer is copied, the object is copied.
+
+    template <class T> struct ptr_null {
+        T *p;
+        ptr_null() {p = 0;}
+        ptr_null(T *p) : p(p) {}
+        ptr_null(const ptr_null &x) {
+            if (x.p) {
+                p = new T(*(x.p));
+            } else {
+                p = 0;
+            }
+        }
+        ptr_null & operator= (const ptr_null &x) {
+            if (x.p) {
+                p = new T(*(x.p));
+            } else {
+                p = 0;
+            }
+            return *this;
+        }
+        operator bool () const {
+            return p;
+        }
+        T& operator* () const {
+            return *p;
+        }
+        T* operator-> () const {
+            return p;
+        }
+    };
+
     // This is a variadic class template for representing Ivy
     // functions. In addition to the standard traits, it provides:
     //
@@ -161,8 +194,8 @@ namespace ivy {
     template<class T, class PrimaryD > struct vector<T, PrimaryD>  {
         typedef std::vector<T> type;
         type data;
-        typedef std::unordered_map <PrimaryD,T,typename T:: __hash> map_type;
-        std::unique_ptr< map_type  > map;
+        typedef std::unordered_map <PrimaryD,T,typename PrimaryD:: __hash> map_type;
+        ptr_null< map_type  > map;
 
         vector () {
         }
@@ -285,7 +318,7 @@ namespace ivy {
                 }
             }
             if (!map) {
-                map = std::unique_ptr< map_type  > (new map_type);
+                map = ptr_null< map_type  > (new map_type);
             }
             return (*map)[idx];
         }

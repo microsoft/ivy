@@ -111,7 +111,11 @@ object ivy = { ...
 
             # True if we are emitting a native C++ name
 
-            native : bool
+            native : bool,
+
+            # True if we are emitting forward declarations
+            
+            forward : bool
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -248,14 +252,19 @@ object ivy = { ...
 	ty := symbol.make(name,ty.get_ann)
     }
 
+    action fix_tpl_param(s:expr,st:tocppst) returns (s:expr) = {
+        s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
+        s := fix_variant_type(s,st);
+    }
+        
     action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst) returns (ty:expr) = {
 	var vid : strident;
 	vid.val := "vector";
-        rng := fix_variant_type(rng,st);
+        rng := fix_tpl_param(rng,st);
 	vid.subscrs := vid.subscrs.append(rng.get_name);
 	var idx := dom.begin;
 	while idx < dom.end {
-            var ty := fix_variant_type(dom.value(idx),st);
+            var ty := fix_tpl_param(dom.value(idx),st);
 	    vid.subscrs := vid.subscrs.append(ty.get_name);
 	    idx := idx.next
 	};
@@ -356,9 +365,9 @@ object ivy = { ...
 
                     # For ternary operators, we need to permute the arguments
 
-                    if s.is(verb.ite) {
+                    if capp.is(cpp.verb.ite) {
                         var tmp := capp.args.value(0);
-                        capp.args := capp.args.set(0,capp.args.value(0));
+                        capp.args := capp.args.set(0,capp.args.value(1));
                         capp.args := capp.args.set(1,tmp);
                     };
                     
@@ -384,14 +393,12 @@ object ivy = { ...
 
                 if s.is(verb.dot) {
                     var lhs := s.args.value(0);
-                    if lhs.is(verb.colon) {
-                        var ty := lhs.get_arg(1);
-                        var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
-                        if st.globals.is_action.mem(fid) {
-                            if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
-                                var args : vector[cpp.expr];
-                                res := cpp.app.make(res,args,res.get_ann);
-                            }
+                    var ty := lhs.get_type;
+                    var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+                    if st.globals.is_action.mem(fid) {
+                        if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
+                            var args : vector[cpp.expr];
+                            res := cpp.app.make(res,args,res.get_ann);
                         }
                     }
                 }
@@ -609,15 +616,45 @@ object ivy = { ...
         }
     }        
 
+    # Instantiate a standard template. This produces a type name of
+    # the form `ivy.tpl[ty]`.
 
+    action make_std_tpl(tpl:str, ty:str, ann:annot) returns (res:cpp.expr) = {
+	var vid : cpp.strident;
+	vid.val := tpl;
+	vid.subscrs := vid.subscrs.append(cpp.strident.make(ty));
+	var tname := cpp.dotident.make(cpp.strident.make("ivy"),vid);
+        res := cpp.symbol.make(tname,ann);
+    }
+    
+    # Make the name of the C++ enum that corresponds to an Ivy enumerated
+    # type. The name is `__enum_name` where `name is the Ivy name.
+
+    action enum_name(name : cpp.expr) returns (res:str) = {
+        res := "__enum_";
+        res := res.extend(name.get_name.to_str)
+    }
+        
     # Unfortunately, enumerated types can't be classes in C++.  To
     # represent one an enumerated type `t`, we declared a C++ enum
     # named `__enum_t`. We then instantiate a template
     # `ivy::native_enum<__enum_t>` defined in the standard header.
     # This wraps the enum in a class with the necessary standard
-    # traits.
-
-    action enum_to_cpp(name:cpp.expr,spec:typespec,st:tocppst)
+    # traits.  The form of an enum type `name` in the C++ code is:
+    #
+    #     enum __enum_name  {elem1,...elemN};
+    #
+    #     struct name : ivy::native_enum< __enum_name > {
+    #         name() : ivy::native_enum< __enum_name >() {}
+    #         name(long long value) : 
+    #         name(__enum_name value) : ivy::native_enum< __enum_name >(value) {}
+    #     };
+    #
+    # Note we have to promote the constructors of the base class to
+    # the derived class. The parameter `sd` is the struct declaration.
+    # This action prepends the C++ enum declaration.
+    
+    action enum_to_cpp(name:cpp.expr,spec:typespec,sd:cpp.decl,st:tocppst)
         returns(res:cpp.decl,st:tocppst) =
     {
 
@@ -625,10 +662,7 @@ object ivy = { ...
 
         var ed : cpp.enumdecl;
         ed.ann := name.get_ann;
-        var enum_name : str;
-        enum_name := "__enum_";
-        enum_name := enum_name.extend(name.get_name.to_str);
-        ed.name := cpp.symbol.makestr(enum_name,ed.ann);
+        ed.name := cpp.symbol.makestr(enum_name(name),ed.ann);
         var cnstrs := spec.get_elems;
         var idx := cnstrs.begin;
         while idx < cnstrs.end {
@@ -640,18 +674,7 @@ object ivy = { ...
         var gd : cpp.groupdc;
         gd.ann := name.get_ann;
         gd.decls := gd.decls.append(ed);
-
-        # Instantiate the template `ivy::native_enum<__enum_t>`
-
-        var td : cpp.typedecl;
-        td.ann := gd.ann;
-	var vid : cpp.strident;
-	vid.val := "native_enum";
-	vid.subscrs := vid.subscrs.append(cpp.strident.make(enum_name));
-	var tname := cpp.dotident.make(cpp.strident.make("ivy"),vid);
-        td.ttype._type := cpp.symbol.make(tname,gd.ann);
-        td.ttype.name := name;
-        gd.decls := gd.decls.append(td);
+        gd.decls := gd.decls.append(sd);
         res := gd;
     }
     
@@ -939,33 +962,23 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
             var res : cpp.structdecl;
             res.ann := s.ann;
-            var members := st.members.get(s.sort.get_name,vector[decl].empty);
             var cls : cpp.expr;
             (cls,st) := s.sort.to_cpp(st);
             res.name := member_name(cls);
-            if s.has_spec & (s.spec isa enumspec) {
-                var td : cpp.decl;
-                (td,st) := enum_to_cpp(res.name,s.spec,st);
-                resd := td;
-            } else if st.cppclasses.mem(s.sort.get_name) & members.end = 0 {
-                var td : cpp.typedecl;
-                td.ann := res.ann;
-                var dflt : expr;  # workaround
-                var itype := st.cppclasses.get(s.sort.get_name,dflt);
-                (td.ttype._type,st) := native_type_to_cpp(itype,st);
-                td.ttype.name := res.name;
-                resd := td;
-            } else {
+            if ~st.forward {
                 if s.has_super {
                     res.has_super := true;
                     (res.super,st) := s.super.to_cpp(st)
+                } else if s.has_spec & (s.spec isa enumspec) {
+                    res.has_super := true;
+                    res.super := make_std_tpl("native_enum",enum_name(res.name),res.ann);
                 } else if st.cppclasses.mem(s.sort.get_name) {
                     res.has_super := true;
-                    var dflt : expr;  # workaround
-                    var itype := st.cppclasses.get(s.sort.get_name,dflt);
+                    var itype := st.cppclasses.value(s.sort.get_name);
                     (res.super,st) := native_type_to_cpp(itype,st);
                 };
                 res.has_members := true;  # This is not a forward declaration
+                var members := st.members.get(s.sort.get_name,vector[decl].empty);
                 var idx := members.begin;
                 st.in_class := true;
                 while idx < members.end {
@@ -981,6 +994,11 @@ object ivy = { ...
                     res := add_standard_traits(res);
                 };
                 resd := res; 
+                if s.has_spec & (s.spec isa enumspec) {
+                    (resd,st) := enum_to_cpp(res.name,s.spec,resd,st);
+                };
+            } else {
+                resd := res;
             };
             resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 
 	}
@@ -1140,10 +1158,6 @@ object ivy = { ...
             
             st.subtype_rel := s.get_subtypes;
 
-            # Get the global typing
-
-            st.globals := s.get_global_types;
-
             # A pass to convert function defs to actions
 
             var idx := s.decls.begin;
@@ -1153,6 +1167,10 @@ object ivy = { ...
 		idx := idx.next
 	    };
 
+            # Get the global typing
+
+            st.globals := s.get_global_types;
+
             # A pass to register all of the type members
             
             idx := s.decls.begin;
@@ -1160,6 +1178,21 @@ object ivy = { ...
                 st := s.decls.value(idx).reg_member(st);
 		idx := idx.next
 	    };
+
+            # A pass to emit the forward declarations of classes
+
+            st.forward := true;
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var ivyd := s.decls.value(idx);
+                if ivyd isa typedc {
+                    var d : cpp.decl;
+                    (d,st) := ivyd.to_cpp(st);
+		    res.decls := res.decls.append(d);
+                };
+		idx := idx.next
+	    };
+            st.forward := false;
 
             # A pass to emit the C++ prototypes and class declarations
             
@@ -1224,8 +1257,7 @@ object ivy = { ...
 
             # Read the program
 
-            var ann : annot;
-            var p := prog.read_file(name,ann);
+            var p := prog.read_file(name);
 #	    var p := prog.dec(name);
 
             # Flattening pass

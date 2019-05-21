@@ -1,6 +1,7 @@
 #lang ivy1.7
 
 include lang
+include hash
 
 object ivy = {
 
@@ -11,6 +12,8 @@ object ivy = {
     instantiate expr_base(false)
     instantiate stmt_base(expr,":=",false)
     instantiate decl_base(expr,stmt)
+    instance ident_set : hash_map(ident,bool)
+    
 
     # Now we have the operators that are unique to Ivy.
     #
@@ -327,9 +330,10 @@ object ivy = {
             file : expr,
             ann : annot
         }
-        action make(file:expr) returns (res:decl) =
+        action make(file:expr,ann:annot) returns (res:decl) =
         {
             var s:this;
+            s.ann := ann;
             s.file := file;
             res := s;
         }
