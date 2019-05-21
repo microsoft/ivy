@@ -289,6 +289,27 @@ module expr_base(cppstyle) = {
         action prefix(s:this,pref:ident) returns (res:ident) = {
             res := dotident.make(pref,s);
         }
+        action parse(st : pstate) returns(st : pstate, id:strident) = {
+            if st.ok & st.tok.end ~= 0 {
+                id.val := st.tok;
+                st := st.consume;
+                while st.ok & st.tok = "[" {
+                    st := st.consume;
+                    var mid : strident;
+                    (st,mid) := parse(st);
+                    var sid : ident := mid;
+                    while st.ok & st.tok = "." {
+                        st := st.consume;
+                        (st,mid) := parse(st);
+                        sid := dotident.make(sid,mid)
+                    };
+                    if st.ok & st.tok = "]" {
+                        st := st.consume;
+                        id.subscrs := id.subscrs.append(sid);
+                    } else { st.ok := false }
+                }
+            } else { st.ok := false }
+        }
     }
 
     # Numerical identifiers are used as temporaries internally. They
@@ -480,22 +501,11 @@ module expr_base(cppstyle) = {
         action parse(st : pstate) returns(st : pstate, res:expr) = {
             if st.ok & st.tok.end ~= 0 {
                 var s : symbol;
-                var id : strident;
-                id.val := st.tok;
                 s.vrb := verb_from_name(st.tok);
                 (st,s.ann) := st.get_ann;
-                st := st.consume;
-                while st.ok & st.tok = "[" {
-                    st := st.consume;
-                    var subs : expr;
-                    (st,subs) := symbol.parse(st);
-                    if st.ok & st.tok = "]" {
-                        st := st.consume;
-                        id.subscrs := id.subscrs.append(subs.get_name);
-                    }
-                };
-                var x : ident := id;  # workaround
-                s.name := x;
+                var id : strident;
+                (st,id) := strident.parse(st);
+                s.name := id;
                 res := s;
             }
             else {

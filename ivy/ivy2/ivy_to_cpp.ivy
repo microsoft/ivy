@@ -152,11 +152,25 @@ object ivy = { ...
         action to_cpp(s:this,native:bool) returns (res:cpp.ident)
     }
 
+    # Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
+    # needed for name subscripts to make legal C++ identifiers.
+
+    action mangle(s:cpp.ident) returns (res:str) = {
+        if s isa cpp.dotident {
+            res := mangle(s.get_namesp);
+            res := res.extend("__");
+            res := res.extend(s.get_member.to_str);
+        } else {
+            res := s.to_str
+        }
+    }
+
     # In translating Ivy names to C++, we have to avoid clashes with C++
     # reserved words like "char" and "bool". We do this by prepending "__".
     # C++ names beginning with "__" are reserved for the compiler. If the
     # `native` argument is true, we treate the identifier as a native C++
-    # name and do not perform this translation.
+    # name and do not perform this translation. Also non-native names with
+    # subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
 
     action strident_to_cpp(s:strident,native:bool) returns (t:cpp.strident) = {
         if ~native & cpp_reserved_word(s.val) {
@@ -167,7 +181,13 @@ object ivy = { ...
         };
         var idx := s.subscrs.begin;
         while idx < s.subscrs.end {
-            t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp(native));
+            var subs := s.subscrs.value(idx).to_cpp(native);
+            if native {
+                t.subscrs := t.subscrs.append(subs);
+            } else {
+                t.val := t.val.extend("__");
+                t.val := t.val.extend(mangle(subs))
+            };
             idx := idx.next
         }
     }
@@ -252,24 +272,29 @@ object ivy = { ...
 	ty := symbol.make(name,ty.get_ann)
     }
 
-    action fix_tpl_param(s:expr,st:tocppst) returns (s:expr) = {
+    action fix_tpl_param(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
         s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
         s := fix_variant_type(s,st);
+        (res,st) := s.to_cpp(st);
     }
         
-    action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst) returns (ty:expr) = {
-	var vid : strident;
+    action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+	var vid : cpp.strident;
 	vid.val := "vector";
-        rng := fix_tpl_param(rng,st);
-	vid.subscrs := vid.subscrs.append(rng.get_name);
+        var crng : cpp.expr;
+        (crng,st) := fix_tpl_param(rng,st);
+	vid.subscrs := vid.subscrs.append(crng.get_name);
 	var idx := dom.begin;
 	while idx < dom.end {
-            var ty := fix_tpl_param(dom.value(idx),st);
-	    vid.subscrs := vid.subscrs.append(ty.get_name);
+            var dty : cpp.expr;
+            (dty,st) := fix_tpl_param(dom.value(idx),st);
+	    vid.subscrs := vid.subscrs.append(dty.get_name);
 	    idx := idx.next
 	};
-	var name := vid.prefix(strident.make("ivy"));
-	ty := symbol.make(name,ty.get_ann)
+	var name := vid.prefix(cpp.strident.make("ivy"));
+	res := cpp.symbol.make(name,rng.get_ann)
     }
 
     # Function types are handled specially, using C++ templates in the
@@ -278,14 +303,15 @@ object ivy = { ...
     # convertible to `size_t`. We also need at least a hash table type
     # here for sparse data.
     
-    action function_type(ty:expr,st:tocppst) returns (ty:expr) = {
+    action function_type(ty:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
 	if ty isa app {
-	    # TODO: verify the domain type is convertible to size_t
 	    # var cty := ty.curry;
 	    # var rng := function_type(cty.get_arg(1));
 	    # ty := make_vector_type(rng);
-	    ty := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
-	}
+	    (res,st) := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
+	} else {
+            (res,st) := ty.to_cpp(st)
+        }
     }
 
     # Make a C++ expression of the form `ivy::from_str<ty>(arg)`
@@ -337,8 +363,7 @@ object ivy = { ...
                 # Function types need special translation to C++
 
 		var tmp : expr := s;  # workaround
-		var fty := function_type(tmp,st);
-		(res,st) := fty.to_cpp(st)
+		(res,st) := function_type(tmp,st)
             } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.cast {
 
                 # A cast operator looks like (cast : (t->u))(x). This may indicate
@@ -600,7 +625,7 @@ object ivy = { ...
         nd.members := nd.members.append(d);
         d := nd;
         if id isa dotident {
-            d := add_namespaces(d,id.get_namesp);
+            d := add_namespaces_rec(d,id.get_namesp);
         }
     }
 
@@ -1272,7 +1297,7 @@ object ivy = { ...
 	        p := p.typeinfer;
             };
 
-#	    call show_prog(p.enc);
+	    call show_prog(p.enc);
 
             # Translate to C++
 

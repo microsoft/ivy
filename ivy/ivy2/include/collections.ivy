@@ -1,5 +1,7 @@
 #lang ivy
 
+include order
+
 module array(domain,range) = {
 
     # The type `this` represents arrays
@@ -46,3 +48,19 @@ module array(domain,range) = {
     
 
 }
+
+################################################################################
+#
+# Vector types
+#
+# A vector is the same as an array, except that the domain type is implicitly
+# an instance of `unbounded sequence`.
+#
+
+module vector(range) = {
+    
+    instance domain : unbounded_sequence
+    
+    instantiate array(domain,range)
+}
+
