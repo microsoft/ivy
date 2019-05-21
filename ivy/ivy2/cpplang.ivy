@@ -28,6 +28,10 @@ object cpp = {
     instance notequals : built_in_binary("!=",verb.notequals,5)
     instance not : built_in_unary("!",verb.not,15)
 
+    # Ternary operator in C++ written `c ? x : y`.
+
+    instance ite : built_in_ternary("?",verb.ite,2)
+
     # C++ can have applications to zero arguments
 
     object app = { ...

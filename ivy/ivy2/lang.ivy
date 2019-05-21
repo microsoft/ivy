@@ -42,7 +42,7 @@ module verb_base = {
         {
             none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
             boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div, string
+            lt, leq, gt, geq, minus, div, string, ite
         }
     }
     
@@ -136,6 +136,20 @@ module built_in_binary (optok,vrb,opprio) = {
         args := args.reverse;
     }
 }    
+
+module built_in_ternary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio,3)
+
+    action make(arg0:expr,arg1:expr,arg2:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.makestr(optok,ann);
+        s.args := s.args.append(arg0);
+        s.args := s.args.append(arg1);
+        s.args := s.args.append(arg2);
+        s.ann := ann;
+        res := s
+    }
+}
 
 module built_in_const (optok,vrb) = {
     instantiate built_in(optok,vrb,0,0)
@@ -549,6 +563,12 @@ module expr_base(cppstyle) = {
                     b := b.extend(verb_to_str(vrb));
                     b := b.extend(" ");
                     b := s.args.value(1).encode(b,opprio+1);
+                    if vrb = verb.ite {
+                        b := b.extend(" ");
+                        b := b.extend(":" if cppstyle else "else");
+                        b := b.extend(" ");
+                        b := s.args.value(2).encode(b,opprio+1);
+                    }
 		};
                 if opprio < prio {
                     b := b.extend(")");
@@ -699,6 +719,13 @@ module expr_base(cppstyle) = {
                     var arg : expr;
                     (st,arg) := parse(st,verb_to_prio(vrb));
                     s.args := s.args.append(arg);
+                    if st.ok & vrb = verb.ite {
+                        if st.tok = (":" if cppstyle else "else") {
+                            st := st.consume;
+                            (st,arg) := parse(st,verb_to_prio(vrb));
+                            s.args := s.args.append(arg);
+                        } else { st.ok := false }
+                    }
                 };
                 res := s;
                 vrb := str_to_verb(st.tok);

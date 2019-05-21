@@ -110,17 +110,11 @@ object ivy = { ...
         }
     }
 
-    # For var declarations, we record only the complete typings. 
-    import action show_mystr(s:str)
-
-
     object vardc = { ...
         action build_global_types(s:this,st:global_types) returns (st:global_types) = {
-            call show_mystr(s.typing.enc);
             if is_typing_complete(s.typing) {
                 var typing := canon_typing(s.typing);
                 var thing := typing.enc;
-                call show_mystr(thing);
 	        var ty := typing.get_arg(1);
 	        if s.is_destructor {
 		    ty := ty.curry;

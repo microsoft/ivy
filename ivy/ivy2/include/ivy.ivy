@@ -2,6 +2,9 @@
 
 header "ivy.h"
 
+type bool
+interpret bool -> ivy.native_bool
+
 object ivy {
     
     type cint

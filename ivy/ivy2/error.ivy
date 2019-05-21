@@ -23,9 +23,15 @@ object ivy = { ...
 
     action report_error(e:error,ann:annot) = {
         var b : pretty;
+        b := b.extend("line");
+        b := b.extend(" ");
+        b := b.extend(ann.line.to_str);
+        b := b.extend(":");
+        b := b.extend(" ");
         b := e.encode(b);
         b := b.flush;
         call show(b.output);
+        errors := errors.append(e);
     }
 
     import action show(msg:str)
@@ -203,4 +209,23 @@ object ivy = { ...
             b := b.newline;
         }
     }
+
+    # - Error `syntax_error(tok)` indicates that a syntax error occurred at token `tok`.
+
+    object syntax_error = {
+        variant this of error = struct {
+            tok : str
+        }
+        action make(tok:str) returns (res:this) = {
+            res.tok := tok;
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Syntax error at token");
+            b := b.extend(" ");
+            b := b.extend(e.tok);
+            b := b.newline;
+        }
+    }
+    
+
 }

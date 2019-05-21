@@ -400,6 +400,49 @@ namespace ivy {
         }
     };
 
+    // This struct implements the Ivy boolean type based on the native
+    // C++ bool type. It provides the standard traits for Ivy values,
+    // plus overloads for the standard boolean operations and
+    // converstions to and from bool.
+
+    struct native_bool {
+        bool value;
+        native_bool() : value(false) {}
+        native_bool(long long value) : value(false) {}
+        operator bool() const {
+            return value;
+        }
+        operator std::size_t() const {
+            return 0;
+        }
+        static bool __is_seq() {
+            return false;
+        }
+        bool operator==(const native_bool &other) const {
+            return value == other.value;
+        }
+        bool operator!=(const native_bool &other) const {
+            return value != other.value;
+        }
+        bool __is_zero() const {
+            return !value;
+        }
+        struct __hash {
+            size_t operator()(const native_bool &x) const {
+                return (size_t)(x.value);
+            }
+        };
+        native_bool operator&(const native_bool & other) const {
+            return native_bool(value && other.value);
+        }
+        native_bool operator|(const native_bool & other) const {
+            return native_bool(value || other.value);
+        }
+        native_bool operator!() const {
+            return native_bool(!value);
+        }
+    };
+
     // This template implements enumerated types based on native C++
     // enum types. It provides the standard traits for Ivy values.
 

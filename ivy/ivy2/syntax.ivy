@@ -447,7 +447,7 @@ module numconv(str) = {
         } else {
             var tmp : str;
             while x > 0 {
-                var y := x - x / 10;
+                var y := x - ((x / 10) * 10);
 
                 # workaround: v1.7 compiler can't cast between numeric types
 

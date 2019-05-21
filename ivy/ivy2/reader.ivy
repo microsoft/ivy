@@ -63,16 +63,23 @@ object ivy = { ...
             var ok : bool;
             (text,ok) := file.read(name,text);
             if ok {
-                p := prog.dec(text);
-                var idx := p.decls.begin;
-                while idx < p.decls.end {
-                    var d := p.decls.value(idx);
-                    if d isa includedc {
-                        var fname := find_include(d.get_expr.get_name.to_str);
-                        var subp := read_file(fname,d.get_ann);
-                        p.decls := p.decls.set(idx,groupdc.make(subp.decls))
-                    };
-                    idx := idx.next
+                var st := pstate.make(text);
+                (st,p) := prog.parse(st,0);
+                ok := st.ok & st.tok.end = 0;
+                if ok {
+                    var idx := p.decls.begin;
+                    while idx < p.decls.end & errors.end > 0{
+                        var d := p.decls.value(idx);
+                        if d isa includedc {
+                            var fname := find_include(d.get_expr.get_name.to_str);
+                            var subp := read_file(fname,d.get_ann);
+                            p.decls := p.decls.set(idx,groupdc.make(subp.decls))
+                        };
+                        idx := idx.next
+                    }
+                } else {
+                    var foo := syntax_error.make(st.tok);
+                    call report_error(foo,st.ann);
                 }
             } else {
                 var foo := file_not_found.make(name);

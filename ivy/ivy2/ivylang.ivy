@@ -33,6 +33,10 @@ object ivy = {
     instance notequals : built_in_binary("~=",verb.notequals,5)
     instance not : built_in_unary("~",verb.not,15)
 
+    # Ternary operator in Ivy written `x if c else y`.
+
+    instance ite : built_in_ternary("if",verb.ite,2)
+
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
     

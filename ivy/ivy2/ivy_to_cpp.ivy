@@ -228,6 +228,8 @@ object ivy = { ...
                 res.name := cpp.strident.make("==")
             } else if vrb = verb.notequals {
                 res.name := cpp.strident.make("!=")
+            } else if vrb = verb.ite {
+                res.name := cpp.strident.make("?")
             } else if st.is_member & s.name = st.this_ident {
                 res.name := cpp.strident.make("(*this)");
             } else {
@@ -338,7 +340,7 @@ object ivy = { ...
 	    } else {
 
                 # This is the normal case of function application. We
-                # translate the funciton and all the arguments and
+                # translate the function and all the arguments and
                 # then apply.
 
                 var capp : cpp.app;
@@ -352,6 +354,14 @@ object ivy = { ...
 			idx := idx.next
 		    };
 
+                    # For ternary operators, we need to permute the arguments
+
+                    if s.is(verb.ite) {
+                        var tmp := capp.args.value(0);
+                        capp.args := capp.args.set(0,capp.args.value(0));
+                        capp.args := capp.args.set(1,tmp);
+                    };
+                    
 		    # If of the form (x:t).f, where t is a variant
 		    # type, convert to x->f, since variant types are
 		    # represented with smart pointers.
@@ -1220,22 +1230,31 @@ object ivy = { ...
 
             # Flattening pass
 
-            p := p.flat;
+            if errors.end = 0 {
+                p := p.flat;
+            };
 
 	    # Type inference pass
 
-	    p := p.typeinfer;
+            if errors.end = 0 {
+	        p := p.typeinfer;
+            };
 
-	    call show_prog(p.enc);
+#	    call show_prog(p.enc);
 
             # Translate to C++
 
-            var cpp_prog := p.to_cpp;
+            var cpp_prog : cpp.prog;
+            if errors.end = 0 {
+                 cpp_prog := p.to_cpp;
+            };
 
             # Pretty-print the C++
 
-            var cpp_name := path.change_extension(name,"cpp");
-            call write_file(cpp_name,cpp_prog.enc);
+            if errors.end = 0 {
+                var cpp_name := path.change_extension(name,"cpp");
+                call write_file(cpp_name,cpp_prog.enc);
+            }
         }
     }
 
