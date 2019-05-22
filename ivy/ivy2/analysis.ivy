@@ -168,4 +168,85 @@ object ivy = { ...
             st.is_action := st.is_action.set(s.name.get_name,true);
 	}
     }
+
+    # Does a prototype have any non-const ref parameters?
+
+    object prototype = { ...
+        action any_non_const_ref(s:this) returns(res:bool) = {
+            var idx := s.args.begin;
+            while ~res & idx < s.args.end {
+                var arg := s.args.value(idx);
+                res := arg.is_ref & ~arg.is_const;
+                idx := idx.next
+            }
+        }
+    }
+
+    # Get a map from param names to positions
+
+    instance param_map : hash_map(ident,vector[expr].domain)
+    
+    action param_set(ps:vector[expr]) returns (res:param_map) = {
+        var idx := ps.begin;
+        while idx < ps.end {
+            res := res.set(ps.value(idx).get_arg(0).get_name,idx);
+            idx := idx.next
+        }
+    }
+        
+    # Here, we add a default prototype to an action declaration, if a
+    # prototype has not already been specified.  The default prototype
+    # has one of two forms. If there is one output, and it is not an
+    # in/out parameter, then the output becomes the C++ return value,
+    # and the inputs are all by reference. Otherwise, all parameters
+    # are by reference and the return type is void. Input parameters
+    # are by const reference.
+    
+    object actdc = { ...
+        action get_proto(s:actdc) returns (res:prototype) = {
+            if s.has_proto {
+                res := s.proto
+            } else {
+                var inps := param_set(s.inputs);
+                var outs := param_set(s.outputs);
+                var idx := s.inputs.begin;
+                while idx < s.inputs.end {
+                    var arg : prototype_argument;
+                    arg.name := s.inputs.value(idx);
+                    var id := arg.name.get_arg(0).get_name;
+                    arg.is_input := true;
+                    arg.inpos := idx;
+                    arg.is_output := outs.mem(id);
+                    if arg.is_output {
+                        arg.outpos := outs.value(id)
+                    } else {
+                        arg.is_const := true;
+                    };
+                    arg.is_ref := true;
+                    res.args := res.args.append(arg);
+                    idx := idx.next
+                };                
+                if s.outputs.end = 1 & ~inps.mem(s.outputs.value(0).get_arg(0).get_name) {
+                    res.has_ret := true;
+                    res.ret.name := s.outputs.value(0);
+                    res.ret.is_output := true;
+                    res.ret.outpos := 0;
+                } else {
+                    idx := 0;
+                    while idx < s.outputs.end {
+                        var arg : prototype_argument;
+                        arg.name := s.outputs.value(idx);
+                        var id := arg.name.get_arg(0).get_name;
+                        if ~inps.mem(id) {
+                            arg.is_output := true;
+                            arg.outpos := idx;
+                            arg.is_ref := true;
+                            res.args := res.args.append(arg);
+                        };
+                        idx := idx.next
+                    }
+                }                
+            }
+        }
+    }
 }

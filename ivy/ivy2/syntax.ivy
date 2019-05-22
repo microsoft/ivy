@@ -107,7 +107,7 @@ object pretty = {
         var idx := self.maxline-self.space;
         while idx > 0 {
             self.output := self.output.append(32);  # space
-            idx := idx.next;
+            idx := idx.prev;
         }
     }
 

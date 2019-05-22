@@ -531,42 +531,53 @@ object ivy = { ...
     }
     
 
+    import action show_proto(p:prototype)
+    import action show_expr(p:expr)
+
     object actdc = { ...
         # Here, we translate an Ivy action declaration to a C++
-        # function declaration. If the action is a member action, we
-        # drop the first input and replace it with `*this`.
+        # function declaration. The C++ function declarations depends
+        # on the action prototype.  If the action is a member action,
+        # we drop the first input and replace it with `*this`.
         
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
             var res : cpp.funcdecl;
             res.ann := s.ann;
-            var has_output := s.outputs.end > 0;
+            var proto := s.get_proto;
+            call show_proto(proto);
+            var has_output := proto.has_ret;
             if has_output {
-                var ty := fix_variant_type(s.outputs.value(0).get_arg(1),st);
+                var ty := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
+                call show_expr(ty);
                 (res.ftype.base._type,st) := ty.to_cpp(st);
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
-            var proto := ~s.has_body | st.proto_only;
+            var cprot := ~s.has_body | st.proto_only;
             var is_member := s.is_member;
             var full_name : cpp.expr;
             (full_name,st) := full_action_name(s.name,is_member,st);
-	    res.ftype.base.name := member_name(full_name) if (proto | st.in_class) else full_name; 
-            var idx := s.inputs.begin;
+	    res.ftype.base.name := member_name(full_name) if (cprot | st.in_class) else full_name; 
+            var idx := proto.args.begin;
             st.is_member := is_member;
             if st.is_member {
                 idx := idx.next;   # skip the first input "this" if a member
-                st.this_ident := s.inputs.value(0).get_arg(0).get_name;
+                st.this_ident := proto.args.value(0).name.get_arg(1).get_name;
+                res.ftype.is_const := proto.args.value(0).is_const;
             };
-            while idx < s.inputs.end {
-                var arg := s.inputs.value(idx);
+            while idx < proto.args.end {
+                var parg := proto.args.value(idx);
+                var arg := parg.name;
                 var argt : cpp.simpletype;
+                argt.is_const := parg.is_const;
+                argt.is_ref := parg.is_ref;
                 var ty := fix_variant_type(arg.get_arg(1),st);
                 (argt._type,st) := ty.to_cpp(st);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
-            res.has_body := s.has_body & ~proto;
+            res.has_body := s.has_body & ~cprot;
             if s.has_body {
                 var body :cpp.stmt;
                 (body,st) := s.body.to_cpp(st);
@@ -584,7 +595,7 @@ object ivy = { ...
             };
             st.is_member := false;
             resd := res;
-            if ~st.in_class & proto {
+            if ~st.in_class & cprot {
                 resd := add_namespaces(resd,s.name.get_name);
             }
         }
