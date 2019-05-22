@@ -13,7 +13,8 @@ object ivy {
     extern action ivy.put(c:cint)
 
     type func
+    type size_t
 
-    extern action ivy.resize(f:func) returns (g:func)
+    extern action ivy.resize(f:func,s:size_t) returns (g:func)
     
 }

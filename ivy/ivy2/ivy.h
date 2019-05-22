@@ -63,7 +63,7 @@ namespace ivy {
             return value == 0;
         }
         struct __hash {
-            size_t operator()(const integer &x) const {
+            std::size_t operator()(const integer &x) const {
                 return x.value;
             }
         };
@@ -101,7 +101,7 @@ namespace ivy {
             return value == 0;
         }
         struct __hash {
-            size_t operator()(const natural &x) const {
+            std::size_t operator()(const natural &x) const {
                 return x.value;
             }
         };
@@ -225,10 +225,10 @@ namespace ivy {
         
         bool operator==(const vector &other) const {
             if (PrimaryD::__is_seq()) {
-                for (size_t idx = 0; idx < data.size(); ++idx) {
+                for (std::size_t idx = 0; idx < data.size(); ++idx) {
                     if (!other.__value_eq(idx,data[idx])) return false;
                 }
-                for (size_t idx = data.size(); idx < other.data.size(); ++idx) {
+                for (std::size_t idx = data.size(); idx < other.data.size(); ++idx) {
                     if (!__value_eq(idx,other.data[idx])) return false;
                 }
             }
@@ -255,7 +255,7 @@ namespace ivy {
 
         bool __is_zero() const {
             if (PrimaryD::__is_seq()) {
-                for (size_t idx = 0; idx < data.size(); ++idx) {
+                for (std::size_t idx = 0; idx < data.size(); ++idx) {
                     if (!data[idx].__is_zero()) return false;
                 }
             }
@@ -271,10 +271,10 @@ namespace ivy {
 
 
         struct __hash {
-            size_t operator()(const vector &x) const {
-                size_t res = 0;
+            std::size_t operator()(const vector &x) const {
+                std::size_t res = 0;
                 if (PrimaryD::__is_seq()) {
-                    for (size_t idx = 0; idx < x.data.size(); ++idx) {
+                    for (std::size_t idx = 0; idx < x.data.size(); ++idx) {
                         typename T::__hash h;
                         res += h(x.data[idx]);
                     }
@@ -292,28 +292,28 @@ namespace ivy {
             }
         };
         
+        static T zero;  // apologies to Calvino
 
         const T& operator() (PrimaryD idx) const {
             if (PrimaryD::__is_seq()) {
                 if (idx < data.size())
                     return data[idx];
-                else if (idx == data.size()) {
-                    data.resize(idx+1);
-                    return data[idx];
+            }
+            if (map) {
+                typename map_type::const_iterator it = map->find(idx);
+                if (it != map->end()) {
+                    return it->second;
                 }
             }
-            if (!map) {
-                map = new map_type;
-            }
-            return (*map)[idx];
+            return zero;
         }
         
         T& operator() (PrimaryD idx) {
             if (T::__is_seq()) {
                 if (idx < data.size())
                     return data[idx];
-                else if (((size_t)idx) == data.size()) {
-                    data.resize(((size_t)idx)+1);
+                else if (((std::size_t)idx) == data.size()) {
+                    data.resize(((std::size_t)idx)+1);
                     return data[idx];
                 }
             }
@@ -323,11 +323,11 @@ namespace ivy {
             return (*map)[idx];
         }
 
-        static vector resize(const vector &x, size_t size) {
+        static vector resize(const vector &x, std::size_t size) {
             vector res;
             if (T::__is_seq()) {
                 res.data.resize(size);
-                for (size_t idx = 0; idx < size; ++idx) {
+                for (std::size_t idx = 0; idx < size; ++idx) {
                     res.data[idx] = x(idx);
                 }
             }
@@ -335,6 +335,9 @@ namespace ivy {
         }
 
     };
+
+    template<class T, class PrimaryD > T vector<T, PrimaryD>::zero;
+    
 
     // This specialization represents the recursive case: a function of more than
     // one argument. 
@@ -371,7 +374,7 @@ namespace ivy {
         }
 
         struct __hash {
-            size_t operator()(const vector &x) const {
+            std::size_t operator()(const vector &x) const {
                 return type::__hash(x.data);
             }
         };
@@ -384,7 +387,7 @@ namespace ivy {
             return data(idx)(parameters...);
         }
 
-        static vector resize(const vector &x, size_t size) {
+        static vector resize(const vector &x, std::size_t size) {
             vector res;
             res.data = x.data.resize(size);
             return res;
@@ -415,7 +418,7 @@ namespace ivy {
             return value == 0;
         }
         struct __hash {
-            size_t operator()(const native_int &x) const {
+            std::size_t operator()(const native_int &x) const {
                 return x.value;
             }
         };
@@ -461,8 +464,8 @@ namespace ivy {
             return !value;
         }
         struct __hash {
-            size_t operator()(const native_bool &x) const {
-                return (size_t)(x.value);
+            std::size_t operator()(const native_bool &x) const {
+                return (std::size_t)(x.value);
             }
         };
         native_bool operator&(const native_bool & other) const {
@@ -485,7 +488,7 @@ namespace ivy {
     native_enum(long long value) : value((T)0) {}
         native_enum(T value) : value(value) {}
         operator std::size_t() const {
-            return (size_t)value;
+            return (std::size_t)value;
         }
         static bool __is_seq() {
             return true;
@@ -500,8 +503,8 @@ namespace ivy {
             return value == (T)0;
         }
         struct __hash {
-            size_t operator()(const native_enum &x) const {
-                return (size_t)x.value;
+            std::size_t operator()(const native_enum &x) const {
+                return (std::size_t)x.value;
             }
         };
     };

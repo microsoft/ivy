@@ -745,7 +745,7 @@ object ivy = { ...
     action add_sizet_conv(s:cpp.structdecl) returns (s:cpp.structdecl) = {
         
         var tosizet : cpp.funcdecl;
-        tosizet.ftype.base.name := cpp.symbol.makestr("operator size_t",s.ann);
+        tosizet.ftype.base.name := cpp.symbol.makestr("operator std::size_t",s.ann);
         tosizet.ftype.is_const := true;
         tosizet.has_body := true;
         tosizet.body := cpp.retst.make(cpp.symbol.makestr("0",s.ann),s.ann);
@@ -861,7 +861,7 @@ object ivy = { ...
         hashstr.name := cpp.symbol.makestr("__hash",s.ann);
         hashstr.has_members := true;
         var hash : cpp.funcdecl;
-        hash.ftype.base._type := cpp.symbol.makestr("size_t",s.ann);
+        hash.ftype.base._type := cpp.symbol.makestr("std::size_t",s.ann);
         hash.ftype.base.name := cpp.symbol.makestr("operator ()",s.ann);
         hash.ftype.is_const := true;
         var hasharg0 : cpp.simpletype;

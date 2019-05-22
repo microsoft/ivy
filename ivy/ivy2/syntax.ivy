@@ -104,7 +104,11 @@ object pretty = {
 
     action do_indent (self:this) returns (self:this) = {
 	self.output := self.output.append(10);  # newline
-	self.output := self.output.resize(self.output.end+(self.maxline-self.space),32);  # spaces
+        var idx := self.maxline-self.space;
+        while idx > 0 {
+            self.output := self.output.append(32);  # space
+            idx := idx.next;
+        }
     }
 
     action print (self:this,tok:token) returns (self:this) = {
