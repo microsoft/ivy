@@ -11,4 +11,9 @@ object ivy {
     interpret cint -> ivy.native_int[int]
     
     extern action ivy.put(c:cint)
+
+    type func
+
+    extern action ivy.resize(f:func) returns (g:func)
+    
 }

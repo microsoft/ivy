@@ -41,10 +41,10 @@ module array(domain,range) = {
 
     # The `resize` action sets the end marker of the string. 
     
-    # extern action resize(s,end:domain) returns (s:this) = {
-    #     s.value := s.value.resize(end);
-    #     s.end := end;
-    # }
+    extern action resize(s,end:domain) returns (s:this) = {
+        s.value := cast(ivy.resize(cast(s.value),end));
+        s.end := end;
+    }
     
 
 }

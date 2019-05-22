@@ -519,6 +519,12 @@ namespace ivy {
         std::cout.put(c);
     }
 
+    // Resize a function.
+
+    template <class T> static inline T resize(const T &f, unsigned size) {
+        return T::resize(f,size);
+    }
+
     // This template is used by the compiler to build string literals
     // of any type with string traits (that is, having array traits
     // and a numeric domain type).

@@ -111,6 +111,10 @@ object ivy = { ...
 
             ty : symeval,
 
+            # True if we are typing a member function
+
+            member : bool,
+
 	    # False if there has been a type error
 
             ok : bool
@@ -243,7 +247,9 @@ object ivy = { ...
                 ty := optypes(e.vrb);
                 ty := ty.reduce(mm);
             } else {
-                if st.ty.mem(e.name) {
+                if st.member {  # treat members (after dot) as polymorphic
+                    (st,ty) := st.newvar(e.ann);
+                } else if st.ty.mem(e.name) {
                     ty := st.ty.value(e.name);
                 } else {
                     (st,ty) := st.newvar(e.ann);
@@ -284,7 +290,9 @@ object ivy = { ...
                 (st,ty) := st.newvar(e.ann);
                 var fty := arrow.make(argty,ty,e.ann);
 		var func : expr;
+                st.member := true;
                 (func,argty,st) := e.get_arg(1).type_decorate(st,m);
+                st.member := false;
                 st := st.unify(argty,fty);
                 if ~st.ok {
                     call type_error(e,argty,fty)
