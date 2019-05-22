@@ -260,12 +260,15 @@ class VariantType(CppClass):
         with self:
             add_member("struct wrap {\n")
             add_member("    virtual wrap *dup() = 0;")
+            add_member("    virtual bool deref() = 0;")
             add_member("    virtual ~wrap() {}")
             add_member("};\n")
             add_member("template <typename T> struct twrap : public wrap {\n")
+            add_member("    unsigned refs;\n")
             add_member("    T item;\n")
-            add_member("    twrap(const T &item) : item(item) {}\n")
-            add_member("    virtual wrap *dup() {return new twrap(item);}\n")
+            add_member("    twrap(const T &item) : refs(1), item(item) {}\n")
+            add_member("    virtual wrap *dup() {refs++; return this;}\n")
+            add_member("    virtual bool deref() {return (--refs) != 0;}\n")
             add_member("};\n")
             add_member("int tag;\n")
             add_member("wrap *ptr;\n")
@@ -280,7 +283,7 @@ class VariantType(CppClass):
                        '    ptr = other.ptr ? other.ptr->dup() : 0;\n' + 
                        '    return *this;\n' +
                        '};\n')
-            add_member('~' + classname + '(){if(ptr)delete ptr;}\n')
+            add_member('~' + classname + '(){if(ptr){if (!ptr->deref()) delete ptr;}}\n')
             add_member('static int temp_counter;\n')
             add_member('static void prepare() {temp_counter = 0;}\n')
             add_member('static void cleanup() {}\n')
@@ -293,6 +296,17 @@ class VariantType(CppClass):
             add_member('    }\n')
             add_member('    return 0;\n')
             add_member('}\n')
+            add_member("template <typename T> static const T &unwrap(const " + classname + " &x) {\n")
+            add_member("    return ((static_cast<const twrap<T> *>(x.ptr))->item);\n")
+            add_member('}\n')
+            add_member("template <typename T> static T &unwrap(" + classname + " &x) {\n")
+            add_member("     twrap<T> *p = static_cast<twrap<T> *>(x.ptr);\n")
+            add_member("     if (p->refs > 1) {\n")
+            add_member("         p = new twrap<T> (p->item);\n")
+            add_member("     }\n")
+            add_member("     return ((static_cast<twrap<T> *>(p))->item);\n")
+            add_member('}\n')
+
 
     def isa(self,variant_idx,expr):
         """ return a test indicating whether expr is of the variant
@@ -303,7 +317,7 @@ class VariantType(CppClass):
         """ downcast an expression of this type to the given variant type.
         this is allowed to crash, if the value of the expression is not of
         the given type. """
-        return '(static_cast<const {}::twrap<{}> *>(('.format(self.short_name(),self.variants[variant_idx][1]) + expr + ').ptr)->item)'
+        return '{}::unwrap< {} >('.format(self.short_name(),self.variants[variant_idx][1]) + expr + ')'
 
     def upcast(self,variant_idx,expr):
         return self.long_name() + '(' + str(variant_idx) + ', new ' + self.long_name() +  '::twrap<{}>('.format(self.variants[variant_idx][1]) + expr + '))'

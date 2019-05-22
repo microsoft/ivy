@@ -1297,7 +1297,7 @@ object ivy = { ...
 	        p := p.typeinfer;
             };
 
-	    call show_prog(p.enc);
+#	    call show_prog(p.enc);
 
             # Translate to C++
 
