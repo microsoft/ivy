@@ -798,6 +798,23 @@ module stmt_base(expr,asgntok,cppstyle) = {
             b := b.newline;
             b := s.rhs.encode(b,0);
         }
+
+        var dummy : vector[stmt]  # workaround
+
+        # Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
+        # xn`, where `*` is a binary operator that associates to the right.
+
+        action fold_right(args:vector[stmt],ann:annot) returns (res:stmt) = {
+            if args.end > 0 {
+                var idx := args.end.prev;
+                res := args.value(idx);
+                while idx > 0 {
+                    res := make(res,args.value(idx),ann);
+                    idx := idx.prev;
+                }
+            }
+        }
+
     }
 
     object skipst = {

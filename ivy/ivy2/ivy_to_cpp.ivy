@@ -68,6 +68,7 @@ object ivy = { ...
 
     instance ident_to_declvec : hash_map(ident,vector[decl])
     instance ident_to_cppclass : hash_map(ident,expr)
+    instance ident_to_prototype : hash_map(ident,prototype)
 
     object tocppst = {
         type this = struct {
@@ -115,15 +116,63 @@ object ivy = { ...
 
             # True if we are emitting forward declarations
             
-            forward : bool
+            forward : bool,
+
+            # Current outputs (lvalues to which expression value will be assigned).
+
+            outputs : vector[expr],
+
+            # Code to be emitted before the current statement
+
+            code : vector[cpp.stmt],
+
+            # Counter for temporary variables
+
+            counter : pos,
+
+            # Map from action names to action prototypes
+
+            protos : ident_to_prototype
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
             var emp : vector[decl];
             s.members := s.members.set(namesp,s.members.get(namesp,emp).append(member));
         }
+
+        action add_stmt(s:this,code:cpp.stmt) returns (s:this) = {
+            s.code := s.code.append(code);
+        }
+
+
+        # This adds a statement to the end of the current code, clears
+        # the code and returns the result.
+
+        action wrap_stmt(s:this,code:cpp.stmt,ann:annot) returns (s:this,res:cpp.stmt) = {
+            s := s.add_stmt(code);
+            res := cpp.sequence.fold_right(s.code,ann);
+            s.code := vector[cpp.stmt].empty;
+        }
+
     }
         
+        # This declares a temporary variable in the current code
+        # context and returns it.
+
+        action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
+            var name : str;
+            name := "__tmp";
+            name := name.extend(s.counter.to_str);
+            s.counter := s.counter.next;
+            res := cpp.symbol.makestr(name,ann);
+            var vst : cpp.varst;
+            var fty := fix_variant_type(ty,s);
+            (vst.vtype._type,s) := fty.to_cpp(s);
+            vst.vtype.name := res;
+            vst.ann := ann;
+            s := s.add_stmt(vst);
+        }
+
     # In context of class declarations, identifiers are declared
     # without their namespaces.
 
@@ -324,6 +373,56 @@ object ivy = { ...
         res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
     }
 
+    # Translate an action call to C++. 
+
+    action call_to_cpp(s:app,proto:prototype,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+
+        # Evaluate all of the arguments
+
+        var args : vector[cpp.expr];
+        var idx := proto.args.begin;
+        var ret_by_ref := false;
+        var ret_val : cpp.expr;
+        while idx < proto.args.end {
+            var parg := proto.args.value(idx);
+            var inp : cpp.expr;
+            if parg.is_input {
+                var save_outputs := st.outputs;
+                st.outputs := vector[expr].empty;
+                (inp,st) := s.args.value(parg.inpos).to_cpp(st);
+                st.outputs := save_outputs;
+            };
+            var out : cpp.expr;
+            if parg.is_output & st.outputs.end > 0 {
+                (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
+            } else if parg.is_ref & ~parg.is_const {
+                (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+            };
+            if parg.is_output & st.outputs.end = 0 {
+                ret_by_ref := true;
+                ret_val := out;
+            };
+            if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
+                st := st.add_stmt(cpp.asgn.make(out,inp,s.ann));
+                inp := out;
+            } else if parg.is_output {
+                inp := out
+            };
+            args := args.append(inp);
+            idx := idx.next
+        };
+        var cfunc : cpp.expr;
+	(cfunc,st) := s.func.to_cpp(st);
+        res := cpp.app.make(cfunc,args,s.ann);
+        if ret_by_ref {
+            st := st.add_stmt(cpp.asgn.make(cpp.empty.make(s.ann),res,s.ann));
+            res := ret_val;
+        };
+        if ~proto.has_ret {
+            st.outputs := vector[expr].empty;  # indicate returning no values
+        }
+    }
+
     # Translate a function application to C++. 
 
     object app = { ...
@@ -371,7 +470,15 @@ object ivy = { ...
 
                 var ty := s.func.get_arg(1).get_arg(1);  # the range type of the cast operator
                 (res,st) := upcast(ty,s.args.value(0),st)
-	    } else {
+	    } else if s.func.get_arg(0).get_verb = verb.none & st.protos.mem(s.func.get_arg(0).get_name) {
+
+                # An action call needs special treatment
+
+                var proto := st.protos.value(s.func.get_arg(0).get_name);
+                (res,st) := call_to_cpp(s,proto,st);
+
+                
+            } else {    
 
                 # This is the normal case of function application. We
                 # translate the function and all the arguments and
@@ -380,6 +487,8 @@ object ivy = { ...
                 var capp : cpp.app;
 		(capp.func,st) := s.func.to_cpp(st);
                 {
+                    var save_outputs := st.outputs;
+                    st.outputs := vector[expr].empty;
 		    var idx := s.args.begin;
 		    while idx < s.args.end {
 			var arg : cpp.expr;
@@ -387,6 +496,7 @@ object ivy = { ...
 			capp.args := capp.args.append(arg);
 			idx := idx.next
 		    };
+                    st.outputs := save_outputs;
 
                     # For ternary operators, we need to permute the arguments
 
@@ -454,15 +564,24 @@ object ivy = { ...
     }
 
     object asgn = { ...
-        instantiate generic_to_cpp(ivy.asgn,cpp.asgn,cpp.stmt)
-        action to_cpp_int(s:ivy.asgn,st:tocppst) returns (res:cpp.asgn,st:tocppst) = {
-            (res.lhs,st) := s.lhs.to_cpp(st);
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var res : cpp.asgn;
+            res.ann := s.ann;
+            st.outputs := st.outputs.append(s.lhs);
 	    # if s.lhs.is(verb.colon) {
 	    #     (res.rhs,st) := upcast(s.lhs.get_arg(1),s.rhs,st)
 	    # } else {
 	    #     (res.rhs,st) := s.rhs.to_cpp(st)
 	    # }
-	    (res.rhs,st) := s.rhs.to_cpp(st)
+	    (res.rhs,st) := s.rhs.to_cpp(st);
+            if st.outputs.end = 0 {  # outputs were consumed as side effects
+                res.lhs := cpp.empty.make(s.ann);
+            } else {
+                (res.lhs,st) := s.lhs.to_cpp(st);
+                st.outputs := vector[expr].empty;
+            };
+            resd := res;
+            (st,resd) := st.wrap_stmt(resd,s.ann);
         }
     }
 
@@ -544,6 +663,9 @@ object ivy = { ...
             var res : cpp.funcdecl;
             res.ann := s.ann;
             var proto := s.get_proto;
+            if st.proto_only {
+                st.protos := st.protos.set(s.name.get_name,proto);
+            };
             call show_proto(proto);
             var has_output := proto.has_ret;
             if has_output {
