@@ -809,8 +809,8 @@ module stmt_base(expr,asgntok,cppstyle) = {
                 var idx := args.end.prev;
                 res := args.value(idx);
                 while idx > 0 {
-                    res := make(res,args.value(idx),ann);
                     idx := idx.prev;
+                    res := make(args.value(idx),res,ann);
                 }
             }
         }

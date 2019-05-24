@@ -66,10 +66,36 @@ object ivy = { ...
     }
 
 
+    # A 'access_path' is an abstraction of an lvalue. The path of an
+    # expression is a sequence of identifiers that gives the name of a
+    # root variable, with a sequence of field references appended. For
+    # example the path of `f.a(x).b(y)` is `[f,a,b]`. If `a.b` is a
+    # function, then the path of `a.b(x,y).c` is `[a.b,c]`. On the
+    # other hand, `(x+y).a` is not an lvalue and does not have a path.
+    # Paths are used in alias analysis.
+
+    object access_path = {
+        type this = struct {
+            elems : vector[ident]
+        }
+    }
+
+    # Two paths may alias if one is a prefix of the other
+    
+    action path_may_alias(v:access_path,w:access_path) returns (res : bool) = {
+        res := true;
+        var idx := v.elems.begin;
+        while res & idx < v.elems.end & idx < w.elems.end {
+            res := (v.elems.value(idx) = w.elems.value(idx));
+            idx := idx.next
+        }
+    }
+    
+
     instance ident_to_declvec : hash_map(ident,vector[decl])
     instance ident_to_cppclass : hash_map(ident,expr)
     instance ident_to_prototype : hash_map(ident,prototype)
-
+    
     object tocppst = {
         type this = struct {
             
@@ -132,7 +158,14 @@ object ivy = { ...
 
             # Map from action names to action prototypes
 
-            protos : ident_to_prototype
+            protos : ident_to_prototype,
+
+            # The dead list of the current context. If an lvalue is on
+            # this list, then any occurrence is the last reference to
+            # the value.
+
+            dead : vector[cpp.expr]
+
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -156,22 +189,102 @@ object ivy = { ...
 
     }
         
-        # This declares a temporary variable in the current code
-        # context and returns it.
+    # This declares a temporary variable in the current code
+    # context and returns it.
 
-        action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
-            var name : str;
-            name := "__tmp";
-            name := name.extend(s.counter.to_str);
-            s.counter := s.counter.next;
-            res := cpp.symbol.makestr(name,ann);
-            var vst : cpp.varst;
-            var fty := fix_variant_type(ty,s);
-            (vst.vtype._type,s) := fty.to_cpp(s);
-            vst.vtype.name := res;
-            vst.ann := ann;
-            s := s.add_stmt(vst);
+    action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
+        var name : str;
+        name := "__tmp";
+        name := name.extend(s.counter.to_str);
+        s.counter := s.counter.next;
+        res := cpp.symbol.makestr(name,ann);
+        var vst : cpp.varst;
+        var fty := fix_variant_type(ty,s);
+        (vst.vtype._type,s) := fty.to_cpp(s);
+        vst.vtype.name := res;
+        vst.ann := ann;
+        var vstt : cpp.stmt := vst;
+        s := s.add_stmt(vstt);
+    }
+
+    # Given a C++ lvalue, this returns its "path". The path is an identifier
+    # that gives the name of the variable, with a sequence of field references
+    # appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
+    # a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
+    # not have a path. For such cases, we return `ok = false`.
+
+    action lvalue_path(s:expr,path:access_path) returns (path:access_path, ok:bool) = {
+        if s isa symbol {
+            if s.get_verb = verb.none {
+                path.elems := path.elems.append(s.get_name);
+                ok := true
+            }
+        } else if s isa app {
+            if s.is(verb.colon) {
+                (path,ok) := lvalue_path(s.get_arg(0),path)
+            } else if s.is(verb.dot) {
+                (path,ok) := lvalue_path(s.get_arg(0),path);
+                if ok {
+                    path.elems := path.elems.append(s.get_arg(1).get_arg(0).get_name);
+                }
+            } else {
+                if s.is(verb.none) {
+                    (path,ok) := lvalue_path(s.get_func,path);
+                }
+            }
         }
+    }
+
+    export action test_lvalue_path(s:str) returns(path:access_path) = {
+        var ok : bool;
+        (path,ok) :=lvalue_path(expr.dec(s),path)
+    }
+
+    # Workaround
+
+    var dummy_vector_access_path : vector[access_path]
+
+    # Get a list of all of the lvalue paths occurring in a C++
+    # expression.
+    
+    action lvalue_paths(s:expr,paths:vector[access_path],ao:bool)
+        returns (paths:vector[access_path]) =
+    {
+        if s.is(verb.colon) {
+            paths := lvalue_paths(s.get_arg(0),paths,ao)
+        } else {
+            if ~ao {
+                var path : access_path;
+                var ok : bool;
+                (path,ok) := lvalue_path(s,path);
+                if ok {
+                    paths := paths.append(path);
+                }
+            };
+            if s isa app {
+                if s.is(verb.dot) {
+                    paths := lvalue_paths(s.get_arg(0),paths,true);
+                } else {
+                    var args := s.get_args;
+                    var idx := args.begin;
+                    while idx < args.end {
+                        paths := lvalue_paths(args.value(idx),paths,false);
+                        idx := idx.next;
+                    }
+                }
+            }
+        }
+    }
+    
+    # This determines whether a C++ lvalue is dead in current context
+
+    action is_dead(e:cpp.expr,st:tocppst) returns (res:bool) = {
+        var idx := st.dead.begin;
+        while ~res & idx < st.dead.end {
+            res := cpp.expr.eq(e,st.dead.value(idx));
+            idx := idx.next
+        }
+    }
 
     # In context of class declarations, identifiers are declared
     # without their namespaces.
@@ -386,17 +499,28 @@ object ivy = { ...
         while idx < proto.args.end {
             var parg := proto.args.value(idx);
             var inp : cpp.expr;
+            var ivy_inp : expr;
             if parg.is_input {
                 var save_outputs := st.outputs;
                 st.outputs := vector[expr].empty;
-                (inp,st) := s.args.value(parg.inpos).to_cpp(st);
+                ivy_inp := s.args.value(parg.inpos);
+                (inp,st) := ivy_inp.to_cpp(st);
                 st.outputs := save_outputs;
             };
             var out : cpp.expr;
             if parg.is_output & st.outputs.end > 0 {
                 (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
+                if ~is_dead(out,st) {
+                    (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+                    ret_by_ref := true;
+                    ret_val := out;
+                }
             } else if parg.is_ref & ~parg.is_const {
-                (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+                if is_dead(inp,st) {
+                    out := inp;  # if input is a dead lvalue, side-effect it
+                } else {
+                    (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+                }
             };
             if parg.is_output & st.outputs.end = 0 {
                 ret_by_ref := true;
@@ -417,8 +541,7 @@ object ivy = { ...
         if ret_by_ref {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(s.ann),res,s.ann));
             res := ret_val;
-        };
-        if ~proto.has_ret {
+        } else if ~proto.has_ret {
             st.outputs := vector[expr].empty;  # indicate returning no values
         }
     }
@@ -563,23 +686,43 @@ object ivy = { ...
         }
     }
 
+    action kill_lvalue(e:expr,st:tocppst,paths:vector[access_path]) returns (st:tocppst) = {
+        var path : access_path;
+        var ok : bool;
+        (path,ok) := lvalue_path(e,path);
+        if ok {
+            var alias_count : pos := 0;
+            var idx := paths.begin;
+            while idx < paths.end {
+                if path_may_alias(path,paths.value(idx)) {
+                    alias_count := alias_count.next;
+                };
+                idx := idx.next
+            };
+            if alias_count < 2 {   # value is used linearly
+                var ce : cpp.expr;
+                (ce,st) := e.to_cpp(st);
+                st.dead := st.dead.append(ce);
+            }
+        }
+    }
+
     object asgn = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var paths : vector[access_path];
+            paths := lvalue_paths(s.rhs,paths,false);
+            st := kill_lvalue(s.lhs,st,paths);
             var res : cpp.asgn;
             res.ann := s.ann;
+            (res.lhs,st) := s.lhs.to_cpp(st);
             st.outputs := st.outputs.append(s.lhs);
-	    # if s.lhs.is(verb.colon) {
-	    #     (res.rhs,st) := upcast(s.lhs.get_arg(1),s.rhs,st)
-	    # } else {
-	    #     (res.rhs,st) := s.rhs.to_cpp(st)
-	    # }
 	    (res.rhs,st) := s.rhs.to_cpp(st);
             if st.outputs.end = 0 {  # outputs were consumed as side effects
                 res.lhs := cpp.empty.make(s.ann);
             } else {
-                (res.lhs,st) := s.lhs.to_cpp(st);
                 st.outputs := vector[expr].empty;
             };
+            st.dead := vector[cpp.expr].empty;
             resd := res;
             (st,resd) := st.wrap_stmt(resd,s.ann);
         }
@@ -650,9 +793,6 @@ object ivy = { ...
     }
     
 
-    import action show_proto(p:prototype)
-    import action show_expr(p:expr)
-
     object actdc = { ...
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. The C++ function declarations depends
@@ -666,11 +806,9 @@ object ivy = { ...
             if st.proto_only {
                 st.protos := st.protos.set(s.name.get_name,proto);
             };
-            call show_proto(proto);
             var has_output := proto.has_ret;
             if has_output {
                 var ty := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
-                call show_expr(ty);
                 (res.ftype.base._type,st) := ty.to_cpp(st);
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
