@@ -490,6 +490,17 @@ object ivy = { ...
 
     action call_to_cpp(s:app,proto:prototype,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
 
+        # Get the inputs. This depends on whether it is a method call.
+
+        var inputs : vector[expr];
+        if s.func.is(verb.dot) {
+            inputs := inputs.append(s.func.args.value(0));
+            inputs := inputs.extend(s.args);
+        } else {
+            inputs := s.args;
+        };
+        
+
         # Evaluate all of the arguments
 
         var args : vector[cpp.expr];
@@ -503,7 +514,7 @@ object ivy = { ...
             if parg.is_input {
                 var save_outputs := st.outputs;
                 st.outputs := vector[expr].empty;
-                ivy_inp := s.args.value(parg.inpos);
+                ivy_inp := inputs.value(parg.inpos);
                 (inp,st) := ivy_inp.to_cpp(st);
                 st.outputs := save_outputs;
             };
@@ -536,8 +547,13 @@ object ivy = { ...
             idx := idx.next
         };
         var cfunc : cpp.expr;
-	(cfunc,st) := s.func.to_cpp(st);
-        res := cpp.app.make(cfunc,args,s.ann);
+        if s.func.is(verb.dot) {
+            (cfunc,st) := s.func.get_arg(1).to_cpp(st);
+            res := cpp.app.make(cpp.dot.make(args.value(0),cfunc),args.segment(1,args.end));
+        } else {
+	    (cfunc,st) := s.func.to_cpp(st);
+            res := cpp.app.make(cfunc,args,s.ann);
+        };
         if ret_by_ref {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(s.ann),res,s.ann));
             res := ret_val;
@@ -545,6 +561,35 @@ object ivy = { ...
             st.outputs := vector[expr].empty;  # indicate returning no values
         }
     }
+
+    
+    # Given a function application, find the identifier of the called
+    # function. Returns `ok=false` if a built-in. There are three cases:
+    #
+    # - (x:t).f            returns t.f
+    # - (x:t).f(a1...an)   returns t.f
+    # - (f:...)(a1...an)   returns f
+
+    action get_called_function(s:expr) returns (res:ident, ok:bool) = {
+        if s.is(verb.dot) {
+            var lhs := s.get_arg(0);
+            var ty := lhs.get_type;
+            res := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+            ok := true
+        } else {
+            var func := s.get_func {
+                if func.is(verb.dot) {
+                    (res,ok) := get_called_function(func);
+                } else if func.is(verb.colon) {
+                    if func.get_arg(0).get_verb = verb.none {
+                        res := func.get_arg(0).get_name;
+                        ok := true
+                    }
+                }
+            }
+        }
+    }
+
 
     # Translate a function application to C++. 
 
@@ -593,70 +638,81 @@ object ivy = { ...
 
                 var ty := s.func.get_arg(1).get_arg(1);  # the range type of the cast operator
                 (res,st) := upcast(ty,s.args.value(0),st)
-	    } else if s.func.get_arg(0).get_verb = verb.none & st.protos.mem(s.func.get_arg(0).get_name) {
+	    } else {
 
-                # An action call needs special treatment
-
-                var proto := st.protos.value(s.func.get_arg(0).get_name);
-                (res,st) := call_to_cpp(s,proto,st);
+                # Detect whether a function application is an action call.
+                
+                var id : ident;
+                var is_call : bool;
+                (id,is_call) := get_called_function(s);
+                if is_call {
+                    is_call := st.protos.mem(id);
+                };
+                if is_call {
+                
+                    # An action call needs special treatment
+                    
+                    var proto := st.protos.value(id);
+                    (res,st) := call_to_cpp(s,proto,st);
 
                 
-            } else {    
+                } else {    
 
-                # This is the normal case of function application. We
-                # translate the function and all the arguments and
-                # then apply.
+                    # This is the normal case of function application. We
+                    # translate the function and all the arguments and
+                    # then apply.
 
-                var capp : cpp.app;
-		(capp.func,st) := s.func.to_cpp(st);
-                {
-                    var save_outputs := st.outputs;
-                    st.outputs := vector[expr].empty;
-		    var idx := s.args.begin;
-		    while idx < s.args.end {
-			var arg : cpp.expr;
-			(arg,st) := s.args.value(idx).to_cpp(st);
-			capp.args := capp.args.append(arg);
-			idx := idx.next
-		    };
-                    st.outputs := save_outputs;
+                    var capp : cpp.app;
+                    (capp.func,st) := s.func.to_cpp(st);
+                    {
+                        var save_outputs := st.outputs;
+                        st.outputs := vector[expr].empty;
+                        var idx := s.args.begin;
+                        while idx < s.args.end {
+                            var arg : cpp.expr;
+                            (arg,st) := s.args.value(idx).to_cpp(st);
+                            capp.args := capp.args.append(arg);
+                            idx := idx.next
+                        };
+                        st.outputs := save_outputs;
 
-                    # For ternary operators, we need to permute the arguments
+                        # For ternary operators, we need to permute the arguments
 
-                    if capp.is(cpp.verb.ite) {
-                        var tmp := capp.args.value(0);
-                        capp.args := capp.args.set(0,capp.args.value(1));
-                        capp.args := capp.args.set(1,tmp);
+                        if capp.is(cpp.verb.ite) {
+                            var tmp := capp.args.value(0);
+                            capp.args := capp.args.set(0,capp.args.value(1));
+                            capp.args := capp.args.set(1,tmp);
+                        };
+
+                        # If of the form (x:t).f, where t is a variant
+                        # type, convert to x->f, since variant types are
+                        # represented with smart pointers.
+
+                        if s.func.get_verb = verb.dot {
+                            var lhs := s.args.value(0);
+                            if lhs.is(verb.colon) {
+                                var ty := lhs.get_arg(1);
+                                if is_variant_type(ty,st) {
+                                    capp.func := cpp.symbol.makestr("->",capp.func.get_ann)
+                                }
+                            }
+                        }
                     };
-                    
-		    # If of the form (x:t).f, where t is a variant
-		    # type, convert to x->f, since variant types are
-		    # represented with smart pointers.
+                    capp.ann := s.ann;
+                    res := capp;
 
-		    if s.func.get_verb = verb.dot {
-			var lhs := s.args.value(0);
-			if lhs.is(verb.colon) {
-			    var ty := lhs.get_arg(1);
-			    if is_variant_type(ty,st) {
-				capp.func := cpp.symbol.makestr("->",capp.func.get_ann)
-			    }
-			}
-		    }
-		};
-		capp.ann := s.ann;
-		res := capp;
+                    # If of the form x.f where is a member action of input arity zero,
+                    # add empty parentheses for C++.
 
-                # If of the form x.f where is a member action of input arity zero,
-                # add empty parentheses for C++.
-
-                if s.is(verb.dot) {
-                    var lhs := s.args.value(0);
-                    var ty := lhs.get_type;
-                    var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
-                    if st.globals.is_action.mem(fid) {
-                        if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
-                            var args : vector[cpp.expr];
-                            res := cpp.app.make(res,args,res.get_ann);
+                    if s.is(verb.dot) {
+                        var lhs := s.args.value(0);
+                        var ty := lhs.get_type;
+                        var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+                        if st.globals.is_action.mem(fid) {
+                            if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
+                                var args : vector[cpp.expr];
+                                res := cpp.app.make(res,args,res.get_ann);
+                            }
                         }
                     }
                 }
