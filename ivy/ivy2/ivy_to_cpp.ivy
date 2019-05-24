@@ -486,20 +486,42 @@ object ivy = { ...
         res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
     }
 
-    # Translate an action call to C++. 
-
-    action call_to_cpp(s:app,proto:prototype,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
-
-        # Get the inputs. This depends on whether it is a method call.
-
-        var inputs : vector[expr];
-        if s.func.is(verb.dot) {
-            inputs := inputs.append(s.func.args.value(0));
-            inputs := inputs.extend(s.args);
+    # Make a C++ function call. There are three cases here:
+    #
+    # Ordinary function call: `prefix.f(a0..an)`
+    # Method call: `a0.f(a1..an)`
+    # Indirect method call: `a0->f(a1..an)`
+    #
+    # The last case is used if `f : (t * ... -> u)` is a member function where
+    # type `t` is a variant type. 
+    
+    action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
+        returns (res:cpp.expr, st:tocppst) =
+    {
+        if func_is_member(func)   {
+            var fid := func.get_arg(0).get_name.to_cpp(false);
+            var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
+            if is_variant_type(get_dom0(func.get_arg(1)),st) {
+                cfunc := cpp.arrow.make(args.value(0),cfunc,ann)
+            } else {
+                cfunc := cpp.dot.make(args.value(0),cfunc,ann)
+            };
+            res := cpp.app.make(cfunc,args.segment(1,args.end),ann);
         } else {
-            inputs := s.args;
-        };
-        
+            var cfunc : cpp.expr;
+            (cfunc,st) := func.to_cpp(st);
+            res := cpp.app.make(cfunc,args,ann);
+        }
+    }
+
+    # Translate an action call to C++. This is complicated, because we have
+    # to apply the action prototype and deal with call-by-reference. 
+    #
+    
+    action call_to_cpp (func:expr, inputs:vector[expr], ann:annot, st:tocppst)
+        returns (res:cpp.expr,st:tocppst) =
+    {
+        var proto := st.protos.value(func.get_arg(0).get_name);
 
         # Evaluate all of the arguments
 
@@ -522,7 +544,7 @@ object ivy = { ...
             if parg.is_output & st.outputs.end > 0 {
                 (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
                 if ~is_dead(out,st) {
-                    (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+                    (st,out) := make_temp(st,parg.name.get_arg(1),ann);
                     ret_by_ref := true;
                     ret_val := out;
                 }
@@ -530,7 +552,7 @@ object ivy = { ...
                 if is_dead(inp,st) {
                     out := inp;  # if input is a dead lvalue, side-effect it
                 } else {
-                    (st,out) := make_temp(st,parg.name.get_arg(1),s.ann);
+                    (st,out) := make_temp(st,parg.name.get_arg(1),ann);
                 }
             };
             if parg.is_output & st.outputs.end = 0 {
@@ -538,7 +560,7 @@ object ivy = { ...
                 ret_val := out;
             };
             if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
-                st := st.add_stmt(cpp.asgn.make(out,inp,s.ann));
+                st := st.add_stmt(cpp.asgn.make(out,inp,ann));
                 inp := out;
             } else if parg.is_output {
                 inp := out
@@ -546,50 +568,14 @@ object ivy = { ...
             args := args.append(inp);
             idx := idx.next
         };
-        var cfunc : cpp.expr;
-        if s.func.is(verb.dot) {
-            (cfunc,st) := s.func.get_arg(1).to_cpp(st);
-            res := cpp.app.make(cpp.dot.make(args.value(0),cfunc),args.segment(1,args.end));
-        } else {
-	    (cfunc,st) := s.func.to_cpp(st);
-            res := cpp.app.make(cfunc,args,s.ann);
-        };
+        (res,st) := make_cpp_call(func,args,ann,st);
         if ret_by_ref {
-            st := st.add_stmt(cpp.asgn.make(cpp.empty.make(s.ann),res,s.ann));
+            st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
             res := ret_val;
         } else if ~proto.has_ret {
             st.outputs := vector[expr].empty;  # indicate returning no values
         }
     }
-
-    
-    # Given a function application, find the identifier of the called
-    # function. Returns `ok=false` if a built-in. There are three cases:
-    #
-    # - (x:t).f            returns t.f
-    # - (x:t).f(a1...an)   returns t.f
-    # - (f:...)(a1...an)   returns f
-
-    action get_called_function(s:expr) returns (res:ident, ok:bool) = {
-        if s.is(verb.dot) {
-            var lhs := s.get_arg(0);
-            var ty := lhs.get_type;
-            res := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
-            ok := true
-        } else {
-            var func := s.get_func {
-                if func.is(verb.dot) {
-                    (res,ok) := get_called_function(func);
-                } else if func.is(verb.colon) {
-                    if func.get_arg(0).get_verb = verb.none {
-                        res := func.get_arg(0).get_name;
-                        ok := true
-                    }
-                }
-            }
-        }
-    }
-
 
     # Translate a function application to C++. 
 
@@ -642,18 +628,15 @@ object ivy = { ...
 
                 # Detect whether a function application is an action call.
                 
-                var id : ident;
-                var is_call : bool;
-                (id,is_call) := get_called_function(s);
-                if is_call {
-                    is_call := st.protos.mem(id);
-                };
-                if is_call {
-                
+                var func : expr;
+                var args : vector[expr];
+                (func,args) := get_app(s);
+
+                if st.globals.is_action.mem(func.get_arg(0).get_name) {
+                    
                     # An action call needs special treatment
                     
-                    var proto := st.protos.value(id);
-                    (res,st) := call_to_cpp(s,proto,st);
+                    (res,st) := call_to_cpp(func,args,s.ann,st);
 
                 
                 } else {    
@@ -704,17 +687,17 @@ object ivy = { ...
                     # If of the form x.f where is a member action of input arity zero,
                     # add empty parentheses for C++.
 
-                    if s.is(verb.dot) {
-                        var lhs := s.args.value(0);
-                        var ty := lhs.get_type;
-                        var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
-                        if st.globals.is_action.mem(fid) {
-                            if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
-                                var args : vector[cpp.expr];
-                                res := cpp.app.make(res,args,res.get_ann);
-                            }
-                        }
-                    }
+                    # if s.is(verb.dot) {
+                    #     var lhs := s.args.value(0);
+                    #     var ty := lhs.get_type;
+                    #     var fid := s.args.value(1).get_arg(0).get_name.prefix(ty.get_name);
+                    #     if st.globals.is_action.mem(fid) {
+                    #         if ~(s.args.value(1).get_arg(1).get_arg(1).is(verb.arrow)) {
+                    #             var args : vector[cpp.expr];
+                    #             res := cpp.app.make(res,args,res.get_ann);
+                    #         }
+                    #     }
+                    # }
                 }
 	    }
         }

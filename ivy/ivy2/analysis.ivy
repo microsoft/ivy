@@ -249,4 +249,89 @@ object ivy = { ...
             }
         }
     }
+
+
+    # Member functions
+    # ================
+
+    # Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
+
+    action uncurry_func(func:expr) returns (func:expr) = {
+        var ty := func.get_arg(1).get_arg(0);
+        var fid := func.get_arg(0).get_name.prefix(ty.get_name);
+        var sym := symbol.make(fid,func.get_ann);
+        func := colon.make(sym,func.get_arg(1).uncurry,func.get_ann);
+    }
+
+    # Given a function type `ty = (t * ... -> u)`, return `t`.
+
+    action get_dom0(ty:expr) returns (res:expr) = {
+        res := ty.get_arg(0);
+        var b := res.is(verb.times);
+        while b {
+            res := res.get_arg(0);
+            b := res.is(verb.times);
+        };
+    }
+    
+    # Test whether a type-decorated function is a member
+    # function. That is, it returns true if `func` has the form
+    # `t.f : (t * ...) -> u`.
+
+    action func_is_member(func:expr) returns (res:bool) = {
+        var ty := func.get_arg(1);
+        if ty.is(verb.arrow) {
+            var fid := func.get_arg(0).get_name;
+            if fid isa dotident {
+                var dom := get_dom0(ty);
+                res := (fid.get_namesp = dom.get_name);
+            }
+        }
+    }
+    
+
+    # A function application can be in several forms
+    #
+    # - (x:t).f            returns t.f(x)
+    # - (x:t).f(a1...an)   returns t.f(x,a1...an)
+    # - (f:...)(a1...an)   returns f(a1...an)
+    #
+    # This action analyzes an app, returning the type-decorated
+    # function and the argument vector. This assumes that the app is
+    # already type-decorated.
+
+    import action show_str(s:str)
+    
+    action get_app(s:expr) returns (func:expr, args:vector[expr]) = {
+        if s.is(verb.dot) {
+            call show_str(s.enc);
+            var lhs := s.get_arg(0);
+            call show_str(lhs.enc);
+            var ty := lhs.get_type;
+            call show_str(ty.enc);
+            func := uncurry_func(s.get_arg(1));
+            call show_str(func.enc);
+            args := args.append(lhs);
+        } else {
+            func := s.get_func;
+            if func.is(verb.dot) {
+                var tmp := func;  # workaround
+                (func,args) := get_app(tmp);
+            };
+            args := args.extend(s.get_args);
+        }
+    }
+
+    # Canonize a function application. If it is in member style,
+    # convert it to an ordinary function call.
+
+    action canon_app(s:expr) returns (s:expr) = {
+        if s.is(verb.dot) {
+            var args : vector[expr];
+            (s,args) := get_app(s);
+            if args.end > 0 {
+                s := app.make(s,args,s.get_ann)
+            }
+        }
+    }
 }
