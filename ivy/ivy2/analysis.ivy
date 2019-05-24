@@ -300,17 +300,11 @@ object ivy = { ...
     # function and the argument vector. This assumes that the app is
     # already type-decorated.
 
-    import action show_str(s:str)
-    
     action get_app(s:expr) returns (func:expr, args:vector[expr]) = {
         if s.is(verb.dot) {
-            call show_str(s.enc);
             var lhs := s.get_arg(0);
-            call show_str(lhs.enc);
             var ty := lhs.get_type;
-            call show_str(ty.enc);
             func := uncurry_func(s.get_arg(1));
-            call show_str(func.enc);
             args := args.append(lhs);
         } else {
             func := s.get_func;
