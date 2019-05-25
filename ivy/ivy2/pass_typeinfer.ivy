@@ -168,14 +168,28 @@ object ivy = { ...
 	}
     }
 
+    # Check if type `rhsty` is a subtype of `lhsty`.
+
+    action is_subtype(rhsty:expr,lhsty:expr,st:typeinferst) returns (res:bool) = {
+        if rhsty.is(verb.comma) {
+            if lhsty.is(verb.comma) {
+                res := is_subtype(rhsty.get_arg(0),lhsty.get_arg(0),st) &
+                       is_subtype(rhsty.get_arg(1),lhsty.get_arg(1),st)
+            }
+        } else if ~lhsty.is(verb.comma) {
+            res := st.subtype_rel.is_subtype(rhsty,lhsty)
+        }
+    }
+
     # Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
-    # used for assignments, and argument passing.
+    # used for assignments, and argument passing. This has to work on tuples
+    # to handle multiple assignment. 
 
     action make_cast(lhsty:expr,rhs:expr,st:typeinferst) returns (rhs:expr) = {
 	if rhs.is(verb.colon) {
 	    var rhsty := rhs.get_arg(1);
             if ~expr.eq(lhsty,rhsty) {
-	        if ~( st.subtype_rel.is_subtype(rhsty,lhsty) ) {
+	        if ~ is_subtype(rhsty,lhsty,st) {
 		    call report_error(type_conversion.make(rhs,rhsty,lhsty),rhs.get_ann);
 	        };
                 var castty := arrow.make(rhsty,lhsty,rhs.get_ann);
@@ -184,6 +198,8 @@ object ivy = { ...
             }
         }
     }
+
+    import action show_str(s:str)
 
     # Assignments. If both assigments are typed, just check for assignment
     # compatibility. Otherwise unify the types of the lhs and rhs.
@@ -199,6 +215,8 @@ object ivy = { ...
                 if res.lhs.is(verb.colon) { 
                     res.rhs := make_cast(res.lhs.get_arg(1),res.rhs,st)  # upcast if needed
                 };
+                call show_str(res.lhs.enc);
+                call show_str(res.rhs.enc);
 		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 	    }
         }

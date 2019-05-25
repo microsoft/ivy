@@ -78,7 +78,7 @@ object ivy = { ...
             res.t2 := t2;
         }
         action encode(e:this,b:pretty) returns (b:pretty) = {
-            b := b.extend("Cannot the expression");
+            b := b.extend("Cannot cast the expression");
             b := b.extend(" ");
             b := e.e.encode(b,0);
             b := b.extend(" ");

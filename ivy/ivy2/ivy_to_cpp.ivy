@@ -91,7 +91,13 @@ object ivy = { ...
         }
     }
     
+    # A pair consisting of an lvalue and an alias count
 
+    type lvalue_count = struct {
+        lvalue : cpp.expr,
+        cnt : pos
+    }
+    
     instance ident_to_declvec : hash_map(ident,vector[decl])
     instance ident_to_cppclass : hash_map(ident,expr)
     instance ident_to_prototype : hash_map(ident,prototype)
@@ -164,7 +170,7 @@ object ivy = { ...
             # this list, then any occurrence is the last reference to
             # the value.
 
-            dead : vector[cpp.expr]
+            dead : vector[lvalue_count]
 
         }
 
@@ -278,10 +284,11 @@ object ivy = { ...
     
     # This determines whether a C++ lvalue is dead in current context
 
-    action is_dead(e:cpp.expr,st:tocppst) returns (res:bool) = {
+    action is_dead(e:cpp.expr,st:tocppst,cnt:pos) returns (res:bool) = {
         var idx := st.dead.begin;
         while ~res & idx < st.dead.end {
-            res := cpp.expr.eq(e,st.dead.value(idx));
+            var d := st.dead.value(idx);
+            res := cpp.expr.eq(e,d.lvalue) & d.cnt <= cnt;
             idx := idx.next
         }
     }
@@ -528,7 +535,7 @@ object ivy = { ...
         var args : vector[cpp.expr];
         var idx := proto.args.begin;
         var ret_by_ref := false;
-        var ret_val : cpp.expr;
+        var ret_vals : vector[cpp.expr];
         while idx < proto.args.end {
             var parg := proto.args.value(idx);
             var inp : cpp.expr;
@@ -543,13 +550,13 @@ object ivy = { ...
             var out : cpp.expr;
             if parg.is_output & st.outputs.end > 0 {
                 (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
-                if ~is_dead(out,st) {
+                if ~is_dead(out,st, 1 if parg.is_input else 0) {
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
                     ret_by_ref := true;
-                    ret_val := out;
+                    ret_vals := ret_vals.append(out);
                 }
             } else if parg.is_ref & ~parg.is_const {
-                if is_dead(inp,st) {
+                if is_dead(inp,st,1) {
                     out := inp;  # if input is a dead lvalue, side-effect it
                 } else {
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
@@ -557,7 +564,7 @@ object ivy = { ...
             };
             if parg.is_output & st.outputs.end = 0 {
                 ret_by_ref := true;
-                ret_val := out;
+                ret_vals := ret_vals.append(out);
             };
             if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
                 st := st.add_stmt(cpp.asgn.make(out,inp,ann));
@@ -571,7 +578,7 @@ object ivy = { ...
         (res,st) := make_cpp_call(func,args,ann,st);
         if ret_by_ref {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
-            res := ret_val;
+            res := cpp.comma.fold_left(ret_vals,ann);
         } else if ~proto.has_ret {
             st.outputs := vector[expr].empty;  # indicate returning no values
         }
@@ -729,7 +736,9 @@ object ivy = { ...
         var path : access_path;
         var ok : bool;
         (path,ok) := lvalue_path(e,path);
+        call show_str(e.enc);
         if ok {
+            call show_str(e.enc);
             var alias_count : pos := 0;
             var idx := paths.begin;
             while idx < paths.end {
@@ -738,11 +747,20 @@ object ivy = { ...
                 };
                 idx := idx.next
             };
-            if alias_count < 2 {   # value is used linearly
-                var ce : cpp.expr;
-                (ce,st) := e.to_cpp(st);
-                st.dead := st.dead.append(ce);
-            }
+            var lc : lvalue_count;
+            (lc.lvalue,st) := e.to_cpp(st);
+            lc.cnt := alias_count;
+            st.dead := st.dead.append(lc);
+        }
+    }
+
+    action kill_lvalues(es:vector[expr],st:tocppst,paths:vector[access_path])
+        returns (st:tocppst) =
+    {
+        var idx := es.begin;
+        while idx < es.end {
+            st := kill_lvalue(es.value(idx),st,paths);
+            idx := idx.next
         }
     }
 
@@ -750,18 +768,18 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
             var paths : vector[access_path];
             paths := lvalue_paths(s.rhs,paths,false);
-            st := kill_lvalue(s.lhs,st,paths);
             var res : cpp.asgn;
             res.ann := s.ann;
             (res.lhs,st) := s.lhs.to_cpp(st);
-            st.outputs := st.outputs.append(s.lhs);
+            st.outputs := comma.unfold_left(s.lhs);
+            st := kill_lvalues(st.outputs,st,paths);
 	    (res.rhs,st) := s.rhs.to_cpp(st);
             if st.outputs.end = 0 {  # outputs were consumed as side effects
                 res.lhs := cpp.empty.make(s.ann);
             } else {
                 st.outputs := vector[expr].empty;
             };
-            st.dead := vector[cpp.expr].empty;
+            st.dead := vector[lvalue_count].empty;
             resd := res;
             (st,resd) := st.wrap_stmt(resd,s.ann);
         }
@@ -832,6 +850,8 @@ object ivy = { ...
     }
     
 
+    import action show_proto(p:prototype)
+
     object actdc = { ...
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. The C++ function declarations depends
@@ -842,6 +862,7 @@ object ivy = { ...
             var res : cpp.funcdecl;
             res.ann := s.ann;
             var proto := s.get_proto;
+            call show_proto(proto);
             if st.proto_only {
                 st.protos := st.protos.set(s.name.get_name,proto);
             };

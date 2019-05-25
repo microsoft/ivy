@@ -92,7 +92,7 @@ object ivy = {
             } else {
                 var s : asgn;
                 (st,s.ann) := st.get_ann;
-                (st,s.lhs) := expr.parse(st,3);
+                (st,s.lhs) := expr.parse(st,0);
                 if st.ok & st.tok = ":=" {
                     st := st.consume;
                     (st,s.rhs) := expr.parse(st,0);
@@ -515,11 +515,11 @@ object ivy = {
             (st,s.ann) := st.get_ann;
             (st,s.name) := expr.parse(st,99);
             if st.ok & st.tok = "(" {
-                (st,s.inputs) := expr.tup.parse(st,0);
+                (st,s.inputs) := expr.tup.parse(st,1);  # 1 = prio of ","
             };
             if st.ok & st.tok = "returns" {
                 st := st.consume;
-                (st,s.outputs) := expr.tup.parse(st,0);
+                (st,s.outputs) := expr.tup.parse(st,1);
             };
             if st.ok & st.tok = "=" {
                 st := st.consume;
@@ -604,7 +604,7 @@ object ivy = {
                 st := st.consume;
                 (st,s.name) := expr.parse(st,99);  # allow dot operator, not application
                 if st.ok & st.tok = "(" {
-                    (st,s.prms) := expr.tup.parse(st,0);
+                    (st,s.prms) := expr.tup.parse(st,1);
                 };
                 if st.ok & st.tok = "=" {
                     st := st.consume;
@@ -617,7 +617,7 @@ object ivy = {
                 st := st.consume;
                 (st,s.name) := expr.parse(st,99);
                 if st.ok & st.tok = "(" {
-                    (st,s.prms) := expr.tup.parse(st,0);
+                    (st,s.prms) := expr.tup.parse(st,1);
                 };
                 res := s
             } else if st.tok = "object" {
@@ -644,7 +644,7 @@ object ivy = {
                     (st,s.modname) := expr.parse(st,99)
                 };
                 if st.ok & st.tok = "(" {
-                    (st,s.prms) := expr.tup.parse(st,0);
+                    (st,s.prms) := expr.tup.parse(st,1);
                 };
                 res := s
             } else if st.tok = "variant" {

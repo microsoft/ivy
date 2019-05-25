@@ -424,11 +424,11 @@ module tuple(t,lb,rb,verb) = {
         if st.tok = lb {
             st := st.consume;
             var s : t;
-            (st,s) := t.parse(st,0);
+            (st,s) := t.parse(st,prio);
             res := res.append(s);
             while st.ok & st.tok = "," {
                 st := st.consume;
-                (st,s) := t.parse(st,0);
+                (st,s) := t.parse(st,prio);
                 res := res.append(s);
             };
             if st.ok & st.tok = rb {

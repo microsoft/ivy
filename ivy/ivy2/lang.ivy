@@ -42,7 +42,7 @@ module verb_base = {
         {
             none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
             boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div, string, ite
+            lt, leq, gt, geq, minus, div, string, ite, comma
         }
     }
     
@@ -126,11 +126,11 @@ module built_in_binary (optok,vrb,opprio) = {
     # where `*` is a binary operator that associates to the left.
 
     action unfold_left(e:expr) returns (args:vector[expr]) = {
-        var b := e.is(vrb);  # workaround
+        var b := e.is_typed(vrb);  # workaround
         while b {
             args := args.append(e.get_arg(1));
             e := e.get_arg(0);
-            b := e.is(vrb);
+            b := e.is_typed(vrb);
         };
         args := args.append(e);
         args := args.reverse;
@@ -431,6 +431,9 @@ module expr_base(cppstyle) = {
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := false;
         }
+        action is_typed(s:this,vrb:verb) returns (res:bool) = {
+            res := false;
+        }
         action get_arg(s:this,p:vector[expr].domain) returns (res:expr)
         action get_name(s:this) returns (res:ident)
         action app_verb(s:this) returns (res:verb)
@@ -598,6 +601,9 @@ module expr_base(cppstyle) = {
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := s.func.get_verb = vrb;
         }
+        action is_typed(s:this,vrb:verb) returns (res:bool) = {
+            res := s.is(vrb) | s.func.is(verb.colon) & s.func.get_arg(0).get_verb = vrb
+        }
         action app_verb(s:this) returns (res:verb) = {
             res := s.func.get_verb
         }
@@ -677,6 +683,7 @@ module expr_base(cppstyle) = {
     instance boolv : built_in_const("bool",verb.boolv)
     instance truev : built_in_const("true",verb.truev)
     instance falsev : built_in_const("false",verb.falsev)
+    instance comma : built_in_binary(",",verb.comma,1)
     
 
     # The dot is used to introduce members of namespaces

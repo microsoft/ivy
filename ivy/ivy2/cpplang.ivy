@@ -107,7 +107,7 @@ object cpp = {
         action parse(st : pstate, base : simpletype, prio:priority) returns(st : pstate, res:functype) = {
             res.base := base;
             if st.ok {
-                (st,res.args) := simpletype.tup.parse(st,prio);
+                (st,res.args) := simpletype.tup.parse(st,1);
             };
             if st.ok & st.tok = "const" {
                 res.is_const := true;
