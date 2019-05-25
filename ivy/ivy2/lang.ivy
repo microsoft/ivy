@@ -917,6 +917,24 @@ module stmt_base(expr,asgntok,cppstyle) = {
         }
     }
 
+    object breakst = {
+        variant this of stmt = struct {
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("break;");
+        }
+    }
+
     object stmt = { ...
         action parse(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
             while st.tok = ";" {

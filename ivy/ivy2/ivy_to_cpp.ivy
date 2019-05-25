@@ -510,6 +510,7 @@ object ivy = { ...
     action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
         returns (res:cpp.expr, st:tocppst) =
     {
+	call show_str(func.enc);
         if func_is_member(func)   {
             var fid := func.get_arg(0).get_name.to_cpp(false);
             var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
@@ -587,15 +588,11 @@ object ivy = { ...
                 if is_dead(inp,st,1) {
                     out := inp;  # if input is a dead lvalue, side-effect it
                 } else {
-		    var orig := out;
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
-                    rets := rets.append(cpp.asgn.make(orig,out,ann));
-                }
+                };
+		ret_vals := ret_vals.append(out);
             };
-            if parg.is_output & st.outputs.end = 0 {
-                ret_vals := ret_vals.append(out);
-            };
-            if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
+	    if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
                 st := st.add_stmt(cpp.asgn.make(out,inp,ann));
                 inp := out;
             } else if parg.is_output {
@@ -828,20 +825,60 @@ object ivy = { ...
         instantiate binary_op_to_cpp(ivy.sequence,cpp.sequence,cpp.stmt)
     }
 
+    # Translate "while" statement. We have to account for any side effects in
+    # the condition evaluation. For example, suppose we have `if f(x) (s1) else {s2}`
+    # where `f(x)` is return-by-reference. This will translate to:
+    #
+    #     bool __tmpXXX = x;
+    #     f(__tmpXXX);
+    #     if (__tmpXXX) {s1} else {s2}
+
     object ifst = { ...
-        instantiate generic_to_cpp(ivy.ifst,cpp.ifst,cpp.stmt)
-        action to_cpp_int(s:ivy.ifst,st:tocppst) returns (res:cpp.ifst,st:tocppst) = {
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+	    var res : cpp.ifst;
+	    res.ann := s.ann;
             (res.cond,st) := s.cond.to_cpp(st);
+            var code := st.code;  # side effects of cond evaluation
+	    st.code := vector[cpp.stmt].empty;
             (res.thenst,st) := s.thenst.to_cpp(st);
             (res.elsest,st) := s.elsest.to_cpp(st);
+	    resd := res;
+            st.code := code;  
+	    (st,resd) := st.wrap_stmt(resd,s.ann);
         }
     }
 
+    # Translate "while" statement. We have to account for any side effects in
+    # the condition evaluation. For example, suppose we have `while f(x) {s1}`
+    # where `f(x)` is return-by-reference. This will translate to:
+    #
+    #     while (true) {
+    #         bool __tmpXXX = x;
+    #         f(__tmpXXX);
+    #         if (!__tmpXXX) break;
+    #         s1
+    #     }
+
     object whilest = { ...
-        instantiate generic_to_cpp(this,cpp.whilest,cpp.stmt)
-        action to_cpp_int(s:this,st:tocppst) returns (res:cpp.whilest,st:tocppst) = {
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+	    var res : cpp.whilest;
+	    res.ann := s.ann;
             (res.cond,st) := s.cond.to_cpp(st);
+            var code := st.code;  # side effects of cond evaluation
+	    st.code := vector[cpp.stmt].empty;
             (res.body,st) := s.body.to_cpp(st);
+	    if code.end > 0 {
+		st.code := code;
+		var brkcond := cpp.not.make(res.cond,s.ann);
+		var brkif := cpp.breakst.make(s.ann);
+		var brkelse := cpp.skipst.make(s.ann);
+		var brkst := cpp.ifst.make(brkcond,brkif,brkelse,s.ann);
+		st := st.add_stmt(brkst);
+		res.cond := cpp.symbol.makestr("true",s.ann);
+		(st,res.body) := st.wrap_stmt(res.body,s.ann);
+	    };
+	    resd := res;
+	    (st,resd) := st.wrap_stmt(resd,s.ann);
         }
     }
 

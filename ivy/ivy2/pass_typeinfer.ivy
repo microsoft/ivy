@@ -25,6 +25,7 @@ object ivy = { ...
 
     object type_context = {
 	type stack_entry = struct {
+	    id : ident,
 	    any : bool,
 	    val : expr
 	}
@@ -36,20 +37,22 @@ object ivy = { ...
 	    s.m := s.m.set(typing.get_arg(0).get_name,typing.get_arg(1));
 	}
 	action push(s:this,typing:expr) returns (s:this) = {
-	    var id := typing.get_arg(0).get_name;
 	    var ent : stack_entry;
-	    ent.any := s.m.mem(id);
+	    ent.id := typing.get_arg(0).get_name;
+	    ent.any := s.m.mem(ent.id);
 	    if ent.any {
-		ent.val := s.m.get(id,ent.val);
+		ent.val := s.m.value(ent.id);
 	    };
 	    s.stack := s.stack.append(ent);
-	    s.m := s.m.set(id,typing.get_arg(1));
+	    s.m := s.m.set(ent.id,typing.get_arg(1));
 	}
 	action pop(s:this) returns (s:this) = {
 	    var ent := s.stack.back;
 	    s.stack := s.stack.pop_back;
 	    if ent.any {
-		s := s.set(ent.val);
+		s.m := s.m.set(ent.id,ent.val)
+	    } else {
+		s.m := s.m.remove(ent.id)
 	    }
 	}
     }

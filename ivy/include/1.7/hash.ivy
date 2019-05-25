@@ -29,6 +29,9 @@ module hash_map(domain,range) = {
     # return true if x maps to some value
     action mem(a:t,x:domain) returns (res:bool) 
 
+    # remove a key x from the map
+    action remove(a:t,x:domain) returns (a:t) 
+
     ########################################
     # Specification
     #
@@ -44,7 +47,7 @@ module hash_map(domain,range) = {
 	    assert ~present(a,X)
 	}
 	after set {
-            assert present(a,x);
+            assert present(a,X) <-> (X = x | present(old a,X));
 	    assert value(a,X) = y if X = x else value(old a,X)
 	}
 	after get {
@@ -52,6 +55,10 @@ module hash_map(domain,range) = {
 	}
 	after mem {
 	    assert res <-> present(a,x)
+	}
+	after remove {
+            assert present(a,X) <-> (X ~= x & present(old a,X));
+	    assert X ~= x -> value(a,X) = value(old a,X)
 	}
     }
 
@@ -92,6 +99,12 @@ module hash_map(domain,range) = {
 	    <<<
 	        `t`::const_iterator it = `a`.find(x);
                 res = (it != `a`.end());
+	    >>>
+	}
+
+	implement remove {
+	    <<<
+	        `a`.erase(`x`);
 	    >>>
 	}
 
