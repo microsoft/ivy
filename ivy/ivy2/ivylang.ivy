@@ -151,12 +151,12 @@ object ivy = {
                 var s : structspec;
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
-                (st,s.destructors) := curly_tup.parse(st,prio);
+                (st,s.destructors) := curly_tup.parse(st,1);
                 res := s;
             } else {
                 var s : enumspec;
                 (st,s.ann) := st.get_ann;
-                (st,s.constructors) := curly_tup.parse(st,prio);
+                (st,s.constructors) := curly_tup.parse(st,1);
                 res := s;
             }
         }

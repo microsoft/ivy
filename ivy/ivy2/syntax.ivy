@@ -381,7 +381,7 @@ action lex(st:pstate) returns (st:pstate) = {
         st := read_string_literal(st);
     } else {
         var last : char := 32;
-        while st.p < st.b.end & st.b.value(st.p) ~= 32
+        while st.p < st.b.end & ~st.b.value(st.p).is_white
             & (last = 32 | (char.kind(st.b.value(st.p)) = char.kind(last)))
             & char.kind(last) ~= char.bracket
         {

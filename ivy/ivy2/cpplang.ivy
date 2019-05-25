@@ -459,7 +459,7 @@ object cpp = {
                 st := st.consume;
                 var t : enumdecl;
                 (st,t.name) := symbol.parse(st);
-                (st,t.elems) := curly_tup.parse(st,0);
+                (st,t.elems) := curly_tup.parse(st,1);
                 t.ann := ann;
                 if st.ok & st.tok = ";" {
                     st := st.consume;

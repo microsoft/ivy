@@ -202,8 +202,6 @@ object ivy = { ...
         }
     }
 
-    import action show_str(s:str)
-
     # Assignments. If both assigments are typed, just check for assignment
     # compatibility. Otherwise unify the types of the lhs and rhs.
 
@@ -218,8 +216,6 @@ object ivy = { ...
                 if res.lhs.is(verb.colon) { 
                     res.rhs := make_cast(res.lhs.get_arg(1),res.rhs,st)  # upcast if needed
                 };
-                call show_str(res.lhs.enc);
-                call show_str(res.rhs.enc);
 		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 	    }
         }

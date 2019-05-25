@@ -510,7 +510,6 @@ object ivy = { ...
     action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
         returns (res:cpp.expr, st:tocppst) =
     {
-	call show_str(func.enc);
         if func_is_member(func)   {
             var fid := func.get_arg(0).get_name.to_cpp(false);
             var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
@@ -765,9 +764,7 @@ object ivy = { ...
         var path : access_path;
         var ok : bool;
         (path,ok) := lvalue_path(e,path);
-        call show_str(e.enc);
         if ok {
-            call show_str(e.enc);
             var alias_count : pos := 0;
             var idx := paths.begin;
             while idx < paths.end {
@@ -926,8 +923,6 @@ object ivy = { ...
     }
     
 
-    import action show_proto(p:prototype)
-
     object actdc = { ...
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. The C++ function declarations depends
@@ -938,7 +933,6 @@ object ivy = { ...
             var res : cpp.funcdecl;
             res.ann := s.ann;
             var proto := s.get_proto;
-            call show_proto(proto);
             if st.proto_only {
                 st.protos := st.protos.set(s.name.get_name,proto);
             };
@@ -958,7 +952,7 @@ object ivy = { ...
             st.is_member := is_member;
             if st.is_member {
                 idx := idx.next;   # skip the first input "this" if a member
-                st.this_ident := proto.args.value(0).name.get_arg(1).get_name;
+                st.this_ident := proto.args.value(0).name.get_arg(0).get_name;
                 res.ftype.is_const := proto.args.value(0).is_const;
             };
             while idx < proto.args.end {
@@ -1703,8 +1697,6 @@ object ivy = { ...
             if errors.end = 0 {
 	        p := p.typeinfer;
             };
-
-#	    call show_prog(p.enc);
 
             # Translate to C++
 
