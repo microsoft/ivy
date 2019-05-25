@@ -183,14 +183,19 @@ object ivy = { ...
             s.code := s.code.append(code);
         }
 
+	# Get the added code and clear it.
 
+	action get_code(s:this,ann:annot) returns (s:this,res:cpp.stmt) = {
+            res := cpp.sequence.fold_right(s.code,ann);
+            s.code := vector[cpp.stmt].empty;
+	}
+	
         # This adds a statement to the end of the current code, clears
         # the code and returns the result.
 
         action wrap_stmt(s:this,code:cpp.stmt,ann:annot) returns (s:this,res:cpp.stmt) = {
             s := s.add_stmt(code);
-            res := cpp.sequence.fold_right(s.code,ann);
-            s.code := vector[cpp.stmt].empty;
+	    (s,res) := s.get_code(ann);
         }
 
     }
@@ -522,7 +527,30 @@ object ivy = { ...
     }
 
     # Translate an action call to C++. This is complicated, because we have
-    # to apply the action prototype and deal with call-by-reference. 
+    # to apply the action prototype and deal with call-by-reference.
+    #
+    # In-place optimization. There are two cases when a call can modify
+    # an argument in-place:
+    #
+    # (1) Borrowing. This is an in/out parameter given an lvalue
+    # that is returned by the expression and has exactly one alias in the
+    # expression.
+    #
+    # (2) Return by reference. This is an out parameter given an
+    # lvalue that is returned by the expression and has no aliases in
+    # the expression.
+    #
+    # In both of these cases, we simply pass the lvalue by non-const
+    # reference. Any other non-const reference parameter is copied
+    # to/from a temporary to preserve value semantics.
+    #
+    # If the call is return-by-value, then we return the translated
+    # function call. If return-by-reference, we emit the function call
+    # and return the lvalue passed to the output parameter, which may
+    # be a temporary. If the call is the expression root and it
+    # is return-by-value, then we we assign the outputs as a side
+    # effect, by copying any temporaries back to the original lvalues,
+    # and we return ().
     #
     
     action call_to_cpp (func:expr, inputs:vector[expr], ann:annot, st:tocppst)
@@ -534,7 +562,7 @@ object ivy = { ...
 
         var args : vector[cpp.expr];
         var idx := proto.args.begin;
-        var ret_by_ref := false;
+        var rets : vector[cpp.stmt];
         var ret_vals : vector[cpp.expr];
         while idx < proto.args.end {
             var parg := proto.args.value(idx);
@@ -551,19 +579,20 @@ object ivy = { ...
             if parg.is_output & st.outputs.end > 0 {
                 (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
                 if ~is_dead(out,st, 1 if parg.is_input else 0) {
+		    var orig := out;
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
-                    ret_by_ref := true;
-                    ret_vals := ret_vals.append(out);
+                    rets := rets.append(cpp.asgn.make(orig,out,ann));
                 }
             } else if parg.is_ref & ~parg.is_const {
                 if is_dead(inp,st,1) {
                     out := inp;  # if input is a dead lvalue, side-effect it
                 } else {
+		    var orig := out;
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
+                    rets := rets.append(cpp.asgn.make(orig,out,ann));
                 }
             };
             if parg.is_output & st.outputs.end = 0 {
-                ret_by_ref := true;
                 ret_vals := ret_vals.append(out);
             };
             if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
@@ -576,11 +605,14 @@ object ivy = { ...
             idx := idx.next
         };
         (res,st) := make_cpp_call(func,args,ann,st);
-        if ret_by_ref {
+        if ret_vals.end > 0 | rets.end > 0 | ~proto.has_ret {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
+	    var jdx := rets.begin;
+	    while jdx < rets.end {
+                st := st.add_stmt(rets.value(jdx));
+		jdx := jdx.next;
+	    };
             res := cpp.comma.fold_left(ret_vals,ann);
-        } else if ~proto.has_ret {
-            st.outputs := vector[expr].empty;  # indicate returning no values
         }
     }
 
@@ -764,6 +796,15 @@ object ivy = { ...
         }
     }
 
+    # Handling of assignments. For each lvalue on the lhs, we count
+    # the number of possibly aliasing references on the rhs, and
+    # record this information in `st.outputs`. We then translate the
+    # rhs. If the rhs is a call to an action with return by reference,
+    # then this will have the side effect of assigning the outputs.
+    # If so, the return value will be ().  Otherwise, we generate an
+    # assigment of the return values to the outputs.  Finally, we
+    # assemble the generated code and restore the context.
+
     object asgn = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
             var paths : vector[access_path];
@@ -774,14 +815,12 @@ object ivy = { ...
             st.outputs := comma.unfold_left(s.lhs);
             st := kill_lvalues(st.outputs,st,paths);
 	    (res.rhs,st) := s.rhs.to_cpp(st);
-            if st.outputs.end = 0 {  # outputs were consumed as side effects
-                res.lhs := cpp.empty.make(s.ann);
-            } else {
-                st.outputs := vector[expr].empty;
-            };
+	    if res.rhs.get_verb ~= cpp.verb.empty {
+		st := st.add_stmt(res);  # Don't generate () = ();
+	    };
+	    (st,resd) := st.get_code(s.ann);
+            st.outputs := vector[expr].empty;
             st.dead := vector[lvalue_count].empty;
-            resd := res;
-            (st,resd) := st.wrap_stmt(resd,s.ann);
         }
     }
 

@@ -119,7 +119,9 @@ module built_in_binary (optok,vrb,opprio) = {
                 res := make(res,args.value(idx),ann);
                 idx := idx.next;
             }
-        }
+        } else {
+	    res := empty.make(ann);  # Works for comma and cross product
+	}
     }
 
     # Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
