@@ -294,7 +294,13 @@ object ivy = { ...
 		}
             } else {
 		(res.lhs,st) := res.lhs.typeinfer(st);
-                (res.rhs,st) := res.rhs.typeinfer(st);
+		if res.lhs isa varst {
+		    st.tc := st.tc.push(res.lhs.get_expr);
+                    (res.rhs,st) := res.rhs.typeinfer(st);
+		    st.tc := st.tc.pop;
+		} else {
+                    (res.rhs,st) := res.rhs.typeinfer(st);
+		};
 		ress := res;
             }
         }
@@ -304,7 +310,11 @@ object ivy = { ...
         instantiate generic_typeinfer(this,stmt)
         action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
             res := s;
-            res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    var ok := true;
+	    (res.cond,ok) := bottom_up_type(res.cond,st,ok);
+	    if ok {
+		res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    };
     	    var ts : stmt;
     	    (ts,st) := res.thenst.typeinfer(st);
             res.thenst := ts;
@@ -318,7 +328,11 @@ object ivy = { ...
         instantiate generic_typeinfer(this,stmt)
         action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
             res := s;
-            res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    var ok := true;
+	    (res.cond,ok) := bottom_up_type(res.cond,st,ok);
+	    if ok {
+		res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    };
     	    var body : stmt;
     	    (body,st) := res.body.typeinfer(st);
             res.body := body;
