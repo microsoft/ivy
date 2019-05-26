@@ -236,7 +236,8 @@ object ivy = { ...
     }
 
     action setup_local_vars(s:stmt, st:flatst) returns (del: vector[ident], st:flatst) = {
-	var lhs := comma.unfold_left(s.get_lhs);
+	var alhs := s.get_lhs;
+	var lhs := comma.unfold_left(alhs);
 	var idx := lhs.begin;
 	while idx < lhs.end {
 	    var e := lhs.value(idx);

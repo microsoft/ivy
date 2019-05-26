@@ -430,6 +430,13 @@ module expr_base(cppstyle) = {
         action get_verb(s:this) returns (vrb:verb) = {
             vrb := verb.none;
         }
+        action get_verb_typed(s:this) returns (vrb:verb) = {
+	    if s.is(verb.colon) {
+		vrb := s.get_arg(0).get_verb;
+	    } else {
+		vrb := s.get_verb;
+	    }
+        }
         action is(s:this,vrb:verb) returns (res:bool) = {
             res := false;
         }

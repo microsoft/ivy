@@ -77,6 +77,7 @@ object ivy = { ...
         action typeinfer(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
             res := s
         }
+        action typeinfer_desugar(s:this,desugar:bool,st:typeinferst) returns (ress:stmt,st:typeinferst)
     }
 
     # Bottom up type inference
@@ -207,7 +208,8 @@ object ivy = { ...
     # `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
     
     action desugar_asgn(s:stmt) returns (varsts:vector[stmt],s:stmt) = {
-	var lhs := comma.unfold_left(s.get_lhs);
+	var tlhs := s.get_lhs;
+	var lhs := comma.unfold_left(tlhs);
 	var idx := lhs.begin;
 	var es : vector[expr];
 	while idx < lhs.end {
@@ -229,18 +231,20 @@ object ivy = { ...
 	    idx := idx.next
 	};
 	if varsts.end > 0 {
-	    var alhs := comma.fold_left(es,s.get_lhs.get_ann);
-	    s := asgn.make(alhs,s.get_rhs,s.get_ann);
+	    var things := comma.fold_left(es,s.get_lhs.get_ann);
+	    s := asgn.make(things,s.get_rhs,s.get_ann);
 	}
     }
 
     # Assignments. If both assigments are typed, just check for assignment
     # compatibility. Otherwise unify the types of the lhs and rhs.
+    #
+    # By default, assignments are desugared. However, we also provide
+    # a non-desugaring version that is used by `sequence`, below.
 
     object asgn = { ...
-        instantiate generic_typeinfer(this,stmt)
-        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
-            res := s;
+        action typeinfer_desugar(s:this,desugar:bool,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+            var res := s;
 	    var ok := true;
 	    (res.lhs,ok) := bottom_up_type(res.lhs,st,ok);
 	    (res.rhs,ok) := bottom_up_type(res.rhs,st,ok);
@@ -249,15 +253,27 @@ object ivy = { ...
                     res.rhs := make_cast(res.lhs.get_arg(1),res.rhs,st)  # upcast if needed
                 };
 		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
+	    };
+	    ress := res;
+	    if desugar {
+		var vsts : vector[stmt];
+		(vsts,ress) := desugar_asgn(ress);
+		if vsts.end > 0 {
+		    vsts := vsts.append(ress);
+		    ress := sequence.fold_right(vsts,res.lhs.get_ann);
+		}
 	    }
         }
+        action typeinfer(s:this,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+	    (ress,st) := s.typeinfer_desugar(true,st)
+	}
     }
 
     object sequence = { ...
         action typeinfer(s:this,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
             var res := s;
-            (res.lhs,st) := res.lhs.typeinfer(st);
             if res.lhs isa asgn {
+		(res.lhs,st) := res.lhs.typeinfer_desugar(false,st);
 		var vsts : vector[stmt];
 		(vsts,res.lhs) := desugar_asgn(res.lhs);
 		var idx := vsts.begin;
@@ -277,6 +293,7 @@ object ivy = { ...
 		    ress := sequence.fold_right(vsts,res.lhs.get_ann);
 		}
             } else {
+		(res.lhs,st) := res.lhs.typeinfer(st);
                 (res.rhs,st) := res.rhs.typeinfer(st);
 		ress := res;
             }

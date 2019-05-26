@@ -93,17 +93,25 @@ object ivy = {
 		    st := st.consume;
 		} else {
 		    st.ok := st.tok = "}";  # allow to omit final semicolon
-		}
+		};
+		res := s;
 	    } else if st.ok & (st.tok = ";" | st.tok = "}") {
 		if st.tok = ";" {
 		    st := st.consume;
 		};
-		s.rhs := s.lhs;
-		s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+		if s.lhs.is(verb.varv) {
+		    var vst : varst;
+		    vst.ann := s.ann;
+		    vst.name := s.lhs.get_arg(0);
+		    res := vst;
+		} else {
+		    s.rhs := s.lhs;
+		    s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+		    res := s;
+		}
 	    } else {
 		st.ok := false; 
 	    };
-	    res := s;
         }
     }
 
