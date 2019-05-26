@@ -115,12 +115,16 @@ object ivy = { ...
     # we treat the dot as an object member reference.
 
     action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
-        var name := member.prefix(arg.get_name);
-        if st.absolute | st.defining | st.defs.get(arg.get_name,false) {
-            res := symbol.make(name,ann);
-        } else {
-            res := dot.make(arg,symbol.make(member,ann),ann);
-        }
+	if arg isa symbol {
+            var name := member.prefix(arg.get_name);
+            if st.absolute | st.defining | st.defs.get(arg.get_name,false) {
+		res := symbol.make(name,ann);
+            } else {
+		res := dot.make(arg,symbol.make(member,ann),ann);
+            }
+	} else {
+	    res := dot.make(arg,symbol.make(member,ann),ann);
+	}
     }
     
     action find_ident(root:ident,s:ident,st:flatst) returns (s:ident) = {
@@ -214,7 +218,7 @@ object ivy = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var arg0 : expr;
             (arg0,st) := s.args.value(0).flat(st);
-            if s.is(verb.dot) & (arg0 isa symbol) & (s.args.value(1) isa symbol) {
+            if s.is(verb.dot) {
                 res := applydot(arg0,s.args.value(1).get_name.flat(true,st),s.ann,st)
             } else if s.is(verb.varv) {
 		(res,st) := flat_formal(s.args.value(0),st);
@@ -290,7 +294,18 @@ object ivy = { ...
 		st := remove_local_vars(del,st);
             } else {
 		(res.lhs,st) := res.lhs.flat(st);
-                (res.rhs,st) := res.rhs.flat(st);
+		if res.lhs isa varst {
+		    var del: vector[ident];
+		    var id := formal_ident(res.lhs.get_expr);
+		    if ~st.locals.mem(id) {
+			del := del.append(id);
+			st.locals := st.locals.set(id,true);
+		    };
+		    (res.rhs,st) := res.rhs.flat(st);
+		    st := remove_local_vars(del,st);
+		} else {
+		    (res.rhs,st) := res.rhs.flat(st);
+		}
             }
         }
     }
