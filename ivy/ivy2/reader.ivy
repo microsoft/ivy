@@ -68,6 +68,7 @@ object ivy = { ...
             (text,ok) := file.read(name,text);
             if ok {
                 var st := pstate.make(text);
+		st.ann.file := name;
                 (st,p) := prog.parse_to(st,0,p);
                 ok := st.ok & st.tok.end = 0;
                 if ok {

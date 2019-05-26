@@ -217,9 +217,17 @@ object str = { ...
 # reference.
 
 object annot = {
-    type this = struct {
+    type this
+    action encode(s:this,b:pretty) returns (b:pretty)
+    action strip(s:this) returns (s:this)
+    action to_str(s:this) returns (res:str)
+}
+
+object annot_i = {
+    variant this of annot = struct {
         comments : vector[str],
-        line : pos
+        line : pos,
+	file : str
     }
     action encode(s:this,b:pretty) returns (b:pretty) = {
         if 0 < s.comments.end {
@@ -233,9 +241,18 @@ object annot = {
             idx := idx.next;
         }
     }    
-    action strip(s:this) returns (s:this) = {
-        s.comments := vector[str].empty;
+    action strip(s:this) returns (res:annot) = {
+	var news := s;
+        news.comments := vector[str].empty;
+	res := news;
     }
+
+    action to_str(s:this) returns (res:str) = {
+	res := s.file;
+	res := res.extend(": line ");
+	res := res.extend(s.line.to_str);
+    }
+
 }
 
 # Parser state
@@ -258,7 +275,7 @@ object pstate = {
 	b : str,
 	p : pos,
 	tok : str,
-        ann : annot,
+        ann : annot_i,
 	ok : bool
     }
     action consume(st:pstate) returns(st:pstate) = {

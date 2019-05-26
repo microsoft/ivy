@@ -569,7 +569,7 @@ object cpp = {
     action namedtype(name:ident,ann : annot) returns(res:expr) = {
         var s : symbol;
         s.name := name;
-        s.ann.line := ann.line;
+        s.ann := ann.strip;
         res := s;
     }
 

@@ -23,9 +23,7 @@ object ivy = { ...
 
     action report_error(e:error,ann:annot) = {
         var b : pretty;
-        b := b.extend("line");
-        b := b.extend(" ");
-        b := b.extend(ann.line.to_str);
+        b := b.extend(ann.to_str);
         b := b.extend(":");
         b := b.extend(" ");
         b := e.encode(b);
