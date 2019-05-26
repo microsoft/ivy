@@ -90,7 +90,8 @@ object ivy = { ...
 		    e := colon.make(e,st.tc.m.value(name),e.get_ann)
 		}
 #                else {
-#		    call report_error(undefined.make(name),e.get_ann)
+#		    call report_error(undefined.make(name),e.get_ann);
+#		    ok := false;
 #		}
 	    } else if e.get_verb = verb.empty {
                 e := colon.make(e,e,e.get_ann)

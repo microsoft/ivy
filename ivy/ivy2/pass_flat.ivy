@@ -198,8 +198,13 @@ object ivy = { ...
     object symbol = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var f := s;
-            if ~st.locals.mem(f.name) {
-                f.name := f.name.flat(false,st);
+	    if s.vrb = verb.none {
+		if ~st.locals.mem(f.name) {
+                    f.name := f.name.flat(false,st);
+		    if ~st.defs.mem(f.name) & ~st.absolute & ~st.defining {
+			call report_error(undefined.make(s.name),s.ann);
+		    }
+		}
             };
             res := f
         }
@@ -211,7 +216,10 @@ object ivy = { ...
             (arg0,st) := s.args.value(0).flat(st);
             if s.is(verb.dot) & (arg0 isa symbol) & (s.args.value(1) isa symbol) {
                 res := applydot(arg0,s.args.value(1).get_name.flat(true,st),s.ann,st)
-            } else {
+            } else if s.is(verb.varv) {
+		(res,st) := flat_formal(s.args.value(0),st);
+		res := varv.make(res,s.ann);
+	    } else {
                 var args : vector[expr];
                 args := args.append(arg0);
                 var idx := s.args.begin.next;
@@ -398,7 +406,7 @@ object ivy = { ...
 
     object typespec = { ...
         action flat(s:this,st:flatst) returns (res:typespec,st:flatst)
-        action defd(s:this,st:flatst) returns (st:flatst)
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst)
         action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst)
     }
 
@@ -414,7 +422,7 @@ object ivy = { ...
             };
             res := t;
         }
-        action defd(s:this,st:flatst) returns (st:flatst) = {
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
             var idx := s.constructors.begin;
             while idx < s.constructors.end {
                 st := add_def(s.constructors.value(idx),st);
@@ -446,14 +454,14 @@ object ivy = { ...
     }
 
     object structspec = { ...
-        action defd(s:this,st:flatst) returns (st:flatst) = {
+        action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
             var idx := s.destructors.begin;
             while idx < s.destructors.end {
                 var lhs := s.destructors.value(idx).get_arg(0);
                 if lhs isa app {
                     lhs := lhs.get_func;
                 };
-                st := add_def(lhs,st);
+		st.defs := st.defs.set(lhs.get_name.prefix(id),true);
                 idx := idx.next;
             }
         }
@@ -461,7 +469,13 @@ object ivy = { ...
             var idx := s.destructors.begin;
             while idx < s.destructors.end {
                 var e := s.destructors.value(idx);
+		var old_has_root := st.has_root;
+		var old_root := st.root;
+		st.root := ty.get_name;
+		st.has_root := true;
                 (e,st) := e.flat(st);
+		st.has_root := old_has_root;
+		st.root := old_root;
                 e := canon_typing(e);
                 var fty := arrow.make(ty,e.get_arg(1),e.get_ann);
                 var typing := colon.make(e.get_arg(0),fty.uncurry,e.get_ann);
@@ -511,7 +525,10 @@ object ivy = { ...
         action defd(s:this,st:flatst) returns (st:flatst) = {
             st := add_def(s.sort,st);
             if s.has_spec {
-                st := s.spec.defd(st);
+		st.defining := true;
+		var id := s.sort.get_name.flat(false,st);
+		st.defining := false;
+		st := s.spec.defd(st,id);
             }
         }
     }

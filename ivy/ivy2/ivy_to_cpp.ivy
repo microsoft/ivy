@@ -1692,6 +1692,8 @@ object ivy = { ...
                 p := p.flat;
             };
 
+#	    call show_prog(p.enc);
+
 	    # Type inference pass
 
             if errors.end = 0 {
