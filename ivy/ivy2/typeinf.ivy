@@ -82,6 +82,7 @@ object ivy = { ...
         call set_built_in_type(verb.geq,"alpha * alpha -> bool",false,false,false,true);
         call set_built_in_type(verb.ite,"alpha * bool * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.comma,"alpha * beta -> alpha * beta",false,true,true,false);
+        call set_built_in_type(verb.varv,"alpha -> alpha",false,true,true,true);
     }
     
 

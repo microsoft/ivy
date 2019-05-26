@@ -40,6 +40,11 @@ object ivy = {
 
     instance ite : built_in_ternary("if",verb.ite,2)
 
+    # We treat "var" as a unary operator so it can appear
+    # on lhs of assignments. 
+
+    instance varv : built_in_unary("var",verb.varv,2)
+
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
     
@@ -78,40 +83,27 @@ object ivy = {
     object stmt = { ...
 
         action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
-            if st.tok = "var" {
-                st := st.consume;
-                var s : varst;
-                (st,s.ann) := st.get_ann;
-                (st,s.name) := expr.parse(st,0);
-                if st.ok & st.tok = ";" {
-                    st := st.consume;
-                } else {
-                    st.ok := st.tok = "}";  # allow to omit final semicolon
-                };
-                res := s;
-            } else {
-                var s : asgn;
-                (st,s.ann) := st.get_ann;
-                (st,s.lhs) := expr.parse(st,0);
-                if st.ok & st.tok = ":=" {
-                    st := st.consume;
-                    (st,s.rhs) := expr.parse(st,0);
-                    if st.ok & st.tok = ";" {
-                        st := st.consume;
-                    } else {
-                        st.ok := st.tok = "}";  # allow to omit final semicolon
-                    }
-                } else if st.ok & (st.tok = ";" | st.tok = "}") {
-                    if st.tok = ";" {
-                        st := st.consume;
-                    };
-                    s.rhs := s.lhs;
-                    s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
-                } else {
-                    st.ok := false; 
-                };
-                res := s;
-            }
+	    var s : asgn;
+	    (st,s.ann) := st.get_ann;
+	    (st,s.lhs) := expr.parse(st,0);
+	    if st.ok & st.tok = ":=" {
+		st := st.consume;
+		(st,s.rhs) := expr.parse(st,0);
+		if st.ok & st.tok = ";" {
+		    st := st.consume;
+		} else {
+		    st.ok := st.tok = "}";  # allow to omit final semicolon
+		}
+	    } else if st.ok & (st.tok = ";" | st.tok = "}") {
+		if st.tok = ";" {
+		    st := st.consume;
+		};
+		s.rhs := s.lhs;
+		s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+	    } else {
+		st.ok := false; 
+	    };
+	    res := s;
         }
     }
 

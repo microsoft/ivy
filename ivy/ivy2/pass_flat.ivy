@@ -73,7 +73,7 @@ object ivy = { ...
 
             root : ident,
 
-            # The current local variables
+            # The current local variables as a set
 
             locals : ident_set,
 
@@ -198,7 +198,7 @@ object ivy = { ...
     object symbol = { ...
         action flat(s:this,st:flatst) returns (res:expr,st:flatst) = {
             var f := s;
-            if ~st.locals.get(f.name,false) {
+            if ~st.locals.mem(f.name) {
                 f.name := f.name.flat(false,st);
             };
             res := f
@@ -235,6 +235,31 @@ object ivy = { ...
         action get_ident(s:this) returns (res:ident)
     }
 
+    action setup_local_vars(s:stmt, st:flatst) returns (del: vector[ident], st:flatst) = {
+	var lhs := comma.unfold_left(s.get_lhs);
+	var idx := lhs.begin;
+	while idx < lhs.end {
+	    var e := lhs.value(idx);
+	    if e.is(verb.varv) {
+		var id := formal_ident(e.get_arg(0));
+		if ~st.locals.mem(id) {
+		    del := del.append(id);
+		    st.locals := st.locals.set(id,true);
+		}
+	    };
+	    idx := idx.next
+	}
+    }
+    
+    action remove_local_vars(del: vector[ident], st:flatst) returns (st:flatst) = {
+	var idx := del.begin;
+	while idx < del.end {
+	    var id := del.value(idx);
+	    st.locals := st.locals.remove(id);
+	    idx := idx.next
+	}
+    }    
+
     object asgn = { ...
         instantiate generic_flat_stmt(this,stmt)
         action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
@@ -248,14 +273,14 @@ object ivy = { ...
         instantiate generic_flat_stmt(this,stmt)
         action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             res := s;
-            (res.lhs,st) := res.lhs.flat(st);
-            if res.lhs isa varst {
-                var id := res.lhs.get_ident;
-                var old_local := st.locals.get(id,false);
-                st.locals := st.locals.set(id,true);
+            if res.lhs isa asgn {
+		var del : vector[ident];
+		(del,st) := setup_local_vars(res.lhs,st);
+		(res.lhs,st) := res.lhs.flat(st);
                 (res.rhs,st) := res.rhs.flat(st);
-                st.locals := st.locals.set(id,old_local);
+		st := remove_local_vars(del,st);
             } else {
+		(res.lhs,st) := res.lhs.flat(st);
                 (res.rhs,st) := res.rhs.flat(st);
             }
         }
@@ -333,7 +358,12 @@ object ivy = { ...
         var idx := es.begin;
         while idx < es.end {
             var e := es.value(idx);
-            st.locals := st.locals.set(formal_ident(e),val);
+	    var fe := formal_ident(e);
+	    if val {
+		st.locals := st.locals.set(fe,true);
+	    } else {
+		st.locals := st.locals.remove(fe);
+	    };
             idx := idx.next;
         }
     }

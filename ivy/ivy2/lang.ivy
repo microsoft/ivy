@@ -42,7 +42,7 @@ module verb_base = {
         {
             none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
             boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div, string, ite, comma
+            lt, leq, gt, geq, minus, div, string, ite, comma, varv
         }
     }
     
@@ -687,7 +687,6 @@ module expr_base(cppstyle) = {
     instance falsev : built_in_const("false",verb.falsev)
     instance comma : built_in_binary(",",verb.comma,1)
     
-
     # The dot is used to introduce members of namespaces
     
     instance dot : built_in_binary(".",verb.dot,100)
@@ -778,6 +777,10 @@ module stmt_base(expr,asgntok,cppstyle) = {
         type this
         instantiate parse_intf(stmt,cppstyle)
 	action get_expr(s:this) returns (res:expr)
+	action get_lhs(s:this) returns (res:expr)
+	action get_rhs(s:this) returns (res:expr)
+	action get_ann(s:this) returns (res:annot)
+	
     }
 
     object asgn = {
@@ -796,6 +799,18 @@ module stmt_base(expr,asgntok,cppstyle) = {
             b := b.extend(";");
             b := b.unnest;
         }
+
+	# This gets the lhs of the assignment
+	action get_lhs(s:this) returns (res:expr) = {
+	    res := s.lhs;
+	}
+	# This gets the rhs of the assignment
+	action get_rhs(s:this) returns (res:expr) = {
+	    res := s.rhs;
+	}
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
     }
 
     object sequence = {
@@ -823,6 +838,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
                 }
             }
         }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
 
     }
 
@@ -842,6 +860,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
             b := b.extend("{");
             b := b.extend("}")
         }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
     }
 
 
@@ -883,6 +904,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
                 b := s.elsest.encode(b,2);
             };
         }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
     }
 
     object whilest = {
@@ -915,6 +939,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
             b := b.extend(" ");
             b := s.body.encode(b,2);
         }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
     }
 
     object breakst = {
@@ -933,6 +960,9 @@ module stmt_base(expr,asgntok,cppstyle) = {
         action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.extend("break;");
         }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
     }
 
     object stmt = { ...

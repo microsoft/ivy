@@ -202,6 +202,38 @@ object ivy = { ...
         }
     }
 
+
+    # After type inference, we can desugar assignments like `var x := y` to
+    # `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
+    
+    action desugar_asgn(s:stmt) returns (varsts:vector[stmt],s:stmt) = {
+	var lhs := comma.unfold_left(s.get_lhs);
+	var idx := lhs.begin;
+	var es : vector[expr];
+	while idx < lhs.end {
+	    var e := lhs.value(idx);
+	    if e isa app {
+		var f := e.get_func;
+		if f.is(verb.colon) & f.get_arg(0).get_verb = verb.varv {
+		    var vst : varst;
+		    vst.ann := e.get_ann;
+		    vst.name := e.get_arg(0);
+		    varsts := varsts.append(vst);
+		    es := es.append(vst.name);
+		} else {
+		    es := es.append(e);
+		}
+	    } else {
+		es := es.append(e);
+	    };
+	    idx := idx.next
+	};
+	if varsts.end > 0 {
+	    var alhs := comma.fold_left(es,s.get_lhs.get_ann);
+	    s := asgn.make(alhs,s.get_rhs,s.get_ann);
+	}
+    }
+
     # Assignments. If both assigments are typed, just check for assignment
     # compatibility. Otherwise unify the types of the lhs and rhs.
 
@@ -222,16 +254,31 @@ object ivy = { ...
     }
 
     object sequence = { ...
-        instantiate generic_typeinfer(this,stmt)
-        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
-            res := s;
+        action typeinfer(s:this,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+            var res := s;
             (res.lhs,st) := res.lhs.typeinfer(st);
-            if res.lhs isa varst {
-		st.tc := st.tc.push(res.lhs.get_expr);
+            if res.lhs isa asgn {
+		var vsts : vector[stmt];
+		(vsts,res.lhs) := desugar_asgn(res.lhs);
+		var idx := vsts.begin;
+		while idx < vsts.end {
+		    st.tc := st.tc.push(vsts.value(idx).get_expr);
+		    idx := idx.next
+		};
                 (res.rhs,st) := res.rhs.typeinfer(st);
-		st.tc := st.tc.pop;
+		idx := vsts.begin;
+		while idx < vsts.end {
+		    st.tc := st.tc.pop;
+		    idx := idx.next
+		};
+		ress := res;
+		if vsts.end > 0 {
+		    vsts := vsts.append(ress);
+		    ress := sequence.fold_right(vsts,res.lhs.get_ann);
+		}
             } else {
                 (res.rhs,st) := res.rhs.typeinfer(st);
+		ress := res;
             }
         }
     }
