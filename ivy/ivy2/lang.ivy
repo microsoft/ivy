@@ -42,7 +42,7 @@ module verb_base = {
         {
             none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
             boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div, string, ite, comma, varv
+            lt, leq, gt, geq, minus, div, string, ite, comma, varv, logvar
         }
     }
     
@@ -55,19 +55,35 @@ module verb_base = {
         str_to_verb(X) := verb.none;
         verb_to_arity(verb.numeral) := 0;
         verb_to_arity(verb.string) := 0;
+        verb_to_arity(verb.logvar) := 0;
     }
 
-    # Numerals are symbols beginning with a digit. Otherwise we determine
+    # Numerals are symbols beginning with a digit. String literals begin
+    # with double quotes. Logical variables consist of a capital followed
+    # by any number of digits. Otherwise we determine
     # the verb of a symbol from its name by looking it up in
     # `str_to_verb`. The default is `none`, which indicates a
     # program-defined symbol.
+    
+    action is_logvar_name(name:str) returns (res:bool) = {
+	if name.value(0).is_capital {
+ 	    res := true;
+	    var idx := name.begin.next;
+	    while res & idx < name.end {
+		res := name.value(idx).is_digit
+	    };
+	    idx := idx.next
+	}
+    }
     
     action verb_from_name(name:str) returns(vrb:verb) = {
         if name.value(0).is_digit {
             vrb := verb.numeral
         } else if name.value(0) = 34 {  # double quote character
             vrb := verb.string
-        } else {
+        } else if is_logvar_name(name) {
+	    vrb := verb.logvar;
+	} else {
             vrb := str_to_verb(name);
         }
     }

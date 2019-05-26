@@ -34,6 +34,7 @@ object char = {
         else (bracket if is_bracket(X) else punct)
     function non_printing(X:char) = (X < 32 | X = 127)
     function is_digit(X:char) = (48 <= X & X < 58)
+    function is_capital(X:char) =  (65 <= X & X < 91)
 }
     
 # Character strings

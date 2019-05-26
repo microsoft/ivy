@@ -237,7 +237,7 @@ object ivy = { ...
     object symbol = { ...
         action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
             if
-                e.vrb ~= verb.none & e.vrb ~= verb.numeral & e.vrb ~= verb.string
+                e.vrb ~= verb.none & e.vrb ~= verb.numeral & e.vrb ~= verb.string & e.vrb ~= verb.logvar
                 & e.vrb ~= verb.empty
             {
                 var mm : symeval;
