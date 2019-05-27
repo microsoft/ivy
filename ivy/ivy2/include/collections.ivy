@@ -57,7 +57,27 @@ module array(domain,range) = {
         s.end := end;
     }
     
+    # The `back` action returns the last element of an array, or zero
+    # if the array is empty.
 
+    action back(s:this) returns (y:range) = {
+        if s.end > 0 {
+            y := s.value(s.end.prev)
+        }
+    }
+
+    # The `back` action removes he last element of the array, if the
+    # array is not empty.
+
+    action pop_back(s:this) returns (s:this) = {
+        if s.end > 0 {
+            s := s.resize(s.end.prev)
+        }
+    }
+
+    
+    
+    
 }
 
 ################################################################################

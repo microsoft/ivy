@@ -1271,3 +1271,34 @@ module prog_base(cppstyle) = {
     }
 }
 
+module push_pop_map(domain,range) = {
+
+    instance map_t : hash_map(domain,range)
+
+    type this = struct {
+        map : map_t,
+        del : vector[domain],
+        stack : vector[domain].domain
+    }
+
+    action set(s:this,id:domain,v:range) returns(s:this) = {
+        if ~s.map.mem(id) {
+            s.del := s.del.append(id);
+        };
+        s.map := s.map.set(id,v)
+    }
+
+    action push(s:this) returns(s:this) = {
+        s.stack := s.stack.append(s.del.end);
+    }
+
+    action pop(s:this) returns(s:this) = {
+        var begin := s.stack.back;
+        s.stack := s.stack.pop_back;
+        while s.del.end > begin {
+            var x := s.del.back;
+            s.del := s.del.pop_back;
+            s.map := s.map.remove(x);
+        }
+    }
+}

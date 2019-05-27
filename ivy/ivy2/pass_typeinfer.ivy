@@ -84,7 +84,7 @@ object ivy = { ...
 
     action bottom_up_type(e:expr,st:typeinferst, ok : bool) returns (e:expr, ok : bool) = {
 	if e isa symbol {
-	    if e.get_verb = verb.none {
+	    if e.get_verb = verb.none | e.get_verb = verb.logvar {
 		var name := e.get_name;
 		if st.tc.m.mem(name) {
 		    e := colon.make(e,st.tc.m.value(name),e.get_ann)
@@ -111,7 +111,7 @@ object ivy = { ...
 		    if ty isa symbol {
 			var name := rhs.get_name.prefix(ty.get_name);
 			if st.tc.m.mem(name) {
-			    var fty := st.tc.m.value(name);
+			    var fty := st.tc.m.value(name).curry;
 			    rhs := colon.make(rhs,fty,rhs.get_ann);
 			    e := dot.make(lhs,rhs,e.get_ann);
 			    if fty.is(verb.arrow) {
@@ -430,7 +430,7 @@ object ivy = { ...
 
 	    # Get the global typing as initial typing context
 
-	    var gt := p.get_global_types;
+	    var gt := p.get_global_types(false);  # don't curry member types
 	    st.tc.m := gt.type_of;
 	    
 	    # TODO: bottom-up inference

@@ -1598,7 +1598,7 @@ object ivy = { ...
 
             # Get the global typing
 
-            st.globals := s.get_global_types;
+            st.globals := s.get_global_types(true);
 
             # A pass to register all of the type members
             

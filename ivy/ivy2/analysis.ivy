@@ -50,17 +50,20 @@ object ivy = { ...
             
     # This analysis runs over a flat program and maps all the global
     # identifiers to their types. For this purpose, actions are
-    # treated as if they were functions. 
+    # treated as if they were functions. If the types of member functions
+    # are curried, the flag `curried` is set.
 
     object global_types = {
         type this = struct {
             type_of : symeval,
-            is_action : ident_set
+            is_action : ident_set,
+            curried : bool
         }
     }
     
     object prog = { ...
-        action get_global_types(p:this) returns (s:global_types) = {
+        action get_global_types(p:this, curried : bool) returns (s:global_types) = {
+            s.curried := curried;
             var idx := p.decls.begin;
 	    while idx < p.decls.end {
                 s := p.decls.value(idx).build_global_types(s);
@@ -116,7 +119,7 @@ object ivy = { ...
                 var typing := canon_typing(s.typing);
                 var thing := typing.enc;
 	        var ty := typing.get_arg(1);
-	        if s.is_destructor {
+	        if s.is_destructor & st.curried {
 		    ty := ty.curry;
 	        };
 	        st.type_of := st.type_of.set(typing.get_arg(0).get_name,ty);
@@ -162,7 +165,7 @@ object ivy = { ...
 	        var inpty := get_formal_type(s.inputs,s.ann);
 	        ty := arrow.make(inpty,ty,s.ann)
             };
-	    if s.is_member {
+	    if s.is_member & st.curried {
 		ty := ty.curry;
 	    };
 	    st.type_of := st.type_of.set(s.name.get_name,ty);
@@ -327,6 +330,38 @@ object ivy = { ...
             if args.end > 0 {
                 s := app.make(s,args,s.get_ann)
             }
+        }
+    }
+
+    # Local variable tracking
+    # =======================
+
+    object local_tracker = {
+        type this = struct {
+            s.map : push_pop_ident_set
+        }
+
+        action push_var(s:this,typing:expr) returns (s:this) = {
+            s.map := s.map.push;
+            s.map := s.map.set(typing.get_arg(0).get_name);
+        }
+
+        action push_vars(s:this,typings:vector[expr]) returns (s:this) = {
+            s.map := s.map.push;
+            var idx := typings.begin;
+            while idx < typings.end {
+                s.map := s.map.set(typing.value(idx).get_arg(0).get_name);
+                idx := idx.next
+            }
+        }
+
+        action push_stmt(s:this,stm:stmt) returns (s:this) = {
+            if stm isa varst {
+                
+        }
+
+        action pop(s:this) returns (s:this) = {
+            s.map := s.map.push
         }
     }
 }

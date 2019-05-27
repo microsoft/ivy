@@ -714,6 +714,8 @@ object ivy = { ...
 	if typing isa app {
 	    if typing.is(verb.colon) {
 		res := get_typed_symbol(typing.get_arg(0))
+	    } else if typing.is(verb.dot) {
+		res := typing
 	    } else {
 		res := get_typed_symbol(typing.get_func)
 	    }

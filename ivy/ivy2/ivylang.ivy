@@ -12,8 +12,9 @@ object ivy = {
     instantiate expr_base(false)
     instantiate stmt_base(expr,":=",false)
     instantiate decl_base(expr,stmt)
+
     instance ident_set : hash_map(ident,bool)
-    
+    instance push_pop_ident_set : push_pop_map(ident,bool)
 
     # Now we have the operators that are unique to Ivy.
     #
@@ -700,7 +701,6 @@ object ivy = {
     }
 
     instantiate prog_base(false)
-
 }
 
 export ivy.expr.enc

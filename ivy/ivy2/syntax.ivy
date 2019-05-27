@@ -224,6 +224,10 @@ object annot = {
     action to_str(s:this) returns (res:str)
 }
 
+# For now, there is only one variant of `annot`. We use a variant
+# so the annotations will be stored by shared reference. This reduces
+# the overhead of copying annotations when transforming AST's. 
+
 object annot_i = {
     variant this of annot = struct {
         comments : vector[str],
@@ -248,10 +252,14 @@ object annot_i = {
 	res := news;
     }
 
+    # Convert an annotation to a string for error reporting
+    # purposes. We count line internally from zero, but in messages
+    # they start from one.
+
     action to_str(s:this) returns (res:str) = {
 	res := s.file;
 	res := res.extend(": line ");
-	res := res.extend(s.line.to_str);
+	res := res.extend(s.line.next.to_str);
     }
 
 }
@@ -481,10 +489,10 @@ module numconv(str) = {
                 tmp := tmp.append(digit);
                 x := x / 10;
             };
-            var idx := tmp.begin;
-            while idx < tmp.end {
+            var idx := tmp.end;
+            while idx > tmp.begin {
+                idx := idx.prev;
                 res := res.append(tmp.value(idx));
-                idx := idx.next;
             }
         }
     }
