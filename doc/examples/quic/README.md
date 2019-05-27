@@ -364,7 +364,7 @@ accordingly.
 Do this to test the server implementation of picoquic:
 
     $ cd test
-    $ python test.py iters=1 server=picoquic test=quic_server_stream
+    $ python test.py iters=1 server=picoquic test=quic_server_test_stream
     
 You may get output that looks something like this:
 
