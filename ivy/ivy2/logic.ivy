@@ -60,6 +60,14 @@ object ivy = { ...
 	    }
         }
     }
+
+    action subst_vector(v:vector[expr], smap:symeval) returns (v:vector[expr]) = {
+	var idx := v.begin;
+	while idx < v.end {
+	    v := v.set(idx,v.value(idx).reduce(smap));
+	    idx := idx.next
+	}
+    }
 }
 
 export ivy.app.reduce

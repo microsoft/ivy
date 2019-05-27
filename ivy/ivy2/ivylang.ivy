@@ -28,7 +28,7 @@ object ivy = {
 
     # Cast operator converts between types.
 
-    instance cast : built_in_unary("cast",verb.cast,1)
+    instance cast : built_in_unary("cast",verb.cast,49)
 
     # The `=`, `~=` and `~` verbs are spelled differently in Ivy and C++
     
@@ -449,12 +449,19 @@ object ivy = {
 
     # The declaration `instance x : y(p1...pn)` is a shorthand for
     # `object x : { instantiate y(p1...pn) }`.
+    #
+    # The declaration `autoinstance x[p1][p2] : y(p1...pn)` causes an instance
+    # `x[p1][p2]` of `y(p1...pn)` to be generated for each identifier `x[p1][p2]` that occurs
+    # undefined in the program, for any values of p1...pn. The module `y` is instantiated
+    # just before the declaration triggering the instantiation. 
+
 
     object instancedc = {
         variant this of decl = struct {
             objname : expr,
             modname : expr,
             prms : vector[expr],
+	    is_auto : bool,
             ann : annot
         }
         action make(objname : expr, modname : expr, prms : vector[expr]) returns (res:decl) =
@@ -468,7 +475,7 @@ object ivy = {
 
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
-            b := b.extend("instance");
+            b := b.extend("autoinstance" if s.is_auto else "instance");
             b := b.extend(" ");
             b := s.objname.encode(b,0);
             b := b.extend(" ");
@@ -632,8 +639,9 @@ object ivy = {
                     (st,s.body) := decl.parse(st,0);
                 };
                 res := s
-            } else if st.tok = "instance" {
+            } else if st.tok = "instance" | st.tok = "autoinstance" {
                 var s : instancedc;
+		s.is_auto := (st.tok = "autoinstance");
                 (st,s.ann) := st.get_ann;
                 st := st.consume;
                 (st,s.objname) := expr.parse(st,99);

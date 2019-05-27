@@ -239,6 +239,7 @@ module expr_base(cppstyle) = {
         action prefix(s:this,pref:ident) returns (res:ident) = {
             res := s
         }
+	action get_last(s:this) returns (res:strident)
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -328,6 +329,9 @@ module expr_base(cppstyle) = {
                 }
             } else { st.ok := false }
         }
+	action get_last(s:this) returns (res:strident) = {
+	    res := s
+	}
     }
 
     # Numerical identifiers are used as temporaries internally. They
@@ -381,6 +385,9 @@ module expr_base(cppstyle) = {
         action prefix(s:this,pref:ident) returns (res:ident) = {
             res := dotident.make(s.namesp.prefix(pref),s.member);
         }
+	action get_last(s:this) returns (res:strident) = {
+	    res := s.member
+	}
     }
 
     # Subscripted identifiers are used for templates
@@ -752,7 +759,7 @@ module expr_base(cppstyle) = {
                 (st,s.ann) := st.get_ann;
                 if vrb = verb.app {
                     s.func := res;
-                    (st,s.args) := tup.parse(st,0);
+                    (st,s.args) := tup.parse(st,1);
                 } else {
                     s.func := symbol.makestr(st.tok,s.ann);
                     st := st.consume;

@@ -323,15 +323,18 @@ namespace ivy {
             return (*map)[idx];
         }
 
-        static vector resize(const vector &x, std::size_t size) {
-            vector res;
+        static void resize(vector &x, std::size_t size) {
             if (T::__is_seq()) {
-                res.data.resize(size);
-                for (std::size_t idx = 0; idx < size; ++idx) {
-                    res.data[idx] = x(idx);
+                std::size_t old_size = x.data.size();
+                x.data.resize(size);
+                if (x.map) {
+                    for(typename map_type::const_iterator it = x.map->begin(),en = x.map->end(); it != en; ++it) {
+                        std::size_t idx = (std::size_t)(it->first);
+                        if (old_size <= idx && idx < size)
+                            x.data[idx] = it->second;
+                    }
                 }
             }
-            return res;
         }
 
     };
@@ -387,10 +390,8 @@ namespace ivy {
             return data(idx)(parameters...);
         }
 
-        static vector resize(const vector &x, std::size_t size) {
-            vector res;
-            res.data = x.data.resize(size);
-            return res;
+        static void resize(vector &x, std::size_t size) {
+            x.data.resize(size);
         }
     };
 
@@ -524,8 +525,8 @@ namespace ivy {
 
     // Resize a function.
 
-    template <class T> static inline T resize(const T &f, unsigned size) {
-        return T::resize(f,size);
+    template <class T> static inline void resize(T &f, unsigned size) {
+        T::resize(f,size);
     }
 
     // This template is used by the compiler to build string literals

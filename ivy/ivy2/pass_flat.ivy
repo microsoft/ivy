@@ -45,6 +45,7 @@ object ivy = { ...
 
     instance ident_to_moduledc : def_map(moduledc)
     instance ident_to_ident : hash_map(ident,ident)
+    instance ident_to_instantiatedc : hash_map(ident,instantiatedc)
     
     object flatst = {
         type this = struct {
@@ -87,7 +88,21 @@ object ivy = { ...
 
             # True if we are on rhs of a dot operator
 
-            dot_rhs : bool
+            dot_rhs : bool,
+
+	    # Maps autoinstance keys to instantiations
+
+	    autodefs : ident_to_instantiatedc,
+
+	    # Auto instantiations that are pending
+
+	    autos_pending : ident_set,
+
+	    # True if we don't want to check undefined
+
+	    no_undefined : bool
+
+	    
 
         }
     }
@@ -117,8 +132,9 @@ object ivy = { ...
     action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
 	if arg isa symbol {
             var name := member.prefix(arg.get_name);
-            if st.absolute | st.defining | st.defs.get(arg.get_name,false) {
+            if st.absolute | st.defining | (st.defs.get(arg.get_name,false) & ~st.locals.mem(arg.get_name)) {
 		res := symbol.make(name,ann);
+		call check_defined(name,st,ann);
             } else {
 		res := dot.make(arg,symbol.make(member,ann),ann);
             }
@@ -191,12 +207,21 @@ object ivy = { ...
         }
     } 
 
-       
+
     action add_def(s:expr,st:flatst) returns (st:flatst) = {
         st.defining := true;
-        var id := s.get_name.flat(false,st);
+#        var id := s.get_name.flat(false,st);
+	var e : expr;
+	(e,st) := s.flat(st);
+	var id := e.get_name;
         st.defining := false;
         st.defs := st.defs.set(id,true);
+    }
+
+    action check_defined(name:ident,st:flatst,ann:annot) = {
+	if ~st.defs.mem(name) & ~st.absolute & ~st.defining & ~st.no_undefined {
+	    call report_error(undefined.make(name),ann);
+	}
     }
 
     object symbol = { ...
@@ -205,9 +230,7 @@ object ivy = { ...
 	    if s.vrb = verb.none {
 		if ~st.locals.mem(f.name) {
                     f.name := f.name.flat(false,st);
-		    if ~st.defs.mem(f.name) & ~st.absolute & ~st.defining {
-			call report_error(undefined.make(s.name),s.ann);
-		    }
+		    call check_defined(f.name,st,s.ann)
 		}
             };
             res := f
@@ -396,7 +419,11 @@ object ivy = { ...
     object actdc = { ...
         instantiate generic_flat(this,decl)
         action flat_int(s:actdc,st:flatst) returns (res:this,st:flatst) = {
+	    if s.kind = action_kind.external {
+		st.absolute := true;
+	    };
             (res.name,st) := s.name.flat(st);
+	    st.absolute := false;
             res.kind := s.kind;
             (res.inputs,st) := flat_formalvec(s.inputs,st);
             (res.outputs,st) := flat_formalvec(s.outputs,st);
@@ -408,7 +435,11 @@ object ivy = { ...
             st := local_vec(res.outputs,false,st);
         }
         action defd(s:this,st:flatst) returns (st:flatst) = {
+	    if s.kind = action_kind.external {
+		st.absolute := true;
+	    };
             st := add_def(s.name,st);
+	    st.absolute := false;
         }
     }
 
@@ -423,6 +454,7 @@ object ivy = { ...
         action flat(s:this,st:flatst) returns (res:typespec,st:flatst)
         action defd(s:this,st:flatst,id:ident) returns (st:flatst)
         action to_destrs(s:this,st:flatst,ty:expr) returns (st:flatst)
+        action auto_flat_spec(s:this,st:flatst,ty:expr) returns (st:flatst)
     }
 
     object enumspec = { ...
@@ -468,15 +500,136 @@ object ivy = { ...
         }
     }
 
+    action make_auto_key(id:ident, rev:bool) returns (key:ident,pmap:symeval) = {
+	var skey := id.get_last;
+	var idx := skey.subscrs.begin;
+	var num : pos := 0;
+	while idx < skey.subscrs.end {
+	    var nv := numident.make(num);
+	    var ann : annot;
+	    if rev {
+		pmap := pmap.set(nv,symbol.make(skey.subscrs.value(idx),ann));
+	    } else {
+		pmap := pmap.set(skey.subscrs.value(idx),symbol.make(nv,ann));
+	    };
+	    skey.subscrs := skey.subscrs.set(idx,nv);
+	    idx := idx.next;
+	    num := num.next;
+	};
+	key := skey;
+	if id isa dotident {
+	    key := key.prefix(id.get_namesp);
+	}
+    }
+
+    action find_auto_inst(id:ident,st:flatst) returns (idc:instantiatedc, ok:bool) = {
+	var key : ident;
+	var pmap : symeval;
+	(key,pmap) := make_auto_key(id,true);
+	if st.autodefs.mem(key) {
+	    idc := st.autodefs.value(key);
+	    var foo : decl := idc;
+	    idc.prms := subst_vector(idc.prms,pmap);
+	    ok := true;
+	}
+    }
+
+    import action show_flat_str(s:str)
+
+    action auto_defd_rec(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.dot) {
+	    st := auto_defd_rec(s.get_arg(0),st);
+	};
+	if s.is(verb.dot) | (s isa symbol) {
+	    var e : expr;
+	    st.no_undefined := true;
+	    (e,st) := s.flat(st);
+	    st.no_undefined := false;
+	    call show_flat_str(e.enc);
+	    var id := e.get_name;
+	    if ~st.defs.mem(id) {
+		var ok : bool;
+		var idc: instantiatedc;
+		(idc,ok) := find_auto_inst(id,st);
+		if ok {
+		    st.defs := st.defs.set(id,true);
+		    var odc : objectdc;
+		    odc.name := symbol.make(id,idc.ann);
+		    odc.ann := idc.ann;
+		    st.decls := st.decls.append(odc);
+		    st.autos_pending := st.autos_pending.set(id,true);
+		    var old_has_root := st.has_root;
+		    var old_root := st.root;
+		    st.has_root := true;
+		    st.root := id;
+		    st := idc.defd(st);
+		    st.has_root := old_has_root;
+		    st.root := old_root;
+		}
+	    }
+	}
+    }
+
+    action auto_defd(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.colon) {
+	    st := auto_defd_rec(s.get_arg(1),st);
+	}
+    }
+
+    action auto_flat_rec(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.dot) {
+	    st := auto_flat_rec(s.get_arg(0),st);
+	};
+	if s.is(verb.dot) | (s isa symbol) {
+	    var e : expr;
+	    st.no_undefined := true;
+	    (e,st) := s.flat(st);
+	    st.no_undefined := false;
+	    var id := e.get_name;
+	    if st.autos_pending.mem(id) {
+		st.autos_pending := st.autos_pending.remove(id);
+		var ok : bool;
+		var idc: instantiatedc;
+		(idc,ok) := find_auto_inst(id,st);
+		if ok {
+		    var old_has_root := st.has_root;
+		    var old_root := st.root;
+		    st.has_root := true;
+		    st.root := id;
+		    st := idc.flat(st);
+		    st.has_root := old_has_root;
+		    st.root := old_root;
+		}
+	    }
+	}
+    }
+	
+    action auto_flat(s:expr,st:flatst) returns(st:flatst) = {
+	if s.is(verb.colon) {
+	    st := auto_flat_rec(s.get_arg(1),st);
+	}
+    }
+    
+    
     object structspec = { ...
         action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
             var idx := s.destructors.begin;
             while idx < s.destructors.end {
-                var lhs := s.destructors.value(idx).get_arg(0);
+		var e := s.destructors.value(idx);
+		st := auto_defd(e,st);
+                var lhs := e.get_arg(0);
                 if lhs isa app {
                     lhs := lhs.get_func;
                 };
 		st.defs := st.defs.set(lhs.get_name.prefix(id),true);
+                idx := idx.next;
+            }
+        }
+        action auto_flat_spec(s:this,st:flatst,ty:expr) returns (st:flatst) = {
+            var idx := s.destructors.begin;
+            while idx < s.destructors.end {
+                var e := s.destructors.value(idx);
+		st := auto_flat(e,st);
                 idx := idx.next;
             }
         }
@@ -532,6 +685,9 @@ object ivy = { ...
                     (res.spec,st) := s.spec.flat(st);
                 }
             };
+	    if s.has_spec {
+		st := s.spec.auto_flat_spec(st,res.sort);  # emit the auto instances before the type
+	    };
             st.decls := st.decls.append(res);
             if s.has_spec {
                 st := s.spec.to_destrs(st,res.sort);
@@ -569,6 +725,7 @@ object ivy = { ...
     object vardc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
+	    st := auto_flat(s.typing,st);
             res.is_destructor := s.is_destructor;
             (res.typing,st) := s.typing.flat(st);
             res.has_def := s.has_def;
@@ -577,6 +734,7 @@ object ivy = { ...
             }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
+	    st := auto_defd(s.typing,st);
             st := add_def(get_typed_symbol(s.typing),st);
         }
     }
@@ -664,6 +822,28 @@ object ivy = { ...
         }
     }
 
+    action auto_instance_defd(s:instancedc,st:flatst) returns (st:flatst) = {
+        st.defining := true;
+        var id := s.objname.get_name.flat(false,st);
+        st.defining := false;
+	var pmap : symeval;
+	var key : ident;
+	(key,pmap) := make_auto_key(id,false);
+	var prms : vector[expr];
+	{
+	    var idx := s.prms.begin;
+	    while idx < s.prms.end {
+		prms := prms.append(pmap.get(s.prms.value(idx).get_name,s.prms.value(idx)));
+		idx := idx.next;
+	    }
+	};
+	var body : instantiatedc;
+	body.ann := s.ann;
+	body.name := s.modname;
+	body.prms := prms;
+	st.autodefs := st.autodefs.set(key,body);
+    }
+
     object instancedc = { ...
         action desugar(s:this) returns (res:decl) = {
             var body := instantiatedc.make(s.modname,s.prms,s.ann);
@@ -671,12 +851,18 @@ object ivy = { ...
         }
         
         action flat(s:this,st:flatst) returns (st:flatst) = {
-            var ds := desugar(s);  # workaround
-            st := ds.flat(st);
+	    if ~s.is_auto {
+		var ds := desugar(s);  # workaround
+		st := ds.flat(st);
+	    }
         }
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            var ds := desugar(s);  # workaround
-            st := ds.defd(st);
+	    if s.is_auto {
+		st := auto_instance_defd(s,st);
+	    } else {
+		var ds := desugar(s);  # workaround
+		st := ds.defd(st);
+	    }
         }
     }
 
@@ -696,8 +882,6 @@ object ivy = { ...
             };
         }
     }
-
-    import action show_defs(d:ident_set)
 
     object prog = { ...
         

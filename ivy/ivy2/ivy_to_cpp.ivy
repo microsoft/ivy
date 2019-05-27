@@ -557,7 +557,7 @@ object ivy = { ...
         returns (res:cpp.expr,st:tocppst) =
     {
         var proto := st.protos.value(func.get_arg(0).get_name);
-
+	
         # Evaluate all of the arguments
 
         var args : vector[cpp.expr];
@@ -894,6 +894,7 @@ object ivy = { ...
         action emitted(s:this,st:tocppst) returns (res:bool) = {
             res := true;
         }
+	action record_prototypes(s:this,st:tocppst) returns (st:tocppst)
     }
 
     # The full name of a C++ function depends on whether it is a member function.
@@ -921,9 +922,14 @@ object ivy = { ...
             idx := idx.next
         }
     }
-    
 
     object actdc = { ...
+
+	action record_prototypes(s:this,st:tocppst) returns (st:tocppst) = {
+            var proto := s.get_proto;
+            st.protos := st.protos.set(s.name.get_name,proto);
+	}
+
         # Here, we translate an Ivy action declaration to a C++
         # function declaration. The C++ function declarations depends
         # on the action prototype.  If the action is a member action,
@@ -932,10 +938,7 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.decl,st:tocppst) = {
             var res : cpp.funcdecl;
             res.ann := s.ann;
-            var proto := s.get_proto;
-            if st.proto_only {
-                st.protos := st.protos.set(s.name.get_name,proto);
-            };
+	    var proto := st.protos.value(s.name.get_name);
             var has_output := proto.has_ret;
             if has_output {
                 var ty := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
@@ -1620,6 +1623,14 @@ object ivy = { ...
 	    };
             st.forward := false;
 
+	    # A pass to record all of the C++ function prototypes
+	    
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+		st := s.decls.value(idx).record_prototypes(st);
+		idx := idx.next
+	    };
+	    
             # A pass to emit the C++ prototypes and class declarations
             
             st.proto_only := true;
@@ -1692,7 +1703,7 @@ object ivy = { ...
                 p := p.flat;
             };
 
-#	    call show_prog(p.enc);
+	    call show_prog(p.enc);
 
 	    # Type inference pass
 

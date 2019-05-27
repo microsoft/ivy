@@ -21,6 +21,17 @@ module array(domain,range) = {
         res := 0;
     }
 
+    # The `empty` action returns an empty array
+
+    action empty returns (res:this) = {
+    }
+
+    # The `set` action sets an element of an array
+
+    action set(s:this,i:domain,v:range) returns (s:this) = {
+	s.value(i) := v;
+    }
+
     # The `append` action appends one character `c` to a array.
 
     action append(s:this,c:range) returns (s:this) = {
@@ -41,7 +52,7 @@ module array(domain,range) = {
 
     # The `resize` action sets the end marker of the string. 
     
-    extern action resize(s,end:domain) returns (s:this) = {
+    action resize(s:this,end:domain) returns (s:this) = {
         s.value := cast(ivy.resize(cast(s.value),cast(end)));
         s.end := end;
     }
@@ -64,3 +75,4 @@ module vector(range) = {
     instantiate array(domain,range)
 }
 
+autoinstance vector[u] : vector(u)
