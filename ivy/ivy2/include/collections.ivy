@@ -71,7 +71,8 @@ module array(domain,range) = {
 
     action pop_back(s:this) returns (s:this) = {
         if s.end > 0 {
-            s := s.resize(s.end.prev)
+            var size := s.end.prev;
+            s := s.resize(size)
         }
     }
 

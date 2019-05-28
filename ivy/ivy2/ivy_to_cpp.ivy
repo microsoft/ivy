@@ -95,6 +95,7 @@ object ivy = { ...
 
     type lvalue_count = struct {
         lvalue : cpp.expr,
+        path : access_path,
         cnt : pos
     }
     
@@ -170,8 +171,11 @@ object ivy = { ...
             # this list, then any occurrence is the last reference to
             # the value.
 
-            dead : vector[lvalue_count]
+            dead : vector[lvalue_count],
 
+            # The set of local variables in scope
+
+            locals : local_tracker
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -431,7 +435,10 @@ object ivy = { ...
             } else if st.is_member & s.name = st.this_ident {
                 res.name := cpp.strident.make("(*this)");
             } else {
-                var id := fix_object_clash(s.name,st);
+                var id := s.name;
+                if ~st.locals.mem(id) {
+                    id := fix_object_clash(s.name,st);
+                };
                 res.name := id.to_cpp(st.native);
             };
             res.vrb := cpp.str_to_verb(res.name.to_str);
@@ -526,6 +533,32 @@ object ivy = { ...
         }
     }
 
+    # After executing a function call, the call gives up ownership of
+    # its arguments, possibly allowing the arguments to be
+    # side-effected by future calls. A good example is this:
+    #
+    #     a := a.resize(size(a) - 1);
+    #
+    # Here, the call to `size` has ownership over `a` which would
+    # prevent `resize` from side-effecting `a`. However, since the
+    # call to `size` executes first, it gives up its ownership before
+    # `resize` executes, so `resize` can side-effect `a`.
+
+    action unown_func_args(args:vector[expr],st:tocppst) returns (st:tocppst) = {
+        var idx := args.begin;
+        while idx < args.end {
+            var arg := args.value(idx);
+            var path : access_path;
+            var ok : bool;
+            (path,ok) := lvalue_path(arg,path);
+            if ok {
+                st := unown_path(path,st);
+            };
+            idx := idx.next
+        }
+    }
+        
+    
     # Translate an action call to C++. This is complicated, because we have
     # to apply the action prototype and deal with call-by-reference.
     #
@@ -552,29 +585,40 @@ object ivy = { ...
     # effect, by copying any temporaries back to the original lvalues,
     # and we return ().
     #
-    
+
     action call_to_cpp (func:expr, inputs:vector[expr], ann:annot, st:tocppst)
         returns (res:cpp.expr,st:tocppst) =
     {
         var proto := st.protos.value(func.get_arg(0).get_name);
 	
-        # Evaluate all of the arguments
-
-        var args : vector[cpp.expr];
+        # First evaluate all of the inputs.
+        
+        var inpvals : vector[cpp.expr];
         var idx := proto.args.begin;
-        var rets : vector[cpp.stmt];
-        var ret_vals : vector[cpp.expr];
         while idx < proto.args.end {
-            var parg := proto.args.value(idx);
             var inp : cpp.expr;
-            var ivy_inp : expr;
+            var parg := proto.args.value(idx);
             if parg.is_input {
                 var save_outputs := st.outputs;
                 st.outputs := vector[expr].empty;
-                ivy_inp := inputs.value(parg.inpos);
-                (inp,st) := ivy_inp.to_cpp(st);
+                (inp,st) := inputs.value(parg.inpos).to_cpp(st);
                 st.outputs := save_outputs;
             };
+            inpvals := inpvals.append(inp);
+            idx := idx.next
+        };
+        
+
+        # Evaluate all of the arguments
+
+        var args : vector[cpp.expr];
+        idx := proto.args.begin;
+        var rets : vector[cpp.stmt];
+        var ret_vals : vector[cpp.expr];
+        var kdx := inpvals .begin;
+        while idx < proto.args.end {
+            var parg := proto.args.value(idx);
+            var inp := inpvals.value(kdx);
             var out : cpp.expr;
             if parg.is_output & st.outputs.end > 0 {
                 (out,st) := st.outputs.value(parg.outpos).to_cpp(st);
@@ -598,9 +642,11 @@ object ivy = { ...
                 inp := out
             };
             args := args.append(inp);
-            idx := idx.next
+            idx := idx.next;
+            kdx := kdx.next
         };
         (res,st) := make_cpp_call(func,args,ann,st);
+        st := unown_func_args(inputs,st);
         if ret_vals.end > 0 | rets.end > 0 | ~proto.has_ret {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
 	    var jdx := rets.begin;
@@ -718,6 +764,7 @@ object ivy = { ...
                     };
                     capp.ann := s.ann;
                     res := capp;
+                    st := unown_func_args(s.args,st);
 
                     # If of the form x.f where is a member action of input arity zero,
                     # add empty parentheses for C++.
@@ -760,6 +807,18 @@ object ivy = { ...
         }
     }
 
+    action unown_path(path:access_path,st:tocppst) returns (st:tocppst) = {
+        var idx := st.dead.begin;
+        while idx < st.dead.end {
+            var lc := st.dead.value(idx);
+            if path_may_alias(path,lc.path) {
+                lc.cnt := lc.cnt.prev;
+                st.dead := st.dead.set(idx,lc);
+            };
+            idx := idx.next
+        }
+    }
+    
     action kill_lvalue(e:expr,st:tocppst,paths:vector[access_path]) returns (st:tocppst) = {
         var path : access_path;
         var ok : bool;
@@ -775,6 +834,7 @@ object ivy = { ...
             };
             var lc : lvalue_count;
             (lc.lvalue,st) := e.to_cpp(st);
+            lc.path := path;
             lc.cnt := alias_count;
             st.dead := st.dead.append(lc);
         }
@@ -819,7 +879,15 @@ object ivy = { ...
     }
 
     object sequence = { ...
-        instantiate binary_op_to_cpp(ivy.sequence,cpp.sequence,cpp.stmt)
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var res : cpp.sequence;
+            res.ann := s.ann;
+            st.locals := st.locals.push_stmt(s.lhs);
+            (res.lhs,st) := s.lhs.to_cpp(st);
+            (res.rhs,st) := s.rhs.to_cpp(st);
+            st.locals := st.locals.pop;
+            resd := res;
+        }
     }
 
     # Translate "while" statement. We have to account for any side effects in
@@ -958,6 +1026,7 @@ object ivy = { ...
                 st.this_ident := proto.args.value(0).name.get_arg(0).get_name;
                 res.ftype.is_const := proto.args.value(0).is_const;
             };
+            st.locals := st.locals.push;
             while idx < proto.args.end {
                 var parg := proto.args.value(idx);
                 var arg := parg.name;
@@ -966,6 +1035,7 @@ object ivy = { ...
                 argt.is_ref := parg.is_ref;
                 var ty := fix_variant_type(arg.get_arg(1),st);
                 (argt._type,st) := ty.to_cpp(st);
+                st.locals := st.locals.add_var(arg);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
@@ -986,6 +1056,7 @@ object ivy = { ...
                     }
                 }
             };
+            st.locals := st.locals.pop;
             st.is_member := false;
             resd := res;
             if ~st.in_class & cprot {

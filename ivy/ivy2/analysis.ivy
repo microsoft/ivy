@@ -332,36 +332,91 @@ object ivy = { ...
             }
         }
     }
+}
 
+
+module push_pop_map(domain,range) = {
+
+    instance map_t : hash_map(domain,range)
+    instance vec_t : array(pos,domain)        
+
+    type this = struct {
+        map : map_t,
+        del : vec_t,
+        stack : vector[pos]
+    }
+
+    action set(s:this,id:domain,v:range) returns(s:this) = {
+        if ~s.map.mem(id) {
+            s.del := s.del.append(id);
+        };
+        s.map := s.map.set(id,v)
+    }
+
+    action mem(s:this, id:domain) returns (res:bool) = {
+        res := s.map.mem(id)
+    }
+
+    action push(s:this) returns(s:this) = {
+        s.stack := s.stack.append(s.del.end);
+    }
+
+    action pop(s:this) returns(s:this) = {
+        var begin := s.stack.back;
+        s.stack := s.stack.pop_back;
+        while s.del.end > begin {
+            var x := s.del.back;
+            s.del := s.del.pop_back;
+            s.map := s.map.remove(x);
+        }
+    }
+}
+    
+object ivy = { ...
+        
     # Local variable tracking
     # =======================
 
+    instance push_pop_ident_set : push_pop_map(ident,bool)
+
     object local_tracker = {
         type this = struct {
-            s.map : push_pop_ident_set
+            map : push_pop_ident_set
         }
 
-        action push_var(s:this,typing:expr) returns (s:this) = {
+        action push(s:this) returns (s:this) = {
             s.map := s.map.push;
-            s.map := s.map.set(typing.get_arg(0).get_name);
+        }                
+
+        action add_var(s:this,typing:expr) returns (s:this) = {
+            var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
+            s.map := s.map.set(v.get_name,true);
         }
 
         action push_vars(s:this,typings:vector[expr]) returns (s:this) = {
             s.map := s.map.push;
             var idx := typings.begin;
             while idx < typings.end {
-                s.map := s.map.set(typing.value(idx).get_arg(0).get_name);
+                var typing := typings.value(idx);
+                var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
+                s.map := s.map.set(v.get_name,true);
                 idx := idx.next
             }
         }
 
         action push_stmt(s:this,stm:stmt) returns (s:this) = {
+            s.map := s.map.push;
             if stm isa varst {
-                
+                s := s.add_var(stm.get_expr);
+            }
         }
 
         action pop(s:this) returns (s:this) = {
             s.map := s.map.push
+        }
+
+        action mem(s:this,id:ident) returns (res:bool) = {
+            res := s.map.mem(id);
         }
     }
 }
