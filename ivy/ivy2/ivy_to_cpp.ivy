@@ -175,7 +175,12 @@ object ivy = { ...
 
             # The set of local variables in scope
 
-            locals : local_tracker
+            locals : local_tracker,
+
+	    # The set of constructor functions
+
+	    constructors : ident_set
+
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -214,8 +219,7 @@ object ivy = { ...
         s.counter := s.counter.next;
         res := cpp.symbol.makestr(name,ann);
         var vst : cpp.varst;
-        var fty := fix_variant_type(ty,s);
-        (vst.vtype._type,s) := fty.to_cpp(s);
+        (vst.vtype._type,s) := fix_variant_type(ty,s);
         vst.vtype.name := res;
         vst.ann := ann;
         var vstt : cpp.stmt := vst;
@@ -455,8 +459,7 @@ object ivy = { ...
 
     action fix_tpl_param(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
         s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
-        s := fix_variant_type(s,st);
-        (res,st) := s.to_cpp(st);
+        (res,st) := fix_variant_type(s,st)
     }
         
     action make_md_vector_type(dom:vector[expr],rng:expr,st:tocppst)
@@ -677,7 +680,9 @@ object ivy = { ...
                 var arg := s.args.value(0);
 		(res,st) := arg.to_cpp(st);
                 if (arg isa symbol) {
-                    if arg.get_verb = verb.numeral {
+		    if arg.get_verb = verb.truev | arg.get_verb = verb.falsev {
+                        res := cpp.app.make1(cpp.symbol.makestr("ivy::native_bool",s.get_ann),res,s.get_ann);
+		    } else if arg.get_verb = verb.numeral | st.constructors.mem(arg.get_name) {
                         var ty : cpp.expr;
 		        (ty,st) := s.args.value(1).to_cpp(st);
                         res := cpp.app.make1(ty,res,s.get_ann);
@@ -797,12 +802,15 @@ object ivy = { ...
 
     action upcast(lhsty:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
         (res,st) := rhs.to_cpp(st);
-        if rhs.is(verb.colon) {
+        if false & rhs.is(verb.colon) {
             var rhsty := rhs.get_arg(1);
             if st.subtype_rel.is_subtype(rhsty,lhsty) {
 		var crhsty : cpp.expr;
 		(crhsty,st) := rhsty.to_cpp(st);
                 res := cpp.new.make(cpp.app.make1(crhsty,res,rhs.get_ann),rhs.get_ann);
+		var clhsty : cpp.expr;
+		(clhsty,st) := fix_variant_type(lhsty,st);
+		res := cpp.app.make1(clhsty,res,rhs.get_ann)
             }
         }
     }
@@ -950,8 +958,7 @@ object ivy = { ...
     object varst = { ...
         instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
         action to_cpp_int(s:varst,st:tocppst) returns (res:cpp.varst,st:tocppst) = {
-            var ty := fix_variant_type(s.name.get_arg(1),st);
-            (res.vtype._type,st) := ty.to_cpp(st);
+            (res.vtype._type,st) := fix_variant_type(s.name.get_arg(1),st);
             (res.vtype.name,st) := s.name.get_arg(0).to_cpp(st);
         }
     }
@@ -1009,8 +1016,7 @@ object ivy = { ...
 	    var proto := st.protos.value(s.name.get_name);
             var has_output := proto.has_ret;
             if has_output {
-                var ty := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
-                (res.ftype.base._type,st) := ty.to_cpp(st);
+                (res.ftype.base._type,st) := fix_variant_type(s.outputs.value(proto.ret.outpos).get_arg(1),st);
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
@@ -1033,8 +1039,7 @@ object ivy = { ...
                 var argt : cpp.simpletype;
                 argt.is_const := parg.is_const;
                 argt.is_ref := parg.is_ref;
-                var ty := fix_variant_type(arg.get_arg(1),st);
-                (argt._type,st) := ty.to_cpp(st);
+                (argt._type,st) := fix_variant_type(arg.get_arg(1),st);
                 st.locals := st.locals.add_var(arg);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
                 res.ftype.args := res.ftype.args.append(argt);
@@ -1245,7 +1250,7 @@ object ivy = { ...
     
     action add_eq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
         var eq : cpp.funcdecl;
-        eq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        eq.ftype.base._type := cpp.symbol.makestr("ivy::native_bool",s.ann);
         eq.ftype.base.name := cpp.symbol.makestr("operator ==",s.ann);
         eq.ftype.is_const := true;
         var eqarg0 : cpp.simpletype;
@@ -1280,7 +1285,7 @@ object ivy = { ...
 
     action add_diseq_pred(s:cpp.structdecl) returns (s:cpp.structdecl) = {
         var diseq : cpp.funcdecl;
-        diseq.ftype.base._type := cpp.symbol.makestr("bool",s.ann);
+        diseq.ftype.base._type := cpp.symbol.makestr("ivy::native_bool",s.ann);
         diseq.ftype.base.name := cpp.symbol.makestr("operator !=",s.ann);
         diseq.ftype.is_const := true;
         var diseqarg0 : cpp.simpletype;
@@ -1502,6 +1507,26 @@ object ivy = { ...
             };
             resd := add_namespaces(resd,fix_object_clash(s.sort.get_name,st)); 
 	}
+	    
+	# Here, we register the constructors of enumerated types
+
+	import action tocpp_show_str(s:str)
+
+	action reg_member(s:this,st:tocppst) returns (st:tocppst) = {
+	    if s.has_spec {
+		if s.spec isa enumspec {
+		    var conss := s.spec.get_elems;
+		    var idx := conss.begin;
+		    while idx < conss.end {
+			var cons := conss.value(idx);
+			st.constructors := st.constructors.set(cons.get_name,true);
+			idx := idx.next
+		    }
+		}
+	    }
+        }
+	    
+
     }
 	
     action is_variant_type(t:expr,st:tocppst) returns (res:bool) = {
@@ -1513,15 +1538,19 @@ object ivy = { ...
     }
 
     # When storing values of variant types we use smart pointers. That is,
-    # type `t` becomes `unique_ptr<t>`.
+    # type `t` becomes `ivy.ptr<t>`.
 
-    action fix_variant_type(t:expr,st:tocppst) returns (t:expr) = {
+    action fix_variant_type(t:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
         if is_variant_type(t,st) {
-            var s : strident;
-            s.val := "unique_ptr";
-            s.subscrs := s.subscrs.append(t.get_name);
-            t := symbol.make(s.prefix(strident.make("std")),t.get_ann);
-        }
+	    var cppty : cpp.expr;
+	    (cppty,st) := t.to_cpp(st);
+            var s : cpp.strident;
+            s.val := "ptr";
+            s.subscrs := s.subscrs.append(cppty.get_name);
+            res := cpp.symbol.make(s.prefix(cpp.strident.make("ivy")),t.get_ann);
+        } else {
+	    (res,st) := t.to_cpp(st);
+	}
     }
 
     # Translate a function definition to an action
@@ -1569,8 +1598,7 @@ object ivy = { ...
             if s.is_destructor {
                 ty := ty.curry.get_arg(1);
             };
-            ty := fix_variant_type(ty,st);
-	    (res.vtype._type,st) := ty.to_cpp(st);
+	    (res.vtype._type,st) := fix_variant_type(ty,st);
             var name : cpp.expr;
             (name,st) := s.typing.get_arg(0).to_cpp(st);
             res.vtype.name := member_name(name);

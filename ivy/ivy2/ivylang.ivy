@@ -547,6 +547,9 @@ object ivy = {
                 st := st.consume;
                 var s : groupdc;
                 (st,s.ann) := st.get_ann;
+		if st.tok = "..." {
+		    st := st.consume  # for now, ignore "..."
+		};
                 (st,s.decls) := parse_list(st,0);
                 if st.tok = "}" {
                     st := st.consume;

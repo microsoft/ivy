@@ -76,8 +76,16 @@ module array(domain,range) = {
         }
     }
 
-    
-    
+    # The `segment` gets the segment of an array from index `beg` to
+    # index `en-1`.
+
+    action segment(s:this,beg:domain,en:domain) returns (res:this) = {
+	var idx := beg;
+	while idx < en & idx < s.end {
+	    res := res.append(s.value(idx));
+	    idx := idx.next
+	}
+    }    
     
 }
 

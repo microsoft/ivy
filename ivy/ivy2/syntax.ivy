@@ -467,7 +467,8 @@ module tuple(t,lb,rb,verb) = {
 # Number/string conversions
 
 module numconv(str) = {
-    action to_str(x:this) returns (res:str) = {
+    action to_str(num:this) returns (res:str) = {
+	var x := num;
         if (x < 0) {
             res := res.extend("-");
             x := 0 - x;
