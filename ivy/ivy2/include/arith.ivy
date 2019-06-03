@@ -1,0 +1,6 @@
+#lang ivy
+
+module arith_char = {
+    type this
+    interpret this -> ivy.native_int[char]
+}

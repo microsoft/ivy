@@ -40,9 +40,9 @@ module verb_base = {
     object verb = {
         type this =
         {
-            none, arrow, plus, times, colon, app, empty, dot, new, numeral, cast,
-            boolv, truev, falsev, and, or, not, iff, equals, notequals,
-            lt, leq, gt, geq, minus, div, string, ite, comma, varv, logvar
+            none, arrow, plus, times, colon, app, empty, dot, new, numeral, castv,
+	    boolv, truev, falsev, and, or, not, iff, equals, notequals,
+            lt, leq, gt, geq, minus, div, string, ite, comma, varv, logvar, isav
         }
     }
     
@@ -198,12 +198,10 @@ import action parse_error(p:pos,tok:str)
 
 module parse_intf(expr,cppstyle) = {
 
-    action encode(e:expr,b:pretty,prio:priority) returns (b:pretty)
-
     action enc(e:expr) returns (s:str) = {
         var p := pretty.make(100,4);
         p.cppstyle := cppstyle;
-        p := e.encode(p,0);
+        p := expr.encode(e,p,0);
         p := p.flush;
         s := p.output
     }
@@ -449,6 +447,7 @@ module expr_base(cppstyle) = {
 
     object expr = {
         type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
         instantiate parse_intf(expr,cppstyle)
         action get_verb(s:this) returns (vrb:verb) = {
             vrb := verb.none;
@@ -805,6 +804,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
 
     object stmt = {
         type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
         instantiate parse_intf(stmt,cppstyle)
 	action get_expr(s:this) returns (res:expr)
 	action get_lhs(s:this) returns (res:expr)
@@ -1063,6 +1063,7 @@ module stmt_base(expr,asgntok,cppstyle) = {
 module decl_base(expr,stmt) = {
     object decl = {
         type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
         instantiate parse_intf(decl,false)
         action get_expr(s:this) returns (res:expr)
         action get_ann(s:this) returns (res:annot)
@@ -1234,7 +1235,7 @@ module prog_base(cppstyle) = {
 	    res := s;
 	}
 
-	implement encode(s:this,b:pretty,prio:priority) returns (b:pretty)  {
+	action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             if ~cppstyle {
                 b := s.vers.encode(b)
             };

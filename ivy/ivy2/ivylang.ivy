@@ -28,7 +28,7 @@ object ivy = {
 
     # Cast operator converts between types.
 
-    instance cast : built_in_unary("cast",verb.cast,49)
+    instance castop : built_in_unary("cast",verb.castv,49)
 
     # The `=`, `~=` and `~` verbs are spelled differently in Ivy and C++
     
@@ -44,6 +44,10 @@ object ivy = {
     # on lhs of assignments. 
 
     instance varv : built_in_unary("var",verb.varv,2)
+
+    # The `isa` operator
+    
+    instance isaop : built_in_binary("isa",verb.isav,5)
 
     # Here, we have statements specific to Ivy and the Ivy statement
     # parser.
@@ -85,6 +89,9 @@ object ivy = {
         action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
 	    var s : asgn;
 	    (st,s.ann) := st.get_ann;
+	    if st.tok = "call" {
+		st := st.consume;
+	    };
 	    (st,s.lhs) := expr.parse(st,0);
 	    if st.ok & st.tok = ":=" {
 		st := st.consume;
@@ -691,6 +698,17 @@ object ivy = {
                     (st,s.body) := stmt.parse(st,1);
                 } else {st.ok := false};
                 res := s;
+            } else if st.tok = "after" {
+                var s : initdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+		if st.tok = "init" {
+                    st := st.consume;
+		} else {st.ok := false};
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false};
+                res := s;
             } else {st.ok := false}
         }
         action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
@@ -705,21 +723,3 @@ object ivy = {
     instantiate prog_base(false)
 }
 
-export ivy.expr.enc
-export ivy.expr.dec
-export ivy.expr.encdec
-export ivy.stmt.enc
-export ivy.stmt.dec
-export ivy.stmt.encdec
-export ivy.decl.enc
-export ivy.decl.dec
-export ivy.decl.encdec
-export ivy.prog.enc
-export ivy.prog.dec
-export ivy.prog.encdec
-
-import parse_error
-
-
-
-import action show_pretty(p:pretty)

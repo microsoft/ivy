@@ -1,5 +1,6 @@
 #lang ivy1.7
 
+include arith
 include order
 include string
 include collections
@@ -21,7 +22,7 @@ include collections
 # control codes and the delete character.
 
 object char = {
-    type this
+    instantiate arith_char
     type kinds = {alphanum,bracket,punct}
     function is_alphanum(X:char)
         = (48 <= X & X < 58) | (65 <= X & X < 91) | (97 <= X & X < 123) | (X = 95)

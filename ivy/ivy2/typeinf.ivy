@@ -67,7 +67,7 @@ object ivy = { ...
         call set_built_in_type(verb.times,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.div,"alpha * alpha -> alpha",false,true,true,true);
         call set_built_in_type(verb.arrow,"bool * bool -> bool",true,true,true,true);
-        call set_built_in_type(verb.cast,"alpha -> beta",false,false,false,false);
+        call set_built_in_type(verb.castv,"alpha -> beta",false,false,false,false);
         call set_built_in_type(verb.truev,"bool",true,true,true,true);
         call set_built_in_type(verb.falsev,"bool",true,true,true,true);
         call set_built_in_type(verb.and,"bool * bool -> bool",true,true,true,true);
@@ -300,6 +300,10 @@ object ivy = { ...
                     call type_error(e,argty,fty)
                 };
                 res := dot.make(arg,func,e.ann);
+            } else if e.is(verb.isav) {
+                (res,argty,st) := e.args.value(0).type_decorate(st,m);
+                ty := symbol.makestr("bool",e.ann);
+		res := isaop.make(res,e.args.value(1),e.ann)
             } else {
                 var argtys : vector[expr];
                 var newargs : vector[expr];

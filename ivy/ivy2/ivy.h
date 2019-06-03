@@ -653,6 +653,10 @@ namespace ivy {
                 return p->__hash();
             }
         };
+
+        template <class S> native_bool isa() const {
+            return dynamic_cast<const twrap<S> *>(p);
+        }
     };
 
     /* template<typename T> T __num(long long x) { */
@@ -685,5 +689,6 @@ namespace ivy {
         }
         return x;
     }
+
 }
 

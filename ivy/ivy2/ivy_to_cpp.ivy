@@ -703,7 +703,22 @@ object ivy = { ...
 
 		var tmp : expr := s;  # workaround
 		(res,st) := function_type(tmp,st)
-            } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.cast {
+            } else if s.is(verb.isav) {
+
+		# `x isa t` is translated to `x.isa<t>()`
+
+		var arg0 : cpp.expr;
+		var arg1 : cpp.expr;
+		(arg0,st) := s.args.value(0).to_cpp(st);
+		(arg1,st) := s.args.value(1).to_cpp(st);
+		var isam : cpp.strident;
+		isam.val := "isa";
+		isam.subscrs := isam.subscrs.append(arg1.get_name);
+		var id : cpp.ident := isam;
+		res := cpp.symbol.make(id,s.ann);
+		res := cpp.dot.make(arg0,res,s.ann);
+		res := cpp.app.make0(res,s.ann);
+	    } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.castv {
 
                 # A cast operator looks like (cast : (t->u))(x). This may indicate
                 # a need for an upcast in C++. 
@@ -1802,7 +1817,7 @@ object ivy = { ...
                 p := p.flat;
             };
 
-	    call show_prog(p.enc);
+#	    call show_prog(p.enc);
 
 	    # Type inference pass
 

@@ -12,12 +12,12 @@ object io = {
     # error. It takes a parameter `str`, which is a type with string
     # traits.
 
-    module stdio(str) = {
+    module stdio(str,domain,range) = {
 
         # The `write` action writes a string to standard output.
 
         action write(s:str) = {
-            var idx : str.domain;
+            var idx : domain;
             idx := s.begin;
             while idx < s.end {
                 ivy.put(cast(s.value(idx)));
