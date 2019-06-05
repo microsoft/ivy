@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <memory>
 #include <typeinfo>
+#include <string>
 
 namespace ivy {
 
@@ -743,6 +744,23 @@ namespace ivy {
 
     static inline int get() {
         return std::cin.get();
+    }
+
+    // Get an environment variable
+
+    template <class T> static inline T getenv(const T &name) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        const char *cres = ::getenv(sname.c_str());
+        T res;
+        if (cres) {
+            for (; *cres; ++cres) {
+                res.append(*cres);
+            }
+        }
+        return res;
     }
 
     // Resize a function.

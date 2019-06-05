@@ -17,4 +17,5 @@ object ivy {
 extern action ivy.put(c:ivy.cint)
 extern action ivy.get returns (c:ivy.cint)
 extern action ivy.resize(f:ivy.func,s:ivy.size_t) returns (f:ivy.func)
-    
+extern action ivy.getenv(name:ivy.func) returns (val:ivy.func)
+
