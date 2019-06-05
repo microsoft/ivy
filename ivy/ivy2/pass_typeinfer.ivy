@@ -250,8 +250,9 @@ object ivy = { ...
 	    (res.lhs,ok) := bottom_up_type(res.lhs,st,ok);
 	    (res.rhs,ok) := bottom_up_type(res.rhs,st,ok);
 	    if ok {  # avoid cascading errors
-                if res.lhs.is(verb.colon) { 
-                    res.rhs := make_cast(res.lhs.get_arg(1),res.rhs,st)  # upcast if needed
+		var lhs := res.lhs.get_arg(0) if res.lhs.is_typed(verb.varv) else res.lhs;
+                if lhs.is(verb.colon) { 
+                    res.rhs := make_cast(lhs.get_arg(1),res.rhs,st)  # upcast if needed
                 };
 		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
 	    };

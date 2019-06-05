@@ -18,7 +18,7 @@ include syntax
 # both to resolve ambiguous parses and to elide perenthese when
 # printing.
 
-type priority
+instance priority : arith_int
 
 # The `verb` type is an enumeration of the built-in symbols in the
 # language.  This is used to avoid comparison of quoted strings
@@ -52,7 +52,7 @@ module verb_base = {
     function verb_to_arity(X:verb) : pos
 
     after init {
-        str_to_verb(X) := verb.none;
+#        str_to_verb(X) := verb.none;
         verb_to_arity(verb.numeral) := 0;
         verb_to_arity(verb.string) := 0;
         verb_to_arity(verb.logvar) := 0;
@@ -143,7 +143,8 @@ module built_in_binary (optok,vrb,opprio) = {
     # Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
     # where `*` is a binary operator that associates to the left.
 
-    action unfold_left(e:expr) returns (args:vector[expr]) = {
+    action unfold_left(s:expr) returns (args:vector[expr]) = {
+	var e := s;
         var b := e.is_typed(vrb);  # workaround
         while b {
             args := args.append(e.get_arg(1));
@@ -201,7 +202,7 @@ module parse_intf(expr,cppstyle) = {
     action enc(e:expr) returns (s:str) = {
         var p := pretty.make(100,4);
         p.cppstyle := cppstyle;
-        p := expr.encode(e,p,0);
+        p := e.encode(p,0);
         p := p.flush;
         s := p.output
     }
@@ -238,6 +239,9 @@ module expr_base(cppstyle) = {
             res := s
         }
 	action get_last(s:this) returns (res:strident)
+	action get_verb(s:this) returns (vrb:verb) = {
+	    vrb := verb.none
+	}
     }
     
     # String identifiers are used for all symbols occurring in the
@@ -276,6 +280,12 @@ module expr_base(cppstyle) = {
         action make(val:str) returns (res:ident) = {
             var s : this;
             s.val := val;
+            res := s
+        }
+        action make1(val:str,arg:ident) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+	    s.subscrs := s.subscrs.append(arg);
             res := s
         }
         action to_str(s:this) returns (b:str) = {
@@ -329,6 +339,9 @@ module expr_base(cppstyle) = {
         }
 	action get_last(s:this) returns (res:strident) = {
 	    res := s
+	}
+	action get_verb(s:this) returns (vrb:verb) = {
+	    vrb := verb_from_name(s.val)
 	}
     }
 
@@ -517,6 +530,13 @@ module expr_base(cppstyle) = {
         action makestr(name:str,ann:annot) returns (res:expr) = {
             var s:symbol;
             s.name := strident.make(name);
+            s.vrb := verb_from_name(name);
+            s.ann := ann;
+            res := s
+        }
+        action makestr1(name:str,arg:ident,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := strident.make1(name,arg);
             s.vrb := verb_from_name(name);
             s.ann := ann;
             res := s

@@ -63,6 +63,10 @@ object ivy = { ...
         cpp_reserved_word("char") := true;
         cpp_reserved_word("int") := true;
         cpp_reserved_word("long") := true;
+        cpp_reserved_word("new") := true;
+        cpp_reserved_word("and") := true;
+        cpp_reserved_word("or") := true;
+        cpp_reserved_word("not") := true;
     }
 
 
@@ -458,7 +462,7 @@ object ivy = { ...
     }
 
     action fix_tpl_param(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
-        s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
+#        s := symbol.make(fix_object_clash(s.get_name,st),s.get_ann);
         (res,st) := fix_variant_type(s,st)
     }
         
@@ -508,6 +512,15 @@ object ivy = { ...
         res := cpp.app.make1(cpp.symbol.make(name,ann),arg,ann);
     }
 
+    # Returns true if the C++ express is `*this`. This case requires special
+    # handling for indirect calls. 
+
+    action is_cpp_this(s : cpp.expr) returns (res:bool) = {
+	if s isa cpp.symbol {
+	    res := (s.get_name.to_str = "(*this)");
+	}
+    }
+
     # Make a C++ function call. There are three cases here:
     #
     # Ordinary function call: `prefix.f(a0..an)`
@@ -515,7 +528,9 @@ object ivy = { ...
     # Indirect method call: `a0->f(a1..an)`
     #
     # The last case is used if `f : (t * ... -> u)` is a member function where
-    # type `t` is a variant type. 
+    # type `t` is a variant type. However, if the first argument is `(*this)` we
+    # do *not* use this form, as `this` is a normal C++ pointer, not a special
+    # Ivy variant pointer. 
     
     action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
         returns (res:cpp.expr, st:tocppst) =
@@ -523,7 +538,7 @@ object ivy = { ...
         if func_is_member(func)   {
             var fid := func.get_arg(0).get_name.to_cpp(false);
             var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
-            if is_variant_type(get_dom0(func.get_arg(1)),st) {
+            if is_variant_type(get_dom0(func.get_arg(1)),st) & ~is_cpp_this(args.value(0)) {
                 cfunc := cpp.arrow.make(args.value(0),cfunc,ann)
             } else {
                 cfunc := cpp.dot.make(args.value(0),cfunc,ann)
@@ -661,6 +676,14 @@ object ivy = { ...
         }
     }
 
+    action make_cast_to_bool(s:cpp.expr) returns (s:cpp.expr) = {
+	s := cpp.app.make1(cpp.symbol.makestr("ivy::native_bool",s.get_ann),s,s.get_ann);
+    }
+
+    action make_isa(s:cpp.expr,ty:cpp.expr) returns (s:cpp.expr) = {
+	s := cpp.app.make1(cpp.symbol.makestr1("ivy::isa",ty.get_name,s.get_ann),s,s.get_ann);
+    }
+
     # Translate a function application to C++. 
 
     object app = { ...
@@ -711,13 +734,17 @@ object ivy = { ...
 		var arg1 : cpp.expr;
 		(arg0,st) := s.args.value(0).to_cpp(st);
 		(arg1,st) := s.args.value(1).to_cpp(st);
-		var isam : cpp.strident;
-		isam.val := "isa";
-		isam.subscrs := isam.subscrs.append(arg1.get_name);
-		var id : cpp.ident := isam;
-		res := cpp.symbol.make(id,s.ann);
-		res := cpp.dot.make(arg0,res,s.ann);
-		res := cpp.app.make0(res,s.ann);
+		if is_cpp_this(arg0) {
+		    res := make_isa(arg0,arg1);
+		} else {
+		    var isam : cpp.strident;
+		    isam.val := "isa";
+		    isam.subscrs := isam.subscrs.append(arg1.get_name);
+		    var id : cpp.ident := isam;
+		    res := cpp.symbol.make(id,s.ann);
+		    res := cpp.dot.make(arg0,res,s.ann);
+		    res := cpp.app.make0(res,s.ann);
+		}
 	    } else if s.func.is(verb.colon) & s.func.get_arg(0).get_verb = verb.castv {
 
                 # A cast operator looks like (cast : (t->u))(x). This may indicate
@@ -776,7 +803,7 @@ object ivy = { ...
                             var lhs := s.args.value(0);
                             if lhs.is(verb.colon) {
                                 var ty := lhs.get_arg(1);
-                                if is_variant_type(ty,st) {
+                                if is_variant_type(ty,st) & ~is_cpp_this(capp.args.value(0)){
                                     capp.func := cpp.symbol.makestr("->",capp.func.get_ann)
                                 }
                             }
@@ -1035,7 +1062,7 @@ object ivy = { ...
             } else {
                 res.ftype.base._type := cpp.voidtype(s.ann);
             };
-            var cprot := ~s.has_body | st.proto_only;
+            var cprot := st.proto_only;
             var is_member := s.is_member;
             var full_name : cpp.expr;
             (full_name,st) := full_action_name(s.name,is_member,st);
@@ -1046,6 +1073,9 @@ object ivy = { ...
                 idx := idx.next;   # skip the first input "this" if a member
                 st.this_ident := proto.args.value(0).name.get_arg(0).get_name;
                 res.ftype.is_const := proto.args.value(0).is_const;
+		if cprot & is_variant_type(proto.args.value(0).name.get_arg(1),st) {
+		    res.is_virtual := true
+		}
             };
             st.locals := st.locals.push;
             while idx < proto.args.end {
@@ -1060,7 +1090,7 @@ object ivy = { ...
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
-            res.has_body := s.has_body & ~cprot;
+            res.has_body := ~cprot;
             if s.has_body {
                 var body :cpp.stmt;
                 (body,st) := s.body.to_cpp(st);
@@ -1075,7 +1105,9 @@ object ivy = { ...
                         res.body := cpp.sequence.make(vs,res.body,s.ann);
                     }
                 }
-            };
+            } else {
+		res.body := cpp.skipst.make(s.ann);
+	    };
             st.locals := st.locals.pop;
             st.is_member := false;
             resd := res;
@@ -1220,6 +1252,16 @@ object ivy = { ...
         s.ftype.base.name := t.name;
         s.has_body := true;
         s.body := cpp.skipst.make(t.ann);
+    }
+
+    action make_virt_destr(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+	var name : str;
+	name := name.extend("~");
+	name := name.extend(t.name.get_name.to_str);
+        s.ftype.base.name := cpp.symbol.makestr(name,t.ann);
+        s.has_body := true;
+        s.body := cpp.skipst.make(t.ann);
+	s.is_virtual := true;
     }
 
     # Numeric constructor does nothing (so that 0 gives default value):
@@ -1402,6 +1444,12 @@ object ivy = { ...
         s := add_hasher(s);
     }
 
+    # Add the standard traits to a struct.
+
+    action add_virtual_destructor(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+        s.members := s.members.append(make_virt_destr(s));
+    }
+
     # Add a constructor that uses the base class constructor.
     #
     #     derived(t value) : base(value) {}
@@ -1513,6 +1561,9 @@ object ivy = { ...
                 } else {
                     res := add_standard_traits(res);
                 };
+		if is_variant_type(s.sort,st) {
+                    res := add_virtual_destructor(res);
+		};
                 resd := res; 
                 if s.has_spec & (s.spec isa enumspec) {
                     (resd,st) := enum_to_cpp(res.name,s.spec,resd,st);

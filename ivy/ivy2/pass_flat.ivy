@@ -230,7 +230,10 @@ object ivy = { ...
 	    if s.vrb = verb.none {
 		if ~st.locals.mem(f.name) {
                     f.name := f.name.flat(false,st);
-		    call check_defined(f.name,st,s.ann)
+		    f.vrb := f.name.get_verb;  # name subst could change verb
+		    if f.vrb = verb.none {
+			call check_defined(f.name,st,s.ann)
+		    }
 		}
             };
             res := f
@@ -534,8 +537,6 @@ object ivy = { ...
 	}
     }
 
-    import action show_flat_str(s:str)
-
     action auto_defd_rec(s:expr,st:flatst) returns(st:flatst) = {
 	if s.is(verb.dot) {
 	    st := auto_defd_rec(s.get_arg(0),st);
@@ -545,7 +546,6 @@ object ivy = { ...
 	    st.no_undefined := true;
 	    (e,st) := s.flat(st);
 	    st.no_undefined := false;
-	    call show_flat_str(e.enc);
 	    var id := e.get_name;
 	    if ~st.defs.mem(id) {
 		var ok : bool;
@@ -733,7 +733,9 @@ object ivy = { ...
             res.has_def := s.has_def;
             if res.has_def {
                 (res.def,st) := s.def.flat(st);
-            }
+            } else {
+		res.typing := canon_typing(res.typing)
+	    }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
 	    st := auto_defd(s.typing,st);

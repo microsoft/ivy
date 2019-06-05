@@ -25,7 +25,7 @@
 include ivylang
 include hash
 include logic
-
+include error
 
 object ivy = { ...
 
@@ -119,7 +119,16 @@ object ivy = { ...
 
 	    # False if there has been a type error
 
-            ok : bool
+            ok : bool,
+
+	    # Types that we failed to unify
+
+	    failed : vector[expr],
+
+	    # Error has been reported
+
+	    error_reported : bool
+
         }
 
 	# Make a new type decorator state
@@ -151,6 +160,19 @@ object ivy = { ...
             };
         }
 
+	import action typeinf_show_str(s:str)
+
+	# Record failure of type unification
+
+	action unification_failed(st:this,x:expr,y:expr) returns (st:this) = {
+	    st.ok := false;
+	    st.failed := st.failed.append(x);
+	    st.failed := st.failed.append(y);
+	    call typeinf_show_str(x.enc);
+	    call typeinf_show_str(y.enc);
+	}
+	    
+
 	# Unify a pair of types. Sets ok to false if the types cannot
 	# be unified.
 
@@ -164,7 +186,7 @@ object ivy = { ...
                 var nx := x.get_name;
                 if nx isa numident {
                     if y.occurs(nx) {
-                        st.ok := false;
+                        st := unification_failed(st,x,y);
                     } else {
                         st.m := st.m.set(nx,y);
                     }
@@ -174,10 +196,12 @@ object ivy = { ...
                         if ny isa numident {
                             st := st.unify(y,x);
                         } else {
-                            st.ok := st.ok & (nx = ny);
+			    if nx ~= ny {
+				st := unification_failed(st,x,y);
+			    }
                         }
                     } else {
-                        st.ok := false
+                        st := unification_failed(st,x,y)
                     }
                 }
             } else if y isa symbol {
@@ -190,7 +214,7 @@ object ivy = { ...
                         st := st.unify(x.get_arg(1),y.get_arg(1));
                     }
                 } else {
-                    st.ok := false;
+                    st := unification_failed(st,x,y);
                 }
             };
         }
@@ -205,14 +229,14 @@ object ivy = { ...
         }
     }
 
-    # Called in case of a type error. TODO: This just calls an
-    # import. Should create a proper error report.
+    # Called in case of an error typing expression `e`. 
 
-    action type_error(e:expr,t1:expr,t2:expr) = {
-        call report_type_error(e.enc,t1.enc,t2.enc)
+    action type_error(e:expr,st:decost) returns (st:decost) = {
+	if ~st.error_reported {
+	    call report_error(type_clash.make(e,st.failed.value(0),st.failed.value(1)),e.get_ann);
+	    st.error_reported := true;
+	}
     }
-
-    import action report_type_error(s1:str,s2:str,s3:str)
 
     # We implement three recursions over expressions:
     #
@@ -255,8 +279,10 @@ object ivy = { ...
                     ty := st.ty.value(e.name);
                 } else {
                     (st,ty) := st.newvar(e.ann);
-                    ty := m.get(e.name,ty);
-                    st.ty := st.ty.set(e.name,ty);
+		    if e.vrb = verb.none | e.vrb = verb.logvar {
+			ty := m.get(e.name,ty);
+			st.ty := st.ty.set(e.name,ty);
+		    }
                 }
             };
             res := colon.make(e,ty,e.ann);
@@ -283,7 +309,7 @@ object ivy = { ...
                 ty := e.args.value(1);
                 st := st.unify(argty,ty);
                 if ~st.ok {
-                    call type_error(e,ty,argty)
+                    st := type_error(e,st)
                 }
             } else if e.is(verb.dot) { # dot operator acts like curried function application
                 var argty : expr;
@@ -297,7 +323,7 @@ object ivy = { ...
                 st.member := false;
                 st := st.unify(argty,fty);
                 if ~st.ok {
-                    call type_error(e,argty,fty)
+                    st := type_error(e,st)
                 };
                 res := dot.make(arg,func,e.ann);
             } else if e.is(verb.isav) {
@@ -319,7 +345,7 @@ object ivy = { ...
                 (arg,argty,st) := e.func.type_decorate(st,m);
                 st := st.unify(argty,fty);
                 if ~st.ok {
-                    call type_error(e,argty,fty)
+                    st := type_error(e,st)
                 };
                 res := app.make(arg,newargs,e.ann);
             }
@@ -416,7 +442,7 @@ object ivy = { ...
 	(e,ty2,st) := e.type_decorate(st,tc);
 	st := st.unify(ty,ty2);
         if ~st.ok {
-            call type_error(e,ty,ty2)
+            st := type_error(e,st)
         };
         (e,st) := e.type_fill_in(st);
     }
@@ -431,7 +457,7 @@ object ivy = { ...
 	(e2,e2ty,st) := e2.type_decorate(st,tc);
 	st := st.unify(e1ty,e2ty);
         if ~st.ok {
-            call type_error(e2,e1ty,e2ty)
+            st := type_error(e2,st)
         };
         (e1,st) := e1.type_fill_in(st);
         (e2,st) := e2.type_fill_in(st);

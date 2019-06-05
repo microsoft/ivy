@@ -601,7 +601,10 @@ namespace ivy {
         //        ptr(wrap *p) : p(p) {}
 
         template <class S> ptr(const S& x) {
-            p = new twrap<S>(x);
+                p = new twrap<S>(x);
+        }
+
+        ptr(std::size_t) {
         }
 
         ptr(const ptr &other){
@@ -645,12 +648,12 @@ namespace ivy {
             return !((*this) == other);
         }
         bool __is_zero() const {
-            const twrap<T> *q = dynamic_cast<const twrap<T> >(p);
-            return q & q->item.__is_zero();
+            const twrap<T> *q = dynamic_cast<const twrap<T> *>(p);
+            return q && q->item.__is_zero();
         }
         struct __hash {
             std::size_t operator()(const ptr &x) const {
-                return p->__hash();
+                return x.p->__hash();
             }
         };
 
@@ -658,6 +661,14 @@ namespace ivy {
             return dynamic_cast<const twrap<S> *>(p);
         }
     };
+
+    template <class T> const T* to_ptr (const T &x) {
+        return &x;
+    }
+    
+    template <class T,class S> native_bool isa(const S& x) {
+        return dynamic_cast<const T *>(&x);
+    }
 
     /* template<typename T> T __num(long long x) { */
     /*     T res; */

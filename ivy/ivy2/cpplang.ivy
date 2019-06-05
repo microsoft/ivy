@@ -317,6 +317,7 @@ object cpp = {
             has_body : bool,
             body : stmt,
             is_static : bool,
+	    is_virtual : bool,
             ann : annot
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
@@ -324,6 +325,10 @@ object cpp = {
             b := b.nest;
             if s.is_static {
                 b := b.extend("static");
+                b := b.extend(" ");
+            };
+            if s.is_virtual {
+                b := b.extend("virtual");
                 b := b.extend(" ");
             };
             b := s.ftype.encode(b,0);

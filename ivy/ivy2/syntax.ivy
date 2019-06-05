@@ -221,7 +221,7 @@ object str = { ...
 object annot = {
     type this
     action encode(s:this,b:pretty) returns (b:pretty)
-    action strip(s:this) returns (s:this)
+    action strip(s:this) returns (res:this)
     action to_str(s:this) returns (res:str)
 }
 

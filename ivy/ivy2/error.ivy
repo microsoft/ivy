@@ -22,7 +22,7 @@ object ivy = { ...
     # Reports an error and returns
 
     action report_error(e:error,ann:annot) = {
-        var b : pretty;
+        var b := pretty.make(100,4);
         b := b.extend(ann.to_str);
         b := b.extend(":");
         b := b.extend(" ");
@@ -53,9 +53,12 @@ object ivy = { ...
             b := b.extend(" ");
             b := e.t1.encode(b,0);
             b := b.extend(" ");
+            b := b.extend("and");
+            b := b.extend(" ");
             b := e.t2.encode(b,0);
             b := b.extend(" ");
             b := b.extend("when typing this expression:");
+            b := b.extend(" ");
             b := b.newline;
             b := e.e.encode(b,0);
         }

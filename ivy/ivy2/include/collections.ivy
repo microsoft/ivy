@@ -76,7 +76,7 @@ module array(domain,range) = {
         }
     }
 
-    # The `segment` gets the segment of an array from index `beg` to
+    # The `segment` action gets the segment of an array from index `beg` to
     # index `en-1`.
 
     action segment(s:this,beg:domain,en:domain) returns (res:this) = {
@@ -87,6 +87,19 @@ module array(domain,range) = {
 	}
     }    
     
+    # The `reverse` action reverses an array.
+
+    action reverse(s:this) returns (s:this) = {
+	var idx := s.begin;
+	var jdx := s.end.prev;
+	while idx < jdx {
+	    var tmp := s.value(idx);
+	    s.value(idx) := s.value(jdx);
+	    s.value(jdx) := tmp;
+	    jdx := jdx.prev;
+	    idx := idx.next;
+	}
+    }    
 }
 
 ################################################################################
