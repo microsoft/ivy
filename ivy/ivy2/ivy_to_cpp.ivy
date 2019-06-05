@@ -1131,7 +1131,7 @@ object ivy = { ...
         # does not have a body. External actions are never emitted.
 
         action emitted(s:this,st:tocppst) returns (res:bool) = {
-            res := (~s.is_member | s.has_body & ~st.proto_only) & s.kind ~= action_kind.external;
+            res := (~s.is_member | ~st.proto_only) & s.kind ~= action_kind.external;
         }
     }
 

@@ -440,7 +440,7 @@ namespace ivy {
         }
     };
 
-    // This template implements numeric types based on native C++
+    // This template implements signed numeric types based on native C++
     // numeric types. It provides the standard traits for Ivy values,
     // plus overloads for the standard arithmetic operations.
 
@@ -495,13 +495,69 @@ namespace ivy {
     };
 
 
+    // This template implements unsigned numeric types based on native C++
+    // numeric types. The unsigned versions use saturation arithmetic, so
+    // `0 - 1 = 0`. It provides the standard traits for Ivy values,
+    // plus overloads for the standard arithmetic operations.
+
+    template <typename T> struct native_unsigned {
+        T value;
+        native_unsigned() : value(0) {}
+        native_unsigned(long long value) : value(value) {}
+        operator std::size_t() const {
+            return value;
+        }
+        static bool __is_seq() {
+            return true;
+        }
+        native_bool operator==(const native_unsigned &other) const {
+            return native_bool(value == other.value);
+        }
+        native_bool operator!=(const native_unsigned &other) const {
+            return native_bool(value != other.value);
+        }
+        bool __is_zero() const {
+            return value == 0;
+        }
+        struct __hash {
+            std::size_t operator()(const native_unsigned &x) const {
+                return x.value;
+            }
+        };
+        native_unsigned operator+(const native_unsigned & other) const {
+            return native_unsigned(value + other.value);
+        }
+        native_unsigned operator-(const native_unsigned & other) const {
+            return native_unsigned((other.value > value) ? 0 : (value - other.value));
+        }
+        native_unsigned operator*(const native_unsigned & other) const {
+            return native_unsigned(value * other.value);
+        }
+        native_unsigned operator/(const native_unsigned & other) const {
+            return native_unsigned(value / other.value);
+        }
+        native_bool operator<(const native_unsigned & other) const {
+            return native_bool(value < other.value);
+        }
+        native_bool operator<=(const native_unsigned & other) const {
+            return native_bool(value <= other.value);
+        }
+        native_bool operator>(const native_unsigned & other) const {
+            return native_bool(value > other.value);
+        }
+        native_bool operator>=(const native_unsigned & other) const {
+            return native_bool(value >= other.value);
+        }
+    };
+
+
     // This template implements enumerated types based on native C++
     // enum types. It provides the standard traits for Ivy values.
 
     template <typename T> struct native_enum {
         T value;
         native_enum() : value((T)0) {}
-        native_enum(long long value) : value((T)0) {}
+        native_enum(long long value) : value((T)value) {}
         native_enum(T value) : value(value) {}
         operator std::size_t() const {
             return (std::size_t)value;
@@ -681,6 +737,12 @@ namespace ivy {
 
     static inline void put(int c) {
         std::cout.put(c);
+    }
+
+    // Get a character from standard in.
+
+    static inline int get() {
+        return std::cin.get();
     }
 
     // Resize a function.

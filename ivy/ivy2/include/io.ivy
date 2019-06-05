@@ -24,5 +24,36 @@ object io = {
                 idx := idx + 1;
             }
         }
+
+        # The `write` action writes a string to standard output followed
+	# by newline.
+
+        action writeln(s:str) = {
+	    call write(s);
+	    ivy.put(10);
+        }
+
+	# The `read` action from standard input untio EOF.
+
+        action read returns (s:str) = {
+	    var c : range := cast(ivy.get);
+            while c >= 0 {
+                s := s.append(c);
+		c := cast(ivy.get)
+            }
+        }
+
+	# The `readln` action reads a line from standard input, returning
+	# the line without any terminating newline character.
+
+        action readln returns (s:str) = {
+	    var c : range := cast(ivy.get);
+            while c >= 0 & c ~= 10 {
+                s := s.append(c);
+		c := cast(ivy.get)
+            }
+        }
+
+
     }
 }
