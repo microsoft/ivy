@@ -183,7 +183,11 @@ object ivy = { ...
 
 	    # The set of constructor functions
 
-	    constructors : ident_set
+	    constructors : ident_set,
+
+	    # True is compiling rhs of a dot operator
+
+	    dot_rhs : bool
 
         }
 
@@ -440,7 +444,7 @@ object ivy = { ...
                 res.name := cpp.strident.make("!=")
             } else if vrb = verb.ite {
                 res.name := cpp.strident.make("?")
-            } else if st.is_member & s.name = st.this_ident {
+            } else if st.is_member & s.name = st.this_ident & ~st.dot_rhs {
                 res.name := cpp.strident.make("(*this)");
             } else {
                 var id := s.name;
@@ -781,7 +785,9 @@ object ivy = { ...
                         var idx := s.args.begin;
                         while idx < s.args.end {
                             var arg : cpp.expr;
+			    if s.func.get_verb = verb.dot & idx = 1 { st.dot_rhs := true; };
                             (arg,st) := s.args.value(idx).to_cpp(st);
+			    st.dot_rhs := false;
                             capp.args := capp.args.append(arg);
                             idx := idx.next
                         };
