@@ -719,6 +719,11 @@ def p_symdecl_destructor_tterms(p):
     'symdecl : DESTRUCTOR tterms'
     p[0] = DestructorDecl(*p[2])
 
+if not(iu.get_numeric_version() <= [1,6]):
+    def p_symdecl_constructor_tterms(p):
+        'symdecl : CONSTRUCTOR tterms'
+        p[0] = ConstructorDecl(*p[2])
+
 def p_constantdecl_constant_tterms(p):
     'constantdecl : INDIV tterms'
     p[0] = ConstantDecl(*p[2])

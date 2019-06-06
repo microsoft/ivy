@@ -1023,6 +1023,11 @@ class IvyDomainSetup(IvyDeclInterp):
             raise IvyError(v,"A destructor must have at least one parameter")
         self.domain.destructor_sorts[sym.name] = dom[0]
         self.domain.sort_destructors[dom[0].name].append(sym)
+    def constructor(self,v):
+        sym = self.individual(v)
+        rng = sym.sort.rng
+        self.domain.constructor_sorts[sym.name] = rng
+        self.domain.sort_constructors[rng.name].append(sym)
     def add_definition(self,ldf):
         defs = self.domain.native_definitions if isinstance(ldf.formula.args[1],ivy_ast.NativeExpr) else self.domain.labeled_props
         lhsvs = list(lu.variables_ast(ldf.formula.args[0]))
@@ -1621,13 +1626,40 @@ def create_constructor_schemata(mod):
         Y = ivy_logic.Variable('Y',sort)
         eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
         fmla = ivy_logic.Exists([Y],ivy_logic.And(*eqs))
-        name = ivy_ast.Atom(iu.compose_names(sortname,'constructor'),[])
+        name = ivy_ast.Atom(iu.compose_names(sortname,'constr'),[])
         sch = ivy_ast.SchemaBody(fmla)
         sch.lineno = None
         sch.instances = []
         goal = ivy_ast.LabeledFormula(name,sch)
         goal.lineno = None
         mod.schemata[name.relname] = goal
+
+        for cons in mod.sort_constructors[sortname]:
+            dom = cons.sort.dom
+            if len(dom) != len(destrs):
+                raise iu.IvyError(cons,"Constructor {} has wrong number of arguments (got {}, expecting {})".format(cons,len(dom),len(destrs)))
+            for x,y in zip(dom,destrs):
+                if len(y.sort.dom) != 1:
+                    raise iu.IvyError(cons,"Cannot define constructor {} for type {} because field {} has higher type".format(cons,sortname,y))
+                if x.name != y.sort.rng.name:
+                    raise iu.IvyError(cons,"In constructor {}, argument {} has wrong type (expecting {}, got {})".format(cons,y.sort.rng,x))
+            xvars = [ivy_logic.Variable('X'+str(n),f.sort.rng) for n,f in enumerate(destrs)]
+            Y = cons(*xvars)
+            eqs = [ivy_logic.Equals(f(Y),ivy_logic.Variable('X'+str(n),f.sort.rng)) for n,f in enumerate(destrs)]
+            fmla = ivy_logic.And(*eqs)
+            name = ivy_ast.Atom(iu.compose_names(cons.name,'constr'),[])
+            sch = ivy_ast.SchemaBody(fmla)
+            sch.lineno = None
+            sch.instances = []
+            goal = ivy_ast.LabeledFormula(name,sch)
+            goal.lineno = None
+            mod.schemata[name.relname] = goal
+
+    for sortname,conss in mod.sort_constructors.iteritems():
+        for cons in conss:
+            if sortname not in mod.sort_destructors:
+                raise iu.IvyError(cons,"Cannot define constructor {} for type {} because {} is not a structure type".format(cons,sortname,sortname))
+    
         
 def apply_assert_proofs(mod,prover):
     def recur(self):

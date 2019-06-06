@@ -413,7 +413,8 @@ def gather_referenced_symbols(expr,res,ignore=[]):
             res.add(sym)
             if sym in is_derived:
                 ldf = is_derived[sym]
-                gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
+                if ldf is not True:
+                    gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
                 
 skip_z3 = False
 
@@ -439,8 +440,11 @@ def make_thunk(impl,vs,expr):
         declare_symbol(impl,sym,classname=the_classname)
     for fun in funs:
         ldf = is_derived[fun]
-        with ivy_ast.ASTContext(ldf):
-            emit_derived(None,impl,ldf.formula,the_classname,inline=True)
+        if ldf is True:
+            emit_constructor(None,impl,fun,the_classname,inline=True)
+        else:
+            with ivy_ast.ASTContext(ldf):
+                emit_derived(None,impl,ldf.formula,the_classname,inline=True)
     envnames = [varname(sym) for sym in env]
     open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
@@ -1144,6 +1148,19 @@ def emit_derived(header,impl,df,classname,inline=False):
     action.formal_returns = [retval]
     emit_some_action(header,impl,name,action,classname,inline)
 
+def emit_constructor(header,impl,cons,classname,inline=False):
+    name = cons.name
+    sort = cons.sort.rng
+    retval = il.Symbol("ret:val",sort)
+    vs = [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(cons.sort.dom)]
+    ps = [ilu.var_to_skolem('fml:',v) for v in vs]
+    destrs = im.module.sort_destructors[sort.name]
+    asgns = [ia.AssignAction(d(retval),p) for idx,(d,p) in enumerate(zip(destrs,ps))]
+    action = ia.Sequence(*asgns);
+    action.formal_params = ps
+    action.formal_returns = [retval]
+    emit_some_action(header,impl,name,action,classname,inline)
+
 
 def native_split(string):
     split = string.split('\n',1)
@@ -1616,6 +1633,9 @@ def module_to_cpp_class(classname,basename):
     is_derived = dict()
     for ldf in im.module.definitions + im.module.native_definitions:
         is_derived[ldf.formula.defines()] = ldf
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            is_derived[cons] = True
     global cpptypes
     cpptypes = []
     global sort_to_cpptype
@@ -2518,7 +2538,9 @@ class z3_thunk : public thunk<D,R> {
     for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
             emit_derived(header,impl,ldf.formula,classname)
-
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            emit_constructor(header,impl,cons,classname)
     for native in im.module.natives:
         tag = native_type(native)
         if tag.startswith('encode'):

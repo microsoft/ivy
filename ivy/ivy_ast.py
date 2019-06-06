@@ -782,6 +782,10 @@ class DestructorDecl(ConstantDecl):
     def name(self):
         return 'destructor'
 
+class ConstructorDecl(ConstantDecl):
+    def name(self):
+        return 'constructor'
+
 class DerivedDecl(Decl):
     def name(self):
         return 'derived'
