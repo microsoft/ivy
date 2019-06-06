@@ -842,7 +842,10 @@ object ivy = { ...
         }
     }
 
+    import action show_upcast_outputs(s:vector[expr])
+
     action upcast(lhsty:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
+	call show_upcast_outputs(st.outputs);
         (res,st) := rhs.to_cpp(st);
         if false & rhs.is(verb.colon) {
             var rhsty := rhs.get_arg(1);

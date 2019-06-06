@@ -5,6 +5,8 @@
 #include <memory>
 #include <typeinfo>
 #include <string>
+#include <fcntl.h>
+#include <unistd.h>
 
 namespace ivy {
 
@@ -763,6 +765,27 @@ namespace ivy {
         return res;
     }
 
+    template <class N, class D> static inline void read_file(const N &name, D &data, __bool &ok) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        int fd = ::open(sname.c_str(),0);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(2048);
+            int len;
+            while ((len = ::read(fd,&tmp[0],2048)) > 0) {
+                for (std::size_t i = 0; i < len; i++)
+                    data.append(tmp[i]);
+            }
+            ok = (len >= 0);
+            ::close(fd);
+        }
+    }
+    
     // Resize a function.
 
     template <class T> static inline void resize(T &f, unsigned size) {

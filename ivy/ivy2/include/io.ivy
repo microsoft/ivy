@@ -57,3 +57,33 @@ object io = {
 
     }
 }
+
+module file_io(buf,name) = {
+
+    action read(fname:name, b:buf) returns (b:buf, ok : bool) = {
+	(b,ok) := cast(ivy.read_file(cast(fname),cast(b)));
+    }
+
+
+}
+
+module path_name(name) = {
+    action change_extension(path:name,ext:name) returns (path:name) = {
+        if path.end > 0 {
+            var idx := path.end.prev;
+            while idx > 0 & path.value(idx) ~= 46 {  # dot
+                idx := idx.prev;
+            };
+            if path.value(idx) = 46 {
+                path := path.segment(path.begin,idx);
+                path := path.extend(".");
+                path := path.extend(ext)
+            }
+        }
+    }
+
+    action concat(path1:name,path2:name) returns (path1:name) = {
+        path1 := path1.extend("/");
+        path1 := path1.extend(path2);
+    }
+}
