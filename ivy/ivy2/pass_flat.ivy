@@ -78,6 +78,10 @@ object ivy = { ...
 
             locals : ident_set,
 
+	    # The set of global variables
+
+	    globals : ident_set,
+
             # True if we are defining an identifier
 
             defining : bool,
@@ -132,7 +136,9 @@ object ivy = { ...
     action applydot(arg:expr,member:ident,ann:annot,st:flatst) returns (res:expr) = {
 	if arg isa symbol {
             var name := member.prefix(arg.get_name);
-            if st.absolute | st.defining | (st.defs.get(arg.get_name,false) & ~st.locals.mem(arg.get_name)) {
+            if st.absolute | st.defining
+	       | (st.defs.get(arg.get_name,false) & ~st.locals.mem(arg.get_name) & ~st.globals.mem(arg.get_name))
+	    {
 		res := symbol.make(name,ann);
 		call check_defined(name,st,ann);
             } else {
@@ -208,7 +214,7 @@ object ivy = { ...
     } 
 
 
-    action add_def(s:expr,st:flatst) returns (st:flatst) = {
+    action add_def(s:expr,st:flatst,is_global:bool) returns (st:flatst) = {
         st.defining := true;
 #        var id := s.get_name.flat(false,st);
 	var e : expr;
@@ -216,6 +222,9 @@ object ivy = { ...
 	var id := e.get_name;
         st.defining := false;
         st.defs := st.defs.set(id,true);
+	if is_global {
+            st.globals := st.globals.set(id,true);
+	}	    
     }
 
     action check_defined(name:ident,st:flatst,ann:annot) = {
@@ -441,7 +450,7 @@ object ivy = { ...
 	    if s.kind = action_kind.external {
 		st.absolute := true;
 	    };
-            st := add_def(s.name,st);
+            st := add_def(s.name,st,false);
 	    st.absolute := false;
         }
     }
@@ -475,7 +484,7 @@ object ivy = { ...
         action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
             var idx := s.constructors.begin;
             while idx < s.constructors.end {
-                st := add_def(s.constructors.value(idx),st);
+                st := add_def(s.constructors.value(idx),st,false);
                 idx := idx.next;
             }
         }
@@ -694,7 +703,7 @@ object ivy = { ...
             }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st := add_def(s.sort,st);
+            st := add_def(s.sort,st,false);
             if s.has_spec {
 		st.defining := true;
 		var id := s.sort.get_name.flat(false,st);
@@ -739,7 +748,7 @@ object ivy = { ...
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
 	    st := auto_defd(s.typing,st);
-            st := add_def(get_typed_symbol(s.typing),st);
+            st := add_def(get_typed_symbol(s.typing),st,true);
         }
     }
 
@@ -767,7 +776,7 @@ object ivy = { ...
             (name,st) := s.name.flat(st);
             st.defining := false;
             st.moddecls := st.moddecls.set(name.get_name,s);
-            st := add_def(s.name,st);
+            st := add_def(s.name,st,false);
         }
     }
 
@@ -816,7 +825,7 @@ object ivy = { ...
             st.root := old_root;
         }
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st := add_def(s.name,st);
+            st := add_def(s.name,st,false);
             var old_has_root := st.has_root;
             var old_root := st.root;
             st := set_root(st,s.name);

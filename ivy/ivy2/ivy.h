@@ -787,7 +787,7 @@ namespace ivy {
         }
     }
     
-    template <class N, class D> static inline bool write_file(const N &name, const D &data) {
+    template <class N, class D> static inline bool __write_file(const N &name, const D &data) {
         bool ok;
         std::string sname;
         for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
