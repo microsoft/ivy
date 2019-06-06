@@ -64,6 +64,14 @@ module file_io(buf,name) = {
 	(b,ok) := cast(ivy.read_file(cast(fname),cast(b)));
     }
 
+    action write(fname:name, b:buf) returns (ok : bool) = {
+	ok := ivy.write_file(cast(fname),cast(b));
+    }
+
+    action exist(fname:name) returns (ok : bool) = {
+	ok := ivy.file_exists(cast(fname));
+    }
+
 
 }
 

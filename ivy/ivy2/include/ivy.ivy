@@ -19,4 +19,6 @@ extern action ivy.get returns (c:ivy.cint)
 extern action ivy.resize(f:ivy.func,s:ivy.size_t) returns (f:ivy.func)
 extern action ivy.getenv(name:ivy.func) returns (val:ivy.func)
 extern action ivy.read_file(name:ivy.func,data:ivy.func) returns (data:ivy.func,ok:bool)
+extern action ivy.write_file(name:ivy.func,data:ivy.func) returns (ok:bool)
+extern action ivy.file_exists(name:ivy.func) returns (ok:bool)
 

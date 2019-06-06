@@ -44,7 +44,7 @@ namespace ivy {
         bool value;
         native_bool() : value(false) {}
         native_bool (bool value) : value(value) {}
-        native_bool(long long value) : value(false) {}
+        native_bool(long long value) : value(value) {}
         operator bool() const {
             return value;
         }
@@ -394,6 +394,7 @@ namespace ivy {
     // one argument. 
 
     template<class T, class PrimaryD, class ... RestD > struct vector<T, PrimaryD, RestD...> {
+        typedef PrimaryD index_type;
         typedef typename vector<T, RestD...>::type OneDimensionDownVectorT;
         typedef vector<OneDimensionDownVectorT,PrimaryD> type;
         type data;
@@ -786,6 +787,36 @@ namespace ivy {
         }
     }
     
+    template <class N, class D> static inline bool write_file(const N &name, const D &data) {
+        bool ok;
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        int fd = ::creat(sname.c_str(),0660);
+        if (fd < 0) {
+            ok = false;
+        } else {
+            std::vector<char> tmp;
+            tmp.resize(data.end);
+            for (std::size_t i = 0; i < tmp.size(); i++) {
+                tmp[i] = data.value(i);
+            }
+            std::size_t bytes = ::write(fd,&tmp[0],tmp.size());
+            ok = (bytes == tmp.size());
+            ::close(fd);
+        }
+        return ok;
+    }
+
+    template <class N> static inline bool file_exists(const N &name) {
+        std::string sname;
+        for (std::size_t idx = 0; idx < ((std::size_t) name.end); idx ++) {
+            sname.push_back(name.value(idx));
+        }
+        return ::access(sname.c_str(),F_OK) != -1;
+    }
+
     // Resize a function.
 
     template <class T> static inline void resize(T &f, unsigned size) {
