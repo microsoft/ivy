@@ -399,19 +399,6 @@ object ivy = { ...
         }
     }
 
-    object subsident = { ...
-        action to_cpp(s:this,native:bool) returns (res:cpp.ident) = {
-            var t : cpp.subsident;
-            t.namesp := s.namesp.to_cpp(native);
-            var idx := s.subscrs.begin;
-            while idx < s.subscrs.end {
-                t.subscrs := t.subscrs.append(s.subscrs.value(idx).to_cpp(native));
-                idx := idx.next
-            };
-            res := t
-        }
-    }
-
     object expr = { ...
         action to_cpp(s:expr,st:tocppst) returns (res:cpp.expr,st:tocppst)
     }
@@ -1911,3 +1898,4 @@ object ivy = { ...
 
 }
 
+export ivy.app.reduce

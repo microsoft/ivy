@@ -124,7 +124,7 @@ object ivy = { ...
     }
 
     object expr = { ...
-        action flat(s:this,st:flatst) returns (s:expr,st:flatst)
+        action flat(s:this,st:flatst) returns (res:expr,st:flatst)
     }
 
     # A dot operator has two possible interpretations: it indicates a
@@ -195,21 +195,6 @@ object ivy = { ...
     object dotident = { ...
         action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
             res := dotident.make(s.namesp.flat(rhs,st),s.member);
-        }
-    } 
-
-    object subsident = { ...
-        action flat(s:this,rhs:bool,st:flatst) returns (res:ident) = {
-            var f := s;
-            f.namesp := f.namesp.flat(rhs,st);
-            var idx := f.subscrs.begin;
-            while idx < f.subscrs.end {
-                var s := f.subscrs.value(idx);
-                s := s.flat(false,st);
-                f.subscrs := f.subscrs.set(idx,s);
-                idx := idx.next
-            };         
-            res := f
         }
     } 
 
@@ -667,7 +652,7 @@ object ivy = { ...
     # type `t1 * ... tn -> s`.
 
     object expr = { ...
-        action uncurry(ty:expr) returns (ty:expr) = {
+        action uncurry(ty:expr) returns (res:expr) = {
             var dom := times.unfold_left(ty.get_arg(0));
             var rng := ty.get_arg(1);
             if rng.is(verb.arrow) {
@@ -675,7 +660,7 @@ object ivy = { ...
                 dom := dom.extend(dom2);
                 rng := rng.get_arg(1);
             };
-            ty := arrow.make(times.fold_left(dom,ty.get_ann),rng,ty.get_ann);
+            res := arrow.make(times.fold_left(dom,ty.get_ann),rng,ty.get_ann);
         }
     }
 

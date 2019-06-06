@@ -35,13 +35,14 @@ object ivy = { ...
 	    	    
     object app = { ...
 	action reduce(s:this,smap:symeval) returns (res:expr) = {
-	    s.func := s.func.reduce(smap);
+	    var resa : this;
+	    resa.func := s.func.reduce(smap);
 	    var idx := s.args.begin;
 	    while idx < s.args.end {
-		s.args := s.args.set(idx,s.args.value(idx).reduce(smap));
+		resa.args := resa.args.append(s.args.value(idx).reduce(smap));
                 idx := idx.next;
 	    };
-	    res := s;
+	    res := resa;
 	}
         action occurs(s:this,n:ident) returns (res:bool) = {
             res := s.func.occurs(n);
@@ -70,6 +71,5 @@ object ivy = { ...
     }
 }
 
-export ivy.app.reduce
 
 

@@ -260,11 +260,11 @@ object ivy = { ...
 
     # Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
 
-    action uncurry_func(func:expr) returns (func:expr) = {
+    action uncurry_func(func:expr) returns (res:expr) = {
         var ty := func.get_arg(1).get_arg(0);
         var fid := func.get_arg(0).get_name.prefix(ty.get_name);
         var sym := symbol.make(fid,func.get_ann);
-        func := colon.make(sym,func.get_arg(1).uncurry,func.get_ann);
+        res := colon.make(sym,func.get_arg(1).uncurry,func.get_ann);
     }
 
     # Given a function type `ty = (t * ... -> u)`, return `t`.

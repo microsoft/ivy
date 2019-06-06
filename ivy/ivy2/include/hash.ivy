@@ -18,7 +18,7 @@ module hash_map(domain,range) = {
     }
     
     type this = struct {
-	value(X:domain) : rec
+	map(X:domain) : rec
     }
 
     # return an empty map
@@ -31,13 +31,13 @@ module hash_map(domain,range) = {
 	var z : rec;
 	z.full := true;
 	z.val := y;
-	a.value(x) := z;
+	a.map(x) := z;
     }
 
     # get the value y such that x maps to z in a, else
     # leave y unchanged.
     action get(a:this,x:domain,y:range) returns (y:range) = {
-	var z := a.value(x);
+	var z := a.map(x);
 	if z.full {
 	    y := z.val
 	}
@@ -45,13 +45,17 @@ module hash_map(domain,range) = {
 
     # return true if x maps to some value
     action mem(a:this,x:domain) returns (res:bool) = {
-	res := a.value(x).full;
+	res := a.map(x).full;
     }
 
     # remove a key x from the map
     action remove(a:this,x:domain) returns (a:this) = {
 	var z : rec;
-	a.value(x) := z;
+	a.map(x) := z;
+    }
+
+    action value(a:this,x:domain) returns (y:range) = {
+	y := a.map(x).val;
     }
 
 }
