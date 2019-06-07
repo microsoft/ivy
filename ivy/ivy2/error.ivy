@@ -28,11 +28,9 @@ object ivy = { ...
         b := b.extend(" ");
         b := e.encode(b);
         b := b.flush;
-        call show(b.output);
+        call stdio.write(b.output);
         errors := errors.append(e);
     }
-
-    import action show(msg:str)
 
     # - Error `type_clash(e,t1,t2)` indicates that in sub-expression `e`,
     #   types `t1` and `t2` could not be unified.

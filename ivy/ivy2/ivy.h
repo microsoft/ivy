@@ -842,5 +842,19 @@ namespace ivy {
         return x;
     }
 
+    // Globals to hold the arguments to main
+
+    int __argc;
+    char **__argv;
+
+    template <class N, class D> static inline void get_argv(const N &idx, D &data) {
+        const char* p = __argv[(std::size_t)idx];
+        for (; *p; ++p) 
+            data.append(*p);
+    }
+    static inline int get_argc() {
+        return __argc;
+    }
+
 }
 

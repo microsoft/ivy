@@ -26,31 +26,6 @@ module binary_op_to_cpp(ivytype,cpptype,cppclass) = {
     }
 }
     
-module test_to_cpp(ivyclass,cppclass) = {
-    export action test(s:str) returns(res:str) = {
-        var ivyexpr := ivyclass.dec(s);
-        var fst : flatst;
-        (ivyexpr,fst) := ivyexpr.flat(fst);
-        var cppexpr : cppclass;
-        var st : tocppst;
-        (cppexpr,st) := ivyexpr.to_cpp(st);
-        res := cppexpr.enc
-    }
-    export action test1(s:str) returns(res:cppclass) = {
-        var ivyexpr := ivyclass.dec(s);
-        var fst : flatst;
-        (ivyexpr,fst) := ivyexpr.flat(fst);
-        var st : tocppst; 
-        (res,st) := ivyexpr.to_cpp(st);
-    }
-    export action test2(s:str) returns(res:ivyclass) = {
-        var ivyexpr := ivyclass.dec(s);
-        var fst : flatst;
-        (ivyexpr,fst) := ivyexpr.flat(fst);
-        res := ivyexpr;
-    }
-}
-
 object ivy = { ...
     
     # The set of names reserved by C++. Ivy names that clash with these
@@ -260,11 +235,6 @@ object ivy = { ...
                 }
             }
         }
-    }
-
-    export action test_lvalue_path(s:str) returns(path:access_path) = {
-        var ok : bool;
-        (path,ok) :=lvalue_path(expr.dec(s),path)
     }
 
     # Workaround
@@ -1867,12 +1837,16 @@ object ivy = { ...
                     main.body := cpp.sequence.make(cbody,main.body,decl.get_ann);
                 }
             };
+	    var argv := cpp.asgn.make(cpp.symbol.makestr("ivy::__argv",main.ann),cpp.symbol.makestr("argv",main.ann),main.ann);
+	    main.body := cpp.sequence.make(argv,main.body,main.ann);
+	    var argc := cpp.asgn.make(cpp.symbol.makestr("ivy::__argc",main.ann),cpp.symbol.makestr("argc",main.ann),main.ann);
+	    main.body := cpp.sequence.make(argc,main.body,main.ann);
             res.decls := res.decls.append(main);
 	}
 
 	import action show_prog(s:str)
 
-        export action file_to_cpp(name:str) = {
+        action file_to_cpp(name:str) = {
 
             # Read the program
 
@@ -1910,15 +1884,6 @@ object ivy = { ...
     }
 
 	
-
-    object expr = { ...
-        instantiate test_to_cpp(ivy.expr,cpp.expr)
-    }
-    
-    object stmt = { ...
-        instantiate test_to_cpp(ivy.stmt,cpp.stmt)
-    }
-
 
 }
 

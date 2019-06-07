@@ -490,30 +490,5 @@ object ivy = { ...
         }
     }
 
-    type thing = struct {
-        out:str,
-        st:decost
-    }
-    
-    export action testdeco(inp:str) returns (res:thing) = {
-        var e := expr.dec(inp);
-        var ty : expr;
-        var m : symeval;
-        m := m.set(strident.make("foo"),expr.dec("t"));
-        res.st := decost.make;
-        (e,ty,res.st) := e.type_decorate(res.st,m);
-        (e,res.st) := e.type_fill_in(res.st);
-        res.out := expr.enc(e);
-    }
-
-    export action testelide(inp:str) returns (res:str) = {
-        var e := expr.dec(inp);
-        var ty : expr;
-        var m : symeval;
-        m := m.set(strident.make("foo"),expr.dec("t"));
-        var st : elidest;
-        (e,st) := e.type_elide_int(false,m,st);
-        res := expr.enc(e);
-    }
 }
 

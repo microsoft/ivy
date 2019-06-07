@@ -15,3 +15,12 @@ module environment(str) = {
 	res := cast(ivy.getenv(cast(name)))
     }
 }    
+
+module sys_argv(pos,str) = {
+    action end returns (res:pos) = {
+	res := cast(ivy.get_argc);
+    }
+    action value(idx:pos) returns (res:str) = {
+	res := cast(ivy.get_argv(cast(idx),cast(res)));
+    }
+}

@@ -5,58 +5,56 @@
 # files.
 #
 
-object io = {
-    
-    # The `stdio` module provides input/output on the standard
-    # streams, that is, standard input, standard output and standard
-    # error. It takes a parameter `str`, which is a type with string
-    # traits.
+# The `stdio` module provides input/output on the standard
+# streams, that is, standard input, standard output and standard
+# error. It takes a parameter `str`, which is a type with string
+# traits.
 
-    module stdio(str,domain,range) = {
+module io_stdio(str,domain,range) = {
 
-        # The `write` action writes a string to standard output.
+    # The `write` action writes a string to standard output.
 
-        action write(s:str) = {
-            var idx : domain;
-            idx := s.begin;
-            while idx < s.end {
-                ivy.put(cast(s.value(idx)));
-                idx := idx + 1;
-            }
-        }
-
-        # The `write` action writes a string to standard output followed
-	# by newline.
-
-        action writeln(s:str) = {
-	    call write(s);
-	    ivy.put(10);
-        }
-
-	# The `read` action from standard input untio EOF.
-
-        action read returns (s:str) = {
-	    var c : range := cast(ivy.get);
-            while c >= 0 {
-                s := s.append(c);
-		c := cast(ivy.get)
-            }
-        }
-
-	# The `readln` action reads a line from standard input, returning
-	# the line without any terminating newline character.
-
-        action readln returns (s:str) = {
-	    var c : range := cast(ivy.get);
-            while c >= 0 & c ~= 10 {
-                s := s.append(c);
-		c := cast(ivy.get)
-            }
-        }
-
-
+    action write(s:str) = {
+	var idx : domain;
+	idx := s.begin;
+	while idx < s.end {
+	    ivy.put(cast(s.value(idx)));
+	    idx := idx + 1;
+	}
     }
+
+    # The `write` action writes a string to standard output followed
+    # by newline.
+
+    action writeln(s:str) = {
+	call write(s);
+	ivy.put(10);
+    }
+
+    # The `read` action from standard input untio EOF.
+
+    action read returns (s:str) = {
+	var c : range := cast(ivy.get);
+	while c >= 0 {
+	    s := s.append(c);
+	    c := cast(ivy.get)
+	}
+    }
+
+    # The `readln` action reads a line from standard input, returning
+    # the line without any terminating newline character.
+
+    action readln returns (s:str) = {
+	var c : range := cast(ivy.get);
+	while c >= 0 & c ~= 10 {
+	    s := s.append(c);
+	    c := cast(ivy.get)
+	}
+    }
+
+
 }
+
 
 module file_io(buf,name) = {
 

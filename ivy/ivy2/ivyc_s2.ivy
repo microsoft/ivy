@@ -1,0 +1,24 @@
+#lang ivy1.7
+
+include reader
+include pass_flat
+include pass_typeinfer
+include ivy_to_cpp
+
+instance argv : sys_argv(pos,str)
+
+object ivy { ...
+    action show_expr(e:expr) = {
+	call stdio.writeln(e.enc)
+    }
+}
+
+init {
+    if argv.end > 1 {
+	ivy.prog.file_to_cpp(argv.value(1));
+    } else {
+	stdio.writeln("usage: ivyc <file>.ivy");
+    }
+}
+
+

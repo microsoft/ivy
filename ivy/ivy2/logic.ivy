@@ -10,7 +10,7 @@ object ivy = { ...
     instance symeval : hash_map(ident,expr)
 
     object expr = { ...
-	export action reduce(e:this,smap:symeval) returns (res:expr)
+	action reduce(e:this,smap:symeval) returns (res:expr)
         action occurs(e:this,n:ident) returns (res:bool) = {
             res := false
         }

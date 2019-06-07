@@ -21,4 +21,6 @@ extern action ivy.getenv(name:ivy.func) returns (val:ivy.func)
 extern action ivy.read_file(name:ivy.func,data:ivy.func) returns (data:ivy.func,ok:bool)
 extern action ivy.__write_file(name:ivy.func,data:ivy.func) returns (ok:bool)
 extern action ivy.file_exists(name:ivy.func) returns (ok:bool)
+extern action ivy.get_argc returns (c:ivy.cint)
+extern action ivy.get_argv(name:ivy.func,data:ivy.func) returns (data:ivy.func)
 

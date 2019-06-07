@@ -525,3 +525,5 @@ object pos = { ...
     instantiate numconv(str)
 }
 
+instance stdio : io_stdio(str,pos,char)
+

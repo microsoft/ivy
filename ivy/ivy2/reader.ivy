@@ -107,13 +107,6 @@ object ivy = { ...
             (p,rst) := read_file_int(name,ann,p,rst);
         }
 
-        export action test_read(name:str) returns (res:str) = {
-            var p := read_file(name);
-            res := prog.enc(p);
-        }
-
-        
-        
     }
 
     instance path : path_name(str)
