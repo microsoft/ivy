@@ -589,17 +589,5 @@ object cpp = {
 
 }
 
-export cpp.expr.enc
-export cpp.expr.dec
-export cpp.expr.encdec
-export cpp.stmt.enc
-export cpp.stmt.dec
-export cpp.stmt.encdec
-export cpp.decl.enc
-export cpp.decl.dec
-export cpp.decl.encdec
-export cpp.prog.enc
-export cpp.prog.dec
-export cpp.prog.encdec
 
 

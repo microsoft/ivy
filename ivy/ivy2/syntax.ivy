@@ -525,5 +525,3 @@ object pos = { ...
     instantiate numconv(str)
 }
 
-instance stdio : io.stdio(str,pos,char)
-

@@ -878,6 +878,22 @@ object ivy = { ...
         }
     }
 
+    # If the "this" argument of a member function is assign to a
+    # variable or passed as an argument, and if "this" is of a
+    # supertype, then we have to use the virtual `__upcast` method of
+    # the object to get a C-o-W pointer to the object. Otherwise C++
+    # will slice the object.
+
+    action fix_variant_arg(s:expr,rhs:cpp.expr,st:tocppst) returns (rhs:cpp.expr) = {
+	if ~s.is_typed(verb.castv) & is_cpp_this(rhs) {
+	    var ty := s.get_type;
+	    if is_variant_type(ty,st) {
+		var ann := rhs.get_ann;
+		rhs := cpp.dot.make(rhs,cpp.app.make0(cpp.symbol.makestr("__upcast",ann),ann),ann);
+	    }
+	}
+    }
+    
     # Handling of assignments. For each lvalue on the lhs, we count
     # the number of possibly aliasing references on the rhs, and
     # record this information in `st.outputs`. We then translate the
@@ -898,6 +914,7 @@ object ivy = { ...
             st := kill_lvalues(st.outputs,st,paths);
 	    (res.rhs,st) := s.rhs.to_cpp(st);
 	    if res.rhs.get_verb ~= cpp.verb.empty {
+		res.rhs := fix_variant_arg(s.rhs,res.rhs,st);
 		st := st.add_stmt(res);  # Don't generate () = ();
 	    };
 	    (st,resd) := st.get_code(s.ann);
@@ -1244,6 +1261,16 @@ object ivy = { ...
 	s.is_virtual := true;
     }
 
+    action make_upcast_method(t:cpp.structdecl) returns (s:cpp.funcdecl) = {
+        s.ftype.base.name := cpp.symbol.makestr("__upcast",t.ann);
+	var ty := t.super if t.has_super else t.name;
+	s.ftype.base._type := cpp.symbol.makestr1("ivy::ptr",ty.get_name,t.ann);
+        s.has_body := true;
+        s.body := cpp.retst.make(cpp.symbol.makestr("(*this)",t.ann),t.ann);
+	s.is_virtual := true;
+	s.ftype.is_const := true;
+    }
+
     # Numeric constructor does nothing (so that 0 gives default value):
     #     name(long long) {};
 
@@ -1424,10 +1451,17 @@ object ivy = { ...
         s := add_hasher(s);
     }
 
-    # Add the standard traits to a struct.
+    # Add a virtual upcast and destructor to a base class.
 
     action add_virtual_destructor(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+	s.members := s.members.append(make_upcast_method(s));
         s.members := s.members.append(make_virt_destr(s));
+    }
+
+    # Add an virtual upcast derived class.
+
+    action add_upcast_method(s:cpp.structdecl) returns (s:cpp.structdecl) = {
+	s.members := s.members.append(make_upcast_method(s));
     }
 
     # Add a constructor that uses the base class constructor.
@@ -1541,6 +1575,9 @@ object ivy = { ...
                 } else {
                     res := add_standard_traits(res);
                 };
+		if s.has_super {
+		    res := add_upcast_method(res);
+		};
 		if is_variant_type(s.sort,st) {
                     res := add_virtual_destructor(res);
 		};
@@ -1885,4 +1922,3 @@ object ivy = { ...
 
 }
 
-export ivy.app.reduce
