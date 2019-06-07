@@ -458,6 +458,10 @@ module expr_base(cppstyle) = {
 
     }
 
+    action show_expr(e:expr) = {
+	stdio.writeln(e.enc)
+    }
+
     object symbol = {
         variant this of expr = struct {
             name : ident,

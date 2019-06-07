@@ -258,6 +258,22 @@ object ivy = { ...
     # Member functions
     # ================
 
+    # Curry a function type, that is, translate type `t1 * ... tn -> s` to
+    # type t1 -> (t2 * ... * tn -> s).
+
+    object expr = { ...
+        action curry(ty:expr) returns (res:expr) = {
+            var dom := times.unfold_left(ty.get_arg(0));
+            var dom2 := dom.segment(1,dom.end);
+            var rng := ty.get_arg(1);
+            var ty2 :=
+                rng if dom2.end = 0
+                else arrow.make(times.fold_left(dom2,ty.get_arg(0).get_ann),rng,ty.get_ann);
+            res := arrow.make(dom.value(0),ty2,ty.get_ann.strip)
+        }
+    }
+    
+
     # Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
 
     action uncurry_func(func:expr) returns (res:expr) = {

@@ -323,21 +323,6 @@ object ivy = { ...
 	};
     }
 
-    # Curry a function type, that is, translate type `t1 * ... tn -> s` to
-    # type t1 -> (t2 * ... * tn -> s).
-
-    object expr = { ...
-        action curry(ty:expr) returns (ty:expr) = {
-            var dom := times.unfold_left(ty.get_arg(0));
-            var dom2 := dom.segment(1,dom.end);
-            var rng := ty.get_arg(1);
-            var ty2 :=
-                rng if dom2.end = 0
-                else arrow.make(times.fold_left(dom2,ty.get_arg(0).get_ann),rng,ty.get_ann);
-            ty := arrow.make(dom.value(0),ty2,ty.get_ann.strip)
-        }
-    }
-    
     object ident = { ...
         action to_cpp(s:this,native:bool) returns (res:cpp.ident)
     }
@@ -1084,22 +1069,24 @@ object ivy = { ...
                 idx := idx.next
             };
             res.has_body := ~cprot;
-            if s.has_body {
-                var body :cpp.stmt;
-                (body,st) := s.body.to_cpp(st);
-                res.body := body;
-                if has_output {
-                    var rvar : cpp.expr;
-                    (rvar,st) := s.outputs.value(0).get_arg(0).to_cpp(st);
-                    var ret := cpp.retst.make(rvar,s.ann);
-                    res.body := cpp.sequence.make(res.body,ret,s.ann);
-                    if ~is_input_param(s,s.outputs.value(0)) {
-                        var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
-                        res.body := cpp.sequence.make(vs,res.body,s.ann);
-                    }
-                }
-            } else {
-		res.body := cpp.skipst.make(s.ann);
+	    if res.has_body {
+		if s.has_body {
+		    var body :cpp.stmt;
+		    (body,st) := s.body.to_cpp(st);
+		    res.body := body;
+		} else {
+		    res.body := cpp.skipst.make(s.ann);
+		};
+		if has_output {
+		    var rvar : cpp.expr;
+		    (rvar,st) := s.outputs.value(0).get_arg(0).to_cpp(st);
+		    var ret := cpp.retst.make(rvar,s.ann);
+		    res.body := cpp.sequence.make(res.body,ret,s.ann);
+		    if ~is_input_param(s,s.outputs.value(0)) {
+			var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
+			res.body := cpp.sequence.make(vs,res.body,s.ann);
+		    }
+		}
 	    };
             st.locals := st.locals.pop;
             st.is_member := false;

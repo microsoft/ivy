@@ -361,6 +361,13 @@ namespace ivy {
                 if (((std::size_t)idx) < data.size())
                     return data[((std::size_t)idx)];
                 else if (((std::size_t)idx) == data.size()) {
+                    if (map) {
+                        map_type &m = *map;
+                        typename map_type::iterator it = m.find(idx);
+                        if (it != m.end()) {
+                            return it->second;
+                        }
+                    }
                     data.resize(((std::size_t)idx)+1);
                     return data[((std::size_t)idx)];
                 }

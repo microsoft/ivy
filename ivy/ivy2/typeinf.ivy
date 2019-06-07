@@ -38,19 +38,19 @@ object ivy = { ...
     #
     # Verb is monomorphic:
     
-    relation verb_mono(X:verb)
+    function verb_mono(X:verb) : bool
     
     # Input types determine output types:
 
-    relation verb_in_to_out(X:verb)
+    function verb_in_to_out(X:verb) : bool
     
     # Output type determines input types:
 
-    relation verb_out_to_in(X:verb)
+    function verb_out_to_in(X:verb) : bool
     
     # First input type determines all:
 
-    relation verb_first_to_in(X:verb)
+    function verb_first_to_in(X:verb) : bool
     
     action set_built_in_type(vrb:verb,ty:str,m:bool,io:bool,oi:bool,fi:bool) = {
         optypes(vrb) := expr.dec(ty);
@@ -179,9 +179,11 @@ object ivy = { ...
 	import action show_unifying(x:str,y:str)
 	import action show_ok(res:bool)
 
-        action unify(st:this,x:expr,y:expr) returns (st:this) = {
-            (st,x) := st.find(x);
-            (st,y) := st.find(y);
+        action unify(st:this,x0:expr,y0:expr) returns (st:this) = {
+	    var x : expr;
+	    var y : expr;
+            (st,x) := st.find(x0);
+            (st,y) := st.find(y0);
             if x isa symbol {
                 var nx := x.get_name;
                 if nx isa numident {
@@ -371,7 +373,8 @@ object ivy = { ...
             res := app.make(func,newargs,e.ann);
         }
 
-        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+        action type_elide_int(e:this,b0:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+	    var b := b0;
             if e.is(verb.colon) {
                 var arg := e.args.value(0);
                 (res,st) := arg.type_elide_int(b,m,st);

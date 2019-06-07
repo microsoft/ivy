@@ -4,6 +4,7 @@ include arith
 include order
 include string
 include collections
+include io
 
 # Characters
 # ----------
@@ -523,3 +524,6 @@ module numconv(str) = {
 object pos = { ...
     instantiate numconv(str)
 }
+
+instance stdio : io.stdio(str,pos,char)
+
