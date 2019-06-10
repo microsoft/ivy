@@ -1,0 +1,450 @@
+#lang ivy1.7
+
+# The typeinfer pass decorates the program with typings and raises type errors if
+# the program cannot be typed.
+
+include ivylang
+include logic
+include error
+include analysis
+include typeinf
+
+module generic_typeinfer(ivytype,ivyclass) = {
+    action typeinfer(s:ivytype,st:typeinferst) returns (res:ivyclass,st:typeinferst) = {
+        var t : ivytype;
+        (t,st) := s.typeinfer_int(st);
+        t.ann := s.ann;
+        res := t;
+    }
+}
+
+object ivy = { ...
+
+    # A `type_context` provides a map from type identifiers to types. It
+    # suports push and pop of typings.
+
+    object type_context = {
+	type stack_entry = struct {
+	    id : ident,
+	    any : bool,
+	    val : expr
+	}
+	type this = struct {
+	    m : symeval,
+	    stack : vector[stack_entry]
+	}
+	action set(s:this,typing:expr) returns (s:this) = {
+	    s.m := s.m.set(typing.get_arg(0).get_name,typing.get_arg(1));
+	}
+	action push(s:this,typing:expr) returns (s:this) = {
+	    var ent : stack_entry;
+	    ent.id := typing.get_arg(0).get_name;
+	    ent.any := s.m.mem(ent.id);
+	    if ent.any {
+		ent.val := s.m.value(ent.id);
+	    };
+	    s.stack := s.stack.append(ent);
+	    s.m := s.m.set(ent.id,typing.get_arg(1));
+	}
+	action pop(s:this) returns (s:this) = {
+	    var ent := s.stack.back;
+	    s.stack := s.stack.pop_back;
+	    if ent.any {
+		s.m := s.m.set(ent.id,ent.val)
+	    } else {
+		s.m := s.m.remove(ent.id)
+	    }
+	}
+    }
+
+    # This object represents the state of the typeinfer pass
+
+    object typeinferst = {
+        type this = struct {
+
+            # Type context
+
+            tc : type_context,
+
+	    # The subtyping relation
+	    
+            subtype_rel : subtypes
+	}
+
+    }
+    
+    object stmt = { ...
+        action typeinfer(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s
+        }
+        action typeinfer_desugar(s:this,desugar:bool,st:typeinferst) returns (ress:stmt,st:typeinferst)
+    }
+
+    # Bottom up type inference
+
+    action bottom_up_type(e:expr,st:typeinferst, ok : bool) returns (e:expr, ok : bool) = {
+	if e isa symbol {
+	    if e.get_verb = verb.none | e.get_verb = verb.logvar {
+		var name := e.get_name;
+		if st.tc.m.mem(name) {
+		    e := colon.make(e,st.tc.m.value(name),e.get_ann)
+		}
+#                else {
+#		    call report_error(undefined.make(name),e.get_ann);
+#		    ok := false;
+#		}
+	    } else if e.get_verb = verb.empty {
+                e := colon.make(e,e,e.get_ann)
+            }
+	} else if e isa app {
+	    if e.is(verb.colon) {
+		var arg : expr;
+		(arg,ok) := bottom_up_type(e.get_arg(0),st,ok);
+		e := colon.make(arg,e.get_arg(1),e.get_ann)
+	    } else if e.is(verb.dot) {
+		var lhs : expr;
+		(lhs,ok) := bottom_up_type(e.get_arg(0),st,ok);
+		var rhs := e.get_arg(1);
+		e := dot.make(lhs,rhs,e.get_ann);
+		if lhs.is(verb.colon) {
+		    var ty := lhs.get_arg(1);
+		    if ty isa symbol {
+			var name := rhs.get_name.prefix(ty.get_name);
+			if st.tc.m.mem(name) {
+			    var fty := st.tc.m.value(name).curry;
+			    rhs := colon.make(rhs,fty,rhs.get_ann);
+			    e := dot.make(lhs,rhs,e.get_ann);
+			    if fty.is(verb.arrow) {
+				e := colon.make(e,fty.get_arg(1),e.get_ann)
+			    }
+			} else {
+			    call report_error(undefined.make(name),e.get_ann);
+			    ok := false;
+			}
+		    } else {
+			call report_error(not_first_order.make(lhs,ty),lhs.get_ann);
+			ok := false;
+		    }
+		} else {
+		    call report_error(untyped.make(lhs,empty.make(lhs.get_ann)),lhs.get_ann);
+		    ok := false;
+		};
+	    } else {
+		var func : expr;
+		(func,ok) := bottom_up_type(e.get_func,st,ok);
+		var args : vector[expr];
+		(args,ok) := bottom_up_types(e.get_args,func,st,ok);
+		e := app.make(func,args,e.get_ann);
+		if func.is(verb.colon) {
+		    var ty := func.get_arg(1);
+		    if ty.is(verb.arrow) {
+			e := colon.make(e,ty.get_arg(1),e.get_ann)
+		    }
+		}
+	    }
+	}
+    }
+
+    # Bottom-up type inference for a vector of arguments `es` of a
+    # function `func`.  If `func` has a type, then we upcast the
+    # arguments to their expected types.  We don't worry about whether
+    # `func` takes the expect number of arguments here.  If it
+    # doesn't, type inference will fail later.
+
+    action bottom_up_types(es:vector[expr],func:expr,st:typeinferst,ok:bool)
+        returns (es:vector[expr],ok:bool) =
+    {
+        var argtypes : vector[expr];
+        if func.is(verb.colon) {
+            var ftype := func.get_arg(1);
+            if ftype.is(verb.arrow) {
+                argtypes := times.unfold_left(ftype.get_arg(0));
+            }
+        };
+	var idx := es.begin;
+	while idx < es.end {
+	    var e : expr;
+	    (e,ok) := bottom_up_type(es.value(idx),st,ok);
+            if idx < argtypes.end {
+                e := make_cast(argtypes.value(idx),e,st);
+            };
+	    es := es.set(idx,e);
+	    idx := idx.next
+	}
+    }
+
+    # Check if type `rhsty` is a subtype of `lhsty`.
+
+    action is_subtype(rhsty:expr,lhsty:expr,st:typeinferst) returns (res:bool) = {
+        if rhsty.is(verb.comma) {
+            if lhsty.is(verb.comma) {
+                res := is_subtype(rhsty.get_arg(0),lhsty.get_arg(0),st) &
+                       is_subtype(rhsty.get_arg(1),lhsty.get_arg(1),st)
+            }
+        } else if ~lhsty.is(verb.comma) {
+            res := st.subtype_rel.is_subtype(rhsty,lhsty)
+        }
+    }
+
+    # Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
+    # used for assignments, and argument passing. This has to work on tuples
+    # to handle multiple assignment. 
+
+    action make_cast(lhsty:expr,rhs:expr,st:typeinferst) returns (rhs:expr) = {
+	if rhs.is(verb.colon) {
+	    var rhsty := rhs.get_arg(1);
+            if ~expr.eq(lhsty,rhsty) {
+	        if ~ is_subtype(rhsty,lhsty,st) {
+		    call report_error(type_conversion.make(rhs,rhsty,lhsty),rhs.get_ann);
+	        };
+                var castty := arrow.make(rhsty,lhsty,rhs.get_ann);
+                var castop := colon.make(symbol.makestr("cast",rhs.get_ann),castty,rhs.get_ann);
+                rhs := app.make1(castop,rhs,rhs.get_ann);
+            }
+        }
+    }
+
+
+    # After type inference, we can desugar assignments like `var x := y` to
+    # `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
+    
+    action desugar_asgn(s:stmt) returns (varsts:vector[stmt],s:stmt) = {
+	var tlhs := s.get_lhs;
+	var lhs := comma.unfold_left(tlhs);
+	var idx := lhs.begin;
+	var es : vector[expr];
+	while idx < lhs.end {
+	    var e := lhs.value(idx);
+	    if e isa app {
+		var f := e.get_func;
+		if f.is(verb.colon) & f.get_arg(0).get_verb = verb.varv {
+		    var vst : varst;
+		    vst.ann := e.get_ann;
+		    vst.name := e.get_arg(0);
+		    varsts := varsts.append(vst);
+		    es := es.append(vst.name);
+		} else {
+		    es := es.append(e);
+		}
+	    } else {
+		es := es.append(e);
+	    };
+	    idx := idx.next
+	};
+	if varsts.end > 0 {
+	    var things := comma.fold_left(es,s.get_lhs.get_ann);
+	    s := asgn.make(things,s.get_rhs,s.get_ann);
+	}
+    }
+
+    # Assignments. If both assigments are typed, just check for assignment
+    # compatibility. Otherwise unify the types of the lhs and rhs.
+    #
+    # By default, assignments are desugared. However, we also provide
+    # a non-desugaring version that is used by `sequence`, below.
+
+    object asgn = { ...
+        action typeinfer_desugar(s:this,desugar:bool,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+            var res := s;
+	    var ok := true;
+	    (res.lhs,ok) := bottom_up_type(res.lhs,st,ok);
+	    (res.rhs,ok) := bottom_up_type(res.rhs,st,ok);
+	    if ok {  # avoid cascading errors
+		var lhs := res.lhs.get_arg(0) if res.lhs.is_typed(verb.varv) else res.lhs;
+                if lhs.is(verb.colon) { 
+                    res.rhs := make_cast(lhs.get_arg(1),res.rhs,st)  # upcast if needed
+                };
+		(res.lhs,res.rhs) := type_unify_exprs(res.lhs,res.rhs,st.tc.m);
+	    };
+	    ress := res;
+	    if desugar {
+		var vsts : vector[stmt];
+		(vsts,ress) := desugar_asgn(ress);
+		if vsts.end > 0 {
+		    vsts := vsts.append(ress);
+		    ress := sequence.fold_right(vsts,res.lhs.get_ann);
+		}
+	    }
+        }
+        action typeinfer(s:this,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+	    (ress,st) := s.typeinfer_desugar(true,st)
+	}
+    }
+
+    object sequence = { ...
+        action typeinfer(s:this,st:typeinferst) returns (ress:stmt,st:typeinferst) = {
+            var res := s;
+            if res.lhs isa asgn {
+		(res.lhs,st) := res.lhs.typeinfer_desugar(false,st);
+		var vsts : vector[stmt];
+		(vsts,res.lhs) := desugar_asgn(res.lhs);
+		var idx := vsts.begin;
+		while idx < vsts.end {
+		    st.tc := st.tc.push(vsts.value(idx).get_expr);
+		    idx := idx.next
+		};
+                (res.rhs,st) := res.rhs.typeinfer(st);
+		idx := vsts.begin;
+		while idx < vsts.end {
+		    st.tc := st.tc.pop;
+		    idx := idx.next
+		};
+		ress := res;
+		if vsts.end > 0 {
+		    vsts := vsts.append(ress);
+		    ress := sequence.fold_right(vsts,res.lhs.get_ann);
+		}
+            } else {
+		(res.lhs,st) := res.lhs.typeinfer(st);
+		if res.lhs isa varst {
+		    st.tc := st.tc.push(res.lhs.get_expr);
+                    (res.rhs,st) := res.rhs.typeinfer(st);
+		    st.tc := st.tc.pop;
+		} else {
+                    (res.rhs,st) := res.rhs.typeinfer(st);
+		};
+		ress := res;
+            }
+        }
+    }
+
+    object ifst = { ...
+        instantiate generic_typeinfer(this,stmt)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+	    var ok := true;
+	    (res.cond,ok) := bottom_up_type(res.cond,st,ok);
+	    if ok {
+		res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    };
+    	    var ts : stmt;
+    	    (ts,st) := res.thenst.typeinfer(st);
+            res.thenst := ts;
+    	    var es : stmt;
+    	    (es,st) := res.elsest.typeinfer(st);
+            res.elsest := es;
+        }
+    }
+
+    object whilest = { ...
+        instantiate generic_typeinfer(this,stmt)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+	    var ok := true;
+	    (res.cond,ok) := bottom_up_type(res.cond,st,ok);
+	    if ok {
+		res.cond := type_infer_known(res.cond,symbol.makestr("bool",s.ann),st.tc.m);
+	    };
+    	    var body : stmt;
+    	    (body,st) := res.body.typeinfer(st);
+            res.body := body;
+        }
+    }
+
+    object decl = { ...
+        action typeinfer(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+	    res := s;
+	}
+    }
+
+    action setup_formals(es:vector[expr],val:bool,st:typeinferst) returns (st:typeinferst) = {
+        var idx := es.begin;
+        while idx < es.end {
+            var e := es.value(idx);
+            if e.is(verb.colon) {
+	        if val {
+		    st.tc := st.tc.push(e);
+	        } else {
+		    st.tc := st.tc.pop
+	        };
+            };
+	    idx := idx.next;
+        }
+    }
+
+
+    object actdc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:actdc,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res.name := s.name;
+            res.kind := s.kind;
+            res.inputs := s.inputs;
+            res.outputs := s.outputs;
+            st := setup_formals(res.inputs,true,st);
+            st := setup_formals(res.outputs,true,st);
+	    res.has_body := s.has_body;
+            (res.body,st) := s.body.typeinfer(st);
+            st := setup_formals(res.inputs,false,st);
+            st := setup_formals(res.outputs,false,st);
+        }
+    }
+
+    object initdc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            (res.body,st) := s.body.typeinfer(st);
+        }
+    }
+
+    action get_func_params(typing:expr) returns (res:vector[expr]) = {
+        var ty := typing;
+        if ty.is(verb.colon) {
+            ty := ty.get_arg(0)
+        };
+        if ty isa app {
+            res := ty.get_args
+        }
+    }
+            
+
+    object vardc = { ...
+        instantiate generic_typeinfer(this,decl)
+        action typeinfer_int(s:this,st:typeinferst) returns (res:this,st:typeinferst) = {
+            res := s;
+            if res.has_def {
+                var prms := get_func_params(res.typing);
+                st := setup_formals(prms,true,st);
+                var ok := true;
+	        (res.def,ok) := bottom_up_type(res.def,st,ok);
+                st := setup_formals(prms,false,st);
+	        if ok {  # avoid cascading errors
+                    if res.typing.is(verb.colon) { 
+                        res.def := make_cast(res.typing.get_arg(1),res.def,st)  # upcast if needed
+                    };
+		    (res.typing,res.def) := type_unify_exprs(res.typing,res.def,st.tc.m);
+                    st.tc := st.tc.set(canon_typing(res.typing));
+                }
+	    }
+        }
+    }
+
+    object prog = { ...
+        
+
+        action typeinfer(p:prog) returns (p:prog) = {
+
+	    var st:typeinferst;
+
+	    # Get the subtype relation
+	    
+            st.subtype_rel := p.get_subtypes;
+
+	    # Get the global typing as initial typing context
+
+	    var gt := p.get_global_types(false);  # don't curry member types
+	    st.tc.m := gt.type_of;
+	    
+	    # TODO: bottom-up inference
+
+            # A pass to typeinfer types with Hindley-Milner
+
+            var idx := p.decls.begin;
+            while idx < p.decls.end {
+		var d : decl;
+                (d,st) := p.decls.value(idx).typeinfer(st);
+		p.decls := p.decls.set(idx,d);
+                idx := idx.next;
+            };
+        }
+    }
+}

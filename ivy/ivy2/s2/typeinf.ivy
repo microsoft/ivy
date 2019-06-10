@@ -1,0 +1,494 @@
+#lang ivy1.7
+
+#
+# Ivy uses Hindley-Milner style type inference a the level of
+# statements. This is used to fill in the omitted types of the
+# polymorphic symbols (including built-in operators and numerals, as
+# well as bound variables).
+#
+# Two basic services are provided here:
+#
+#     action type_infer(es : vector[expr], tc : symeval) returns (es : vector[expr], err : error)
+#
+# This action adds type decorations to all sub-expressions of a vector
+# of expressions, in a type contec `tc`. The type context is a map
+# from names to types.  The possible errors return are `type_clash`
+# and `untyped`.
+#
+#     action type_elide(es : vector[expr], tc : symeval) returns (es : vector[expr])
+#
+# This action removes type decorations that can be inferred from a
+# vector of expressions. This is usually done before printing the
+# expressions to improve readability.
+# 
+
+include ivylang
+include hash
+include logic
+include error
+
+object ivy = { ...
+
+    # This function gives the types of the builtin-in symbols
+
+    function optypes(X:verb) : expr
+
+    # The predicates determine for a given verb what type inferences we can
+    # rely on when eliding type decorations:
+    #
+    # Verb is monomorphic:
+    
+    function verb_mono(X:verb) : bool
+    
+    # Input types determine output types:
+
+    function verb_in_to_out(X:verb) : bool
+    
+    # Output type determines input types:
+
+    function verb_out_to_in(X:verb) : bool
+    
+    # First input type determines all:
+
+    function verb_first_to_in(X:verb) : bool
+    
+    action set_built_in_type(vrb:verb,ty:str,m:bool,io:bool,oi:bool,fi:bool) = {
+        optypes(vrb) := expr.dec(ty);
+        verb_mono(vrb) := m;
+        verb_in_to_out(vrb) := io;
+        verb_out_to_in(vrb) := oi;
+        verb_first_to_in(vrb) := fi;
+    }
+    
+    after init {
+        call set_built_in_type(verb.none,"alpha",true,true,true,true);
+        call set_built_in_type(verb.plus,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.minus,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.times,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.div,"alpha * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.arrow,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.castv,"alpha -> beta",false,false,false,false);
+        call set_built_in_type(verb.truev,"bool",true,true,true,true);
+        call set_built_in_type(verb.falsev,"bool",true,true,true,true);
+        call set_built_in_type(verb.and,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.or,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.not,"bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.iff,"bool * bool -> bool",true,true,true,true);
+        call set_built_in_type(verb.equals,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.notequals,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.lt,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.leq,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.gt,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.geq,"alpha * alpha -> bool",false,false,false,true);
+        call set_built_in_type(verb.ite,"alpha * bool * alpha -> alpha",false,true,true,true);
+        call set_built_in_type(verb.comma,"alpha * beta -> alpha * beta",false,true,true,false);
+        call set_built_in_type(verb.varv,"alpha -> alpha",false,true,true,true);
+    }
+    
+
+    # Returns `true` if the type of a the first input of a given verb determines
+    # the type of the remaining inputs.
+
+    action verb_det_type(vrb:verb) returns (res:bool) = {
+        res := true;
+    }
+
+    # This object represents the state of the type decorator
+
+    object decost = {
+
+        instance map : hash_map(ident,expr)
+
+        type this = struct {
+
+	    # A counter for creating type variables
+	    
+            counter : pos,
+
+	    # Maps types and type variables to their representatives
+	    
+            m : map,
+
+            # Maps identifiers of symbols to their types
+
+            ty : symeval,
+
+            # True if we are typing a member function
+
+            member : bool,
+
+	    # False if there has been a type error
+
+            ok : bool,
+
+	    # Types that we failed to unify
+
+	    failed : vector[expr],
+
+	    # Error has been reported
+
+	    error_reported : bool
+
+        }
+
+	# Make a new type decorator state
+
+        action make returns (res:this) = {
+            res.ok := true;
+        }
+
+	# Make a new type variable
+
+        action newvar(s:this,ann:annot) returns (s:this,res:expr) = {
+            res := symbol.makenum(s.counter,ann);
+            s.counter := s.counter.next
+        }
+        
+	# Find the representative of an expression. This has the
+	# side effect of shortening the path to the representative
+	# as in classic union/find.
+
+        action find(st:this,x:expr) returns(st:this,res:expr) = {
+            res := x;
+            if x isa symbol {
+                var nx := x.get_name;
+                res := st.m.get(nx,res);
+                if res ~= x {
+                    (st,res) := st.find(res);
+                    st.m := st.m.set(nx,res);
+                }
+            };
+        }
+
+	import action typeinf_show_str(s:str)
+
+	# Record failure of type unification
+
+	action unification_failed(st:this,x:expr,y:expr) returns (st:this) = {
+	    st.ok := false;
+	    st.failed := st.failed.append(x);
+	    st.failed := st.failed.append(y);
+	    call typeinf_show_str(x.enc);
+	    call typeinf_show_str(y.enc);
+	}
+	    
+
+	# Unify a pair of types. Sets ok to false if the types cannot
+	# be unified.
+
+	import action show_unifying(x:str,y:str)
+	import action show_ok(res:bool)
+
+        action unify(st:this,x0:expr,y0:expr) returns (st:this) = {
+	    var x : expr;
+	    var y : expr;
+            (st,x) := st.find(x0);
+            (st,y) := st.find(y0);
+            if x isa symbol {
+                var nx := x.get_name;
+                if nx isa numident {
+                    if y.occurs(nx) {
+                        st := unification_failed(st,x,y);
+                    } else {
+                        st.m := st.m.set(nx,y);
+                    }
+                } else {
+                    if y isa symbol {
+                        var ny := y.get_name;
+                        if ny isa numident {
+                            st := st.unify(y,x);
+                        } else {
+			    if nx ~= ny {
+				st := unification_failed(st,x,y);
+			    }
+                        }
+                    } else {
+                        st := unification_failed(st,x,y)
+                    }
+                }
+            } else if y isa symbol {
+                st := st.unify(y,x);
+            } else {
+                if x.is(verb.times) & y.is(verb.times)
+                   | x.is(verb.arrow) & y.is(verb.arrow) {
+                    st := st.unify(x.get_arg(0),y.get_arg(0));
+                    if st.ok {
+                        st := st.unify(x.get_arg(1),y.get_arg(1));
+                    }
+                } else {
+                    st := unification_failed(st,x,y);
+                }
+            };
+        }
+    }
+
+    # State of the a type elider.
+
+    object elidest = {
+        instance map : hash_map(ident,bool)
+        type this = struct {
+            seen : map
+        }
+    }
+
+    # Called in case of an error typing expression `e`. 
+
+    action type_error(e:expr,st:decost) returns (st:decost) = {
+	if ~st.error_reported {
+	    call report_error(type_clash.make(e,st.failed.value(0),st.failed.value(1)),e.get_ann);
+	    st.error_reported := true;
+	}
+    }
+
+    # We implement three recursions over expressions:
+    #
+    # - `type_decorate`: This adds a typing to each subexpression that
+    #   may contain free type variables, and also unifies types.
+    #
+    # - `type_fill_in`: This fills in the values of the type variables
+    #    with their representative types. If any free type variables
+    #    remain, an error is reported.
+    #
+    # - `type_elide`: This removes typings that can be trivially
+    #    inferred.  This is useful to make printed expressions more
+    #    readable.
+
+
+    object expr = { ...
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost)
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost)
+        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest)
+    }
+
+    object symbol = { ...
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
+            if
+                e.vrb ~= verb.none & e.vrb ~= verb.numeral & e.vrb ~= verb.string & e.vrb ~= verb.logvar
+                & e.vrb ~= verb.empty
+            {
+                var mm : symeval;
+                var v : expr;
+                (st,v) := st.newvar(e.ann);
+                mm := mm.set(strident.make("alpha"),v);
+                (st,v) := st.newvar(e.ann);
+                mm := mm.set(strident.make("beta"),v);
+                ty := optypes(e.vrb);
+                ty := ty.reduce(mm);
+            } else {
+                if st.member {  # treat members (after dot) as polymorphic
+                    (st,ty) := st.newvar(e.ann);
+                } else if st.ty.mem(e.name) {
+                    ty := st.ty.value(e.name);
+                } else {
+                    (st,ty) := st.newvar(e.ann);
+		    if e.vrb = verb.none | e.vrb = verb.logvar {
+			ty := m.get(e.name,ty);
+			st.ty := st.ty.set(e.name,ty);
+		    }
+                }
+            };
+            res := colon.make(e,ty,e.ann);
+        }
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost) = {
+            var ee : expr := e;
+            (st,res) := st.find(ee);  # workaround
+            if res ~= ee {
+                (res,st) := res.type_fill_in(st)
+            }
+        }
+        action type_elide_int(e:this,b:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+            res := e;
+        }
+    }
+    
+    object app = { ...
+        
+        action type_decorate(e:this,st:decost,m:symeval) returns (res:expr,ty:expr,st:decost) = {
+            var arg : expr;
+            var argty : expr;
+            if e.is(verb.colon) {
+                (res,argty,st) := e.args.value(0).type_decorate(st,m);
+                ty := e.args.value(1);
+                st := st.unify(argty,ty);
+                if ~st.ok {
+                    st := type_error(e,st)
+                }
+            } else if e.is(verb.dot) { # dot operator acts like curried function application
+                var argty : expr;
+                var arg : expr;
+                (arg,argty,st) := e.get_arg(0).type_decorate(st,m);
+                (st,ty) := st.newvar(e.ann);
+                var fty := arrow.make(argty,ty,e.ann);
+		var func : expr;
+                st.member := true;
+                (func,argty,st) := e.get_arg(1).type_decorate(st,m);
+                st.member := false;
+                st := st.unify(argty,fty);
+                if ~st.ok {
+                    st := type_error(e,st)
+                };
+                res := dot.make(arg,func,e.ann);
+            } else if e.is(verb.isav) {
+                (res,argty,st) := e.args.value(0).type_decorate(st,m);
+                ty := symbol.makestr("bool",e.ann);
+		res := isaop.make(res,e.args.value(1),e.ann)
+            } else {
+                var argtys : vector[expr];
+                var newargs : vector[expr];
+                var idx := e.args.begin;
+                while idx < e.args.end {
+                    (arg,argty,st) := e.args.value(idx).type_decorate(st,m);
+                    argtys := argtys.append(argty);
+                    newargs := newargs.append(arg);
+                    idx := idx.next
+                };
+                (st,ty) := st.newvar(e.ann);
+                var fty := arrow.make(times.fold_left(argtys,e.ann),ty,e.ann);
+                (arg,argty,st) := e.func.type_decorate(st,m);
+                st := st.unify(argty,fty);
+                if ~st.ok {
+                    st := type_error(e,st)
+                };
+                res := app.make(arg,newargs,e.ann);
+            }
+        }
+
+        action type_fill_in(e:this,st:decost) returns (res:expr,st:decost) = {
+            var func : expr;
+            (func,st) := e.func.type_fill_in(st);
+            var newargs : vector[expr];
+            var idx := e.args.begin;
+            while idx < e.args.end {
+                var arg : expr;
+                (arg,st) := e.args.value(idx).type_fill_in(st);
+                newargs := newargs.append(arg);
+                idx := idx.next
+            };
+            if e.is(verb.colon) {
+                if newargs.value(1).has_numident {
+                    call cannot_infer(e,newargs.value(1));
+                    st.ok := false
+                }
+            };
+            res := app.make(func,newargs,e.ann);
+        }
+
+        action type_elide_int(e:this,b0:bool,m:symeval,st:elidest) returns (res:expr,st:elidest) = {
+	    var b := b0;
+            if e.is(verb.colon) {
+                var arg := e.args.value(0);
+                (res,st) := arg.type_elide_int(b,m,st);
+                if ~b {
+                    if arg isa app {
+                        b := verb_in_to_out(arg.app_verb);
+                    } else {
+                        b := verb_mono(arg.get_verb) &
+                        (st.seen.get(arg.get_name,false) | m.mem(arg.get_name));
+                    }
+                };
+                if ~b {
+                    res := colon.make(res,e.args.value(1),e.ann)
+                };
+                if arg isa symbol {
+                    st.seen := st.seen.set(arg.get_name,true);
+                }
+            } else {
+                var func : expr;
+                (func,st) := e.func.type_elide_int(true,m,st);
+                var vrb := e.func.get_verb;
+                b := b & verb_out_to_in(vrb) | verb_mono(vrb); 
+                var newargs : vector[expr];
+                var idx := e.args.begin;
+                while idx < e.args.end {
+                    var arg : expr;
+                    var ba := b | verb_first_to_in(vrb) & idx > 0;
+                    (arg,st) := e.args.value(idx).type_elide_int(ba,m,st);
+                    newargs := newargs.append(arg);
+                    idx := idx.next
+                };
+                res := app.make(func,newargs,e.ann);
+            }
+        }
+    }
+
+    action cannot_infer(e:expr,t:expr) = {
+        call report_cannot_infer(e.enc,t.enc)
+    }
+
+    import action report_cannot_infer(s1:str,s2:str)
+
+    # This takes a vector of expressions and a type context, returning
+    # the expressions with types inferred.
+
+    action type_infer_vec(es : vector[expr], tc : symeval) returns (es : vector[expr]) = {
+	var st := decost.make;
+	var idx := es.begin;
+	while idx < es.end {
+	    var e := es.value(idx);
+	    var ty : expr;  # ignored
+	    (e,ty,st) := e.type_decorate(st,tc);
+	    es := es.set(idx,e);
+	    idx := idx.next
+	};
+	idx := es.begin;
+	while idx < es.end {
+	    var e := es.value(idx);
+            (e,st) := e.type_fill_in(st);
+	    es := es.set(idx,e);
+	    idx := idx.next
+	}
+    }
+
+    action type_infer_known(e:expr, ty:expr, tc : symeval) returns (e : expr) = {
+	var st := decost.make;
+	var ty2 : expr;  # ignored
+	(e,ty2,st) := e.type_decorate(st,tc);
+	st := st.unify(ty,ty2);
+        if ~st.ok {
+            st := type_error(e,st)
+        };
+        (e,st) := e.type_fill_in(st);
+    }
+
+    # Unify the types of two expressions
+
+    action type_unify_exprs(e1:expr,e2:expr,tc:symeval) returns (e1:expr,e2:expr) = {
+	var st := decost.make;
+	var e1ty : expr;
+	(e1,e1ty,st) := e1.type_decorate(st,tc);
+	var e2ty : expr;
+	(e2,e2ty,st) := e2.type_decorate(st,tc);
+	st := st.unify(e1ty,e2ty);
+        if ~st.ok {
+            st := type_error(e2,st)
+        };
+        (e1,st) := e1.type_fill_in(st);
+        (e2,st) := e2.type_fill_in(st);
+    }
+
+    # Get the type of an expression
+
+    object expr = { ...
+        action get_type(s:this) returns (res:expr)
+    }
+
+    action range_type(s:expr) returns (s:expr) = {
+        if s.is(verb.arrow) {
+            s := s.get_arg(1);
+        }
+    }
+
+    object app = { ...
+        action get_type(s:this) returns (res:expr) = {
+            if s.is(verb.colon) {
+                res := s.args.value(1);
+            } else if s.is(verb.dot) {
+                res := range_type(s.args.value(1).get_arg(1).get_arg(1));
+            } else {
+                res := range_type(s.func.get_arg(1).get_arg(1));
+            }
+        }
+    }
+
+}
+

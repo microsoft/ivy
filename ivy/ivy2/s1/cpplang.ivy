@@ -1,0 +1,593 @@
+#lang ivy1.7
+
+include lang
+
+# C++ subset syntax
+# -----------------
+#
+# This file implements a small subset of the syntax of C++ that
+# is used by the Ivy to C++ translator.
+#
+
+object cpp = {
+    instantiate verb_base
+    instantiate expr_base(true)
+    instantiate stmt_base(expr,"=",true)
+
+    # Operators specific to C++
+
+    instance new : built_in_unary("new",verb.new,100)
+
+    # Dereference arrow (same precedence as dot)
+    
+    instance arrow : built_in_binary("->",verb.arrow,100)
+
+    # The `=` and `~=` verbs are spelled differently in Ivy and C++
+    
+    instance equals : built_in_binary("==",verb.equals,5)
+    instance notequals : built_in_binary("!=",verb.notequals,5)
+    instance not : built_in_unary("!",verb.not,15)
+
+    # Ternary operator in C++ written `c ? x : y`.
+
+    instance ite : built_in_ternary("?",verb.ite,2)
+
+    # C++ can have applications to zero arguments
+
+    object app = { ...
+        action make0(func:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.ann := ann;
+            res := s
+        }
+    }
+
+
+    # Here, we parse statements specific to C++
+    
+    object simpletype = {
+        type this = struct {
+            _type : expr,
+            name : expr,
+            is_const : bool,
+            is_ref : bool
+        }
+
+        instance tup : tuple(simpletype,"(",")",verb)
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            if s.is_const {
+                b := b.extend("const");
+                b := b.extend(" ");
+            };
+            b := s._type.encode(b,0);
+            b := b.extend(" ");
+            if s.is_ref {
+                b := b.extend("&");
+            };
+            b := s.name.encode(b,99);
+        }
+        
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:simpletype) = {
+            (st,res._type) := symbol.parse(st);
+            if st.ok {
+                (st,res.name) := symbol.parse(st);
+            }
+        }
+    }
+
+    object functype = {
+        type this = struct {
+            base : simpletype,
+            args : vector[simpletype],
+            is_const : bool,
+            has_initializer : bool,
+            initializer : expr
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.base.encode(b,0);
+            b := b.extend(" ");
+            if s.args.end > 0 {
+                b := simpletype.tup.encode(s.args,b,0);
+            } else {
+                b := b.extend("()");
+            };
+            if s.is_const {
+                b := b.extend(" ");
+                b := b.extend("const");
+            };
+            if s.has_initializer {
+                b := b.extend(" ");
+                b := b.extend(":");
+                b := b.extend(" ");
+                b := s.initializer.encode(b,0);
+            }
+        }
+        action parse(st : pstate, base : simpletype, prio:priority) returns(st : pstate, res:functype) = {
+            res.base := base;
+            if st.ok {
+                (st,res.args) := simpletype.tup.parse(st,1);
+            };
+            if st.ok & st.tok = "const" {
+                res.is_const := true;
+                st := st.consume;
+            };
+            if st.ok & st.tok = ":" {
+                res.has_initializer := true;
+                (st,res.initializer) := expr.parse(st,0);
+            }
+        }
+    }
+
+    object varst = {
+        variant this of stmt = struct {
+            vtype : simpletype,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(_type:expr, name:expr, ann:annot) returns (res:stmt) = {
+            var s : this;
+            s.vtype._type := _type;
+            s.vtype.name := name;
+            s.ann := ann;
+            res := s;
+        }
+       
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := s.vtype.encode(b,prio);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+    }
+
+    object retst = {
+        variant this of stmt = struct {
+            val : expr,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(val:expr, ann:annot) returns (res:stmt) = {
+            var s : this;
+            s.val := val;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("return");
+            b := b.extend(" ");
+            b := s.val.encode(b,prio);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+    }
+
+    object stmt = { ...
+
+        
+        action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
+            var lhs : expr;
+            var ann : annot;
+            (st,ann) := st.get_ann;
+            (st,lhs) := expr.parse(st,3);
+            if st.ok & st.tok = "=" {
+                st := st.consume;
+                var s : asgn;
+                s.lhs := lhs;
+                s.ann := ann;
+                (st,s.rhs) := expr.parse(st,0);
+                res := s;
+            }
+            else {
+                # if not assignment, could be variable declaration
+                var name : expr;
+                (st,name) := symbol.parse(st);
+                if st.ok {
+                    var s : varst;
+                    s.ann := ann;
+                    s.vtype._type := lhs;
+                    s.vtype.name := name;
+                    res := s;
+                }
+            };
+            if st.ok & st.tok = ";" {
+                st := st.consume;
+            } else {
+                st.ok := false;  # cannot omit final semicolon in C++
+            }
+        }
+    }
+
+
+
+    object decl = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        instantiate parse_intf(decl,true)
+        action get_ann(d:this) returns (res:annot)
+        action get_name(d:this) returns (res:expr)
+        action get_type(d:this) returns (res:expr)
+    }        
+
+
+    object header = {
+        variant this of decl = struct {
+            filename : str,
+            ann : annot
+        }
+        action make(filename:str) returns (res:decl) =
+        {
+            var s:this;
+            s.filename := filename;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("#include ");
+            b := b.extend(s.filename);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+
+    object typedecl = {
+        variant this of decl = struct {
+            ttype : simpletype,
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("typedef");
+            b := b.extend(" ");
+            b := s.ttype.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+
+    instance curly_tup : tuple(expr,"{","}",verb)
+
+    object enumdecl = {
+        variant this of decl = struct {
+            name : expr,
+            elems : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("enum");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.extend(" ");
+            b := curly_tup.encode(s.elems,b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+
+    object vardecl = {
+        variant this of decl = struct {
+            vtype : simpletype,
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := s.vtype.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+        action get_name(d:this) returns (res:expr) = {
+            res := d.vtype.name;
+        }
+        action get_type(d:this) returns (res:expr) =  {
+            res := d.vtype._type;
+        }
+    }
+
+    object funcdecl = {
+        variant this of decl = struct {
+            ftype : functype,
+            has_body : bool,
+            body : stmt,
+            is_static : bool,
+	    is_virtual : bool,
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            if s.is_static {
+                b := b.extend("static");
+                b := b.extend(" ");
+            };
+            if s.is_virtual {
+                b := b.extend("virtual");
+                b := b.extend(" ");
+            };
+            b := s.ftype.encode(b,0);
+            if s.has_body {
+                b := b.unnest;
+                b := b.extend(" ");
+                b := s.body.encode(b,2);
+            }
+            else {
+                b := b.extend(";");
+                b := b.unnest;
+                b := b.newline;
+            }
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+
+    object structdecl = {
+        variant this of decl = struct {
+            name : expr,
+            has_super : bool,
+            super : expr,
+            has_members : bool,
+            members : vector[decl],
+            ann : annot
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("struct");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            if s.has_super {
+                b := b.extend(" ");
+                b := b.extend(":");
+                b := b.extend(" ");
+                b := s.super.encode(b,0);
+            };
+            if s.has_members {
+                b := b.unnest;
+                b := b.newline;
+                b := b.extend("{");
+                b := b.nest;
+                var idx := s.members.begin;
+                while idx < s.members.end {
+                    b := b.newline;
+                    b := s.members.value(idx).encode(b,0);
+                    idx := idx.next;
+                };
+                b := b.unnest;
+                b := b.newline;
+                b := b.extend("}");
+                b := b.extend(";");
+            } else {
+                b := b.extend(";");
+                b := b.unnest;
+            };
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+        
+    object namespacedecl = {
+        variant this of decl = struct {
+            name : expr,
+            members : vector[decl],
+            ann : annot
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("namespace");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("{");
+            b := b.nest;
+            var idx := s.members.begin;
+            while idx < s.members.end {
+                b := b.newline;
+                b := s.members.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("}");
+            b := b.newline;
+        }
+        action get_ann(d:this) returns (res:annot) = {
+            res := d.ann
+        }
+    }
+        
+
+    object groupdc = {
+        variant this of decl = struct {
+            decls : vector[decl],
+            ann : annot
+        }
+        
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                b := b.newline;
+                b := s.decls.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+        }	    
+    }
+
+    object decl = { ...
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
+            var ann : annot;
+            (st,ann) := st.get_ann;
+            if st.tok = "typedef" {
+                st := st.consume;
+                var t : typedecl;
+                (st,t.ttype) := simpletype.parse(st,0);
+                t.ann := ann;
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                };
+                res := t;
+            } else if st.tok = "enum" {
+                st := st.consume;
+                var t : enumdecl;
+                (st,t.name) := symbol.parse(st);
+                (st,t.elems) := curly_tup.parse(st,1);
+                t.ann := ann;
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                };
+                res := t;
+            } else if st.tok = "struct" {
+                st := st.consume;
+                var t : structdecl;
+                (st,t.name) := symbol.parse(st);
+                t.ann := ann;
+                if st.ok & st.tok = ":" {
+                    st := st.consume;
+                    t.has_super := true;
+                    (st,t.super) := symbol.parse(st);
+                };
+                if st.ok & st.tok = "{" {
+                    st := st.consume;
+                    (st,t.members) := parse_list(st,0);
+                    if st.ok & st.tok = "}" {
+                        st := st.consume;
+                    } else {
+                        st.ok := false
+                    }
+                };
+                if st.ok & st.tok = ";" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                };
+                res := t;
+            } else if st.tok = "namespace" {
+                st := st.consume;
+                var t : namespacedecl;
+                (st,t.name) := symbol.parse(st);
+                t.ann := ann;
+                if st.ok & st.tok = "{" {
+                    st := st.consume;
+                    (st,t.members) := parse_list(st,0);
+                    if st.ok & st.tok = "}" {
+                        st := st.consume;
+                    } else {
+                        st.ok := false
+                    }
+                };
+                res := t;
+            } else if st.tok = "#" {
+                var s : header;
+                st := st.consume;
+                if st.ok & st.tok = "include" {
+                    st := st.consume;
+                    if st.ok & st.tok.end > 0 & st.tok.value(0) = 34 {  # double quote
+                        s.filename := st.tok;
+                        st := st.consume;
+                    } else { st.ok := false }
+                } else { st.ok := false }
+            } else {
+		var t : simpletype;
+                var is_static : bool;
+                if st.ok & st.tok = "static" {
+                    is_static := true;
+                    st := st.consume
+                };
+		(st,t) := simpletype.parse(st,prio);
+		if st.ok & st.tok = "(" {
+		    var s : funcdecl;
+		    s.ann := ann;
+                    s.is_static := is_static;
+                    (st,s.ftype) := functype.parse(st,t,prio);
+                    if st.ok & st.tok = ";" {
+			st := st.consume;
+                    } else if st.ok & st.tok = "{" {
+                        s.has_body := true;
+			(st,s.body) := stmt.parse(st,0);
+		    } else {
+			st.ok := false;
+		    };
+		    res := s;
+                } else {
+                    if st.ok & st.tok = ";" {
+			st := st.consume;
+			var s : vardecl;
+			s.vtype := t;
+			s.ann := ann;
+			res := s;
+		    } else {
+			st.ok := false;
+		    }
+		}
+            }
+        }
+
+        var foo : vector[decl]  # workaround
+
+        action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
+            while st.ok & st.tok.end > 0 & st.tok ~= "}" {
+                var s : decl;
+                (st,s) := parse(st,0);
+                res := res.append(s);
+            }
+        }
+    }
+
+    instantiate prog_base(true)
+
+    action namedtype(name:ident,ann : annot) returns(res:expr) = {
+        var s : symbol;
+        s.name := name;
+        s.ann := ann.strip;
+        res := s;
+    }
+
+    action inttype(ann : annot) returns(res:expr) = {
+        res := namedtype(strident.make("int"),ann);
+    }
+
+    action voidtype(ann : annot) returns(res:expr) = {
+        res := namedtype(strident.make("void"),ann);
+    }
+
+}
+
+
+

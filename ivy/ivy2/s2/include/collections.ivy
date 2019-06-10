@@ -1,0 +1,120 @@
+#lang ivy
+
+include order
+
+module array(domain,range) = {
+
+    # The type `this` represents arrays
+
+    type this
+
+    # We have two destructors (fields) representing the array
+    # contents. The `value` field is represented using a dense
+    # encoding, which means the C++ type `std::vector<range>`.
+
+    destructor value : (this * domain -> range)
+    destructor end : (this -> domain)
+
+    # The `begin` action always returns 0.
+
+    action begin(s:this) returns (res:domain) = {
+        res := 0;
+    }
+
+    # The `empty` action returns an empty array
+
+    action empty returns (res:this) = {
+    }
+
+    # The `set` action sets an element of an array
+
+    action set(s:this,i:domain,v:range) returns (s:this) = {
+	s.value(i) := v;
+    }
+
+    # The `append` action appends one character `c` to a array.
+
+    action append(s:this,c:range) returns (s:this) = {
+        s.value(s.end) := c;
+        s.end := s.end.next;
+    }
+
+    # The `extend` action appends a array `x` to a array `s`.
+
+    action extend(s:this,x:this) returns (s:this) = {
+        var idx : domain;
+        idx := x.begin;
+        while idx < x.end {
+            s := s.append(x.value(idx));
+            idx := idx.next;
+        }
+    }
+
+    # The `resize` action sets the end marker of the string. 
+    
+    action resize(s:this,end:domain) returns (s:this) = {
+        s.value := cast(ivy.resize(cast(s.value),cast(end)));
+        s.end := end;
+    }
+    
+    # The `back` action returns the last element of an array, or zero
+    # if the array is empty.
+
+    action back(s:this) returns (y:range) = {
+        if s.end > 0 {
+            y := s.value(s.end.prev)
+        }
+    }
+
+    # The `back` action removes he last element of the array, if the
+    # array is not empty.
+
+    action pop_back(s:this) returns (s:this) = {
+        if s.end > 0 {
+            var size := s.end.prev;
+            s := s.resize(size)
+        }
+    }
+
+    # The `segment` action gets the segment of an array from index `beg` to
+    # index `en-1`.
+
+    action segment(s:this,beg:domain,en:domain) returns (res:this) = {
+	var idx := beg;
+	while idx < en & idx < s.end {
+	    res := res.append(s.value(idx));
+	    idx := idx.next
+	}
+    }    
+    
+    # The `reverse` action reverses an array.
+
+    action reverse(s:this) returns (s:this) = {
+	var idx := s.begin;
+	var jdx := s.end.prev;
+	while idx < jdx {
+	    var tmp := s.value(idx);
+	    s.value(idx) := s.value(jdx);
+	    s.value(jdx) := tmp;
+	    jdx := jdx.prev;
+	    idx := idx.next;
+	}
+    }    
+}
+
+################################################################################
+#
+# Vector types
+#
+# A vector is the same as an array, except that the domain type is implicitly
+# an instance of `unbounded sequence`.
+#
+
+module vector(range) = {
+    
+    instance domain : unbounded_sequence
+    
+    instantiate array(domain,range)
+}
+
+autoinstance vector[u] : vector(u)

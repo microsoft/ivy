@@ -1,0 +1,1238 @@
+#lang ivy1.7
+
+include syntax
+
+# Common language traits between Ivy and C++
+# ------------------------------------------
+#
+# This file contains a number of modules that are used in common
+# between the Ivy and C++ languages.  Some of these modules have
+# parameters that can vary the syntax, for example, by selecting
+# the assignment or equality operator, or whether parentheses are
+# required around the condition in an if/else statement.
+#
+
+# The type `priority` is used to represent the binding strength of
+# operators, with stronger-binding operators having higher priority.
+# For example, `*` has a higher priority that `+`. Priorities are used
+# both to resolve ambiguous parses and to elide perenthese when
+# printing.
+
+instance priority : arith_int
+
+# The `verb` type is an enumeration of the built-in symbols in the
+# language.  This is used to avoid comparison of quoted strings
+# representing the names of these symbols. Each verb also has a
+# corresponding priority.  The verb corresponding to a symbol name is
+# added as a meta-field to the symbol, in which case the string name
+# can be empty (the value `none` is used for non-built-in symbols).
+#
+# - `str_to_verb` stores the map from string symbol names to verbs
+# - `verb_to_str` is the inverse map
+# - `verb_to_prio` gives the priority of a verb
+#
+# The verb `empty` represents the empty tuple, of type `unit`. Neither
+# of these is available in the source lanuage, but they are used
+# internally.
+#
+
+module verb_base = {
+    object verb = {
+        type this =
+        {
+            none, arrow, plus, times, colon, app, empty, dot, new, numeral, castv,
+	    boolv, truev, falsev, and, or, not, iff, equals, notequals,
+            lt, leq, gt, geq, minus, div, string, ite, comma, varv, logvar, isav
+        }
+    }
+    
+    function str_to_verb(X:str) : verb
+    function verb_to_str(X:verb) : str
+    function verb_to_prio(X:verb) : priority
+    function verb_to_arity(X:verb) : pos
+
+    after init {
+#        str_to_verb(X) := verb.none;
+        verb_to_arity(verb.numeral) := 0;
+        verb_to_arity(verb.string) := 0;
+        verb_to_arity(verb.logvar) := 0;
+    }
+
+    # Numerals are symbols beginning with a digit. String literals begin
+    # with double quotes. Logical variables consist of a capital followed
+    # by any number of digits. Otherwise we determine
+    # the verb of a symbol from its name by looking it up in
+    # `str_to_verb`. The default is `none`, which indicates a
+    # program-defined symbol.
+    
+    action is_logvar_name(name:str) returns (res:bool) = {
+	if name.value(0).is_capital {
+ 	    res := true;
+	    var idx := name.begin.next;
+	    while res & idx < name.end {
+		res := name.value(idx).is_digit
+	    };
+	    idx := idx.next
+	}
+    }
+    
+    action verb_from_name(name:str) returns(vrb:verb) = {
+        if name.value(0).is_digit {
+            vrb := verb.numeral
+        } else if name.value(0) = 34 {  # double quote character
+            vrb := verb.string
+        } else if is_logvar_name(name) {
+	    vrb := verb.logvar;
+	} else {
+            vrb := str_to_verb(name);
+        }
+    }
+}        
+
+
+
+module built_in (optok,vrb,opprio,oparity) = {
+    after init {
+        str_to_verb(optok) := vrb;
+        verb_to_str(vrb) := optok; 
+        verb_to_prio(vrb) := opprio;
+	verb_to_arity(vrb) := oparity;
+    }
+}
+
+module built_in_unary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio,1)
+
+    action make(arg:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.makestr(optok,ann);
+        s.args := s.args.append(arg);
+        s.ann := ann;
+        res := s
+    }
+}
+
+module built_in_binary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio,2)
+
+    action make(lhs:expr,rhs:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.makestr(optok,ann);
+        s.args := s.args.append(lhs);
+        s.args := s.args.append(rhs);
+        s.ann := ann;
+        res := s
+    }
+
+    # Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
+    # xn`, where `*` is a binary operator that associates to the left.
+
+    action fold_left(args:vector[expr],ann:annot) returns (res:expr) = {
+        if args.end > 0 {
+            res := args.value(0);
+            var idx := args.begin.next;
+            while idx < args.end {
+                res := make(res,args.value(idx),ann);
+                idx := idx.next;
+            }
+        } else {
+	    res := empty.make(ann);  # Works for comma and cross product
+	}
+    }
+
+    # Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
+    # where `*` is a binary operator that associates to the left.
+
+    action unfold_left(s:expr) returns (args:vector[expr]) = {
+	var e := s;
+        var b := e.is_typed(vrb);  # workaround
+        while b {
+            args := args.append(e.get_arg(1));
+            e := e.get_arg(0);
+            b := e.is_typed(vrb);
+        };
+        args := args.append(e);
+        args := args.reverse;
+    }
+}    
+
+module built_in_ternary (optok,vrb,opprio) = {
+    instantiate built_in(optok,vrb,opprio,3)
+
+    action make(arg0:expr,arg1:expr,arg2:expr,ann:annot) returns (res:expr) = {
+        var s:app;
+        s.func := symbol.makestr(optok,ann);
+        s.args := s.args.append(arg0);
+        s.args := s.args.append(arg1);
+        s.args := s.args.append(arg2);
+        s.ann := ann;
+        res := s
+    }
+}
+
+module built_in_const (optok,vrb) = {
+    instantiate built_in(optok,vrb,0,0)
+
+    action make(ann:annot) returns (res:expr) = {
+        res := symbol.makestr(optok,ann);
+    }
+}
+    
+    
+module genbinop(expr,arg) = {
+    variant this of expr = struct {
+	lhs : arg,
+	rhs : arg,
+        ann : annot
+    }
+
+    action make(x:arg,y:arg,ann:annot) returns (res:expr) = {
+        var s:this;
+        s.lhs := x;
+        s.rhs := y;
+        s.ann := ann;
+        res := s;
+    }
+}
+
+import action parse_error(p:pos,tok:str)
+
+module parse_intf(expr,cppstyle) = {
+
+    action enc(e:expr) returns (s:str) = {
+        var p := pretty.make(100,4);
+        p.cppstyle := cppstyle;
+        p := e.encode(p,0);
+        p := p.flush;
+        s := p.output
+    }
+
+    action dec(s:str) returns (e:expr) = {
+        var st := pstate.make(s);
+        (st,e) := expr.parse(st,0);
+        if ~st.ok | st.tok.end ~= 0 {
+            call parse_error(st.ann.line,st.tok);
+        }
+    }
+
+    action encdec(s:str) returns (res:str) = {
+        var e := dec(s);
+        res := enc(e)
+    }
+}
+
+
+
+module expr_base(cppstyle) = {
+
+    # Identifiers of type `ident` are use as names. They don't have
+    # annotations, so they can be hashed and compared for equality.
+
+    object ident = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        action to_str(s:this) returns (res:str)
+        action get_namesp(s:this) returns (res:ident)
+        action get_member(s:this) returns (res:ident)
+        action get_subscripts(s:this) returns (res:vector[ident])
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := s
+        }
+	action get_last(s:this) returns (res:strident)
+	action get_verb(s:this) returns (vrb:verb) = {
+	    vrb := verb.none
+	}
+    }
+    
+    # String identifiers are used for all symbols occurring in the
+    # source, including operators like `+` and `&`. 
+        
+    object strident = {
+        variant this of ident = struct {
+            val : str,
+            subscrs : vector[ident]
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend(s.val);
+            if cppstyle {
+                if s.subscrs.end > 0 {
+                    b := b.extend("< ");
+                    var idx := s.subscrs.begin;
+                    while idx < s.subscrs.end {
+                        if idx > 0 {
+                            b := b.extend(",");
+                        };
+                        b := s.subscrs.value(idx).encode(b,0);
+                        idx := idx.next
+                    };
+                    b := b.extend(" >");
+                }
+            } else {
+                var idx := s.subscrs.begin;
+                while idx < s.subscrs.end {
+                    b := b.extend("[");
+                    b := s.subscrs.value(idx).encode(b,0);
+                    b := b.extend("]");
+                    idx := idx.next
+                }
+            }
+        }
+        action make(val:str) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+            res := s
+        }
+        action make1(val:str,arg:ident) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+	    s.subscrs := s.subscrs.append(arg);
+            res := s
+        }
+        action to_str(s:this) returns (b:str) = {
+            b := s.val;
+            if cppstyle {
+                if s.subscrs.end > 0 {
+                    b := b.extend("< ");
+                    var idx := s.subscrs.begin;
+                    while idx < s.subscrs.end {
+                        if idx > 0 {
+                            b := b.extend(",");
+                        };
+                        b := b.extend(s.subscrs.value(idx).to_str);
+                        idx := idx.next
+                    };
+                    b := b.extend(" >");
+                }
+            } else {
+                var idx := s.subscrs.begin;
+                while idx < s.subscrs.end {
+                    b := b.extend("[");
+                    b := b.extend(s.subscrs.value(idx).to_str);
+                    b := b.extend("]");
+                    idx := idx.next
+                }
+            }
+        }
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(pref,s);
+        }
+        action parse(st : pstate) returns(st : pstate, id:strident) = {
+            if st.ok & st.tok.end ~= 0 {
+                id.val := st.tok;
+                st := st.consume;
+                while st.ok & st.tok = "[" {
+                    st := st.consume;
+                    var mid : strident;
+                    (st,mid) := parse(st);
+                    var sid : ident := mid;
+                    while st.ok & st.tok = "." {
+                        st := st.consume;
+                        (st,mid) := parse(st);
+                        sid := dotident.make(sid,mid)
+                    };
+                    if st.ok & st.tok = "]" {
+                        st := st.consume;
+                        id.subscrs := id.subscrs.append(sid);
+                    } else { st.ok := false }
+                }
+            } else { st.ok := false }
+        }
+	action get_last(s:this) returns (res:strident) = {
+	    res := s
+	}
+	action get_verb(s:this) returns (vrb:verb) = {
+	    vrb := verb_from_name(s.val)
+	}
+    }
+
+    # Numerical identifiers are used as temporaries internally. They
+    # are printed as decimal number in brackets.
+
+    object numident = {
+        variant this of ident = struct {
+            val : pos
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("[");
+            b := b.extend(s.val.to_str);
+            b := b.extend("]");
+        }
+        action make(val:pos) returns (res:ident) = {
+            var s : this;
+            s.val := val;
+            res := s
+        }
+    }
+
+    # Dotted identifiers are used to represent members of a namespace.
+        
+    object dotident = {
+        variant this of ident = struct {
+            namesp : ident,
+            member : strident
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.namesp.encode(b,0);
+            b := b.extend("::" if cppstyle else ".");
+            b := s.member.encode(b,0)
+        }
+        action make(namesp:ident,member:strident) returns (res:ident) = {
+            var s : this;
+            s.namesp := namesp;
+            s.member := member;
+            res := s
+        }
+        action to_str(s:this) returns (res:str) = {
+            res := s.namesp.to_str;
+            res := res.extend("::" if cppstyle else ".");
+            res := res.extend(s.member.to_str);
+        }
+        action get_namesp(s:this) returns (res:ident) = {
+            res := s.namesp;
+        }
+        action get_member(s:this) returns (res:ident) = {
+            res := s.member;
+        }
+        action prefix(s:this,pref:ident) returns (res:ident) = {
+            res := dotident.make(s.namesp.prefix(pref),s.member);
+        }
+	action get_last(s:this) returns (res:strident) = {
+	    res := s.member
+	}
+    }
+
+
+    object expr = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        instantiate parse_intf(expr,cppstyle)
+        action get_verb(s:this) returns (vrb:verb) = {
+            vrb := verb.none;
+        }
+        action get_verb_typed(s:this) returns (vrb:verb) = {
+	    if s.is(verb.colon) {
+		vrb := s.get_arg(0).get_verb;
+	    } else {
+		vrb := s.get_verb;
+	    }
+        }
+        action is(s:this,vrb:verb) returns (res:bool) = {
+            res := false;
+        }
+        action is_typed(s:this,vrb:verb) returns (res:bool) = {
+            res := false;
+        }
+        action get_arg(s:this,p:vector[expr].domain) returns (res:expr)
+        action get_name(s:this) returns (res:ident)
+        action app_verb(s:this) returns (res:verb)
+        action get_ann(s:this) returns (res:annot)
+        action get_func(s:this) returns (res:expr) 
+        action get_args(s:this) returns (res:vector[expr])
+        action prefix(s:this,pref:ident) returns (res:expr)
+
+	# Tests whether two expressions are syntacically equal,
+	# leaving aside annotations.
+
+	action eq(e1:expr,e2:expr) returns (res:bool) = {
+	    if e1 isa symbol {
+		if e2 isa symbol {
+		    res := (e1.get_name = e2.get_name);
+		}
+	    } else if e1 isa app {
+		if eq(e1.get_func,e2.get_func) {
+		    var args1 := e1.get_args;
+		    var args2 := e2.get_args;
+		    if args1.end = args2.end {
+			res := true;
+			var idx := args1.begin;
+			while res & idx < args1.end {
+			    if ~eq(args1.value(idx),args2.value(idx)) {
+				res := false;
+			    };
+			    idx := idx.next;
+			}
+		    }
+		}
+	    }
+	}
+
+    }
+
+    object symbol = {
+        variant this of expr = struct {
+            name : ident,
+            vrb : verb,
+            ann : annot
+        }
+        action make(name:ident,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := name;
+            s.vrb := verb.none;
+            s.ann := ann;
+            res := s
+        }
+        action makestr(name:str,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := strident.make(name);
+            s.vrb := verb_from_name(name);
+            s.ann := ann;
+            res := s
+        }
+        action makestr1(name:str,arg:ident,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := strident.make1(name,arg);
+            s.vrb := verb_from_name(name);
+            s.ann := ann;
+            res := s
+        }
+        action makenum(num:pos,ann:annot) returns (res:expr) = {
+            var s:symbol;
+            s.name := numident.make(num);
+            s.vrb := verb.none;
+            s.ann := ann;
+            res := s
+        }
+        action encode(s:symbol,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := s.name.encode(b,0);
+        }
+        action parse(st : pstate) returns(st : pstate, res:expr) = {
+            if st.ok & st.tok.end ~= 0 {
+                var s : symbol;
+                s.vrb := verb_from_name(st.tok);
+                (st,s.ann) := st.get_ann;
+                var id : strident;
+                (st,id) := strident.parse(st);
+                s.name := id;
+                res := s;
+            }
+            else {
+                st.ok := false;
+            }
+        }
+        action get_verb(s:symbol) returns (res:verb) = {
+            res := s.vrb;
+        }
+        action get_name(s:this) returns (res:ident) = {
+            res := s.name
+        }
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
+        }
+        action prefix(s:this,pref:ident) returns (res:expr) = {
+            res := symbol.make(s.get_name.prefix(pref),s.get_ann);
+        }
+    }
+
+    object app = {
+        variant this of expr = struct {
+            func : expr,
+            args : vector[expr],
+            ann : annot
+        }
+        action make(func:expr,args:vector[expr],ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := args;
+            s.ann := ann;
+            res := s
+        }
+        action make1(func:expr,arg0:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := s.args.append(arg0);
+            s.ann := ann;
+            res := s
+        }
+        action make2(func:expr,arg0:expr,arg1:expr,ann:annot) returns (res:expr) = {
+            var s:app;
+            s.func := func;
+            s.args := s.args.append(arg0);
+            s.args := s.args.append(arg1);
+            s.ann := ann;
+            res := s
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            var vrb := s.func.get_verb;
+            if vrb ~= verb.none {
+                var opprio := verb_to_prio(vrb);
+                if opprio < prio {
+                    b := b.nest;
+                    b := b.extend("(");
+                };	    
+		if s.args.end = 1 {
+                    b := b.extend(verb_to_str(vrb));
+                    b := b.extend(" ");
+                    b := s.args.value(0).encode(b,opprio);
+		} else {
+                    b := s.args.value(0).encode(b,opprio);
+                    b := b.extend(" ");
+                    b := b.extend(verb_to_str(vrb));
+                    b := b.extend(" ");
+                    b := s.args.value(1).encode(b,opprio+1);
+                    if vrb = verb.ite {
+                        b := b.extend(" ");
+                        b := b.extend(":" if cppstyle else "else");
+                        b := b.extend(" ");
+                        b := s.args.value(2).encode(b,opprio+1);
+                    }
+		};
+                if opprio < prio {
+                    b := b.extend(")");
+                    b := b.unnest
+                }
+            } else {
+                b := b.nest;
+                b := s.func.encode(b,99);
+                if s.args.end = 0 {
+                    b := b.extend("()")
+                } else {
+                    b := expr.tup.encode(s.args,b,0);
+                };
+                b := b.unnest;
+            }
+        }
+        action is(s:this,vrb:verb) returns (res:bool) = {
+            res := s.func.get_verb = vrb;
+        }
+        action is_typed(s:this,vrb:verb) returns (res:bool) = {
+            res := s.is(vrb) | s.func.is(verb.colon) & s.func.get_arg(0).get_verb = vrb
+        }
+        action app_verb(s:this) returns (res:verb) = {
+            res := s.func.get_verb
+        }
+        action get_func(s:this) returns (res:expr) = {
+            res := s.func
+        }
+        action get_args(s:this) returns (res:vector[expr]) = {
+            res := s.args
+        }
+        action get_arg(s:this,p:vector[expr].domain) returns (res:expr) = {
+            res := s.args.value(p)
+        }
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
+        }
+    }
+
+    # Variables are used internally as placeholders but
+    # are not intended to be parsed or printed out.
+
+    object variable = {
+        variant this of expr = struct {
+            idx : pos,
+            ann : annot
+        }
+        
+        action make(idx:pos) returns (res:expr) = {
+            var s:this;
+            s.idx := idx;
+            res := s
+        }
+    }
+    
+    object pi = {
+        variant this of expr = struct {
+            vars : vector[expr],
+            body : expr,
+	    ann : annot
+        }
+
+        action make (vars:vector[expr], body:expr,ann:annot) returns (res:expr) = {
+            var s:this;
+            s.vars := vars;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("pi");
+            b := b.extend(" ");
+            b := expr.tup.encode(s.vars,b,0);
+            b := b.extend(".");
+            b := b.extend(" ");
+            b := s.body.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+        
+    }
+
+
+    instance iff : built_in_binary("<->",verb.iff,2)
+    instance or : built_in_binary("|",verb.or,3)
+    instance and : built_in_binary("&",verb.and,4)
+    instance lt : built_in_binary("<",verb.lt,6)
+    instance leq : built_in_binary("<=",verb.leq,6)
+    instance gt : built_in_binary(">",verb.gt,6)
+    instance geq : built_in_binary(">=",verb.geq,6)
+    instance plus : built_in_binary("+",verb.plus,12)
+    instance minus : built_in_binary("-",verb.minus,12)
+    instance times : built_in_binary("*",verb.times,13)
+    instance div : built_in_binary("/",verb.div,13)
+
+    instance empty : built_in_const("()",verb.empty)
+    instance boolv : built_in_const("bool",verb.boolv)
+    instance truev : built_in_const("true",verb.truev)
+    instance falsev : built_in_const("false",verb.falsev)
+    instance comma : built_in_binary(",",verb.comma,1)
+    
+    # The dot is used to introduce members of namespaces
+    
+    instance dot : built_in_binary(".",verb.dot,100)
+
+    # Treat open paren as a builtin operator for function application. The
+    # real operator is the empty string, but open paren will work.
+
+    instantiate built_in("(",verb.app,99,1)        
+
+    object expr = { ...
+
+        var foo : vector[expr]  # workaround
+
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:expr) = {
+            if st.tok = "(" {
+                st := st.consume;
+                (st,res) := parse(st,0);
+                if st.ok & st.tok = ")" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                }
+            } else {
+		var vrb := str_to_verb(st.tok);
+		if  vrb ~= verb.none & verb_to_arity(vrb) = 1 {
+                    var s : app;
+                    s.func := symbol.makestr(st.tok,s.ann);
+                    st := st.consume;
+		    var arg : expr; 
+                    (st,arg) := parse(st,verb_to_prio(vrb));
+                    s.args := s.args.append(arg);
+		    res := s;
+		} else {
+		    (st,res) := symbol.parse(st);
+		}
+            };
+            var vrb := str_to_verb(st.tok);
+            while st.ok & vrb ~= verb.none & prio < verb_to_prio(vrb) {
+                var s : app;
+                (st,s.ann) := st.get_ann;
+                if vrb = verb.app {
+                    s.func := res;
+                    (st,s.args) := tup.parse(st,1);
+                } else {
+                    s.func := symbol.makestr(st.tok,s.ann);
+                    st := st.consume;
+                    s.args := s.args.append(res);
+                    var arg : expr;
+                    (st,arg) := parse(st,verb_to_prio(vrb));
+                    s.args := s.args.append(arg);
+                    if st.ok & vrb = verb.ite {
+                        if st.tok = (":" if cppstyle else "else") {
+                            st := st.consume;
+                            (st,arg) := parse(st,verb_to_prio(vrb));
+                            s.args := s.args.append(arg);
+                        } else { st.ok := false }
+                    }
+                };
+                res := s;
+                vrb := str_to_verb(st.tok);
+            }
+        }
+
+        instance tup : tuple(expr,"(",")",verb)
+    }
+}
+
+module generic_stmt_encode(stmt_prio) = {
+    action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+        b := s.ann.encode(b);
+        if stmt_prio < prio {
+            b := b.nest;
+            b := b.extend("{");
+            b := b.newline;
+        };	    
+        b := s.encode_int(b,prio);
+        if stmt_prio < prio {
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("}");
+        }	    
+    }
+}
+
+module stmt_base(expr,asgntok,cppstyle) = {
+
+    object stmt = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        instantiate parse_intf(stmt,cppstyle)
+	action get_expr(s:this) returns (res:expr)
+	action get_lhs(s:this) returns (res:expr)
+	action get_rhs(s:this) returns (res:expr)
+	action get_ann(s:this) returns (res:annot)
+	
+    }
+
+    object asgn = {
+        instantiate genbinop(stmt,expr)
+        instantiate generic_stmt_encode(1)
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            if s.lhs.get_verb ~= verb.empty {
+                b := s.lhs.encode(b,0);
+                b := b.extend(" ");
+                b := b.extend(asgntok);
+                b := b.extend(" ");
+            };
+            b := s.rhs.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+
+	# This gets the lhs of the assignment
+	action get_lhs(s:this) returns (res:expr) = {
+	    res := s.lhs;
+	}
+	# This gets the rhs of the assignment
+	action get_rhs(s:this) returns (res:expr) = {
+	    res := s.rhs;
+	}
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+    }
+
+    object sequence = {
+        instantiate genbinop(stmt,stmt)
+        instantiate generic_stmt_encode(0)
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.lhs.encode(b,1);
+            b := b.newline;
+            b := s.rhs.encode(b,0);
+        }
+
+        var dummy : vector[stmt]  # workaround
+
+        # Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
+        # xn`, where `*` is a binary operator that associates to the right.
+
+        action fold_right(args:vector[stmt],ann:annot) returns (res:stmt) = {
+            if args.end > 0 {
+                var idx := args.end.prev;
+                res := args.value(idx);
+                while idx > 0 {
+                    idx := idx.prev;
+                    res := make(args.value(idx),res,ann);
+                }
+            }
+        }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+
+    }
+
+    object skipst = {
+        variant this of stmt = struct {
+            ann : annot
+        }
+
+        action make (ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.extend("{");
+            b := b.extend("}")
+        }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+    }
+
+
+    object ifst = {
+        variant this of stmt = struct {
+            cond : expr,
+            thenst : stmt,
+            elsest : stmt,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(cond:expr,thenst:stmt,elsest:stmt,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.cond := cond;
+            s.thenst := elsest;
+            s.elsest := elsest;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("if");
+            b := b.extend(" ");
+            if cppstyle {
+                b := b.extend("(");
+            };
+            b := s.cond.encode(b,0);
+            if cppstyle {
+                b := b.extend(")");
+            };
+            b := b.extend(" ");
+            b := s.thenst.encode(b,2);
+            if ~(s.elsest isa skipst) {
+                b := b.extend(" ");
+                b := b.extend("else");
+                b := b.extend(" ");
+                b := s.elsest.encode(b,2);
+            };
+        }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+    }
+
+    object whilest = {
+        variant this of stmt = struct {
+            cond : expr,
+            body : stmt,
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(cond:expr,body:stmt,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.cond := cond;
+            s.body := body;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("while");
+            b := b.extend(" ");
+            if cppstyle {
+                b := b.extend("(");
+            };
+            b := s.cond.encode(b,0);
+            if cppstyle {
+                b := b.extend(")");
+            };
+            b := b.extend(" ");
+            b := s.body.encode(b,2);
+        }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+    }
+
+    object breakst = {
+        variant this of stmt = struct {
+            ann : annot
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action make(ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("break;");
+        }
+	action get_ann(s:this) returns (res:annot) = {
+	    res := s.ann
+	}
+    }
+
+    object stmt = { ...
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
+            while st.tok = ";" {
+                st := st.consume;
+            };
+            if st.tok = "{" {
+                st := st.consume;
+                (st,res) := parse(st,0);
+                if st.ok & st.tok = "}" {
+                    st := st.consume;
+                } else {
+                    st.ok := false;
+                }
+            } else if st.tok = "if" {
+                st := st.consume;
+                var s : ifst;
+                (st,s.ann) := st.get_ann;
+                (st,s.cond) := expr.parse(st,0);
+                if st.ok & st.tok = "{" {
+                    (st,s.thenst) := stmt.parse(st,1);
+                    if st.ok & st.tok = "else" {
+                        st := st.consume;
+                        if st.ok & (st.tok = "{" | st.tok = "if") {
+                            (st,s.elsest) := stmt.parse(st,1);
+                        } else {
+                            st.ok := false;
+                        }
+                    } else {
+                        var ann : annot; # missing else doesn't print, so don't annotate
+                        s.elsest := skipst.make(ann)
+                    }
+                }
+                else {
+                    st.ok := false;
+                };
+                res := s;
+            } else if st.tok = "while" {
+                st := st.consume;
+                var s : whilest;
+                (st,s.ann) := st.get_ann;
+                (st,s.cond) := expr.parse(st,0);
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                }
+                else {
+                    st.ok := false;
+                };
+                res := s;
+            } else if st.tok = "}" {
+                var ann : annot;
+                (st,ann) := st.get_ann;
+                res := skipst.make(ann);
+            } else {
+                (st,res) := stmt.parse_lang_stmt(st,prio);
+            };
+            if st.ok & prio = 0 & st.tok.end > 0 & st.tok ~= "}" {
+                var sq : sequence;
+                sq.lhs := res;
+                (st,sq.rhs) := stmt.parse(st,0);
+                res := sq;
+            }
+        }
+    }
+}
+
+module decl_base(expr,stmt) = {
+    object decl = {
+        type this
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        instantiate parse_intf(decl,false)
+        action get_expr(s:this) returns (res:expr)
+        action get_ann(s:this) returns (res:annot)
+        action get_body(s:this) returns (res:stmt)
+    }
+
+    object action_kind = {
+        type this = {internal,external,imported,exported}
+    }
+
+    # This represents the protocol for passing an argument in C++.  The
+    # `is_input` and `is_output` fields tell us whether the argument
+    # is an input, an output or both. Field `is_ref` means the
+    # argument is passed by reference. Field `is_const` indicates it
+    # is a const reference. 
+
+    object prototype_argument = {
+        type this = struct {
+            name : expr,
+            is_input : bool,
+            inpos : vector[expr].domain,
+            is_output : bool,
+            outpos : vector[expr].domain,
+            is_ref : bool,
+            is_const : bool
+        }
+    }
+
+    # The prototype tells us how arguments are passed in C++. 
+
+    object prototype = {
+        type this = struct {
+            args : vector[prototype_argument],
+            has_ret : bool,
+            ret : prototype_argument
+        }
+    }
+
+    object actdc = {
+        variant this of decl = struct {
+            name : expr,
+            kind : action_kind,
+            inputs : vector[expr],
+            outputs : vector[expr],
+            has_body : bool,
+            body : stmt,
+            ann : annot,
+            has_proto : bool,
+            proto : prototype
+        }
+
+        action make(name : expr, inputs : vector[expr], outputs : vector[expr], has_body:bool,
+                    body : stmt)
+            returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.inputs := inputs;
+            s.outputs := outputs;
+            s.has_body := has_body;
+            s.body := body;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            if s.kind = action_kind.external {
+                b := b.extend("extern");
+                b := b.extend(" ");
+            } else if s.kind = action_kind.imported {
+                b := b.extend("import");
+                b := b.extend(" ");
+            } else if s.kind = action_kind.exported {
+                b := b.extend("export");
+                b := b.extend(" ");
+            };
+            b := b.extend("action");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := expr.tup.encode(s.inputs,b,prio);
+            if s.outputs.end > 0 {
+                b := b.extend(" ");
+                b := b.extend("returns");
+                b := expr.tup.encode(s.outputs,b,prio);
+            };
+            b := b.unnest;
+            if s.has_body {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.body.encode(b,2);
+            }
+        }
+
+        # A member is a action of the form `action type.member(x:type,...)`
+
+        action is_member(s:this) returns (res:bool) = {
+            res := s.name.get_name isa dotident
+            & s.inputs.end > 0
+            & s.member_type = s.name.get_name.get_namesp;
+        }
+
+        # If this is a member action, return the type it is a member of.
+
+        action member_type(s:this) returns (res:ident) = {
+            res := s.inputs.value(0).get_arg(1).get_name;
+        }
+
+        action get_body(s:this) returns (res:stmt) = {
+            res := s.body
+        }
+    }
+}
+    
+module prog_base(cppstyle) = {
+
+    object version = {
+        type this = struct {
+            nums : vector[pos]
+        }
+        action encode(s:this,b:pretty) returns(b:pretty) = {
+            b := b.extend("#lang ivy");
+            var idx := s.nums.begin;
+            while idx < s.nums.end {
+                if idx > s.nums.begin {
+                    b := b.extend(".")
+                };
+                b := b.extend(s.nums.value(idx).to_str);
+                idx := idx.next
+            }
+        }
+	action parse(st : pstate, prio:priority) returns(st : pstate, res:this) = {
+            if st.ok & st.tok = "lang" {
+                st := st.consume;
+            } else {st.ok := false};
+            if st.ok & st.tok.segment(0,3) = "ivy" {
+                st.p := st.p - (st.tok.end - 3);  # re-read remainder of token for backward compat
+                st := st.consume;
+            };
+            if st.ok & st.tok.end > 0 & st.tok.value(0).is_digit {
+                res.nums := res.nums.append(pos.from_str(st.tok));
+                st := st.consume;
+                while st.ok & st.tok = "." {
+                    st := st.consume;
+                    if st.tok.end > 0 & st.tok.value(0).is_digit {
+                        res.nums := res.nums.append(pos.from_str(st.tok));
+                        st := st.consume;
+                    } else {st.ok := false;}
+                }
+            };
+            if st.tok.end > 0 {
+                st.ok := false;
+            }
+        }
+    }
+
+    object prog = {
+        type this = struct {
+            vers : version,
+	    decls : vector[decl]
+	}
+	instantiate parse_intf(this,cppstyle)
+
+	action make(decls : vector[decl]) returns (res:prog) =
+	{
+	    var s:this;
+	    s.decls := decls;
+	    res := s;
+	}
+
+	action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            if ~cppstyle {
+                b := s.vers.encode(b)
+            };
+            b := b.newline;
+	    var idx := s.decls.begin;
+	    while idx < s.decls.end {
+		b := b.newline;
+		b := s.decls.value(idx).encode(b,0);
+		idx := idx.next;
+	    };
+	}	    
+
+        # Note, the Ivy verison number is encoded in the first comment line
+
+	action parse_to(st : pstate, prio:priority, res:prog) returns(st : pstate, res:prog) = {
+            if ~cppstyle {
+                if st.ann.comments.end > 0 {
+                    var vst := pstate.make(st.ann.comments.value(0));
+                    (vst,res.vers) := version.parse(vst,0);
+                    st.ok := vst.ok;
+                    st.ann.comments := st.ann.comments.segment(1,st.ann.comments.end)
+                } else {st.ok := false};
+            };
+	    while st.ok & st.tok.end > 0 {
+		var dcl : decl;
+		(st,dcl) := decl.parse(st,0);
+		res.decls := res.decls.append(dcl);
+	    }
+	}
+
+	action parse(st : pstate, prio:priority) returns(st : pstate, res:prog) = {
+            (st,res) := parse_to(st,prio,res);
+        }
+    }
+}
+

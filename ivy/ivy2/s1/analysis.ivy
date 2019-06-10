@@ -1,0 +1,438 @@
+#lang ivy1.7
+
+include ivylang
+include hash
+
+object ivy = { ...
+
+    instance ident_to_exprs : hash_rel(ident,expr)
+
+    # This analysis runs over a flat program and finds the subtype
+    # relations
+
+    object subtypes = {
+        type this = struct {
+            subtypes_of : ident_to_exprs,
+            supertype_of : symeval
+        }
+	action is_subtype(s:this,sub:expr,super:expr) returns (res:bool) = {
+	    if sub isa symbol {
+		var name := sub.get_name;
+		if s.supertype_of.mem(name) {
+		    res := s.supertype_of.value(name).get_name = super.get_name
+		}
+	    }
+	}
+    }
+
+    object prog = { ...
+        action get_subtypes(p:this) returns (s:subtypes) = {
+            var idx := p.decls.begin;
+            while idx < p.decls.end {
+                s := p.decls.value(idx).build_subtypes(s);
+                idx := idx.next
+            }
+        }
+    }
+
+    object decl = { ...
+        action build_subtypes(s:decl,st:subtypes) returns (st:subtypes)
+    }
+
+    object typedc = { ...
+        action build_subtypes(s:this,st:subtypes) returns (st:subtypes) = {
+            if s.has_super {
+                st.subtypes_of := st.subtypes_of.add(s.super.get_name,s.sort);
+                st.supertype_of := st.supertype_of.set(s.sort.get_name,s.super);
+            }
+        }
+    }        
+            
+    # This analysis runs over a flat program and maps all the global
+    # identifiers to their types. For this purpose, actions are
+    # treated as if they were functions. If the types of member functions
+    # are curried, the flag `curried` is set.
+
+    object global_types = {
+        type this = struct {
+            type_of : symeval,
+            is_action : ident_set,
+            curried : bool
+        }
+    }
+    
+    object prog = { ...
+        action get_global_types(p:this, curried : bool) returns (s:global_types) = {
+            s.curried := curried;
+            var idx := p.decls.begin;
+	    while idx < p.decls.end {
+                s := p.decls.value(idx).build_global_types(s);
+                idx := idx.next
+            }
+        }
+    }
+
+    object decl = { ...
+        action build_global_types(s:decl,st:global_types) returns (st:global_types)
+    }
+
+    # A complete typing looks like one of these:
+    #
+    # (1)  x:t
+    # (2)  f(x1:t1,...,xn:tn) : t
+    # (3)  (f : (t1*...*tn->t)(...) : u
+    # (4)  (f : (t1*...*tn->t)(...)
+    #
+    
+    action is_typing_complete(typing:expr) returns (res:bool) = {
+        if typing.is(verb.colon) {
+            var lhs := typing.get_arg(0);
+            if lhs isa symbol {
+                res := true;
+            } else if lhs isa app {
+                if lhs.get_func.is(verb.colon) {
+                    res := true;
+                } else {
+                    res := true;
+                    var args := lhs.get_args;
+                    var idx := args.begin;
+                    while idx < args.end {
+                        if ~args.value(idx).is(verb.colon) {
+                            res := false;
+                        };
+                        idx := idx.next
+                    }
+                }
+            }
+        } else {
+            if typing isa app {
+                if typing.get_func.is(verb.colon) {
+                    res := true
+                }
+            }
+        }
+    }
+
+    object vardc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+            if is_typing_complete(s.typing) {
+                var typing := canon_typing(s.typing);
+                var thing := typing.enc;
+	        var ty := typing.get_arg(1);
+	        if s.is_destructor & st.curried {
+		    ty := ty.curry;
+	        };
+	        st.type_of := st.type_of.set(typing.get_arg(0).get_name,ty);
+            }
+        }
+    }        
+
+    action get_formal_type(typings : vector[expr],ann:annot) returns (res:expr) = {
+	if typings.end = 0 {
+	    res := empty.make(ann);
+	} else {
+	    var tys : vector[expr];
+	    var idx := typings.begin;
+            while idx < typings.end {
+		var ty := typings.value(idx).get_arg(1);
+		tys := tys.append(ty);
+		idx := idx.next
+            };
+	    res := times.fold_left(tys,ann);
+	}
+    }
+
+    object typedc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+            if s.has_spec {
+                if s.spec isa enumspec {
+		    var foobar : decl := s;
+                    var conss := s.spec.get_elems;
+                    var idx := conss.begin;
+                    while idx < conss.end {
+	                st.type_of := st.type_of.set(conss.value(idx).get_name,s.sort);
+                        idx := idx.next
+                    }
+                }
+            }
+        }
+    }
+
+    object actdc = { ...
+        action build_global_types(s:this,st:global_types) returns (st:global_types) = {
+	    var ty := get_formal_type(s.outputs,s.ann);
+            if s.inputs.end > 0 {
+	        var inpty := get_formal_type(s.inputs,s.ann);
+	        ty := arrow.make(inpty,ty,s.ann)
+            };
+	    if s.is_member & st.curried {
+		ty := ty.curry;
+	    };
+	    st.type_of := st.type_of.set(s.name.get_name,ty);
+            st.is_action := st.is_action.set(s.name.get_name,true);
+	}
+    }
+
+    # Does a prototype have any non-const ref parameters?
+
+    object prototype = { ...
+        action any_non_const_ref(s:this) returns(res:bool) = {
+            var idx := s.args.begin;
+            while ~res & idx < s.args.end {
+                var arg := s.args.value(idx);
+                res := arg.is_ref & ~arg.is_const;
+                idx := idx.next
+            }
+        }
+    }
+
+    # Get a map from param names to positions
+
+    instance param_map : hash_map(ident,vector[expr].domain)
+    
+    action param_set(ps:vector[expr]) returns (res:param_map) = {
+        var idx := ps.begin;
+        while idx < ps.end {
+            res := res.set(ps.value(idx).get_arg(0).get_name,idx);
+            idx := idx.next
+        }
+    }
+        
+    # Here, we add a default prototype to an action declaration, if a
+    # prototype has not already been specified.  The default prototype
+    # has one of two forms. If there is one output, and it is not an
+    # in/out parameter, then the output becomes the C++ return value,
+    # and the inputs are all by reference. Otherwise, all parameters
+    # are by reference and the return type is void. Input parameters
+    # are by const reference.
+    
+    object actdc = { ...
+        action get_proto(s:actdc) returns (res:prototype) = {
+            if s.has_proto {
+                res := s.proto
+            } else {
+                var inps := param_set(s.inputs);
+                var outs := param_set(s.outputs);
+                var idx := s.inputs.begin;
+                while idx < s.inputs.end {
+                    var arg : prototype_argument;
+                    arg.name := s.inputs.value(idx);
+                    var id := arg.name.get_arg(0).get_name;
+                    arg.is_input := true;
+                    arg.inpos := idx;
+                    arg.is_output := outs.mem(id);
+                    if arg.is_output {
+                        arg.outpos := outs.value(id)
+                    } else {
+                        arg.is_const := true;
+                    };
+                    arg.is_ref := true;
+                    res.args := res.args.append(arg);
+                    idx := idx.next
+                };                
+                if s.outputs.end = 1 & ~inps.mem(s.outputs.value(0).get_arg(0).get_name) {
+                    res.has_ret := true;
+                    res.ret.name := s.outputs.value(0);
+                    res.ret.is_output := true;
+                    res.ret.outpos := 0;
+                } else {
+                    idx := 0;
+                    while idx < s.outputs.end {
+                        var arg : prototype_argument;
+                        arg.name := s.outputs.value(idx);
+                        var id := arg.name.get_arg(0).get_name;
+                        if ~inps.mem(id) {
+                            arg.is_output := true;
+                            arg.outpos := idx;
+                            arg.is_ref := true;
+                            res.args := res.args.append(arg);
+                        };
+                        idx := idx.next
+                    }
+                }                
+            }
+        }
+    }
+
+
+    # Member functions
+    # ================
+
+    # Curry a function type, that is, translate type `t1 * ... tn -> s` to
+    # type t1 -> (t2 * ... * tn -> s).
+
+    object expr = { ...
+        action curry(ty:expr) returns (res:expr) = {
+            var dom := times.unfold_left(ty.get_arg(0));
+            var dom2 := dom.segment(1,dom.end);
+            var rng := ty.get_arg(1);
+            var ty2 :=
+                rng if dom2.end = 0
+                else arrow.make(times.fold_left(dom2,ty.get_arg(0).get_ann),rng,ty.get_ann);
+            res := arrow.make(dom.value(0),ty2,ty.get_ann.strip)
+        }
+    }
+    
+
+    # Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
+
+    action uncurry_func(func:expr) returns (res:expr) = {
+        var ty := func.get_arg(1).get_arg(0);
+        var fid := func.get_arg(0).get_name.prefix(ty.get_name);
+        var sym := symbol.make(fid,func.get_ann);
+        res := colon.make(sym,func.get_arg(1).uncurry,func.get_ann);
+    }
+
+    # Given a function type `ty = (t * ... -> u)`, return `t`.
+
+    action get_dom0(ty:expr) returns (res:expr) = {
+        res := ty.get_arg(0);
+        var b := res.is(verb.times);
+        while b {
+            res := res.get_arg(0);
+            b := res.is(verb.times);
+        };
+    }
+    
+    # Test whether a type-decorated function is a member
+    # function. That is, it returns true if `func` has the form
+    # `t.f : (t * ...) -> u`.
+
+    action func_is_member(func:expr) returns (res:bool) = {
+        var ty := func.get_arg(1);
+        if ty.is(verb.arrow) {
+            var fid := func.get_arg(0).get_name;
+            if fid isa dotident {
+                var dom := get_dom0(ty);
+                res := (fid.get_namesp = dom.get_name);
+            }
+        }
+    }
+    
+
+    # A function application can be in several forms
+    #
+    # - (x:t).f            returns t.f(x)
+    # - (x:t).f(a1...an)   returns t.f(x,a1...an)
+    # - (f:...)(a1...an)   returns f(a1...an)
+    #
+    # This action analyzes an app, returning the type-decorated
+    # function and the argument vector. This assumes that the app is
+    # already type-decorated.
+
+    action get_app(s:expr) returns (func:expr, args:vector[expr]) = {
+        if s.is(verb.dot) {
+            var lhs := s.get_arg(0);
+            var ty := lhs.get_type;
+            func := uncurry_func(s.get_arg(1));
+            args := args.append(lhs);
+        } else {
+            func := s.get_func;
+            if func.is(verb.dot) {
+                var tmp := func;  # workaround
+                (func,args) := get_app(tmp);
+            };
+            args := args.extend(s.get_args);
+        }
+    }
+
+    # Canonize a function application. If it is in member style,
+    # convert it to an ordinary function call.
+
+    action canon_app(s:expr) returns (s:expr) = {
+        if s.is(verb.dot) {
+            var args : vector[expr];
+            (s,args) := get_app(s);
+            if args.end > 0 {
+                s := app.make(s,args,s.get_ann)
+            }
+        }
+    }
+}
+
+
+module push_pop_map(domain,range) = {
+
+    instance map_t : hash_map(domain,range)
+    instance vec_t : array(pos,domain)        
+
+    type this = struct {
+        map : map_t,
+        del : vec_t,
+        stack : vector[pos]
+    }
+
+    action set(s:this,id:domain,v:range) returns(s:this) = {
+        if ~s.map.mem(id) {
+            s.del := s.del.append(id);
+        };
+        s.map := s.map.set(id,v)
+    }
+
+    action mem(s:this, id:domain) returns (res:bool) = {
+        res := s.map.mem(id)
+    }
+
+    action push(s:this) returns(s:this) = {
+        s.stack := s.stack.append(s.del.end);
+    }
+
+    action pop(s:this) returns(s:this) = {
+        var begin := s.stack.back;
+        s.stack := s.stack.pop_back;
+        while s.del.end > begin {
+            var x := s.del.back;
+            s.del := s.del.pop_back;
+            s.map := s.map.remove(x);
+        }
+    }
+}
+    
+object ivy = { ...
+        
+    # Local variable tracking
+    # =======================
+
+    instance push_pop_ident_set : push_pop_map(ident,bool)
+
+    object local_tracker = {
+        type this = struct {
+            map : push_pop_ident_set
+        }
+
+        action push(s:this) returns (s:this) = {
+            s.map := s.map.push;
+        }                
+
+        action add_var(s:this,typing:expr) returns (s:this) = {
+            var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
+            s.map := s.map.set(v.get_name,true);
+        }
+
+        action push_vars(s:this,typings:vector[expr]) returns (s:this) = {
+            s.map := s.map.push;
+            var idx := typings.begin;
+            while idx < typings.end {
+                var typing := typings.value(idx);
+                var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
+                s.map := s.map.set(v.get_name,true);
+                idx := idx.next
+            }
+        }
+
+        action push_stmt(s:this,stm:stmt) returns (s:this) = {
+            s.map := s.map.push;
+            if stm isa varst {
+                s := s.add_var(stm.get_expr);
+            }
+        }
+
+        action pop(s:this) returns (s:this) = {
+            s.map := s.map.push
+        }
+
+        action mem(s:this,id:ident) returns (res:bool) = {
+            res := s.map.mem(id);
+        }
+    }
+}

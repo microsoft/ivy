@@ -1,0 +1,95 @@
+#lang ivy
+
+#
+# This module provides various traits of input/output on streams and
+# files.
+#
+
+# The `stdio` module provides input/output on the standard
+# streams, that is, standard input, standard output and standard
+# error. It takes a parameter `str`, which is a type with string
+# traits.
+
+module io_stdio(str,domain,range) = {
+
+    # The `write` action writes a string to standard output.
+
+    action write(s:str) = {
+	var idx : domain;
+	idx := s.begin;
+	while idx < s.end {
+	    ivy.put(cast(s.value(idx)));
+	    idx := idx + 1;
+	}
+    }
+
+    # The `write` action writes a string to standard output followed
+    # by newline.
+
+    action writeln(s:str) = {
+	call write(s);
+	ivy.put(10);
+    }
+
+    # The `read` action from standard input untio EOF.
+
+    action read returns (s:str) = {
+	var c : range := cast(ivy.get);
+	while c >= 0 {
+	    s := s.append(c);
+	    c := cast(ivy.get)
+	}
+    }
+
+    # The `readln` action reads a line from standard input, returning
+    # the line without any terminating newline character.
+
+    action readln returns (s:str) = {
+	var c : range := cast(ivy.get);
+	while c >= 0 & c ~= 10 {
+	    s := s.append(c);
+	    c := cast(ivy.get)
+	}
+    }
+
+
+}
+
+
+module file_io(buf,name) = {
+
+    action read(fname:name, b:buf) returns (b:buf, ok : bool) = {
+	(b,ok) := cast(ivy.read_file(cast(fname),cast(b)));
+    }
+
+    action write(fname:name, b:buf) returns (ok : bool) = {
+	ok := ivy.__write_file(cast(fname),cast(b));
+    }
+
+    action exist(fname:name) returns (ok : bool) = {
+	ok := ivy.file_exists(cast(fname));
+    }
+
+
+}
+
+module path_name(name) = {
+    action change_extension(path:name,ext:name) returns (path:name) = {
+        if path.end > 0 {
+            var idx := path.end.prev;
+            while idx > 0 & path.value(idx) ~= 46 {  # dot
+                idx := idx.prev;
+            };
+            if path.value(idx) = 46 {
+                path := path.segment(path.begin,idx);
+                path := path.extend(".");
+                path := path.extend(ext)
+            }
+        }
+    }
+
+    action concat(path1:name,path2:name) returns (path1:name) = {
+        path1 := path1.extend("/");
+        path1 := path1.extend(path2);
+    }
+}

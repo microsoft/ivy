@@ -1,0 +1,725 @@
+#lang ivy1.7
+
+include lang
+include hash
+
+object ivy = {
+
+    # Here, we instantiate the Ivy language traits that are in common
+    # with C++.
+
+    instantiate verb_base
+    instantiate expr_base(false)
+    instantiate stmt_base(expr,":=",false)
+    instantiate decl_base(expr,stmt)
+
+    instance ident_set : hash_map(ident,bool)
+
+    # Now we have the operators that are unique to Ivy.
+    #
+    # The binary `:` operator is used to represent a type
+    # judgement.
+
+    instance colon : built_in_binary(":",verb.colon,50)
+
+    # Type and implication arrow
+
+    instance arrow : built_in_binary("->",verb.arrow,2)
+
+    # Cast operator converts between types.
+
+    instance castop : built_in_unary("cast",verb.castv,49)
+
+    # The `=`, `~=` and `~` verbs are spelled differently in Ivy and C++
+    
+    instance equals : built_in_binary("=",verb.equals,5)
+    instance notequals : built_in_binary("~=",verb.notequals,5)
+    instance not : built_in_unary("~",verb.not,15)
+
+    # Ternary operator in Ivy written `x if c else y`.
+
+    instance ite : built_in_ternary("if",verb.ite,2)
+
+    # We treat "var" as a unary operator so it can appear
+    # on lhs of assignments. 
+
+    instance varv : built_in_unary("var",verb.varv,2)
+
+    # The `isa` operator
+    
+    instance isaop : built_in_binary("isa",verb.isav,5)
+
+    # Here, we have statements specific to Ivy and the Ivy statement
+    # parser.
+    
+    # The object `varst` represents the `var` statement.
+
+    object varst = {
+        variant this of stmt = struct {
+            name : expr,
+            ann : annot
+        }
+
+        action make (name:expr,ann:annot) returns (res:stmt) = {
+            var s:this;
+            s.name := name;
+            s.ann := ann;
+            res := s;
+        }
+
+        instantiate generic_stmt_encode(1)
+
+        action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("var");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.extend(";");
+            b := b.unnest;
+        }
+
+	action get_expr(s:this) returns (res:expr) = {
+	    res := s.name;
+	}
+    }
+
+    object stmt = { ...
+
+        action parse_lang_stmt(st : pstate, prio:priority) returns(st : pstate, res:stmt) = {
+	    var s : asgn;
+	    (st,s.ann) := st.get_ann;
+	    if st.tok = "call" {
+		st := st.consume;
+	    };
+	    (st,s.lhs) := expr.parse(st,0);
+	    if st.ok & st.tok = ":=" {
+		st := st.consume;
+		(st,s.rhs) := expr.parse(st,0);
+		if st.ok & st.tok = ";" {
+		    st := st.consume;
+		} else {
+		    st.ok := st.tok = "}";  # allow to omit final semicolon
+		};
+		res := s;
+	    } else if st.ok & (st.tok = ";" | st.tok = "}") {
+		if st.tok = ";" {
+		    st := st.consume;
+		};
+		if s.lhs.is(verb.varv) {
+		    var vst : varst;
+		    vst.ann := s.ann;
+		    vst.name := s.lhs.get_arg(0);
+		    res := vst;
+		} else {
+		    s.rhs := s.lhs;
+		    s.lhs := empty.make(s.ann.strip);  # just an expression -- assign to ()
+		    res := s;
+		}
+	    } else {
+		st.ok := false; 
+	    };
+        }
+    }
+
+    object groupdc = {
+        variant this of decl = struct {
+            decls : vector[decl],
+            ann : annot
+        }
+
+        action make(decls : vector[decl]) returns (res:decl) =
+        {
+            var s:this;
+            s.decls := decls;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("{");
+            var idx := s.decls.begin;
+            while idx < s.decls.end {
+                b := b.newline;
+                b := s.decls.value(idx).encode(b,0);
+                idx := idx.next;
+            };
+            b := b.unnest;
+            b := b.newline;
+            b := b.extend("}");
+        }	    
+    }
+
+    object typespec = {
+        type this
+
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:this) = {
+            if st.tok = "struct" {
+                var s : structspec;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.destructors) := curly_tup.parse(st,1);
+                res := s;
+            } else {
+                var s : enumspec;
+                (st,s.ann) := st.get_ann;
+                (st,s.constructors) := curly_tup.parse(st,1);
+                res := s;
+            }
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty)
+        action get_elems(s:this) returns (res:vector[expr])
+    }
+
+    instance curly_tup : tuple(expr,"{","}",verb)
+    
+    object enumspec = {
+        variant this of typespec = struct {
+            constructors : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := curly_tup.encode(s.constructors,b,prio);
+            b := b.unnest;
+        }	    
+        action get_elems(s:this) returns (res:vector[expr]) = {
+            res := s.constructors
+        }
+    }
+            
+    object structspec = {
+        variant this of typespec = struct {
+            destructors : vector[expr],
+            ann : annot
+        }
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("struct");
+            b := b.extend(" ");
+            b := curly_tup.encode(s.destructors,b,prio);
+            b := b.unnest;
+        }	    
+        action get_elems(s:this) returns (res:vector[expr]) = {
+            res := s.destructors
+        }
+    }
+
+    object typedc = {
+        variant this of decl = struct {
+            sort : expr,
+            has_super : bool,
+            super : expr,
+            has_spec : bool,
+            spec : typespec,
+            ann : annot
+        }
+
+        action make(sort:expr) returns (res:decl) =
+        {
+            var s:this;
+            s.sort := sort;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := s.ann.encode(b);
+            b := b.nest;
+            b := b.extend("variant" if s.has_super else "type");
+            b := b.extend(" ");
+            b := s.sort.encode(b,0);
+            if s.has_super {
+                b := b.extend(" ");
+                b := b.extend("of");
+                b := b.extend(" ");
+                b := s.super.encode(b,0);
+            };
+            if s.has_spec {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.spec.encode(b,0);
+            };
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }        
+
+    object vardc = {
+        variant this of decl = struct {
+            typing : expr,
+            is_destructor : bool,
+            has_def : bool,
+            def : expr,
+            ann : annot
+        }
+
+        action make(typing:expr,is_destructor:bool,ann:annot) returns (res:decl) =
+        {
+            var s:this;
+            s.typing := typing;
+            s.is_destructor := is_destructor;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("destructor" if s.is_destructor
+                          else ("function" if s.has_def else "var"));
+            b := b.extend(" ");
+            b := s.typing.encode(b,0);
+            b := b.unnest;
+            if s.has_def {
+                b := b.extend(" ");
+                b := b.extend("=");
+                b := b.extend(" ");
+                b := s.def.encode(b,0);
+            };
+            b := b.newline;
+        }	    
+    }        
+
+    object header = {
+        variant this of decl = struct {
+            filename : str,
+            ann : annot
+        }
+        action make(filename:str) returns (res:decl) =
+        {
+            var s:this;
+            s.filename := filename;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("header");
+            b := b.extend(" ");
+            b := b.extend(s.filename);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }
+        
+
+    object interpdc = {
+        variant this of decl = struct {
+            itype : expr,
+            ctype : expr,
+            ann : annot
+        }
+        
+        action make(itype : expr, ctype : expr, ann : annot) returns (res:decl) =
+        {
+            var s:this;
+            s.itype := itype;
+            s.ctype := ctype;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("interpret");
+            b := b.extend(" ");
+            b := s.itype.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend("->");
+            b := b.extend(" ");
+            b := s.ctype.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+    }
+
+    object includedc = {
+        variant this of decl = struct {
+            file : expr,
+            ann : annot
+        }
+        action make(file:expr,ann:annot) returns (res:decl) =
+        {
+            var s:this;
+            s.ann := ann;
+            s.file := file;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("include");
+            b := b.extend(" ");
+            b := s.file.encode(b,0);
+            b := b.unnest;
+            b := b.newline;
+        }	    
+
+        action get_expr(s:this) returns (res:expr) = {
+            res := s.file
+        }
+
+        action get_ann(s:this) returns (res:annot) = {
+            res := s.ann
+        }
+    }
+        
+    object moduledc = {
+        variant this of decl = struct {
+            name : expr,
+            prms : vector[expr],
+            body : decl,
+            ann : annot
+        }
+        action make(name : expr, prms : vector[expr], body : decl) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.prms := prms;
+            s.body := body;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("module");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.extend(" ");
+            b := b.extend("=");
+            b := b.extend(" ");
+            b := s.body.encode(b,2);
+        }	    
+
+    }
+        
+    object instantiatedc = {
+        variant this of decl = struct {
+            name : expr,
+            prms : vector[expr],
+            ann : annot
+        }
+        action make(name : expr, prms : vector[expr], ann:annot) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.prms := prms;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("instantiate");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.newline
+        }	    
+
+    }
+
+    object objectdc = {
+        variant this of decl = struct {
+            name : expr,
+            body : decl,
+            ann : annot
+        }
+        action make(name : expr, body : decl, ann:annot) returns (res:decl) =
+        {
+            var s:this;
+            s.name := name;
+            s.body := body;
+            s.ann := ann;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("object");
+            b := b.extend(" ");
+            b := s.name.encode(b,0);
+            b := b.unnest;
+            b := b.extend(" ");
+            b := b.extend("=");
+            b := b.extend(" ");
+            b := s.body.encode(b,0);
+        }	    
+
+    }
+
+    # The declaration `instance x : y(p1...pn)` is a shorthand for
+    # `object x : { instantiate y(p1...pn) }`.
+    #
+    # The declaration `autoinstance x[p1][p2] : y(p1...pn)` causes an instance
+    # `x[p1][p2]` of `y(p1...pn)` to be generated for each identifier `x[p1][p2]` that occurs
+    # undefined in the program, for any values of p1...pn. The module `y` is instantiated
+    # just before the declaration triggering the instantiation. 
+
+
+    object instancedc = {
+        variant this of decl = struct {
+            objname : expr,
+            modname : expr,
+            prms : vector[expr],
+	    is_auto : bool,
+            ann : annot
+        }
+        action make(objname : expr, modname : expr, prms : vector[expr]) returns (res:decl) =
+        {
+            var s:this;
+            s.objname := objname;
+            s.modname := modname;
+            s.prms := prms;
+            res := s;
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.nest;
+            b := b.extend("autoinstance" if s.is_auto else "instance");
+            b := b.extend(" ");
+            b := s.objname.encode(b,0);
+            b := b.extend(" ");
+            b := b.extend(":");
+            b := b.extend(" ");
+            b := s.modname.encode(b,0);
+            if s.prms.end > 0 {
+                b := expr.tup.encode(s.prms,b,0)
+            };
+            b := b.unnest;
+            b := b.newline
+        }	    
+
+    }
+
+    # The `init` declaration contains initialization code
+
+    object initdc = {
+        variant this of decl = struct {
+            body : stmt,
+            ann : annot
+        }
+
+        action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
+            b := b.extend("init");
+            b := b.extend(" ");
+            b := s.body.encode(b,1);
+            b := b.newline
+        }	    
+
+        action get_body(s:this) returns (res:stmt) = {
+            res := s.body
+        }
+    }
+    
+
+    action parse_action(st : pstate, prio:priority, kind:action_kind)
+        returns (st : pstate, res:decl) =
+    {
+        if st.tok = "action" {
+            st := st.consume;
+            var s : actdc;
+            s.kind := kind;
+            (st,s.ann) := st.get_ann;
+            (st,s.name) := expr.parse(st,99);
+            if st.ok & st.tok = "(" {
+                (st,s.inputs) := expr.tup.parse(st,1);  # 1 = prio of ","
+            };
+            if st.ok & st.tok = "returns" {
+                st := st.consume;
+                (st,s.outputs) := expr.tup.parse(st,1);
+            };
+            if st.ok & st.tok = "=" {
+                st := st.consume;
+                s.has_body := true;
+                if st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false}
+            };
+            res := s
+        } else {
+            st.ok := false;
+        }
+    }
+
+    object decl = { ...
+        action parse(st : pstate, prio:priority) returns(st : pstate, res:decl) = {
+            if st.tok = "{" {
+                st := st.consume;
+                var s : groupdc;
+                (st,s.ann) := st.get_ann;
+		if st.tok = "..." {
+		    st := st.consume  # for now, ignore "..."
+		};
+                (st,s.decls) := parse_list(st,0);
+                if st.tok = "}" {
+                    st := st.consume;
+                } else {st.ok := false};
+                res := s
+            }
+            else if st.tok = "action" {
+                (st,res) := parse_action(st,prio,action_kind.internal)
+            } else if st.tok = "type" {
+                st := st.consume;
+                var s : typedc;
+                (st,s.ann) := st.get_ann;
+                (st,s.sort) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_spec := true;
+                    (st,s.spec) := typespec.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "var" | st.tok = "destructor" | st.tok = "function" {
+                var s : vardc;
+                s.is_destructor := (st.tok = "destructor");
+                st := st.consume;
+                (st,s.ann) := st.get_ann;
+                (st,s.typing) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_def := true;
+                    (st,s.def) := expr.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "header" {
+                var s : header;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.ok & st.tok.end > 0 & st.tok.value(0) = 34 {  # double quote
+                    s.filename := st.tok;
+                    st := st.consume;
+                } else { st.ok := false };
+                res := s
+            } else if st.tok = "interpret" {
+                var s : interpdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.ok & st.tok.end > 0 {  # double quote
+                    (st,s.itype) := expr.parse(st,verb_to_prio(verb.arrow));
+                    if st.ok & st.tok = "->" {
+                        st := st.consume;
+                        (st,s.ctype) := expr.parse(st,0); 
+                    } else { st.ok := false };
+                } else { st.ok := false };
+                res := s
+            } else if st.tok = "include" {
+                var s : includedc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.file) := expr.parse(st,0);
+                res := s
+            } else if st.tok = "module" {
+                var s : moduledc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);  # allow dot operator, not application
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,1);
+                };
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    (st,s.body) := decl.parse(st,0);
+                } else { st.ok := false };
+                res := s;
+            } else if st.tok = "instantiate" {
+                var s : instantiatedc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,1);
+                };
+                res := s
+            } else if st.tok = "object" {
+                var s : objectdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.name) := expr.parse(st,99);
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                };
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := decl.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "instance" | st.tok = "autoinstance" {
+                var s : instancedc;
+		s.is_auto := (st.tok = "autoinstance");
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                (st,s.objname) := expr.parse(st,99);
+                if st.ok & st.tok = ":" {
+                    st := st.consume;
+                };
+                if st.ok {
+                    (st,s.modname) := expr.parse(st,99)
+                };
+                if st.ok & st.tok = "(" {
+                    (st,s.prms) := expr.tup.parse(st,1);
+                };
+                res := s
+            } else if st.tok = "variant" {
+                st := st.consume;
+                var s : typedc;
+                s.has_super := true;
+                (st,s.ann) := st.get_ann;
+                (st,s.sort) := expr.parse(st,0);
+                if st.ok & st.tok = "of" {
+                    st := st.consume
+                } else {st.ok := false};
+                (st,s.super) := expr.parse(st,verb_to_prio(verb.equals));
+                if st.ok & st.tok = "=" {
+                    st := st.consume;
+                    s.has_spec := true;
+                    (st,s.spec) := typespec.parse(st,0);
+                };
+                res := s
+            } else if st.tok = "extern" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.external);
+            } else if st.tok = "import" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.imported);
+            } else if st.tok = "export" {
+                st := st.consume;
+                (st,res) := parse_action(st,prio,action_kind.exported);
+            } else if st.tok = "init" {
+                var s : initdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+                if st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false};
+                res := s;
+            } else if st.tok = "after" {
+                var s : initdc;
+                (st,s.ann) := st.get_ann;
+                st := st.consume;
+		if st.tok = "init" {
+                    st := st.consume;
+		} else {st.ok := false};
+                if st.ok & st.tok = "{" {
+                    (st,s.body) := stmt.parse(st,1);
+                } else {st.ok := false};
+                res := s;
+            } else {st.ok := false}
+        }
+        action parse_list(st : pstate, prio:priority) returns(st : pstate, res:vector[decl]) = {
+            while st.ok & st.tok.end > 0 & st.tok ~= "}" {
+                var s : decl;
+                (st,s) := parse(st,0);
+                res := res.append(s);
+            }
+        }
+    }
+
+    instantiate prog_base(false)
+}
+

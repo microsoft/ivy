@@ -1,0 +1,75 @@
+#lang ivy1.7
+
+include ivylang
+include hash
+
+# Beta reduction
+
+object ivy = { ...
+
+    instance symeval : hash_map(ident,expr)
+
+    object expr = { ...
+	action reduce(e:this,smap:symeval) returns (res:expr)
+        action occurs(e:this,n:ident) returns (res:bool) = {
+            res := false
+        }
+        action has_numident(e:this) returns (res:bool) = {
+            res := false
+        }
+    }
+
+    object symbol = { ...
+	action reduce(s:this,smap:symeval) returns (res:expr) = {
+	    var e : expr;
+	    e := s;
+	    res := smap.get(s.name,e);
+	}
+        action occurs(e:this,n:ident) returns (res:bool) = {
+            res := (e.name = n)
+        }
+        action has_numident(e:this) returns (res:bool) = {
+            res := e.name isa numident;
+        }
+    }	
+	    	    
+    object app = { ...
+	action reduce(s:this,smap:symeval) returns (res:expr) = {
+	    var resa : this;
+	    resa.func := s.func.reduce(smap);
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		resa.args := resa.args.append(s.args.value(idx).reduce(smap));
+                idx := idx.next;
+	    };
+	    res := resa;
+	}
+        action occurs(s:this,n:ident) returns (res:bool) = {
+            res := s.func.occurs(n);
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		res := res | s.args.value(idx).occurs(n);
+                idx := idx.next;
+	    }
+        }
+        action has_numident(s:this) returns (res:bool) = {
+            res := s.func.has_numident;
+	    var idx := s.args.begin;
+	    while idx < s.args.end {
+		res := res | s.args.value(idx).has_numident;
+                idx := idx.next;
+	    }
+        }
+    }
+
+    action subst_vector(v:vector[expr], smap:symeval) returns (v:vector[expr]) = {
+	var idx := v.begin;
+	while idx < v.end {
+	    v := v.set(idx,v.value(idx).reduce(smap));
+	    idx := idx.next
+	}
+    }
+}
+
+
+
