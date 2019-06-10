@@ -88,6 +88,18 @@ module path_name(name) = {
         }
     }
 
+    action drop_extension(path:name) returns (path:name) = {
+        if path.end > 0 {
+            var idx := path.end.prev;
+            while idx > 0 & path.value(idx) ~= 46 {  # dot
+                idx := idx.prev;
+            };
+            if path.value(idx) = 46 {
+                path := path.segment(path.begin,idx);
+            }
+        }
+    }
+
     action concat(path1:name,path2:name) returns (path1:name) = {
         path1 := path1.extend("/");
         path1 := path1.extend(path2);

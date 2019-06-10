@@ -23,4 +23,5 @@ extern action ivy.__write_file(name:ivy.func,data:ivy.func) returns (ok:bool)
 extern action ivy.file_exists(name:ivy.func) returns (ok:bool)
 extern action ivy.get_argc returns (c:ivy.cint)
 extern action ivy.get_argv(name:ivy.func,data:ivy.func) returns (data:ivy.func)
-
+extern action ivy.subproc(cmd:ivy.func) returns (pid:ivy.cint)
+extern action ivy.wait(cmd:ivy.cint) returns (pid:ivy.cint)

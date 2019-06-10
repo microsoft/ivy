@@ -7,6 +7,8 @@
 #include <string>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 namespace ivy {
 
@@ -854,6 +856,39 @@ namespace ivy {
     }
     static inline int get_argc() {
         return __argc;
+    }
+
+    // Process creation and wait.
+
+    template <class T> static inline int subproc(const T &cmd) {
+        int res = ::fork();
+        if (res == 0) {
+            std::vector<std::string> argv;
+            std::vector<const char *> cargv;
+            for (std::size_t idx = 0; idx < cmd.end; ++idx) {
+                auto arg = cmd.value(idx);
+                std::string sarg;
+                for (std::size_t jdx = 0; jdx < arg.end; ++jdx) {
+                    sarg.push_back(arg.value(jdx));
+                }
+                argv.push_back(sarg);
+            }
+            for (std::size_t idx = 0; idx < argv.size(); ++idx) {
+                cargv.push_back(argv[idx].c_str());
+            }
+            if (argv.size() > 0) {
+                cargv.push_back(0);
+                ::execvp(cargv[0],(char * const *)&cargv[0]);
+            }
+            ::exit(-1);
+        }
+        return res;
+    }
+
+    template <class T> static inline int wait(const T &pid) {
+        int status;
+        ::waitpid(pid,&status,0);
+        return status;
     }
 
 }

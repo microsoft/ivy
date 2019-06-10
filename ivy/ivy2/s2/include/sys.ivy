@@ -24,3 +24,14 @@ module sys_argv(pos,str) = {
 	res := cast(ivy.get_argv(cast(idx),cast(res)));
     }
 }
+
+object sys = {
+    module command(pid,cmd,retcode) = {
+	action command(s:cmd) returns (res:pid) = {
+	    res := cast(ivy.subproc(cast(s)));
+	}
+	action wait(s:pid) returns (res:retcode) = {
+	    res := cast(ivy.wait(cast(s)));
+	}
+    }
+}

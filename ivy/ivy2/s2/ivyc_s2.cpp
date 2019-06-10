@@ -1439,6 +1439,16 @@ namespace vector__ivy__access_path
     struct __t;
     
 }
+namespace pid
+{
+    struct __t;
+    
+}
+namespace retcode
+{
+    struct __t;
+    
+}
 #include "ivy.h"
 struct __bool : ivy::native_bool
 {
@@ -8226,6 +8236,15 @@ namespace ivy
     namespace path
     {
         void change_extension  (str::__t &path,const str::__t &ext);
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace path
+    {
+        void drop_extension  (str::__t &path);
         
     }
     
@@ -16851,11 +16870,48 @@ namespace argv
     str::__t value  (const pos::__t &idx);
     
 }
+namespace pid
+{
+    struct __t : ivy::native_int< int >
+    {
+         __t () {}
+         __t  (long long value) : ivy::native_int< int > (value) {}
+         __t  (const ivy::native_int< int > &value) : ivy::native_int< int > (value) {}
+         operator ivy::native_int< int > () const {
+            return (*this);
+        }
+    };
+    
+}
+namespace retcode
+{
+    struct __t : ivy::native_int< int >
+    {
+         __t () {}
+         __t  (long long value) : ivy::native_int< int > (value) {}
+         __t  (const ivy::native_int< int > &value) : ivy::native_int< int > (value) {}
+         operator ivy::native_int< int > () const {
+            return (*this);
+        }
+    };
+    
+}
+namespace cmd
+{
+    pid::__t command  (const vector__str::__t &s);
+    
+}
+namespace cmd
+{
+    retcode::__t wait  (const pid::__t &s);
+    
+}
 namespace ivy
 {
     void show_expr  (const ivy::ptr< ivy::expr::__t > &e);
     
 }
+void usage ();
 __bool __char::__t::is_alphanum () const
 {
     __bool __out;
@@ -23411,6 +23467,22 @@ void ivy::path::change_extension  (str::__t &path,const str::__t &ext)
             path = path . segment (path . begin(),idx);
             path . extend (ivy::from_str< str::__t > ("."));
             path . extend (ext);
+        }
+    }
+}
+void ivy::path::drop_extension  (str::__t &path)
+{
+    if (path . end > pos::__t (0))
+    {
+        pos::__t idx;
+        idx = path . end . prev();
+        while (idx > pos::__t (0) & path . value (idx) != __char::__t (46)) 
+        // dot
+        {
+            idx = idx . prev();
+        }
+        if (path . value (idx) == __char::__t (46)) {
+            path = path . segment (path . begin(),idx);
         }
     }
 }
@@ -34065,8 +34137,21 @@ str::__t argv::value  (const pos::__t &idx) {
     ivy::get_argv (idx,res);
     return res;
 }
+pid::__t cmd::command  (const vector__str::__t &s) {
+    pid::__t res;
+    res = ivy::subproc (s);
+    return res;
+}
+retcode::__t cmd::wait  (const pid::__t &s) {
+    retcode::__t res;
+    res = ivy::wait (s);
+    return res;
+}
 void ivy::show_expr  (const ivy::ptr< ivy::expr::__t > &e) {
     stdio::writeln (e -> enc());
+}
+void usage () {
+    stdio::writeln (ivy::from_str< str::__t > ("usage: ivyc <file>.ivy"));
 }
 int main  (int argc,char ** argv)
 {
@@ -34472,10 +34557,61 @@ int main  (int argc,char ** argv)
         ivy::cpp_reserved_word (ivy::from_str< str::__t > ("or")) = ivy::native_bool (true);
         ivy::cpp_reserved_word (ivy::from_str< str::__t > ("not")) = ivy::native_bool (true);
     }
-    if (argv::end() > pos::__t (1)) {
-        ivy::prog::file_to_cpp (argv::value (pos::__t (1)));
+    if (argv::end() > pos::__t (1))
+    {
+        str::__t name;
+        name = argv::value (pos::__t (1));
+        ivy::prog::file_to_cpp (name);
+        if (ivy::errors . end == vector__ivy__error::domain::__t (0))
+        {
+            str::__t cpp_name;
+            {
+                cpp_name = name;
+                ivy::path::change_extension (cpp_name,ivy::from_str< str::__t > ("cpp"));
+            }
+            vector__str::__t com;
+            com . append (ivy::from_str< str::__t > ("g++"));
+            com . append (ivy::from_str< str::__t > ("-O2"));
+            vector__str::domain::__t idx;
+            idx = ivy::include_path . begin();
+            while (idx < ivy::include_path . end)
+            {
+                com . append (ivy::from_str< str::__t > ("-I"));
+                com . append (ivy::include_path . value (idx));
+                idx = idx . next();
+            }
+            com . append (ivy::from_str< str::__t > ("-o"));
+            str::__t bin_name;
+            {
+                bin_name = name;
+                ivy::path::drop_extension (bin_name);
+            }
+            com . append (bin_name);
+            com . append (ivy::from_str< str::__t > ("-std=c++17"));
+            com . append (cpp_name);
+            str::__t full_com;
+            full_com = com . value (vector__str::domain::__t (0));
+            vector__str::domain::__t jdx;
+            jdx = com . begin() . next();
+            while (jdx < com . end)
+            {
+                full_com . extend (ivy::from_str< str::__t > (" "));
+                full_com . extend (com . value (jdx));
+                jdx = jdx . next();
+            }
+            stdio::writeln (full_com);
+            pid::__t p;
+            p = cmd::command (com);
+            retcode::__t rc;
+            rc = cmd::wait (p);
+            if (rc == retcode::__t (0)) {
+                stdio::writeln (ivy::from_str< str::__t > ("success"));
+            } else {
+                stdio::writeln (ivy::from_str< str::__t > ("error returned"));
+            }
+        }
     } else {
-        stdio::writeln (ivy::from_str< str::__t > ("usage: ivyc <file>.ivy"));
+        usage();
     }
     return 0;
 }
