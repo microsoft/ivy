@@ -192,15 +192,21 @@ object ivy = { ...
 
     }
         
-    # This declares a temporary variable in the current code
-    # context and returns it.
+    # Generate a temporay symbol name
 
-    action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
+    action temp_sym(s:tocppst,ann:annot) returns (s:tocppst,res:cpp.expr) = {
         var name : str;
         name := "__tmp";
         name := name.extend(s.counter.to_str);
         s.counter := s.counter.next;
         res := cpp.symbol.makestr(name,ann);
+    }	
+
+    # This declares a temporary variable in the current code
+    # context and returns it.
+
+    action make_temp(s:tocppst,ty:expr,ann:annot) returns (s:tocppst,res:cpp.expr) = {
+	(s,res) := temp_sym(s,ann);
         var vst : cpp.varst;
         (vst.vtype._type,s) := fix_variant_type(ty,s);
         vst.vtype.name := res;
@@ -467,25 +473,31 @@ object ivy = { ...
 	}
     }
 
-    # Make a C++ function call. There are three cases here:
+    # Make a C++ function call. There are four cases here:
     #
     # Ordinary function call: `prefix.f(a0..an)`
     # Method call: `a0.f(a1..an)`
-    # Indirect method call: `a0->f(a1..an)`
+    # Indirect const method call: `a0->f(a1..an)`
+    # Indirect non-const method call: `a0.get().f(a1..an)`
     #
-    # The last case is used if `f : (t * ... -> u)` is a member function where
+    # The last two cases are used if `f : (t * ... -> u)` is a member function where
     # type `t` is a variant type. However, if the first argument is `(*this)` we
     # do *not* use this form, as `this` is a normal C++ pointer, not a special
     # Ivy variant pointer. 
     
-    action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst)
+    action make_cpp_call(func:expr, args:vector[cpp.expr], ann:annot, st:tocppst, proto : prototype)
         returns (res:cpp.expr, st:tocppst) =
     {
         if func_is_member(func)   {
             var fid := func.get_arg(0).get_name.to_cpp(false);
             var cfunc := cpp.symbol.make(fid.get_member,func.get_ann);
             if is_variant_type(get_dom0(func.get_arg(1)),st) & ~is_cpp_this(args.value(0)) {
-                cfunc := cpp.arrow.make(args.value(0),cfunc,ann)
+		var arg := proto.args.value(0);
+		if arg.is_const {
+                    cfunc := cpp.arrow.make(args.value(0),cfunc,ann)
+		} else {
+		    cfunc := cpp.dot.make(cpp.app.make0(cpp.dot.make(args.value(0),cpp.symbol.makestr("get",ann),ann),ann),cfunc,ann)
+		}
             } else {
                 cfunc := cpp.dot.make(args.value(0),cfunc,ann)
             };
@@ -529,9 +541,9 @@ object ivy = { ...
     # In-place optimization. There are two cases when a call can modify
     # an argument in-place:
     #
-    # (1) Borrowing. This is an in/out parameter given an lvalue
-    # that is returned by the expression and has exactly one alias in the
-    # expression.
+    # (1) Borrowing. This is an in/out parameter given an lvalue that
+    # is returned by the expression and has exactly one remaining
+    # alias in the expression.
     #
     # (2) Return by reference. This is an out parameter given an
     # lvalue that is returned by the expression and has no aliases in
@@ -549,6 +561,9 @@ object ivy = { ...
     # effect, by copying any temporaries back to the original lvalues,
     # and we return ().
     #
+    # Note that any remaining inputs may be either by const ref or by value.
+    # We need not make this distinction here, however, as call-by-value is
+    # the same as call-by-const-ref with an internal copy operation.
 
     action call_to_cpp (func:expr, inputs:vector[expr], ann:annot, st:tocppst)
         returns (res:cpp.expr,st:tocppst) =
@@ -597,7 +612,9 @@ object ivy = { ...
                 } else {
                     (st,out) := make_temp(st,parg.name.get_arg(1),ann);
                 };
-		ret_vals := ret_vals.append(out);
+		if parg.is_output {
+		    ret_vals := ret_vals.append(out);
+		}
             };
 	    if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
                 st := st.add_stmt(cpp.asgn.make(out,inp,ann));
@@ -609,7 +626,7 @@ object ivy = { ...
             idx := idx.next;
             kdx := kdx.next
         };
-        (res,st) := make_cpp_call(func,args,ann,st);
+        (res,st) := make_cpp_call(func,args,ann,st,proto);
         st := unown_func_args(inputs,st);
         if ret_vals.end > 0 | rets.end > 0 | ~proto.has_ret {
             st := st.add_stmt(cpp.asgn.make(cpp.empty.make(ann),res,ann));
@@ -884,7 +901,7 @@ object ivy = { ...
             st := kill_lvalues(st.outputs,st,paths);
 	    (res.rhs,st) := s.rhs.to_cpp(st);
 	    if res.rhs.get_verb ~= cpp.verb.empty {
-		res.rhs := fix_variant_arg(s.rhs,res.rhs,st);
+#		res.rhs := fix_variant_arg(s.rhs,res.rhs,st);
 		st := st.add_stmt(res);  # Don't generate () = ();
 	    };
 	    (st,resd) := st.get_code(s.ann);
@@ -1005,10 +1022,26 @@ object ivy = { ...
         }
     }
 
+    # Make a variable declaration with an initializer
+
+    action make_initializer(typing:expr,initval:cpp.expr,st:tocppst) returns (res:cpp.stmt,st:tocppst) = {
+	var vd : cpp.varst;
+	(vd.vtype.name,st) := typing.get_arg(0).to_cpp(st);
+	(vd.vtype._type,st) := typing.get_arg(1).to_cpp(st);
+	vd.has_initval := true;
+	vd.initval := initval;
+	vd.ann := typing.get_ann;
+	res := vd;
+    }
+	
+
+    # Create a temporary name for an argument that will be copied into
+    # a local variable.
+
     object actdc = { ...
 
 	action record_prototypes(s:this,st:tocppst) returns (st:tocppst) = {
-            var proto := s.get_proto;
+            var proto := s.get_proto(st.globals,st.subtype_rel);
             st.protos := st.protos.set(s.name.get_name,proto);
 	}
 
@@ -1034,9 +1067,16 @@ object ivy = { ...
 	    res.ftype.base.name := member_name(full_name) if (cprot | st.in_class) else full_name; 
             var idx := proto.args.begin;
             st.is_member := is_member;
+	    var argasgns : vector[cpp.stmt];
             if st.is_member {
                 idx := idx.next;   # skip the first input "this" if a member
-                st.this_ident := proto.args.value(0).name.get_arg(0).get_name;
+		var parg := proto.args.value(0);
+		if ~cprot & parg.is_copy {
+		    var vd,st := make_initializer(parg.name,cpp.symbol.makestr("(*this)",s.ann),st);
+		    argasgns := argasgns.append(vd);
+		} else {
+                    st.this_ident := parg.name.get_arg(0).get_name;
+		};
                 res.ftype.is_const := proto.args.value(0).is_const;
 		if cprot & is_variant_type(proto.args.value(0).name.get_arg(1),st) {
 		    res.is_virtual := true
@@ -1052,6 +1092,11 @@ object ivy = { ...
                 (argt._type,st) := fix_variant_type(arg.get_arg(1),st);
                 st.locals := st.locals.add_var(arg);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
+		if ~cprot & parg.is_copy {
+		    (st,argt.name) := temp_sym(st,s.ann);
+		    var vd,st := make_initializer(parg.name,argt.name,st);
+		    argasgns := argasgns.append(vd);
+		}
                 res.ftype.args := res.ftype.args.append(argt);
                 idx := idx.next
             };
@@ -1073,6 +1118,11 @@ object ivy = { ...
 			var vs := cpp.varst.make(res.ftype.base._type,rvar,s.ann);
 			res.body := cpp.sequence.make(vs,res.body,s.ann);
 		    }
+		};
+		var kdx := argasgns.end;
+		while kdx > argasgns.begin {
+		    kdx := kdx.prev;
+		    res.body := cpp.sequence.make(argasgns.value(kdx),res.body,s.ann);
 		}
 	    };
             st.locals := st.locals.pop;
@@ -1081,6 +1131,7 @@ object ivy = { ...
             if ~st.in_class & cprot {
                 resd := add_namespaces(resd,s.name.get_name);
             }
+	    st.this_ident := 0;
         }
 
         # Here, we register actions as members of types. These will be emitted
@@ -1100,6 +1151,45 @@ object ivy = { ...
         action emitted(s:this,st:tocppst) returns (res:bool) = {
             res := (~s.is_member | ~st.proto_only) & s.kind ~= action_kind.external;
         }
+
+	# If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+	# prototype. The easiest way to handle this is to eliminate the in-out parameter by
+	# replacing the output parameter with a fresh name and copying the value. For example,
+	# suppose we have this action:
+	#
+	#     action t.f(s:t,...) returns (s:t,...) { ... }
+	#
+	# We replace this by the following equivalent action:
+	#
+	#     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+	#
+	# This results in a copy of `s` that might be unnecessary if its value is dead. However,
+	# it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+	# in the value being sliced.
+
+	
+	action fix_action(s : this, st:tocppst) returns (res : decl) = {
+	    if s.is_member {
+		var outs := param_set(s.outputs);
+		var origthis := s.inputs.value(0).get_arg(0);
+		var thisty := s.inputs.value(0).get_arg(1);
+		var id := origthis.get_name;
+		if outs.mem(id) {
+		    if is_virtual_action(s,st.globals,st.subtype_rel) {
+			var resa := s;
+			var newthis := symbol.makestr("__this",s.ann);
+			var newthisarg := colon.make(newthis,thisty,s.ann);
+			resa.inputs := resa.inputs.set(0,newthisarg);
+			if resa.has_body {
+			    resa.body := sequence.make(asgn.make(origthis,newthis,s.ann),resa.body,s.ann);
+			};
+			res := resa;
+		    } else {res := s}
+		} else {res := s}
+	    } else {res := s}
+	}
+
+
     }
 
     # Init declarations are not emitted
@@ -1606,10 +1696,13 @@ object ivy = { ...
 	}
     }
 
-    # Translate a function definition to an action
+    # Translate a function definition to an action, and fix actions we can't handle.
 
     object decl = { ...
         action func_to_action(s : this) returns (res : decl) = {
+            res := s;
+        }
+        action fix_action(s : this, st:tocppst) returns (res : decl) = {
             res := s;
         }
     }   
@@ -1775,6 +1868,15 @@ object ivy = { ...
 	    };
             st.forward := false;
 
+	    # A pass to rewrite actions with problematic signatures
+
+            idx := s.decls.begin;
+	    while idx < s.decls.end {
+                var d := s.decls.value(idx).fix_action(st);
+                s.decls := s.decls.set(idx,d);
+		idx := idx.next
+	    };
+	    
 	    # A pass to record all of the C++ function prototypes
 	    
             idx := s.decls.begin;

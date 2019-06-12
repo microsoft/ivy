@@ -862,6 +862,15 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace root_mod_ref
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
     namespace decost
     {
         namespace map
@@ -4525,6 +4534,10 @@ namespace ivy
             
             virtual ivy::ptr< ivy::ident::__t > get_ident () const;
             
+            
+            // Get just the roots that are modified by a statement
+            virtual void mod_roots  (ivy::root_mod_ref::__t &st) const;
+            
             virtual void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t > &res)
                 const;
             
@@ -4614,6 +4627,8 @@ namespace ivy
             
             void flat_int  (ivy::flatst::__t &st,ivy::asgn::__t &res) const;
             
+            void mod_roots  (ivy::root_mod_ref::__t &st) const;
+            
             void typeinfer_desugar  (const __bool &desugar,ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t >
                 &ress) const;
             
@@ -4689,6 +4704,8 @@ namespace ivy
             void flat  (ivy::flatst::__t &st,ivy::ptr< ivy::stmt::__t > &res) const;
             
             void flat_int  (ivy::flatst::__t &st,ivy::sequence::__t &res) const;
+            
+            void mod_roots  (ivy::root_mod_ref::__t &st) const;
             
             void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t > &ress) const;
             
@@ -4976,6 +4993,8 @@ namespace ivy
             
             void flat_int  (ivy::flatst::__t &st,ivy::ifst::__t &res) const;
             
+            void mod_roots  (ivy::root_mod_ref::__t &st) const;
+            
             void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t > &res) const;
             
             void typeinfer_int  (ivy::typeinferst::__t &st,ivy::ifst::__t &res) const;
@@ -5053,6 +5072,8 @@ namespace ivy
             void flat  (ivy::flatst::__t &st,ivy::ptr< ivy::stmt::__t > &res) const;
             
             void flat_int  (ivy::flatst::__t &st,ivy::whilest::__t &res) const;
+            
+            void mod_roots  (ivy::root_mod_ref::__t &st) const;
             
             void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t > &res) const;
             
@@ -5209,6 +5230,8 @@ namespace ivy
             
             virtual ivy::ptr< ivy::decl::__t > func_to_action () const;
             
+            virtual ivy::ptr< ivy::decl::__t > fix_action  (const ivy::tocppst::__t &st) const;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -5301,6 +5324,8 @@ namespace ivy
             
             __bool is_const;
             
+            __bool is_copy;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -5313,7 +5338,7 @@ namespace ivy
             {
                 return name == other . name & is_input == other . is_input & inpos == other . inpos
                     & is_output == other . is_output & outpos == other . outpos & is_ref == other .
-                    is_ref & is_const == other . is_const;
+                    is_ref & is_const == other . is_const & is_copy == other . is_copy;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -5322,7 +5347,7 @@ namespace ivy
             {
                 return name . __is_zero() & is_input . __is_zero() & inpos . __is_zero() &
                     is_output . __is_zero() & outpos . __is_zero() & is_ref . __is_zero() &
-                    is_const . __is_zero();
+                    is_const . __is_zero() & is_copy . __is_zero();
             }
             struct __hash
             {
@@ -5333,7 +5358,8 @@ namespace ivy
                         vector__ivy__expr::domain::__t::__hash() (x . inpos) +
                         __bool::__hash() (x . is_output) +
                         vector__ivy__expr::domain::__t::__hash() (x . outpos) +
-                        __bool::__hash() (x . is_ref) + __bool::__hash() (x . is_const);
+                        __bool::__hash() (x . is_ref) + __bool::__hash() (x . is_const) +
+                        __bool::__hash() (x . is_copy);
                 }
             };
             
@@ -5552,7 +5578,8 @@ namespace ivy
             
             void build_global_types  (ivy::global_types::__t &st) const;
             
-            ivy::prototype::__t get_proto () const;
+            ivy::prototype::__t get_proto  (const ivy::global_types::__t &gl,const ivy::subtypes::__t
+                &st) const;
             
             void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::decl::__t > &res) const;
             
@@ -5576,6 +5603,23 @@ namespace ivy
             // An action declaration is not emitted if it is a member and
             // does not have a body. External actions are never emitted.
             __bool emitted  (const ivy::tocppst::__t &st) const;
+            
+            
+            // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+            // prototype. The easiest way to handle this is to eliminate the in-out parameter by
+            // replacing the output parameter with a fresh name and copying the value. For example,
+            // suppose we have this action:
+            //
+            //     action t.f(s:t,...) returns (s:t,...) { ... }
+            //
+            // We replace this by the following equivalent action:
+            //
+            //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+            //
+            // This results in a copy of `s` that might be unnecessary if its value is dead. However,
+            // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+            // in the value being sliced.
+            ivy::ptr< ivy::decl::__t > fix_action  (const ivy::tocppst::__t &st) const;
             
              __t () {}
              __t  (long long value) {}
@@ -9287,16 +9331,16 @@ namespace ivy
 //
 // (1)  x:t
 // (2)  f(x1:t1,...,xn:tn) : t
-// (3)  (f : (t1*...*tn->t)(...) : u
-// (4)  (f : (t1*...*tn->t)(...)
+// (3)  (f : (t1*...*tn->t)(...)) : u
+// (4)  (f : (t1*...*tn->t)(...))
 //
 namespace 
     // A complete typing looks like one of these:
     //
     // (1)  x:t
     // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...) : u
-    // (4)  (f : (t1*...*tn->t)(...)
+    // (3)  (f : (t1*...*tn->t)(...)) : u
+    // (4)  (f : (t1*...*tn->t)(...))
     //
     ivy
 {
@@ -9305,8 +9349,8 @@ namespace
     //
     // (1)  x:t
     // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...) : u
-    // (4)  (f : (t1*...*tn->t)(...)
+    // (3)  (f : (t1*...*tn->t)(...)) : u
+    // (4)  (f : (t1*...*tn->t)(...))
     //
     __bool is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing);
     
@@ -9315,6 +9359,23 @@ namespace ivy
 {
     ivy::ptr< ivy::expr::__t > get_formal_type  (const vector__ivy__expr::__t &typings,const ivy::ptr< annot::__t >
         &ann);
+    
+}
+// Returns true is an action is virtual. A virtual action is one that
+// overrides an action of a superclass or is overridden by an action of
+// a subclass. This action assumes that parameter s is a member action.
+namespace 
+    // Returns true is an action is virtual. A virtual action is one that
+    // overrides an action of a superclass or is overridden by an action of
+    // a subclass. This action assumes that parameter s is a member action.
+    ivy
+{
+    
+    // Returns true is an action is virtual. A virtual action is one that
+    // overrides an action of a superclass or is overridden by an action of
+    // a subclass. This action assumes that parameter s is a member action.
+    __bool is_virtual_action  (const ivy::actdc::__t &s,const ivy::global_types::__t &gl,const ivy::subtypes::__t
+        &st);
     
 }
 namespace ivy
@@ -9878,6 +9939,62 @@ namespace ivy
         };
         
     }
+    
+}
+namespace ivy
+{
+    namespace root_mod_ref
+    {
+        struct __t
+        {
+            ivy::ident_set::__t mod;
+            
+            ivy::ident_set::__t ref;
+            
+            ivy::local_tracker::__t ignore;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return mod == other . mod & ref == other . ref & ignore == other . ignore;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return mod . __is_zero() & ref . __is_zero() & ignore . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ident_set::__t::__hash() (x . mod) +
+                        ivy::ident_set::__t::__hash() (x . ref) +
+                        ivy::local_tracker::__t::__hash() (x . ignore);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+// Get the root modset of an assignment, given its lhs
+namespace 
+    // Get the root modset of an assignment, given its lhs
+    ivy
+{
+    
+    // Get the root modset of an assignment, given its lhs
+    void get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st);
     
 }
 // This function gives the types of the builtin-in symbols
@@ -13861,6 +13978,10 @@ namespace cpp
         {
             cpp::simpletype::__t vtype;
             
+            __bool has_initval;
+            
+            ivy::ptr< cpp::expr::__t > initval;
+            
             ivy::ptr< annot::__t > ann;
             
             void encode  (pretty::__t &b,const priority::__t &prio) const;
@@ -13877,19 +13998,24 @@ namespace cpp
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return vtype == other . vtype & ann == other . ann;
+                return vtype == other . vtype & has_initval == other . has_initval & initval ==
+                    other . initval & ann == other . ann;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
-            bool __is_zero () const {
-                return vtype . __is_zero() & ann . __is_zero();
+            bool __is_zero () const
+            {
+                return vtype . __is_zero() & has_initval . __is_zero() & initval . __is_zero() &
+                    ann . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
                     return cpp::simpletype::__t::__hash() (x . vtype) +
+                        __bool::__hash() (x . has_initval) +
+                        ivy::ptr< cpp::expr::__t >::__hash() (x . initval) +
                         ivy::ptr< annot::__t >::__hash() (x . ann);
                 }
             };
@@ -14234,6 +14360,10 @@ namespace cpp
         {
             cpp::simpletype::__t vtype;
             
+            __bool has_initval;
+            
+            ivy::ptr< cpp::expr::__t > initval;
+            
             ivy::ptr< annot::__t > ann;
             
             void encode  (pretty::__t &b,const priority::__t &prio) const;
@@ -14254,19 +14384,24 @@ namespace cpp
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return vtype == other . vtype & ann == other . ann;
+                return vtype == other . vtype & has_initval == other . has_initval & initval ==
+                    other . initval & ann == other . ann;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
-            bool __is_zero () const {
-                return vtype . __is_zero() & ann . __is_zero();
+            bool __is_zero () const
+            {
+                return vtype . __is_zero() & has_initval . __is_zero() & initval . __is_zero() &
+                    ann . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
                     return cpp::simpletype::__t::__hash() (x . vtype) +
+                        __bool::__hash() (x . has_initval) +
+                        ivy::ptr< cpp::expr::__t >::__hash() (x . initval) +
                         ivy::ptr< annot::__t >::__hash() (x . ann);
                 }
             };
@@ -15850,6 +15985,17 @@ namespace ivy
     }
     
 }
+// Generate a temporay symbol name
+namespace 
+    // Generate a temporay symbol name
+    ivy
+{
+    
+    // Generate a temporay symbol name
+    void temp_sym  (ivy::tocppst::__t &s,const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::expr::__t >
+        &res);
+    
+}
 // This declares a temporary variable in the current code
 // context and returns it.
 namespace 
@@ -16167,42 +16313,46 @@ namespace
     __bool is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s);
     
 }
-// Make a C++ function call. There are three cases here:
+// Make a C++ function call. There are four cases here:
 //
 // Ordinary function call: `prefix.f(a0..an)`
 // Method call: `a0.f(a1..an)`
-// Indirect method call: `a0->f(a1..an)`
+// Indirect const method call: `a0->f(a1..an)`
+// Indirect non-const method call: `a0.get().f(a1..an)`
 //
-// The last case is used if `f : (t * ... -> u)` is a member function where
+// The last two cases are used if `f : (t * ... -> u)` is a member function where
 // type `t` is a variant type. However, if the first argument is `(*this)` we
 // do *not* use this form, as `this` is a normal C++ pointer, not a special
 // Ivy variant pointer. 
 namespace 
-    // Make a C++ function call. There are three cases here:
+    // Make a C++ function call. There are four cases here:
     //
     // Ordinary function call: `prefix.f(a0..an)`
     // Method call: `a0.f(a1..an)`
-    // Indirect method call: `a0->f(a1..an)`
+    // Indirect const method call: `a0->f(a1..an)`
+    // Indirect non-const method call: `a0.get().f(a1..an)`
     //
-    // The last case is used if `f : (t * ... -> u)` is a member function where
+    // The last two cases are used if `f : (t * ... -> u)` is a member function where
     // type `t` is a variant type. However, if the first argument is `(*this)` we
     // do *not* use this form, as `this` is a normal C++ pointer, not a special
     // Ivy variant pointer. 
     ivy
 {
     
-    // Make a C++ function call. There are three cases here:
+    // Make a C++ function call. There are four cases here:
     //
     // Ordinary function call: `prefix.f(a0..an)`
     // Method call: `a0.f(a1..an)`
-    // Indirect method call: `a0->f(a1..an)`
+    // Indirect const method call: `a0->f(a1..an)`
+    // Indirect non-const method call: `a0.get().f(a1..an)`
     //
-    // The last case is used if `f : (t * ... -> u)` is a member function where
+    // The last two cases are used if `f : (t * ... -> u)` is a member function where
     // type `t` is a variant type. However, if the first argument is `(*this)` we
     // do *not* use this form, as `this` is a normal C++ pointer, not a special
     // Ivy variant pointer. 
     void make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__cpp__expr::__t &args,const
-        ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res);
+        ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,const ivy::prototype::__t &proto,ivy::ptr< cpp::expr::__t >
+        &res);
     
 }
 // After executing a function call, the call gives up ownership of
@@ -16248,9 +16398,9 @@ namespace
 // In-place optimization. There are two cases when a call can modify
 // an argument in-place:
 //
-// (1) Borrowing. This is an in/out parameter given an lvalue
-// that is returned by the expression and has exactly one alias in the
-// expression.
+// (1) Borrowing. This is an in/out parameter given an lvalue that
+// is returned by the expression and has exactly one remaining
+// alias in the expression.
 //
 // (2) Return by reference. This is an out parameter given an
 // lvalue that is returned by the expression and has no aliases in
@@ -16268,6 +16418,9 @@ namespace
 // effect, by copying any temporaries back to the original lvalues,
 // and we return ().
 //
+// Note that any remaining inputs may be either by const ref or by value.
+// We need not make this distinction here, however, as call-by-value is
+// the same as call-by-const-ref with an internal copy operation.
 namespace 
     // Translate an action call to C++. This is complicated, because we have
     // to apply the action prototype and deal with call-by-reference.
@@ -16275,9 +16428,9 @@ namespace
     // In-place optimization. There are two cases when a call can modify
     // an argument in-place:
     //
-    // (1) Borrowing. This is an in/out parameter given an lvalue
-    // that is returned by the expression and has exactly one alias in the
-    // expression.
+    // (1) Borrowing. This is an in/out parameter given an lvalue that
+    // is returned by the expression and has exactly one remaining
+    // alias in the expression.
     //
     // (2) Return by reference. This is an out parameter given an
     // lvalue that is returned by the expression and has no aliases in
@@ -16295,6 +16448,9 @@ namespace
     // effect, by copying any temporaries back to the original lvalues,
     // and we return ().
     //
+    // Note that any remaining inputs may be either by const ref or by value.
+    // We need not make this distinction here, however, as call-by-value is
+    // the same as call-by-const-ref with an internal copy operation.
     ivy
 {
     
@@ -16304,9 +16460,9 @@ namespace
     // In-place optimization. There are two cases when a call can modify
     // an argument in-place:
     //
-    // (1) Borrowing. This is an in/out parameter given an lvalue
-    // that is returned by the expression and has exactly one alias in the
-    // expression.
+    // (1) Borrowing. This is an in/out parameter given an lvalue that
+    // is returned by the expression and has exactly one remaining
+    // alias in the expression.
     //
     // (2) Return by reference. This is an out parameter given an
     // lvalue that is returned by the expression and has no aliases in
@@ -16324,6 +16480,9 @@ namespace
     // effect, by copying any temporaries back to the original lvalues,
     // and we return ().
     //
+    // Note that any remaining inputs may be either by const ref or by value.
+    // We need not make this distinction here, however, as call-by-value is
+    // the same as call-by-const-ref with an internal copy operation.
     void call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy__expr::__t &inputs,const
         ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res);
     
@@ -16407,6 +16566,17 @@ namespace
 namespace ivy
 {
     __bool is_input_param  (const ivy::actdc::__t &s,const ivy::ptr< ivy::expr::__t > &p);
+    
+}
+// Make a variable declaration with an initializer
+namespace 
+    // Make a variable declaration with an initializer
+    ivy
+{
+    
+    // Make a variable declaration with an initializer
+    void make_initializer  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::expr::__t >
+        &initval,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res);
     
 }
 namespace ivy
@@ -25037,16 +25207,16 @@ void ivy::decl::__t::build_global_types  (ivy::global_types::__t &st) const {}
 //
 // (1)  x:t
 // (2)  f(x1:t1,...,xn:tn) : t
-// (3)  (f : (t1*...*tn->t)(...) : u
-// (4)  (f : (t1*...*tn->t)(...)
+// (3)  (f : (t1*...*tn->t)(...)) : u
+// (4)  (f : (t1*...*tn->t)(...))
 //
 __bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing) 
 // A complete typing looks like one of these:
 //
 // (1)  x:t
 // (2)  f(x1:t1,...,xn:tn) : t
-// (3)  (f : (t1*...*tn->t)(...) : u
-// (4)  (f : (t1*...*tn->t)(...)
+// (3)  (f : (t1*...*tn->t)(...)) : u
+// (4)  (f : (t1*...*tn->t)(...))
 //
 {
     
@@ -25054,8 +25224,8 @@ __bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing)
     //
     // (1)  x:t
     // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...) : u
-    // (4)  (f : (t1*...*tn->t)(...)
+    // (3)  (f : (t1*...*tn->t)(...)) : u
+    // (4)  (f : (t1*...*tn->t)(...))
     //
     __bool res;
     
@@ -25063,8 +25233,8 @@ __bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing)
     //
     // (1)  x:t
     // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...) : u
-    // (4)  (f : (t1*...*tn->t)(...)
+    // (3)  (f : (t1*...*tn->t)(...)) : u
+    // (4)  (f : (t1*...*tn->t)(...))
     //
     if (typing -> is (ivy::verb::__t (ivy::verb::colon)))
     {
@@ -25112,8 +25282,8 @@ __bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing)
     //
     // (1)  x:t
     // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...) : u
-    // (4)  (f : (t1*...*tn->t)(...)
+    // (3)  (f : (t1*...*tn->t)(...)) : u
+    // (4)  (f : (t1*...*tn->t)(...))
     //
     return res;
 }
@@ -25193,6 +25363,58 @@ void ivy::actdc::__t::build_global_types  (ivy::global_types::__t &st) const
     }
     st . type_of . set ((*this) . name -> get_name(),ty);
     st . is_action . set ((*this) . name -> get_name(),ivy::native_bool (true));
+}
+// Returns true is an action is virtual. A virtual action is one that
+// overrides an action of a superclass or is overridden by an action of
+// a subclass. This action assumes that parameter s is a member action.
+__bool ivy::is_virtual_action  (const ivy::actdc::__t &s,const ivy::global_types::__t &gl,const ivy::subtypes::__t
+    &st) 
+// Returns true is an action is virtual. A virtual action is one that
+// overrides an action of a superclass or is overridden by an action of
+// a subclass. This action assumes that parameter s is a member action.
+{
+    
+    // Returns true is an action is virtual. A virtual action is one that
+    // overrides an action of a superclass or is overridden by an action of
+    // a subclass. This action assumes that parameter s is a member action.
+    __bool res;
+    
+    // Returns true is an action is virtual. A virtual action is one that
+    // overrides an action of a superclass or is overridden by an action of
+    // a subclass. This action assumes that parameter s is a member action.
+    {
+        ivy::ptr< ivy::ident::__t > tyid;
+        tyid = s . name -> get_name() -> get_namesp();
+        ivy::ptr< ivy::ident::__t > memid;
+        memid = s . name -> get_name() -> get_member();
+        if (st . subtypes_of . mem (tyid))
+        {
+            vector__ivy__expr::__t subtys;
+            subtys = st . subtypes_of . value (tyid);
+            vector__ivy__expr::domain::__t idx;
+            idx = subtys . begin();
+            while (! res & idx < subtys . end)
+            {
+                if (gl . is_action . mem (memid -> prefix (subtys . value (idx) -> get_name())))
+                {
+                    res = ivy::native_bool (true);
+                }
+                idx = idx . next();
+            }
+        }
+        if (! res & st . supertype_of . mem (tyid))
+        {
+            if (gl . is_action . mem (memid -> prefix (st . supertype_of . value (tyid) -> get_name())))
+            {
+                res = ivy::native_bool (true);
+            }
+        }
+    }
+    
+    // Returns true is an action is virtual. A virtual action is one that
+    // overrides an action of a superclass or is overridden by an action of
+    // a subclass. This action assumes that parameter s is a member action.
+    return res;
 }
 __bool ivy::prototype::__t::any_non_const_ref () const
 {
@@ -25282,7 +25504,8 @@ ivy::param_map::__t ivy::param_set  (const vector__ivy__expr::__t &ps)
     }
     return res;
 }
-ivy::prototype::__t ivy::actdc::__t::get_proto () const
+ivy::prototype::__t ivy::actdc::__t::get_proto  (const ivy::global_types::__t &gl,const ivy::subtypes::__t
+    &st) const
 {
     ivy::prototype::__t res;
     if ((*this) . has_proto) {
@@ -25295,6 +25518,12 @@ ivy::prototype::__t ivy::actdc::__t::get_proto () const
         outs = ivy::param_set ((*this) . outputs);
         vector__ivy__expr::domain::__t idx;
         idx = (*this) . inputs . begin();
+        ivy::root_mod_ref::__t mods;
+        if ((*this) . has_body) {
+            (*this) . body -> mod_roots (mods);
+        }
+        __bool is_member;
+        is_member = (*this) . is_member();
         while (idx < (*this) . inputs . end)
         {
             ivy::prototype_argument::__t arg;
@@ -25304,12 +25533,33 @@ ivy::prototype::__t ivy::actdc::__t::get_proto () const
             arg . is_input = ivy::native_bool (true);
             arg . inpos = idx;
             arg . is_output = outs . mem (id);
+            arg . is_ref = ivy::native_bool (true);
             if (arg . is_output) {
                 arg . outpos = outs . value (id);
-            } else {
-                arg . is_const = ivy::native_bool (true);
+            } else
+            {
+                if (mods . mod . mem (id))
+                {
+                    if (is_member)
+                    {
+                        if (ivy::is_virtual_action ((*this),gl,st))
+                        {
+                            arg . is_const = ivy::native_bool (true);
+                            arg . is_copy = ivy::native_bool (true);
+                        } else
+                        {
+                            if (idx != vector__ivy__expr::domain::__t (0))
+                            {
+                                arg . is_ref = ivy::native_bool (false);
+                            }
+                        }
+                    } else {
+                        arg . is_ref = ivy::native_bool (false);
+                    }
+                } else {
+                    arg . is_const = ivy::native_bool (true);
+                }
             }
-            arg . is_ref = ivy::native_bool (true);
             res . args . append (arg);
             idx = idx . next();
         }
@@ -25763,6 +26013,52 @@ __bool ivy::local_tracker::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) con
     __bool res;
     res = (*this) . map . mem (id);
     return res;
+}
+// Get the root modset of an assignment, given its lhs
+void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st)
+{
+    if (s . isa< ivy::app::__t >())
+    {
+        ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (0)),st);
+        if (s -> is (ivy::verb::__t (ivy::verb::comma)))
+        {
+            ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (1)),st);
+        }
+    } else
+    {
+        if (s . isa< ivy::symbol::__t >())
+        {
+            ivy::ptr< ivy::ident::__t > id;
+            id = s -> get_name();
+            if (! st . ignore . mem (id)) {
+                st . mod . set (id,ivy::native_bool (true));
+            }
+        }
+    }
+}
+// Get just the roots that are modified by a statement
+void ivy::stmt::__t::mod_roots  (ivy::root_mod_ref::__t &st) const 
+// Get just the roots that are modified by a statement
+{}
+void ivy::sequence::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
+{
+    st . ignore . push_stmt ((*this) . lhs);
+    (*this) . lhs -> mod_roots (st);
+    (*this) . rhs -> mod_roots (st);
+    st . ignore . pop();
+}
+void ivy::asgn::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
+{
+    ivy::get_lhs_roots ((*this) . lhs,st);
+}
+void ivy::ifst::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
+{
+    (*this) . thenst -> mod_roots (st);
+    (*this) . elsest -> mod_roots (st);
+}
+void ivy::whilest::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
+{
+    (*this) . body -> mod_roots (st);
 }
 void ivy::set_built_in_type  (const ivy::verb::__t &vrb,const str::__t &ty,const __bool &m,const
     __bool &io,const __bool &oi,const __bool &fi)
@@ -30563,6 +30859,14 @@ void cpp::varst::__t::encode_int  (pretty::__t &b,const priority::__t &prio) con
 {
     b . nest();
     (*this) . vtype . encode (b,prio);
+    if ((*this) . has_initval)
+    {
+        b . extend (ivy::from_str< str::__t > (" "));
+        b . extend (ivy::from_str< str::__t > ("="));
+        b . extend (ivy::from_str< str::__t > (" "));
+        (*this) . initval -> encode (b,priority::__t (0));
+        b . extend (ivy::from_str< str::__t > (";"));
+    }
     b . extend (ivy::from_str< str::__t > (";"));
     b . unnest();
 }
@@ -30800,7 +31104,14 @@ void cpp::vardecl::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     (*this) . ann -> encode (b);
     b . nest();
     (*this) . vtype . encode (b,priority::__t (0));
-    b . extend (ivy::from_str< str::__t > (";"));
+    if ((*this) . has_initval)
+    {
+        b . extend (ivy::from_str< str::__t > (" "));
+        b . extend (ivy::from_str< str::__t > ("="));
+        b . extend (ivy::from_str< str::__t > (" "));
+        (*this) . initval -> encode (b,priority::__t (0));
+        b . extend (ivy::from_str< str::__t > (";"));
+    }
     b . unnest();
     b . newline();
 }
@@ -31784,16 +32095,22 @@ void ivy::tocppst::__t::wrap_stmt  (const ivy::ptr< cpp::stmt::__t > &code,const
     (*this) . add_stmt (code);
     (*this) . get_code (ann,res);
 }
-// This declares a temporary variable in the current code
-// context and returns it.
-void ivy::make_temp  (ivy::tocppst::__t &s,const ivy::ptr< ivy::expr::__t > &ty,const ivy::ptr< annot::__t >
-    &ann,ivy::ptr< cpp::expr::__t > &res)
+// Generate a temporay symbol name
+void ivy::temp_sym  (ivy::tocppst::__t &s,const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::expr::__t >
+    &res)
 {
     str::__t name;
     name = ivy::from_str< str::__t > ("__tmp");
     name . extend (s . counter . to_str());
     s . counter = s . counter . next();
     res = cpp::symbol::makestr (name,ann);
+}
+// This declares a temporary variable in the current code
+// context and returns it.
+void ivy::make_temp  (ivy::tocppst::__t &s,const ivy::ptr< ivy::expr::__t > &ty,const ivy::ptr< annot::__t >
+    &ann,ivy::ptr< cpp::expr::__t > &res)
+{
+    ivy::temp_sym (s,ann,res);
     cpp::varst::__t vst;
     ivy::fix_variant_type (ty,s,vst . vtype . _type);
     vst . vtype . name = res;
@@ -32344,18 +32661,20 @@ __bool ivy::is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s)
     // handling for indirect calls. 
     return res;
 }
-// Make a C++ function call. There are three cases here:
+// Make a C++ function call. There are four cases here:
 //
 // Ordinary function call: `prefix.f(a0..an)`
 // Method call: `a0.f(a1..an)`
-// Indirect method call: `a0->f(a1..an)`
+// Indirect const method call: `a0->f(a1..an)`
+// Indirect non-const method call: `a0.get().f(a1..an)`
 //
-// The last case is used if `f : (t * ... -> u)` is a member function where
+// The last two cases are used if `f : (t * ... -> u)` is a member function where
 // type `t` is a variant type. However, if the first argument is `(*this)` we
 // do *not* use this form, as `this` is a normal C++ pointer, not a special
 // Ivy variant pointer. 
 void ivy::make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__cpp__expr::__t &args,const
-    ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res)
+    ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,const ivy::prototype::__t &proto,ivy::ptr< cpp::expr::__t >
+    &res)
 {
     if (ivy::func_is_member (func))
     {
@@ -32368,7 +32687,18 @@ void ivy::make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__c
         if (ivy::is_variant_type (ivy::get_dom0 (func -> get_arg (vector__ivy__expr::domain::__t (1))),st)
         & ! ivy::is_cpp_this (args . value (vector__cpp__expr::domain::__t (0))))
         {
-            cfunc = cpp::arrow::make (args . value (vector__cpp__expr::domain::__t (0)),cfunc,ann);
+            ivy::prototype_argument::__t arg;
+            arg = proto . args . value (vector__ivy__prototype_argument::domain::__t (0));
+            if (arg . is_const)
+            {
+                cfunc =
+                    cpp::arrow::make (args . value (vector__cpp__expr::domain::__t (0)),cfunc,ann);
+            } else
+            {
+                cfunc =
+                    cpp::dot::make (cpp::app::make0 (cpp::dot::make (args . value (vector__cpp__expr::domain::__t
+                                        (0)),cpp::symbol::makestr (ivy::from_str< str::__t > ("get"),ann),ann),ann),cfunc,ann);
+            }
         } else
         {
             cfunc = cpp::dot::make (args . value (vector__cpp__expr::domain::__t (0)),cfunc,ann);
@@ -32415,9 +32745,9 @@ void ivy::unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t
 // In-place optimization. There are two cases when a call can modify
 // an argument in-place:
 //
-// (1) Borrowing. This is an in/out parameter given an lvalue
-// that is returned by the expression and has exactly one alias in the
-// expression.
+// (1) Borrowing. This is an in/out parameter given an lvalue that
+// is returned by the expression and has exactly one remaining
+// alias in the expression.
 //
 // (2) Return by reference. This is an out parameter given an
 // lvalue that is returned by the expression and has no aliases in
@@ -32435,6 +32765,9 @@ void ivy::unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t
 // effect, by copying any temporaries back to the original lvalues,
 // and we return ().
 //
+// Note that any remaining inputs may be either by const ref or by value.
+// We need not make this distinction here, however, as call-by-value is
+// the same as call-by-const-ref with an internal copy operation.
 void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy__expr::__t &inputs,const
     ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -32496,7 +32829,9 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
                 {
                     ivy::make_temp (st,parg . name -> get_arg (vector__ivy__expr::domain::__t (1)),ann,out);
                 }
-                ret_vals . append (out);
+                if (parg . is_output) {
+                    ret_vals . append (out);
+                }
             }
         }
         if (parg . is_input & parg . is_ref & ! parg . is_const & ! inp -> eq (out))
@@ -32512,7 +32847,7 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
         idx = idx . next();
         kdx = kdx . next();
     }
-    ivy::make_cpp_call (func,args,ann,st,res);
+    ivy::make_cpp_call (func,args,ann,st,proto,res);
     ivy::unown_func_args (inputs,st);
     if (ret_vals . end > vector__cpp__expr::domain::__t (0) | rets . end >
     vector__cpp__stmt::domain::__t (0) | ! proto . has_ret)
@@ -32845,9 +33180,7 @@ void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     st . outputs = ivy::comma::unfold_left ((*this) . lhs);
     ivy::kill_lvalues (st . outputs,st,paths);
     (*this) . rhs -> to_cpp (st,res . rhs);
-    if (res . rhs -> get_verb() != cpp::verb::__t (cpp::verb::empty))
-    {
-        ivy::fix_variant_arg ((*this) . rhs,res . rhs,st);
+    if (res . rhs -> get_verb() != cpp::verb::__t (cpp::verb::empty)) {
         st . add_stmt (res);
     }
     st . get_code ((*this) . ann,resd);
@@ -32972,10 +33305,22 @@ __bool ivy::is_input_param  (const ivy::actdc::__t &s,const ivy::ptr< ivy::expr:
     }
     return res;
 }
+// Make a variable declaration with an initializer
+void ivy::make_initializer  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::expr::__t >
+    &initval,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res)
+{
+    cpp::varst::__t vd;
+    typing -> get_arg (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,vd . vtype . name);
+    typing -> get_arg (vector__ivy__expr::domain::__t (1)) -> to_cpp (st,vd . vtype . _type);
+    vd . has_initval = ivy::native_bool (true);
+    vd . initval = initval;
+    vd . ann = typing -> get_ann();
+    res = vd;
+}
 void ivy::actdc::__t::record_prototypes  (ivy::tocppst::__t &st) const
 {
     ivy::prototype::__t proto;
-    proto = (*this) . get_proto();
+    proto = (*this) . get_proto (st . globals,st . subtype_rel);
     st . protos . set ((*this) . name -> get_name(),proto);
 }
 // Here, we translate an Ivy action declaration to a C++
@@ -33012,14 +33357,27 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
     vector__ivy__prototype_argument::domain::__t idx;
     idx = proto . args . begin();
     st . is_member = is_member;
+    vector__cpp__stmt::__t argasgns;
     if (st . is_member)
     {
         idx = idx . next();
         
         // skip the first input "this" if a member
-        st . this_ident =
-            proto . args . value (vector__ivy__prototype_argument::domain::__t (0)) . name ->
-                    get_arg (vector__ivy__expr::domain::__t (0)) -> get_name();
+        ivy::prototype_argument::__t parg;
+        
+        // skip the first input "this" if a member
+        parg = proto . args . value (vector__ivy__prototype_argument::domain::__t (0));
+        if (! cprot & parg . is_copy)
+        {
+            ivy::ptr< cpp::stmt::__t > vd;
+            ivy::make_initializer (parg . name,cpp::symbol::makestr (ivy::from_str< str::__t > ("(*this)"),(*this)
+                        . ann),st,vd);
+            argasgns . append (vd);
+        } else
+        {
+            st . this_ident =
+                parg . name -> get_arg (vector__ivy__expr::domain::__t (0)) -> get_name();
+        }
         res . ftype . is_const =
             proto . args . value (vector__ivy__prototype_argument::domain::__t (0)) . is_const;
         if (cprot &
@@ -33042,6 +33400,13 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
         ivy::fix_variant_type (arg -> get_arg (vector__ivy__expr::domain::__t (1)),st,argt . _type);
         st . locals . add_var (arg);
         arg -> get_arg (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,argt . name);
+        if (! cprot & parg . is_copy)
+        {
+            ivy::temp_sym (st,(*this) . ann,argt . name);
+            ivy::ptr< cpp::stmt::__t > vd;
+            ivy::make_initializer (parg . name,argt . name,st,vd);
+            argasgns . append (vd);
+        }
         res . ftype . args . append (argt);
         idx = idx . next();
     }
@@ -33072,6 +33437,13 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
                 res . body = cpp::sequence::make (vs,res . body,(*this) . ann);
             }
         }
+        vector__cpp__stmt::domain::__t kdx;
+        kdx = argasgns . end;
+        while (kdx > argasgns . begin())
+        {
+            kdx = kdx . prev();
+            res . body = cpp::sequence::make (argasgns . value (kdx),res . body,(*this) . ann);
+        }
     }
     st . locals . pop();
     st . is_member = ivy::native_bool (false);
@@ -33079,6 +33451,7 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
     if (! st . in_class & cprot) {
         ivy::add_namespaces (resd,(*this) . name -> get_name());
     }
+    st . this_ident = ivy::ident::__t (0);
 }
 // Here, we register actions as members of types. These will be emitted
 // as members of the corresponding C++ class. 
@@ -33110,6 +33483,125 @@ __bool ivy::actdc::__t::emitted  (const ivy::tocppst::__t &st) const
     
     // An action declaration is not emitted if it is a member and
     // does not have a body. External actions are never emitted.
+    return res;
+}
+// If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+// prototype. The easiest way to handle this is to eliminate the in-out parameter by
+// replacing the output parameter with a fresh name and copying the value. For example,
+// suppose we have this action:
+//
+//     action t.f(s:t,...) returns (s:t,...) { ... }
+//
+// We replace this by the following equivalent action:
+//
+//     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+//
+// This results in a copy of `s` that might be unnecessary if its value is dead. However,
+// it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+// in the value being sliced.
+ivy::ptr< ivy::decl::__t > ivy::actdc::__t::fix_action  (const ivy::tocppst::__t &st) const 
+// If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+// prototype. The easiest way to handle this is to eliminate the in-out parameter by
+// replacing the output parameter with a fresh name and copying the value. For example,
+// suppose we have this action:
+//
+//     action t.f(s:t,...) returns (s:t,...) { ... }
+//
+// We replace this by the following equivalent action:
+//
+//     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+//
+// This results in a copy of `s` that might be unnecessary if its value is dead. However,
+// it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+// in the value being sliced.
+{
+    
+    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
+    // replacing the output parameter with a fresh name and copying the value. For example,
+    // suppose we have this action:
+    //
+    //     action t.f(s:t,...) returns (s:t,...) { ... }
+    //
+    // We replace this by the following equivalent action:
+    //
+    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+    //
+    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
+    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+    // in the value being sliced.
+    ivy::ptr< ivy::decl::__t > res;
+    
+    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
+    // replacing the output parameter with a fresh name and copying the value. For example,
+    // suppose we have this action:
+    //
+    //     action t.f(s:t,...) returns (s:t,...) { ... }
+    //
+    // We replace this by the following equivalent action:
+    //
+    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+    //
+    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
+    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+    // in the value being sliced.
+    if ((*this) . is_member())
+    {
+        ivy::param_map::__t outs;
+        outs = ivy::param_set ((*this) . outputs);
+        ivy::ptr< ivy::expr::__t > origthis;
+        origthis =
+            (*this) . inputs . value (vector__ivy__expr::domain::__t (0)) -> get_arg (vector__ivy__expr::domain::__t
+                    (0));
+        ivy::ptr< ivy::expr::__t > thisty;
+        thisty =
+            (*this) . inputs . value (vector__ivy__expr::domain::__t (0)) -> get_arg (vector__ivy__expr::domain::__t
+                    (1));
+        ivy::ptr< ivy::ident::__t > id;
+        id = origthis -> get_name();
+        if (outs . mem (id))
+        {
+            if (ivy::is_virtual_action ((*this),st . globals,st . subtype_rel))
+            {
+                ivy::actdc::__t resa;
+                resa = (*this);
+                ivy::ptr< ivy::expr::__t > newthis;
+                newthis = ivy::symbol::makestr (ivy::from_str< str::__t > ("__this"),(*this) . ann);
+                ivy::ptr< ivy::expr::__t > newthisarg;
+                newthisarg = ivy::colon::make (newthis,thisty,(*this) . ann);
+                resa . inputs . set (vector__ivy__expr::domain::__t (0),newthisarg);
+                if (resa . has_body)
+                {
+                    resa . body =
+                        ivy::sequence::make (ivy::asgn::make (origthis,newthis,(*this) . ann),resa .
+                            body,(*this) . ann);
+                }
+                res = resa;
+            } else {
+                res = (*this);
+            }
+        } else {
+            res = (*this);
+        }
+    } else {
+        res = (*this);
+    }
+    
+    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
+    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
+    // replacing the output parameter with a fresh name and copying the value. For example,
+    // suppose we have this action:
+    //
+    //     action t.f(s:t,...) returns (s:t,...) { ... }
+    //
+    // We replace this by the following equivalent action:
+    //
+    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
+    //
+    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
+    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
+    // in the value being sliced.
     return res;
 }
 __bool ivy::initdc::__t::emitted  (const ivy::tocppst::__t &st) const
@@ -33806,6 +34298,12 @@ ivy::ptr< ivy::decl::__t > ivy::decl::__t::func_to_action () const
     res = (*this) . __upcast();
     return res;
 }
+ivy::ptr< ivy::decl::__t > ivy::decl::__t::fix_action  (const ivy::tocppst::__t &st) const
+{
+    ivy::ptr< ivy::decl::__t > res;
+    res = (*this) . __upcast();
+    return res;
+}
 ivy::ptr< ivy::decl::__t > ivy::vardc::__t::func_to_action () const
 {
     ivy::ptr< ivy::decl::__t > dres;
@@ -34003,6 +34501,16 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
             idx = idx . next();
         }
         st . forward = ivy::native_bool (false);
+        
+        // A pass to rewrite actions with problematic signatures
+        idx = s . decls . begin();
+        while (idx < s . decls . end)
+        {
+            ivy::ptr< ivy::decl::__t > d;
+            d = s . decls . value (idx) -> fix_action (st);
+            s . decls . set (idx,d);
+            idx = idx . next();
+        }
         
         // A pass to record all of the C++ function prototypes
         idx = s . decls . begin();

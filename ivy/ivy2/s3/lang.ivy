@@ -1042,7 +1042,8 @@ module decl_base(expr,stmt) = {
     # `is_input` and `is_output` fields tell us whether the argument
     # is an input, an output or both. Field `is_ref` means the
     # argument is passed by reference. Field `is_const` indicates it
-    # is a const reference. 
+    # is a const reference. Field `is_copy` indicates that a const ref
+    # parameter should be internally copied.
 
     object prototype_argument = {
         type this = struct {
@@ -1052,7 +1053,8 @@ module decl_base(expr,stmt) = {
             is_output : bool,
             outpos : vector[expr].domain,
             is_ref : bool,
-            is_const : bool
+            is_const : bool,
+	    is_copy : bool
         }
     }
 

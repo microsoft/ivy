@@ -123,6 +123,8 @@ object cpp = {
     object varst = {
         variant this of stmt = struct {
             vtype : simpletype,
+	    has_initval : bool,
+	    initval : expr,
             ann : annot
         }
 
@@ -140,6 +142,13 @@ object cpp = {
         action encode_int(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := b.nest;
             b := s.vtype.encode(b,prio);
+	    if s.has_initval {
+		b := b.extend(" ");
+		b := b.extend("=");
+		b := b.extend(" ");
+		b := s.initval.encode(b,0);
+		b := b.extend(";");
+	    }
             b := b.extend(";");
             b := b.unnest;
         }
@@ -290,13 +299,21 @@ object cpp = {
     object vardecl = {
         variant this of decl = struct {
             vtype : simpletype,
+	    has_initval : bool,
+	    initval : expr,
             ann : annot
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
             b := s.ann.encode(b);
             b := b.nest;
             b := s.vtype.encode(b,0);
-            b := b.extend(";");
+	    if s.has_initval {
+		b := b.extend(" ");
+		b := b.extend("=");
+		b := b.extend(" ");
+		b := s.initval.encode(b,0);
+		b := b.extend(";");
+	    }
             b := b.unnest;
             b := b.newline;
         }

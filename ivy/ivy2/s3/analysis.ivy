@@ -80,8 +80,8 @@ object ivy = { ...
     #
     # (1)  x:t
     # (2)  f(x1:t1,...,xn:tn) : t
-    # (3)  (f : (t1*...*tn->t)(...) : u
-    # (4)  (f : (t1*...*tn->t)(...)
+    # (3)  (f : (t1*...*tn->t)(...)) : u
+    # (4)  (f : (t1*...*tn->t)(...))
     #
     
     action is_typing_complete(typing:expr) returns (res:bool) = {
@@ -173,6 +173,32 @@ object ivy = { ...
 	}
     }
 
+
+    # Returns true is an action is virtual. A virtual action is one that
+    # overrides an action of a superclass or is overridden by an action of
+    # a subclass. This action assumes that parameter s is a member action.
+
+    action is_virtual_action(s:actdc, gl:global_types, st:subtypes) returns (res:bool) = {
+	var tyid := s.name.get_name.get_namesp;
+	var memid := s.name.get_name.get_member;
+	if st.subtypes_of.mem(tyid) {
+	    var subtys := st.subtypes_of.value(tyid);
+	    var idx := subtys.begin;
+	    while ~res & idx < subtys.end {
+		if gl.is_action.mem(memid.prefix(subtys.value(idx).get_name)) {
+		    res := true
+		}
+		idx := idx.next
+	    }
+	}
+	if ~res & st.supertype_of.mem(tyid) {
+	    if gl.is_action.mem(memid.prefix(st.supertype_of.value(tyid).get_name)) {
+		res := true
+	    }
+	}
+    }
+    
+
     # Does a prototype have any non-const ref parameters?
 
     object prototype = { ...
@@ -204,16 +230,40 @@ object ivy = { ...
     # in/out parameter, then the output becomes the C++ return value,
     # and the inputs are all by reference. Otherwise, all parameters
     # are by reference and the return type is void. Input parameters
-    # are by const reference.
+    # are by const reference. If the input is modified in the action
+    # body, we change it to a value parameter. A exception is the
+    # `this` parameter of a member action. This is normally passed by
+    # con-const reference, even if it is not an output. 
+    
+    # A member action of a base type, or an overriding action of a
+    # variant type that modifies the `this` parameter needs special
+    # handling. For example, suppose we have this code:
+    #
+    #     type t
+    #     action t.foo(x:t,...)
+    #     variant u of t
+    #     action u.foo(x:u,...) = { x := ... }
+    #
+    # Since u.foo is non-const, t.foo must also be non-const, and further
+    # all other foo member actions of variants of t must be non-const, so that
+    # we can successfully override foo. For now, we handle this in the simplest
+    # way. That is, for member functions of bases and variants, if any parameter
+    # is internally modified, we pass a const reference and make an internal copy. 
+    # We indicate this by setting the `is_copy` bit of the prototype argument.
     
     object actdc = { ...
-        action get_proto(s:actdc) returns (res:prototype) = {
+        action get_proto(s:actdc,gl:global_types,st:subtypes) returns (res:prototype) = {
             if s.has_proto {
                 res := s.proto
             } else {
                 var inps := param_set(s.inputs);
                 var outs := param_set(s.outputs);
                 var idx := s.inputs.begin;
+		var mods : root_mod_ref;
+		if s.has_body {
+		    mods := s.body.mod_roots(mods);
+		};
+		var is_member := s.is_member;
                 while idx < s.inputs.end {
                     var arg : prototype_argument;
                     arg.name := s.inputs.value(idx);
@@ -221,12 +271,25 @@ object ivy = { ...
                     arg.is_input := true;
                     arg.inpos := idx;
                     arg.is_output := outs.mem(id);
-                    if arg.is_output {
-                        arg.outpos := outs.value(id)
-                    } else {
-                        arg.is_const := true;
-                    };
                     arg.is_ref := true;
+                    if arg.is_output {
+                        arg.outpos := outs.value(id);
+                    } else {
+			if mods.mod.mem(id) {
+			    if is_member {
+				if is_virtual_action(s,gl,st) {
+				    arg.is_const := true;
+				    arg.is_copy := true;
+				} else if idx ~= 0 {
+				    arg.is_ref := false;
+				}   
+			    } else {
+				arg.is_ref := false;
+			    }
+			} else {
+                            arg.is_const := true;
+			}
+                    };
                     res.args := res.args.append(arg);
                     idx := idx.next
                 };                
@@ -435,4 +498,67 @@ object ivy = { ...
             res := s.map.mem(id);
         }
     }
+
+    # Mod/ref computation
+    # ===================
+
+    # These analyses assume that their input has been flattened and
+    # type-decorated.
+
+    # This structure represents the set of roots (global and local
+    # variable identifiers) that are modified and referenced by a
+    # given statement. The `ignore` field provides a set of
+    # identifiers that are ignored in the analysis, usually because
+    # they are shadowed by a local variable declaration.
+    #
+
+    object root_mod_ref = {
+	type this = struct {
+	    mod : ident_set,
+	    ref : ident_set,
+	    ignore : local_tracker
+	}
+    }
+
+    # Get the root modset of an assignment, given its lhs
+
+    action get_lhs_roots(s:expr,st:root_mod_ref) returns (st:root_mod_ref) = {
+	if s isa app {
+	    st := get_lhs_roots(s.get_arg(0),st);
+	    if s.is(verb.comma) {
+		st := get_lhs_roots(s.get_arg(1),st);
+	    }
+	} else if s isa symbol {
+	    var id := s.get_name;
+	    if ~st.ignore.mem(id) {
+		st.mod := st.mod.set(id,true);
+	    }
+	}
+    }
+
+    # Get just the roots that are modified by a statement
+
+    action stmt.mod_roots(s:stmt, st:root_mod_ref) returns (st:root_mod_ref)
+
+    action sequence.mod_roots(s:sequence, st:root_mod_ref) returns (st:root_mod_ref) = {
+	st.ignore := st.ignore.push_stmt(s.lhs);
+	st := s.lhs.mod_roots(st);
+	st := s.rhs.mod_roots(st);
+        st.ignore := st.ignore.pop;
+    }
+    
+    action asgn.mod_roots(s:asgn, st:root_mod_ref) returns (st:root_mod_ref) = {
+	st := get_lhs_roots(s.lhs,st);
+    }
+
+    action ifst.mod_roots(s:ifst, st:root_mod_ref) returns (st:root_mod_ref) = {
+	st := s.thenst.mod_roots(st);
+	st := s.elsest.mod_roots(st);
+    }
+
+    action whilest.mod_roots(s:whilest, st:root_mod_ref) returns (st:root_mod_ref) = {
+	st := s.body.mod_roots(st);
+    }
+
+
 }
