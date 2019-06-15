@@ -404,7 +404,7 @@ namespace ivy {
 
     template<class T, class PrimaryD, class ... RestD > struct vector<T, PrimaryD, RestD...> {
         typedef PrimaryD index_type;
-        typedef typename vector<T, RestD...>::type OneDimensionDownVectorT;
+        typedef typename ivy::vector<T, RestD...> OneDimensionDownVectorT;
         typedef vector<OneDimensionDownVectorT,PrimaryD> type;
         type data;
 
@@ -436,7 +436,7 @@ namespace ivy {
 
         struct __hash {
             std::size_t operator()(const vector &x) const {
-                return type::__hash(x.data);
+                return typename type::__hash()(x.data);
             }
         };
 

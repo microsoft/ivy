@@ -448,7 +448,7 @@ object ivy = { ...
 	    # var cty := ty.curry;
 	    # var rng := function_type(cty.get_arg(1));
 	    # ty := make_vector_type(rng);
-	    (res,st) := make_md_vector_type(arrow.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
+	    (res,st) := make_md_vector_type(times.unfold_left(ty.get_arg(0)),ty.get_arg(1),st)
 	} else {
             (res,st) := ty.to_cpp(st)
         }

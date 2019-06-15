@@ -193,6 +193,28 @@ object ivy = { ...
         }
     }
     
+    # - Error `redefining(n,ann)` indicates that identifier `n` is redefined,
+    # and `ann` is the location of the original definition.
+
+    object redefining = {
+        variant this of error = struct {
+            n : ident,
+	    ann : annot
+        }
+        action make(n:ident,ann:annot) returns (res:this) = {
+            res.n := n;
+	    res.ann := ann
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Redefining ");
+            b := e.n.encode(b,0);
+            b := b.newline;
+            b := b.extend(e.ann.to_str);
+            b := b.extend(": previous definition");
+            b := b.newline;
+        }
+    }
+
     # - Error `wrong_number_params(n)` indicates that `n` parameters were expected,
     #   but a different number was given.
 
@@ -226,5 +248,22 @@ object ivy = { ...
         }
     }
     
+    # - Error `bad_syntax(e)` indicates bad syntax at expression `e`.
+
+    object bad_syntax = {
+        variant this of error = struct {
+	    e : expr
+	}
+        action make(e:expr) returns (res:this) = {
+	    res.e := e
+        }
+        action encode(e:this,b:pretty) returns (b:pretty) = {
+            b := b.extend("Syntax error at expression");
+            b := b.extend(" ");
+            b := e.e.encode(b,0);
+            b := b.newline;
+        }
+    }
+
 
 }

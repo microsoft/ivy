@@ -18316,7 +18316,7 @@ ivyc_s1::cpp__expr ivyc_s1::ext__ivy__function_type(ivyc_s1::ivy__expr ty, ivy__
                         loc__0 = ext__ivy__expr__get_arg(ty, 0);
                     }
                 }
-                loc__1 = ext__ivy__arrow__unfold_left(loc__0);
+                loc__1 = ext__ivy__times__unfold_left(loc__0);
                 {
                     ivy__app self__COLON__ivy__app;
                     if (((ty).tag == 1)) self__COLON__ivy__app = ivyc_s1::ivy__expr::unwrap< ivyc_s1::ivy__app >(ty);
@@ -30455,88 +30455,11 @@ void ivyc_s1::ext__ivy__actdc__reg_member(const ivy__actdc& s, ivy__tocppst& st)
         }
     }
 }
-ivyc_s1::vector__ivy__expr__ ivyc_s1::ext__ivy__arrow__unfold_left(ivyc_s1::ivy__expr s){
-    vector__ivy__expr__ args;
-    {
-        {
-            ivyc_s1::ivy__expr loc__e;
-            {
-                loc__e = s;
-                {
-                    bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16770);
-                    {
-                        {
-                            ivy__app self__COLON__ivy__app;
-                            if (((loc__e).tag == 1)) self__COLON__ivy__app = ivyc_s1::ivy__expr::unwrap< ivyc_s1::ivy__app >(loc__e);
-                            if(((loc__e).tag == 1)){
-                                loc__0 = ext__ivy__app__is_typed(self__COLON__ivy__app, ivy__verb__arrow);
-                            }
-                            else {
-                                loc__0 = ext__ivy__expr__is_typed(loc__e, ivy__verb__arrow);
-                            }
-                        }
-                        {
-                            bool loc__b;
-    loc__b = (bool)___ivy_choose(0,"loc:b",16769);
-                            {
-                                loc__b = loc__0;
-                                while(loc__b){
-                                    {
-                                        {
-                                            ivyc_s1::ivy__expr loc__0;
-                                            {
-                                                {
-                                                    ivy__app self__COLON__ivy__app;
-                                                    if (((loc__e).tag == 1)) self__COLON__ivy__app = ivyc_s1::ivy__expr::unwrap< ivyc_s1::ivy__app >(loc__e);
-                                                    if(((loc__e).tag == 1)){
-                                                        loc__0 = ext__ivy__app__get_arg(self__COLON__ivy__app, 1);
-                                                    }
-                                                    else {
-                                                        loc__0 = ext__ivy__expr__get_arg(loc__e, 1);
-                                                    }
-                                                }
-                                                ext__vector__ivy__expr____append(args, loc__0);
-                                            }
-                                        }
-                                        {
-                                            ivy__app self__COLON__ivy__app;
-                                            if (((loc__e).tag == 1)) self__COLON__ivy__app = ivyc_s1::ivy__expr::unwrap< ivyc_s1::ivy__app >(loc__e);
-                                            if(((loc__e).tag == 1)){
-                                                loc__e = ext__ivy__app__get_arg(self__COLON__ivy__app, 0);
-                                            }
-                                            else {
-                                                loc__e = ext__ivy__expr__get_arg(loc__e, 0);
-                                            }
-                                        }
-                                        {
-                                            ivy__app self__COLON__ivy__app;
-                                            if (((loc__e).tag == 1)) self__COLON__ivy__app = ivyc_s1::ivy__expr::unwrap< ivyc_s1::ivy__app >(loc__e);
-                                            if(((loc__e).tag == 1)){
-                                                loc__b = ext__ivy__app__is_typed(self__COLON__ivy__app, ivy__verb__arrow);
-                                            }
-                                            else {
-                                                loc__b = ext__ivy__expr__is_typed(loc__e, ivy__verb__arrow);
-                                            }
-                                        }
-                                    }
-                                }
-                                ext__vector__ivy__expr____append(args, loc__e);
-                                ext__vector__ivy__expr____reverse(args);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return args;
-}
 ivyc_s1::ivy__ident ivyc_s1::ext__ivy__formal_ident(ivyc_s1::ivy__expr s){
     ivyc_s1::ivy__ident res;
     {
         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16772);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16768);
         ivyc_s1::ivy__expr loc__1;
         ivyc_s1::ivy__ident loc__2;
         ivyc_s1::ivy__ident loc__3;
@@ -30765,12 +30688,12 @@ void ivyc_s1::__init(){
                         loc__inc = loc__0;
                         {
                             unsigned long long loc__start;
-    loc__start = (unsigned long long)___ivy_choose(0,"loc:start",16951);
+    loc__start = (unsigned long long)___ivy_choose(0,"loc:start",16947);
                             {
                                 loc__start = str__begin(loc__inc);
                                 {
                                     unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16950);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16946);
                                     {
                                         loc__idx = str__begin(loc__inc);
                                         while((loc__idx < str__end(loc__inc))){
@@ -31157,7 +31080,7 @@ void ivyc_s1::ext__ivy__version__parse(pstate& st, int prio, ivy__version& res){
             {
                 {
                     unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16778);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16774);
                     {
                         loc__0 = ext__pos__from_str(st.tok);
                         ext__vector__pos____append(res.nums, loc__0);
@@ -31171,7 +31094,7 @@ void ivyc_s1::ext__ivy__version__parse(pstate& st, int prio, ivy__version& res){
                             {
                                 {
                                     unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16779);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16775);
                                     {
                                         loc__0 = ext__pos__from_str(st.tok);
                                         ext__vector__pos____append(res.nums, loc__0);
@@ -31261,22 +31184,22 @@ void ivyc_s1::ext__ivy__prog__read_file_int(const str& name, ivyc_s1::annot ann,
         {
             {
                 bool loc__ok;
-    loc__ok = (bool)___ivy_choose(0,"loc:ok",16802);
+    loc__ok = (bool)___ivy_choose(0,"loc:ok",16798);
                 {
                     ext__ivy__file__read(name, loc__text, loc__ok);
                     if(loc__ok){
                         {
                             pstate loc__0;
-    loc__0.p = (unsigned long long)___ivy_choose(0,"loc:0",16799);
-    loc__0.ann.line = (unsigned long long)___ivy_choose(0,"loc:0",16799);
-    loc__0.ok = (bool)___ivy_choose(0,"loc:0",16799);
+    loc__0.p = (unsigned long long)___ivy_choose(0,"loc:0",16795);
+    loc__0.ann.line = (unsigned long long)___ivy_choose(0,"loc:0",16795);
+    loc__0.ok = (bool)___ivy_choose(0,"loc:0",16795);
                             {
                                 loc__0 = ext__pstate__make(loc__text);
                                 {
                                     pstate loc__st;
-    loc__st.p = (unsigned long long)___ivy_choose(0,"loc:st",16798);
-    loc__st.ann.line = (unsigned long long)___ivy_choose(0,"loc:st",16798);
-    loc__st.ok = (bool)___ivy_choose(0,"loc:st",16798);
+    loc__st.p = (unsigned long long)___ivy_choose(0,"loc:st",16794);
+    loc__st.ann.line = (unsigned long long)___ivy_choose(0,"loc:st",16794);
+    loc__st.ok = (bool)___ivy_choose(0,"loc:st",16794);
                                     {
                                         loc__st = loc__0;
                                         loc__st.ann.file = name;
@@ -31285,7 +31208,7 @@ void ivyc_s1::ext__ivy__prog__read_file_int(const str& name, ivyc_s1::annot ann,
                                         if(loc__ok){
                                             {
                                                 unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16795);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16791);
                                                 {
                                                     loc__idx = vector__ivy__decl____begin(p.decls);
                                                     while(((loc__idx < vector__ivy__decl____end(p.decls)) && (vector__ivy__error____end(ivy__errors) == 0))){
@@ -31324,7 +31247,7 @@ void ivyc_s1::ext__ivy__prog__read_file_int(const str& name, ivyc_s1::annot ann,
                                                                                     loc__iname = loc__1;
                                                                                     {
                                                                                         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16791);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16787);
                                                                                         {
                                                                                             loc__0 = ext__ivy__ident_set__mem(rst.have_read, loc__iname);
                                                                                             if(!loc__0){
@@ -31497,12 +31420,12 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
     ivyc_s1::ivy__expr res;
     {
         bool loc__b;
-    loc__b = (bool)___ivy_choose(0,"loc:b",16817);
+    loc__b = (bool)___ivy_choose(0,"loc:b",16813);
         {
             loc__b = b0;
             {
                 bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16816);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16812);
                 {
                     loc__0 = ext__ivy__app__is(e, ivy__verb__colon);
                     if(loc__0){
@@ -31534,7 +31457,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                         {
                                             {
                                                 ivy__verb loc__0;
-    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16805);
+    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16801);
                                                 {
                                                     {
                                                         ivy__app self__COLON__ivy__app;
@@ -31555,13 +31478,13 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                         {
                                             {
                                                 ivy__verb loc__0;
-    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16806);
+    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16802);
                                                 ivyc_s1::ivy__ident loc__1;
                                                 bool loc__2;
-    loc__2 = (bool)___ivy_choose(0,"loc:2",16806);
+    loc__2 = (bool)___ivy_choose(0,"loc:2",16802);
                                                 ivyc_s1::ivy__ident loc__3;
                                                 bool loc__4;
-    loc__4 = (bool)___ivy_choose(0,"loc:4",16806);
+    loc__4 = (bool)___ivy_choose(0,"loc:4",16802);
                                                 {
                                                     {
                                                         ivy__symbol self__COLON__ivy__symbol;
@@ -31655,7 +31578,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                     }
                                     {
                                         ivy__verb loc__0;
-    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16814);
+    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16810);
                                         {
                                             {
                                                 ivy__symbol self__COLON__ivy__symbol;
@@ -31669,7 +31592,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                             }
                                             {
                                                 ivy__verb loc__vrb;
-    loc__vrb = (ivy__verb)___ivy_choose(0,"loc:vrb",16813);
+    loc__vrb = (ivy__verb)___ivy_choose(0,"loc:vrb",16809);
                                                 {
                                                     loc__vrb = loc__0;
                                                     loc__b = ((loc__b && ivy__verb_out_to_in[loc__vrb]) || ivy__verb_mono[loc__vrb]);
@@ -31678,7 +31601,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                                         {
                                                             {
                                                                 unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16811);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16807);
                                                                 {
                                                                     loc__idx = vector__ivy__expr____begin(e.args);
                                                                     while((loc__idx < vector__ivy__expr____end(e.args))){
@@ -31687,7 +31610,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_elide_int(const ivy__app& e, boo
                                                                             {
                                                                                 {
                                                                                     bool loc__ba;
-    loc__ba = (bool)___ivy_choose(0,"loc:ba",16809);
+    loc__ba = (bool)___ivy_choose(0,"loc:ba",16805);
                                                                                     {
                                                                                         loc__ba = (loc__b || (ivy__verb_first_to_in[loc__vrb] && (0 < loc__idx)));
                                                                                         {
@@ -31804,8 +31727,8 @@ ivyc_s1::ivy__decl ivyc_s1::ext__ivy__vardc__make(ivyc_s1::ivy__expr typing, boo
     {
         {
             ivy__vardc loc__s;
-    loc__s.is_destructor = (bool)___ivy_choose(0,"loc:s",16819);
-    loc__s.has_def = (bool)___ivy_choose(0,"loc:s",16819);
+    loc__s.is_destructor = (bool)___ivy_choose(0,"loc:s",16815);
+    loc__s.has_def = (bool)___ivy_choose(0,"loc:s",16815);
             {
                 loc__s.typing = typing;
                 loc__s.is_destructor = is_destructor;
@@ -31836,29 +31759,29 @@ void ivyc_s1::ext__ivy__add_hasher(cpp__structdecl& s){
     {
         {
             cpp__structdecl loc__hashstr;
-    loc__hashstr.has_super = (bool)___ivy_choose(0,"loc:hashstr",16835);
-    loc__hashstr.has_members = (bool)___ivy_choose(0,"loc:hashstr",16835);
+    loc__hashstr.has_super = (bool)___ivy_choose(0,"loc:hashstr",16831);
+    loc__hashstr.has_members = (bool)___ivy_choose(0,"loc:hashstr",16831);
             {
                 loc__hashstr.ann = s.ann;
                 loc__hashstr.name = ext__cpp__symbol__makestr(__lit<str>("__hash"), s.ann);
                 loc__hashstr.has_members = true;
                 {
                     cpp__funcdecl loc__hash;
-    loc__hash.ftype.base.is_const = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.ftype.base.is_ref = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.ftype.is_const = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.ftype.has_initializer = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.has_body = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.is_static = (bool)___ivy_choose(0,"loc:hash",16834);
-    loc__hash.is_virtual = (bool)___ivy_choose(0,"loc:hash",16834);
+    loc__hash.ftype.base.is_const = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.ftype.base.is_ref = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.ftype.is_const = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.ftype.has_initializer = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.has_body = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.is_static = (bool)___ivy_choose(0,"loc:hash",16830);
+    loc__hash.is_virtual = (bool)___ivy_choose(0,"loc:hash",16830);
                     {
                         loc__hash.ftype.base._type = ext__cpp__symbol__makestr(__lit<str>("std::size_t"), s.ann);
                         loc__hash.ftype.base.name = ext__cpp__symbol__makestr(__lit<str>("operator ()"), s.ann);
                         loc__hash.ftype.is_const = true;
                         {
                             cpp__simpletype loc__hasharg0;
-    loc__hasharg0.is_const = (bool)___ivy_choose(0,"loc:hasharg0",16833);
-    loc__hasharg0.is_ref = (bool)___ivy_choose(0,"loc:hasharg0",16833);
+    loc__hasharg0.is_const = (bool)___ivy_choose(0,"loc:hasharg0",16829);
+    loc__hasharg0.is_ref = (bool)___ivy_choose(0,"loc:hasharg0",16829);
                             {
                                 loc__hasharg0._type = s.name;
                                 loc__hasharg0.is_const = true;
@@ -31871,7 +31794,7 @@ void ivyc_s1::ext__ivy__add_hasher(cpp__structdecl& s){
                                     {
                                         {
                                             unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16831);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16827);
                                             {
                                                 loc__idx = vector__cpp__decl____begin(s.members);
                                                 while((loc__idx < vector__cpp__decl____end(s.members))){
@@ -32080,24 +32003,24 @@ ivyc_s1::str ivyc_s1::ext__cpp__prog__enc(const cpp__prog& e){
     str s;
     {
         pretty loc__0;
-    loc__0.st.begin = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.st.total = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.maxline = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.indent = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.space = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.depth = (unsigned long long)___ivy_choose(0,"loc:0",16837);
-    loc__0.cppstyle = (bool)___ivy_choose(0,"loc:0",16837);
+    loc__0.st.begin = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.st.total = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.maxline = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.indent = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.space = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.depth = (unsigned long long)___ivy_choose(0,"loc:0",16833);
+    loc__0.cppstyle = (bool)___ivy_choose(0,"loc:0",16833);
         {
             loc__0 = ext__pretty__make(100, 4);
             {
                 pretty loc__p;
-    loc__p.st.begin = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.st.total = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.maxline = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.indent = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.space = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.depth = (unsigned long long)___ivy_choose(0,"loc:p",16836);
-    loc__p.cppstyle = (bool)___ivy_choose(0,"loc:p",16836);
+    loc__p.st.begin = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.st.total = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.maxline = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.indent = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.space = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.depth = (unsigned long long)___ivy_choose(0,"loc:p",16832);
+    loc__p.cppstyle = (bool)___ivy_choose(0,"loc:p",16832);
                 {
                     loc__p = loc__0;
                     loc__p.cppstyle = true;
@@ -32265,15 +32188,15 @@ void ivyc_s1::ext__ivy__prog__flat(ivy__prog& p){
     {
         {
             ivy__flatst loc__st;
-    loc__st.has_root = (bool)___ivy_choose(0,"loc:st",16849);
-    loc__st.defining = (bool)___ivy_choose(0,"loc:st",16849);
-    loc__st.absolute = (bool)___ivy_choose(0,"loc:st",16849);
-    loc__st.dot_rhs = (bool)___ivy_choose(0,"loc:st",16849);
-    loc__st.no_undefined = (bool)___ivy_choose(0,"loc:st",16849);
+    loc__st.has_root = (bool)___ivy_choose(0,"loc:st",16845);
+    loc__st.defining = (bool)___ivy_choose(0,"loc:st",16845);
+    loc__st.absolute = (bool)___ivy_choose(0,"loc:st",16845);
+    loc__st.dot_rhs = (bool)___ivy_choose(0,"loc:st",16845);
+    loc__st.no_undefined = (bool)___ivy_choose(0,"loc:st",16845);
             {
                 {
                     unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16848);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16844);
                     {
                         loc__idx = vector__ivy__decl____begin(p.decls);
                         while((loc__idx < vector__ivy__decl____end(p.decls))){
@@ -32461,7 +32384,7 @@ void ivyc_s1::ext__ivy__prog__flat(ivy__prog& p){
 void ivyc_s1::ext__ivy__auto_flat(ivyc_s1::ivy__expr s, ivy__flatst& st){
     {
         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16851);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16847);
         {
             {
                 ivy__app self__COLON__ivy__app;
@@ -32501,12 +32424,12 @@ bool ivyc_s1::ext__ivy__app__is_typed(const ivy__app& s, ivy__verb vrb){
     res = (bool)___ivy_choose(0,"fml:res",0);
     {
         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16852);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16848);
         bool loc__1;
-    loc__1 = (bool)___ivy_choose(0,"loc:1",16852);
+    loc__1 = (bool)___ivy_choose(0,"loc:1",16848);
         ivyc_s1::ivy__expr loc__2;
         ivy__verb loc__3;
-    loc__3 = (ivy__verb)___ivy_choose(0,"loc:3",16852);
+    loc__3 = (ivy__verb)___ivy_choose(0,"loc:3",16848);
         {
             loc__0 = ext__ivy__app__is(s, vrb);
             {
@@ -32553,7 +32476,7 @@ ivyc_s1::cpp__decl ivyc_s1::ext__ivy__decl__to_cpp(ivyc_s1::ivy__decl s, ivy__to
 void ivyc_s1::ext__ivy__local_vec(const vector__ivy__expr__& es, bool val, ivy__flatst& st){
     {
         unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16856);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16852);
         {
             loc__idx = vector__ivy__expr____begin(es);
             while((loc__idx < vector__ivy__expr____end(es))){
@@ -32620,7 +32543,7 @@ void ivyc_s1::ext__ivy__push_pop_ident_set__push(ivy__push_pop_ident_set& s){
 void ivyc_s1::ext__ivy__structspec__to_destrs(const ivy__structspec& s, ivy__flatst& st, ivyc_s1::ivy__expr ty){
     {
         unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16867);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16863);
         {
             loc__idx = vector__ivy__expr____begin(s.destructors);
             while((loc__idx < vector__ivy__expr____end(s.destructors))){
@@ -32631,7 +32554,7 @@ void ivyc_s1::ext__ivy__structspec__to_destrs(const ivy__structspec& s, ivy__fla
                             loc__e = vector__ivy__expr____value(s.destructors,loc__idx);
                             {
                                 bool loc__old_has_root;
-    loc__old_has_root = (bool)___ivy_choose(0,"loc:old_has_root",16865);
+    loc__old_has_root = (bool)___ivy_choose(0,"loc:old_has_root",16861);
                                 {
                                     loc__old_has_root = st.has_root;
                                     {
@@ -32857,7 +32780,7 @@ ivyc_s1::str ivyc_s1::ext__ivy__strident__to_str(const ivy__strident& s){
                     ext__str__extend(b, __lit<str>("< "));
                     {
                         unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16871);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16867);
                         {
                             loc__idx = vector__ivy__ident____begin(s.subscrs);
                             while((loc__idx < vector__ivy__ident____end(s.subscrs))){
@@ -32904,7 +32827,7 @@ ivyc_s1::str ivyc_s1::ext__ivy__strident__to_str(const ivy__strident& s){
         else {
             {
                 unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16873);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16869);
                 {
                     loc__idx = vector__ivy__ident____begin(s.subscrs);
                     while((loc__idx < vector__ivy__ident____end(s.subscrs))){
@@ -32994,7 +32917,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__symbol__makenum(unsigned long long num, iv
     ivyc_s1::ivy__expr res;
     {
         ivy__symbol loc__s;
-    loc__s.vrb = (ivy__verb)___ivy_choose(0,"loc:s",16874);
+    loc__s.vrb = (ivy__verb)___ivy_choose(0,"loc:s",16870);
         {
             loc__s.name = ext__ivy__numident__make(num);
             loc__s.vrb = ivy__verb__none;
@@ -33066,7 +32989,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__symbol__type_decorate(const ivy__symbol& e
             else {
                 {
                     bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16879);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16875);
                     {
                         loc__0 = ext__ivy__symeval__mem(st.ty, e.name);
                         if(loc__0){
@@ -33114,7 +33037,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_decorate(const ivy__app& e, ivy_
                 {
                     {
                         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16894);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16890);
                         {
                             loc__0 = ext__ivy__app__is(e, ivy__verb__colon);
                             if(loc__0){
@@ -33148,7 +33071,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_decorate(const ivy__app& e, ivy_
                             else {
                                 {
                                     bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16893);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16889);
                                     {
                                         loc__0 = ext__ivy__app__is(e, ivy__verb__dot);
                                         if(loc__0){
@@ -33243,7 +33166,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_decorate(const ivy__app& e, ivy_
                                         else {
                                             {
                                                 bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16892);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16888);
                                                 {
                                                     loc__0 = ext__ivy__app__is(e, ivy__verb__isav);
                                                     if(loc__0){
@@ -33281,7 +33204,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_decorate(const ivy__app& e, ivy_
                                                                         {
                                                                             {
                                                                                 unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16889);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16885);
                                                                                 {
                                                                                     loc__idx = vector__ivy__expr____begin(e.args);
                                                                                     while((loc__idx < vector__ivy__expr____end(e.args))){
@@ -33595,12 +33518,12 @@ ivyc_s1::ivy__ident ivyc_s1::ext__ivy__make_auto_key(ivyc_s1::ivy__ident id, boo
                     loc__skey = loc__0;
                     {
                         unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16907);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16903);
                         {
                             loc__idx = vector__ivy__ident____begin(loc__skey.subscrs);
                             {
                                 unsigned long long loc__num;
-    loc__num = (unsigned long long)___ivy_choose(0,"loc:num",16906);
+    loc__num = (unsigned long long)___ivy_choose(0,"loc:num",16902);
                                 {
                                     loc__num = 0;
                                     while((loc__idx < vector__ivy__ident____end(loc__skey.subscrs))){
@@ -33702,7 +33625,7 @@ void ivyc_s1::ext__ivy__local_tracker__add_var(ivy__local_tracker& s, ivyc_s1::i
     {
         {
             bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16912);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16908);
             ivyc_s1::ivy__expr loc__1;
             {
                 {
@@ -33884,7 +33807,7 @@ void ivyc_s1::ext__ivy__undefined__encode(const ivy__undefined& e, pretty& b){
 void ivyc_s1::ext__ivy__structspec__defd(const ivy__structspec& s, ivy__flatst& st, ivyc_s1::ivy__ident id){
     {
         unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16919);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16915);
         {
             loc__idx = vector__ivy__expr____begin(s.destructors);
             while((loc__idx < vector__ivy__expr____end(s.destructors))){
@@ -33978,12 +33901,12 @@ ivyc_s1::cpp__stmt ivyc_s1::ext__cpp__sequence__fold_right(const vector__cpp__st
     if((0 < vector__cpp__stmt____end(args))){
         {
             unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16921);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16917);
             {
                 loc__0 = ext__vector__cpp__stmt____domain__prev(vector__cpp__stmt____end(args));
                 {
                     unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16920);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16916);
                     {
                         loc__idx = loc__0;
                         res = vector__cpp__stmt____value(args,loc__idx);
@@ -34004,24 +33927,24 @@ void ivyc_s1::ext__ivy__actdc__record_prototypes(const ivy__actdc& s, ivy__tocpp
     {
         {
             ivy__prototype loc__0;
-    loc__0.has_ret = (bool)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.is_input = (bool)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.inpos = (unsigned long long)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.is_output = (bool)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.outpos = (unsigned long long)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.is_ref = (bool)___ivy_choose(0,"loc:0",16924);
-    loc__0.ret.is_const = (bool)___ivy_choose(0,"loc:0",16924);
+    loc__0.has_ret = (bool)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.is_input = (bool)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.inpos = (unsigned long long)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.is_output = (bool)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.outpos = (unsigned long long)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.is_ref = (bool)___ivy_choose(0,"loc:0",16920);
+    loc__0.ret.is_const = (bool)___ivy_choose(0,"loc:0",16920);
             {
                 loc__0 = ext__ivy__actdc__get_proto(s);
                 {
                     ivy__prototype loc__proto;
-    loc__proto.has_ret = (bool)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.is_input = (bool)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.inpos = (unsigned long long)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.is_output = (bool)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.outpos = (unsigned long long)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.is_ref = (bool)___ivy_choose(0,"loc:proto",16923);
-    loc__proto.ret.is_const = (bool)___ivy_choose(0,"loc:proto",16923);
+    loc__proto.has_ret = (bool)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.is_input = (bool)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.inpos = (unsigned long long)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.is_output = (bool)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.outpos = (unsigned long long)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.is_ref = (bool)___ivy_choose(0,"loc:proto",16919);
+    loc__proto.ret.is_const = (bool)___ivy_choose(0,"loc:proto",16919);
                     {
                         loc__proto = loc__0;
                         {
@@ -34140,7 +34063,7 @@ ivyc_s1::ivy__type_context__stack_entry ivyc_s1::ext__vector__ivy__type_context_
     {
         {
             unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16927);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16923);
             {
                 loc__0 = ext__vector__ivy__type_context__stack_entry____domain__prev(vector__ivy__type_context__stack_entry____end(a));
                 res = vector__ivy__type_context__stack_entry____value(a,loc__0);
@@ -34163,7 +34086,7 @@ void ivyc_s1::ext__read_string_literal(pstate& st){
         while((st.ok && (st.p < str__end(st.b)) && !(str__value(st.b,st.p) == 34))){
             {
                 int loc__chr;
-    loc__chr = (int)___ivy_choose(0,"loc:chr",16928);
+    loc__chr = (int)___ivy_choose(0,"loc:chr",16924);
                 {
                     loc__chr = str__value(st.b,st.p);
                     if((loc__chr == 92)){
@@ -34252,7 +34175,7 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_fill_in(const ivy__app& e, ivy__
                     {
                         {
                             unsigned long long loc__idx;
-    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16932);
+    loc__idx = (unsigned long long)___ivy_choose(0,"loc:idx",16928);
                             {
                                 loc__idx = vector__ivy__expr____begin(e.args);
                                 while((loc__idx < vector__ivy__expr____end(e.args))){
@@ -34285,13 +34208,13 @@ ivyc_s1::ivy__expr ivyc_s1::ext__ivy__app__type_fill_in(const ivy__app& e, ivy__
                                 }
                                 {
                                     bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16931);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16927);
                                     {
                                         loc__0 = ext__ivy__app__is(e, ivy__verb__colon);
                                         if(loc__0){
                                             {
                                                 bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16930);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16926);
                                                 {
                                                     {
                                                         ivy__app self__COLON__ivy__app;
@@ -34396,12 +34319,12 @@ ivyc_s1::cpp__symbol ivyc_s1::ext__ivy__symbol__to_cpp_int(const ivy__symbol& s,
     {
         {
             ivy__verb loc__0;
-    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16940);
+    loc__0 = (ivy__verb)___ivy_choose(0,"loc:0",16936);
             {
                 loc__0 = ext__ivy__symbol__get_verb(s);
                 {
                     ivy__verb loc__vrb;
-    loc__vrb = (ivy__verb)___ivy_choose(0,"loc:vrb",16939);
+    loc__vrb = (ivy__verb)___ivy_choose(0,"loc:vrb",16935);
                     {
                         loc__vrb = loc__0;
                         if((loc__vrb == ivy__verb__not)){
@@ -34433,7 +34356,7 @@ ivyc_s1::cpp__symbol ivyc_s1::ext__ivy__symbol__to_cpp_int(const ivy__symbol& s,
                                                         loc__id = s.name;
                                                         {
                                                             bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16936);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16932);
                                                             {
                                                                 loc__0 = ext__ivy__local_tracker__mem(st.locals, loc__id);
                                                                 if(!loc__0){
@@ -34644,28 +34567,28 @@ void ivyc_s1::ext__pretty__add_length(pretty& self, unsigned long long len, unsi
         if((self.st.begin < at)){
             {
                 unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16947);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16943);
                 {
                     loc__0 = ext__vector__pretty__token____domain__prev(at);
                     {
                         pretty__token loc__prev;
-    loc__prev.pair = (bool)___ivy_choose(0,"loc:prev",16946);
-    loc__prev.tdepth = (unsigned long long)___ivy_choose(0,"loc:prev",16946);
-    loc__prev.second = (unsigned long long)___ivy_choose(0,"loc:prev",16946);
+    loc__prev.pair = (bool)___ivy_choose(0,"loc:prev",16942);
+    loc__prev.tdepth = (unsigned long long)___ivy_choose(0,"loc:prev",16942);
+    loc__prev.second = (unsigned long long)___ivy_choose(0,"loc:prev",16942);
                         {
                             loc__prev = vector__pretty__token____value(self.tokens,loc__0);
                             if(loc__prev.pair){
                                 {
                                     pretty__token loc__newtok;
-    loc__newtok.pair = (bool)___ivy_choose(0,"loc:newtok",16945);
-    loc__newtok.tdepth = (unsigned long long)___ivy_choose(0,"loc:newtok",16945);
-    loc__newtok.second = (unsigned long long)___ivy_choose(0,"loc:newtok",16945);
+    loc__newtok.pair = (bool)___ivy_choose(0,"loc:newtok",16941);
+    loc__newtok.tdepth = (unsigned long long)___ivy_choose(0,"loc:newtok",16941);
+    loc__newtok.second = (unsigned long long)___ivy_choose(0,"loc:newtok",16941);
                                     {
                                         loc__newtok = loc__prev;
                                         loc__newtok.second = (loc__newtok.second + len);
                                         {
                                             unsigned long long loc__0;
-    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16944);
+    loc__0 = (unsigned long long)___ivy_choose(0,"loc:0",16940);
                                             {
                                                 loc__0 = ext__vector__pretty__token____domain__prev(at);
                                                 ext__vector__pretty__token____set(self.tokens, loc__0, loc__newtok);
@@ -34684,7 +34607,7 @@ void ivyc_s1::ext__pretty__add_length(pretty& self, unsigned long long len, unsi
 void ivyc_s1::ext__ivy__auto_defd(ivyc_s1::ivy__expr s, ivy__flatst& st){
     {
         bool loc__0;
-    loc__0 = (bool)___ivy_choose(0,"loc:0",16949);
+    loc__0 = (bool)___ivy_choose(0,"loc:0",16945);
         {
             {
                 ivy__app self__COLON__ivy__app;

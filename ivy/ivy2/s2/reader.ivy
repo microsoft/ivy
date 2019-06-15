@@ -76,14 +76,19 @@ object ivy = { ...
                     while idx < p.decls.end & errors.end = 0 {
                         var d := p.decls.value(idx);
                         if d isa includedc {
-                            var iname := d.get_expr.get_name;
-                            if ~rst.have_read.mem(iname) {
-                                var fname := find_include(iname.to_str);
-                                var subp : prog;
-                                (subp,rst) := read_file_int(fname,d.get_ann,subp,rst);
-                                p.decls := p.decls.set(idx,groupdc.make(subp.decls));
-                                rst.have_read := rst.have_read.set(iname,true);
-                            }
+			    var sname := d.get_expr;
+			    if ~(sname isa symbol) {
+				call report_error(bad_syntax.make(sname),sname.get_ann);
+			    } else {
+				var iname := sname.get_name;
+				if ~rst.have_read.mem(iname) {
+				    var fname := find_include(iname.to_str);
+				    var subp : prog;
+				    (subp,rst) := read_file_int(fname,d.get_ann,subp,rst);
+				    p.decls := p.decls.set(idx,groupdc.make(subp.decls));
+				    rst.have_read := rst.have_read.set(iname,true);
+				}
+			    }
                         };
                         idx := idx.next
                     }

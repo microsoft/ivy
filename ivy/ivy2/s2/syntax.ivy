@@ -94,7 +94,8 @@ object pretty = {
 	output : str,
 	space : pos,
         depth : pos,
-        cppstyle : bool
+        cppstyle : bool,
+	annots : (str * pos -> bool)
     }
     
     action make(maxline:pos,indent:pos) returns (res:this) = {
@@ -238,15 +239,19 @@ object annot_i = {
     }
     action encode(s:this,b:pretty) returns (b:pretty) = {
         if 0 < s.comments.end {
-            b := b.newline;
-        };
-        var idx := s.comments.begin;
-        while idx < s.comments.end {
-            b := b.extend("//" if b.cppstyle else "#");
-	    b := b.extend(s.comments.value(idx));
-            b := b.newline;
-            idx := idx.next;
-        }
+	    if ~b.annots(s.file,s.line) {
+		b := b.newline;
+		var idx := s.comments.begin;
+		while idx < s.comments.end {
+		    b := b.extend("//" if b.cppstyle else "#");
+		    b := b.extend(s.comments.value(idx));
+		    b := b.newline;
+		    idx := idx.next;
+		}
+		b := b.newline;
+		b.annots(s.file,s.line) := true;
+	    }
+	}
     }    
     action strip(s:this) returns (res:annot) = {
 	var news := s;

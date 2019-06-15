@@ -652,6 +652,15 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace redefining
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
     namespace wrong_number_params
     {
         struct __t;
@@ -662,6 +671,15 @@ namespace ivy
 namespace ivy
 {
     namespace syntax_error
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
     {
         struct __t;
         
@@ -743,6 +761,24 @@ namespace ivy
 namespace ivy
 {
     namespace ident_to_instantiatedc
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        struct rec;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
     {
         struct __t;
         
@@ -2149,6 +2185,8 @@ namespace pretty
         
         __bool cppstyle;
         
+        ivy::vector< __bool,str::__t,pos::__t > annots;
+        
         void do_indent ();
         
         void print  (const pretty::token &tok);
@@ -2178,7 +2216,7 @@ namespace pretty
             return tokens == other . tokens & st == other . st & maxline == other . maxline & indent
                 == other . indent & whitespace == other . whitespace & states == other . states &
                 stack == other . stack & output == other . output & space == other . space & depth
-                == other . depth & cppstyle == other . cppstyle;
+                == other . depth & cppstyle == other . cppstyle & annots == other . annots;
         }
         ivy::native_bool operator !=  (const __t &other) const {
             return ! ((*this) == other);
@@ -2188,7 +2226,7 @@ namespace pretty
             return tokens . __is_zero() & st . __is_zero() & maxline . __is_zero() &
                 indent . __is_zero() & whitespace . __is_zero() & states . __is_zero() &
                 stack . __is_zero() & output . __is_zero() & space . __is_zero() &
-                depth . __is_zero() & cppstyle . __is_zero();
+                depth . __is_zero() & cppstyle . __is_zero() & annots . __is_zero();
         }
         struct __hash
         {
@@ -2200,7 +2238,8 @@ namespace pretty
                     vector__pretty__state::__t::__hash() (x . states) +
                     vector__pos::__t::__hash() (x . stack) + str::__t::__hash() (x . output) +
                     pos::__t::__hash() (x . space) + pos::__t::__hash() (x . depth) +
-                    __bool::__hash() (x . cppstyle);
+                    __bool::__hash() (x . cppstyle) +
+                    ivy::vector< __bool,str::__t,pos::__t >::__hash() (x . annots);
             }
         };
         
@@ -7001,7 +7040,7 @@ namespace ivy
             
             void encode  (pretty::__t &b,const priority::__t &prio) const;
             
-            void setup  (ivy::flatst::__t &st,ivy::moduledc::__t &mod) const;
+            void setup  (ivy::flatst::__t &st,const __bool &check,ivy::moduledc::__t &mod) const;
             
             void flat  (ivy::flatst::__t &st) const;
             
@@ -8007,6 +8046,63 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace redefining
+    {
+        struct __t : ivy::error::__t
+        {
+            ivy::ptr< ivy::ident::__t > n;
+            
+            ivy::ptr< annot::__t > ann;
+            
+            void encode  (pretty::__t &b) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return n == other . n & ann == other . ann;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return n . __is_zero() & ann . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::ident::__t >::__hash() (x . n) +
+                        ivy::ptr< annot::__t >::__hash() (x . ann);
+                }
+            };
+            
+            virtual ivy::ptr< ivy::error::__t > __upcast () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace redefining
+    {
+        ivy::redefining::__t make  (const ivy::ptr< ivy::ident::__t > &n,const ivy::ptr< annot::__t >
+            &ann);
+        
+    }
+    
+}
+namespace ivy
+{
     namespace wrong_number_params
     {
         struct __t : ivy::error::__t
@@ -8104,6 +8200,58 @@ namespace ivy
     namespace syntax_error
     {
         ivy::syntax_error::__t make  (const str::__t &tok);
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
+    {
+        struct __t : ivy::error::__t
+        {
+            ivy::ptr< ivy::expr::__t > e;
+            
+            void encode  (pretty::__t &b) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const {
+                return e == other . e;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return e . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::expr::__t >::__hash() (x . e);
+                }
+            };
+            
+            virtual ivy::ptr< ivy::error::__t > __upcast () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
+    {
+        ivy::bad_syntax::__t make  (const ivy::ptr< ivy::expr::__t > &e);
         
     }
     
@@ -8742,6 +8890,124 @@ namespace
 }
 namespace ivy
 {
+    namespace ident_to_annot
+    {
+        struct rec
+        {
+            __bool full;
+            
+            ivy::ptr< annot::__t > val;
+            
+             rec () {}
+             rec  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const rec &other) const
+            {
+                return full == other . full & val == other . val;
+            }
+            ivy::native_bool operator !=  (const rec &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return full . __is_zero() & val . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const rec &x) const
+                {
+                    return __bool::__hash() (x . full) + ivy::ptr< annot::__t >::__hash() (x . val);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        struct __t
+        {
+            ivy::vector< ivy::ident_to_annot::rec,ivy::ptr< ivy::ident::__t > > map;
+            
+            
+            // mutate a map a so that x in maps to y
+            void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< annot::__t > &y);
+            
+            
+            // get the value y such that x maps to z in a, else
+            // leave y unchanged.
+            void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< annot::__t > &y) const;
+            
+            
+            // return true if x maps to some value
+            __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
+            
+            
+            // remove a key x from the map
+            void remove  (const ivy::ptr< ivy::ident::__t > &x);
+            
+            ivy::ptr< annot::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const {
+                return map == other . map;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return map . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return
+                        ivy::vector< ivy::ident_to_annot::rec,ivy::ptr< ivy::ident::__t > >::__hash()
+                            (x . map);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+// return an empty map
+namespace 
+    // return an empty map
+    ivy
+{
+    
+    // return an empty map
+    namespace 
+        // return an empty map
+        ident_to_annot
+    {
+        
+        // return an empty map
+        ivy::ident_to_annot::__t empty ();
+        
+    }
+    
+}
+namespace ivy
+{
     namespace flatst
     {
         struct __t
@@ -8761,6 +9027,10 @@ namespace ivy
             ivy::ident_set::__t 
                 // The set of defined identifiers
                 defs;
+            
+            ivy::ident_to_annot::__t 
+                // The locations of definitions of traits (non-objects)
+                non_objects;
             
             __bool 
                 // True if the hierarchy root is set
@@ -8829,6 +9099,10 @@ namespace ivy
                     defs == other . 
                     // The set of defined identifiers
                     defs & 
+                    // The locations of definitions of traits (non-objects)
+                    non_objects == other . 
+                    // The locations of definitions of traits (non-objects)
+                    non_objects & 
                     // True if the hierarchy root is set
                     has_root == other . 
                     // True if the hierarchy root is set
@@ -8887,6 +9161,9 @@ namespace ivy
                         // The set of defined identifiers
                         defs . __is_zero() &
                     
+                        // The locations of definitions of traits (non-objects)
+                        non_objects . __is_zero() &
+                    
                         // True if the hierarchy root is set
                         has_root . __is_zero() & 
                         // The current hierarchy root
@@ -8931,6 +9208,9 @@ namespace ivy
                         ivy::ident_set::__t::__hash() (x . 
                             // The set of defined identifiers
                             defs) +
+                        ivy::ident_to_annot::__t::__hash() (x . 
+                            // The locations of definitions of traits (non-objects)
+                            non_objects) +
                         __bool::__hash() (x . 
                             // True if the hierarchy root is set
                             has_root) +
@@ -9006,7 +9286,8 @@ namespace ivy
 }
 namespace ivy
 {
-    void add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global);
+    void add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
+        __bool &is_object);
     
 }
 namespace ivy
@@ -9089,6 +9370,11 @@ namespace ivy
     void auto_flat  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st);
     
 }
+namespace ivy
+{
+    void check_syntax_symbol  (const ivy::ptr< ivy::expr::__t > &e);
+    
+}
 // Get the symbol that is typed in a typing. Examples:
 //
 // - in `x : t`, the typed symbol is `x`
@@ -9109,6 +9395,28 @@ namespace
     // - in `f(X:u) : t`, the typed symbol is `f`
     // - in `f(X:u)` the typed symbol is `f'
     ivy::ptr< ivy::expr::__t > get_typed_symbol  (const ivy::ptr< ivy::expr::__t > &typing);
+    
+}
+namespace ivy
+{
+    void is_typing_lhs_syntax  (const ivy::ptr< ivy::expr::__t > &lhs,__bool &res,ivy::ptr< ivy::expr::__t >
+        &bad);
+    
+}
+namespace ivy
+{
+    void is_typing_rhs_syntax  (const ivy::ptr< ivy::expr::__t > &rhs,__bool &res,ivy::ptr< ivy::expr::__t >
+        &bad);
+    
+}
+namespace ivy
+{
+    void check_syntax_typing  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &has_def);
+    
+}
+namespace ivy
+{
+    void check_syntax_symbol_vec  (const vector__ivy__expr::__t &s);
     
 }
 namespace ivy
@@ -16911,6 +17219,11 @@ namespace ivy
     void show_expr  (const ivy::ptr< ivy::expr::__t > &e);
     
 }
+namespace ivy
+{
+    void show_annot  (const ivy::ptr< annot::__t > &a);
+    
+}
 void usage ();
 __bool __char::__t::is_alphanum () const
 {
@@ -17813,18 +18126,24 @@ void vector__str::__t::reverse ()
 }
 void annot_i::__t::encode  (pretty::__t &b) const
 {
-    if (vector__str::domain::__t (0) < (*this) . comments . end) {
-        b . newline();
-    }
-    vector__str::domain::__t idx;
-    idx = (*this) . comments . begin();
-    while (idx < (*this) . comments . end)
+    if (vector__str::domain::__t (0) < (*this) . comments . end)
     {
-        b . extend (b . cppstyle ? ivy::from_str< str::__t > ("//") :
-                ivy::from_str< str::__t > ("#"));
-        b . extend ((*this) . comments . value (idx));
-        b . newline();
-        idx = idx . next();
+        if (! b . annots ((*this) . file,(*this) . line))
+        {
+            b . newline();
+            vector__str::domain::__t idx;
+            idx = (*this) . comments . begin();
+            while (idx < (*this) . comments . end)
+            {
+                b . extend (b . cppstyle ? ivy::from_str< str::__t > ("//") :
+                        ivy::from_str< str::__t > ("#"));
+                b . extend ((*this) . comments . value (idx));
+                b . newline();
+                idx = idx . next();
+            }
+            b . newline();
+            b . annots ((*this) . file,(*this) . line) = ivy::native_bool (true);
+        }
     }
 }
 ivy::ptr< annot::__t > annot_i::__t::strip () const
@@ -23298,6 +23617,24 @@ void ivy::undefined::__t::encode  (pretty::__t &b) const
     (*this) . n -> encode (b,priority::__t (0));
     b . newline();
 }
+ivy::redefining::__t ivy::redefining::make  (const ivy::ptr< ivy::ident::__t > &n,const ivy::ptr< annot::__t >
+    &ann) {
+    ivy::redefining::__t res;
+    {
+        res . n = n;
+        res . ann = ann;
+    }
+    return res;
+}
+void ivy::redefining::__t::encode  (pretty::__t &b) const
+{
+    b . extend (ivy::from_str< str::__t > ("Redefining "));
+    (*this) . n -> encode (b,priority::__t (0));
+    b . newline();
+    b . extend ((*this) . ann -> to_str());
+    b . extend (ivy::from_str< str::__t > (": previous definition"));
+    b . newline();
+}
 ivy::wrong_number_params::__t ivy::wrong_number_params::make  (const vector__ivy__expr::domain::__t
     &n) {
     ivy::wrong_number_params::__t res;
@@ -23320,6 +23657,19 @@ void ivy::syntax_error::__t::encode  (pretty::__t &b) const
     b . extend (ivy::from_str< str::__t > ("Syntax error at token"));
     b . extend (ivy::from_str< str::__t > (" "));
     b . extend ((*this) . tok);
+    b . newline();
+}
+ivy::bad_syntax::__t ivy::bad_syntax::make  (const ivy::ptr< ivy::expr::__t > &e)
+{
+    ivy::bad_syntax::__t res;
+    res . e = e;
+    return res;
+}
+void ivy::bad_syntax::__t::encode  (pretty::__t &b) const
+{
+    b . extend (ivy::from_str< str::__t > ("Syntax error at expression"));
+    b . extend (ivy::from_str< str::__t > (" "));
+    (*this) . e -> encode (b,priority::__t (0));
     b . newline();
 }
 str::__t env::get  (const str::__t &name) {
@@ -23397,19 +23747,27 @@ void ivy::prog::read_file_int  (const str::__t &name,const ivy::ptr< annot::__t 
                 d = p . decls . value (idx);
                 if (d . isa< ivy::includedc::__t >())
                 {
-                    ivy::ptr< ivy::ident::__t > iname;
-                    iname = d -> get_expr() -> get_name();
-                    if (! rst . have_read . mem (iname))
+                    ivy::ptr< ivy::expr::__t > sname;
+                    sname = d -> get_expr();
+                    if (! sname . isa< ivy::symbol::__t >())
                     {
-                        str::__t fname;
+                        ivy::report_error (ivy::bad_syntax::make (sname),sname -> get_ann());
+                    } else
+                    {
+                        ivy::ptr< ivy::ident::__t > iname;
+                        iname = sname -> get_name();
+                        if (! rst . have_read . mem (iname))
                         {
-                            fname = iname -> to_str();
-                            ivy::prog::find_include (fname);
+                            str::__t fname;
+                            {
+                                fname = iname -> to_str();
+                                ivy::prog::find_include (fname);
+                            }
+                            ivy::prog::__t subp;
+                            ivy::prog::read_file_int (fname,d -> get_ann(),subp,rst);
+                            p . decls . set (idx,ivy::groupdc::make (subp . decls));
+                            rst . have_read . set (iname,ivy::native_bool (true));
                         }
-                        ivy::prog::__t subp;
-                        ivy::prog::read_file_int (fname,d -> get_ann(),subp,rst);
-                        p . decls . set (idx,ivy::groupdc::make (subp . decls));
-                        rst . have_read . set (iname,ivy::native_bool (true));
                     }
                 }
                 idx = idx . next();
@@ -23833,6 +24191,65 @@ ivy::instantiatedc::__t ivy::ident_to_instantiatedc::__t::value  (const ivy::ptr
     y = (*this) . map (x) . val;
     return y;
 }
+// return an empty map
+ivy::ident_to_annot::__t ivy::ident_to_annot::empty () 
+// return an empty map
+{
+    
+    // return an empty map
+    ivy::ident_to_annot::__t a;
+    
+    // return an empty map
+    {}
+    
+    // return an empty map
+    return a;
+}
+// mutate a map a so that x in maps to y
+void ivy::ident_to_annot::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< annot::__t >
+    &y)
+{
+    ivy::ident_to_annot::rec z;
+    z . full = ivy::native_bool (true);
+    z . val = y;
+    (*this) . map (x) = z;
+}
+// get the value y such that x maps to z in a, else
+// leave y unchanged.
+void ivy::ident_to_annot::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< annot::__t > &y)
+    const {
+    ivy::ident_to_annot::rec z;
+    z = (*this) . map (x);
+    if (z . full) {
+        y = z . val;
+    }
+}
+// return true if x maps to some value
+__bool ivy::ident_to_annot::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
+// return true if x maps to some value
+{
+    
+    // return true if x maps to some value
+    __bool res;
+    
+    // return true if x maps to some value
+    res = (*this) . map (x) . full;
+    
+    // return true if x maps to some value
+    return res;
+}
+// remove a key x from the map
+void ivy::ident_to_annot::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
+{
+    ivy::ident_to_annot::rec z;
+    (*this) . map (x) = z;
+}
+ivy::ptr< annot::__t > ivy::ident_to_annot::__t::value  (const ivy::ptr< ivy::ident::__t > &x) const
+{
+    ivy::ptr< annot::__t > y;
+    y = (*this) . map (x) . val;
+    return y;
+}
 ivy::ident_to_ident::__t ivy::prm_map  (const vector__ivy__expr::__t &fml,const vector__ivy__expr::__t
     &act,const ivy::ptr< annot::__t > &ann)
 {
@@ -23978,17 +24395,29 @@ ivy::ptr< ivy::ident::__t > ivy::dotident::__t::flat  (const __bool &rhs,const i
     res = ivy::dotident::make ((*this) . namesp -> flat (rhs,st),(*this) . member);
     return res;
 }
-void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global)
+void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
+    __bool &is_object)
 {
     st . defining = ivy::native_bool (true);
     
     //        var id := s.get_name.flat(false,st);
     ivy::ptr< ivy::expr::__t > e;
     s -> flat (st,e);
+    ivy::check_syntax_symbol (e);
     ivy::ptr< ivy::ident::__t > id;
     id = e -> get_name();
     st . defining = ivy::native_bool (false);
     st . defs . set (id,ivy::native_bool (true));
+    if (! is_object)
+    {
+        if (st . non_objects . mem (id))
+        {
+            ivy::report_error (ivy::redefining::make (id,st . non_objects . value (id)),s -> get_ann());
+        }
+    }
+    if (! is_object) {
+        st . non_objects . set (id,s -> get_ann());
+    }
     if (is_global) {
         st . globals . set (id,ivy::native_bool (true));
     }
@@ -24308,7 +24737,7 @@ void ivy::actdc::__t::defd  (ivy::flatst::__t &st) const
     {
         st . absolute = ivy::native_bool (true);
     }
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (false));
     st . absolute = ivy::native_bool (false);
 }
 void ivy::initdc::__t::flat  (ivy::flatst::__t &st) const
@@ -24338,6 +24767,7 @@ void ivy::enumspec::__t::flat  (ivy::flatst::__t &st,ivy::ptr< ivy::typespec::__
     {
         ivy::ptr< ivy::expr::__t > e;
         e = t . constructors . value (idx);
+        ivy::check_syntax_symbol (e);
         {
             ivy::ptr< ivy::expr::__t > __tmp4;
             e -> flat (st,__tmp4);
@@ -24354,7 +24784,8 @@ void ivy::enumspec::__t::defd  (ivy::flatst::__t &st,const ivy::ptr< ivy::ident:
     idx = (*this) . constructors . begin();
     while (idx < (*this) . constructors . end)
     {
-        ivy::add_def ((*this) . constructors . value (idx),st,ivy::native_bool (false));
+        ivy::add_def ((*this) . constructors . value (idx),st,ivy::native_bool (false),ivy::native_bool
+                    (false));
         idx = idx . next();
     }
 }
@@ -24576,6 +25007,7 @@ void ivy::structspec::__t::to_destrs  (ivy::flatst::__t &st,const ivy::ptr< ivy:
             e -> flat (st,__tmp5);
             e = __tmp5;
         }
+        ivy::check_syntax_typing (e,ivy::native_bool (false));
         st . has_root = old_has_root;
         st . root = old_root;
         ivy::canon_typing (e);
@@ -24586,7 +25018,9 @@ void ivy::structspec::__t::to_destrs  (ivy::flatst::__t &st,const ivy::ptr< ivy:
             ivy::colon::make (e -> get_arg (vector__ivy__expr::domain::__t (0)),fty -> uncurry(),e
                     -> get_ann());
         ivy::ptr< ivy::decl::__t > dstr;
-        dstr = ivy::vardc::make (typing,ivy::native_bool (true),e -> get_ann());
+        dstr =
+            ivy::vardc::make (typing,ivy::native_bool (true),e -> get_arg (vector__ivy__expr::domain::__t
+                            (0)) -> get_ann());
         st . decls . append (dstr);
         idx = idx . next();
     }
@@ -24611,14 +25045,23 @@ ivy::ptr< ivy::expr::__t > ivy::expr::__t::uncurry () const
     }
     return res;
 }
+void ivy::check_syntax_symbol  (const ivy::ptr< ivy::expr::__t > &e)
+{
+    if (! e . isa< ivy::symbol::__t >())
+    {
+        ivy::report_error (ivy::bad_syntax::make (e),e -> get_ann());
+    }
+}
 void ivy::typedc::__t::flat  (ivy::flatst::__t &st) const
 {
     ivy::typedc::__t res;
     res = (*this);
     (*this) . sort -> flat (st,res . sort);
     res . has_super = (*this) . has_super;
-    if (res . has_super) {
+    if (res . has_super)
+    {
         (*this) . super -> flat (st,res . super);
+        ivy::check_syntax_symbol (res . super);
     }
     if (res . has_spec)
     {
@@ -24639,7 +25082,7 @@ void ivy::typedc::__t::flat  (ivy::flatst::__t &st) const
 }
 void ivy::typedc::__t::defd  (ivy::flatst::__t &st) const
 {
-    ivy::add_def ((*this) . sort,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . sort,st,ivy::native_bool (false),ivy::native_bool (false));
     if ((*this) . has_spec)
     {
         st . defining = ivy::native_bool (true);
@@ -24698,6 +25141,115 @@ ivy::ptr< ivy::expr::__t > ivy::get_typed_symbol  (const ivy::ptr< ivy::expr::__
     // - in `f(X:u)` the typed symbol is `f'
     return res;
 }
+void ivy::is_typing_lhs_syntax  (const ivy::ptr< ivy::expr::__t > &lhs,__bool &res,ivy::ptr< ivy::expr::__t >
+    &bad)
+{
+    res = ivy::native_bool (false);
+    bad = lhs;
+    if (lhs . isa< ivy::symbol::__t >()) {
+        res = ivy::native_bool (true);
+    } else
+    {
+        if (lhs . isa< ivy::app::__t >())
+        {
+            if (lhs -> get_func() . isa< ivy::symbol::__t >())
+            {
+                res = ivy::native_bool (true);
+                vector__ivy__expr::__t args;
+                args = lhs -> get_args();
+                vector__ivy__expr::domain::__t idx;
+                idx = args . begin();
+                while (res & idx < args . end)
+                {
+                    bad = args . value (idx);
+                    if (! bad -> is (ivy::verb::__t (ivy::verb::colon)))
+                    {
+                        res = ivy::native_bool (false);
+                    } else
+                    {
+                        ivy::ptr< ivy::expr::__t > v;
+                        v = bad -> get_arg (vector__ivy__expr::domain::__t (0));
+                        if (!
+                        (v . isa< ivy::symbol::__t >() & v -> get_verb() ==
+                            ivy::verb::__t (ivy::verb::logvar) &
+                            bad -> get_arg (vector__ivy__expr::domain::__t (1)) . isa< ivy::symbol::__t >()))
+                        {
+                            res = ivy::native_bool (false);
+                        }
+                    }
+                    idx = idx . next();
+                }
+            }
+        }
+    }
+}
+void ivy::is_typing_rhs_syntax  (const ivy::ptr< ivy::expr::__t > &rhs,__bool &res,ivy::ptr< ivy::expr::__t >
+    &bad)
+{
+    res = ivy::native_bool (false);
+    bad = rhs;
+    if (rhs . isa< ivy::symbol::__t >()) {
+        res = ivy::native_bool (true);
+    } else
+    {
+        if (rhs -> is (ivy::verb::__t (ivy::verb::arrow)))
+        {
+            res = ivy::native_bool (true);
+            vector__ivy__expr::__t dom;
+            dom = ivy::times::unfold_left (rhs -> get_arg (vector__ivy__expr::domain::__t (0)));
+            vector__ivy__expr::domain::__t idx;
+            idx = dom . begin();
+            while (res & idx < dom . end)
+            {
+                bad = dom . value (idx);
+                if (! bad . isa< ivy::symbol::__t >()) {
+                    res = ivy::native_bool (false);
+                }
+                idx = idx . next();
+            }
+            if (res & !
+            rhs -> get_arg (vector__ivy__expr::domain::__t (1)) . isa< ivy::symbol::__t >())
+            {
+                res = ivy::native_bool (false);
+                bad = rhs -> get_arg (vector__ivy__expr::domain::__t (1));
+            }
+        } else {
+            bad = rhs;
+        }
+    }
+}
+void ivy::check_syntax_typing  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &has_def)
+{
+    __bool ok;
+    ivy::ptr< ivy::expr::__t > bad;
+    if (typing -> is (ivy::verb::__t (ivy::verb::colon)))
+    {
+        ivy::is_typing_lhs_syntax (typing -> get_arg (vector__ivy__expr::domain::__t (0)),ok,bad);
+        if (ok)
+        {
+            if (typing -> get_arg (vector__ivy__expr::domain::__t (1)) -> is (ivy::verb::__t (ivy::verb::arrow))
+            & ! typing -> get_arg (vector__ivy__expr::domain::__t (0)) . isa< ivy::symbol::__t >())
+            {
+                ok = ivy::native_bool (false);
+                bad = typing -> get_arg (vector__ivy__expr::domain::__t (1));
+            } else
+            {
+                ivy::is_typing_rhs_syntax (typing -> get_arg (vector__ivy__expr::domain::__t (1)),ok,bad);
+            }
+        }
+    } else
+    {
+        if (has_def) {
+            ivy::is_typing_lhs_syntax (typing,ok,bad);
+        } else {
+            ok = ivy::native_bool (false);
+            bad = typing;
+        }
+    }
+    if (! ok) {
+        ivy::report_error (ivy::bad_syntax::make (bad),bad -> get_ann());
+    }
+}
 void ivy::vardc::__t::flat  (ivy::flatst::__t &st) const
 {
     ivy::vardc::__t t;
@@ -24711,6 +25263,7 @@ void ivy::vardc::__t::flat_int  (ivy::flatst::__t &st,ivy::vardc::__t &res) cons
     res . is_destructor = (*this) . is_destructor;
     (*this) . typing -> flat (st,res . typing);
     res . has_def = (*this) . has_def;
+    ivy::check_syntax_typing (res . typing,res . has_def);
     if (res . has_def) {
         (*this) . def -> flat (st,res . def);
     } else {
@@ -24720,7 +25273,8 @@ void ivy::vardc::__t::flat_int  (ivy::flatst::__t &st,ivy::vardc::__t &res) cons
 void ivy::vardc::__t::defd  (ivy::flatst::__t &st) const
 {
     ivy::auto_defd ((*this) . typing,st);
-    ivy::add_def (ivy::get_typed_symbol ((*this) . typing),st,ivy::native_bool (true));
+    ivy::add_def (ivy::get_typed_symbol ((*this) . typing),st,ivy::native_bool (true),ivy::native_bool
+                (false));
 }
 void ivy::header::__t::flat  (ivy::flatst::__t &st) const
 {
@@ -24743,20 +25297,35 @@ void ivy::interpdc::__t::flat  (ivy::flatst::__t &st) const
 void ivy::interpdc::__t::flat_int  (ivy::flatst::__t &st,ivy::interpdc::__t &res) const
 {
     (*this) . itype -> flat (st,res . itype);
+    ivy::check_syntax_symbol (res . itype);
     st . absolute = ivy::native_bool (true);
     (*this) . ctype -> flat (st,res . ctype);
+    ivy::check_syntax_symbol (res . ctype);
     st . absolute = ivy::native_bool (false);
+}
+void ivy::check_syntax_symbol_vec  (const vector__ivy__expr::__t &s)
+{
+    vector__ivy__expr::domain::__t idx;
+    idx = s . begin();
+    while (idx < s . end) {
+        ivy::check_syntax_symbol (s . value (idx));
+        idx = idx . next();
+    }
 }
 void ivy::moduledc::__t::defd  (ivy::flatst::__t &st) const
 {
     ivy::ptr< ivy::expr::__t > name;
     st . defining = ivy::native_bool (true);
     (*this) . name -> flat (st,name);
+    vector__ivy__expr::domain::__t idx;
+    idx = (*this) . prms . begin();
+    ivy::check_syntax_symbol_vec ((*this) . prms);
     st . defining = ivy::native_bool (false);
     st . moddecls . set (name -> get_name(),(*this));
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (false));
 }
-void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,ivy::moduledc::__t &mod) const
+void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,const __bool &check,ivy::moduledc::__t &mod)
+    const
 {
     ivy::ptr< ivy::expr::__t > name;
     vector__ivy__expr::__t prms;
@@ -24765,15 +25334,22 @@ void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,ivy::moduledc::__t &m
         prms = (*this) . prms;
         ivy::flat_exprvec (prms,st);
     }
-    mod = st . moddecls . get_def (name -> get_name(),(*this) . ann);
-    st . prmvals = ivy::prm_map (mod . prms,prms,(*this) . ann);
+    if (check) {
+        ivy::check_syntax_symbol (name);
+        ivy::check_syntax_symbol_vec (prms);
+    }
+    if (name . isa< ivy::symbol::__t >())
+    {
+        mod = st . moddecls . get_def (name -> get_name(),(*this) . ann);
+        st . prmvals = ivy::prm_map (mod . prms,prms,(*this) . ann);
+    }
 }
 void ivy::instantiatedc::__t::flat  (ivy::flatst::__t &st) const
 {
     ivy::moduledc::__t mod;
     ivy::ident_to_ident::__t old_prmvals;
     old_prmvals = st . prmvals;
-    (*this) . setup (st,mod);
+    (*this) . setup (st,ivy::native_bool (true),mod);
     mod . body -> flat (st);
     st . prmvals = old_prmvals;
 }
@@ -24782,13 +25358,15 @@ void ivy::instantiatedc::__t::defd  (ivy::flatst::__t &st) const
     ivy::moduledc::__t mod;
     ivy::ident_to_ident::__t old_prmvals;
     old_prmvals = st . prmvals;
-    (*this) . setup (st,mod);
+    (*this) . setup (st,ivy::native_bool (false),mod);
     mod . body -> defd (st);
     st . prmvals = old_prmvals;
 }
 void ivy::set_root  (ivy::flatst::__t &st,const ivy::ptr< ivy::expr::__t > &s)
 {
-    st . root = st . has_root ? s -> get_name() -> prefix (st . root) : s -> get_name();
+    ivy::ptr< ivy::expr::__t > root;
+    s -> flat (st,root);
+    st . root = root -> get_name();
     st . has_root = ivy::native_bool (true);
 }
 void ivy::objectdc::__t::flat  (ivy::flatst::__t &st) const
@@ -24808,7 +25386,7 @@ void ivy::objectdc::__t::flat  (ivy::flatst::__t &st) const
 }
 void ivy::objectdc::__t::defd  (ivy::flatst::__t &st) const
 {
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (true));
     __bool old_has_root;
     old_has_root = st . has_root;
     ivy::ptr< ivy::ident::__t > old_root;
@@ -32294,7 +32872,7 @@ void ivy::function_type  (const ivy::ptr< ivy::expr::__t > &ty,ivy::tocppst::__t
 {
     if (ty . isa< ivy::app::__t >())
     {
-        ivy::make_md_vector_type (ivy::arrow::unfold_left (ty -> get_arg (vector__ivy__expr::domain::__t
+        ivy::make_md_vector_type (ivy::times::unfold_left (ty -> get_arg (vector__ivy__expr::domain::__t
                             (0))),ty -> get_arg (vector__ivy__expr::domain::__t (1)),st,res);
     } else {
         ty -> to_cpp (st,res);
@@ -34149,6 +34727,9 @@ retcode::__t cmd::wait  (const pid::__t &s) {
 }
 void ivy::show_expr  (const ivy::ptr< ivy::expr::__t > &e) {
     stdio::writeln (e -> enc());
+}
+void ivy::show_annot  (const ivy::ptr< annot::__t > &a) {
+    stdio::writeln (a -> to_str());
 }
 void usage () {
     stdio::writeln (ivy::from_str< str::__t > ("usage: ivyc <file>.ivy"));

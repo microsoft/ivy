@@ -2946,7 +2946,6 @@ public:
     virtual ivyc_s1::annot ext__ivy__ifst__get_ann(const ivy__ifst& s);
     virtual void ext__vector__ivy__expr____append(vector__ivy__expr__& a, ivyc_s1::ivy__expr v);
     virtual void ext__ivy__actdc__reg_member(const ivy__actdc& s, ivy__tocppst& st);
-    virtual vector__ivy__expr__ ext__ivy__arrow__unfold_left(ivyc_s1::ivy__expr s);
     virtual ivyc_s1::ivy__ident ext__ivy__formal_ident(ivyc_s1::ivy__expr s);
     virtual void __init();
     virtual void ext__ivy__stmt__parse(pstate& st, int prio, ivyc_s1::ivy__stmt& res);

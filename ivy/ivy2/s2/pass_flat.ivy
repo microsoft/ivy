@@ -46,6 +46,7 @@ object ivy = { ...
     instance ident_to_moduledc : def_map(moduledc)
     instance ident_to_ident : hash_map(ident,ident)
     instance ident_to_instantiatedc : hash_map(ident,instantiatedc)
+    instance ident_to_annot : hash_map(ident,annot)
     
     object flatst = {
         type this = struct {
@@ -66,6 +67,10 @@ object ivy = { ...
 
             defs : ident_set,
             
+            # The locations of definitions of traits (non-objects)
+
+            non_objects : ident_to_annot,
+
             # True if the hierarchy root is set
 
             has_root : bool,
@@ -199,14 +204,23 @@ object ivy = { ...
     } 
 
 
-    action add_def(s:expr,st:flatst,is_global:bool) returns (st:flatst) = {
+    action add_def(s:expr,st:flatst,is_global:bool,is_object:bool) returns (st:flatst) = {
         st.defining := true;
 #        var id := s.get_name.flat(false,st);
 	var e : expr;
 	(e,st) := s.flat(st);
+	call check_syntax_symbol(e);
 	var id := e.get_name;
         st.defining := false;
         st.defs := st.defs.set(id,true);
+	if ~is_object {
+	    if st.non_objects.mem(id) {
+		call report_error(redefining.make(id,st.non_objects.value(id)),s.get_ann);
+	    }
+	}
+	if ~is_object {
+	    st.non_objects := st.non_objects.set(id,s.get_ann);
+	}
 	if is_global {
             st.globals := st.globals.set(id,true);
 	}	    
@@ -435,7 +449,7 @@ object ivy = { ...
 	    if s.kind = action_kind.external {
 		st.absolute := true;
 	    };
-            st := add_def(s.name,st,false);
+            st := add_def(s.name,st,false,false);
 	    st.absolute := false;
         }
     }
@@ -460,6 +474,7 @@ object ivy = { ...
             var idx := t.constructors.begin;
             while idx < t.constructors.end {
                 var e := t.constructors.value(idx);
+		call check_syntax_symbol(e);
                 (e,st) := e.flat(st);
                 t.constructors := t.constructors.set(idx,e);
                 idx := idx.next;
@@ -469,7 +484,7 @@ object ivy = { ...
         action defd(s:this,st:flatst,id:ident) returns (st:flatst) = {
             var idx := s.constructors.begin;
             while idx < s.constructors.end {
-                st := add_def(s.constructors.value(idx),st,false);
+                st := add_def(s.constructors.value(idx),st,false,false);
                 idx := idx.next;
             }
         }
@@ -636,12 +651,13 @@ object ivy = { ...
 		st.root := ty.get_name;
 		st.has_root := true;
                 (e,st) := e.flat(st);
+		call check_syntax_typing(e,false);
 		st.has_root := old_has_root;
 		st.root := old_root;
                 e := canon_typing(e);
                 var fty := arrow.make(ty,e.get_arg(1),e.get_ann);
                 var typing := colon.make(e.get_arg(0),fty.uncurry,e.get_ann);
-                var dstr := vardc.make(typing,true,e.get_ann);
+                var dstr := vardc.make(typing,true,e.get_arg(0).get_ann);
                 st.decls := st.decls.append(dstr);
                 idx := idx.next;
             }
@@ -664,6 +680,13 @@ object ivy = { ...
         }
     }
 
+    action check_syntax_symbol(e:expr) = {
+	if ~(e isa symbol) {
+	    call report_error(bad_syntax.make(e),e.get_ann);
+	}
+    }
+	
+
     object typedc = { ...
         action flat(s:this,st:flatst) returns (st:flatst) = {
             var res := s;
@@ -671,6 +694,7 @@ object ivy = { ...
             res.has_super := s.has_super;
             if res.has_super {
                 (res.super,st) := s.super.flat(st);
+		call check_syntax_symbol(res.super);
             };
             if res.has_spec {
                 if s.spec isa structspec {
@@ -688,7 +712,7 @@ object ivy = { ...
             }
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st := add_def(s.sort,st,false);
+            st := add_def(s.sort,st,false,false);
             if s.has_spec {
 		st.defining := true;
 		var id := s.sort.get_name.flat(false,st);
@@ -718,6 +742,81 @@ object ivy = { ...
 	}
     }
 
+    action is_typing_lhs_syntax(lhs:expr) returns (res:bool,bad:expr) = {
+	res := false;
+	bad := lhs;
+	if lhs isa symbol {
+	    res := true
+	} else if lhs isa app {
+	    if lhs.get_func isa symbol {
+                res := true;
+                var args := lhs.get_args;
+                var idx := args.begin;
+                while res & idx < args.end {
+		    bad := args.value(idx);
+                    if ~bad.is(verb.colon) {
+                        res := false;
+                    } else {
+			var v := bad.get_arg(0);
+			if ~(v isa symbol & v.get_verb = verb.logvar & (bad.get_arg(1) isa symbol)) {
+                            res := false;
+			}
+                    };
+		    idx := idx.next
+                }
+	    }
+	}
+    }
+
+    action is_typing_rhs_syntax(rhs:expr) returns (res:bool,bad:expr) = {
+	res := false;
+	bad := rhs;
+	if rhs isa symbol {
+	    res := true;
+	} else if rhs.is(verb.arrow) {
+	    res := true;
+	    var dom := times.unfold_left(rhs.get_arg(0));
+            var idx := dom.begin;
+            while res & idx < dom.end {
+		bad := dom.value(idx);
+                if ~(bad isa symbol) {
+                    res := false;
+                };
+		idx := idx.next
+	    }
+	    if res & ~(rhs.get_arg(1) isa symbol) {
+		res := false;
+		bad := rhs.get_arg(1);
+	    }
+	} else {
+	    bad := rhs
+	}
+    }
+    
+    action check_syntax_typing(typing:expr,has_def:bool) = {
+	var ok : bool;
+	var bad : expr;
+        if typing.is(verb.colon) {
+	    (ok,bad) := is_typing_lhs_syntax(typing.get_arg(0));
+	    if ok {
+		if typing.get_arg(1).is(verb.arrow) & ~(typing.get_arg(0) isa symbol) {
+		    ok := false;
+		    bad := typing.get_arg(1);
+		} else {
+		    (ok,bad) := is_typing_rhs_syntax(typing.get_arg(1));
+		}
+	    }
+	} else if has_def {
+	    (ok,bad) := is_typing_lhs_syntax(typing);
+	} else {
+	    ok := false;
+	    bad := typing;
+	};
+	if ~ok {
+	    call report_error(bad_syntax.make(bad),bad.get_ann);
+	}
+    }
+
     object vardc = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
@@ -725,6 +824,7 @@ object ivy = { ...
             res.is_destructor := s.is_destructor;
             (res.typing,st) := s.typing.flat(st);
             res.has_def := s.has_def;
+	    call check_syntax_typing(res.typing,res.has_def);
             if res.has_def {
                 (res.def,st) := s.def.flat(st);
             } else {
@@ -733,7 +833,7 @@ object ivy = { ...
 	}
         action defd(s:this,st:flatst) returns (st:flatst) = {
 	    st := auto_defd(s.typing,st);
-            st := add_def(get_typed_symbol(s.typing),st,true);
+            st := add_def(get_typed_symbol(s.typing),st,true,false);
         }
     }
 
@@ -748,51 +848,71 @@ object ivy = { ...
         instantiate generic_flat(this,decl)
 	action flat_int(s:this,st:flatst) returns (res:this,st:flatst) = {
             (res.itype,st) := s.itype.flat(st);
+	    call check_syntax_symbol(res.itype);
 	    st.absolute := true;
             (res.ctype,st) := s.ctype.flat(st);
+	    call check_syntax_symbol(res.ctype);
 	    st.absolute := false;
 	}
     }
 
+    action check_syntax_symbol_vec(s:vector[expr]) = {
+	var idx := s.begin;
+	while idx < s.end {
+	    call check_syntax_symbol(s.value(idx));
+	    idx := idx.next
+	}
+    }
+    
     object moduledc = { ...
         action defd(s:this,st:flatst) returns (st:flatst) = {
             var name : expr;
             st.defining := true;
             (name,st) := s.name.flat(st);
+	    var idx := s.prms.begin;
+	    call check_syntax_symbol_vec(s.prms);
             st.defining := false;
             st.moddecls := st.moddecls.set(name.get_name,s);
-            st := add_def(s.name,st,false);
+            st := add_def(s.name,st,false,false);
         }
     }
 
     object instantiatedc = { ...
-        action setup(s:this,st:flatst) returns (mod:moduledc,st:flatst) = {
+        action setup(s:this,st:flatst,check:bool) returns (mod:moduledc,st:flatst) = {
             var name : expr;
             var prms : vector[expr];
             (name,st) := s.name.flat(st);
             (prms,st) := flat_exprvec(s.prms,st);
-            mod := st.moddecls.get_def(name.get_name,s.ann);
-            st.prmvals := prm_map(mod.prms,prms,s.ann);
+	    if check {
+		call check_syntax_symbol(name);
+		call check_syntax_symbol_vec(prms);
+	    };
+	    if name isa symbol {
+		mod := st.moddecls.get_def(name.get_name,s.ann);
+		st.prmvals := prm_map(mod.prms,prms,s.ann);
+	    }
         }
 
         action flat(s:this,st:flatst) returns (st:flatst) = {
             var mod : moduledc;
             var old_prmvals := st.prmvals;
-            (mod,st) := s.setup(st);
+            (mod,st) := s.setup(st,true);
             st := mod.body.flat(st);
             st.prmvals := old_prmvals;
         }
         action defd(s:this,st:flatst) returns (st:flatst) = {
             var mod : moduledc;
             var old_prmvals := st.prmvals;
-            (mod,st) := s.setup(st);
+            (mod,st) := s.setup(st,false);
             st := mod.body.defd(st);
             st.prmvals := old_prmvals;
         }
     }
 
     action set_root(st:flatst,s:expr) returns (st:flatst) = {
-        st.root := s.get_name.prefix(st.root) if st.has_root else s.get_name;
+	var root : expr;
+	(root,st) := s.flat(st);
+        st.root := root.get_name;
         st.has_root := true;
     }
 
@@ -810,7 +930,7 @@ object ivy = { ...
             st.root := old_root;
         }
         action defd(s:this,st:flatst) returns (st:flatst) = {
-            st := add_def(s.name,st,false);
+            st := add_def(s.name,st,false,true);
             var old_has_root := st.has_root;
             var old_root := st.root;
             st := set_root(st,s.name);

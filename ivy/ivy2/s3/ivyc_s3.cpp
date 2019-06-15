@@ -652,6 +652,15 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace redefining
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
     namespace wrong_number_params
     {
         struct __t;
@@ -662,6 +671,15 @@ namespace ivy
 namespace ivy
 {
     namespace syntax_error
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
     {
         struct __t;
         
@@ -743,6 +761,24 @@ namespace ivy
 namespace ivy
 {
     namespace ident_to_instantiatedc
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        struct rec;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
     {
         struct __t;
         
@@ -1348,12 +1384,8 @@ namespace ivy
     
 }
 // A pair consisting of an lvalue and an alias count
-namespace 
-    // A pair consisting of an lvalue and an alias count
-    ivy
+namespace ivy
 {
-    
-    // A pair consisting of an lvalue and an alias count
     struct lvalue_count;
     
 }
@@ -1615,47 +1647,57 @@ namespace str
         // We have two destructors (fields) representing the array
         // contents. The `value` field is represented using a dense
         // encoding, which means the C++ type `std::vector<range>`.
+        
         ivy::vector< __char::__t,pos::__t > value;
         
         pos::__t end;
         
         
         // The `begin` action always returns 0.
+        
         pos::__t begin () const;
         
         
         // The `set` action sets an element of an array
+        
         void set  (const pos::__t &i,const __char::__t &v);
         
         
         // The `append` action appends one character `c` to a array.
+        
         void append  (const __char::__t &c);
         
         
         // The `extend` action appends a array `x` to a array `s`.
+        
         void extend  (const str::__t &x);
         
         
         // The `resize` action sets the end marker of the string. 
+        
         void resize  (const pos::__t &end);
         
         
         // The `back` action returns the last element of an array, or zero
         // if the array is empty.
+        
         __char::__t back () const;
         
         
         // The `back` action removes he last element of the array, if the
         // array is not empty.
+        
         void pop_back ();
         
         
         // The `segment` action gets the segment of an array from index `beg` to
         // index `en-1`.
+        
         str::__t segment  (const pos::__t &beg,const pos::__t &en) const;
         
         
         // The `reverse` action reverses an array.
+        
         void reverse ();
         
         void encode  (pretty::__t &b) const;
@@ -1691,12 +1733,8 @@ namespace str
     
 }
 // The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    str
+namespace str
 {
-    
-    // The `empty` action returns an empty array
     str::__t empty ();
     
 }
@@ -1771,52 +1809,27 @@ namespace vector__pretty__token
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< pretty::token,vector__pretty__token::domain::__t > value;
         
         vector__pretty__token::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__pretty__token::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__pretty__token::domain::__t &i,const pretty::token &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const pretty::token &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__pretty__token::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__pretty__token::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         pretty::token back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__pretty__token::__t segment  (const vector__pretty__token::domain::__t &beg,const
             vector__pretty__token::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -1850,13 +1863,8 @@ namespace vector__pretty__token
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__pretty__token
+namespace vector__pretty__token
 {
-    
-    // The `empty` action returns an empty array
     vector__pretty__token::__t empty ();
     
 }
@@ -1929,52 +1937,27 @@ namespace vector__pretty__state
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< pretty::state,vector__pretty__state::domain::__t > value;
         
         vector__pretty__state::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__pretty__state::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__pretty__state::domain::__t &i,const pretty::state &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const pretty::state &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__pretty__state::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__pretty__state::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         pretty::state back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__pretty__state::__t segment  (const vector__pretty__state::domain::__t &beg,const
             vector__pretty__state::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -2008,13 +1991,8 @@ namespace vector__pretty__state
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__pretty__state
+namespace vector__pretty__state
 {
-    
-    // The `empty` action returns an empty array
     vector__pretty__state::__t empty ();
     
 }
@@ -2044,52 +2022,27 @@ namespace vector__pos
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< pos::__t,vector__pos::domain::__t > value;
         
         vector__pos::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__pos::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__pos::domain::__t &i,const pos::__t &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const pos::__t &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__pos::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__pos::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         pos::__t back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__pos::__t segment  (const vector__pos::domain::__t &beg,const vector__pos::domain::__t
             &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -2122,13 +2075,8 @@ namespace vector__pos
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__pos
+namespace vector__pos
 {
-    
-    // The `empty` action returns an empty array
     vector__pos::__t empty ();
     
 }
@@ -2157,6 +2105,8 @@ namespace pretty
         pos::__t depth;
         
         __bool cppstyle;
+        
+        ivy::vector< __bool,str::__t,pos::__t > annots;
         
         void do_indent ();
         
@@ -2187,7 +2137,7 @@ namespace pretty
             return tokens == other . tokens & st == other . st & maxline == other . maxline & indent
                 == other . indent & whitespace == other . whitespace & states == other . states &
                 stack == other . stack & output == other . output & space == other . space & depth
-                == other . depth & cppstyle == other . cppstyle;
+                == other . depth & cppstyle == other . cppstyle & annots == other . annots;
         }
         ivy::native_bool operator !=  (const __t &other) const {
             return ! ((*this) == other);
@@ -2197,7 +2147,7 @@ namespace pretty
             return tokens . __is_zero() & st . __is_zero() & maxline . __is_zero() &
                 indent . __is_zero() & whitespace . __is_zero() & states . __is_zero() &
                 stack . __is_zero() & output . __is_zero() & space . __is_zero() &
-                depth . __is_zero() & cppstyle . __is_zero();
+                depth . __is_zero() & cppstyle . __is_zero() & annots . __is_zero();
         }
         struct __hash
         {
@@ -2209,7 +2159,8 @@ namespace pretty
                     vector__pretty__state::__t::__hash() (x . states) +
                     vector__pos::__t::__hash() (x . stack) + str::__t::__hash() (x . output) +
                     pos::__t::__hash() (x . space) + pos::__t::__hash() (x . depth) +
-                    __bool::__hash() (x . cppstyle);
+                    __bool::__hash() (x . cppstyle) +
+                    ivy::vector< __bool,str::__t,pos::__t >::__hash() (x . annots);
             }
         };
         
@@ -2288,52 +2239,27 @@ namespace vector__str
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< str::__t,vector__str::domain::__t > value;
         
         vector__str::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__str::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__str::domain::__t &i,const str::__t &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const str::__t &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__str::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__str::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         str::__t back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__str::__t segment  (const vector__str::domain::__t &beg,const vector__str::domain::__t
             &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -2366,13 +2292,8 @@ namespace vector__str
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__str
+namespace vector__str
 {
-    
-    // The `empty` action returns an empty array
     vector__str::__t empty ();
     
 }
@@ -2394,6 +2315,7 @@ namespace annot_i
         // Convert an annotation to a string for error reporting
         // purposes. We count line internally from zero, but in messages
         // they start from one.
+        
         str::__t to_str () const;
         
          __t () {}
@@ -2530,37 +2452,21 @@ namespace stdio
 }
 // The `write` action writes a string to standard output followed
 // by newline.
-namespace 
-    // The `write` action writes a string to standard output followed
-    // by newline.
-    stdio
+namespace stdio
 {
-    
-    // The `write` action writes a string to standard output followed
-    // by newline.
     void writeln  (const str::__t &s);
     
 }
 // The `read` action from standard input untio EOF.
-namespace 
-    // The `read` action from standard input untio EOF.
-    stdio
+namespace stdio
 {
-    
-    // The `read` action from standard input untio EOF.
     str::__t read ();
     
 }
 // The `readln` action reads a line from standard input, returning
 // the line without any terminating newline character.
-namespace 
-    // The `readln` action reads a line from standard input, returning
-    // the line without any terminating newline character.
-    stdio
+namespace stdio
 {
-    
-    // The `readln` action reads a line from standard input, returning
-    // the line without any terminating newline character.
     str::__t readln ();
     
 }
@@ -2625,22 +2531,8 @@ namespace ivy
 // the verb of a symbol from its name by looking it up in
 // `str_to_verb`. The default is `none`, which indicates a
 // program-defined symbol.
-namespace 
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
-    ivy
+namespace ivy
 {
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     __bool is_logvar_name  (const str::__t &name);
     
 }
@@ -2736,52 +2628,27 @@ namespace vector__ivy__ident
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< ivy::ident::__t >,vector__ivy__ident::domain::__t > value;
         
         vector__ivy__ident::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__ident::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__ident::domain::__t &i,const ivy::ptr< ivy::ident::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< ivy::ident::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__ident::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__ident::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< ivy::ident::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__ident::__t segment  (const vector__ivy__ident::domain::__t &beg,const
             vector__ivy__ident::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -2815,13 +2682,8 @@ namespace vector__ivy__ident
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__ident
+namespace vector__ivy__ident
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__ident::__t empty ();
     
 }
@@ -3070,6 +2932,7 @@ namespace ivy
             
             // Tests whether two expressions are syntacically equal,
             // leaving aside annotations.
+            
             virtual __bool eq  (const ivy::ptr< ivy::expr::__t > &e2) const;
             
             virtual ivy::ptr< ivy::expr::__t > reduce  (const ivy::symeval::__t &smap) const;
@@ -3299,52 +3162,27 @@ namespace vector__ivy__expr
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< ivy::expr::__t >,vector__ivy__expr::domain::__t > value;
         
         vector__ivy__expr::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__expr::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__expr::domain::__t &i,const ivy::ptr< ivy::expr::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< ivy::expr::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__expr::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__expr::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< ivy::expr::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__expr::__t segment  (const vector__ivy__expr::domain::__t &beg,const
             vector__ivy__expr::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -3378,13 +3216,8 @@ namespace vector__ivy__expr
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__expr
+namespace vector__ivy__expr
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__expr::__t empty ();
     
 }
@@ -3629,22 +3462,10 @@ namespace ivy
 }
 // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
 // xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        iff
+    namespace iff
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
@@ -3654,26 +3475,10 @@ namespace
 // Works for comma and cross product
 // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
 // where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        iff
+    namespace iff
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3689,53 +3494,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        __or
+    namespace __or
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        __or
+    namespace __or
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3751,53 +3523,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        __and
+    namespace __and
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        __and
+    namespace __and
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3813,53 +3552,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        lt
+    namespace lt
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        lt
+    namespace lt
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3875,53 +3581,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        leq
+    namespace leq
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        leq
+    namespace leq
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3937,53 +3610,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        gt
+    namespace gt
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        gt
+    namespace gt
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -3999,53 +3639,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        geq
+    namespace geq
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        geq
+    namespace geq
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4061,53 +3668,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        plus
+    namespace plus
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        plus
+    namespace plus
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4123,53 +3697,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        minus
+    namespace minus
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        minus
+    namespace minus
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4185,53 +3726,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        times
+    namespace times
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        times
+    namespace times
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4247,53 +3755,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        div
+    namespace div
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        div
+    namespace div
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4345,53 +3820,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        comma
+    namespace comma
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        comma
+    namespace comma
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4407,53 +3849,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        dot
+    namespace dot
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        dot
+    namespace dot
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -4469,18 +3878,10 @@ namespace ivy
     
 }
 // workaround
-namespace 
-    // workaround
-    ivy
+namespace ivy
 {
-    
-    // workaround
-    namespace 
-        // workaround
-        expr
+    namespace expr
     {
-        
-        // workaround
         void parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy::expr::__t > &res);
         
     }
@@ -4536,6 +3937,7 @@ namespace ivy
             
             
             // Get just the roots that are modified by a statement
+            
             virtual void mod_roots  (ivy::root_mod_ref::__t &st) const;
             
             virtual void typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t > &res)
@@ -4615,10 +4017,12 @@ namespace ivy
             
             
             // This gets the lhs of the assignment
+            
             ivy::ptr< ivy::expr::__t > get_lhs () const;
             
             
             // This gets the rhs of the assignment
+            
             ivy::ptr< ivy::expr::__t > get_rhs () const;
             
             ivy::ptr< annot::__t > get_ann () const;
@@ -4784,52 +4188,27 @@ namespace vector__ivy__stmt
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< ivy::stmt::__t >,vector__ivy__stmt::domain::__t > value;
         
         vector__ivy__stmt::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__stmt::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__stmt::domain::__t &i,const ivy::ptr< ivy::stmt::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< ivy::stmt::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__stmt::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__stmt::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< ivy::stmt::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__stmt::__t segment  (const vector__ivy__stmt::domain::__t &beg,const
             vector__ivy__stmt::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -4863,13 +4242,8 @@ namespace vector__ivy__stmt
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__stmt
+namespace vector__ivy__stmt
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__stmt::__t empty ();
     
 }
@@ -4885,26 +4259,10 @@ namespace ivy
 // workaround
 // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
 // xn`, where `*` is a binary operator that associates to the right.
-namespace 
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
-    ivy
+namespace ivy
 {
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
-    namespace 
-        // workaround
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the right.
-        sequence
+    namespace sequence
     {
-        
-        // workaround
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the right.
         ivy::ptr< ivy::stmt::__t > fold_right  (const vector__ivy__stmt::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
@@ -5394,54 +4752,29 @@ namespace vector__ivy__prototype_argument
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::prototype_argument::__t,vector__ivy__prototype_argument::domain::__t >
             value;
         
         vector__ivy__prototype_argument::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__prototype_argument::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__prototype_argument::domain::__t &i,const ivy::prototype_argument::__t
             &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::prototype_argument::__t &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__prototype_argument::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__prototype_argument::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::prototype_argument::__t back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__prototype_argument::__t segment  (const vector__ivy__prototype_argument::domain::__t
             &beg,const vector__ivy__prototype_argument::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -5476,13 +4809,8 @@ namespace vector__ivy__prototype_argument
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__prototype_argument
+namespace vector__ivy__prototype_argument
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__prototype_argument::__t empty ();
     
 }
@@ -5562,10 +4890,12 @@ namespace ivy
             
             
             // A member is a action of the form `action type.member(x:type,...)`
+            
             __bool is_member () const;
             
             
             // If this is a member action, return the type it is a member of.
+            
             ivy::ptr< ivy::ident::__t > member_type () const;
             
             ivy::ptr< ivy::stmt::__t > get_body () const;
@@ -5592,16 +4922,19 @@ namespace ivy
             // function declaration. The C++ function declarations depends
             // on the action prototype.  If the action is a member action,
             // we drop the first input and replace it with `*this`.
+            
             void to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &resd) const;
             
             
             // Here, we register actions as members of types. These will be emitted
             // as members of the corresponding C++ class. 
+            
             void reg_member  (ivy::tocppst::__t &st) const;
             
             
             // An action declaration is not emitted if it is a member and
             // does not have a body. External actions are never emitted.
+            
             __bool emitted  (const ivy::tocppst::__t &st) const;
             
             
@@ -5619,6 +4952,7 @@ namespace ivy
             // This results in a copy of `s` that might be unnecessary if its value is dead. However,
             // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
             // in the value being sliced.
+            
             ivy::ptr< ivy::decl::__t > fix_action  (const ivy::tocppst::__t &st) const;
             
              __t () {}
@@ -5729,19 +5063,23 @@ namespace ivy
             
             
             // mutate a map a so that x in maps to y
+            
             void set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y);
             
             
             // get the value y such that x maps to z in a, else
             // leave y unchanged.
+            
             void get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const;
             
             
             // return true if x maps to some value
+            
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
             
             // remove a key x from the map
+            
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             __bool value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -5779,18 +5117,10 @@ namespace ivy
     
 }
 // return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_set
+    namespace ident_set
     {
-        
-        // return an empty map
         ivy::ident_set::__t empty ();
         
     }
@@ -5806,53 +5136,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        colon
+    namespace colon
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        colon
+    namespace colon
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -5868,53 +5165,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        arrow
+    namespace arrow
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        arrow
+    namespace arrow
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -5940,53 +5204,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        equals
+    namespace equals
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        equals
+    namespace equals
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -6002,53 +5233,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        notequals
+    namespace notequals
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        notequals
+    namespace notequals
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -6094,53 +5292,20 @@ namespace ivy
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        isaop
+    namespace isaop
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< ivy::expr::__t > fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    ivy
+namespace ivy
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        isaop
+    namespace isaop
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__ivy__expr::__t unfold_left  (const ivy::ptr< ivy::expr::__t > &s);
         
     }
@@ -6253,52 +5418,27 @@ namespace vector__ivy__decl
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< ivy::decl::__t >,vector__ivy__decl::domain::__t > value;
         
         vector__ivy__decl::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__decl::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__decl::domain::__t &i,const ivy::ptr< ivy::decl::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< ivy::decl::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__decl::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__decl::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< ivy::decl::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__decl::__t segment  (const vector__ivy__decl::domain::__t &beg,const
             vector__ivy__decl::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -6332,13 +5472,8 @@ namespace vector__ivy__decl
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__decl
+namespace vector__ivy__decl
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__decl::__t empty ();
     
 }
@@ -6709,10 +5844,12 @@ namespace ivy
             
             
             // A type destructor is translated to a data member of the class;
+            
             void reg_member  (ivy::tocppst::__t &st) const;
             
             
             // An variable declaration is not emitted if it is a destructor.
+            
             __bool emitted  (const ivy::tocppst::__t &st) const;
             
              __t () {}
@@ -6849,10 +5986,12 @@ namespace ivy
             
             
             // An interpret declararation determines the C++ superclass of the type.
+            
             void reg_member  (ivy::tocppst::__t &st) const;
             
             
             // Interpret declarations are never emitted
+            
             __bool emitted  (const ivy::tocppst::__t &st) const;
             
              __t () {}
@@ -7045,7 +6184,7 @@ namespace ivy
             
             void encode  (pretty::__t &b,const priority::__t &prio) const;
             
-            void setup  (ivy::flatst::__t &st,ivy::moduledc::__t &mod) const;
+            void setup  (ivy::flatst::__t &st,const __bool &check,ivy::moduledc::__t &mod) const;
             
             void flat  (ivy::flatst::__t &st) const;
             
@@ -7121,10 +6260,12 @@ namespace ivy
             // we emit namespace declarations for the object members, not here.
             // Here, we just record the object identifiers, so we know when they
             // clash with type identifiers.
+            
             void reg_member  (ivy::tocppst::__t &st) const;
             
             
             // Object declarations are never emitted
+            
             __bool emitted  (const ivy::tocppst::__t &st) const;
             
              __t () {}
@@ -7464,18 +6605,10 @@ namespace ivy
     
 }
 // Note, the Ivy verison number is encoded in the first comment line
-namespace 
-    // Note, the Ivy verison number is encoded in the first comment line
-    ivy
+namespace ivy
 {
-    
-    // Note, the Ivy verison number is encoded in the first comment line
-    namespace 
-        // Note, the Ivy verison number is encoded in the first comment line
-        prog
+    namespace prog
     {
-        
-        // Note, the Ivy verison number is encoded in the first comment line
         void parse_to  (pstate::__t &st,const priority::__t &prio,ivy::prog::__t &res);
         
     }
@@ -7557,52 +6690,27 @@ namespace vector__ivy__error
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< ivy::error::__t >,vector__ivy__error::domain::__t > value;
         
         vector__ivy__error::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__error::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__error::domain::__t &i,const ivy::ptr< ivy::error::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< ivy::error::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__error::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__error::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< ivy::error::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__error::__t segment  (const vector__ivy__error::domain::__t &beg,const
             vector__ivy__error::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -7636,13 +6744,8 @@ namespace vector__ivy__error
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__error
+namespace vector__ivy__error
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__error::__t empty ();
     
 }
@@ -7652,12 +6755,8 @@ namespace ivy
     
 }
 // Reports an error and returns
-namespace 
-    // Reports an error and returns
-    ivy
+namespace ivy
 {
-    
-    // Reports an error and returns
     void report_error  (const ivy::ptr< ivy::error::__t > &e,const ivy::ptr< annot::__t > &ann);
     
 }
@@ -8051,6 +7150,63 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace redefining
+    {
+        struct __t : ivy::error::__t
+        {
+            ivy::ptr< ivy::ident::__t > n;
+            
+            ivy::ptr< annot::__t > ann;
+            
+            void encode  (pretty::__t &b) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return n == other . n & ann == other . ann;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return n . __is_zero() & ann . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::ident::__t >::__hash() (x . n) +
+                        ivy::ptr< annot::__t >::__hash() (x . ann);
+                }
+            };
+            
+            virtual ivy::ptr< ivy::error::__t > __upcast () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace redefining
+    {
+        ivy::redefining::__t make  (const ivy::ptr< ivy::ident::__t > &n,const ivy::ptr< annot::__t >
+            &ann);
+        
+    }
+    
+}
+namespace ivy
+{
     namespace wrong_number_params
     {
         struct __t : ivy::error::__t
@@ -8148,6 +7304,58 @@ namespace ivy
     namespace syntax_error
     {
         ivy::syntax_error::__t make  (const str::__t &tok);
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
+    {
+        struct __t : ivy::error::__t
+        {
+            ivy::ptr< ivy::expr::__t > e;
+            
+            void encode  (pretty::__t &b) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const {
+                return e == other . e;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return e . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::expr::__t >::__hash() (x . e);
+                }
+            };
+            
+            virtual ivy::ptr< ivy::error::__t > __upcast () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace bad_syntax
+    {
+        ivy::bad_syntax::__t make  (const ivy::ptr< ivy::expr::__t > &e);
         
     }
     
@@ -8254,22 +7462,10 @@ namespace ivy
 }
 // Read the main file, named `name`. We prepend `include ivy`
 // to the file, to cause the standard preamble to be read.
-namespace 
-    // Read the main file, named `name`. We prepend `include ivy`
-    // to the file, to cause the standard preamble to be read.
-    ivy
+namespace ivy
 {
-    
-    // Read the main file, named `name`. We prepend `include ivy`
-    // to the file, to cause the standard preamble to be read.
-    namespace 
-        // Read the main file, named `name`. We prepend `include ivy`
-        // to the file, to cause the standard preamble to be read.
-        prog
+    namespace prog
     {
-        
-        // Read the main file, named `name`. We prepend `include ivy`
-        // to the file, to cause the standard preamble to be read.
         ivy::prog::__t read_file  (const str::__t &name);
         
     }
@@ -8352,21 +7548,12 @@ namespace ivy
         {
             ivy::vector< ivy::symeval::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t > &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t > &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::ptr< ivy::expr::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -8403,19 +7590,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        symeval
+    namespace symeval
     {
-        
-        // return an empty map
         ivy::symeval::__t empty ();
         
     }
@@ -8475,21 +7653,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_moduledc::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::moduledc::__t &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::moduledc::__t &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::moduledc::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -8529,19 +7698,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_moduledc
+    namespace ident_to_moduledc
     {
-        
-        // return an empty map
         ivy::ident_to_moduledc::__t empty ();
         
     }
@@ -8597,21 +7757,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_ident::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::ident::__t > &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::ident::__t > &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::ptr< ivy::ident::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -8648,19 +7799,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_ident
+    namespace ident_to_ident
     {
-        
-        // return an empty map
         ivy::ident_to_ident::__t empty ();
         
     }
@@ -8715,21 +7857,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_instantiatedc::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::instantiatedc::__t &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::instantiatedc::__t &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::instantiatedc::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -8766,20 +7899,111 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_instantiatedc
+    namespace ident_to_instantiatedc
     {
-        
-        // return an empty map
         ivy::ident_to_instantiatedc::__t empty ();
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        struct rec
+        {
+            __bool full;
+            
+            ivy::ptr< annot::__t > val;
+            
+             rec () {}
+             rec  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const rec &other) const
+            {
+                return full == other . full & val == other . val;
+            }
+            ivy::native_bool operator !=  (const rec &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return full . __is_zero() & val . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const rec &x) const
+                {
+                    return __bool::__hash() (x . full) + ivy::ptr< annot::__t >::__hash() (x . val);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        struct __t
+        {
+            ivy::vector< ivy::ident_to_annot::rec,ivy::ptr< ivy::ident::__t > > map;
+            
+            void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< annot::__t > &y);
+            
+            void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< annot::__t > &y) const;
+            
+            __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
+            
+            void remove  (const ivy::ptr< ivy::ident::__t > &x);
+            
+            ivy::ptr< annot::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const {
+                return map == other . map;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return map . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return
+                        ivy::vector< ivy::ident_to_annot::rec,ivy::ptr< ivy::ident::__t > >::__hash()
+                            (x . map);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_annot
+    {
+        ivy::ident_to_annot::__t empty ();
         
     }
     
@@ -8790,61 +8014,80 @@ namespace ivy
     {
         struct __t
         {
-            vector__ivy__decl::__t 
-                // Accumulated declarations
-                decls;
             
-            ivy::ident_to_ident::__t 
-                // The module parameter valuations
-                prmvals;
+            // Accumulated declarations
             
-            ivy::ident_to_moduledc::__t 
-                // The module declarations, by name
-                moddecls;
+            vector__ivy__decl::__t decls;
             
-            ivy::ident_set::__t 
-                // The set of defined identifiers
-                defs;
             
-            __bool 
-                // True if the hierarchy root is set
-                has_root;
+            // The module parameter valuations
             
-            ivy::ptr< ivy::ident::__t > 
-                // The current hierarchy root
-                root;
+            ivy::ident_to_ident::__t prmvals;
             
-            ivy::ident_set::__t 
-                // The current local variables as a set
-                locals;
             
-            ivy::ident_set::__t 
-                // The set of global variables
-                globals;
+            // The module declarations, by name
             
-            __bool 
-                // True if we are defining an identifier
-                defining;
+            ivy::ident_to_moduledc::__t moddecls;
             
-            __bool 
-                // True if we are on an absolute identifier
-                absolute;
             
-            __bool 
-                // True if we are on rhs of a dot operator
-                dot_rhs;
+            // The set of defined identifiers
             
-            ivy::ident_to_instantiatedc::__t 
-                // Maps autoinstance keys to instantiations
-                autodefs;
+            ivy::ident_set::__t defs;
             
-            ivy::ident_set::__t 
-                // Auto instantiations that are pending
-                autos_pending;
             
-            __bool 
-                // True if we don't want to check undefined
-                no_undefined;
+            // The locations of definitions of traits (non-objects)
+            
+            ivy::ident_to_annot::__t non_objects;
+            
+            
+            // True if the hierarchy root is set
+            
+            __bool has_root;
+            
+            
+            // The current hierarchy root
+            
+            ivy::ptr< ivy::ident::__t > root;
+            
+            
+            // The current local variables as a set
+            
+            ivy::ident_set::__t locals;
+            
+            
+            // The set of global variables
+            
+            ivy::ident_set::__t globals;
+            
+            
+            // True if we are defining an identifier
+            
+            __bool defining;
+            
+            
+            // True if we are on an absolute identifier
+            
+            __bool absolute;
+            
+            
+            // True if we are on rhs of a dot operator
+            
+            __bool dot_rhs;
+            
+            
+            // Maps autoinstance keys to instantiations
+            
+            ivy::ident_to_instantiatedc::__t autodefs;
+            
+            
+            // Auto instantiations that are pending
+            
+            ivy::ident_set::__t autos_pending;
+            
+            
+            // True if we don't want to check undefined
+            
+            __bool no_undefined;
             
              __t () {}
              __t  (long long value) {}
@@ -8856,155 +8099,43 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return 
-                    // Accumulated declarations
-                    decls == other . 
-                    // Accumulated declarations
-                    decls & 
-                    // The module parameter valuations
-                    prmvals == other . 
-                    // The module parameter valuations
-                    prmvals & 
-                    // The module declarations, by name
-                    moddecls == other . 
-                    // The module declarations, by name
-                    moddecls & 
-                    // The set of defined identifiers
-                    defs == other . 
-                    // The set of defined identifiers
-                    defs & 
-                    // True if the hierarchy root is set
-                    has_root == other . 
-                    // True if the hierarchy root is set
-                    has_root & 
-                    // The current hierarchy root
-                    root == other . 
-                    // The current hierarchy root
-                    root & 
-                    // The current local variables as a set
-                    locals == other . 
-                    // The current local variables as a set
-                    locals & 
-                    // The set of global variables
-                    globals == other . 
-                    // The set of global variables
-                    globals & 
-                    // True if we are defining an identifier
-                    defining == other . 
-                    // True if we are defining an identifier
-                    defining & 
-                    // True if we are on an absolute identifier
-                    absolute == other . 
-                    // True if we are on an absolute identifier
-                    absolute & 
-                    // True if we are on rhs of a dot operator
-                    dot_rhs == other . 
-                    // True if we are on rhs of a dot operator
-                    dot_rhs & 
-                    // Maps autoinstance keys to instantiations
-                    autodefs == other . 
-                    // Maps autoinstance keys to instantiations
-                    autodefs & 
-                    // Auto instantiations that are pending
-                    autos_pending == other . 
-                    // Auto instantiations that are pending
-                    autos_pending & 
-                    // True if we don't want to check undefined
-                    no_undefined == other . 
-                    // True if we don't want to check undefined
-                    no_undefined;
+                return decls == other . decls & prmvals == other . prmvals & moddecls == other .
+                    moddecls & defs == other . defs & non_objects == other . non_objects & has_root
+                    == other . has_root & root == other . root & locals == other . locals & globals
+                    == other . globals & defining == other . defining & absolute == other . absolute
+                    & dot_rhs == other . dot_rhs & autodefs == other . autodefs & autos_pending ==
+                    other . autos_pending & no_undefined == other . no_undefined;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
             bool __is_zero () const
             {
-                return 
-                        // Accumulated declarations
-                        decls . __is_zero() &
-                    
-                        // The module parameter valuations
-                        prmvals . __is_zero() &
-                    
-                        // The module declarations, by name
-                        moddecls . __is_zero() & 
-                        // The set of defined identifiers
-                        defs . __is_zero() &
-                    
-                        // True if the hierarchy root is set
-                        has_root . __is_zero() & 
-                        // The current hierarchy root
-                        root . __is_zero() &
-                    
-                        // The current local variables as a set
-                        locals . __is_zero() & 
-                        // The set of global variables
-                        globals . __is_zero() &
-                    
-                        // True if we are defining an identifier
-                        defining . __is_zero() &
-                    
-                        // True if we are on an absolute identifier
-                        absolute . __is_zero() &
-                    
-                        // True if we are on rhs of a dot operator
-                        dot_rhs . __is_zero() &
-                    
-                        // Maps autoinstance keys to instantiations
-                        autodefs . __is_zero() &
-                    
-                        // Auto instantiations that are pending
-                        autos_pending . __is_zero() &
-                    
-                        // True if we don't want to check undefined
-                        no_undefined . __is_zero();
+                return decls . __is_zero() & prmvals . __is_zero() & moddecls . __is_zero() &
+                    defs . __is_zero() & non_objects . __is_zero() & has_root . __is_zero() &
+                    root . __is_zero() & locals . __is_zero() & globals . __is_zero() &
+                    defining . __is_zero() & absolute . __is_zero() & dot_rhs . __is_zero() &
+                    autodefs . __is_zero() & autos_pending . __is_zero() &
+                    no_undefined . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return vector__ivy__decl::__t::__hash() (x . 
-                            // Accumulated declarations
-                            decls) +
-                        ivy::ident_to_ident::__t::__hash() (x . 
-                            // The module parameter valuations
-                            prmvals) +
-                        ivy::ident_to_moduledc::__t::__hash() (x . 
-                            // The module declarations, by name
-                            moddecls) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // The set of defined identifiers
-                            defs) +
-                        __bool::__hash() (x . 
-                            // True if the hierarchy root is set
-                            has_root) +
-                        ivy::ptr< ivy::ident::__t >::__hash() (x . 
-                            // The current hierarchy root
-                            root) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // The current local variables as a set
-                            locals) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // The set of global variables
-                            globals) +
-                        __bool::__hash() (x . 
-                            // True if we are defining an identifier
-                            defining) +
-                        __bool::__hash() (x . 
-                            // True if we are on an absolute identifier
-                            absolute) +
-                        __bool::__hash() (x . 
-                            // True if we are on rhs of a dot operator
-                            dot_rhs) +
-                        ivy::ident_to_instantiatedc::__t::__hash() (x . 
-                            // Maps autoinstance keys to instantiations
-                            autodefs) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // Auto instantiations that are pending
-                            autos_pending) +
-                        __bool::__hash() (x . 
-                            // True if we don't want to check undefined
-                            no_undefined);
+                    return vector__ivy__decl::__t::__hash() (x . decls) +
+                        ivy::ident_to_ident::__t::__hash() (x . prmvals) +
+                        ivy::ident_to_moduledc::__t::__hash() (x . moddecls) +
+                        ivy::ident_set::__t::__hash() (x . defs) +
+                        ivy::ident_to_annot::__t::__hash() (x . non_objects) +
+                        __bool::__hash() (x . has_root) +
+                        ivy::ptr< ivy::ident::__t >::__hash() (x . root) +
+                        ivy::ident_set::__t::__hash() (x . locals) +
+                        ivy::ident_set::__t::__hash() (x . globals) +
+                        __bool::__hash() (x . defining) + __bool::__hash() (x . absolute) +
+                        __bool::__hash() (x . dot_rhs) +
+                        ivy::ident_to_instantiatedc::__t::__hash() (x . autodefs) +
+                        ivy::ident_set::__t::__hash() (x . autos_pending) +
+                        __bool::__hash() (x . no_undefined);
                 }
             };
             
@@ -9024,20 +8155,8 @@ namespace ivy
 // action. When defining a name, it is always the former. When not
 // defining, we check whether the lhs of the dot is defined. If it is,
 // we treat the dot as an object member reference.
-namespace 
-    // A dot operator has two possible interpretations: it indicates a
-    // member of an object, or an application of a destructor or member
-    // action. When defining a name, it is always the former. When not
-    // defining, we check whether the lhs of the dot is defined. If it is,
-    // we treat the dot as an object member reference.
-    ivy
+namespace ivy
 {
-    
-    // A dot operator has two possible interpretations: it indicates a
-    // member of an object, or an application of a destructor or member
-    // action. When defining a name, it is always the former. When not
-    // defining, we check whether the lhs of the dot is defined. If it is,
-    // we treat the dot as an object member reference.
     ivy::ptr< ivy::expr::__t > applydot  (const ivy::ptr< ivy::expr::__t > &arg,const ivy::ptr< ivy::ident::__t >
         &member,const ivy::ptr< annot::__t > &ann,const ivy::flatst::__t &st);
     
@@ -9050,7 +8169,8 @@ namespace ivy
 }
 namespace ivy
 {
-    void add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global);
+    void add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
+        __bool &is_object);
     
 }
 namespace ivy
@@ -9133,26 +8253,41 @@ namespace ivy
     void auto_flat  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st);
     
 }
+namespace ivy
+{
+    void check_syntax_symbol  (const ivy::ptr< ivy::expr::__t > &e);
+    
+}
 // Get the symbol that is typed in a typing. Examples:
 //
 // - in `x : t`, the typed symbol is `x`
 // - in `f(X:u) : t`, the typed symbol is `f`
 // - in `f(X:u)` the typed symbol is `f'
-namespace 
-    // Get the symbol that is typed in a typing. Examples:
-    //
-    // - in `x : t`, the typed symbol is `x`
-    // - in `f(X:u) : t`, the typed symbol is `f`
-    // - in `f(X:u)` the typed symbol is `f'
-    ivy
+namespace ivy
 {
-    
-    // Get the symbol that is typed in a typing. Examples:
-    //
-    // - in `x : t`, the typed symbol is `x`
-    // - in `f(X:u) : t`, the typed symbol is `f`
-    // - in `f(X:u)` the typed symbol is `f'
     ivy::ptr< ivy::expr::__t > get_typed_symbol  (const ivy::ptr< ivy::expr::__t > &typing);
+    
+}
+namespace ivy
+{
+    void is_typing_lhs_syntax  (const ivy::ptr< ivy::expr::__t > &lhs,__bool &res,ivy::ptr< ivy::expr::__t >
+        &bad);
+    
+}
+namespace ivy
+{
+    void is_typing_rhs_syntax  (const ivy::ptr< ivy::expr::__t > &rhs,__bool &res,ivy::ptr< ivy::expr::__t >
+        &bad);
+    
+}
+namespace ivy
+{
+    void check_syntax_typing  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &has_def);
+    
+}
+namespace ivy
+{
+    void check_syntax_symbol_vec  (const vector__ivy__expr::__t &s);
     
 }
 namespace ivy
@@ -9175,14 +8310,17 @@ namespace ivy
             
             
             // mutate a relation map a so that x is related to y
+            
             void add  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t > &y);
             
             
             // get a vector of values y such that x maps to y in a
+            
             vector__ivy__expr::__t get  (const ivy::ptr< ivy::ident::__t > &x) const;
             
             
             // return true if x maps to some value
+            
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
              __t () {}
@@ -9218,18 +8356,10 @@ namespace ivy
     
 }
 // return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_exprs
+    namespace ident_to_exprs
     {
-        
-        // return an empty map
         ivy::ident_to_exprs::__t empty ();
         
     }
@@ -9334,24 +8464,8 @@ namespace ivy
 // (3)  (f : (t1*...*tn->t)(...)) : u
 // (4)  (f : (t1*...*tn->t)(...))
 //
-namespace 
-    // A complete typing looks like one of these:
-    //
-    // (1)  x:t
-    // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...)) : u
-    // (4)  (f : (t1*...*tn->t)(...))
-    //
-    ivy
+namespace ivy
 {
-    
-    // A complete typing looks like one of these:
-    //
-    // (1)  x:t
-    // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...)) : u
-    // (4)  (f : (t1*...*tn->t)(...))
-    //
     __bool is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing);
     
 }
@@ -9364,16 +8478,8 @@ namespace ivy
 // Returns true is an action is virtual. A virtual action is one that
 // overrides an action of a superclass or is overridden by an action of
 // a subclass. This action assumes that parameter s is a member action.
-namespace 
-    // Returns true is an action is virtual. A virtual action is one that
-    // overrides an action of a superclass or is overridden by an action of
-    // a subclass. This action assumes that parameter s is a member action.
-    ivy
+namespace ivy
 {
-    
-    // Returns true is an action is virtual. A virtual action is one that
-    // overrides an action of a superclass or is overridden by an action of
-    // a subclass. This action assumes that parameter s is a member action.
     __bool is_virtual_action  (const ivy::actdc::__t &s,const ivy::global_types::__t &gl,const ivy::subtypes::__t
         &st);
     
@@ -9428,21 +8534,12 @@ namespace ivy
         {
             ivy::vector< ivy::param_map::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const vector__ivy__expr::domain::__t &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,vector__ivy__expr::domain::__t &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             vector__ivy__expr::domain::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -9479,19 +8576,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        param_map
+    namespace param_map
     {
-        
-        // return an empty map
         ivy::param_map::__t empty ();
         
     }
@@ -9503,38 +8591,22 @@ namespace ivy
     
 }
 // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
-namespace 
-    // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
-    ivy
+namespace ivy
 {
-    
-    // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
     ivy::ptr< ivy::expr::__t > uncurry_func  (const ivy::ptr< ivy::expr::__t > &func);
     
 }
 // Given a function type `ty = (t * ... -> u)`, return `t`.
-namespace 
-    // Given a function type `ty = (t * ... -> u)`, return `t`.
-    ivy
+namespace ivy
 {
-    
-    // Given a function type `ty = (t * ... -> u)`, return `t`.
     ivy::ptr< ivy::expr::__t > get_dom0  (const ivy::ptr< ivy::expr::__t > &ty);
     
 }
 // Test whether a type-decorated function is a member
 // function. That is, it returns true if `func` has the form
 // `t.f : (t * ...) -> u`.
-namespace 
-    // Test whether a type-decorated function is a member
-    // function. That is, it returns true if `func` has the form
-    // `t.f : (t * ...) -> u`.
-    ivy
+namespace ivy
 {
-    
-    // Test whether a type-decorated function is a member
-    // function. That is, it returns true if `func` has the form
-    // `t.f : (t * ...) -> u`.
     __bool func_is_member  (const ivy::ptr< ivy::expr::__t > &func);
     
 }
@@ -9547,42 +8619,16 @@ namespace
 // This action analyzes an app, returning the type-decorated
 // function and the argument vector. This assumes that the app is
 // already type-decorated.
-namespace 
-    // A function application can be in several forms
-    //
-    // - (x:t).f            returns t.f(x)
-    // - (x:t).f(a1...an)   returns t.f(x,a1...an)
-    // - (f:...)(a1...an)   returns f(a1...an)
-    //
-    // This action analyzes an app, returning the type-decorated
-    // function and the argument vector. This assumes that the app is
-    // already type-decorated.
-    ivy
+namespace ivy
 {
-    
-    // A function application can be in several forms
-    //
-    // - (x:t).f            returns t.f(x)
-    // - (x:t).f(a1...an)   returns t.f(x,a1...an)
-    // - (f:...)(a1...an)   returns f(a1...an)
-    //
-    // This action analyzes an app, returning the type-decorated
-    // function and the argument vector. This assumes that the app is
-    // already type-decorated.
     void get_app  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< ivy::expr::__t > &func,vector__ivy__expr::__t
         &args);
     
 }
 // Canonize a function application. If it is in member style,
 // convert it to an ordinary function call.
-namespace 
-    // Canonize a function application. If it is in member style,
-    // convert it to an ordinary function call.
-    ivy
+namespace ivy
 {
-    
-    // Canonize a function application. If it is in member style,
-    // convert it to an ordinary function call.
     void canon_app  (ivy::ptr< ivy::expr::__t > &s);
     
 }
@@ -9641,21 +8687,12 @@ namespace ivy
             {
                 ivy::vector< ivy::push_pop_ident_set::map_t::rec,ivy::ptr< ivy::ident::__t > > map;
                 
-                
-                // mutate a map a so that x in maps to y
                 void set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y);
                 
-                
-                // get the value y such that x maps to z in a, else
-                // leave y unchanged.
                 void get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const;
                 
-                
-                // return true if x maps to some value
                 __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
                 
-                
-                // remove a key x from the map
                 void remove  (const ivy::ptr< ivy::ident::__t > &x);
                 
                 __bool value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -9694,25 +8731,12 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        push_pop_ident_set
+    namespace push_pop_ident_set
     {
-        
-        // return an empty map
-        namespace 
-            // return an empty map
-            map_t
+        namespace map_t
         {
-            
-            // return an empty map
             ivy::push_pop_ident_set::map_t::__t empty ();
             
         }
@@ -9728,52 +8752,27 @@ namespace ivy
         {
             struct __t
             {
-                
-                // We have two destructors (fields) representing the array
-                // contents. The `value` field is represented using a dense
-                // encoding, which means the C++ type `std::vector<range>`.
                 ivy::vector< ivy::ptr< ivy::ident::__t >,pos::__t > value;
                 
                 pos::__t end;
                 
-                
-                // The `begin` action always returns 0.
                 pos::__t begin () const;
                 
-                
-                // The `set` action sets an element of an array
                 void set  (const pos::__t &i,const ivy::ptr< ivy::ident::__t > &v);
                 
-                
-                // The `append` action appends one character `c` to a array.
                 void append  (const ivy::ptr< ivy::ident::__t > &c);
                 
-                
-                // The `extend` action appends a array `x` to a array `s`.
                 void extend  (const ivy::push_pop_ident_set::vec_t::__t &x);
                 
-                
-                // The `resize` action sets the end marker of the string. 
                 void resize  (const pos::__t &end);
                 
-                
-                // The `back` action returns the last element of an array, or zero
-                // if the array is empty.
                 ivy::ptr< ivy::ident::__t > back () const;
                 
-                
-                // The `back` action removes he last element of the array, if the
-                // array is not empty.
                 void pop_back ();
                 
-                
-                // The `segment` action gets the segment of an array from index `beg` to
-                // index `en-1`.
                 ivy::push_pop_ident_set::vec_t::__t segment  (const pos::__t &beg,const pos::__t &en)
                     const;
                 
-                
-                // The `reverse` action reverses an array.
                 void reverse ();
                 
                  __t () {}
@@ -9811,25 +8810,12 @@ namespace ivy
     }
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    ivy
+namespace ivy
 {
-    
-    // The `empty` action returns an empty array
-    namespace 
-        // The `empty` action returns an empty array
-        push_pop_ident_set
+    namespace push_pop_ident_set
     {
-        
-        // The `empty` action returns an empty array
-        namespace 
-            // The `empty` action returns an empty array
-            vec_t
+        namespace vec_t
         {
-            
-            // The `empty` action returns an empty array
             ivy::push_pop_ident_set::vec_t::__t empty ();
             
         }
@@ -9988,22 +8974,14 @@ namespace ivy
     
 }
 // Get the root modset of an assignment, given its lhs
-namespace 
-    // Get the root modset of an assignment, given its lhs
-    ivy
+namespace ivy
 {
-    
-    // Get the root modset of an assignment, given its lhs
     void get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st);
     
 }
 // This function gives the types of the builtin-in symbols
-namespace 
-    // This function gives the types of the builtin-in symbols
-    ivy
+namespace ivy
 {
-    
-    // This function gives the types of the builtin-in symbols
     ivy::vector< ivy::ptr< ivy::expr::__t >,ivy::verb::__t > optypes;
     
 }
@@ -10011,48 +8989,26 @@ namespace
 // rely on when eliding type decorations:
 //
 // Verb is monomorphic:
-namespace 
-    // The predicates determine for a given verb what type inferences we can
-    // rely on when eliding type decorations:
-    //
-    // Verb is monomorphic:
-    ivy
+namespace ivy
 {
-    
-    // The predicates determine for a given verb what type inferences we can
-    // rely on when eliding type decorations:
-    //
-    // Verb is monomorphic:
     ivy::vector< __bool,ivy::verb::__t > verb_mono;
     
 }
 // Input types determine output types:
-namespace 
-    // Input types determine output types:
-    ivy
+namespace ivy
 {
-    
-    // Input types determine output types:
     ivy::vector< __bool,ivy::verb::__t > verb_in_to_out;
     
 }
 // Output type determines input types:
-namespace 
-    // Output type determines input types:
-    ivy
+namespace ivy
 {
-    
-    // Output type determines input types:
     ivy::vector< __bool,ivy::verb::__t > verb_out_to_in;
     
 }
 // First input type determines all:
-namespace 
-    // First input type determines all:
-    ivy
+namespace ivy
 {
-    
-    // First input type determines all:
     ivy::vector< __bool,ivy::verb::__t > verb_first_to_in;
     
 }
@@ -10064,14 +9020,8 @@ namespace ivy
 }
 // Returns `true` if the type of a the first input of a given verb determines
 // the type of the remaining inputs.
-namespace 
-    // Returns `true` if the type of a the first input of a given verb determines
-    // the type of the remaining inputs.
-    ivy
+namespace ivy
 {
-    
-    // Returns `true` if the type of a the first input of a given verb determines
-    // the type of the remaining inputs.
     __bool verb_det_type  (const ivy::verb::__t &vrb);
     
 }
@@ -10131,21 +9081,12 @@ namespace ivy
             {
                 ivy::vector< ivy::decost::map::rec,ivy::ptr< ivy::ident::__t > > map;
                 
-                
-                // mutate a map a so that x in maps to y
                 void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t > &y);
                 
-                
-                // get the value y such that x maps to z in a, else
-                // leave y unchanged.
                 void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t > &y) const;
                 
-                
-                // return true if x maps to some value
                 __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
                 
-                
-                // remove a key x from the map
                 void remove  (const ivy::ptr< ivy::ident::__t > &x);
                 
                 ivy::ptr< ivy::expr::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -10184,25 +9125,12 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        decost
+    namespace decost
     {
-        
-        // return an empty map
-        namespace 
-            // return an empty map
-            map
+        namespace map
         {
-            
-            // return an empty map
             ivy::decost::map::__t empty ();
             
         }
@@ -10216,46 +9144,56 @@ namespace ivy
     {
         struct __t
         {
-            pos::__t 
-                // A counter for creating type variables
-                counter;
             
-            ivy::decost::map::__t 
-                // Maps types and type variables to their representatives
-                m;
+            // A counter for creating type variables
             
-            ivy::symeval::__t 
-                // Maps identifiers of symbols to their types
-                ty;
+            pos::__t counter;
             
-            __bool 
-                // True if we are typing a member function
-                member;
             
-            __bool 
-                // False if there has been a type error
-                ok;
+            // Maps types and type variables to their representatives
             
-            vector__ivy__expr::__t 
-                // Types that we failed to unify
-                failed;
+            ivy::decost::map::__t m;
             
-            __bool 
-                // Error has been reported
-                error_reported;
+            
+            // Maps identifiers of symbols to their types
+            
+            ivy::symeval::__t ty;
+            
+            
+            // True if we are typing a member function
+            
+            __bool member;
+            
+            
+            // False if there has been a type error
+            
+            __bool ok;
+            
+            
+            // Types that we failed to unify
+            
+            vector__ivy__expr::__t failed;
+            
+            
+            // Error has been reported
+            
+            __bool error_reported;
             
             
             // Make a new type variable
+            
             void newvar  (const ivy::ptr< annot::__t > &ann,ivy::ptr< ivy::expr::__t > &res);
             
             
             // Find the representative of an expression. This has the
             // side effect of shortening the path to the representative
             // as in classic union/find.
+            
             void find  (const ivy::ptr< ivy::expr::__t > &x,ivy::ptr< ivy::expr::__t > &res);
             
             
             // Record failure of type unification
+            
             void unification_failed  (const ivy::ptr< ivy::expr::__t > &x,const ivy::ptr< ivy::expr::__t >
                 &y);
             
@@ -10271,87 +9209,28 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return 
-                    // A counter for creating type variables
-                    counter == other . 
-                    // A counter for creating type variables
-                    counter & 
-                    // Maps types and type variables to their representatives
-                    m == other . 
-                    // Maps types and type variables to their representatives
-                    m & 
-                    // Maps identifiers of symbols to their types
-                    ty == other . 
-                    // Maps identifiers of symbols to their types
-                    ty & 
-                    // True if we are typing a member function
-                    member == other . 
-                    // True if we are typing a member function
-                    member & 
-                    // False if there has been a type error
-                    ok == other . 
-                    // False if there has been a type error
-                    ok & 
-                    // Types that we failed to unify
-                    failed == other . 
-                    // Types that we failed to unify
-                    failed & 
-                    // Error has been reported
-                    error_reported == other . 
-                    // Error has been reported
-                    error_reported;
+                return counter == other . counter & m == other . m & ty == other . ty & member ==
+                    other . member & ok == other . ok & failed == other . failed & error_reported ==
+                    other . error_reported;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
             bool __is_zero () const
             {
-                return 
-                        // A counter for creating type variables
-                        counter . __is_zero() &
-                    
-                        // Maps types and type variables to their representatives
-                        m . __is_zero() &
-                    
-                        // Maps identifiers of symbols to their types
-                        ty . __is_zero() &
-                    
-                        // True if we are typing a member function
-                        member . __is_zero() &
-                    
-                        // False if there has been a type error
-                        ok . __is_zero() & 
-                        // Types that we failed to unify
-                        failed . __is_zero() &
-                    
-                        // Error has been reported
-                        error_reported . __is_zero();
+                return counter . __is_zero() & m . __is_zero() & ty . __is_zero() &
+                    member . __is_zero() & ok . __is_zero() & failed . __is_zero() &
+                    error_reported . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return pos::__t::__hash() (x . 
-                            // A counter for creating type variables
-                            counter) +
-                        ivy::decost::map::__t::__hash() (x . 
-                            // Maps types and type variables to their representatives
-                            m) +
-                        ivy::symeval::__t::__hash() (x . 
-                            // Maps identifiers of symbols to their types
-                            ty) +
-                        __bool::__hash() (x . 
-                            // True if we are typing a member function
-                            member) +
-                        __bool::__hash() (x . 
-                            // False if there has been a type error
-                            ok) +
-                        vector__ivy__expr::__t::__hash() (x . 
-                            // Types that we failed to unify
-                            failed) +
-                        __bool::__hash() (x . 
-                            // Error has been reported
-                            error_reported);
+                    return pos::__t::__hash() (x . counter) +
+                        ivy::decost::map::__t::__hash() (x . m) +
+                        ivy::symeval::__t::__hash() (x . ty) + __bool::__hash() (x . member) +
+                        __bool::__hash() (x . ok) + vector__ivy__expr::__t::__hash() (x . failed) +
+                        __bool::__hash() (x . error_reported);
                 }
             };
             
@@ -10361,18 +9240,10 @@ namespace ivy
     
 }
 // Make a new type decorator state
-namespace 
-    // Make a new type decorator state
-    ivy
+namespace ivy
 {
-    
-    // Make a new type decorator state
-    namespace 
-        // Make a new type decorator state
-        decost
+    namespace decost
     {
-        
-        // Make a new type decorator state
         ivy::decost::__t make ();
         
     }
@@ -10389,22 +9260,10 @@ namespace ivy
 }
 // Unify a pair of types. Sets ok to false if the types cannot
 // be unified.
-namespace 
-    // Unify a pair of types. Sets ok to false if the types cannot
-    // be unified.
-    ivy
+namespace ivy
 {
-    
-    // Unify a pair of types. Sets ok to false if the types cannot
-    // be unified.
-    namespace 
-        // Unify a pair of types. Sets ok to false if the types cannot
-        // be unified.
-        decost
+    namespace decost
     {
-        
-        // Unify a pair of types. Sets ok to false if the types cannot
-        // be unified.
         void show_unifying  (const str::__t &x,const str::__t &y);
         
     }
@@ -10474,21 +9333,12 @@ namespace ivy
             {
                 ivy::vector< ivy::elidest::map::rec,ivy::ptr< ivy::ident::__t > > map;
                 
-                
-                // mutate a map a so that x in maps to y
                 void set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y);
                 
-                
-                // get the value y such that x maps to z in a, else
-                // leave y unchanged.
                 void get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const;
                 
-                
-                // return true if x maps to some value
                 __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
                 
-                
-                // remove a key x from the map
                 void remove  (const ivy::ptr< ivy::ident::__t > &x);
                 
                 __bool value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -10527,25 +9377,12 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        elidest
+    namespace elidest
     {
-        
-        // return an empty map
-        namespace 
-            // return an empty map
-            map
+        namespace map
         {
-            
-            // return an empty map
             ivy::elidest::map::__t empty ();
             
         }
@@ -10592,12 +9429,8 @@ namespace ivy
     
 }
 // Called in case of an error typing expression `e`. 
-namespace 
-    // Called in case of an error typing expression `e`. 
-    ivy
+namespace ivy
 {
-    
-    // Called in case of an error typing expression `e`. 
     void type_error  (const ivy::ptr< ivy::expr::__t > &e,ivy::decost::__t &st);
     
 }
@@ -10613,14 +9446,8 @@ namespace ivy
 }
 // This takes a vector of expressions and a type context, returning
 // the expressions with types inferred.
-namespace 
-    // This takes a vector of expressions and a type context, returning
-    // the expressions with types inferred.
-    ivy
+namespace ivy
 {
-    
-    // This takes a vector of expressions and a type context, returning
-    // the expressions with types inferred.
     void type_infer_vec  (vector__ivy__expr::__t &es,const ivy::symeval::__t &tc);
     
 }
@@ -10631,12 +9458,8 @@ namespace ivy
     
 }
 // Unify the types of two expressions
-namespace 
-    // Unify the types of two expressions
-    ivy
+namespace ivy
 {
-    
-    // Unify the types of two expressions
     void type_unify_exprs  (ivy::ptr< ivy::expr::__t > &e1,ivy::ptr< ivy::expr::__t > &e2,const ivy::symeval::__t
         &tc);
     
@@ -10718,55 +9541,30 @@ namespace vector__ivy__type_context__stack_entry
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::type_context::stack_entry,vector__ivy__type_context__stack_entry::domain::__t >
             value;
         
         vector__ivy__type_context__stack_entry::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__type_context__stack_entry::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__type_context__stack_entry::domain::__t &i,const ivy::type_context::stack_entry
             &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::type_context::stack_entry &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__type_context__stack_entry::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__type_context__stack_entry::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::type_context::stack_entry back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__type_context__stack_entry::__t segment  (const
             vector__ivy__type_context__stack_entry::domain::__t &beg,const
             vector__ivy__type_context__stack_entry::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -10801,13 +9599,8 @@ namespace vector__ivy__type_context__stack_entry
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__type_context__stack_entry
+namespace vector__ivy__type_context__stack_entry
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__type_context__stack_entry::__t empty ();
     
 }
@@ -10865,13 +9658,15 @@ namespace ivy
     {
         struct __t
         {
-            ivy::type_context::__t 
-                // Type context
-                tc;
             
-            ivy::subtypes::__t 
-                // The subtyping relation
-                subtype_rel;
+            // Type context
+            
+            ivy::type_context::__t tc;
+            
+            
+            // The subtyping relation
+            
+            ivy::subtypes::__t subtype_rel;
             
              __t () {}
              __t  (long long value) {}
@@ -10883,37 +9678,20 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return 
-                    // Type context
-                    tc == other . 
-                    // Type context
-                    tc & 
-                    // The subtyping relation
-                    subtype_rel == other . 
-                    // The subtyping relation
-                    subtype_rel;
+                return tc == other . tc & subtype_rel == other . subtype_rel;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
-            bool __is_zero () const
-            {
-                return 
-                        // Type context
-                        tc . __is_zero() & 
-                        // The subtyping relation
-                        subtype_rel . __is_zero();
+            bool __is_zero () const {
+                return tc . __is_zero() & subtype_rel . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return ivy::type_context::__t::__hash() (x . 
-                            // Type context
-                            tc) +
-                        ivy::subtypes::__t::__hash() (x . 
-                            // The subtyping relation
-                            subtype_rel);
+                    return ivy::type_context::__t::__hash() (x . tc) +
+                        ivy::subtypes::__t::__hash() (x . subtype_rel);
                 }
             };
             
@@ -10923,12 +9701,8 @@ namespace ivy
     
 }
 // Bottom up type inference
-namespace 
-    // Bottom up type inference
-    ivy
+namespace ivy
 {
-    
-    // Bottom up type inference
     void bottom_up_type  (ivy::ptr< ivy::expr::__t > &e,const ivy::typeinferst::__t &st,__bool &ok);
     
 }
@@ -10937,31 +9711,15 @@ namespace
 // arguments to their expected types.  We don't worry about whether
 // `func` takes the expect number of arguments here.  If it
 // doesn't, type inference will fail later.
-namespace 
-    // Bottom-up type inference for a vector of arguments `es` of a
-    // function `func`.  If `func` has a type, then we upcast the
-    // arguments to their expected types.  We don't worry about whether
-    // `func` takes the expect number of arguments here.  If it
-    // doesn't, type inference will fail later.
-    ivy
+namespace ivy
 {
-    
-    // Bottom-up type inference for a vector of arguments `es` of a
-    // function `func`.  If `func` has a type, then we upcast the
-    // arguments to their expected types.  We don't worry about whether
-    // `func` takes the expect number of arguments here.  If it
-    // doesn't, type inference will fail later.
     void bottom_up_types  (vector__ivy__expr::__t &es,const ivy::ptr< ivy::expr::__t > &func,const
         ivy::typeinferst::__t &st,__bool &ok);
     
 }
 // Check if type `rhsty` is a subtype of `lhsty`.
-namespace 
-    // Check if type `rhsty` is a subtype of `lhsty`.
-    ivy
+namespace ivy
 {
-    
-    // Check if type `rhsty` is a subtype of `lhsty`.
     __bool is_subtype  (const ivy::ptr< ivy::expr::__t > &rhsty,const ivy::ptr< ivy::expr::__t > &lhsty,const
         ivy::typeinferst::__t &st);
     
@@ -10969,30 +9727,16 @@ namespace
 // Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
 // used for assignments, and argument passing. This has to work on tuples
 // to handle multiple assignment. 
-namespace 
-    // Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
-    // used for assignments, and argument passing. This has to work on tuples
-    // to handle multiple assignment. 
-    ivy
+namespace ivy
 {
-    
-    // Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
-    // used for assignments, and argument passing. This has to work on tuples
-    // to handle multiple assignment. 
     void make_cast  (const ivy::ptr< ivy::expr::__t > &lhsty,ivy::ptr< ivy::expr::__t > &rhs,const
         ivy::typeinferst::__t &st);
     
 }
 // After type inference, we can desugar assignments like `var x := y` to
 // `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
-namespace 
-    // After type inference, we can desugar assignments like `var x := y` to
-    // `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
-    ivy
+namespace ivy
 {
-    
-    // After type inference, we can desugar assignments like `var x := y` to
-    // `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
     void desugar_asgn  (ivy::ptr< ivy::stmt::__t > &s,vector__ivy__stmt::__t &varsts);
     
 }
@@ -11047,28 +9791,8 @@ namespace cpp
     ivy::vector< pos::__t,cpp::verb::__t > verb_to_arity;
     
 }
-// Numerals are symbols beginning with a digit. String literals begin
-// with double quotes. Logical variables consist of a capital followed
-// by any number of digits. Otherwise we determine
-// the verb of a symbol from its name by looking it up in
-// `str_to_verb`. The default is `none`, which indicates a
-// program-defined symbol.
-namespace 
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
-    cpp
+namespace cpp
 {
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     __bool is_logvar_name  (const str::__t &name);
     
 }
@@ -11159,52 +9883,27 @@ namespace vector__cpp__ident
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< cpp::ident::__t >,vector__cpp__ident::domain::__t > value;
         
         vector__cpp__ident::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__cpp__ident::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__cpp__ident::domain::__t &i,const ivy::ptr< cpp::ident::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< cpp::ident::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__cpp__ident::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__cpp__ident::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< cpp::ident::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__cpp__ident::__t segment  (const vector__cpp__ident::domain::__t &beg,const
             vector__cpp__ident::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -11238,13 +9937,8 @@ namespace vector__cpp__ident
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__cpp__ident
+namespace vector__cpp__ident
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__ident::__t empty ();
     
 }
@@ -11482,9 +10176,6 @@ namespace cpp
             virtual ivy::ptr< cpp::expr::__t > prefix  (const ivy::ptr< cpp::ident::__t > &pref)
                 const;
             
-            
-            // Tests whether two expressions are syntacically equal,
-            // leaving aside annotations.
             virtual __bool eq  (const ivy::ptr< cpp::expr::__t > &e2) const;
             
              __t () {}
@@ -11670,52 +10361,27 @@ namespace vector__cpp__expr
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< cpp::expr::__t >,vector__cpp__expr::domain::__t > value;
         
         vector__cpp__expr::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__cpp__expr::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__cpp__expr::domain::__t &i,const ivy::ptr< cpp::expr::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< cpp::expr::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__cpp__expr::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__cpp__expr::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< cpp::expr::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__cpp__expr::__t segment  (const vector__cpp__expr::domain::__t &beg,const
             vector__cpp__expr::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -11749,13 +10415,8 @@ namespace vector__cpp__expr
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__cpp__expr
+namespace vector__cpp__expr
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__expr::__t empty ();
     
 }
@@ -11978,53 +10639,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        iff
+    namespace iff
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        iff
+    namespace iff
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12040,53 +10668,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        __or
+    namespace __or
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        __or
+    namespace __or
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12102,53 +10697,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        __and
+    namespace __and
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        __and
+    namespace __and
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12164,53 +10726,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        lt
+    namespace lt
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        lt
+    namespace lt
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12226,53 +10755,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        leq
+    namespace leq
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        leq
+    namespace leq
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12288,53 +10784,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        gt
+    namespace gt
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        gt
+    namespace gt
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12350,53 +10813,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        geq
+    namespace geq
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        geq
+    namespace geq
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12412,53 +10842,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        plus
+    namespace plus
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        plus
+    namespace plus
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12474,53 +10871,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        minus
+    namespace minus
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        minus
+    namespace minus
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12536,53 +10900,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        times
+    namespace times
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        times
+    namespace times
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12598,53 +10929,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        div
+    namespace div
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        div
+    namespace div
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12696,53 +10994,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        comma
+    namespace comma
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        comma
+    namespace comma
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12758,53 +11023,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        dot
+    namespace dot
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        dot
+    namespace dot
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -12819,19 +11051,10 @@ namespace cpp
     }
     
 }
-// workaround
-namespace 
-    // workaround
-    cpp
+namespace cpp
 {
-    
-    // workaround
-    namespace 
-        // workaround
-        expr
+    namespace expr
     {
-        
-        // workaround
         void parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< cpp::expr::__t > &res);
         
     }
@@ -12948,12 +11171,8 @@ namespace cpp
             
             void encode_int  (pretty::__t &b,const priority::__t &prio) const;
             
-            
-            // This gets the lhs of the assignment
             ivy::ptr< cpp::expr::__t > get_lhs () const;
             
-            
-            // This gets the rhs of the assignment
             ivy::ptr< cpp::expr::__t > get_rhs () const;
             
             ivy::ptr< annot::__t > get_ann () const;
@@ -13096,52 +11315,27 @@ namespace vector__cpp__stmt
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< cpp::stmt::__t >,vector__cpp__stmt::domain::__t > value;
         
         vector__cpp__stmt::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__cpp__stmt::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__cpp__stmt::domain::__t &i,const ivy::ptr< cpp::stmt::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< cpp::stmt::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__cpp__stmt::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__cpp__stmt::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< cpp::stmt::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__cpp__stmt::__t segment  (const vector__cpp__stmt::domain::__t &beg,const
             vector__cpp__stmt::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -13175,13 +11369,8 @@ namespace vector__cpp__stmt
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__cpp__stmt
+namespace vector__cpp__stmt
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__stmt::__t empty ();
     
 }
@@ -13194,29 +11383,10 @@ namespace cpp
     }
     
 }
-// workaround
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the right.
-namespace 
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
-    cpp
+namespace cpp
 {
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
-    namespace 
-        // workaround
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the right.
-        sequence
+    namespace sequence
     {
-        
-        // workaround
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the right.
         ivy::ptr< cpp::stmt::__t > fold_right  (const vector__cpp__stmt::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
@@ -13497,53 +11667,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        arrow
+    namespace arrow
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        arrow
+    namespace arrow
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -13559,53 +11696,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        equals
+    namespace equals
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        equals
+    namespace equals
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -13621,53 +11725,20 @@ namespace cpp
     }
     
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
-namespace 
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
-    namespace 
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
-        notequals
+    namespace notequals
     {
-        
-        // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-        // xn`, where `*` is a binary operator that associates to the left.
         ivy::ptr< cpp::expr::__t > fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
             &ann);
         
     }
     
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-namespace 
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    cpp
+namespace cpp
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
-    namespace 
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
-        notequals
+    namespace notequals
     {
-        
-        // Works for comma and cross product
-        // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-        // where `*` is a binary operator that associates to the left.
         vector__cpp__expr::__t unfold_left  (const ivy::ptr< cpp::expr::__t > &s);
         
     }
@@ -13816,52 +11887,27 @@ namespace vector__cpp__simpletype
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< cpp::simpletype::__t,vector__cpp__simpletype::domain::__t > value;
         
         vector__cpp__simpletype::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__cpp__simpletype::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__cpp__simpletype::domain::__t &i,const cpp::simpletype::__t &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const cpp::simpletype::__t &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__cpp__simpletype::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__cpp__simpletype::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         cpp::simpletype::__t back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__cpp__simpletype::__t segment  (const vector__cpp__simpletype::domain::__t &beg,const
             vector__cpp__simpletype::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -13895,13 +11941,8 @@ namespace vector__cpp__simpletype
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__cpp__simpletype
+namespace vector__cpp__simpletype
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__simpletype::__t empty ();
     
 }
@@ -14504,52 +12545,27 @@ namespace vector__cpp__decl
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::ptr< cpp::decl::__t >,vector__cpp__decl::domain::__t > value;
         
         vector__cpp__decl::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__cpp__decl::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__cpp__decl::domain::__t &i,const ivy::ptr< cpp::decl::__t > &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::ptr< cpp::decl::__t > &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__cpp__decl::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__cpp__decl::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::ptr< cpp::decl::__t > back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__cpp__decl::__t segment  (const vector__cpp__decl::domain::__t &beg,const
             vector__cpp__decl::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -14583,13 +12599,8 @@ namespace vector__cpp__decl
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__cpp__decl
+namespace vector__cpp__decl
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__decl::__t empty ();
     
 }
@@ -14777,18 +12788,10 @@ namespace cpp
     
 }
 // workaround
-namespace 
-    // workaround
-    cpp
+namespace cpp
 {
-    
-    // workaround
-    namespace 
-        // workaround
-        decl
+    namespace decl
     {
-        
-        // workaround
         void parse_list  (pstate::__t &st,const priority::__t &prio,vector__cpp__decl::__t &res);
         
     }
@@ -14916,19 +12919,10 @@ namespace cpp
     }
     
 }
-// Note, the Ivy verison number is encoded in the first comment line
-namespace 
-    // Note, the Ivy verison number is encoded in the first comment line
-    cpp
+namespace cpp
 {
-    
-    // Note, the Ivy verison number is encoded in the first comment line
-    namespace 
-        // Note, the Ivy verison number is encoded in the first comment line
-        prog
+    namespace prog
     {
-        
-        // Note, the Ivy verison number is encoded in the first comment line
         void parse_to  (pstate::__t &st,const priority::__t &prio,cpp::prog::__t &res);
         
     }
@@ -14961,14 +12955,8 @@ namespace cpp
 }
 // The set of names reserved by C++. Ivy names that clash with these
 // have to be changed.
-namespace 
-    // The set of names reserved by C++. Ivy names that clash with these
-    // have to be changed.
-    ivy
+namespace ivy
 {
-    
-    // The set of names reserved by C++. Ivy names that clash with these
-    // have to be changed.
     ivy::vector< __bool,str::__t > cpp_reserved_word;
     
 }
@@ -15011,22 +12999,13 @@ namespace ivy
     
 }
 // Two paths may alias if one is a prefix of the other
-namespace 
-    // Two paths may alias if one is a prefix of the other
-    ivy
+namespace ivy
 {
-    
-    // Two paths may alias if one is a prefix of the other
     __bool path_may_alias  (const ivy::access_path::__t &v,const ivy::access_path::__t &w);
     
 }
-// A pair consisting of an lvalue and an alias count
-namespace 
-    // A pair consisting of an lvalue and an alias count
-    ivy
+namespace ivy
 {
-    
-    // A pair consisting of an lvalue and an alias count
     struct lvalue_count
     {
         ivy::ptr< cpp::expr::__t > lvalue;
@@ -15035,147 +13014,32 @@ namespace
         
         pos::__t cnt;
         
-         lvalue_count () 
-        // A pair consisting of an lvalue and an alias count
-        {}
-         lvalue_count  (
-            // A pair consisting of an lvalue and an alias count
-            long long value) 
-        // A pair consisting of an lvalue and an alias count
-        {}
-         
-            // A pair consisting of an lvalue and an alias count
-            operator std::size_t () const 
-        // A pair consisting of an lvalue and an alias count
-        {
-            return 
-                // A pair consisting of an lvalue and an alias count
-                0;
+         lvalue_count () {}
+         lvalue_count  (long long value) {}
+         operator std::size_t () const {
+            return 0;
         }
-        static 
-            // A pair consisting of an lvalue and an alias count
-            bool 
-            // A pair consisting of an lvalue and an alias count
-            __is_seq () 
-        // A pair consisting of an lvalue and an alias count
-        {
-            return 
-                // A pair consisting of an lvalue and an alias count
-                false;
+        static bool __is_seq () {
+            return false;
         }
-        
-            // A pair consisting of an lvalue and an alias count
-            ivy::native_bool 
-            // A pair consisting of an lvalue and an alias count
-            operator ==  (const lvalue_count &other) const 
-        // A pair consisting of an lvalue and an alias count
+        ivy::native_bool operator ==  (const lvalue_count &other) const
         {
-            return 
-                // A pair consisting of an lvalue and an alias count
-                
-                // A pair consisting of an lvalue and an alias count
-                
-                // A pair consisting of an lvalue and an alias count
-                lvalue == 
-                // A pair consisting of an lvalue and an alias count
-                other . lvalue & 
-                // A pair consisting of an lvalue and an alias count
-                path == 
-                // A pair consisting of an lvalue and an alias count
-                other . path & 
-                // A pair consisting of an lvalue and an alias count
-                cnt == 
-                // A pair consisting of an lvalue and an alias count
-                other . cnt;
+            return lvalue == other . lvalue & path == other . path & cnt == other . cnt;
         }
-        
-            // A pair consisting of an lvalue and an alias count
-            ivy::native_bool 
-            // A pair consisting of an lvalue and an alias count
-            operator !=  (const lvalue_count &other) const 
-        // A pair consisting of an lvalue and an alias count
+        ivy::native_bool operator !=  (const lvalue_count &other) const
         {
-            return 
-                // A pair consisting of an lvalue and an alias count
-                ! 
-                // A pair consisting of an lvalue and an alias count
-                (
-                    // A pair consisting of an lvalue and an alias count
-                    (*this) == other);
+            return ! ((*this) == other);
         }
-        
-            // A pair consisting of an lvalue and an alias count
-            bool 
-            // A pair consisting of an lvalue and an alias count
-            __is_zero () const 
-        // A pair consisting of an lvalue and an alias count
+        bool __is_zero () const
         {
-            return 
-                // A pair consisting of an lvalue and an alias count
-                
-                // A pair consisting of an lvalue and an alias count
-                
-                // A pair consisting of an lvalue and an alias count
-                
-                    // A pair consisting of an lvalue and an alias count
-                    lvalue . 
-                    // A pair consisting of an lvalue and an alias count
-                    __is_zero() & 
-                // A pair consisting of an lvalue and an alias count
-                
-                    // A pair consisting of an lvalue and an alias count
-                    path . 
-                    // A pair consisting of an lvalue and an alias count
-                    __is_zero() & 
-                // A pair consisting of an lvalue and an alias count
-                
-                    // A pair consisting of an lvalue and an alias count
-                    cnt . 
-                    // A pair consisting of an lvalue and an alias count
-                    __is_zero();
+            return lvalue . __is_zero() & path . __is_zero() & cnt . __is_zero();
         }
-        
-        // A pair consisting of an lvalue and an alias count
-        struct 
-            // A pair consisting of an lvalue and an alias count
-            __hash
+        struct __hash
         {
-            
-                // A pair consisting of an lvalue and an alias count
-                std::size_t 
-                // A pair consisting of an lvalue and an alias count
-                operator ()  (const lvalue_count &x) const 
-            // A pair consisting of an lvalue and an alias count
+            std::size_t operator ()  (const lvalue_count &x) const
             {
-                return 
-                    // A pair consisting of an lvalue and an alias count
-                    
-                    // A pair consisting of an lvalue and an alias count
-                    
-                    // A pair consisting of an lvalue and an alias count
-                    
-                        // A pair consisting of an lvalue and an alias count
-                        
-                            // A pair consisting of an lvalue and an alias count
-                            ivy::ptr< cpp::expr::__t >::__hash() (
-                        // A pair consisting of an lvalue and an alias count
-                        x . lvalue) + 
-                    // A pair consisting of an lvalue and an alias count
-                    
-                        // A pair consisting of an lvalue and an alias count
-                        
-                            // A pair consisting of an lvalue and an alias count
-                            ivy::access_path::__t::__hash() (
-                        // A pair consisting of an lvalue and an alias count
-                        x . path) + 
-                    // A pair consisting of an lvalue and an alias count
-                    
-                        // A pair consisting of an lvalue and an alias count
-                        
-                            // A pair consisting of an lvalue and an alias count
-                            pos::__t::__hash() (
-                        // A pair consisting of an lvalue and an alias count
-                        x . cnt);
+                return ivy::ptr< cpp::expr::__t >::__hash() (x . lvalue) +
+                    ivy::access_path::__t::__hash() (x . path) + pos::__t::__hash() (x . cnt);
             }
         };
         
@@ -15231,21 +13095,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_declvec::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const vector__ivy__decl::__t &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,vector__ivy__decl::__t &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             vector__ivy__decl::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -15282,19 +13137,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_declvec
+    namespace ident_to_declvec
     {
-        
-        // return an empty map
         ivy::ident_to_declvec::__t empty ();
         
     }
@@ -15350,21 +13196,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_cppclass::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t > &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t > &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::ptr< ivy::expr::__t > value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -15401,19 +13238,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_cppclass
+    namespace ident_to_cppclass
     {
-        
-        // return an empty map
         ivy::ident_to_cppclass::__t empty ();
         
     }
@@ -15468,21 +13296,12 @@ namespace ivy
         {
             ivy::vector< ivy::ident_to_prototype::rec,ivy::ptr< ivy::ident::__t > > map;
             
-            
-            // mutate a map a so that x in maps to y
             void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::prototype::__t &y);
             
-            
-            // get the value y such that x maps to z in a, else
-            // leave y unchanged.
             void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::prototype::__t &y) const;
             
-            
-            // return true if x maps to some value
             __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
             
-            
-            // remove a key x from the map
             void remove  (const ivy::ptr< ivy::ident::__t > &x);
             
             ivy::prototype::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
@@ -15519,19 +13338,10 @@ namespace ivy
     }
     
 }
-// return an empty map
-namespace 
-    // return an empty map
-    ivy
+namespace ivy
 {
-    
-    // return an empty map
-    namespace 
-        // return an empty map
-        ident_to_prototype
+    namespace ident_to_prototype
     {
-        
-        // return an empty map
         ivy::ident_to_prototype::__t empty ();
         
     }
@@ -15563,52 +13373,27 @@ namespace vector__ivy__lvalue_count
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::lvalue_count,vector__ivy__lvalue_count::domain::__t > value;
         
         vector__ivy__lvalue_count::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__lvalue_count::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__lvalue_count::domain::__t &i,const ivy::lvalue_count &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::lvalue_count &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__lvalue_count::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__lvalue_count::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::lvalue_count back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__lvalue_count::__t segment  (const vector__ivy__lvalue_count::domain::__t &beg,const
             vector__ivy__lvalue_count::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -15642,13 +13427,8 @@ namespace vector__ivy__lvalue_count
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__lvalue_count
+namespace vector__ivy__lvalue_count
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__lvalue_count::__t empty ();
     
 }
@@ -15658,84 +13438,103 @@ namespace ivy
     {
         struct __t
         {
-            ivy::ident_to_declvec::__t 
-                // Maps types to their members, which includes destructors and
-                // member actions.
-                members;
             
-            ivy::ident_to_cppclass::__t 
-                // Maps types to their C++ superclasses
-                cppclasses;
+            // Maps types to their members, which includes destructors and
+            // member actions.
             
-            ivy::ident_set::__t 
-                // Identifiers of all objects
-                objects;
+            ivy::ident_to_declvec::__t members;
             
-            ivy::global_types::__t 
-                // Types of global actions and variables
-                globals;
             
-            __bool 
-                // True if we are emitting a member action
-                is_member;
+            // Maps types to their C++ superclasses
             
-            ivy::ptr< ivy::ident::__t > 
-                // The name of the "this" parameter in a member
-                this_ident;
+            ivy::ident_to_cppclass::__t cppclasses;
             
-            __bool 
-                // True if we are in a class declaration
-                in_class;
             
-            __bool 
-                // True if we are only emitting prototypes
-                proto_only;
+            // Identifiers of all objects
             
-            ivy::subtypes::__t 
-                // The subtyping relation
-                subtype_rel;
+            ivy::ident_set::__t objects;
             
-            __bool 
-                // True if we are emitting a native C++ name
-                native;
             
-            __bool 
-                // True if we are emitting forward declarations
-                forward;
+            // Types of global actions and variables
             
-            vector__ivy__expr::__t 
-                // Current outputs (lvalues to which expression value will be assigned).
-                outputs;
+            ivy::global_types::__t globals;
             
-            vector__cpp__stmt::__t 
-                // Code to be emitted before the current statement
-                code;
             
-            pos::__t 
-                // Counter for temporary variables
-                counter;
+            // True if we are emitting a member action
             
-            ivy::ident_to_prototype::__t 
-                // Map from action names to action prototypes
-                protos;
+            __bool is_member;
             
-            vector__ivy__lvalue_count::__t 
-                // The dead list of the current context. If an lvalue is on
-                // this list, then any occurrence is the last reference to
-                // the value.
-                dead;
             
-            ivy::local_tracker::__t 
-                // The set of local variables in scope
-                locals;
+            // The name of the "this" parameter in a member
             
-            ivy::ident_set::__t 
-                // The set of constructor functions
-                constructors;
+            ivy::ptr< ivy::ident::__t > this_ident;
             
-            __bool 
-                // True is compiling rhs of a dot operator
-                dot_rhs;
+            
+            // True if we are in a class declaration
+            
+            __bool in_class;
+            
+            
+            // True if we are only emitting prototypes
+            
+            __bool proto_only;
+            
+            
+            // The subtyping relation
+            
+            ivy::subtypes::__t subtype_rel;
+            
+            
+            // True if we are emitting a native C++ name
+            
+            __bool native;
+            
+            
+            // True if we are emitting forward declarations
+            
+            __bool forward;
+            
+            
+            // Current outputs (lvalues to which expression value will be assigned).
+            
+            vector__ivy__expr::__t outputs;
+            
+            
+            // Code to be emitted before the current statement
+            
+            vector__cpp__stmt::__t code;
+            
+            
+            // Counter for temporary variables
+            
+            pos::__t counter;
+            
+            
+            // Map from action names to action prototypes
+            
+            ivy::ident_to_prototype::__t protos;
+            
+            
+            // The dead list of the current context. If an lvalue is on
+            // this list, then any occurrence is the last reference to
+            // the value.
+            
+            vector__ivy__lvalue_count::__t dead;
+            
+            
+            // The set of local variables in scope
+            
+            ivy::local_tracker::__t locals;
+            
+            
+            // The set of constructor functions
+            
+            ivy::ident_set::__t constructors;
+            
+            
+            // True is compiling rhs of a dot operator
+            
+            __bool dot_rhs;
             
             void add_member  (const ivy::ptr< ivy::ident::__t > &namesp,const ivy::ptr< ivy::decl::__t >
                 &member);
@@ -15744,11 +13543,13 @@ namespace ivy
             
             
             // Get the added code and clear it.
+            
             void get_code  (const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::stmt::__t > &res);
             
             
             // This adds a statement to the end of the current code, clears
             // the code and returns the result.
+            
             void wrap_stmt  (const ivy::ptr< cpp::stmt::__t > &code,const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::stmt::__t >
                 &res);
             
@@ -15762,221 +13563,49 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return 
-                    // Maps types to their members, which includes destructors and
-                    // member actions.
-                    members == other . 
-                    // Maps types to their members, which includes destructors and
-                    // member actions.
-                    members & 
-                    // Maps types to their C++ superclasses
-                    cppclasses == other . 
-                    // Maps types to their C++ superclasses
-                    cppclasses & 
-                    // Identifiers of all objects
-                    objects == other . 
-                    // Identifiers of all objects
-                    objects & 
-                    // Types of global actions and variables
-                    globals == other . 
-                    // Types of global actions and variables
-                    globals & 
-                    // True if we are emitting a member action
-                    is_member == other . 
-                    // True if we are emitting a member action
-                    is_member & 
-                    // The name of the "this" parameter in a member
-                    this_ident == other . 
-                    // The name of the "this" parameter in a member
-                    this_ident & 
-                    // True if we are in a class declaration
-                    in_class == other . 
-                    // True if we are in a class declaration
-                    in_class & 
-                    // True if we are only emitting prototypes
-                    proto_only == other . 
-                    // True if we are only emitting prototypes
-                    proto_only & 
-                    // The subtyping relation
-                    subtype_rel == other . 
-                    // The subtyping relation
-                    subtype_rel & 
-                    // True if we are emitting a native C++ name
-                    native == other . 
-                    // True if we are emitting a native C++ name
-                    native & 
-                    // True if we are emitting forward declarations
-                    forward == other . 
-                    // True if we are emitting forward declarations
-                    forward & 
-                    // Current outputs (lvalues to which expression value will be assigned).
-                    outputs == other . 
-                    // Current outputs (lvalues to which expression value will be assigned).
-                    outputs & 
-                    // Code to be emitted before the current statement
-                    code == other . 
-                    // Code to be emitted before the current statement
-                    code & 
-                    // Counter for temporary variables
-                    counter == other . 
-                    // Counter for temporary variables
-                    counter & 
-                    // Map from action names to action prototypes
-                    protos == other . 
-                    // Map from action names to action prototypes
-                    protos & 
-                    // The dead list of the current context. If an lvalue is on
-                    // this list, then any occurrence is the last reference to
-                    // the value.
-                    dead == other . 
-                    // The dead list of the current context. If an lvalue is on
-                    // this list, then any occurrence is the last reference to
-                    // the value.
-                    dead & 
-                    // The set of local variables in scope
-                    locals == other . 
-                    // The set of local variables in scope
-                    locals & 
-                    // The set of constructor functions
-                    constructors == other . 
-                    // The set of constructor functions
-                    constructors & 
-                    // True is compiling rhs of a dot operator
-                    dot_rhs == other . 
-                    // True is compiling rhs of a dot operator
-                    dot_rhs;
+                return members == other . members & cppclasses == other . cppclasses & objects ==
+                    other . objects & globals == other . globals & is_member == other . is_member &
+                    this_ident == other . this_ident & in_class == other . in_class & proto_only ==
+                    other . proto_only & subtype_rel == other . subtype_rel & native == other .
+                    native & forward == other . forward & outputs == other . outputs & code == other
+                    . code & counter == other . counter & protos == other . protos & dead == other .
+                    dead & locals == other . locals & constructors == other . constructors & dot_rhs
+                    == other . dot_rhs;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
             bool __is_zero () const
             {
-                return
-                    
-                        // Maps types to their members, which includes destructors and
-                        // member actions.
-                        members . __is_zero() &
-                    
-                        // Maps types to their C++ superclasses
-                        cppclasses . __is_zero() &
-                    
-                        // Identifiers of all objects
-                        objects . __is_zero() &
-                    
-                        // Types of global actions and variables
-                        globals . __is_zero() &
-                    
-                        // True if we are emitting a member action
-                        is_member . __is_zero() &
-                    
-                        // The name of the "this" parameter in a member
-                        this_ident . __is_zero() &
-                    
-                        // True if we are in a class declaration
-                        in_class . __is_zero() &
-                    
-                        // True if we are only emitting prototypes
-                        proto_only . __is_zero() &
-                    
-                        // The subtyping relation
-                        subtype_rel . __is_zero() &
-                    
-                        // True if we are emitting a native C++ name
-                        native . __is_zero() &
-                    
-                        // True if we are emitting forward declarations
-                        forward . __is_zero() &
-                    
-                        // Current outputs (lvalues to which expression value will be assigned).
-                        outputs . __is_zero() &
-                    
-                        // Code to be emitted before the current statement
-                        code . __is_zero() & 
-                        // Counter for temporary variables
-                        counter . __is_zero() &
-                    
-                        // Map from action names to action prototypes
-                        protos . __is_zero() &
-                    
-                        // The dead list of the current context. If an lvalue is on
-                        // this list, then any occurrence is the last reference to
-                        // the value.
-                        dead . __is_zero() &
-                    
-                        // The set of local variables in scope
-                        locals . __is_zero() &
-                    
-                        // The set of constructor functions
-                        constructors . __is_zero() &
-                    
-                        // True is compiling rhs of a dot operator
-                        dot_rhs . __is_zero();
+                return members . __is_zero() & cppclasses . __is_zero() & objects . __is_zero() &
+                    globals . __is_zero() & is_member . __is_zero() & this_ident . __is_zero() &
+                    in_class . __is_zero() & proto_only . __is_zero() & subtype_rel . __is_zero() &
+                    native . __is_zero() & forward . __is_zero() & outputs . __is_zero() &
+                    code . __is_zero() & counter . __is_zero() & protos . __is_zero() &
+                    dead . __is_zero() & locals . __is_zero() & constructors . __is_zero() &
+                    dot_rhs . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return
-                        ivy::ident_to_declvec::__t::__hash() (x . 
-                            // Maps types to their members, which includes destructors and
-                            // member actions.
-                            members) +
-                        ivy::ident_to_cppclass::__t::__hash() (x . 
-                            // Maps types to their C++ superclasses
-                            cppclasses) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // Identifiers of all objects
-                            objects) +
-                        ivy::global_types::__t::__hash() (x . 
-                            // Types of global actions and variables
-                            globals) +
-                        __bool::__hash() (x . 
-                            // True if we are emitting a member action
-                            is_member) +
-                        ivy::ptr< ivy::ident::__t >::__hash() (x . 
-                            // The name of the "this" parameter in a member
-                            this_ident) +
-                        __bool::__hash() (x . 
-                            // True if we are in a class declaration
-                            in_class) +
-                        __bool::__hash() (x . 
-                            // True if we are only emitting prototypes
-                            proto_only) +
-                        ivy::subtypes::__t::__hash() (x . 
-                            // The subtyping relation
-                            subtype_rel) +
-                        __bool::__hash() (x . 
-                            // True if we are emitting a native C++ name
-                            native) +
-                        __bool::__hash() (x . 
-                            // True if we are emitting forward declarations
-                            forward) +
-                        vector__ivy__expr::__t::__hash() (x . 
-                            // Current outputs (lvalues to which expression value will be assigned).
-                            outputs) +
-                        vector__cpp__stmt::__t::__hash() (x . 
-                            // Code to be emitted before the current statement
-                            code) +
-                        pos::__t::__hash() (x . 
-                            // Counter for temporary variables
-                            counter) +
-                        ivy::ident_to_prototype::__t::__hash() (x . 
-                            // Map from action names to action prototypes
-                            protos) +
-                        vector__ivy__lvalue_count::__t::__hash() (x . 
-                            // The dead list of the current context. If an lvalue is on
-                            // this list, then any occurrence is the last reference to
-                            // the value.
-                            dead) +
-                        ivy::local_tracker::__t::__hash() (x . 
-                            // The set of local variables in scope
-                            locals) +
-                        ivy::ident_set::__t::__hash() (x . 
-                            // The set of constructor functions
-                            constructors) +
-                        __bool::__hash() (x . 
-                            // True is compiling rhs of a dot operator
-                            dot_rhs);
+                    return ivy::ident_to_declvec::__t::__hash() (x . members) +
+                        ivy::ident_to_cppclass::__t::__hash() (x . cppclasses) +
+                        ivy::ident_set::__t::__hash() (x . objects) +
+                        ivy::global_types::__t::__hash() (x . globals) +
+                        __bool::__hash() (x . is_member) +
+                        ivy::ptr< ivy::ident::__t >::__hash() (x . this_ident) +
+                        __bool::__hash() (x . in_class) + __bool::__hash() (x . proto_only) +
+                        ivy::subtypes::__t::__hash() (x . subtype_rel) +
+                        __bool::__hash() (x . native) + __bool::__hash() (x . forward) +
+                        vector__ivy__expr::__t::__hash() (x . outputs) +
+                        vector__cpp__stmt::__t::__hash() (x . code) +
+                        pos::__t::__hash() (x . counter) +
+                        ivy::ident_to_prototype::__t::__hash() (x . protos) +
+                        vector__ivy__lvalue_count::__t::__hash() (x . dead) +
+                        ivy::local_tracker::__t::__hash() (x . locals) +
+                        ivy::ident_set::__t::__hash() (x . constructors) +
+                        __bool::__hash() (x . dot_rhs);
                 }
             };
             
@@ -15986,26 +13615,16 @@ namespace ivy
     
 }
 // Generate a temporay symbol name
-namespace 
-    // Generate a temporay symbol name
-    ivy
+namespace ivy
 {
-    
-    // Generate a temporay symbol name
     void temp_sym  (ivy::tocppst::__t &s,const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::expr::__t >
         &res);
     
 }
 // This declares a temporary variable in the current code
 // context and returns it.
-namespace 
-    // This declares a temporary variable in the current code
-    // context and returns it.
-    ivy
+namespace ivy
 {
-    
-    // This declares a temporary variable in the current code
-    // context and returns it.
     void make_temp  (ivy::tocppst::__t &s,const ivy::ptr< ivy::expr::__t > &ty,const ivy::ptr< annot::__t >
         &ann,ivy::ptr< cpp::expr::__t > &res);
     
@@ -16015,20 +13634,8 @@ namespace
 // appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
 // a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
 // not have a path. For such cases, we return `ok = false`.
-namespace 
-    // Given a C++ lvalue, this returns its "path". The path is an identifier
-    // that gives the name of the variable, with a sequence of field references
-    // appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
-    // a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
-    // not have a path. For such cases, we return `ok = false`.
-    ivy
+namespace ivy
 {
-    
-    // Given a C++ lvalue, this returns its "path". The path is an identifier
-    // that gives the name of the variable, with a sequence of field references
-    // appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
-    // a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
-    // not have a path. For such cases, we return `ok = false`.
     void lvalue_path  (const ivy::ptr< ivy::expr::__t > &s,ivy::access_path::__t &path,__bool &ok);
     
 }
@@ -16058,52 +13665,27 @@ namespace vector__ivy__access_path
 {
     struct __t
     {
-        
-        // We have two destructors (fields) representing the array
-        // contents. The `value` field is represented using a dense
-        // encoding, which means the C++ type `std::vector<range>`.
         ivy::vector< ivy::access_path::__t,vector__ivy__access_path::domain::__t > value;
         
         vector__ivy__access_path::domain::__t end;
         
-        
-        // The `begin` action always returns 0.
         vector__ivy__access_path::domain::__t begin () const;
         
-        
-        // The `set` action sets an element of an array
         void set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t &v);
         
-        
-        // The `append` action appends one character `c` to a array.
         void append  (const ivy::access_path::__t &c);
         
-        
-        // The `extend` action appends a array `x` to a array `s`.
         void extend  (const vector__ivy__access_path::__t &x);
         
-        
-        // The `resize` action sets the end marker of the string. 
         void resize  (const vector__ivy__access_path::domain::__t &end);
         
-        
-        // The `back` action returns the last element of an array, or zero
-        // if the array is empty.
         ivy::access_path::__t back () const;
         
-        
-        // The `back` action removes he last element of the array, if the
-        // array is not empty.
         void pop_back ();
         
-        
-        // The `segment` action gets the segment of an array from index `beg` to
-        // index `en-1`.
         vector__ivy__access_path::__t segment  (const vector__ivy__access_path::domain::__t &beg,const
             vector__ivy__access_path::domain::__t &en) const;
         
-        
-        // The `reverse` action reverses an array.
         void reverse ();
         
          __t () {}
@@ -16137,74 +13719,43 @@ namespace vector__ivy__access_path
     };
     
 }
-// The `empty` action returns an empty array
-namespace 
-    // The `empty` action returns an empty array
-    vector__ivy__access_path
+namespace vector__ivy__access_path
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__access_path::__t empty ();
     
 }
 // Workaround
-namespace 
-    // Workaround
-    ivy
+namespace ivy
 {
-    
-    // Workaround
     vector__ivy__access_path::__t dummy_vector_access_path;
     
 }
 // Get a list of all of the lvalue paths occurring in a C++
 // expression.
-namespace 
-    // Get a list of all of the lvalue paths occurring in a C++
-    // expression.
-    ivy
+namespace ivy
 {
-    
-    // Get a list of all of the lvalue paths occurring in a C++
-    // expression.
     void lvalue_paths  (const ivy::ptr< ivy::expr::__t > &s,vector__ivy__access_path::__t &paths,const
         __bool &ao);
     
 }
 // This determines whether a C++ lvalue is dead in current context
-namespace 
-    // This determines whether a C++ lvalue is dead in current context
-    ivy
+namespace ivy
 {
-    
-    // This determines whether a C++ lvalue is dead in current context
     __bool is_dead  (const ivy::ptr< cpp::expr::__t > &e,const ivy::tocppst::__t &st,const pos::__t
         &cnt);
     
 }
 // In context of class declarations, identifiers are declared
 // without their namespaces.
-namespace 
-    // In context of class declarations, identifiers are declared
-    // without their namespaces.
-    ivy
+namespace ivy
 {
-    
-    // In context of class declarations, identifiers are declared
-    // without their namespaces.
     void name_in_context  (ivy::ptr< ivy::expr::__t > &name,const ivy::tocppst::__t &st);
     
 }
 // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
 // needed for name subscripts to make legal C++ identifiers.
-namespace 
-    // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-    // needed for name subscripts to make legal C++ identifiers.
-    ivy
+namespace ivy
 {
-    
-    // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-    // needed for name subscripts to make legal C++ identifiers.
     str::__t mangle  (const ivy::ptr< cpp::ident::__t > &s);
     
 }
@@ -16214,38 +13765,16 @@ namespace
 // `native` argument is true, we treate the identifier as a native C++
 // name and do not perform this translation. Also non-native names with
 // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
-namespace 
-    // In translating Ivy names to C++, we have to avoid clashes with C++
-    // reserved words like "char" and "bool". We do this by prepending "__".
-    // C++ names beginning with "__" are reserved for the compiler. If the
-    // `native` argument is true, we treate the identifier as a native C++
-    // name and do not perform this translation. Also non-native names with
-    // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
-    ivy
+namespace ivy
 {
-    
-    // In translating Ivy names to C++, we have to avoid clashes with C++
-    // reserved words like "char" and "bool". We do this by prepending "__".
-    // C++ names beginning with "__" are reserved for the compiler. If the
-    // `native` argument is true, we treate the identifier as a native C++
-    // name and do not perform this translation. Also non-native names with
-    // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
     cpp::strident::__t strident_to_cpp  (const ivy::strident::__t &s,const __bool &native);
     
 }
 // When translating symbols to C++, we need to take care of name clashes between
 // namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
 // an object, we append `.__t` to the identifier of the type.
-namespace 
-    // When translating symbols to C++, we need to take care of name clashes between
-    // namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
-    // an object, we append `.__t` to the identifier of the type.
-    ivy
+namespace ivy
 {
-    
-    // When translating symbols to C++, we need to take care of name clashes between
-    // namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
-    // an object, we append `.__t` to the identifier of the type.
     void fix_object_clash  (ivy::ptr< ivy::ident::__t > &id,const ivy::tocppst::__t &st);
     
 }
@@ -16271,45 +13800,23 @@ namespace ivy
 // using `std::vector`. This works only when the domain types are
 // convertible to `size_t`. We also need at least a hash table type
 // here for sparse data.
-namespace 
-    // Function types are handled specially, using C++ templates in the
-    // standard header. For now we have only a dense representation
-    // using `std::vector`. This works only when the domain types are
-    // convertible to `size_t`. We also need at least a hash table type
-    // here for sparse data.
-    ivy
+namespace ivy
 {
-    
-    // Function types are handled specially, using C++ templates in the
-    // standard header. For now we have only a dense representation
-    // using `std::vector`. This works only when the domain types are
-    // convertible to `size_t`. We also need at least a hash table type
-    // here for sparse data.
     void function_type  (const ivy::ptr< ivy::expr::__t > &ty,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
         &res);
     
 }
 // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
-namespace 
-    // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
-    ivy
+namespace ivy
 {
-    
-    // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
     ivy::ptr< cpp::expr::__t > make_from_string  (const ivy::ptr< cpp::expr::__t > &ty,const ivy::ptr< cpp::expr::__t >
         &arg,const ivy::ptr< annot::__t > &ann);
     
 }
 // Returns true if the C++ express is `*this`. This case requires special
 // handling for indirect calls. 
-namespace 
-    // Returns true if the C++ express is `*this`. This case requires special
-    // handling for indirect calls. 
-    ivy
+namespace ivy
 {
-    
-    // Returns true if the C++ express is `*this`. This case requires special
-    // handling for indirect calls. 
     __bool is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s);
     
 }
@@ -16324,32 +13831,8 @@ namespace
 // type `t` is a variant type. However, if the first argument is `(*this)` we
 // do *not* use this form, as `this` is a normal C++ pointer, not a special
 // Ivy variant pointer. 
-namespace 
-    // Make a C++ function call. There are four cases here:
-    //
-    // Ordinary function call: `prefix.f(a0..an)`
-    // Method call: `a0.f(a1..an)`
-    // Indirect const method call: `a0->f(a1..an)`
-    // Indirect non-const method call: `a0.get().f(a1..an)`
-    //
-    // The last two cases are used if `f : (t * ... -> u)` is a member function where
-    // type `t` is a variant type. However, if the first argument is `(*this)` we
-    // do *not* use this form, as `this` is a normal C++ pointer, not a special
-    // Ivy variant pointer. 
-    ivy
+namespace ivy
 {
-    
-    // Make a C++ function call. There are four cases here:
-    //
-    // Ordinary function call: `prefix.f(a0..an)`
-    // Method call: `a0.f(a1..an)`
-    // Indirect const method call: `a0->f(a1..an)`
-    // Indirect non-const method call: `a0.get().f(a1..an)`
-    //
-    // The last two cases are used if `f : (t * ... -> u)` is a member function where
-    // type `t` is a variant type. However, if the first argument is `(*this)` we
-    // do *not* use this form, as `this` is a normal C++ pointer, not a special
-    // Ivy variant pointer. 
     void make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__cpp__expr::__t &args,const
         ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,const ivy::prototype::__t &proto,ivy::ptr< cpp::expr::__t >
         &res);
@@ -16365,30 +13848,8 @@ namespace
 // prevent `resize` from side-effecting `a`. However, since the
 // call to `size` executes first, it gives up its ownership before
 // `resize` executes, so `resize` can side-effect `a`.
-namespace 
-    // After executing a function call, the call gives up ownership of
-    // its arguments, possibly allowing the arguments to be
-    // side-effected by future calls. A good example is this:
-    //
-    //     a := a.resize(size(a) - 1);
-    //
-    // Here, the call to `size` has ownership over `a` which would
-    // prevent `resize` from side-effecting `a`. However, since the
-    // call to `size` executes first, it gives up its ownership before
-    // `resize` executes, so `resize` can side-effect `a`.
-    ivy
+namespace ivy
 {
-    
-    // After executing a function call, the call gives up ownership of
-    // its arguments, possibly allowing the arguments to be
-    // side-effected by future calls. A good example is this:
-    //
-    //     a := a.resize(size(a) - 1);
-    //
-    // Here, the call to `size` has ownership over `a` which would
-    // prevent `resize` from side-effecting `a`. However, since the
-    // call to `size` executes first, it gives up its ownership before
-    // `resize` executes, so `resize` can side-effect `a`.
     void unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t &st);
     
 }
@@ -16421,68 +13882,8 @@ namespace
 // Note that any remaining inputs may be either by const ref or by value.
 // We need not make this distinction here, however, as call-by-value is
 // the same as call-by-const-ref with an internal copy operation.
-namespace 
-    // Translate an action call to C++. This is complicated, because we have
-    // to apply the action prototype and deal with call-by-reference.
-    //
-    // In-place optimization. There are two cases when a call can modify
-    // an argument in-place:
-    //
-    // (1) Borrowing. This is an in/out parameter given an lvalue that
-    // is returned by the expression and has exactly one remaining
-    // alias in the expression.
-    //
-    // (2) Return by reference. This is an out parameter given an
-    // lvalue that is returned by the expression and has no aliases in
-    // the expression.
-    //
-    // In both of these cases, we simply pass the lvalue by non-const
-    // reference. Any other non-const reference parameter is copied
-    // to/from a temporary to preserve value semantics.
-    //
-    // If the call is return-by-value, then we return the translated
-    // function call. If return-by-reference, we emit the function call
-    // and return the lvalue passed to the output parameter, which may
-    // be a temporary. If the call is the expression root and it
-    // is return-by-value, then we we assign the outputs as a side
-    // effect, by copying any temporaries back to the original lvalues,
-    // and we return ().
-    //
-    // Note that any remaining inputs may be either by const ref or by value.
-    // We need not make this distinction here, however, as call-by-value is
-    // the same as call-by-const-ref with an internal copy operation.
-    ivy
+namespace ivy
 {
-    
-    // Translate an action call to C++. This is complicated, because we have
-    // to apply the action prototype and deal with call-by-reference.
-    //
-    // In-place optimization. There are two cases when a call can modify
-    // an argument in-place:
-    //
-    // (1) Borrowing. This is an in/out parameter given an lvalue that
-    // is returned by the expression and has exactly one remaining
-    // alias in the expression.
-    //
-    // (2) Return by reference. This is an out parameter given an
-    // lvalue that is returned by the expression and has no aliases in
-    // the expression.
-    //
-    // In both of these cases, we simply pass the lvalue by non-const
-    // reference. Any other non-const reference parameter is copied
-    // to/from a temporary to preserve value semantics.
-    //
-    // If the call is return-by-value, then we return the translated
-    // function call. If return-by-reference, we emit the function call
-    // and return the lvalue passed to the output parameter, which may
-    // be a temporary. If the call is the expression root and it
-    // is return-by-value, then we we assign the outputs as a side
-    // effect, by copying any temporaries back to the original lvalues,
-    // and we return ().
-    //
-    // Note that any remaining inputs may be either by const ref or by value.
-    // We need not make this distinction here, however, as call-by-value is
-    // the same as call-by-const-ref with an internal copy operation.
     void call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy__expr::__t &inputs,const
         ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res);
     
@@ -16525,20 +13926,8 @@ namespace ivy
 // supertype, then we have to use the virtual `__upcast` method of
 // the object to get a C-o-W pointer to the object. Otherwise C++
 // will slice the object.
-namespace 
-    // If the "this" argument of a member function is assign to a
-    // variable or passed as an argument, and if "this" is of a
-    // supertype, then we have to use the virtual `__upcast` method of
-    // the object to get a C-o-W pointer to the object. Otherwise C++
-    // will slice the object.
-    ivy
+namespace ivy
 {
-    
-    // If the "this" argument of a member function is assign to a
-    // variable or passed as an argument, and if "this" is of a
-    // supertype, then we have to use the virtual `__upcast` method of
-    // the object to get a C-o-W pointer to the object. Otherwise C++
-    // will slice the object.
     void fix_variant_arg  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< cpp::expr::__t > &rhs,const
         ivy::tocppst::__t &st);
     
@@ -16547,18 +13936,8 @@ namespace
 // If so, we find take the full name of the class and append the member name.
 // The full name of the class can differ from the name of Ivy type because of
 // object name clashes.
-namespace 
-    // The full name of a C++ function depends on whether it is a member function.
-    // If so, we find take the full name of the class and append the member name.
-    // The full name of the class can differ from the name of Ivy type because of
-    // object name clashes.
-    ivy
+namespace ivy
 {
-    
-    // The full name of a C++ function depends on whether it is a member function.
-    // If so, we find take the full name of the class and append the member name.
-    // The full name of the class can differ from the name of Ivy type because of
-    // object name clashes.
     void full_action_name  (const ivy::ptr< ivy::expr::__t > &name,const __bool &is_member,ivy::tocppst::__t
         &st,ivy::ptr< cpp::expr::__t > &res);
     
@@ -16569,12 +13948,8 @@ namespace ivy
     
 }
 // Make a variable declaration with an initializer
-namespace 
-    // Make a variable declaration with an initializer
-    ivy
+namespace ivy
 {
-    
-    // Make a variable declaration with an initializer
     void make_initializer  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::expr::__t >
         &initval,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res);
     
@@ -16596,28 +13971,16 @@ namespace ivy
 }
 // Instantiate a standard template. This produces a type name of
 // the form `ivy.tpl[ty]`.
-namespace 
-    // Instantiate a standard template. This produces a type name of
-    // the form `ivy.tpl[ty]`.
-    ivy
+namespace ivy
 {
-    
-    // Instantiate a standard template. This produces a type name of
-    // the form `ivy.tpl[ty]`.
     ivy::ptr< cpp::expr::__t > make_std_tpl  (const str::__t &tpl,const str::__t &ty,const ivy::ptr< annot::__t >
         &ann);
     
 }
 // Make the name of the C++ enum that corresponds to an Ivy enumerated
 // type. The name is `__enum_name` where `name is the Ivy name.
-namespace 
-    // Make the name of the C++ enum that corresponds to an Ivy enumerated
-    // type. The name is `__enum_name` where `name is the Ivy name.
-    ivy
+namespace ivy
 {
-    
-    // Make the name of the C++ enum that corresponds to an Ivy enumerated
-    // type. The name is `__enum_name` where `name is the Ivy name.
     str::__t enum_name  (const ivy::ptr< cpp::expr::__t > &name);
     
 }
@@ -16639,46 +14002,8 @@ namespace
 // Note we have to promote the constructors of the base class to
 // the derived class. The parameter `sd` is the struct declaration.
 // This action prepends the C++ enum declaration.
-namespace 
-    // Unfortunately, enumerated types can't be classes in C++.  To
-    // represent one an enumerated type `t`, we declared a C++ enum
-    // named `__enum_t`. We then instantiate a template
-    // `ivy::native_enum<__enum_t>` defined in the standard header.
-    // This wraps the enum in a class with the necessary standard
-    // traits.  The form of an enum type `name` in the C++ code is:
-    //
-    //     enum __enum_name  {elem1,...elemN};
-    //
-    //     struct name : ivy::native_enum< __enum_name > {
-    //         name() : ivy::native_enum< __enum_name >() {}
-    //         name(long long value) : 
-    //         name(__enum_name value) : ivy::native_enum< __enum_name >(value) {}
-    //     };
-    //
-    // Note we have to promote the constructors of the base class to
-    // the derived class. The parameter `sd` is the struct declaration.
-    // This action prepends the C++ enum declaration.
-    ivy
+namespace ivy
 {
-    
-    // Unfortunately, enumerated types can't be classes in C++.  To
-    // represent one an enumerated type `t`, we declared a C++ enum
-    // named `__enum_t`. We then instantiate a template
-    // `ivy::native_enum<__enum_t>` defined in the standard header.
-    // This wraps the enum in a class with the necessary standard
-    // traits.  The form of an enum type `name` in the C++ code is:
-    //
-    //     enum __enum_name  {elem1,...elemN};
-    //
-    //     struct name : ivy::native_enum< __enum_name > {
-    //         name() : ivy::native_enum< __enum_name >() {}
-    //         name(long long value) : 
-    //         name(__enum_name value) : ivy::native_enum< __enum_name >(value) {}
-    //     };
-    //
-    // Note we have to promote the constructors of the base class to
-    // the derived class. The parameter `sd` is the struct declaration.
-    // This action prepends the C++ enum declaration.
     void enum_to_cpp  (const ivy::ptr< cpp::expr::__t > &name,const ivy::ptr< ivy::typespec::__t > &spec,const
         ivy::ptr< cpp::decl::__t > &sd,ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &res);
     
@@ -16699,42 +14024,8 @@ namespace
 // Make a C++ constructor for a struct
 // Default constructor does nothing:
 //     name() {};
-namespace 
-    // All the delcared classes have to have certain standard traits.
-    // These are:
-    //
-    // (1) A default constructor
-    // (2) A constructor from (signed or unsigned) long long.
-    // (3) A conversion to size_t
-    // (4) A static predicate __is_seq
-    // (5) A == overload
-    // (6) A != overload
-    // (7) A predicate __is_zero
-    // (8) A class __hash of hashers
-    //
-    // Here, we add the standard traits to a C++ structure.
-    // Make a C++ constructor for a struct
-    // Default constructor does nothing:
-    //     name() {};
-    ivy
+namespace ivy
 {
-    
-    // All the delcared classes have to have certain standard traits.
-    // These are:
-    //
-    // (1) A default constructor
-    // (2) A constructor from (signed or unsigned) long long.
-    // (3) A conversion to size_t
-    // (4) A static predicate __is_seq
-    // (5) A == overload
-    // (6) A != overload
-    // (7) A predicate __is_zero
-    // (8) A class __hash of hashers
-    //
-    // Here, we add the standard traits to a C++ structure.
-    // Make a C++ constructor for a struct
-    // Default constructor does nothing:
-    //     name() {};
     cpp::funcdecl::__t make_cpp_cons  (const cpp::structdecl::__t &t);
     
 }
@@ -16750,79 +14041,43 @@ namespace ivy
 }
 // Numeric constructor does nothing (so that 0 gives default value):
 //     name(long long) {};
-namespace 
-    // Numeric constructor does nothing (so that 0 gives default value):
-    //     name(long long) {};
-    ivy
+namespace ivy
 {
-    
-    // Numeric constructor does nothing (so that 0 gives default value):
-    //     name(long long) {};
     void add_numeric_cons  (cpp::structdecl::__t &s);
     
 }
 // Conversion to size_t returns zero:
 //     operator size_t() const { return 0; }
-namespace 
-    // Conversion to size_t returns zero:
-    //     operator size_t() const { return 0; }
-    ivy
+namespace ivy
 {
-    
-    // Conversion to size_t returns zero:
-    //     operator size_t() const { return 0; }
     void add_sizet_conv  (cpp::structdecl::__t &s);
     
 }
 // __is_seq returns zero:
 //     static bool __is_seq() {return false;}
-namespace 
-    // __is_seq returns zero:
-    //     static bool __is_seq() {return false;}
-    ivy
+namespace ivy
 {
-    
-    // __is_seq returns zero:
-    //     static bool __is_seq() {return false;}
     void add_is_seq_pred  (cpp::structdecl::__t &s);
     
 }
 // Equality comparison yields member-wise equality: 
 //     bool operator==(const name &other) const { return f1==other.f1 & ...; }
-namespace 
-    // Equality comparison yields member-wise equality: 
-    //     bool operator==(const name &other) const { return f1==other.f1 & ...; }
-    ivy
+namespace ivy
 {
-    
-    // Equality comparison yields member-wise equality: 
-    //     bool operator==(const name &other) const { return f1==other.f1 & ...; }
     void add_eq_pred  (cpp::structdecl::__t &s);
     
 }
 // Disequality is just negation of equality
 //     bool operator!=(const name &other) const { return !((*this)==other); }
-namespace 
-    // Disequality is just negation of equality
-    //     bool operator!=(const name &other) const { return !((*this)==other); }
-    ivy
+namespace ivy
 {
-    
-    // Disequality is just negation of equality
-    //     bool operator!=(const name &other) const { return !((*this)==other); }
     void add_diseq_pred  (cpp::structdecl::__t &s);
     
 }
 // __is_zero is conjunction of __is_zero for members.
 //    bool __is_zero() const { return f1.is_zero() & ...; }
-namespace 
-    // __is_zero is conjunction of __is_zero for members.
-    //    bool __is_zero() const { return f1.is_zero() & ...; }
-    ivy
+namespace ivy
 {
-    
-    // __is_zero is conjunction of __is_zero for members.
-    //    bool __is_zero() const { return f1.is_zero() & ...; }
     void add_is_zero_pred  (cpp::structdecl::__t &s);
     
 }
@@ -16832,32 +14087,20 @@ namespace ivy
     
 }
 // Add the standard traits to a struct.
-namespace 
-    // Add the standard traits to a struct.
-    ivy
+namespace ivy
 {
-    
-    // Add the standard traits to a struct.
     void add_standard_traits  (cpp::structdecl::__t &s);
     
 }
 // Add a virtual upcast and destructor to a base class.
-namespace 
-    // Add a virtual upcast and destructor to a base class.
-    ivy
+namespace ivy
 {
-    
-    // Add a virtual upcast and destructor to a base class.
     void add_virtual_destructor  (cpp::structdecl::__t &s);
     
 }
 // Add an virtual upcast derived class.
-namespace 
-    // Add an virtual upcast derived class.
-    ivy
+namespace ivy
 {
-    
-    // Add an virtual upcast derived class.
     void add_upcast_method  (cpp::structdecl::__t &s);
     
 }
@@ -16867,22 +14110,8 @@ namespace
 //     derived(const t& value) : base(value) {}
 //
 // The latter is produced if the `constref` parameter is true
-namespace 
-    // Add a constructor that uses the base class constructor.
-    //
-    //     derived(t value) : base(value) {}
-    //     derived(const t& value) : base(value) {}
-    //
-    // The latter is produced if the `constref` parameter is true
-    ivy
+namespace ivy
 {
-    
-    // Add a constructor that uses the base class constructor.
-    //
-    //     derived(t value) : base(value) {}
-    //     derived(const t& value) : base(value) {}
-    //
-    // The latter is produced if the `constref` parameter is true
     void add_derived_cons  (cpp::structdecl::__t &s,const ivy::ptr< cpp::expr::__t > &t,const __bool
         &constref);
     
@@ -16891,18 +14120,8 @@ namespace
 //
 //     operator base () const { return (*this); }
 //
-namespace 
-    // Add a conversion of a derived struct to its base struct
-    //
-    //     operator base () const { return (*this); }
-    //
-    ivy
+namespace ivy
 {
-    
-    // Add a conversion of a derived struct to its base struct
-    //
-    //     operator base () const { return (*this); }
-    //
     void add_base_conversion  (cpp::structdecl::__t &s);
     
 }
@@ -16921,73 +14140,25 @@ namespace
 // like `x+y`, where `x` and `y` are of the derived class. Since the only available
 // conversion is to the base class, the `+` operator of the base class is used. On
 // assignment, the constructor is used.
-namespace 
-    // Subclasses of native c++ classes inherit the standard traits from those classes.
-    // In order to allow them to use the overloads of the native classes, we add this
-    // boilerplate to the class:
-    //
-    // struct ivytype : cpptype {
-    //    ivytype(long long value) : cpptype(value) {}
-    //    ivytype(const cpptype &x) : cpptype(x) {}
-    //    operator cpptype() { return (*this); }
-    //  };
-    //
-    // That is, we provide a constructor from the base class and a conversion to the
-    // base class. THe latte is used by the C++ compiler when interpreting an expression
-    // like `x+y`, where `x` and `y` are of the derived class. Since the only available
-    // conversion is to the base class, the `+` operator of the base class is used. On
-    // assignment, the constructor is used.
-    ivy
+namespace ivy
 {
-    
-    // Subclasses of native c++ classes inherit the standard traits from those classes.
-    // In order to allow them to use the overloads of the native classes, we add this
-    // boilerplate to the class:
-    //
-    // struct ivytype : cpptype {
-    //    ivytype(long long value) : cpptype(value) {}
-    //    ivytype(const cpptype &x) : cpptype(x) {}
-    //    operator cpptype() { return (*this); }
-    //  };
-    //
-    // That is, we provide a constructor from the base class and a conversion to the
-    // base class. THe latte is used by the C++ compiler when interpreting an expression
-    // like `x+y`, where `x` and `y` are of the derived class. Since the only available
-    // conversion is to the base class, the `+` operator of the base class is used. On
-    // assignment, the constructor is used.
     void add_derived_traits  (cpp::structdecl::__t &s);
     
 }
 // Native types occur on the right-hand side of `interpret` declarations.
 // They need special processing, because we do *not* want to avoid clashes
 // with C++ reserved words.
-namespace 
-    // Native types occur on the right-hand side of `interpret` declarations.
-    // They need special processing, because we do *not* want to avoid clashes
-    // with C++ reserved words.
-    ivy
+namespace ivy
 {
-    
-    // Native types occur on the right-hand side of `interpret` declarations.
-    // They need special processing, because we do *not* want to avoid clashes
-    // with C++ reserved words.
     void native_type_to_cpp  (const ivy::ptr< ivy::expr::__t > &ty,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
         &res);
     
 }
 // Here, we register the constructors of enumerated types
-namespace 
-    // Here, we register the constructors of enumerated types
-    ivy
+namespace ivy
 {
-    
-    // Here, we register the constructors of enumerated types
-    namespace 
-        // Here, we register the constructors of enumerated types
-        typedc
+    namespace typedc
     {
-        
-        // Here, we register the constructors of enumerated types
         void tocpp_show_str  (const str::__t &s);
         
     }
@@ -17000,14 +14171,8 @@ namespace ivy
 }
 // When storing values of variant types we use smart pointers. That is,
 // type `t` becomes `ivy.ptr<t>`.
-namespace 
-    // When storing values of variant types we use smart pointers. That is,
-    // type `t` becomes `ivy.ptr<t>`.
-    ivy
+namespace ivy
 {
-    
-    // When storing values of variant types we use smart pointers. That is,
-    // type `t` becomes `ivy.ptr<t>`.
     void fix_variant_type  (const ivy::ptr< ivy::expr::__t > &t,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
         &res);
     
@@ -17140,45 +14305,24 @@ pos::__t pos::__t::prev () const {
     y = (*this) - pos::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-pos::__t str::__t::begin () const 
-// The `begin` action always returns 0.
-{
-    
-    // The `begin` action always returns 0.
+pos::__t str::__t::begin () const {
     pos::__t res;
-    
-    // The `begin` action always returns 0.
     res = pos::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-str::__t str::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+str::__t str::empty () {
     str::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void str::__t::set  (const pos::__t &i,const __char::__t &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void str::__t::append  (const __char::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void str::__t::extend  (const str::__t &x)
 {
     pos::__t idx;
@@ -17188,34 +14332,18 @@ void str::__t::extend  (const str::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void str::__t::resize  (const pos::__t &end) {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-__char::__t str::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+__char::__t str::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     __char::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > pos::__t (0)) {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void str::__t::pop_back ()
 {
     if ((*this) . end > pos::__t (0))
@@ -17225,19 +14353,9 @@ void str::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
-str::__t str::__t::segment  (const pos::__t &beg,const pos::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+str::__t str::__t::segment  (const pos::__t &beg,const pos::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     str::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         pos::__t idx;
         idx = beg;
@@ -17247,12 +14365,8 @@ str::__t str::__t::segment  (const pos::__t &beg,const pos::__t &en) const
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void str::__t::reverse ()
 {
     pos::__t idx;
@@ -17281,46 +14395,27 @@ vector__pretty__token::domain::__t vector__pretty__token::domain::__t::prev () c
     y = (*this) - vector__pretty__token::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__pretty__token::domain::__t vector__pretty__token::__t::begin () const 
-// The `begin` action always returns 0.
+vector__pretty__token::domain::__t vector__pretty__token::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__pretty__token::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__pretty__token::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__pretty__token::__t vector__pretty__token::empty () 
-// The `empty` action returns an empty array
+vector__pretty__token::__t vector__pretty__token::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__pretty__token::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__pretty__token::__t::set  (const vector__pretty__token::domain::__t &i,const pretty::token
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__pretty__token::__t::append  (const pretty::token &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__pretty__token::__t::extend  (const vector__pretty__token::__t &x)
 {
     vector__pretty__token::domain::__t idx;
@@ -17330,36 +14425,20 @@ void vector__pretty__token::__t::extend  (const vector__pretty__token::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__pretty__token::__t::resize  (const vector__pretty__token::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-pretty::token vector__pretty__token::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+pretty::token vector__pretty__token::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     pretty::token y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__pretty__token::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__pretty__token::__t::pop_back ()
 {
     if ((*this) . end > vector__pretty__token::domain::__t (0))
@@ -17369,20 +14448,10 @@ void vector__pretty__token::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__pretty__token::__t vector__pretty__token::__t::segment  (const vector__pretty__token::domain::__t
-    &beg,const vector__pretty__token::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &beg,const vector__pretty__token::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__pretty__token::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__pretty__token::domain::__t idx;
         idx = beg;
@@ -17392,12 +14461,8 @@ vector__pretty__token::__t vector__pretty__token::__t::segment  (const vector__p
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__pretty__token::__t::reverse ()
 {
     vector__pretty__token::domain::__t idx;
@@ -17426,46 +14491,27 @@ vector__pretty__state::domain::__t vector__pretty__state::domain::__t::prev () c
     y = (*this) - vector__pretty__state::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__pretty__state::domain::__t vector__pretty__state::__t::begin () const 
-// The `begin` action always returns 0.
+vector__pretty__state::domain::__t vector__pretty__state::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__pretty__state::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__pretty__state::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__pretty__state::__t vector__pretty__state::empty () 
-// The `empty` action returns an empty array
+vector__pretty__state::__t vector__pretty__state::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__pretty__state::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__pretty__state::__t::set  (const vector__pretty__state::domain::__t &i,const pretty::state
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__pretty__state::__t::append  (const pretty::state &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__pretty__state::__t::extend  (const vector__pretty__state::__t &x)
 {
     vector__pretty__state::domain::__t idx;
@@ -17475,36 +14521,20 @@ void vector__pretty__state::__t::extend  (const vector__pretty__state::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__pretty__state::__t::resize  (const vector__pretty__state::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-pretty::state vector__pretty__state::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+pretty::state vector__pretty__state::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     pretty::state y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__pretty__state::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__pretty__state::__t::pop_back ()
 {
     if ((*this) . end > vector__pretty__state::domain::__t (0))
@@ -17514,20 +14544,10 @@ void vector__pretty__state::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__pretty__state::__t vector__pretty__state::__t::segment  (const vector__pretty__state::domain::__t
-    &beg,const vector__pretty__state::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &beg,const vector__pretty__state::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__pretty__state::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__pretty__state::domain::__t idx;
         idx = beg;
@@ -17537,12 +14557,8 @@ vector__pretty__state::__t vector__pretty__state::__t::segment  (const vector__p
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__pretty__state::__t::reverse ()
 {
     vector__pretty__state::domain::__t idx;
@@ -17571,46 +14587,26 @@ vector__pos::domain::__t vector__pos::domain::__t::prev () const
     y = (*this) - vector__pos::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__pos::domain::__t vector__pos::__t::begin () const 
-// The `begin` action always returns 0.
+vector__pos::domain::__t vector__pos::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__pos::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__pos::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__pos::__t vector__pos::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__pos::__t vector__pos::empty () {
     vector__pos::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__pos::__t::set  (const vector__pos::domain::__t &i,const pos::__t &v)
 {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__pos::__t::append  (const pos::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__pos::__t::extend  (const vector__pos::__t &x)
 {
     vector__pos::domain::__t idx;
@@ -17620,35 +14616,19 @@ void vector__pos::__t::extend  (const vector__pos::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__pos::__t::resize  (const vector__pos::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-pos::__t vector__pos::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+pos::__t vector__pos::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     pos::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__pos::domain::__t (0)) {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__pos::__t::pop_back ()
 {
     if ((*this) . end > vector__pos::domain::__t (0))
@@ -17658,20 +14638,10 @@ void vector__pos::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__pos::__t vector__pos::__t::segment  (const vector__pos::domain::__t &beg,const vector__pos::domain::__t
-    &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__pos::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__pos::domain::__t idx;
         idx = beg;
@@ -17681,12 +14651,8 @@ vector__pos::__t vector__pos::__t::segment  (const vector__pos::domain::__t &beg
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__pos::__t::reverse ()
 {
     vector__pos::domain::__t idx;
@@ -17720,15 +14686,15 @@ void pretty::__t::do_indent ()
     (*this) . output . append (__char::__t (10));
     
     // newline
-    pos::__t idx;
     
-    // newline
+    pos::__t idx;
     idx = (*this) . maxline - (*this) . space;
     while (idx > pos::__t (0))
     {
         (*this) . output . append (__char::__t (32));
         
         // space
+        
         idx = idx . prev();
     }
 }
@@ -17788,6 +14754,7 @@ void pretty::__t::extend  (const str::__t &string)
     {
         
         // true = breakable
+        
         tok . pair = ivy::native_bool (true);
         tok . second = string . end;
     } else {
@@ -17849,46 +14816,26 @@ vector__str::domain::__t vector__str::domain::__t::prev () const
     y = (*this) - vector__str::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__str::domain::__t vector__str::__t::begin () const 
-// The `begin` action always returns 0.
+vector__str::domain::__t vector__str::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__str::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__str::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__str::__t vector__str::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__str::__t vector__str::empty () {
     vector__str::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__str::__t::set  (const vector__str::domain::__t &i,const str::__t &v)
 {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__str::__t::append  (const str::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__str::__t::extend  (const vector__str::__t &x)
 {
     vector__str::domain::__t idx;
@@ -17898,35 +14845,19 @@ void vector__str::__t::extend  (const vector__str::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__str::__t::resize  (const vector__str::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-str::__t vector__str::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+str::__t vector__str::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     str::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__str::domain::__t (0)) {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__str::__t::pop_back ()
 {
     if ((*this) . end > vector__str::domain::__t (0))
@@ -17936,20 +14867,10 @@ void vector__str::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__str::__t vector__str::__t::segment  (const vector__str::domain::__t &beg,const vector__str::domain::__t
-    &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__str::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__str::domain::__t idx;
         idx = beg;
@@ -17959,12 +14880,8 @@ vector__str::__t vector__str::__t::segment  (const vector__str::domain::__t &beg
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__str::__t::reverse ()
 {
     vector__str::domain::__t idx;
@@ -17983,18 +14900,24 @@ void vector__str::__t::reverse ()
 }
 void annot_i::__t::encode  (pretty::__t &b) const
 {
-    if (vector__str::domain::__t (0) < (*this) . comments . end) {
-        b . newline();
-    }
-    vector__str::domain::__t idx;
-    idx = (*this) . comments . begin();
-    while (idx < (*this) . comments . end)
+    if (vector__str::domain::__t (0) < (*this) . comments . end)
     {
-        b . extend (b . cppstyle ? ivy::from_str< str::__t > ("//") :
-                ivy::from_str< str::__t > ("#"));
-        b . extend ((*this) . comments . value (idx));
-        b . newline();
-        idx = idx . next();
+        if (! b . annots ((*this) . file,(*this) . line))
+        {
+            b . newline();
+            vector__str::domain::__t idx;
+            idx = (*this) . comments . begin();
+            while (idx < (*this) . comments . end)
+            {
+                b . extend (b . cppstyle ? ivy::from_str< str::__t > ("//") :
+                        ivy::from_str< str::__t > ("#"));
+                b . extend ((*this) . comments . value (idx));
+                b . newline();
+                idx = idx . next();
+            }
+            b . newline();
+            b . annots ((*this) . file,(*this) . line) = ivy::native_bool (true);
+        }
     }
 }
 ivy::ptr< annot::__t > annot_i::__t::strip () const
@@ -18008,32 +14931,14 @@ ivy::ptr< annot::__t > annot_i::__t::strip () const
     }
     return res;
 }
-// Convert an annotation to a string for error reporting
-// purposes. We count line internally from zero, but in messages
-// they start from one.
-str::__t annot_i::__t::to_str () const 
-// Convert an annotation to a string for error reporting
-// purposes. We count line internally from zero, but in messages
-// they start from one.
+str::__t annot_i::__t::to_str () const
 {
-    
-    // Convert an annotation to a string for error reporting
-    // purposes. We count line internally from zero, but in messages
-    // they start from one.
     str::__t res;
-    
-    // Convert an annotation to a string for error reporting
-    // purposes. We count line internally from zero, but in messages
-    // they start from one.
     {
         res = (*this) . file;
         res . extend (ivy::from_str< str::__t > (": line "));
         res . extend ((*this) . line . next() . to_str());
     }
-    
-    // Convert an annotation to a string for error reporting
-    // purposes. We count line internally from zero, but in messages
-    // they start from one.
     return res;
 }
 void pstate::__t::consume () {
@@ -18055,32 +14960,6 @@ void pstate::__t::get_ann  (ivy::ptr< annot::__t > &ann)
     ann = (*this) . ann;
     (*this) . ann . comments = vector__str::empty();
 }
-// Lexical analyzer. Read tokens from the input stream 
-// ---------------------------------------------------
-//
-// A token is one of the following:
-//
-// - A singleton characeter in the bracket set
-// - A maximal sequence of characters in the alphanumeric set
-// - A maximal sequence of characters in the punctuation set
-// - A string literal
-//
-// Tokens may be separated by whitespace, which consists of space,
-// tab, carriage return and newline characters as well as comments. A
-// comment is a hash character up to and including the next newline or
-// the end of stream, whichever comes first.
-//
-// A string literal consists of printing characters enclosed in double
-// quote characters. The following escape sequences are recognized:
-//
-// - \n : newline character
-//
-// A backslash followed by any other printing character is interpreted
-// as that character. 
-//
-// Any non-printing character other than carriage return and newline
-// is considered a syntax error.
-// 
 void skip_space  (pstate::__t &st) 
 // Skip space, tab, carriage return and newline characters
 {
@@ -18097,11 +14976,10 @@ void get_line  (pstate::__t &st,str::__t &line)
 // Read until a newline or end of input.
 {
     pos::__t start;
-    
-    // Read until a newline or end of input.
     start = st . p;
     while (st . p < st . b . end & st . b . value (st . p) != __char::__t (10)) 
     // newline
+    
     {
         st . p = st . p . next();
     }
@@ -18119,9 +14997,11 @@ void get_annot  (pstate::__t &st)
     {
         
         // hash sign
+        
         st . p = st . p . next();
         
         // skip the hash sign
+        
         str::__t comment;
         get_line (st,comment);
         st . ann . comments . append (comment);
@@ -18134,6 +15014,7 @@ void read_string_literal  (pstate::__t &st)
     st . tok . append (__char::__t (34));
     
     // workaround
+    
     st . p = st . p . next();
     while (st . ok & st . p < st . b . end & st . b . value (st . p) != __char::__t (34))
     {
@@ -18151,6 +15032,7 @@ void read_string_literal  (pstate::__t &st)
                     st . tok . append (chr);
                     
                     // newline
+                    
                     st . p = st . p . next();
                 } else {
                     st . ok = ivy::native_bool (false);
@@ -18174,6 +15056,7 @@ void read_string_literal  (pstate::__t &st)
         st . tok . append (__char::__t (34));
         
         // double quote
+        
         st . p = st . p . next();
     } else {
         st . ok = ivy::native_bool (false);
@@ -18225,9 +15108,8 @@ str::__t pos::__t::to_str () const
                 y = x - x / pos::__t (10) * pos::__t (10);
                 
                 // workaround: v1.7 compiler can't cast between numeric types
-                __char::__t digit;
                 
-                // workaround: v1.7 compiler can't cast between numeric types
+                __char::__t digit;
                 digit = __char::__t (48);
                 while (y > pos::__t (0)) {
                     y = y - pos::__t (1);
@@ -18266,6 +15148,7 @@ pos::__t pos::from_str  (const str::__t &x)
             digit = x . value (idx);
             
             // workaround: v1.7 compiler can't cast between numeric types
+            
             while (digit > __char::__t (48))
             {
                 digit = digit - __char::__t (1);
@@ -18285,21 +15168,13 @@ void stdio::write  (const str::__t &s)
         idx = idx + pos::__t (1);
     }
 }
-// The `write` action writes a string to standard output followed
-// by newline.
 void stdio::writeln  (const str::__t &s) {
     stdio::write (s);
     ivy::put (ivy::cint (10));
 }
-// The `read` action from standard input untio EOF.
-str::__t stdio::read () 
-// The `read` action from standard input untio EOF.
+str::__t stdio::read ()
 {
-    
-    // The `read` action from standard input untio EOF.
     str::__t s;
-    
-    // The `read` action from standard input untio EOF.
     {
         __char::__t c;
         c = ivy::get();
@@ -18308,23 +15183,11 @@ str::__t stdio::read ()
             c = ivy::get();
         }
     }
-    
-    // The `read` action from standard input untio EOF.
     return s;
 }
-// The `readln` action reads a line from standard input, returning
-// the line without any terminating newline character.
-str::__t stdio::readln () 
-// The `readln` action reads a line from standard input, returning
-// the line without any terminating newline character.
+str::__t stdio::readln ()
 {
-    
-    // The `readln` action reads a line from standard input, returning
-    // the line without any terminating newline character.
     str::__t s;
-    
-    // The `readln` action reads a line from standard input, returning
-    // the line without any terminating newline character.
     {
         __char::__t c;
         c = ivy::get();
@@ -18333,41 +15196,12 @@ str::__t stdio::readln ()
             c = ivy::get();
         }
     }
-    
-    // The `readln` action reads a line from standard input, returning
-    // the line without any terminating newline character.
     return s;
 }
 void parse_error  (const pos::__t &p,const str::__t &tok) {}
-// Numerals are symbols beginning with a digit. String literals begin
-// with double quotes. Logical variables consist of a capital followed
-// by any number of digits. Otherwise we determine
-// the verb of a symbol from its name by looking it up in
-// `str_to_verb`. The default is `none`, which indicates a
-// program-defined symbol.
-__bool ivy::is_logvar_name  (const str::__t &name) 
-// Numerals are symbols beginning with a digit. String literals begin
-// with double quotes. Logical variables consist of a capital followed
-// by any number of digits. Otherwise we determine
-// the verb of a symbol from its name by looking it up in
-// `str_to_verb`. The default is `none`, which indicates a
-// program-defined symbol.
+__bool ivy::is_logvar_name  (const str::__t &name)
 {
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     __bool res;
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     if (name . value (pos::__t (0)) . is_capital())
     {
         res = ivy::native_bool (true);
@@ -18378,13 +15212,6 @@ __bool ivy::is_logvar_name  (const str::__t &name)
         }
         idx = idx . next();
     }
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     return res;
 }
 ivy::verb::__t ivy::verb_from_name  (const str::__t &name)
@@ -18396,6 +15223,7 @@ ivy::verb::__t ivy::verb_from_name  (const str::__t &name)
     {
         if (name . value (pos::__t (0)) == __char::__t (34)) 
         // double quote character
+        
         {
             vrb = ivy::verb::__t (ivy::verb::string);
         } else
@@ -18462,46 +15290,26 @@ vector__ivy__ident::domain::__t vector__ivy__ident::domain::__t::prev () const
     y = (*this) - vector__ivy__ident::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__ident::domain::__t vector__ivy__ident::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__ident::domain::__t vector__ivy__ident::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__ident::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__ident::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__ident::__t vector__ivy__ident::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__ivy__ident::__t vector__ivy__ident::empty () {
     vector__ivy__ident::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__ident::__t::set  (const vector__ivy__ident::domain::__t &i,const ivy::ptr< ivy::ident::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__ident::__t::append  (const ivy::ptr< ivy::ident::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__ident::__t::extend  (const vector__ivy__ident::__t &x)
 {
     vector__ivy__ident::domain::__t idx;
@@ -18511,36 +15319,20 @@ void vector__ivy__ident::__t::extend  (const vector__ivy__ident::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__ident::__t::resize  (const vector__ivy__ident::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::ident::__t > vector__ivy__ident::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::ident::__t > vector__ivy__ident::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::ident::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__ident::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__ident::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__ident::domain::__t (0))
@@ -18550,20 +15342,10 @@ void vector__ivy__ident::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__ident::__t vector__ivy__ident::__t::segment  (const vector__ivy__ident::domain::__t &beg,const
-    vector__ivy__ident::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__ident::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__ident::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__ident::domain::__t idx;
         idx = beg;
@@ -18573,12 +15355,8 @@ vector__ivy__ident::__t vector__ivy__ident::__t::segment  (const vector__ivy__id
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__ident::__t::reverse ()
 {
     vector__ivy__ident::domain::__t idx;
@@ -18914,19 +15692,9 @@ ivy::ptr< ivy::expr::__t > ivy::expr::__t::prefix  (const ivy::ptr< ivy::ident::
     {}
     return res;
 }
-// Tests whether two expressions are syntacically equal,
-// leaving aside annotations.
-__bool ivy::expr::__t::eq  (const ivy::ptr< ivy::expr::__t > &e2) const 
-// Tests whether two expressions are syntacically equal,
-// leaving aside annotations.
+__bool ivy::expr::__t::eq  (const ivy::ptr< ivy::expr::__t > &e2) const
 {
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     __bool res;
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     if (ivy::isa< ivy::symbol::__t > ((*this)))
     {
         if (e2 . isa< ivy::symbol::__t >()) {
@@ -18959,9 +15727,6 @@ __bool ivy::expr::__t::eq  (const ivy::ptr< ivy::expr::__t > &e2) const
             }
         }
     }
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     return res;
 }
 ivy::ptr< ivy::expr::__t > ivy::symbol::make  (const ivy::ptr< ivy::ident::__t > &name,const ivy::ptr< annot::__t >
@@ -19071,46 +15836,26 @@ vector__ivy__expr::domain::__t vector__ivy__expr::domain::__t::prev () const
     y = (*this) - vector__ivy__expr::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__expr::domain::__t vector__ivy__expr::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__expr::domain::__t vector__ivy__expr::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__expr::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__expr::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__expr::__t vector__ivy__expr::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__ivy__expr::__t vector__ivy__expr::empty () {
     vector__ivy__expr::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__expr::__t::set  (const vector__ivy__expr::domain::__t &i,const ivy::ptr< ivy::expr::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__expr::__t::append  (const ivy::ptr< ivy::expr::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__expr::__t::extend  (const vector__ivy__expr::__t &x)
 {
     vector__ivy__expr::domain::__t idx;
@@ -19120,36 +15865,20 @@ void vector__ivy__expr::__t::extend  (const vector__ivy__expr::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__expr::__t::resize  (const vector__ivy__expr::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::expr::__t > vector__ivy__expr::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::expr::__t > vector__ivy__expr::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::expr::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__expr::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__expr::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__expr::domain::__t (0))
@@ -19159,20 +15888,10 @@ void vector__ivy__expr::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__expr::__t vector__ivy__expr::__t::segment  (const vector__ivy__expr::domain::__t &beg,const
-    vector__ivy__expr::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__expr::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__expr::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__expr::domain::__t idx;
         idx = beg;
@@ -19182,12 +15901,8 @@ vector__ivy__expr::__t vector__ivy__expr::__t::segment  (const vector__ivy__expr
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__expr::__t::reverse ()
 {
     vector__ivy__expr::domain::__t idx;
@@ -19389,20 +16104,10 @@ ivy::ptr< ivy::expr::__t > ivy::iff::make  (const ivy::ptr< ivy::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::iff::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19416,28 +16121,11 @@ ivy::ptr< ivy::expr::__t > ivy::iff::fold_left  (const vector__ivy__expr::__t &a
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::iff::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::iff::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
@@ -19445,6 +16133,7 @@ vector__ivy__expr::__t ivy::iff::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         b = e -> is_typed (ivy::verb::__t (ivy::verb::iff));
         
         // workaround
+        
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19454,10 +16143,6 @@ vector__ivy__expr::__t ivy::iff::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::__or::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19474,20 +16159,10 @@ ivy::ptr< ivy::expr::__t > ivy::__or::make  (const ivy::ptr< ivy::expr::__t > &l
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::__or::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19501,35 +16176,16 @@ ivy::ptr< ivy::expr::__t > ivy::__or::fold_left  (const vector__ivy__expr::__t &
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::__or::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::__or::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::__or));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19539,10 +16195,6 @@ vector__ivy__expr::__t ivy::__or::unfold_left  (const ivy::ptr< ivy::expr::__t >
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::__and::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19559,20 +16211,10 @@ ivy::ptr< ivy::expr::__t > ivy::__and::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::__and::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19586,35 +16228,16 @@ ivy::ptr< ivy::expr::__t > ivy::__and::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::__and::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::__and::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::__and));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19624,10 +16247,6 @@ vector__ivy__expr::__t ivy::__and::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::lt::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19644,20 +16263,10 @@ ivy::ptr< ivy::expr::__t > ivy::lt::make  (const ivy::ptr< ivy::expr::__t > &lhs
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::lt::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19671,35 +16280,16 @@ ivy::ptr< ivy::expr::__t > ivy::lt::fold_left  (const vector__ivy__expr::__t &ar
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::lt::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::lt::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::lt));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19709,10 +16299,6 @@ vector__ivy__expr::__t ivy::lt::unfold_left  (const ivy::ptr< ivy::expr::__t > &
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::leq::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19729,20 +16315,10 @@ ivy::ptr< ivy::expr::__t > ivy::leq::make  (const ivy::ptr< ivy::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::leq::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19756,35 +16332,16 @@ ivy::ptr< ivy::expr::__t > ivy::leq::fold_left  (const vector__ivy__expr::__t &a
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::leq::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::leq::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::leq));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19794,10 +16351,6 @@ vector__ivy__expr::__t ivy::leq::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::gt::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19814,20 +16367,10 @@ ivy::ptr< ivy::expr::__t > ivy::gt::make  (const ivy::ptr< ivy::expr::__t > &lhs
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::gt::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19841,35 +16384,16 @@ ivy::ptr< ivy::expr::__t > ivy::gt::fold_left  (const vector__ivy__expr::__t &ar
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::gt::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::gt::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::gt));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19879,10 +16403,6 @@ vector__ivy__expr::__t ivy::gt::unfold_left  (const ivy::ptr< ivy::expr::__t > &
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::geq::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19899,20 +16419,10 @@ ivy::ptr< ivy::expr::__t > ivy::geq::make  (const ivy::ptr< ivy::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::geq::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -19926,35 +16436,16 @@ ivy::ptr< ivy::expr::__t > ivy::geq::fold_left  (const vector__ivy__expr::__t &a
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::geq::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::geq::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::geq));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -19964,10 +16455,6 @@ vector__ivy__expr::__t ivy::geq::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::plus::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -19984,20 +16471,10 @@ ivy::ptr< ivy::expr::__t > ivy::plus::make  (const ivy::ptr< ivy::expr::__t > &l
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::plus::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20011,35 +16488,16 @@ ivy::ptr< ivy::expr::__t > ivy::plus::fold_left  (const vector__ivy__expr::__t &
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::plus::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::plus::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::plus));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20049,10 +16507,6 @@ vector__ivy__expr::__t ivy::plus::unfold_left  (const ivy::ptr< ivy::expr::__t >
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::minus::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -20069,20 +16523,10 @@ ivy::ptr< ivy::expr::__t > ivy::minus::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::minus::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20096,35 +16540,16 @@ ivy::ptr< ivy::expr::__t > ivy::minus::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::minus::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::minus::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::minus));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20134,10 +16559,6 @@ vector__ivy__expr::__t ivy::minus::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::times::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -20154,20 +16575,10 @@ ivy::ptr< ivy::expr::__t > ivy::times::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::times::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20181,35 +16592,16 @@ ivy::ptr< ivy::expr::__t > ivy::times::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::times::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::times::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::times));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20219,10 +16611,6 @@ vector__ivy__expr::__t ivy::times::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::div::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -20239,20 +16627,10 @@ ivy::ptr< ivy::expr::__t > ivy::div::make  (const ivy::ptr< ivy::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::div::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20266,35 +16644,16 @@ ivy::ptr< ivy::expr::__t > ivy::div::fold_left  (const vector__ivy__expr::__t &a
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::div::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::div::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::div));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20304,10 +16663,6 @@ vector__ivy__expr::__t ivy::div::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::empty::make  (const ivy::ptr< annot::__t > &ann)
@@ -20348,20 +16703,10 @@ ivy::ptr< ivy::expr::__t > ivy::comma::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::comma::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20375,35 +16720,16 @@ ivy::ptr< ivy::expr::__t > ivy::comma::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::comma::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::comma::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::comma));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20413,10 +16739,6 @@ vector__ivy__expr::__t ivy::comma::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::dot::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -20433,20 +16755,10 @@ ivy::ptr< ivy::expr::__t > ivy::dot::make  (const ivy::ptr< ivy::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::dot::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -20460,35 +16772,16 @@ ivy::ptr< ivy::expr::__t > ivy::dot::fold_left  (const vector__ivy__expr::__t &a
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::dot::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::dot::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::dot));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -20498,13 +16791,8 @@ vector__ivy__expr::__t ivy::dot::unfold_left  (const ivy::ptr< ivy::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
-// workaround
 void ivy::expr::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy::expr::__t > &res)
 {
     if (st . tok == ivy::from_str< str::__t > ("("))
@@ -20714,32 +17002,16 @@ void ivy::asgn::__t::encode_int  (pretty::__t &b,const priority::__t &prio) cons
     b . extend (ivy::from_str< str::__t > (";"));
     b . unnest();
 }
-// This gets the lhs of the assignment
-ivy::ptr< ivy::expr::__t > ivy::asgn::__t::get_lhs () const 
-// This gets the lhs of the assignment
+ivy::ptr< ivy::expr::__t > ivy::asgn::__t::get_lhs () const
 {
-    
-    // This gets the lhs of the assignment
     ivy::ptr< ivy::expr::__t > res;
-    
-    // This gets the lhs of the assignment
     res = (*this) . lhs;
-    
-    // This gets the lhs of the assignment
     return res;
 }
-// This gets the rhs of the assignment
-ivy::ptr< ivy::expr::__t > ivy::asgn::__t::get_rhs () const 
-// This gets the rhs of the assignment
+ivy::ptr< ivy::expr::__t > ivy::asgn::__t::get_rhs () const
 {
-    
-    // This gets the rhs of the assignment
     ivy::ptr< ivy::expr::__t > res;
-    
-    // This gets the rhs of the assignment
     res = (*this) . rhs;
-    
-    // This gets the rhs of the assignment
     return res;
 }
 ivy::ptr< annot::__t > ivy::asgn::__t::get_ann () const
@@ -20796,46 +17068,26 @@ vector__ivy__stmt::domain::__t vector__ivy__stmt::domain::__t::prev () const
     y = (*this) - vector__ivy__stmt::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__stmt::domain::__t vector__ivy__stmt::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__stmt::domain::__t vector__ivy__stmt::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__stmt::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__stmt::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__stmt::__t vector__ivy__stmt::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__ivy__stmt::__t vector__ivy__stmt::empty () {
     vector__ivy__stmt::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__stmt::__t::set  (const vector__ivy__stmt::domain::__t &i,const ivy::ptr< ivy::stmt::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__stmt::__t::append  (const ivy::ptr< ivy::stmt::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__stmt::__t::extend  (const vector__ivy__stmt::__t &x)
 {
     vector__ivy__stmt::domain::__t idx;
@@ -20845,36 +17097,20 @@ void vector__ivy__stmt::__t::extend  (const vector__ivy__stmt::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__stmt::__t::resize  (const vector__ivy__stmt::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::stmt::__t > vector__ivy__stmt::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::stmt::__t > vector__ivy__stmt::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::stmt::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__stmt::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__stmt::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__stmt::domain::__t (0))
@@ -20884,20 +17120,10 @@ void vector__ivy__stmt::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__stmt::__t vector__ivy__stmt::__t::segment  (const vector__ivy__stmt::domain::__t &beg,const
-    vector__ivy__stmt::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__stmt::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__stmt::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__stmt::domain::__t idx;
         idx = beg;
@@ -20907,12 +17133,8 @@ vector__ivy__stmt::__t vector__ivy__stmt::__t::segment  (const vector__ivy__stmt
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__stmt::__t::reverse ()
 {
     vector__ivy__stmt::domain::__t idx;
@@ -20929,24 +17151,10 @@ void vector__ivy__stmt::__t::reverse ()
         idx = idx . next();
     }
 }
-// workaround
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the right.
 ivy::ptr< ivy::stmt::__t > ivy::sequence::fold_right  (const vector__ivy__stmt::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// workaround
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the right.
+    &ann)
 {
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     ivy::ptr< ivy::stmt::__t > res;
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     if (args . end > vector__ivy__stmt::domain::__t (0))
     {
         vector__ivy__stmt::domain::__t idx;
@@ -20958,10 +17166,6 @@ ivy::ptr< ivy::stmt::__t > ivy::sequence::fold_right  (const vector__ivy__stmt::
             res = ivy::sequence::make (args . value (idx),res,ann);
         }
     }
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     return res;
 }
 ivy::ptr< annot::__t > ivy::sequence::__t::get_ann () const
@@ -21179,6 +17383,7 @@ void ivy::stmt::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy:
                     ivy::ptr< annot::__t > ann;
                     
                     // missing else doesn't print, so don't annotate
+                    
                     s . elsest = ivy::skipst::make (ann);
                 }
             } else {
@@ -21290,46 +17495,27 @@ vector__ivy__prototype_argument::domain::__t vector__ivy__prototype_argument::do
     y = (*this) - vector__ivy__prototype_argument::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__prototype_argument::domain::__t vector__ivy__prototype_argument::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__prototype_argument::domain::__t vector__ivy__prototype_argument::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__prototype_argument::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__prototype_argument::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__prototype_argument::__t vector__ivy__prototype_argument::empty () 
-// The `empty` action returns an empty array
+vector__ivy__prototype_argument::__t vector__ivy__prototype_argument::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__prototype_argument::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__prototype_argument::__t::set  (const vector__ivy__prototype_argument::domain::__t
     &i,const ivy::prototype_argument::__t &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__prototype_argument::__t::append  (const ivy::prototype_argument::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__prototype_argument::__t::extend  (const vector__ivy__prototype_argument::__t &x)
 {
     vector__ivy__prototype_argument::domain::__t idx;
@@ -21339,36 +17525,20 @@ void vector__ivy__prototype_argument::__t::extend  (const vector__ivy__prototype
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__prototype_argument::__t::resize  (const vector__ivy__prototype_argument::domain::__t
     &end) {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::prototype_argument::__t vector__ivy__prototype_argument::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::prototype_argument::__t vector__ivy__prototype_argument::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::prototype_argument::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__prototype_argument::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__prototype_argument::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__prototype_argument::domain::__t (0))
@@ -21378,21 +17548,11 @@ void vector__ivy__prototype_argument::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__prototype_argument::__t vector__ivy__prototype_argument::__t::segment  (const
     vector__ivy__prototype_argument::domain::__t &beg,const vector__ivy__prototype_argument::domain::__t
-    &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__prototype_argument::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__prototype_argument::domain::__t idx;
         idx = beg;
@@ -21402,12 +17562,8 @@ vector__ivy__prototype_argument::__t vector__ivy__prototype_argument::__t::segme
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__prototype_argument::__t::reverse ()
 {
     vector__ivy__prototype_argument::domain::__t idx;
@@ -21482,36 +17638,20 @@ void ivy::actdc::__t::encode  (pretty::__t &b,const priority::__t &prio) const
         (*this) . body -> encode (b,priority::__t (2));
     }
 }
-// A member is a action of the form `action type.member(x:type,...)`
-__bool ivy::actdc::__t::is_member () const 
-// A member is a action of the form `action type.member(x:type,...)`
+__bool ivy::actdc::__t::is_member () const
 {
-    
-    // A member is a action of the form `action type.member(x:type,...)`
     __bool res;
-    
-    // A member is a action of the form `action type.member(x:type,...)`
     res = (*this) . name -> get_name() . isa< ivy::dotident::__t >() & (*this) . inputs . end >
         vector__ivy__expr::domain::__t (0) & (*this) . member_type() ==
         (*this) . name -> get_name() -> get_namesp();
-    
-    // A member is a action of the form `action type.member(x:type,...)`
     return res;
 }
-// If this is a member action, return the type it is a member of.
-ivy::ptr< ivy::ident::__t > ivy::actdc::__t::member_type () const 
-// If this is a member action, return the type it is a member of.
+ivy::ptr< ivy::ident::__t > ivy::actdc::__t::member_type () const
 {
-    
-    // If this is a member action, return the type it is a member of.
     ivy::ptr< ivy::ident::__t > res;
-    
-    // If this is a member action, return the type it is a member of.
     res =
         (*this) . inputs . value (vector__ivy__expr::domain::__t (0)) -> get_arg (vector__ivy__expr::domain::__t
                     (1)) -> get_name();
-    
-    // If this is a member action, return the type it is a member of.
     return res;
 }
 ivy::ptr< ivy::stmt::__t > ivy::actdc::__t::get_body () const
@@ -21520,21 +17660,11 @@ ivy::ptr< ivy::stmt::__t > ivy::actdc::__t::get_body () const
     res = (*this) . body;
     return res;
 }
-// return an empty map
-ivy::ident_set::__t ivy::ident_set::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::ident_set::__t ivy::ident_set::empty () {
     ivy::ident_set::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_set::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y)
 {
     ivy::ident_set::rec z;
@@ -21542,8 +17672,6 @@ void ivy::ident_set::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __boo
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_set::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const
 {
     ivy::ident_set::rec z;
@@ -21552,21 +17680,12 @@ void ivy::ident_set::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) 
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_set::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_set::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_set::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_set::rec z;
@@ -21592,20 +17711,10 @@ ivy::ptr< ivy::expr::__t > ivy::colon::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::colon::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -21619,35 +17728,16 @@ ivy::ptr< ivy::expr::__t > ivy::colon::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::colon::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::colon::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::colon));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -21657,10 +17747,6 @@ vector__ivy__expr::__t ivy::colon::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::arrow::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -21677,20 +17763,10 @@ ivy::ptr< ivy::expr::__t > ivy::arrow::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::arrow::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -21704,35 +17780,16 @@ ivy::ptr< ivy::expr::__t > ivy::arrow::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::arrow::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::arrow::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::arrow));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -21742,10 +17799,6 @@ vector__ivy__expr::__t ivy::arrow::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::castop::make  (const ivy::ptr< ivy::expr::__t > &arg,const ivy::ptr< annot::__t >
@@ -21775,20 +17828,10 @@ ivy::ptr< ivy::expr::__t > ivy::equals::make  (const ivy::ptr< ivy::expr::__t > 
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::equals::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -21802,35 +17845,16 @@ ivy::ptr< ivy::expr::__t > ivy::equals::fold_left  (const vector__ivy__expr::__t
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::equals::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::equals::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::equals));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -21840,10 +17864,6 @@ vector__ivy__expr::__t ivy::equals::unfold_left  (const ivy::ptr< ivy::expr::__t
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::notequals::make  (const ivy::ptr< ivy::expr::__t > &lhs,const ivy::ptr< ivy::expr::__t >
@@ -21860,20 +17880,10 @@ ivy::ptr< ivy::expr::__t > ivy::notequals::make  (const ivy::ptr< ivy::expr::__t
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::notequals::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -21887,35 +17897,16 @@ ivy::ptr< ivy::expr::__t > ivy::notequals::fold_left  (const vector__ivy__expr::
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::notequals::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::notequals::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::notequals));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -21925,10 +17916,6 @@ vector__ivy__expr::__t ivy::notequals::unfold_left  (const ivy::ptr< ivy::expr::
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::expr::__t > ivy::__not::make  (const ivy::ptr< ivy::expr::__t > &arg,const ivy::ptr< annot::__t >
@@ -21986,20 +17973,10 @@ ivy::ptr< ivy::expr::__t > ivy::isaop::make  (const ivy::ptr< ivy::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< ivy::expr::__t > ivy::isaop::fold_left  (const vector__ivy__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__ivy__expr::domain::__t (0))
     {
         res = args . value (vector__ivy__expr::domain::__t (0));
@@ -22013,35 +17990,16 @@ ivy::ptr< ivy::expr::__t > ivy::isaop::fold_left  (const vector__ivy__expr::__t 
     } else {
         res = ivy::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__ivy__expr::__t ivy::isaop::unfold_left  (const ivy::ptr< ivy::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__ivy__expr::__t ivy::isaop::unfold_left  (const ivy::ptr< ivy::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__ivy__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< ivy::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (ivy::verb::__t (ivy::verb::isav));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__ivy__expr::domain::__t (1)));
@@ -22051,10 +18009,6 @@ vector__ivy__expr::__t ivy::isaop::unfold_left  (const ivy::ptr< ivy::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< ivy::stmt::__t > ivy::varst::make  (const ivy::ptr< ivy::expr::__t > &name,const ivy::ptr< annot::__t >
@@ -22122,6 +18076,7 @@ void ivy::stmt::parse_lang_stmt  (pstate::__t &st,const priority::__t &prio,ivy:
         }
         
         // allow to omit final semicolon
+        
         res = s;
     } else
     {
@@ -22143,6 +18098,7 @@ void ivy::stmt::parse_lang_stmt  (pstate::__t &st,const priority::__t &prio,ivy:
                 s . lhs = ivy::empty::make (s . ann -> strip());
                 
                 // just an expression -- assign to ()
+                
                 res = s;
             }
         } else {
@@ -22163,46 +18119,26 @@ vector__ivy__decl::domain::__t vector__ivy__decl::domain::__t::prev () const
     y = (*this) - vector__ivy__decl::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__decl::domain::__t vector__ivy__decl::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__decl::domain::__t vector__ivy__decl::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__decl::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__decl::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__decl::__t vector__ivy__decl::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__ivy__decl::__t vector__ivy__decl::empty () {
     vector__ivy__decl::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__decl::__t::set  (const vector__ivy__decl::domain::__t &i,const ivy::ptr< ivy::decl::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__decl::__t::append  (const ivy::ptr< ivy::decl::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__decl::__t::extend  (const vector__ivy__decl::__t &x)
 {
     vector__ivy__decl::domain::__t idx;
@@ -22212,36 +18148,20 @@ void vector__ivy__decl::__t::extend  (const vector__ivy__decl::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__decl::__t::resize  (const vector__ivy__decl::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::decl::__t > vector__ivy__decl::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::decl::__t > vector__ivy__decl::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::decl::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__decl::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__decl::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__decl::domain::__t (0))
@@ -22251,20 +18171,10 @@ void vector__ivy__decl::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__decl::__t vector__ivy__decl::__t::segment  (const vector__ivy__decl::domain::__t &beg,const
-    vector__ivy__decl::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__decl::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__decl::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__decl::domain::__t idx;
         idx = beg;
@@ -22274,12 +18184,8 @@ vector__ivy__decl::__t vector__ivy__decl::__t::segment  (const vector__ivy__decl
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__decl::__t::reverse ()
 {
     vector__ivy__decl::domain::__t idx;
@@ -22697,6 +18603,7 @@ void ivy::parse_action  (pstate::__t &st,const priority::__t &prio,const ivy::ac
         }
         
         // 1 = prio of ","
+        
         if (st . ok & st . tok == ivy::from_str< str::__t > ("returns"))
         {
             st . consume();
@@ -22786,6 +18693,7 @@ void ivy::decl::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy:
                         {
                             
                             // double quote
+                            
                             s . filename = st . tok;
                             st . consume();
                         } else {
@@ -22834,6 +18742,7 @@ void ivy::decl::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< ivy:
                                     ivy::expr::parse (st,priority::__t (99),s . name);
                                     
                                     // allow dot operator, not application
+                                    
                                     if (st . ok & st . tok == ivy::from_str< str::__t > ("("))
                                     {
                                         ivy::expr::tup::parse (st,priority::__t (1),s . prms);
@@ -23143,7 +19052,6 @@ void ivy::prog::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     }
     {}
 }
-// Note, the Ivy verison number is encoded in the first comment line
 void ivy::prog::parse_to  (pstate::__t &st,const priority::__t &prio,ivy::prog::__t &res)
 {
     if (! ivy::native_bool (false))
@@ -23189,46 +19097,26 @@ vector__ivy__error::domain::__t vector__ivy__error::domain::__t::prev () const
     y = (*this) - vector__ivy__error::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__error::domain::__t vector__ivy__error::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__error::domain::__t vector__ivy__error::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__error::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__error::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__error::__t vector__ivy__error::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__ivy__error::__t vector__ivy__error::empty () {
     vector__ivy__error::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__error::__t::set  (const vector__ivy__error::domain::__t &i,const ivy::ptr< ivy::error::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__error::__t::append  (const ivy::ptr< ivy::error::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__error::__t::extend  (const vector__ivy__error::__t &x)
 {
     vector__ivy__error::domain::__t idx;
@@ -23238,36 +19126,20 @@ void vector__ivy__error::__t::extend  (const vector__ivy__error::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__error::__t::resize  (const vector__ivy__error::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::error::__t > vector__ivy__error::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::error::__t > vector__ivy__error::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::error::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__error::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__error::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__error::domain::__t (0))
@@ -23277,20 +19149,10 @@ void vector__ivy__error::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__error::__t vector__ivy__error::__t::segment  (const vector__ivy__error::domain::__t &beg,const
-    vector__ivy__error::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__error::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__error::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__error::domain::__t idx;
         idx = beg;
@@ -23300,12 +19162,8 @@ vector__ivy__error::__t vector__ivy__error::__t::segment  (const vector__ivy__er
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__error::__t::reverse ()
 {
     vector__ivy__error::domain::__t idx;
@@ -23322,7 +19180,6 @@ void vector__ivy__error::__t::reverse ()
         idx = idx . next();
     }
 }
-// Reports an error and returns
 void ivy::report_error  (const ivy::ptr< ivy::error::__t > &e,const ivy::ptr< annot::__t > &ann)
 {
     pretty::__t b;
@@ -23468,6 +19325,24 @@ void ivy::undefined::__t::encode  (pretty::__t &b) const
     (*this) . n -> encode (b,priority::__t (0));
     b . newline();
 }
+ivy::redefining::__t ivy::redefining::make  (const ivy::ptr< ivy::ident::__t > &n,const ivy::ptr< annot::__t >
+    &ann) {
+    ivy::redefining::__t res;
+    {
+        res . n = n;
+        res . ann = ann;
+    }
+    return res;
+}
+void ivy::redefining::__t::encode  (pretty::__t &b) const
+{
+    b . extend (ivy::from_str< str::__t > ("Redefining "));
+    (*this) . n -> encode (b,priority::__t (0));
+    b . newline();
+    b . extend ((*this) . ann -> to_str());
+    b . extend (ivy::from_str< str::__t > (": previous definition"));
+    b . newline();
+}
 ivy::wrong_number_params::__t ivy::wrong_number_params::make  (const vector__ivy__expr::domain::__t
     &n) {
     ivy::wrong_number_params::__t res;
@@ -23490,6 +19365,19 @@ void ivy::syntax_error::__t::encode  (pretty::__t &b) const
     b . extend (ivy::from_str< str::__t > ("Syntax error at token"));
     b . extend (ivy::from_str< str::__t > (" "));
     b . extend ((*this) . tok);
+    b . newline();
+}
+ivy::bad_syntax::__t ivy::bad_syntax::make  (const ivy::ptr< ivy::expr::__t > &e)
+{
+    ivy::bad_syntax::__t res;
+    res . e = e;
+    return res;
+}
+void ivy::bad_syntax::__t::encode  (pretty::__t &b) const
+{
+    b . extend (ivy::from_str< str::__t > ("Syntax error at expression"));
+    b . extend (ivy::from_str< str::__t > (" "));
+    (*this) . e -> encode (b,priority::__t (0));
     b . newline();
 }
 str::__t env::get  (const str::__t &name) {
@@ -23567,19 +19455,27 @@ void ivy::prog::read_file_int  (const str::__t &name,const ivy::ptr< annot::__t 
                 d = p . decls . value (idx);
                 if (d . isa< ivy::includedc::__t >())
                 {
-                    ivy::ptr< ivy::ident::__t > iname;
-                    iname = d -> get_expr() -> get_name();
-                    if (! rst . have_read . mem (iname))
+                    ivy::ptr< ivy::expr::__t > sname;
+                    sname = d -> get_expr();
+                    if (! sname . isa< ivy::symbol::__t >())
                     {
-                        str::__t fname;
+                        ivy::report_error (ivy::bad_syntax::make (sname),sname -> get_ann());
+                    } else
+                    {
+                        ivy::ptr< ivy::ident::__t > iname;
+                        iname = sname -> get_name();
+                        if (! rst . have_read . mem (iname))
                         {
-                            fname = iname -> to_str();
-                            ivy::prog::find_include (fname);
+                            str::__t fname;
+                            {
+                                fname = iname -> to_str();
+                                ivy::prog::find_include (fname);
+                            }
+                            ivy::prog::__t subp;
+                            ivy::prog::read_file_int (fname,d -> get_ann(),subp,rst);
+                            p . decls . set (idx,ivy::groupdc::make (subp . decls));
+                            rst . have_read . set (iname,ivy::native_bool (true));
                         }
-                        ivy::prog::__t subp;
-                        ivy::prog::read_file_int (fname,d -> get_ann(),subp,rst);
-                        p . decls . set (idx,ivy::groupdc::make (subp . decls));
-                        rst . have_read . set (iname,ivy::native_bool (true));
                     }
                 }
                 idx = idx . next();
@@ -23597,28 +19493,15 @@ void ivy::prog::read_file_int  (const str::__t &name,const ivy::ptr< annot::__t 
         ivy::report_error (foo,ann);
     }
 }
-// Read the main file, named `name`. We prepend `include ivy`
-// to the file, to cause the standard preamble to be read.
-ivy::prog::__t ivy::prog::read_file  (const str::__t &name) 
-// Read the main file, named `name`. We prepend `include ivy`
-// to the file, to cause the standard preamble to be read.
+ivy::prog::__t ivy::prog::read_file  (const str::__t &name)
 {
-    
-    // Read the main file, named `name`. We prepend `include ivy`
-    // to the file, to cause the standard preamble to be read.
     ivy::prog::__t p;
-    
-    // Read the main file, named `name`. We prepend `include ivy`
-    // to the file, to cause the standard preamble to be read.
     {
         ivy::ptr< annot::__t > ann;
         p . decls . append (ivy::includedc::make (ivy::symbol::makestr (ivy::from_str< str::__t > ("ivy"),ann),ann));
         ivy::prog::readst rst;
         ivy::prog::read_file_int (name,ann,p,rst);
     }
-    
-    // Read the main file, named `name`. We prepend `include ivy`
-    // to the file, to cause the standard preamble to be read.
     return p;
 }
 void ivy::path::change_extension  (str::__t &path,const str::__t &ext)
@@ -23629,6 +19512,7 @@ void ivy::path::change_extension  (str::__t &path,const str::__t &ext)
         idx = path . end . prev();
         while (idx > pos::__t (0) & path . value (idx) != __char::__t (46)) 
         // dot
+        
         {
             idx = idx . prev();
         }
@@ -23648,6 +19532,7 @@ void ivy::path::drop_extension  (str::__t &path)
         idx = path . end . prev();
         while (idx > pos::__t (0) & path . value (idx) != __char::__t (46)) 
         // dot
+        
         {
             idx = idx . prev();
         }
@@ -23661,21 +19546,11 @@ void ivy::path::concat  (str::__t &path1,const str::__t &path2)
     path1 . extend (ivy::from_str< str::__t > ("/"));
     path1 . extend (path2);
 }
-// return an empty map
-ivy::symeval::__t ivy::symeval::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::symeval::__t ivy::symeval::empty () {
     ivy::symeval::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::symeval::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t >
     &y) {
     ivy::symeval::rec z;
@@ -23683,8 +19558,6 @@ void ivy::symeval::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::pt
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::symeval::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t > &y)
     const {
     ivy::symeval::rec z;
@@ -23693,21 +19566,12 @@ void ivy::symeval::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::symeval::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::symeval::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::symeval::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::symeval::rec z;
@@ -23815,21 +19679,12 @@ void ivy::subst_vector  (vector__ivy__expr::__t &v,const ivy::symeval::__t &smap
         idx = idx . next();
     }
 }
-// return an empty map
-ivy::ident_to_moduledc::__t ivy::ident_to_moduledc::empty () 
-// return an empty map
+ivy::ident_to_moduledc::__t ivy::ident_to_moduledc::empty ()
 {
-    
-    // return an empty map
     ivy::ident_to_moduledc::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_moduledc::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::moduledc::__t
     &y)
 {
@@ -23838,8 +19693,6 @@ void ivy::ident_to_moduledc::__t::set  (const ivy::ptr< ivy::ident::__t > &x,con
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_moduledc::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::moduledc::__t &y)
     const {
     ivy::ident_to_moduledc::rec z;
@@ -23848,21 +19701,12 @@ void ivy::ident_to_moduledc::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_moduledc::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_moduledc::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_moduledc::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_moduledc::rec z;
@@ -23885,21 +19729,11 @@ ivy::moduledc::__t ivy::ident_to_moduledc::__t::get_def  (const ivy::ptr< ivy::i
     }
     return y;
 }
-// return an empty map
-ivy::ident_to_ident::__t ivy::ident_to_ident::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::ident_to_ident::__t ivy::ident_to_ident::empty () {
     ivy::ident_to_ident::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_ident::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::ident::__t >
     &y)
 {
@@ -23908,8 +19742,6 @@ void ivy::ident_to_ident::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const 
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_ident::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::ident::__t >
     &y) const {
     ivy::ident_to_ident::rec z;
@@ -23918,21 +19750,12 @@ void ivy::ident_to_ident::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::p
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_ident::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_ident::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_ident::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_ident::rec z;
@@ -23944,21 +19767,12 @@ ivy::ptr< ivy::ident::__t > ivy::ident_to_ident::__t::value  (const ivy::ptr< iv
     y = (*this) . map (x) . val;
     return y;
 }
-// return an empty map
-ivy::ident_to_instantiatedc::__t ivy::ident_to_instantiatedc::empty () 
-// return an empty map
+ivy::ident_to_instantiatedc::__t ivy::ident_to_instantiatedc::empty ()
 {
-    
-    // return an empty map
     ivy::ident_to_instantiatedc::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_instantiatedc::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::instantiatedc::__t
     &y)
 {
@@ -23967,8 +19781,6 @@ void ivy::ident_to_instantiatedc::__t::set  (const ivy::ptr< ivy::ident::__t > &
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_instantiatedc::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::instantiatedc::__t
     &y) const {
     ivy::ident_to_instantiatedc::rec z;
@@ -23977,21 +19789,12 @@ void ivy::ident_to_instantiatedc::__t::get  (const ivy::ptr< ivy::ident::__t > &
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_instantiatedc::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_instantiatedc::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_instantiatedc::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_instantiatedc::rec z;
@@ -24000,6 +19803,44 @@ void ivy::ident_to_instantiatedc::__t::remove  (const ivy::ptr< ivy::ident::__t 
 ivy::instantiatedc::__t ivy::ident_to_instantiatedc::__t::value  (const ivy::ptr< ivy::ident::__t >
     &x) const {
     ivy::instantiatedc::__t y;
+    y = (*this) . map (x) . val;
+    return y;
+}
+ivy::ident_to_annot::__t ivy::ident_to_annot::empty () {
+    ivy::ident_to_annot::__t a;
+    {}
+    return a;
+}
+void ivy::ident_to_annot::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< annot::__t >
+    &y)
+{
+    ivy::ident_to_annot::rec z;
+    z . full = ivy::native_bool (true);
+    z . val = y;
+    (*this) . map (x) = z;
+}
+void ivy::ident_to_annot::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< annot::__t > &y)
+    const {
+    ivy::ident_to_annot::rec z;
+    z = (*this) . map (x);
+    if (z . full) {
+        y = z . val;
+    }
+}
+__bool ivy::ident_to_annot::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
+{
+    __bool res;
+    res = (*this) . map (x) . full;
+    return res;
+}
+void ivy::ident_to_annot::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
+{
+    ivy::ident_to_annot::rec z;
+    (*this) . map (x) = z;
+}
+ivy::ptr< annot::__t > ivy::ident_to_annot::__t::value  (const ivy::ptr< ivy::ident::__t > &x) const
+{
+    ivy::ptr< annot::__t > y;
     y = (*this) . map (x) . val;
     return y;
 }
@@ -24022,32 +19863,10 @@ ivy::ident_to_ident::__t ivy::prm_map  (const vector__ivy__expr::__t &fml,const 
     return res;
 }
 void ivy::expr::__t::flat  (ivy::flatst::__t &st,ivy::ptr< ivy::expr::__t > &res) const {}
-// A dot operator has two possible interpretations: it indicates a
-// member of an object, or an application of a destructor or member
-// action. When defining a name, it is always the former. When not
-// defining, we check whether the lhs of the dot is defined. If it is,
-// we treat the dot as an object member reference.
 ivy::ptr< ivy::expr::__t > ivy::applydot  (const ivy::ptr< ivy::expr::__t > &arg,const ivy::ptr< ivy::ident::__t >
-    &member,const ivy::ptr< annot::__t > &ann,const ivy::flatst::__t &st) 
-// A dot operator has two possible interpretations: it indicates a
-// member of an object, or an application of a destructor or member
-// action. When defining a name, it is always the former. When not
-// defining, we check whether the lhs of the dot is defined. If it is,
-// we treat the dot as an object member reference.
+    &member,const ivy::ptr< annot::__t > &ann,const ivy::flatst::__t &st)
 {
-    
-    // A dot operator has two possible interpretations: it indicates a
-    // member of an object, or an application of a destructor or member
-    // action. When defining a name, it is always the former. When not
-    // defining, we check whether the lhs of the dot is defined. If it is,
-    // we treat the dot as an object member reference.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // A dot operator has two possible interpretations: it indicates a
-    // member of an object, or an application of a destructor or member
-    // action. When defining a name, it is always the former. When not
-    // defining, we check whether the lhs of the dot is defined. If it is,
-    // we treat the dot as an object member reference.
     if (arg . isa< ivy::symbol::__t >())
     {
         ivy::ptr< ivy::ident::__t > name;
@@ -24066,12 +19885,6 @@ ivy::ptr< ivy::expr::__t > ivy::applydot  (const ivy::ptr< ivy::expr::__t > &arg
     } else {
         res = ivy::dot::make (arg,ivy::symbol::make (member,ann),ann);
     }
-    
-    // A dot operator has two possible interpretations: it indicates a
-    // member of an object, or an application of a destructor or member
-    // action. When defining a name, it is always the former. When not
-    // defining, we check whether the lhs of the dot is defined. If it is,
-    // we treat the dot as an object member reference.
     return res;
 }
 void ivy::find_ident  (const ivy::ptr< ivy::ident::__t > &root,ivy::ptr< ivy::ident::__t > &s,const
@@ -24102,9 +19915,8 @@ ivy::ptr< ivy::ident::__t > ivy::strident::__t::flat  (const __bool &rhs,const i
         s2 = (*this);
         
         // workaround
-        vector__ivy__ident::domain::__t idx;
         
-        // workaround
+        vector__ivy__ident::domain::__t idx;
         idx = s2 . subscrs . begin();
         while (idx < s2 . subscrs . end)
         {
@@ -24148,17 +19960,30 @@ ivy::ptr< ivy::ident::__t > ivy::dotident::__t::flat  (const __bool &rhs,const i
     res = ivy::dotident::make ((*this) . namesp -> flat (rhs,st),(*this) . member);
     return res;
 }
-void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global)
+void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
+    __bool &is_object)
 {
     st . defining = ivy::native_bool (true);
     
     //        var id := s.get_name.flat(false,st);
+    
     ivy::ptr< ivy::expr::__t > e;
     s -> flat (st,e);
+    ivy::check_syntax_symbol (e);
     ivy::ptr< ivy::ident::__t > id;
     id = e -> get_name();
     st . defining = ivy::native_bool (false);
     st . defs . set (id,ivy::native_bool (true));
+    if (! is_object)
+    {
+        if (st . non_objects . mem (id))
+        {
+            ivy::report_error (ivy::redefining::make (id,st . non_objects . value (id)),s -> get_ann());
+        }
+    }
+    if (! is_object) {
+        st . non_objects . set (id,s -> get_ann());
+    }
     if (is_global) {
         st . globals . set (id,ivy::native_bool (true));
     }
@@ -24183,6 +20008,7 @@ void ivy::symbol::__t::flat  (ivy::flatst::__t &st,ivy::ptr< ivy::expr::__t > &r
             f . vrb = f . name -> get_verb();
             
             // name subst could change verb
+            
             if (f . vrb == ivy::verb::__t (ivy::verb::none))
             {
                 ivy::check_defined (f . name,st,(*this) . ann);
@@ -24478,7 +20304,7 @@ void ivy::actdc::__t::defd  (ivy::flatst::__t &st) const
     {
         st . absolute = ivy::native_bool (true);
     }
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (false));
     st . absolute = ivy::native_bool (false);
 }
 void ivy::initdc::__t::flat  (ivy::flatst::__t &st) const
@@ -24508,6 +20334,7 @@ void ivy::enumspec::__t::flat  (ivy::flatst::__t &st,ivy::ptr< ivy::typespec::__
     {
         ivy::ptr< ivy::expr::__t > e;
         e = t . constructors . value (idx);
+        ivy::check_syntax_symbol (e);
         {
             ivy::ptr< ivy::expr::__t > __tmp4;
             e -> flat (st,__tmp4);
@@ -24524,7 +20351,8 @@ void ivy::enumspec::__t::defd  (ivy::flatst::__t &st,const ivy::ptr< ivy::ident:
     idx = (*this) . constructors . begin();
     while (idx < (*this) . constructors . end)
     {
-        ivy::add_def ((*this) . constructors . value (idx),st,ivy::native_bool (false));
+        ivy::add_def ((*this) . constructors . value (idx),st,ivy::native_bool (false),ivy::native_bool
+                    (false));
         idx = idx . next();
     }
 }
@@ -24746,6 +20574,7 @@ void ivy::structspec::__t::to_destrs  (ivy::flatst::__t &st,const ivy::ptr< ivy:
             e -> flat (st,__tmp5);
             e = __tmp5;
         }
+        ivy::check_syntax_typing (e,ivy::native_bool (false));
         st . has_root = old_has_root;
         st . root = old_root;
         ivy::canon_typing (e);
@@ -24756,7 +20585,9 @@ void ivy::structspec::__t::to_destrs  (ivy::flatst::__t &st,const ivy::ptr< ivy:
             ivy::colon::make (e -> get_arg (vector__ivy__expr::domain::__t (0)),fty -> uncurry(),e
                     -> get_ann());
         ivy::ptr< ivy::decl::__t > dstr;
-        dstr = ivy::vardc::make (typing,ivy::native_bool (true),e -> get_ann());
+        dstr =
+            ivy::vardc::make (typing,ivy::native_bool (true),e -> get_arg (vector__ivy__expr::domain::__t
+                            (0)) -> get_ann());
         st . decls . append (dstr);
         idx = idx . next();
     }
@@ -24781,14 +20612,23 @@ ivy::ptr< ivy::expr::__t > ivy::expr::__t::uncurry () const
     }
     return res;
 }
+void ivy::check_syntax_symbol  (const ivy::ptr< ivy::expr::__t > &e)
+{
+    if (! e . isa< ivy::symbol::__t >())
+    {
+        ivy::report_error (ivy::bad_syntax::make (e),e -> get_ann());
+    }
+}
 void ivy::typedc::__t::flat  (ivy::flatst::__t &st) const
 {
     ivy::typedc::__t res;
     res = (*this);
     (*this) . sort -> flat (st,res . sort);
     res . has_super = (*this) . has_super;
-    if (res . has_super) {
+    if (res . has_super)
+    {
         (*this) . super -> flat (st,res . super);
+        ivy::check_syntax_symbol (res . super);
     }
     if (res . has_spec)
     {
@@ -24809,7 +20649,7 @@ void ivy::typedc::__t::flat  (ivy::flatst::__t &st) const
 }
 void ivy::typedc::__t::defd  (ivy::flatst::__t &st) const
 {
-    ivy::add_def ((*this) . sort,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . sort,st,ivy::native_bool (false),ivy::native_bool (false));
     if ((*this) . has_spec)
     {
         st . defining = ivy::native_bool (true);
@@ -24819,31 +20659,9 @@ void ivy::typedc::__t::defd  (ivy::flatst::__t &st) const
         (*this) . spec -> defd (st,id);
     }
 }
-// Get the symbol that is typed in a typing. Examples:
-//
-// - in `x : t`, the typed symbol is `x`
-// - in `f(X:u) : t`, the typed symbol is `f`
-// - in `f(X:u)` the typed symbol is `f'
-ivy::ptr< ivy::expr::__t > ivy::get_typed_symbol  (const ivy::ptr< ivy::expr::__t > &typing) 
-// Get the symbol that is typed in a typing. Examples:
-//
-// - in `x : t`, the typed symbol is `x`
-// - in `f(X:u) : t`, the typed symbol is `f`
-// - in `f(X:u)` the typed symbol is `f'
+ivy::ptr< ivy::expr::__t > ivy::get_typed_symbol  (const ivy::ptr< ivy::expr::__t > &typing)
 {
-    
-    // Get the symbol that is typed in a typing. Examples:
-    //
-    // - in `x : t`, the typed symbol is `x`
-    // - in `f(X:u) : t`, the typed symbol is `f`
-    // - in `f(X:u)` the typed symbol is `f'
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Get the symbol that is typed in a typing. Examples:
-    //
-    // - in `x : t`, the typed symbol is `x`
-    // - in `f(X:u) : t`, the typed symbol is `f`
-    // - in `f(X:u)` the typed symbol is `f'
     if (typing . isa< ivy::app::__t >())
     {
         if (typing -> is (ivy::verb::__t (ivy::verb::colon)))
@@ -24860,13 +20678,116 @@ ivy::ptr< ivy::expr::__t > ivy::get_typed_symbol  (const ivy::ptr< ivy::expr::__
     } else {
         res = typing;
     }
-    
-    // Get the symbol that is typed in a typing. Examples:
-    //
-    // - in `x : t`, the typed symbol is `x`
-    // - in `f(X:u) : t`, the typed symbol is `f`
-    // - in `f(X:u)` the typed symbol is `f'
     return res;
+}
+void ivy::is_typing_lhs_syntax  (const ivy::ptr< ivy::expr::__t > &lhs,__bool &res,ivy::ptr< ivy::expr::__t >
+    &bad)
+{
+    res = ivy::native_bool (false);
+    bad = lhs;
+    if (lhs . isa< ivy::symbol::__t >()) {
+        res = ivy::native_bool (true);
+    } else
+    {
+        if (lhs . isa< ivy::app::__t >())
+        {
+            if (lhs -> get_func() . isa< ivy::symbol::__t >())
+            {
+                res = ivy::native_bool (true);
+                vector__ivy__expr::__t args;
+                args = lhs -> get_args();
+                vector__ivy__expr::domain::__t idx;
+                idx = args . begin();
+                while (res & idx < args . end)
+                {
+                    bad = args . value (idx);
+                    if (! bad -> is (ivy::verb::__t (ivy::verb::colon)))
+                    {
+                        res = ivy::native_bool (false);
+                    } else
+                    {
+                        ivy::ptr< ivy::expr::__t > v;
+                        v = bad -> get_arg (vector__ivy__expr::domain::__t (0));
+                        if (!
+                        (v . isa< ivy::symbol::__t >() & v -> get_verb() ==
+                            ivy::verb::__t (ivy::verb::logvar) &
+                            bad -> get_arg (vector__ivy__expr::domain::__t (1)) . isa< ivy::symbol::__t >()))
+                        {
+                            res = ivy::native_bool (false);
+                        }
+                    }
+                    idx = idx . next();
+                }
+            }
+        }
+    }
+}
+void ivy::is_typing_rhs_syntax  (const ivy::ptr< ivy::expr::__t > &rhs,__bool &res,ivy::ptr< ivy::expr::__t >
+    &bad)
+{
+    res = ivy::native_bool (false);
+    bad = rhs;
+    if (rhs . isa< ivy::symbol::__t >()) {
+        res = ivy::native_bool (true);
+    } else
+    {
+        if (rhs -> is (ivy::verb::__t (ivy::verb::arrow)))
+        {
+            res = ivy::native_bool (true);
+            vector__ivy__expr::__t dom;
+            dom = ivy::times::unfold_left (rhs -> get_arg (vector__ivy__expr::domain::__t (0)));
+            vector__ivy__expr::domain::__t idx;
+            idx = dom . begin();
+            while (res & idx < dom . end)
+            {
+                bad = dom . value (idx);
+                if (! bad . isa< ivy::symbol::__t >()) {
+                    res = ivy::native_bool (false);
+                }
+                idx = idx . next();
+            }
+            if (res & !
+            rhs -> get_arg (vector__ivy__expr::domain::__t (1)) . isa< ivy::symbol::__t >())
+            {
+                res = ivy::native_bool (false);
+                bad = rhs -> get_arg (vector__ivy__expr::domain::__t (1));
+            }
+        } else {
+            bad = rhs;
+        }
+    }
+}
+void ivy::check_syntax_typing  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &has_def)
+{
+    __bool ok;
+    ivy::ptr< ivy::expr::__t > bad;
+    if (typing -> is (ivy::verb::__t (ivy::verb::colon)))
+    {
+        ivy::is_typing_lhs_syntax (typing -> get_arg (vector__ivy__expr::domain::__t (0)),ok,bad);
+        if (ok)
+        {
+            if (typing -> get_arg (vector__ivy__expr::domain::__t (1)) -> is (ivy::verb::__t (ivy::verb::arrow))
+            & ! typing -> get_arg (vector__ivy__expr::domain::__t (0)) . isa< ivy::symbol::__t >())
+            {
+                ok = ivy::native_bool (false);
+                bad = typing -> get_arg (vector__ivy__expr::domain::__t (1));
+            } else
+            {
+                ivy::is_typing_rhs_syntax (typing -> get_arg (vector__ivy__expr::domain::__t (1)),ok,bad);
+            }
+        }
+    } else
+    {
+        if (has_def) {
+            ivy::is_typing_lhs_syntax (typing,ok,bad);
+        } else {
+            ok = ivy::native_bool (false);
+            bad = typing;
+        }
+    }
+    if (! ok) {
+        ivy::report_error (ivy::bad_syntax::make (bad),bad -> get_ann());
+    }
 }
 void ivy::vardc::__t::flat  (ivy::flatst::__t &st) const
 {
@@ -24881,6 +20802,7 @@ void ivy::vardc::__t::flat_int  (ivy::flatst::__t &st,ivy::vardc::__t &res) cons
     res . is_destructor = (*this) . is_destructor;
     (*this) . typing -> flat (st,res . typing);
     res . has_def = (*this) . has_def;
+    ivy::check_syntax_typing (res . typing,res . has_def);
     if (res . has_def) {
         (*this) . def -> flat (st,res . def);
     } else {
@@ -24890,7 +20812,8 @@ void ivy::vardc::__t::flat_int  (ivy::flatst::__t &st,ivy::vardc::__t &res) cons
 void ivy::vardc::__t::defd  (ivy::flatst::__t &st) const
 {
     ivy::auto_defd ((*this) . typing,st);
-    ivy::add_def (ivy::get_typed_symbol ((*this) . typing),st,ivy::native_bool (true));
+    ivy::add_def (ivy::get_typed_symbol ((*this) . typing),st,ivy::native_bool (true),ivy::native_bool
+                (false));
 }
 void ivy::header::__t::flat  (ivy::flatst::__t &st) const
 {
@@ -24913,20 +20836,35 @@ void ivy::interpdc::__t::flat  (ivy::flatst::__t &st) const
 void ivy::interpdc::__t::flat_int  (ivy::flatst::__t &st,ivy::interpdc::__t &res) const
 {
     (*this) . itype -> flat (st,res . itype);
+    ivy::check_syntax_symbol (res . itype);
     st . absolute = ivy::native_bool (true);
     (*this) . ctype -> flat (st,res . ctype);
+    ivy::check_syntax_symbol (res . ctype);
     st . absolute = ivy::native_bool (false);
+}
+void ivy::check_syntax_symbol_vec  (const vector__ivy__expr::__t &s)
+{
+    vector__ivy__expr::domain::__t idx;
+    idx = s . begin();
+    while (idx < s . end) {
+        ivy::check_syntax_symbol (s . value (idx));
+        idx = idx . next();
+    }
 }
 void ivy::moduledc::__t::defd  (ivy::flatst::__t &st) const
 {
     ivy::ptr< ivy::expr::__t > name;
     st . defining = ivy::native_bool (true);
     (*this) . name -> flat (st,name);
+    vector__ivy__expr::domain::__t idx;
+    idx = (*this) . prms . begin();
+    ivy::check_syntax_symbol_vec ((*this) . prms);
     st . defining = ivy::native_bool (false);
     st . moddecls . set (name -> get_name(),(*this));
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (false));
 }
-void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,ivy::moduledc::__t &mod) const
+void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,const __bool &check,ivy::moduledc::__t &mod)
+    const
 {
     ivy::ptr< ivy::expr::__t > name;
     vector__ivy__expr::__t prms;
@@ -24935,15 +20873,22 @@ void ivy::instantiatedc::__t::setup  (ivy::flatst::__t &st,ivy::moduledc::__t &m
         prms = (*this) . prms;
         ivy::flat_exprvec (prms,st);
     }
-    mod = st . moddecls . get_def (name -> get_name(),(*this) . ann);
-    st . prmvals = ivy::prm_map (mod . prms,prms,(*this) . ann);
+    if (check) {
+        ivy::check_syntax_symbol (name);
+        ivy::check_syntax_symbol_vec (prms);
+    }
+    if (name . isa< ivy::symbol::__t >())
+    {
+        mod = st . moddecls . get_def (name -> get_name(),(*this) . ann);
+        st . prmvals = ivy::prm_map (mod . prms,prms,(*this) . ann);
+    }
 }
 void ivy::instantiatedc::__t::flat  (ivy::flatst::__t &st) const
 {
     ivy::moduledc::__t mod;
     ivy::ident_to_ident::__t old_prmvals;
     old_prmvals = st . prmvals;
-    (*this) . setup (st,mod);
+    (*this) . setup (st,ivy::native_bool (true),mod);
     mod . body -> flat (st);
     st . prmvals = old_prmvals;
 }
@@ -24952,13 +20897,15 @@ void ivy::instantiatedc::__t::defd  (ivy::flatst::__t &st) const
     ivy::moduledc::__t mod;
     ivy::ident_to_ident::__t old_prmvals;
     old_prmvals = st . prmvals;
-    (*this) . setup (st,mod);
+    (*this) . setup (st,ivy::native_bool (false),mod);
     mod . body -> defd (st);
     st . prmvals = old_prmvals;
 }
 void ivy::set_root  (ivy::flatst::__t &st,const ivy::ptr< ivy::expr::__t > &s)
 {
-    st . root = st . has_root ? s -> get_name() -> prefix (st . root) : s -> get_name();
+    ivy::ptr< ivy::expr::__t > root;
+    s -> flat (st,root);
+    st . root = root -> get_name();
     st . has_root = ivy::native_bool (true);
 }
 void ivy::objectdc::__t::flat  (ivy::flatst::__t &st) const
@@ -24978,7 +20925,7 @@ void ivy::objectdc::__t::flat  (ivy::flatst::__t &st) const
 }
 void ivy::objectdc::__t::defd  (ivy::flatst::__t &st) const
 {
-    ivy::add_def ((*this) . name,st,ivy::native_bool (false));
+    ivy::add_def ((*this) . name,st,ivy::native_bool (false),ivy::native_bool (true));
     __bool old_has_root;
     old_has_root = st . has_root;
     ivy::ptr< ivy::ident::__t > old_root;
@@ -25077,12 +21024,8 @@ void ivy::prog::__t::flat ()
     // know which identifiers are defined to determine the
     // scope of an object reference and to disambiguate
     // hierarchical names from "dot" operators.
-    vector__ivy__decl::domain::__t idx;
     
-    // A pass to record all the defined identifiers, We need to
-    // know which identifiers are defined to determine the
-    // scope of an object reference and to disambiguate
-    // hierarchical names from "dot" operators.
+    vector__ivy__decl::domain::__t idx;
     idx = (*this) . decls . begin();
     while (idx < (*this) . decls . end)
     {
@@ -25094,6 +21037,7 @@ void ivy::prog::__t::flat ()
     // instantiations and expands hieracharical names of object
     // members, so that all declarations are in global scope.
     // Object declarations remain, but their bodies are empty.
+    
     idx = (*this) . decls . begin();
     while (idx < (*this) . decls . end)
     {
@@ -25102,51 +21046,25 @@ void ivy::prog::__t::flat ()
     }
     (*this) . decls = st . decls;
 }
-// return an empty map
-ivy::ident_to_exprs::__t ivy::ident_to_exprs::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::ident_to_exprs::__t ivy::ident_to_exprs::empty () {
     ivy::ident_to_exprs::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a relation map a so that x is related to y
 void ivy::ident_to_exprs::__t::add  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t >
     &y) {
     (*this) . value (x) . append (y);
 }
-// get a vector of values y such that x maps to y in a
-vector__ivy__expr::__t ivy::ident_to_exprs::__t::get  (const ivy::ptr< ivy::ident::__t > &x) const 
-// get a vector of values y such that x maps to y in a
+vector__ivy__expr::__t ivy::ident_to_exprs::__t::get  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // get a vector of values y such that x maps to y in a
     vector__ivy__expr::__t res;
-    
-    // get a vector of values y such that x maps to y in a
     res = (*this) . value (x);
-    
-    // get a vector of values y such that x maps to y in a
     return res;
 }
-// return true if x maps to some value
-__bool ivy::ident_to_exprs::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_exprs::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . value (x) . end > vector__ivy__expr::domain::__t (0);
-    
-    // return true if x maps to some value
     return res;
 }
 __bool ivy::subtypes::__t::is_subtype  (const ivy::ptr< ivy::expr::__t > &sub,const ivy::ptr< ivy::expr::__t >
@@ -25203,39 +21121,9 @@ ivy::global_types::__t ivy::prog::__t::get_global_types  (const __bool &curried)
     return s;
 }
 void ivy::decl::__t::build_global_types  (ivy::global_types::__t &st) const {}
-// A complete typing looks like one of these:
-//
-// (1)  x:t
-// (2)  f(x1:t1,...,xn:tn) : t
-// (3)  (f : (t1*...*tn->t)(...)) : u
-// (4)  (f : (t1*...*tn->t)(...))
-//
-__bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing) 
-// A complete typing looks like one of these:
-//
-// (1)  x:t
-// (2)  f(x1:t1,...,xn:tn) : t
-// (3)  (f : (t1*...*tn->t)(...)) : u
-// (4)  (f : (t1*...*tn->t)(...))
-//
+__bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing)
 {
-    
-    // A complete typing looks like one of these:
-    //
-    // (1)  x:t
-    // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...)) : u
-    // (4)  (f : (t1*...*tn->t)(...))
-    //
     __bool res;
-    
-    // A complete typing looks like one of these:
-    //
-    // (1)  x:t
-    // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...)) : u
-    // (4)  (f : (t1*...*tn->t)(...))
-    //
     if (typing -> is (ivy::verb::__t (ivy::verb::colon)))
     {
         ivy::ptr< ivy::expr::__t > lhs;
@@ -25277,14 +21165,6 @@ __bool ivy::is_typing_complete  (const ivy::ptr< ivy::expr::__t > &typing)
             }
         }
     }
-    
-    // A complete typing looks like one of these:
-    //
-    // (1)  x:t
-    // (2)  f(x1:t1,...,xn:tn) : t
-    // (3)  (f : (t1*...*tn->t)(...)) : u
-    // (4)  (f : (t1*...*tn->t)(...))
-    //
     return res;
 }
 void ivy::vardc::__t::build_global_types  (ivy::global_types::__t &st) const
@@ -25364,24 +21244,10 @@ void ivy::actdc::__t::build_global_types  (ivy::global_types::__t &st) const
     st . type_of . set ((*this) . name -> get_name(),ty);
     st . is_action . set ((*this) . name -> get_name(),ivy::native_bool (true));
 }
-// Returns true is an action is virtual. A virtual action is one that
-// overrides an action of a superclass or is overridden by an action of
-// a subclass. This action assumes that parameter s is a member action.
 __bool ivy::is_virtual_action  (const ivy::actdc::__t &s,const ivy::global_types::__t &gl,const ivy::subtypes::__t
-    &st) 
-// Returns true is an action is virtual. A virtual action is one that
-// overrides an action of a superclass or is overridden by an action of
-// a subclass. This action assumes that parameter s is a member action.
+    &st)
 {
-    
-    // Returns true is an action is virtual. A virtual action is one that
-    // overrides an action of a superclass or is overridden by an action of
-    // a subclass. This action assumes that parameter s is a member action.
     __bool res;
-    
-    // Returns true is an action is virtual. A virtual action is one that
-    // overrides an action of a superclass or is overridden by an action of
-    // a subclass. This action assumes that parameter s is a member action.
     {
         ivy::ptr< ivy::ident::__t > tyid;
         tyid = s . name -> get_name() -> get_namesp();
@@ -25410,10 +21276,6 @@ __bool ivy::is_virtual_action  (const ivy::actdc::__t &s,const ivy::global_types
             }
         }
     }
-    
-    // Returns true is an action is virtual. A virtual action is one that
-    // overrides an action of a superclass or is overridden by an action of
-    // a subclass. This action assumes that parameter s is a member action.
     return res;
 }
 __bool ivy::prototype::__t::any_non_const_ref () const
@@ -25432,21 +21294,11 @@ __bool ivy::prototype::__t::any_non_const_ref () const
     }
     return res;
 }
-// return an empty map
-ivy::param_map::__t ivy::param_map::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::param_map::__t ivy::param_map::empty () {
     ivy::param_map::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::param_map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const vector__ivy__expr::domain::__t
     &y) {
     ivy::param_map::rec z;
@@ -25454,8 +21306,6 @@ void ivy::param_map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const vecto
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::param_map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,vector__ivy__expr::domain::__t
     &y) const {
     ivy::param_map::rec z;
@@ -25464,21 +21314,12 @@ void ivy::param_map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,vector__ivy
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::param_map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::param_map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::param_map::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::param_map::rec z;
@@ -25613,15 +21454,9 @@ ivy::ptr< ivy::expr::__t > ivy::expr::__t::curry () const
     }
     return res;
 }
-// Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
-ivy::ptr< ivy::expr::__t > ivy::uncurry_func  (const ivy::ptr< ivy::expr::__t > &func) 
-// Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
+ivy::ptr< ivy::expr::__t > ivy::uncurry_func  (const ivy::ptr< ivy::expr::__t > &func)
 {
-    
-    // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
     {
         ivy::ptr< ivy::expr::__t > ty;
         ty =
@@ -25637,19 +21472,11 @@ ivy::ptr< ivy::expr::__t > ivy::uncurry_func  (const ivy::ptr< ivy::expr::__t > 
             ivy::colon::make (sym,func -> get_arg (vector__ivy__expr::domain::__t (1)) -> uncurry(),func
                     -> get_ann());
     }
-    
-    // Uncurry a function. This converts `f : t -> (... -> u)` to `t.f : (t * ... -> u)`.
     return res;
 }
-// Given a function type `ty = (t * ... -> u)`, return `t`.
-ivy::ptr< ivy::expr::__t > ivy::get_dom0  (const ivy::ptr< ivy::expr::__t > &ty) 
-// Given a function type `ty = (t * ... -> u)`, return `t`.
+ivy::ptr< ivy::expr::__t > ivy::get_dom0  (const ivy::ptr< ivy::expr::__t > &ty)
 {
-    
-    // Given a function type `ty = (t * ... -> u)`, return `t`.
     ivy::ptr< ivy::expr::__t > res;
-    
-    // Given a function type `ty = (t * ... -> u)`, return `t`.
     {
         res = ty -> get_arg (vector__ivy__expr::domain::__t (0));
         __bool b;
@@ -25661,27 +21488,11 @@ ivy::ptr< ivy::expr::__t > ivy::get_dom0  (const ivy::ptr< ivy::expr::__t > &ty)
         }
         {}
     }
-    
-    // Given a function type `ty = (t * ... -> u)`, return `t`.
     return res;
 }
-// Test whether a type-decorated function is a member
-// function. That is, it returns true if `func` has the form
-// `t.f : (t * ...) -> u`.
-__bool ivy::func_is_member  (const ivy::ptr< ivy::expr::__t > &func) 
-// Test whether a type-decorated function is a member
-// function. That is, it returns true if `func` has the form
-// `t.f : (t * ...) -> u`.
+__bool ivy::func_is_member  (const ivy::ptr< ivy::expr::__t > &func)
 {
-    
-    // Test whether a type-decorated function is a member
-    // function. That is, it returns true if `func` has the form
-    // `t.f : (t * ...) -> u`.
     __bool res;
-    
-    // Test whether a type-decorated function is a member
-    // function. That is, it returns true if `func` has the form
-    // `t.f : (t * ...) -> u`.
     {
         ivy::ptr< ivy::expr::__t > ty;
         ty = func -> get_arg (vector__ivy__expr::domain::__t (1));
@@ -25697,21 +21508,8 @@ __bool ivy::func_is_member  (const ivy::ptr< ivy::expr::__t > &func)
             }
         }
     }
-    
-    // Test whether a type-decorated function is a member
-    // function. That is, it returns true if `func` has the form
-    // `t.f : (t * ...) -> u`.
     return res;
 }
-// A function application can be in several forms
-//
-// - (x:t).f            returns t.f(x)
-// - (x:t).f(a1...an)   returns t.f(x,a1...an)
-// - (f:...)(a1...an)   returns f(a1...an)
-//
-// This action analyzes an app, returning the type-decorated
-// function and the argument vector. This assumes that the app is
-// already type-decorated.
 void ivy::get_app  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< ivy::expr::__t > &func,vector__ivy__expr::__t
     &args)
 {
@@ -25735,8 +21533,6 @@ void ivy::get_app  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< ivy::expr::__t
         args . extend (s -> get_args());
     }
 }
-// Canonize a function application. If it is in member style,
-// convert it to an ordinary function call.
 void ivy::canon_app  (ivy::ptr< ivy::expr::__t > &s)
 {
     if (s -> is (ivy::verb::__t (ivy::verb::dot)))
@@ -25753,21 +21549,12 @@ void ivy::canon_app  (ivy::ptr< ivy::expr::__t > &s)
         }
     }
 }
-// return an empty map
-ivy::push_pop_ident_set::map_t::__t ivy::push_pop_ident_set::map_t::empty () 
-// return an empty map
+ivy::push_pop_ident_set::map_t::__t ivy::push_pop_ident_set::map_t::empty ()
 {
-    
-    // return an empty map
     ivy::push_pop_ident_set::map_t::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::push_pop_ident_set::map_t::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y)
 {
     ivy::push_pop_ident_set::map_t::rec z;
@@ -25775,8 +21562,6 @@ void ivy::push_pop_ident_set::map_t::__t::set  (const ivy::ptr< ivy::ident::__t 
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::push_pop_ident_set::map_t::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y)
     const {
     ivy::push_pop_ident_set::map_t::rec z;
@@ -25785,21 +21570,12 @@ void ivy::push_pop_ident_set::map_t::__t::get  (const ivy::ptr< ivy::ident::__t 
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::push_pop_ident_set::map_t::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::push_pop_ident_set::map_t::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::push_pop_ident_set::map_t::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::push_pop_ident_set::map_t::rec z;
@@ -25811,46 +21587,27 @@ __bool ivy::push_pop_ident_set::map_t::__t::value  (const ivy::ptr< ivy::ident::
     y = (*this) . map (x) . val;
     return y;
 }
-// The `begin` action always returns 0.
-pos::__t ivy::push_pop_ident_set::vec_t::__t::begin () const 
-// The `begin` action always returns 0.
+pos::__t ivy::push_pop_ident_set::vec_t::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     pos::__t res;
-    
-    // The `begin` action always returns 0.
     res = pos::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::empty () 
-// The `empty` action returns an empty array
+ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::empty ()
 {
-    
-    // The `empty` action returns an empty array
     ivy::push_pop_ident_set::vec_t::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void ivy::push_pop_ident_set::vec_t::__t::set  (const pos::__t &i,const ivy::ptr< ivy::ident::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void ivy::push_pop_ident_set::vec_t::__t::append  (const ivy::ptr< ivy::ident::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void ivy::push_pop_ident_set::vec_t::__t::extend  (const ivy::push_pop_ident_set::vec_t::__t &x)
 {
     pos::__t idx;
@@ -25860,35 +21617,19 @@ void ivy::push_pop_ident_set::vec_t::__t::extend  (const ivy::push_pop_ident_set
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void ivy::push_pop_ident_set::vec_t::__t::resize  (const pos::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< ivy::ident::__t > ivy::push_pop_ident_set::vec_t::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< ivy::ident::__t > ivy::push_pop_ident_set::vec_t::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< ivy::ident::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > pos::__t (0)) {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void ivy::push_pop_ident_set::vec_t::__t::pop_back ()
 {
     if ((*this) . end > pos::__t (0))
@@ -25898,20 +21639,10 @@ void ivy::push_pop_ident_set::vec_t::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::__t::segment  (const pos::__t &beg,const
-    pos::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    pos::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     ivy::push_pop_ident_set::vec_t::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         pos::__t idx;
         idx = beg;
@@ -25921,12 +21652,8 @@ ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::__t::segment
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void ivy::push_pop_ident_set::vec_t::__t::reverse ()
 {
     pos::__t idx;
@@ -26014,7 +21741,6 @@ __bool ivy::local_tracker::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) con
     res = (*this) . map . mem (id);
     return res;
 }
-// Get the root modset of an assignment, given its lhs
 void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st)
 {
     if (s . isa< ivy::app::__t >())
@@ -26036,10 +21762,7 @@ void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref:
         }
     }
 }
-// Get just the roots that are modified by a statement
-void ivy::stmt::__t::mod_roots  (ivy::root_mod_ref::__t &st) const 
-// Get just the roots that are modified by a statement
-{}
+void ivy::stmt::__t::mod_roots  (ivy::root_mod_ref::__t &st) const {}
 void ivy::sequence::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
 {
     st . ignore . push_stmt ((*this) . lhs);
@@ -26069,40 +21792,17 @@ void ivy::set_built_in_type  (const ivy::verb::__t &vrb,const str::__t &ty,const
     ivy::verb_out_to_in (vrb) = oi;
     ivy::verb_first_to_in (vrb) = fi;
 }
-// Returns `true` if the type of a the first input of a given verb determines
-// the type of the remaining inputs.
-__bool ivy::verb_det_type  (const ivy::verb::__t &vrb) 
-// Returns `true` if the type of a the first input of a given verb determines
-// the type of the remaining inputs.
+__bool ivy::verb_det_type  (const ivy::verb::__t &vrb)
 {
-    
-    // Returns `true` if the type of a the first input of a given verb determines
-    // the type of the remaining inputs.
     __bool res;
-    
-    // Returns `true` if the type of a the first input of a given verb determines
-    // the type of the remaining inputs.
     res = ivy::native_bool (true);
-    
-    // Returns `true` if the type of a the first input of a given verb determines
-    // the type of the remaining inputs.
     return res;
 }
-// return an empty map
-ivy::decost::map::__t ivy::decost::map::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::decost::map::__t ivy::decost::map::empty () {
     ivy::decost::map::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::decost::map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t >
     &y)
 {
@@ -26111,8 +21811,6 @@ void ivy::decost::map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::decost::map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t > &y)
     const {
     ivy::decost::map::rec z;
@@ -26121,21 +21819,12 @@ void ivy::decost::map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr<
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::decost::map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::decost::map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::decost::map::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::decost::map::rec z;
@@ -26147,29 +21836,17 @@ ivy::ptr< ivy::expr::__t > ivy::decost::map::__t::value  (const ivy::ptr< ivy::i
     y = (*this) . map (x) . val;
     return y;
 }
-// Make a new type decorator state
-ivy::decost::__t ivy::decost::make () 
-// Make a new type decorator state
+ivy::decost::__t ivy::decost::make ()
 {
-    
-    // Make a new type decorator state
     ivy::decost::__t res;
-    
-    // Make a new type decorator state
     res . ok = ivy::native_bool (true);
-    
-    // Make a new type decorator state
     return res;
 }
-// Make a new type variable
 void ivy::decost::__t::newvar  (const ivy::ptr< annot::__t > &ann,ivy::ptr< ivy::expr::__t > &res)
 {
     res = ivy::symbol::makenum ((*this) . counter,ann);
     (*this) . counter = (*this) . counter . next();
 }
-// Find the representative of an expression. This has the
-// side effect of shortening the path to the representative
-// as in classic union/find.
 void ivy::decost::__t::find  (const ivy::ptr< ivy::expr::__t > &x,ivy::ptr< ivy::expr::__t > &res)
 {
     res = x;
@@ -26191,7 +21868,6 @@ void ivy::decost::__t::find  (const ivy::ptr< ivy::expr::__t > &x,ivy::ptr< ivy:
     {}
 }
 void ivy::decost::typeinf_show_str  (const str::__t &s) {}
-// Record failure of type unification
 void ivy::decost::__t::unification_failed  (const ivy::ptr< ivy::expr::__t > &x,const ivy::ptr< ivy::expr::__t >
     &y)
 {
@@ -26201,12 +21877,7 @@ void ivy::decost::__t::unification_failed  (const ivy::ptr< ivy::expr::__t > &x,
     ivy::decost::typeinf_show_str (x -> enc());
     ivy::decost::typeinf_show_str (y -> enc());
 }
-// Unify a pair of types. Sets ok to false if the types cannot
-// be unified.
-void ivy::decost::show_unifying  (const str::__t &x,const str::__t &y) 
-// Unify a pair of types. Sets ok to false if the types cannot
-// be unified.
-{}
+void ivy::decost::show_unifying  (const str::__t &x,const str::__t &y) {}
 void ivy::decost::show_ok  (const __bool &res) {}
 void ivy::decost::__t::unify  (const ivy::ptr< ivy::expr::__t > &x0,const ivy::ptr< ivy::expr::__t >
     &y0)
@@ -26268,21 +21939,11 @@ void ivy::decost::__t::unify  (const ivy::ptr< ivy::expr::__t > &x0,const ivy::p
     }
     {}
 }
-// return an empty map
-ivy::elidest::map::__t ivy::elidest::map::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::elidest::map::__t ivy::elidest::map::empty () {
     ivy::elidest::map::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::elidest::map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y)
 {
     ivy::elidest::map::rec z;
@@ -26290,8 +21951,6 @@ void ivy::elidest::map::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::elidest::map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const
 {
     ivy::elidest::map::rec z;
@@ -26300,21 +21959,12 @@ void ivy::elidest::map::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::elidest::map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::elidest::map::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::elidest::map::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::elidest::map::rec z;
@@ -26326,7 +21976,6 @@ __bool ivy::elidest::map::__t::value  (const ivy::ptr< ivy::ident::__t > &x) con
     y = (*this) . map (x) . val;
     return y;
 }
-// Called in case of an error typing expression `e`. 
 void ivy::type_error  (const ivy::ptr< ivy::expr::__t > &e,ivy::decost::__t &st)
 {
     if (! st . error_reported)
@@ -26387,6 +22036,7 @@ void ivy::symbol::__t::type_fill_in  (ivy::decost::__t &st,ivy::ptr< ivy::expr::
     st . find (ee,res);
     
     // workaround
+    
     if (res != ee) {
         ivy::ptr< ivy::expr::__t > __tmp9;
         res -> type_fill_in (st,__tmp9);
@@ -26416,6 +22066,7 @@ void ivy::app::__t::type_decorate  (ivy::decost::__t &st,const ivy::symeval::__t
         {
             
             // dot operator acts like curried function application
+            
             ivy::ptr< ivy::expr::__t > argty;
             ivy::ptr< ivy::expr::__t > arg;
             (*this) . get_arg (vector__ivy__expr::domain::__t (0)) -> type_decorate (st,m,arg,argty);
@@ -26550,8 +22201,6 @@ void ivy::cannot_infer  (const ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy
     ivy::report_cannot_infer (e -> enc(),t -> enc());
 }
 void ivy::report_cannot_infer  (const str::__t &s1,const str::__t &s2) {}
-// This takes a vector of expressions and a type context, returning
-// the expressions with types inferred.
 void ivy::type_infer_vec  (vector__ivy__expr::__t &es,const ivy::symeval::__t &tc)
 {
     ivy::decost::__t st;
@@ -26565,10 +22214,9 @@ void ivy::type_infer_vec  (vector__ivy__expr::__t &es,const ivy::symeval::__t &t
         ivy::ptr< ivy::expr::__t > ty;
         
         // ignored
+        
         {
             ivy::ptr< ivy::expr::__t > __tmp11;
-            
-            // ignored
             e -> type_decorate (st,tc,__tmp11,ty);
             e = __tmp11;
         }
@@ -26597,10 +22245,9 @@ void ivy::type_infer_known  (ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy::
     ivy::ptr< ivy::expr::__t > ty2;
     
     // ignored
+    
     {
         ivy::ptr< ivy::expr::__t > __tmp13;
-        
-        // ignored
         e -> type_decorate (st,tc,__tmp13,ty2);
         e = __tmp13;
     }
@@ -26612,7 +22259,6 @@ void ivy::type_infer_known  (ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy::
     e -> type_fill_in (st,__tmp14);
     e = __tmp14;
 }
-// Unify the types of two expressions
 void ivy::type_unify_exprs  (ivy::ptr< ivy::expr::__t > &e1,ivy::ptr< ivy::expr::__t > &e2,const ivy::symeval::__t
     &tc)
 {
@@ -26694,47 +22340,28 @@ vector__ivy__type_context__stack_entry::domain::__t vector__ivy__type_context__s
     y = (*this) - vector__ivy__type_context__stack_entry::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
 vector__ivy__type_context__stack_entry::domain::__t vector__ivy__type_context__stack_entry::__t::begin
-    () const 
-// The `begin` action always returns 0.
+    () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__type_context__stack_entry::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__type_context__stack_entry::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__type_context__stack_entry::__t vector__ivy__type_context__stack_entry::empty () 
-// The `empty` action returns an empty array
+vector__ivy__type_context__stack_entry::__t vector__ivy__type_context__stack_entry::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__type_context__stack_entry::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__type_context__stack_entry::__t::set  (const vector__ivy__type_context__stack_entry::domain::__t
     &i,const ivy::type_context::stack_entry &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__type_context__stack_entry::__t::append  (const ivy::type_context::stack_entry &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__type_context__stack_entry::__t::extend  (const
     vector__ivy__type_context__stack_entry::__t &x)
 {
@@ -26745,37 +22372,21 @@ void vector__ivy__type_context__stack_entry::__t::extend  (const
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__type_context__stack_entry::__t::resize  (const
     vector__ivy__type_context__stack_entry::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::type_context::stack_entry vector__ivy__type_context__stack_entry::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::type_context::stack_entry vector__ivy__type_context__stack_entry::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::type_context::stack_entry y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__type_context__stack_entry::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__type_context__stack_entry::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__type_context__stack_entry::domain::__t (0))
@@ -26785,21 +22396,11 @@ void vector__ivy__type_context__stack_entry::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__type_context__stack_entry::__t vector__ivy__type_context__stack_entry::__t::segment  (const
     vector__ivy__type_context__stack_entry::domain::__t &beg,const
-    vector__ivy__type_context__stack_entry::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__ivy__type_context__stack_entry::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__type_context__stack_entry::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__type_context__stack_entry::domain::__t idx;
         idx = beg;
@@ -26809,12 +22410,8 @@ vector__ivy__type_context__stack_entry::__t vector__ivy__type_context__stack_ent
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__type_context__stack_entry::__t::reverse ()
 {
     vector__ivy__type_context__stack_entry::domain::__t idx;
@@ -26864,7 +22461,6 @@ void ivy::stmt::__t::typeinfer  (ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::
 }
 void ivy::stmt::__t::typeinfer_desugar  (const __bool &desugar,ivy::typeinferst::__t &st,ivy::ptr< ivy::stmt::__t >
     &ress) const {}
-// Bottom up type inference
 void ivy::bottom_up_type  (ivy::ptr< ivy::expr::__t > &e,const ivy::typeinferst::__t &st,__bool &ok)
 {
     if (e . isa< ivy::symbol::__t >())
@@ -26883,6 +22479,7 @@ void ivy::bottom_up_type  (ivy::ptr< ivy::expr::__t > &e,const ivy::typeinferst:
         //		    call report_error(undefined.make(name),e.get_ann);
         //		    ok := false;
         //		}
+        
         {
             if (e -> get_verb() == ivy::verb::__t (ivy::verb::empty))
             {
@@ -26981,11 +22578,6 @@ void ivy::bottom_up_type  (ivy::ptr< ivy::expr::__t > &e,const ivy::typeinferst:
         }
     }
 }
-// Bottom-up type inference for a vector of arguments `es` of a
-// function `func`.  If `func` has a type, then we upcast the
-// arguments to their expected types.  We don't worry about whether
-// `func` takes the expect number of arguments here.  If it
-// doesn't, type inference will fail later.
 void ivy::bottom_up_types  (vector__ivy__expr::__t &es,const ivy::ptr< ivy::expr::__t > &func,const
     ivy::typeinferst::__t &st,__bool &ok)
 {
@@ -27016,16 +22608,10 @@ void ivy::bottom_up_types  (vector__ivy__expr::__t &es,const ivy::ptr< ivy::expr
         idx = idx . next();
     }
 }
-// Check if type `rhsty` is a subtype of `lhsty`.
 __bool ivy::is_subtype  (const ivy::ptr< ivy::expr::__t > &rhsty,const ivy::ptr< ivy::expr::__t > &lhsty,const
-    ivy::typeinferst::__t &st) 
-// Check if type `rhsty` is a subtype of `lhsty`.
+    ivy::typeinferst::__t &st)
 {
-    
-    // Check if type `rhsty` is a subtype of `lhsty`.
     __bool res;
-    
-    // Check if type `rhsty` is a subtype of `lhsty`.
     if (rhsty -> is (ivy::verb::__t (ivy::verb::comma)))
     {
         if (lhsty -> is (ivy::verb::__t (ivy::verb::comma)))
@@ -27043,13 +22629,8 @@ __bool ivy::is_subtype  (const ivy::ptr< ivy::expr::__t > &rhsty,const ivy::ptr<
             res = st . subtype_rel . is_subtype (rhsty,lhsty);
         }
     }
-    
-    // Check if type `rhsty` is a subtype of `lhsty`.
     return res;
 }
-// Add an upcast operator to `rhs` if it is subtype of `lhs`. This is
-// used for assignments, and argument passing. This has to work on tuples
-// to handle multiple assignment. 
 void ivy::make_cast  (const ivy::ptr< ivy::expr::__t > &lhsty,ivy::ptr< ivy::expr::__t > &rhs,const
     ivy::typeinferst::__t &st)
 {
@@ -27073,8 +22654,6 @@ void ivy::make_cast  (const ivy::ptr< ivy::expr::__t > &lhsty,ivy::ptr< ivy::exp
         }
     }
 }
-// After type inference, we can desugar assignments like `var x := y` to
-// `var x : t; x := y`. This makes things a bit eassier on subsequent passes.
 void ivy::desugar_asgn  (ivy::ptr< ivy::stmt::__t > &s,vector__ivy__stmt::__t &varsts)
 {
     ivy::ptr< ivy::expr::__t > tlhs;
@@ -27127,10 +22706,9 @@ void ivy::asgn::__t::typeinfer_desugar  (const __bool &desugar,ivy::typeinferst:
     ivy::bottom_up_type (res . rhs,st,ok);
     if (ok) 
     // avoid cascading errors
+    
     {
         ivy::ptr< ivy::expr::__t > lhs;
-        
-        // avoid cascading errors
         lhs = res . lhs -> is_typed (ivy::verb::__t (ivy::verb::varv)) ?
             res . lhs -> get_arg (vector__ivy__expr::domain::__t (0)) : res . lhs;
         if (lhs -> is (ivy::verb::__t (ivy::verb::colon)))
@@ -27339,6 +22917,7 @@ void ivy::vardc::__t::typeinfer_int  (ivy::typeinferst::__t &st,ivy::vardc::__t 
         {
             
             // avoid cascading errors
+            
             if (res . typing -> is (ivy::verb::__t (ivy::verb::colon)))
             {
                 ivy::make_cast (res . typing -> get_arg (vector__ivy__expr::domain::__t (1)),res .
@@ -27357,23 +22936,22 @@ void ivy::prog::__t::typeinfer ()
     ivy::typeinferst::__t st;
     
     // Get the subtype relation
+    
     st . subtype_rel = (*this) . get_subtypes();
     
     // Get the global typing as initial typing context
-    ivy::global_types::__t gt;
     
-    // Get the global typing as initial typing context
+    ivy::global_types::__t gt;
     gt = (*this) . get_global_types (ivy::native_bool (false));
     
     // don't curry member types
+    
     st . tc . m = gt . type_of;
     
     // TODO: bottom-up inference
     // A pass to typeinfer types with Hindley-Milner
-    vector__ivy__decl::domain::__t idx;
     
-    // TODO: bottom-up inference
-    // A pass to typeinfer types with Hindley-Milner
+    vector__ivy__decl::domain::__t idx;
     idx = (*this) . decls . begin();
     while (idx < (*this) . decls . end)
     {
@@ -27384,35 +22962,9 @@ void ivy::prog::__t::typeinfer ()
     }
     {}
 }
-// Numerals are symbols beginning with a digit. String literals begin
-// with double quotes. Logical variables consist of a capital followed
-// by any number of digits. Otherwise we determine
-// the verb of a symbol from its name by looking it up in
-// `str_to_verb`. The default is `none`, which indicates a
-// program-defined symbol.
-__bool cpp::is_logvar_name  (const str::__t &name) 
-// Numerals are symbols beginning with a digit. String literals begin
-// with double quotes. Logical variables consist of a capital followed
-// by any number of digits. Otherwise we determine
-// the verb of a symbol from its name by looking it up in
-// `str_to_verb`. The default is `none`, which indicates a
-// program-defined symbol.
+__bool cpp::is_logvar_name  (const str::__t &name)
 {
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     __bool res;
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     if (name . value (pos::__t (0)) . is_capital())
     {
         res = ivy::native_bool (true);
@@ -27423,13 +22975,6 @@ __bool cpp::is_logvar_name  (const str::__t &name)
         }
         idx = idx . next();
     }
-    
-    // Numerals are symbols beginning with a digit. String literals begin
-    // with double quotes. Logical variables consist of a capital followed
-    // by any number of digits. Otherwise we determine
-    // the verb of a symbol from its name by looking it up in
-    // `str_to_verb`. The default is `none`, which indicates a
-    // program-defined symbol.
     return res;
 }
 cpp::verb::__t cpp::verb_from_name  (const str::__t &name)
@@ -27439,8 +22984,7 @@ cpp::verb::__t cpp::verb_from_name  (const str::__t &name)
         vrb = cpp::verb::__t (cpp::verb::numeral);
     } else
     {
-        if (name . value (pos::__t (0)) == __char::__t (34)) 
-        // double quote character
+        if (name . value (pos::__t (0)) == __char::__t (34))
         {
             vrb = cpp::verb::__t (cpp::verb::string);
         } else
@@ -27507,46 +23051,26 @@ vector__cpp__ident::domain::__t vector__cpp__ident::domain::__t::prev () const
     y = (*this) - vector__cpp__ident::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__cpp__ident::domain::__t vector__cpp__ident::__t::begin () const 
-// The `begin` action always returns 0.
+vector__cpp__ident::domain::__t vector__cpp__ident::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__cpp__ident::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__cpp__ident::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__cpp__ident::__t vector__cpp__ident::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__cpp__ident::__t vector__cpp__ident::empty () {
     vector__cpp__ident::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__cpp__ident::__t::set  (const vector__cpp__ident::domain::__t &i,const ivy::ptr< cpp::ident::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__cpp__ident::__t::append  (const ivy::ptr< cpp::ident::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__cpp__ident::__t::extend  (const vector__cpp__ident::__t &x)
 {
     vector__cpp__ident::domain::__t idx;
@@ -27556,36 +23080,20 @@ void vector__cpp__ident::__t::extend  (const vector__cpp__ident::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__cpp__ident::__t::resize  (const vector__cpp__ident::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< cpp::ident::__t > vector__cpp__ident::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< cpp::ident::__t > vector__cpp__ident::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< cpp::ident::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__cpp__ident::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__cpp__ident::__t::pop_back ()
 {
     if ((*this) . end > vector__cpp__ident::domain::__t (0))
@@ -27595,20 +23103,10 @@ void vector__cpp__ident::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__cpp__ident::__t vector__cpp__ident::__t::segment  (const vector__cpp__ident::domain::__t &beg,const
-    vector__cpp__ident::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__cpp__ident::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__cpp__ident::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__cpp__ident::domain::__t idx;
         idx = beg;
@@ -27618,12 +23116,8 @@ vector__cpp__ident::__t vector__cpp__ident::__t::segment  (const vector__cpp__id
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__cpp__ident::__t::reverse ()
 {
     vector__cpp__ident::domain::__t idx;
@@ -27959,19 +23453,9 @@ ivy::ptr< cpp::expr::__t > cpp::expr::__t::prefix  (const ivy::ptr< cpp::ident::
     {}
     return res;
 }
-// Tests whether two expressions are syntacically equal,
-// leaving aside annotations.
-__bool cpp::expr::__t::eq  (const ivy::ptr< cpp::expr::__t > &e2) const 
-// Tests whether two expressions are syntacically equal,
-// leaving aside annotations.
+__bool cpp::expr::__t::eq  (const ivy::ptr< cpp::expr::__t > &e2) const
 {
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     __bool res;
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     if (ivy::isa< cpp::symbol::__t > ((*this)))
     {
         if (e2 . isa< cpp::symbol::__t >()) {
@@ -28004,9 +23488,6 @@ __bool cpp::expr::__t::eq  (const ivy::ptr< cpp::expr::__t > &e2) const
             }
         }
     }
-    
-    // Tests whether two expressions are syntacically equal,
-    // leaving aside annotations.
     return res;
 }
 ivy::ptr< cpp::expr::__t > cpp::symbol::make  (const ivy::ptr< cpp::ident::__t > &name,const ivy::ptr< annot::__t >
@@ -28116,46 +23597,26 @@ vector__cpp__expr::domain::__t vector__cpp__expr::domain::__t::prev () const
     y = (*this) - vector__cpp__expr::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__cpp__expr::domain::__t vector__cpp__expr::__t::begin () const 
-// The `begin` action always returns 0.
+vector__cpp__expr::domain::__t vector__cpp__expr::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__cpp__expr::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__cpp__expr::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__cpp__expr::__t vector__cpp__expr::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__cpp__expr::__t vector__cpp__expr::empty () {
     vector__cpp__expr::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__cpp__expr::__t::set  (const vector__cpp__expr::domain::__t &i,const ivy::ptr< cpp::expr::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__cpp__expr::__t::append  (const ivy::ptr< cpp::expr::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__cpp__expr::__t::extend  (const vector__cpp__expr::__t &x)
 {
     vector__cpp__expr::domain::__t idx;
@@ -28165,36 +23626,20 @@ void vector__cpp__expr::__t::extend  (const vector__cpp__expr::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__cpp__expr::__t::resize  (const vector__cpp__expr::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< cpp::expr::__t > vector__cpp__expr::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< cpp::expr::__t > vector__cpp__expr::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< cpp::expr::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__cpp__expr::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__cpp__expr::__t::pop_back ()
 {
     if ((*this) . end > vector__cpp__expr::domain::__t (0))
@@ -28204,20 +23649,10 @@ void vector__cpp__expr::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__cpp__expr::__t vector__cpp__expr::__t::segment  (const vector__cpp__expr::domain::__t &beg,const
-    vector__cpp__expr::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__cpp__expr::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__cpp__expr::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__cpp__expr::domain::__t idx;
         idx = beg;
@@ -28227,12 +23662,8 @@ vector__cpp__expr::__t vector__cpp__expr::__t::segment  (const vector__cpp__expr
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__cpp__expr::__t::reverse ()
 {
     vector__cpp__expr::domain::__t idx;
@@ -28434,20 +23865,10 @@ ivy::ptr< cpp::expr::__t > cpp::iff::make  (const ivy::ptr< cpp::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::iff::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28461,35 +23882,16 @@ ivy::ptr< cpp::expr::__t > cpp::iff::fold_left  (const vector__cpp__expr::__t &a
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::iff::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::iff::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::iff));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28499,10 +23901,6 @@ vector__cpp__expr::__t cpp::iff::unfold_left  (const ivy::ptr< cpp::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::__or::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28519,20 +23917,10 @@ ivy::ptr< cpp::expr::__t > cpp::__or::make  (const ivy::ptr< cpp::expr::__t > &l
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::__or::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28546,35 +23934,16 @@ ivy::ptr< cpp::expr::__t > cpp::__or::fold_left  (const vector__cpp__expr::__t &
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::__or::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::__or::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::__or));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28584,10 +23953,6 @@ vector__cpp__expr::__t cpp::__or::unfold_left  (const ivy::ptr< cpp::expr::__t >
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::__and::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28604,20 +23969,10 @@ ivy::ptr< cpp::expr::__t > cpp::__and::make  (const ivy::ptr< cpp::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::__and::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28631,35 +23986,16 @@ ivy::ptr< cpp::expr::__t > cpp::__and::fold_left  (const vector__cpp__expr::__t 
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::__and::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::__and::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::__and));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28669,10 +24005,6 @@ vector__cpp__expr::__t cpp::__and::unfold_left  (const ivy::ptr< cpp::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::lt::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28689,20 +24021,10 @@ ivy::ptr< cpp::expr::__t > cpp::lt::make  (const ivy::ptr< cpp::expr::__t > &lhs
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::lt::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28716,35 +24038,16 @@ ivy::ptr< cpp::expr::__t > cpp::lt::fold_left  (const vector__cpp__expr::__t &ar
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::lt::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::lt::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::lt));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28754,10 +24057,6 @@ vector__cpp__expr::__t cpp::lt::unfold_left  (const ivy::ptr< cpp::expr::__t > &
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::leq::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28774,20 +24073,10 @@ ivy::ptr< cpp::expr::__t > cpp::leq::make  (const ivy::ptr< cpp::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::leq::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28801,35 +24090,16 @@ ivy::ptr< cpp::expr::__t > cpp::leq::fold_left  (const vector__cpp__expr::__t &a
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::leq::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::leq::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::leq));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28839,10 +24109,6 @@ vector__cpp__expr::__t cpp::leq::unfold_left  (const ivy::ptr< cpp::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::gt::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28859,20 +24125,10 @@ ivy::ptr< cpp::expr::__t > cpp::gt::make  (const ivy::ptr< cpp::expr::__t > &lhs
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::gt::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28886,35 +24142,16 @@ ivy::ptr< cpp::expr::__t > cpp::gt::fold_left  (const vector__cpp__expr::__t &ar
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::gt::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::gt::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::gt));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -28924,10 +24161,6 @@ vector__cpp__expr::__t cpp::gt::unfold_left  (const ivy::ptr< cpp::expr::__t > &
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::geq::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -28944,20 +24177,10 @@ ivy::ptr< cpp::expr::__t > cpp::geq::make  (const ivy::ptr< cpp::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::geq::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -28971,35 +24194,16 @@ ivy::ptr< cpp::expr::__t > cpp::geq::fold_left  (const vector__cpp__expr::__t &a
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::geq::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::geq::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::geq));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29009,10 +24213,6 @@ vector__cpp__expr::__t cpp::geq::unfold_left  (const ivy::ptr< cpp::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::plus::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -29029,20 +24229,10 @@ ivy::ptr< cpp::expr::__t > cpp::plus::make  (const ivy::ptr< cpp::expr::__t > &l
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::plus::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29056,35 +24246,16 @@ ivy::ptr< cpp::expr::__t > cpp::plus::fold_left  (const vector__cpp__expr::__t &
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::plus::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::plus::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::plus));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29094,10 +24265,6 @@ vector__cpp__expr::__t cpp::plus::unfold_left  (const ivy::ptr< cpp::expr::__t >
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::minus::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -29114,20 +24281,10 @@ ivy::ptr< cpp::expr::__t > cpp::minus::make  (const ivy::ptr< cpp::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::minus::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29141,35 +24298,16 @@ ivy::ptr< cpp::expr::__t > cpp::minus::fold_left  (const vector__cpp__expr::__t 
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::minus::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::minus::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::minus));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29179,10 +24317,6 @@ vector__cpp__expr::__t cpp::minus::unfold_left  (const ivy::ptr< cpp::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::times::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -29199,20 +24333,10 @@ ivy::ptr< cpp::expr::__t > cpp::times::make  (const ivy::ptr< cpp::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::times::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29226,35 +24350,16 @@ ivy::ptr< cpp::expr::__t > cpp::times::fold_left  (const vector__cpp__expr::__t 
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::times::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::times::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::times));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29264,10 +24369,6 @@ vector__cpp__expr::__t cpp::times::unfold_left  (const ivy::ptr< cpp::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::div::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -29284,20 +24385,10 @@ ivy::ptr< cpp::expr::__t > cpp::div::make  (const ivy::ptr< cpp::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::div::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29311,35 +24402,16 @@ ivy::ptr< cpp::expr::__t > cpp::div::fold_left  (const vector__cpp__expr::__t &a
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::div::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::div::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::div));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29349,10 +24421,6 @@ vector__cpp__expr::__t cpp::div::unfold_left  (const ivy::ptr< cpp::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::empty::make  (const ivy::ptr< annot::__t > &ann)
@@ -29393,20 +24461,10 @@ ivy::ptr< cpp::expr::__t > cpp::comma::make  (const ivy::ptr< cpp::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::comma::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29420,35 +24478,16 @@ ivy::ptr< cpp::expr::__t > cpp::comma::fold_left  (const vector__cpp__expr::__t 
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::comma::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::comma::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::comma));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29458,10 +24497,6 @@ vector__cpp__expr::__t cpp::comma::unfold_left  (const ivy::ptr< cpp::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::dot::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -29478,20 +24513,10 @@ ivy::ptr< cpp::expr::__t > cpp::dot::make  (const ivy::ptr< cpp::expr::__t > &lh
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::dot::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -29505,35 +24530,16 @@ ivy::ptr< cpp::expr::__t > cpp::dot::fold_left  (const vector__cpp__expr::__t &a
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::dot::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::dot::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::dot));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -29543,13 +24549,8 @@ vector__cpp__expr::__t cpp::dot::unfold_left  (const ivy::ptr< cpp::expr::__t > 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
-// workaround
 void cpp::expr::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< cpp::expr::__t > &res)
 {
     if (st . tok == ivy::from_str< str::__t > ("("))
@@ -29759,32 +24760,16 @@ void cpp::asgn::__t::encode_int  (pretty::__t &b,const priority::__t &prio) cons
     b . extend (ivy::from_str< str::__t > (";"));
     b . unnest();
 }
-// This gets the lhs of the assignment
-ivy::ptr< cpp::expr::__t > cpp::asgn::__t::get_lhs () const 
-// This gets the lhs of the assignment
+ivy::ptr< cpp::expr::__t > cpp::asgn::__t::get_lhs () const
 {
-    
-    // This gets the lhs of the assignment
     ivy::ptr< cpp::expr::__t > res;
-    
-    // This gets the lhs of the assignment
     res = (*this) . lhs;
-    
-    // This gets the lhs of the assignment
     return res;
 }
-// This gets the rhs of the assignment
-ivy::ptr< cpp::expr::__t > cpp::asgn::__t::get_rhs () const 
-// This gets the rhs of the assignment
+ivy::ptr< cpp::expr::__t > cpp::asgn::__t::get_rhs () const
 {
-    
-    // This gets the rhs of the assignment
     ivy::ptr< cpp::expr::__t > res;
-    
-    // This gets the rhs of the assignment
     res = (*this) . rhs;
-    
-    // This gets the rhs of the assignment
     return res;
 }
 ivy::ptr< annot::__t > cpp::asgn::__t::get_ann () const
@@ -29841,46 +24826,26 @@ vector__cpp__stmt::domain::__t vector__cpp__stmt::domain::__t::prev () const
     y = (*this) - vector__cpp__stmt::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__cpp__stmt::domain::__t vector__cpp__stmt::__t::begin () const 
-// The `begin` action always returns 0.
+vector__cpp__stmt::domain::__t vector__cpp__stmt::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__cpp__stmt::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__cpp__stmt::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__cpp__stmt::__t vector__cpp__stmt::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__cpp__stmt::__t vector__cpp__stmt::empty () {
     vector__cpp__stmt::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__cpp__stmt::__t::set  (const vector__cpp__stmt::domain::__t &i,const ivy::ptr< cpp::stmt::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__cpp__stmt::__t::append  (const ivy::ptr< cpp::stmt::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__cpp__stmt::__t::extend  (const vector__cpp__stmt::__t &x)
 {
     vector__cpp__stmt::domain::__t idx;
@@ -29890,36 +24855,20 @@ void vector__cpp__stmt::__t::extend  (const vector__cpp__stmt::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__cpp__stmt::__t::resize  (const vector__cpp__stmt::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< cpp::stmt::__t > vector__cpp__stmt::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< cpp::stmt::__t > vector__cpp__stmt::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< cpp::stmt::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__cpp__stmt::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__cpp__stmt::__t::pop_back ()
 {
     if ((*this) . end > vector__cpp__stmt::domain::__t (0))
@@ -29929,20 +24878,10 @@ void vector__cpp__stmt::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__cpp__stmt::__t vector__cpp__stmt::__t::segment  (const vector__cpp__stmt::domain::__t &beg,const
-    vector__cpp__stmt::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__cpp__stmt::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__cpp__stmt::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__cpp__stmt::domain::__t idx;
         idx = beg;
@@ -29952,12 +24891,8 @@ vector__cpp__stmt::__t vector__cpp__stmt::__t::segment  (const vector__cpp__stmt
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__cpp__stmt::__t::reverse ()
 {
     vector__cpp__stmt::domain::__t idx;
@@ -29974,24 +24909,10 @@ void vector__cpp__stmt::__t::reverse ()
         idx = idx . next();
     }
 }
-// workaround
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the right.
 ivy::ptr< cpp::stmt::__t > cpp::sequence::fold_right  (const vector__cpp__stmt::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// workaround
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the right.
+    &ann)
 {
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     ivy::ptr< cpp::stmt::__t > res;
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     if (args . end > vector__cpp__stmt::domain::__t (0))
     {
         vector__cpp__stmt::domain::__t idx;
@@ -30003,10 +24924,6 @@ ivy::ptr< cpp::stmt::__t > cpp::sequence::fold_right  (const vector__cpp__stmt::
             res = cpp::sequence::make (args . value (idx),res,ann);
         }
     }
-    
-    // workaround
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the right.
     return res;
 }
 ivy::ptr< annot::__t > cpp::sequence::__t::get_ann () const
@@ -30219,11 +25136,8 @@ void cpp::stmt::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< cpp:
                     } else {
                         st . ok = ivy::native_bool (false);
                     }
-                } else
-                {
+                } else {
                     ivy::ptr< annot::__t > ann;
-                    
-                    // missing else doesn't print, so don't annotate
                     s . elsest = cpp::skipst::make (ann);
                 }
             } else {
@@ -30294,20 +25208,10 @@ ivy::ptr< cpp::expr::__t > cpp::arrow::make  (const ivy::ptr< cpp::expr::__t > &
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::arrow::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -30321,35 +25225,16 @@ ivy::ptr< cpp::expr::__t > cpp::arrow::fold_left  (const vector__cpp__expr::__t 
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::arrow::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::arrow::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::arrow));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -30359,10 +25244,6 @@ vector__cpp__expr::__t cpp::arrow::unfold_left  (const ivy::ptr< cpp::expr::__t 
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::equals::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -30379,20 +25260,10 @@ ivy::ptr< cpp::expr::__t > cpp::equals::make  (const ivy::ptr< cpp::expr::__t > 
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::equals::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -30406,35 +25277,16 @@ ivy::ptr< cpp::expr::__t > cpp::equals::fold_left  (const vector__cpp__expr::__t
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::equals::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::equals::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::equals));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -30444,10 +25296,6 @@ vector__cpp__expr::__t cpp::equals::unfold_left  (const ivy::ptr< cpp::expr::__t
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::notequals::make  (const ivy::ptr< cpp::expr::__t > &lhs,const ivy::ptr< cpp::expr::__t >
@@ -30464,20 +25312,10 @@ ivy::ptr< cpp::expr::__t > cpp::notequals::make  (const ivy::ptr< cpp::expr::__t
     }
     return res;
 }
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
 ivy::ptr< cpp::expr::__t > cpp::notequals::fold_left  (const vector__cpp__expr::__t &args,const ivy::ptr< annot::__t >
-    &ann) 
-// Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-// xn`, where `*` is a binary operator that associates to the left.
+    &ann)
 {
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     if (args . end > vector__cpp__expr::domain::__t (0))
     {
         res = args . value (vector__cpp__expr::domain::__t (0));
@@ -30491,35 +25329,16 @@ ivy::ptr< cpp::expr::__t > cpp::notequals::fold_left  (const vector__cpp__expr::
     } else {
         res = cpp::empty::make (ann);
     }
-    
-    // Translate the vector `[x1,..,xn]` to the expression `x1 * ... *
-    // xn`, where `*` is a binary operator that associates to the left.
     return res;
 }
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
-vector__cpp__expr::__t cpp::notequals::unfold_left  (const ivy::ptr< cpp::expr::__t > &s) 
-// Works for comma and cross product
-// Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-// where `*` is a binary operator that associates to the left.
+vector__cpp__expr::__t cpp::notequals::unfold_left  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     vector__cpp__expr::__t args;
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     {
         ivy::ptr< cpp::expr::__t > e;
         e = s;
         __bool b;
         b = e -> is_typed (cpp::verb::__t (cpp::verb::notequals));
-        
-        // workaround
         while (b)
         {
             args . append (e -> get_arg (vector__cpp__expr::domain::__t (1)));
@@ -30529,10 +25348,6 @@ vector__cpp__expr::__t cpp::notequals::unfold_left  (const ivy::ptr< cpp::expr::
         args . append (e);
         args . reverse();
     }
-    
-    // Works for comma and cross product
-    // Translate the expression `x1 * ... * xn` to the vector `[x1,..,xn]`,
-    // where `*` is a binary operator that associates to the left.
     return args;
 }
 ivy::ptr< cpp::expr::__t > cpp::__not::make  (const ivy::ptr< cpp::expr::__t > &arg,const ivy::ptr< annot::__t >
@@ -30651,46 +25466,27 @@ vector__cpp__simpletype::domain::__t vector__cpp__simpletype::domain::__t::prev 
     y = (*this) - vector__cpp__simpletype::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__cpp__simpletype::domain::__t vector__cpp__simpletype::__t::begin () const 
-// The `begin` action always returns 0.
+vector__cpp__simpletype::domain::__t vector__cpp__simpletype::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__cpp__simpletype::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__cpp__simpletype::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__cpp__simpletype::__t vector__cpp__simpletype::empty () 
-// The `empty` action returns an empty array
+vector__cpp__simpletype::__t vector__cpp__simpletype::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__cpp__simpletype::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__cpp__simpletype::__t::set  (const vector__cpp__simpletype::domain::__t &i,const cpp::simpletype::__t
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__cpp__simpletype::__t::append  (const cpp::simpletype::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__cpp__simpletype::__t::extend  (const vector__cpp__simpletype::__t &x)
 {
     vector__cpp__simpletype::domain::__t idx;
@@ -30700,36 +25496,20 @@ void vector__cpp__simpletype::__t::extend  (const vector__cpp__simpletype::__t &
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__cpp__simpletype::__t::resize  (const vector__cpp__simpletype::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-cpp::simpletype::__t vector__cpp__simpletype::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+cpp::simpletype::__t vector__cpp__simpletype::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     cpp::simpletype::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__cpp__simpletype::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__cpp__simpletype::__t::pop_back ()
 {
     if ((*this) . end > vector__cpp__simpletype::domain::__t (0))
@@ -30739,20 +25519,10 @@ void vector__cpp__simpletype::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__cpp__simpletype::__t vector__cpp__simpletype::__t::segment  (const vector__cpp__simpletype::domain::__t
-    &beg,const vector__cpp__simpletype::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    &beg,const vector__cpp__simpletype::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__cpp__simpletype::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__cpp__simpletype::domain::__t idx;
         idx = beg;
@@ -30762,12 +25532,8 @@ vector__cpp__simpletype::__t vector__cpp__simpletype::__t::segment  (const vecto
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__cpp__simpletype::__t::reverse ()
 {
     vector__cpp__simpletype::domain::__t idx;
@@ -30927,6 +25693,7 @@ void cpp::stmt::parse_lang_stmt  (pstate::__t &st,const priority::__t &prio,ivy:
     {
         
         // if not assignment, could be variable declaration
+        
         ivy::ptr< cpp::expr::__t > name;
         cpp::symbol::parse (st,name);
         if (st . ok)
@@ -31177,46 +25944,26 @@ vector__cpp__decl::domain::__t vector__cpp__decl::domain::__t::prev () const
     y = (*this) - vector__cpp__decl::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__cpp__decl::domain::__t vector__cpp__decl::__t::begin () const 
-// The `begin` action always returns 0.
+vector__cpp__decl::domain::__t vector__cpp__decl::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__cpp__decl::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__cpp__decl::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__cpp__decl::__t vector__cpp__decl::empty () 
-// The `empty` action returns an empty array
-{
-    
-    // The `empty` action returns an empty array
+vector__cpp__decl::__t vector__cpp__decl::empty () {
     vector__cpp__decl::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__cpp__decl::__t::set  (const vector__cpp__decl::domain::__t &i,const ivy::ptr< cpp::decl::__t >
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__cpp__decl::__t::append  (const ivy::ptr< cpp::decl::__t > &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__cpp__decl::__t::extend  (const vector__cpp__decl::__t &x)
 {
     vector__cpp__decl::domain::__t idx;
@@ -31226,36 +25973,20 @@ void vector__cpp__decl::__t::extend  (const vector__cpp__decl::__t &x)
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__cpp__decl::__t::resize  (const vector__cpp__decl::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::ptr< cpp::decl::__t > vector__cpp__decl::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::ptr< cpp::decl::__t > vector__cpp__decl::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::ptr< cpp::decl::__t > y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__cpp__decl::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__cpp__decl::__t::pop_back ()
 {
     if ((*this) . end > vector__cpp__decl::domain::__t (0))
@@ -31265,20 +25996,10 @@ void vector__cpp__decl::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__cpp__decl::__t vector__cpp__decl::__t::segment  (const vector__cpp__decl::domain::__t &beg,const
-    vector__cpp__decl::domain::__t &en) const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    vector__cpp__decl::domain::__t &en) const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__cpp__decl::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__cpp__decl::domain::__t idx;
         idx = beg;
@@ -31288,12 +26009,8 @@ vector__cpp__decl::__t vector__cpp__decl::__t::segment  (const vector__cpp__decl
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__cpp__decl::__t::reverse ()
 {
     vector__cpp__decl::domain::__t idx;
@@ -31490,6 +26207,7 @@ void cpp::decl::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< cpp:
                             {
                                 
                                 // double quote
+                                
                                 s . filename = st . tok;
                                 st . consume();
                             } else {
@@ -31547,7 +26265,6 @@ void cpp::decl::parse  (pstate::__t &st,const priority::__t &prio,ivy::ptr< cpp:
         }
     }
 }
-// workaround
 void cpp::decl::parse_list  (pstate::__t &st,const priority::__t &prio,vector__cpp__decl::__t &res)
 {
     while (st . ok & st . tok . end > pos::__t (0) & st . tok != ivy::from_str< str::__t > ("}"))
@@ -31666,7 +26383,6 @@ void cpp::prog::__t::encode  (pretty::__t &b,const priority::__t &prio) const
     }
     {}
 }
-// Note, the Ivy verison number is encoded in the first comment line
 void cpp::prog::parse_to  (pstate::__t &st,const priority::__t &prio,cpp::prog::__t &res)
 {
     if (! ivy::native_bool (true))
@@ -31720,15 +26436,9 @@ ivy::ptr< cpp::expr::__t > cpp::voidtype  (const ivy::ptr< annot::__t > &ann)
     res = cpp::namedtype (cpp::strident::make (ivy::from_str< str::__t > ("void")),ann);
     return res;
 }
-// Two paths may alias if one is a prefix of the other
-__bool ivy::path_may_alias  (const ivy::access_path::__t &v,const ivy::access_path::__t &w) 
-// Two paths may alias if one is a prefix of the other
+__bool ivy::path_may_alias  (const ivy::access_path::__t &v,const ivy::access_path::__t &w)
 {
-    
-    // Two paths may alias if one is a prefix of the other
     __bool res;
-    
-    // Two paths may alias if one is a prefix of the other
     {
         res = ivy::native_bool (true);
         vector__ivy__ident::domain::__t idx;
@@ -31739,25 +26449,13 @@ __bool ivy::path_may_alias  (const ivy::access_path::__t &v,const ivy::access_pa
             idx = idx . next();
         }
     }
-    
-    // Two paths may alias if one is a prefix of the other
     return res;
 }
-// return an empty map
-ivy::ident_to_declvec::__t ivy::ident_to_declvec::empty () 
-// return an empty map
-{
-    
-    // return an empty map
+ivy::ident_to_declvec::__t ivy::ident_to_declvec::empty () {
     ivy::ident_to_declvec::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_declvec::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const vector__ivy__decl::__t
     &y)
 {
@@ -31766,8 +26464,6 @@ void ivy::ident_to_declvec::__t::set  (const ivy::ptr< ivy::ident::__t > &x,cons
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_declvec::__t::get  (const ivy::ptr< ivy::ident::__t > &x,vector__ivy__decl::__t &y)
     const {
     ivy::ident_to_declvec::rec z;
@@ -31776,21 +26472,12 @@ void ivy::ident_to_declvec::__t::get  (const ivy::ptr< ivy::ident::__t > &x,vect
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_declvec::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_declvec::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_declvec::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_declvec::rec z;
@@ -31802,21 +26489,12 @@ vector__ivy__decl::__t ivy::ident_to_declvec::__t::value  (const ivy::ptr< ivy::
     y = (*this) . map (x) . val;
     return y;
 }
-// return an empty map
-ivy::ident_to_cppclass::__t ivy::ident_to_cppclass::empty () 
-// return an empty map
+ivy::ident_to_cppclass::__t ivy::ident_to_cppclass::empty ()
 {
-    
-    // return an empty map
     ivy::ident_to_cppclass::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_cppclass::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::ptr< ivy::expr::__t >
     &y)
 {
@@ -31825,8 +26503,6 @@ void ivy::ident_to_cppclass::__t::set  (const ivy::ptr< ivy::ident::__t > &x,con
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_cppclass::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::ptr< ivy::expr::__t >
     &y) const {
     ivy::ident_to_cppclass::rec z;
@@ -31835,21 +26511,12 @@ void ivy::ident_to_cppclass::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_cppclass::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_cppclass::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_cppclass::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_cppclass::rec z;
@@ -31861,21 +26528,12 @@ ivy::ptr< ivy::expr::__t > ivy::ident_to_cppclass::__t::value  (const ivy::ptr< 
     y = (*this) . map (x) . val;
     return y;
 }
-// return an empty map
-ivy::ident_to_prototype::__t ivy::ident_to_prototype::empty () 
-// return an empty map
+ivy::ident_to_prototype::__t ivy::ident_to_prototype::empty ()
 {
-    
-    // return an empty map
     ivy::ident_to_prototype::__t a;
-    
-    // return an empty map
     {}
-    
-    // return an empty map
     return a;
 }
-// mutate a map a so that x in maps to y
 void ivy::ident_to_prototype::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::prototype::__t
     &y)
 {
@@ -31884,8 +26542,6 @@ void ivy::ident_to_prototype::__t::set  (const ivy::ptr< ivy::ident::__t > &x,co
     z . val = y;
     (*this) . map (x) = z;
 }
-// get the value y such that x maps to z in a, else
-// leave y unchanged.
 void ivy::ident_to_prototype::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::prototype::__t &y)
     const {
     ivy::ident_to_prototype::rec z;
@@ -31894,21 +26550,12 @@ void ivy::ident_to_prototype::__t::get  (const ivy::ptr< ivy::ident::__t > &x,iv
         y = z . val;
     }
 }
-// return true if x maps to some value
-__bool ivy::ident_to_prototype::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const 
-// return true if x maps to some value
+__bool ivy::ident_to_prototype::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
-    
-    // return true if x maps to some value
     __bool res;
-    
-    // return true if x maps to some value
     res = (*this) . map (x) . full;
-    
-    // return true if x maps to some value
     return res;
 }
-// remove a key x from the map
 void ivy::ident_to_prototype::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
     ivy::ident_to_prototype::rec z;
@@ -31932,46 +26579,27 @@ vector__ivy__lvalue_count::domain::__t vector__ivy__lvalue_count::domain::__t::p
     y = (*this) - vector__ivy__lvalue_count::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__lvalue_count::domain::__t vector__ivy__lvalue_count::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__lvalue_count::domain::__t vector__ivy__lvalue_count::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__lvalue_count::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__lvalue_count::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__lvalue_count::__t vector__ivy__lvalue_count::empty () 
-// The `empty` action returns an empty array
+vector__ivy__lvalue_count::__t vector__ivy__lvalue_count::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__lvalue_count::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__lvalue_count::__t::set  (const vector__ivy__lvalue_count::domain::__t &i,const ivy::lvalue_count
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__lvalue_count::__t::append  (const ivy::lvalue_count &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__lvalue_count::__t::extend  (const vector__ivy__lvalue_count::__t &x)
 {
     vector__ivy__lvalue_count::domain::__t idx;
@@ -31981,36 +26609,20 @@ void vector__ivy__lvalue_count::__t::extend  (const vector__ivy__lvalue_count::_
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__lvalue_count::__t::resize  (const vector__ivy__lvalue_count::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::lvalue_count vector__ivy__lvalue_count::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::lvalue_count vector__ivy__lvalue_count::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::lvalue_count y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__lvalue_count::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__lvalue_count::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__lvalue_count::domain::__t (0))
@@ -32020,21 +26632,11 @@ void vector__ivy__lvalue_count::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__lvalue_count::__t vector__ivy__lvalue_count::__t::segment  (const
     vector__ivy__lvalue_count::domain::__t &beg,const vector__ivy__lvalue_count::domain::__t &en)
-    const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__lvalue_count::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__lvalue_count::domain::__t idx;
         idx = beg;
@@ -32044,12 +26646,8 @@ vector__ivy__lvalue_count::__t vector__ivy__lvalue_count::__t::segment  (const
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__lvalue_count::__t::reverse ()
 {
     vector__ivy__lvalue_count::domain::__t idx;
@@ -32082,20 +26680,16 @@ void ivy::tocppst::__t::add_stmt  (const ivy::ptr< cpp::stmt::__t > &code)
 {
     (*this) . code . append (code);
 }
-// Get the added code and clear it.
 void ivy::tocppst::__t::get_code  (const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::stmt::__t > &res)
 {
     res = cpp::sequence::fold_right ((*this) . code,ann);
     (*this) . code = vector__cpp__stmt::empty();
 }
-// This adds a statement to the end of the current code, clears
-// the code and returns the result.
 void ivy::tocppst::__t::wrap_stmt  (const ivy::ptr< cpp::stmt::__t > &code,const ivy::ptr< annot::__t >
     &ann,ivy::ptr< cpp::stmt::__t > &res) {
     (*this) . add_stmt (code);
     (*this) . get_code (ann,res);
 }
-// Generate a temporay symbol name
 void ivy::temp_sym  (ivy::tocppst::__t &s,const ivy::ptr< annot::__t > &ann,ivy::ptr< cpp::expr::__t >
     &res)
 {
@@ -32105,8 +26699,6 @@ void ivy::temp_sym  (ivy::tocppst::__t &s,const ivy::ptr< annot::__t > &ann,ivy:
     s . counter = s . counter . next();
     res = cpp::symbol::makestr (name,ann);
 }
-// This declares a temporary variable in the current code
-// context and returns it.
 void ivy::make_temp  (ivy::tocppst::__t &s,const ivy::ptr< ivy::expr::__t > &ty,const ivy::ptr< annot::__t >
     &ann,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -32119,11 +26711,6 @@ void ivy::make_temp  (ivy::tocppst::__t &s,const ivy::ptr< ivy::expr::__t > &ty,
     vstt = vst;
     s . add_stmt (vstt);
 }
-// Given a C++ lvalue, this returns its "path". The path is an identifier
-// that gives the name of the variable, with a sequence of field references
-// appended. For example the path of `f.a(x).b(y)` is `f.(a.b)`. The path of
-// a.b(x,y) is `a.b`. On the other hand, `(x+y).a` is not an lvalue and does
-// not have a path. For such cases, we return `ok = false`.
 void ivy::lvalue_path  (const ivy::ptr< ivy::expr::__t > &s,ivy::access_path::__t &path,__bool &ok)
 {
     if (s . isa< ivy::symbol::__t >())
@@ -32173,46 +26760,27 @@ vector__ivy__access_path::domain::__t vector__ivy__access_path::domain::__t::pre
     y = (*this) - vector__ivy__access_path::domain::__t (1);
     return y;
 }
-// The `begin` action always returns 0.
-vector__ivy__access_path::domain::__t vector__ivy__access_path::__t::begin () const 
-// The `begin` action always returns 0.
+vector__ivy__access_path::domain::__t vector__ivy__access_path::__t::begin () const
 {
-    
-    // The `begin` action always returns 0.
     vector__ivy__access_path::domain::__t res;
-    
-    // The `begin` action always returns 0.
     res = vector__ivy__access_path::domain::__t (0);
-    
-    // The `begin` action always returns 0.
     return res;
 }
-// The `empty` action returns an empty array
-vector__ivy__access_path::__t vector__ivy__access_path::empty () 
-// The `empty` action returns an empty array
+vector__ivy__access_path::__t vector__ivy__access_path::empty ()
 {
-    
-    // The `empty` action returns an empty array
     vector__ivy__access_path::__t res;
-    
-    // The `empty` action returns an empty array
     {}
-    
-    // The `empty` action returns an empty array
     return res;
 }
-// The `set` action sets an element of an array
 void vector__ivy__access_path::__t::set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t
     &v) {
     (*this) . value (i) = v;
 }
-// The `append` action appends one character `c` to a array.
 void vector__ivy__access_path::__t::append  (const ivy::access_path::__t &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-// The `extend` action appends a array `x` to a array `s`.
 void vector__ivy__access_path::__t::extend  (const vector__ivy__access_path::__t &x)
 {
     vector__ivy__access_path::domain::__t idx;
@@ -32222,36 +26790,20 @@ void vector__ivy__access_path::__t::extend  (const vector__ivy__access_path::__t
         idx = idx . next();
     }
 }
-// The `resize` action sets the end marker of the string. 
 void vector__ivy__access_path::__t::resize  (const vector__ivy__access_path::domain::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
-ivy::access_path::__t vector__ivy__access_path::__t::back () const 
-// The `back` action returns the last element of an array, or zero
-// if the array is empty.
+ivy::access_path::__t vector__ivy__access_path::__t::back () const
 {
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     ivy::access_path::__t y;
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     if ((*this) . end > vector__ivy__access_path::domain::__t (0))
     {
         y = (*this) . value ((*this) . end . prev());
     }
-    
-    // The `back` action returns the last element of an array, or zero
-    // if the array is empty.
     return y;
 }
-// The `back` action removes he last element of the array, if the
-// array is not empty.
 void vector__ivy__access_path::__t::pop_back ()
 {
     if ((*this) . end > vector__ivy__access_path::domain::__t (0))
@@ -32261,21 +26813,11 @@ void vector__ivy__access_path::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
 vector__ivy__access_path::__t vector__ivy__access_path::__t::segment  (const
     vector__ivy__access_path::domain::__t &beg,const vector__ivy__access_path::domain::__t &en)
-    const 
-// The `segment` action gets the segment of an array from index `beg` to
-// index `en-1`.
+    const
 {
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     vector__ivy__access_path::__t res;
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     {
         vector__ivy__access_path::domain::__t idx;
         idx = beg;
@@ -32285,12 +26827,8 @@ vector__ivy__access_path::__t vector__ivy__access_path::__t::segment  (const
             idx = idx . next();
         }
     }
-    
-    // The `segment` action gets the segment of an array from index `beg` to
-    // index `en-1`.
     return res;
 }
-// The `reverse` action reverses an array.
 void vector__ivy__access_path::__t::reverse ()
 {
     vector__ivy__access_path::domain::__t idx;
@@ -32307,8 +26845,6 @@ void vector__ivy__access_path::__t::reverse ()
         idx = idx . next();
     }
 }
-// Get a list of all of the lvalue paths occurring in a C++
-// expression.
 void ivy::lvalue_paths  (const ivy::ptr< ivy::expr::__t > &s,vector__ivy__access_path::__t &paths,const
     __bool &ao)
 {
@@ -32347,16 +26883,10 @@ void ivy::lvalue_paths  (const ivy::ptr< ivy::expr::__t > &s,vector__ivy__access
         }
     }
 }
-// This determines whether a C++ lvalue is dead in current context
 __bool ivy::is_dead  (const ivy::ptr< cpp::expr::__t > &e,const ivy::tocppst::__t &st,const pos::__t
-    &cnt) 
-// This determines whether a C++ lvalue is dead in current context
+    &cnt)
 {
-    
-    // This determines whether a C++ lvalue is dead in current context
     __bool res;
-    
-    // This determines whether a C++ lvalue is dead in current context
     {
         vector__ivy__lvalue_count::domain::__t idx;
         idx = st . dead . begin();
@@ -32368,12 +26898,8 @@ __bool ivy::is_dead  (const ivy::ptr< cpp::expr::__t > &e,const ivy::tocppst::__
             idx = idx . next();
         }
     }
-    
-    // This determines whether a C++ lvalue is dead in current context
     return res;
 }
-// In context of class declarations, identifiers are declared
-// without their namespaces.
 void ivy::name_in_context  (ivy::ptr< ivy::expr::__t > &name,const ivy::tocppst::__t &st)
 {
     if (st . in_class)
@@ -32388,19 +26914,9 @@ ivy::ptr< cpp::ident::__t > ivy::ident::__t::to_cpp  (const __bool &native) cons
     {}
     return res;
 }
-// Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-// needed for name subscripts to make legal C++ identifiers.
-str::__t ivy::mangle  (const ivy::ptr< cpp::ident::__t > &s) 
-// Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-// needed for name subscripts to make legal C++ identifiers.
+str::__t ivy::mangle  (const ivy::ptr< cpp::ident::__t > &s)
 {
-    
-    // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-    // needed for name subscripts to make legal C++ identifiers.
     str::__t res;
-    
-    // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-    // needed for name subscripts to make legal C++ identifiers.
     if (s . isa< cpp::dotident::__t >())
     {
         res = ivy::mangle (s -> get_namesp());
@@ -32409,40 +26925,11 @@ str::__t ivy::mangle  (const ivy::ptr< cpp::ident::__t > &s)
     } else {
         res = s -> to_str();
     }
-    
-    // Mangle a C++ identifier. This turns `x::y` into `x__y`, which is
-    // needed for name subscripts to make legal C++ identifiers.
     return res;
 }
-// In translating Ivy names to C++, we have to avoid clashes with C++
-// reserved words like "char" and "bool". We do this by prepending "__".
-// C++ names beginning with "__" are reserved for the compiler. If the
-// `native` argument is true, we treate the identifier as a native C++
-// name and do not perform this translation. Also non-native names with
-// subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
-cpp::strident::__t ivy::strident_to_cpp  (const ivy::strident::__t &s,const __bool &native) 
-// In translating Ivy names to C++, we have to avoid clashes with C++
-// reserved words like "char" and "bool". We do this by prepending "__".
-// C++ names beginning with "__" are reserved for the compiler. If the
-// `native` argument is true, we treate the identifier as a native C++
-// name and do not perform this translation. Also non-native names with
-// subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
+cpp::strident::__t ivy::strident_to_cpp  (const ivy::strident::__t &s,const __bool &native)
 {
-    
-    // In translating Ivy names to C++, we have to avoid clashes with C++
-    // reserved words like "char" and "bool". We do this by prepending "__".
-    // C++ names beginning with "__" are reserved for the compiler. If the
-    // `native` argument is true, we treate the identifier as a native C++
-    // name and do not perform this translation. Also non-native names with
-    // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
     cpp::strident::__t t;
-    
-    // In translating Ivy names to C++, we have to avoid clashes with C++
-    // reserved words like "char" and "bool". We do this by prepending "__".
-    // C++ names beginning with "__" are reserved for the compiler. If the
-    // `native` argument is true, we treate the identifier as a native C++
-    // name and do not perform this translation. Also non-native names with
-    // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
     {
         if (! native & ivy::cpp_reserved_word (s . val))
         {
@@ -32467,13 +26954,6 @@ cpp::strident::__t ivy::strident_to_cpp  (const ivy::strident::__t &s,const __bo
             idx = idx . next();
         }
     }
-    
-    // In translating Ivy names to C++, we have to avoid clashes with C++
-    // reserved words like "char" and "bool". We do this by prepending "__".
-    // C++ names beginning with "__" are reserved for the compiler. If the
-    // `native` argument is true, we treate the identifier as a native C++
-    // name and do not perform this translation. Also non-native names with
-    // subscripts need to be mangled. For example, `x[t]` becomes `x__t`.
     return t;
 }
 ivy::ptr< cpp::ident::__t > ivy::strident::__t::to_cpp  (const __bool &native) const
@@ -32484,9 +26964,8 @@ ivy::ptr< cpp::ident::__t > ivy::strident::__t::to_cpp  (const __bool &native) c
         x = ivy::strident_to_cpp ((*this),native);
         
         // workaround
-        ivy::ptr< cpp::ident::__t > y;
         
-        // workaround
+        ivy::ptr< cpp::ident::__t > y;
         y = x;
         res = y;
     }
@@ -32504,9 +26983,6 @@ ivy::ptr< cpp::ident::__t > ivy::dotident::__t::to_cpp  (const __bool &native) c
     return res;
 }
 void ivy::expr::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res) const {}
-// When translating symbols to C++, we need to take care of name clashes between
-// namespaces (Ivy objects) and classes (Ivy types). If a type has the same identifier as
-// an object, we append `.__t` to the identifier of the type.
 void ivy::fix_object_clash  (ivy::ptr< ivy::ident::__t > &id,const ivy::tocppst::__t &st)
 {
     if (st . objects . mem (id))
@@ -32601,32 +27077,21 @@ void ivy::make_md_vector_type  (const vector__ivy__expr::__t &dom,const ivy::ptr
     name = vid . prefix (cpp::strident::make (ivy::from_str< str::__t > ("ivy")));
     res = cpp::symbol::make (name,rng -> get_ann());
 }
-// Function types are handled specially, using C++ templates in the
-// standard header. For now we have only a dense representation
-// using `std::vector`. This works only when the domain types are
-// convertible to `size_t`. We also need at least a hash table type
-// here for sparse data.
 void ivy::function_type  (const ivy::ptr< ivy::expr::__t > &ty,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
     &res)
 {
     if (ty . isa< ivy::app::__t >())
     {
-        ivy::make_md_vector_type (ivy::arrow::unfold_left (ty -> get_arg (vector__ivy__expr::domain::__t
+        ivy::make_md_vector_type (ivy::times::unfold_left (ty -> get_arg (vector__ivy__expr::domain::__t
                             (0))),ty -> get_arg (vector__ivy__expr::domain::__t (1)),st,res);
     } else {
         ty -> to_cpp (st,res);
     }
 }
-// Make a C++ expression of the form `ivy::from_str<ty>(arg)`
 ivy::ptr< cpp::expr::__t > ivy::make_from_string  (const ivy::ptr< cpp::expr::__t > &ty,const ivy::ptr< cpp::expr::__t >
-    &arg,const ivy::ptr< annot::__t > &ann) 
-// Make a C++ expression of the form `ivy::from_str<ty>(arg)`
+    &arg,const ivy::ptr< annot::__t > &ann)
 {
-    
-    // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
     {
         cpp::strident::__t id;
         id . val = ivy::from_str< str::__t > ("from_str");
@@ -32635,43 +27100,17 @@ ivy::ptr< cpp::expr::__t > ivy::make_from_string  (const ivy::ptr< cpp::expr::__
         name = cpp::dotident::make (cpp::strident::make (ivy::from_str< str::__t > ("ivy")),id);
         res = cpp::app::make1 (cpp::symbol::make (name,ann),arg,ann);
     }
-    
-    // Make a C++ expression of the form `ivy::from_str<ty>(arg)`
     return res;
 }
-// Returns true if the C++ express is `*this`. This case requires special
-// handling for indirect calls. 
-__bool ivy::is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s) 
-// Returns true if the C++ express is `*this`. This case requires special
-// handling for indirect calls. 
+__bool ivy::is_cpp_this  (const ivy::ptr< cpp::expr::__t > &s)
 {
-    
-    // Returns true if the C++ express is `*this`. This case requires special
-    // handling for indirect calls. 
     __bool res;
-    
-    // Returns true if the C++ express is `*this`. This case requires special
-    // handling for indirect calls. 
     if (s . isa< cpp::symbol::__t >())
     {
         res = s -> get_name() -> to_str() == ivy::from_str< str::__t > ("(*this)");
     }
-    
-    // Returns true if the C++ express is `*this`. This case requires special
-    // handling for indirect calls. 
     return res;
 }
-// Make a C++ function call. There are four cases here:
-//
-// Ordinary function call: `prefix.f(a0..an)`
-// Method call: `a0.f(a1..an)`
-// Indirect const method call: `a0->f(a1..an)`
-// Indirect non-const method call: `a0.get().f(a1..an)`
-//
-// The last two cases are used if `f : (t * ... -> u)` is a member function where
-// type `t` is a variant type. However, if the first argument is `(*this)` we
-// do *not* use this form, as `this` is a normal C++ pointer, not a special
-// Ivy variant pointer. 
 void ivy::make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__cpp__expr::__t &args,const
     ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,const ivy::prototype::__t &proto,ivy::ptr< cpp::expr::__t >
     &res)
@@ -32712,16 +27151,6 @@ void ivy::make_cpp_call  (const ivy::ptr< ivy::expr::__t > &func,const vector__c
         res = cpp::app::make (cfunc,args,ann);
     }
 }
-// After executing a function call, the call gives up ownership of
-// its arguments, possibly allowing the arguments to be
-// side-effected by future calls. A good example is this:
-//
-//     a := a.resize(size(a) - 1);
-//
-// Here, the call to `size` has ownership over `a` which would
-// prevent `resize` from side-effecting `a`. However, since the
-// call to `size` executes first, it gives up its ownership before
-// `resize` executes, so `resize` can side-effect `a`.
 void ivy::unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t &st)
 {
     vector__ivy__expr::domain::__t idx;
@@ -32739,35 +27168,6 @@ void ivy::unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t
         idx = idx . next();
     }
 }
-// Translate an action call to C++. This is complicated, because we have
-// to apply the action prototype and deal with call-by-reference.
-//
-// In-place optimization. There are two cases when a call can modify
-// an argument in-place:
-//
-// (1) Borrowing. This is an in/out parameter given an lvalue that
-// is returned by the expression and has exactly one remaining
-// alias in the expression.
-//
-// (2) Return by reference. This is an out parameter given an
-// lvalue that is returned by the expression and has no aliases in
-// the expression.
-//
-// In both of these cases, we simply pass the lvalue by non-const
-// reference. Any other non-const reference parameter is copied
-// to/from a temporary to preserve value semantics.
-//
-// If the call is return-by-value, then we return the translated
-// function call. If return-by-reference, we emit the function call
-// and return the lvalue passed to the output parameter, which may
-// be a temporary. If the call is the expression root and it
-// is return-by-value, then we we assign the outputs as a side
-// effect, by copying any temporaries back to the original lvalues,
-// and we return ().
-//
-// Note that any remaining inputs may be either by const ref or by value.
-// We need not make this distinction here, however, as call-by-value is
-// the same as call-by-const-ref with an internal copy operation.
 void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy__expr::__t &inputs,const
     ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -32775,6 +27175,7 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
     proto = st . protos . value (func -> get_arg (vector__ivy__expr::domain::__t (0)) -> get_name());
     
     // First evaluate all of the inputs.
+    
     vector__cpp__expr::__t inpvals;
     vector__ivy__prototype_argument::domain::__t idx;
     idx = proto . args . begin();
@@ -32796,6 +27197,7 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
     }
     
     // Evaluate all of the arguments
+    
     vector__cpp__expr::__t args;
     idx = proto . args . begin();
     vector__cpp__stmt::__t rets;
@@ -32885,17 +27287,9 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
     //
     // If a symbol is an action and its type is not a
     // function type, we have to add () for C++.
+    
     {
         ivy::ptr< ivy::expr::__t > arg;
-        
-        // Generally, type decorations are not emitted to
-        // C++. However, in case of a numeral, we need to cast
-        // the numeral to the appropriate type. If a string
-        // literal, we use the template function
-        // `ivy::from_str<t>` to convert to type `t`.
-        //
-        // If a symbol is an action and its type is not a
-        // function type, we have to add () for C++.
         arg = (*this) . args . value (vector__ivy__expr::domain::__t (0));
         arg -> to_cpp (st,res);
         if (arg . isa< ivy::symbol::__t >())
@@ -32941,10 +27335,9 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
     {
         if ((*this) . is (ivy::verb::__t (ivy::verb::arrow))) 
         // Function types need special translation to C++
+        
         {
             ivy::ptr< ivy::expr::__t > tmp;
-            
-            // Function types need special translation to C++
             tmp = (*this);
             ivy::function_type (tmp,st,res);
         } else
@@ -32953,6 +27346,7 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
             {
                 
                 // `x isa t` is translated to `x.isa<t>()`
+                
                 ivy::ptr< cpp::expr::__t > arg0;
                 ivy::ptr< cpp::expr::__t > arg1;
                 (*this) . args . value (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,arg0);
@@ -32978,11 +27372,9 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                 ivy::verb::__t (ivy::verb::castv)) 
                 // A cast operator looks like (cast : (t->u))(x). This may indicate
                 // a need for an upcast in C++. 
+                
                 {
                     ivy::ptr< ivy::expr::__t > ty;
-                    
-                    // A cast operator looks like (cast : (t->u))(x). This may indicate
-                    // a need for an upcast in C++. 
                     ty =
                         (*this) . func -> get_arg (vector__ivy__expr::domain::__t (1)) -> get_arg (vector__ivy__expr::domain::__t
                                 (1));
@@ -32991,6 +27383,7 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                 {
                     
                     // Detect whether a function application is an action call.
+                    
                     ivy::ptr< ivy::expr::__t > func;
                     vector__ivy__expr::__t args;
                     ivy::get_app ((*this),func,args);
@@ -33004,6 +27397,7 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                         // This is the normal case of function application. We
                         // translate the function and all the arguments and
                         // then apply.
+                        
                         cpp::app::__t capp;
                         (*this) . func -> to_cpp (st,capp . func);
                         {
@@ -33028,6 +27422,7 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                             st . outputs = save_outputs;
                             
                             // For ternary operators, we need to permute the arguments
+                            
                             if (capp . is (cpp::verb::__t (cpp::verb::ite)))
                             {
                                 ivy::ptr< cpp::expr::__t > tmp;
@@ -33040,6 +27435,7 @@ void ivy::app::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &r
                             // If of the form (x:t).f, where t is a variant
                             // type, convert to x->f, since variant types are
                             // represented with smart pointers.
+                            
                             if ((*this) . func -> get_verb() == ivy::verb::__t (ivy::verb::dot))
                             {
                                 ivy::ptr< ivy::expr::__t > lhs;
@@ -33148,11 +27544,6 @@ void ivy::kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,
         idx = idx . next();
     }
 }
-// If the "this" argument of a member function is assign to a
-// variable or passed as an argument, and if "this" is of a
-// supertype, then we have to use the virtual `__upcast` method of
-// the object to get a C-o-W pointer to the object. Otherwise C++
-// will slice the object.
 void ivy::fix_variant_arg  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< cpp::expr::__t > &rhs,const
     ivy::tocppst::__t &st)
 {
@@ -33206,6 +27597,7 @@ void ivy::ifst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     code = st . code;
     
     // side effects of cond evaluation
+    
     st . code = vector__cpp__stmt::empty();
     (*this) . thenst -> to_cpp (st,res . thenst);
     (*this) . elsest -> to_cpp (st,res . elsest);
@@ -33224,6 +27616,7 @@ void ivy::whilest::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t 
     code = st . code;
     
     // side effects of cond evaluation
+    
     st . code = vector__cpp__stmt::empty();
     (*this) . body -> to_cpp (st,res . body);
     if (code . end > vector__cpp__stmt::domain::__t (0))
@@ -33268,10 +27661,6 @@ __bool ivy::decl::__t::emitted  (const ivy::tocppst::__t &st) const
     return res;
 }
 void ivy::decl::__t::record_prototypes  (ivy::tocppst::__t &st) const {}
-// The full name of a C++ function depends on whether it is a member function.
-// If so, we find take the full name of the class and append the member name.
-// The full name of the class can differ from the name of Ivy type because of
-// object name clashes.
 void ivy::full_action_name  (const ivy::ptr< ivy::expr::__t > &name,const __bool &is_member,ivy::tocppst::__t
     &st,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -33305,7 +27694,6 @@ __bool ivy::is_input_param  (const ivy::actdc::__t &s,const ivy::ptr< ivy::expr:
     }
     return res;
 }
-// Make a variable declaration with an initializer
 void ivy::make_initializer  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::expr::__t >
     &initval,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res)
 {
@@ -33323,10 +27711,6 @@ void ivy::actdc::__t::record_prototypes  (ivy::tocppst::__t &st) const
     proto = (*this) . get_proto (st . globals,st . subtype_rel);
     st . protos . set ((*this) . name -> get_name(),proto);
 }
-// Here, we translate an Ivy action declaration to a C++
-// function declaration. The C++ function declarations depends
-// on the action prototype.  If the action is a member action,
-// we drop the first input and replace it with `*this`.
 void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &resd) const
 {
     cpp::funcdecl::__t res;
@@ -33363,9 +27747,8 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
         idx = idx . next();
         
         // skip the first input "this" if a member
-        ivy::prototype_argument::__t parg;
         
-        // skip the first input "this" if a member
+        ivy::prototype_argument::__t parg;
         parg = proto . args . value (vector__ivy__prototype_argument::domain::__t (0));
         if (! cprot & parg . is_copy)
         {
@@ -33453,8 +27836,6 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
     }
     st . this_ident = ivy::ident::__t (0);
 }
-// Here, we register actions as members of types. These will be emitted
-// as members of the corresponding C++ class. 
 void ivy::actdc::__t::reg_member  (ivy::tocppst::__t &st) const
 {
     if ((*this) . is_member())
@@ -33465,87 +27846,16 @@ void ivy::actdc::__t::reg_member  (ivy::tocppst::__t &st) const
         st . add_member ((*this) . member_type(),actd);
     }
 }
-// An action declaration is not emitted if it is a member and
-// does not have a body. External actions are never emitted.
-__bool ivy::actdc::__t::emitted  (const ivy::tocppst::__t &st) const 
-// An action declaration is not emitted if it is a member and
-// does not have a body. External actions are never emitted.
+__bool ivy::actdc::__t::emitted  (const ivy::tocppst::__t &st) const
 {
-    
-    // An action declaration is not emitted if it is a member and
-    // does not have a body. External actions are never emitted.
     __bool res;
-    
-    // An action declaration is not emitted if it is a member and
-    // does not have a body. External actions are never emitted.
     res = (! (*this) . is_member() | ! st . proto_only) & (*this) . kind !=
         ivy::action_kind::__t (ivy::action_kind::external);
-    
-    // An action declaration is not emitted if it is a member and
-    // does not have a body. External actions are never emitted.
     return res;
 }
-// If a virtual action has `this` as an in-out parameter, we don't have an appropriate
-// prototype. The easiest way to handle this is to eliminate the in-out parameter by
-// replacing the output parameter with a fresh name and copying the value. For example,
-// suppose we have this action:
-//
-//     action t.f(s:t,...) returns (s:t,...) { ... }
-//
-// We replace this by the following equivalent action:
-//
-//     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
-//
-// This results in a copy of `s` that might be unnecessary if its value is dead. However,
-// it gets us aroud the problem that assigning a value of a subtype to `*this` will result
-// in the value being sliced.
-ivy::ptr< ivy::decl::__t > ivy::actdc::__t::fix_action  (const ivy::tocppst::__t &st) const 
-// If a virtual action has `this` as an in-out parameter, we don't have an appropriate
-// prototype. The easiest way to handle this is to eliminate the in-out parameter by
-// replacing the output parameter with a fresh name and copying the value. For example,
-// suppose we have this action:
-//
-//     action t.f(s:t,...) returns (s:t,...) { ... }
-//
-// We replace this by the following equivalent action:
-//
-//     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
-//
-// This results in a copy of `s` that might be unnecessary if its value is dead. However,
-// it gets us aroud the problem that assigning a value of a subtype to `*this` will result
-// in the value being sliced.
+ivy::ptr< ivy::decl::__t > ivy::actdc::__t::fix_action  (const ivy::tocppst::__t &st) const
 {
-    
-    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
-    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
-    // replacing the output parameter with a fresh name and copying the value. For example,
-    // suppose we have this action:
-    //
-    //     action t.f(s:t,...) returns (s:t,...) { ... }
-    //
-    // We replace this by the following equivalent action:
-    //
-    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
-    //
-    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
-    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
-    // in the value being sliced.
     ivy::ptr< ivy::decl::__t > res;
-    
-    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
-    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
-    // replacing the output parameter with a fresh name and copying the value. For example,
-    // suppose we have this action:
-    //
-    //     action t.f(s:t,...) returns (s:t,...) { ... }
-    //
-    // We replace this by the following equivalent action:
-    //
-    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
-    //
-    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
-    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
-    // in the value being sliced.
     if ((*this) . is_member())
     {
         ivy::param_map::__t outs;
@@ -33587,21 +27897,6 @@ ivy::ptr< ivy::decl::__t > ivy::actdc::__t::fix_action  (const ivy::tocppst::__t
     } else {
         res = (*this);
     }
-    
-    // If a virtual action has `this` as an in-out parameter, we don't have an appropriate
-    // prototype. The easiest way to handle this is to eliminate the in-out parameter by
-    // replacing the output parameter with a fresh name and copying the value. For example,
-    // suppose we have this action:
-    //
-    //     action t.f(s:t,...) returns (s:t,...) { ... }
-    //
-    // We replace this by the following equivalent action:
-    //
-    //     action t.f(__this:t,...) returns (s:t,...) { s := __this; ... }
-    //
-    // This results in a copy of `s` that might be unnecessary if its value is dead. However,
-    // it gets us aroud the problem that assigning a value of a subtype to `*this` will result
-    // in the value being sliced.
     return res;
 }
 __bool ivy::initdc::__t::emitted  (const ivy::tocppst::__t &st) const
@@ -33636,20 +27931,10 @@ void ivy::member_name  (ivy::ptr< cpp::expr::__t > &s)
         s = cpp::symbol::make (s -> get_name() -> get_member(),s -> get_ann());
     }
 }
-// Instantiate a standard template. This produces a type name of
-// the form `ivy.tpl[ty]`.
 ivy::ptr< cpp::expr::__t > ivy::make_std_tpl  (const str::__t &tpl,const str::__t &ty,const ivy::ptr< annot::__t >
-    &ann) 
-// Instantiate a standard template. This produces a type name of
-// the form `ivy.tpl[ty]`.
+    &ann)
 {
-    
-    // Instantiate a standard template. This produces a type name of
-    // the form `ivy.tpl[ty]`.
     ivy::ptr< cpp::expr::__t > res;
-    
-    // Instantiate a standard template. This produces a type name of
-    // the form `ivy.tpl[ty]`.
     {
         cpp::strident::__t vid;
         vid . val = tpl;
@@ -33658,56 +27943,23 @@ ivy::ptr< cpp::expr::__t > ivy::make_std_tpl  (const str::__t &tpl,const str::__
         tname = cpp::dotident::make (cpp::strident::make (ivy::from_str< str::__t > ("ivy")),vid);
         res = cpp::symbol::make (tname,ann);
     }
-    
-    // Instantiate a standard template. This produces a type name of
-    // the form `ivy.tpl[ty]`.
     return res;
 }
-// Make the name of the C++ enum that corresponds to an Ivy enumerated
-// type. The name is `__enum_name` where `name is the Ivy name.
-str::__t ivy::enum_name  (const ivy::ptr< cpp::expr::__t > &name) 
-// Make the name of the C++ enum that corresponds to an Ivy enumerated
-// type. The name is `__enum_name` where `name is the Ivy name.
+str::__t ivy::enum_name  (const ivy::ptr< cpp::expr::__t > &name)
 {
-    
-    // Make the name of the C++ enum that corresponds to an Ivy enumerated
-    // type. The name is `__enum_name` where `name is the Ivy name.
     str::__t res;
-    
-    // Make the name of the C++ enum that corresponds to an Ivy enumerated
-    // type. The name is `__enum_name` where `name is the Ivy name.
     {
         res = ivy::from_str< str::__t > ("__enum_");
         res . extend (name -> get_name() -> to_str());
     }
-    
-    // Make the name of the C++ enum that corresponds to an Ivy enumerated
-    // type. The name is `__enum_name` where `name is the Ivy name.
     return res;
 }
-// Unfortunately, enumerated types can't be classes in C++.  To
-// represent one an enumerated type `t`, we declared a C++ enum
-// named `__enum_t`. We then instantiate a template
-// `ivy::native_enum<__enum_t>` defined in the standard header.
-// This wraps the enum in a class with the necessary standard
-// traits.  The form of an enum type `name` in the C++ code is:
-//
-//     enum __enum_name  {elem1,...elemN};
-//
-//     struct name : ivy::native_enum< __enum_name > {
-//         name() : ivy::native_enum< __enum_name >() {}
-//         name(long long value) : 
-//         name(__enum_name value) : ivy::native_enum< __enum_name >(value) {}
-//     };
-//
-// Note we have to promote the constructors of the base class to
-// the derived class. The parameter `sd` is the struct declaration.
-// This action prepends the C++ enum declaration.
 void ivy::enum_to_cpp  (const ivy::ptr< cpp::expr::__t > &name,const ivy::ptr< ivy::typespec::__t >
     &spec,const ivy::ptr< cpp::decl::__t > &sd,ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &res)
 {
     
     // Delcare the enum `__enum_t`.
+    
     cpp::enumdecl::__t ed;
     ed . ann = name -> get_ann();
     ed . name = cpp::symbol::makestr (ivy::enum_name (name),ed . ann);
@@ -33733,97 +27985,14 @@ void ivy::enum_to_cpp  (const ivy::ptr< cpp::expr::__t > &name,const ivy::ptr< i
     gd . decls . append (sd);
     res = gd;
 }
-// All the delcared classes have to have certain standard traits.
-// These are:
-//
-// (1) A default constructor
-// (2) A constructor from (signed or unsigned) long long.
-// (3) A conversion to size_t
-// (4) A static predicate __is_seq
-// (5) A == overload
-// (6) A != overload
-// (7) A predicate __is_zero
-// (8) A class __hash of hashers
-//
-// Here, we add the standard traits to a C++ structure.
-// Make a C++ constructor for a struct
-// Default constructor does nothing:
-//     name() {};
-cpp::funcdecl::__t ivy::make_cpp_cons  (const cpp::structdecl::__t &t) 
-// All the delcared classes have to have certain standard traits.
-// These are:
-//
-// (1) A default constructor
-// (2) A constructor from (signed or unsigned) long long.
-// (3) A conversion to size_t
-// (4) A static predicate __is_seq
-// (5) A == overload
-// (6) A != overload
-// (7) A predicate __is_zero
-// (8) A class __hash of hashers
-//
-// Here, we add the standard traits to a C++ structure.
-// Make a C++ constructor for a struct
-// Default constructor does nothing:
-//     name() {};
+cpp::funcdecl::__t ivy::make_cpp_cons  (const cpp::structdecl::__t &t)
 {
-    
-    // All the delcared classes have to have certain standard traits.
-    // These are:
-    //
-    // (1) A default constructor
-    // (2) A constructor from (signed or unsigned) long long.
-    // (3) A conversion to size_t
-    // (4) A static predicate __is_seq
-    // (5) A == overload
-    // (6) A != overload
-    // (7) A predicate __is_zero
-    // (8) A class __hash of hashers
-    //
-    // Here, we add the standard traits to a C++ structure.
-    // Make a C++ constructor for a struct
-    // Default constructor does nothing:
-    //     name() {};
     cpp::funcdecl::__t s;
-    
-    // All the delcared classes have to have certain standard traits.
-    // These are:
-    //
-    // (1) A default constructor
-    // (2) A constructor from (signed or unsigned) long long.
-    // (3) A conversion to size_t
-    // (4) A static predicate __is_seq
-    // (5) A == overload
-    // (6) A != overload
-    // (7) A predicate __is_zero
-    // (8) A class __hash of hashers
-    //
-    // Here, we add the standard traits to a C++ structure.
-    // Make a C++ constructor for a struct
-    // Default constructor does nothing:
-    //     name() {};
     {
         s . ftype . base . name = t . name;
         s . has_body = ivy::native_bool (true);
         s . body = cpp::skipst::make (t . ann);
     }
-    
-    // All the delcared classes have to have certain standard traits.
-    // These are:
-    //
-    // (1) A default constructor
-    // (2) A constructor from (signed or unsigned) long long.
-    // (3) A conversion to size_t
-    // (4) A static predicate __is_seq
-    // (5) A == overload
-    // (6) A != overload
-    // (7) A predicate __is_zero
-    // (8) A class __hash of hashers
-    //
-    // Here, we add the standard traits to a C++ structure.
-    // Make a C++ constructor for a struct
-    // Default constructor does nothing:
-    //     name() {};
     return s;
 }
 cpp::funcdecl::__t ivy::make_virt_destr  (const cpp::structdecl::__t &t)
@@ -33859,8 +28028,6 @@ cpp::funcdecl::__t ivy::make_upcast_method  (const cpp::structdecl::__t &t)
     }
     return s;
 }
-// Numeric constructor does nothing (so that 0 gives default value):
-//     name(long long) {};
 void ivy::add_numeric_cons  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t ncons;
@@ -33871,8 +28038,6 @@ void ivy::add_numeric_cons  (cpp::structdecl::__t &s)
     ncons . ftype . args . append (nconsarg0);
     s . members . append (ncons);
 }
-// Conversion to size_t returns zero:
-//     operator size_t() const { return 0; }
 void ivy::add_sizet_conv  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t tosizet;
@@ -33884,8 +28049,6 @@ void ivy::add_sizet_conv  (cpp::structdecl::__t &s)
         cpp::retst::make (cpp::symbol::makestr (ivy::from_str< str::__t > ("0"),s . ann),s . ann);
     s . members . append (tosizet);
 }
-// __is_seq returns zero:
-//     static bool __is_seq() {return false;}
 void ivy::add_is_seq_pred  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t isseq;
@@ -33898,8 +28061,6 @@ void ivy::add_is_seq_pred  (cpp::structdecl::__t &s)
         cpp::retst::make (cpp::symbol::makestr (ivy::from_str< str::__t > ("false"),s . ann),s . ann);
     s . members . append (isseq);
 }
-// Equality comparison yields member-wise equality: 
-//     bool operator==(const name &other) const { return f1==other.f1 & ...; }
 void ivy::add_eq_pred  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t eq;
@@ -33943,8 +28104,6 @@ void ivy::add_eq_pred  (cpp::structdecl::__t &s)
     eq . body = cpp::retst::make (retexp,s . ann);
     s . members . append (eq);
 }
-// Disequality is just negation of equality
-//     bool operator!=(const name &other) const { return !((*this)==other); }
 void ivy::add_diseq_pred  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t diseq;
@@ -33967,8 +28126,6 @@ void ivy::add_diseq_pred  (cpp::structdecl::__t &s)
     diseq . body = cpp::retst::make (diseqret,s . ann);
     s . members . append (diseq);
 }
-// __is_zero is conjunction of __is_zero for members.
-//    bool __is_zero() const { return f1.is_zero() & ...; }
 void ivy::add_is_zero_pred  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t iszero;
@@ -34012,6 +28169,7 @@ void ivy::add_hasher  (cpp::structdecl::__t &s)
     
     // Hash function adds hashes of members:
     //     struct __hash { size_t operator()(const name &x) {returns t1::__hash(f1) + ...; } };
+    
     cpp::structdecl::__t hashstr;
     hashstr . ann = s . ann;
     hashstr . name = cpp::symbol::makestr (ivy::from_str< str::__t > ("__hash"),s . ann);
@@ -34060,7 +28218,6 @@ void ivy::add_hasher  (cpp::structdecl::__t &s)
     hashstr . members . append (hash);
     s . members . append (hashstr);
 }
-// Add the standard traits to a struct.
 void ivy::add_standard_traits  (cpp::structdecl::__t &s)
 {
     s . members . append (ivy::make_cpp_cons (s));
@@ -34072,23 +28229,15 @@ void ivy::add_standard_traits  (cpp::structdecl::__t &s)
     ivy::add_is_zero_pred (s);
     ivy::add_hasher (s);
 }
-// Add a virtual upcast and destructor to a base class.
 void ivy::add_virtual_destructor  (cpp::structdecl::__t &s)
 {
     s . members . append (ivy::make_upcast_method (s));
     s . members . append (ivy::make_virt_destr (s));
 }
-// Add an virtual upcast derived class.
 void ivy::add_upcast_method  (cpp::structdecl::__t &s)
 {
     s . members . append (ivy::make_upcast_method (s));
 }
-// Add a constructor that uses the base class constructor.
-//
-//     derived(t value) : base(value) {}
-//     derived(const t& value) : base(value) {}
-//
-// The latter is produced if the `constref` parameter is true
 void ivy::add_derived_cons  (cpp::structdecl::__t &s,const ivy::ptr< cpp::expr::__t > &t,const
     __bool &constref)
 {
@@ -34104,10 +28253,6 @@ void ivy::add_derived_cons  (cpp::structdecl::__t &s,const ivy::ptr< cpp::expr::
     dcons . ftype . initializer = cpp::app::make1 (s . super,dconsarg0 . name,s . ann);
     s . members . append (dcons);
 }
-// Add a conversion of a derived struct to its base struct
-//
-//     operator base () const { return (*this); }
-//
 void ivy::add_base_conversion  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t abc;
@@ -34122,21 +28267,6 @@ void ivy::add_base_conversion  (cpp::structdecl::__t &s)
             ann);
     s . members . append (abc);
 }
-// Subclasses of native c++ classes inherit the standard traits from those classes.
-// In order to allow them to use the overloads of the native classes, we add this
-// boilerplate to the class:
-//
-// struct ivytype : cpptype {
-//    ivytype(long long value) : cpptype(value) {}
-//    ivytype(const cpptype &x) : cpptype(x) {}
-//    operator cpptype() { return (*this); }
-//  };
-//
-// That is, we provide a constructor from the base class and a conversion to the
-// base class. THe latte is used by the C++ compiler when interpreting an expression
-// like `x+y`, where `x` and `y` are of the derived class. Since the only available
-// conversion is to the base class, the `+` operator of the base class is used. On
-// assignment, the constructor is used.
 void ivy::add_derived_traits  (cpp::structdecl::__t &s)
 {
     s . members . append (ivy::make_cpp_cons (s));
@@ -34145,9 +28275,6 @@ void ivy::add_derived_traits  (cpp::structdecl::__t &s)
     ivy::add_derived_cons (s,s . super,ivy::native_bool (true));
     ivy::add_base_conversion (s);
 }
-// Native types occur on the right-hand side of `interpret` declarations.
-// They need special processing, because we do *not* want to avoid clashes
-// with C++ reserved words.
 void ivy::native_type_to_cpp  (const ivy::ptr< ivy::expr::__t > &ty,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
     &res)
 {
@@ -34193,9 +28320,8 @@ void ivy::typedc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t >
         res . has_members = ivy::native_bool (true);
         
         // This is not a forward declaration
-        vector__ivy__decl::__t members;
         
-        // This is not a forward declaration
+        vector__ivy__decl::__t members;
         {
             members = vector__ivy__decl::empty();
             st . members . get ((*this) . sort -> get_name(),members);
@@ -34238,10 +28364,7 @@ void ivy::typedc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t >
     ivy::fix_object_clash (__tmp27,st);
     ivy::add_namespaces (resd,__tmp27);
 }
-// Here, we register the constructors of enumerated types
-void ivy::typedc::tocpp_show_str  (const str::__t &s) 
-// Here, we register the constructors of enumerated types
-{}
+void ivy::typedc::tocpp_show_str  (const str::__t &s) {}
 void ivy::typedc::__t::reg_member  (ivy::tocppst::__t &st) const
 {
     if ((*this) . has_spec)
@@ -34273,8 +28396,6 @@ __bool ivy::is_variant_type  (const ivy::ptr< ivy::expr::__t > &t,const ivy::toc
     }
     return res;
 }
-// When storing values of variant types we use smart pointers. That is,
-// type `t` becomes `ivy.ptr<t>`.
 void ivy::fix_variant_type  (const ivy::ptr< ivy::expr::__t > &t,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t >
     &res)
 {
@@ -34362,13 +28483,13 @@ void ivy::vardc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
     resd = res;
     
     // workaround
+    
     if (! st . in_class)
     {
         ivy::add_namespaces (resd,(*this) . typing -> get_arg (vector__ivy__expr::domain::__t (0))
                     -> get_name());
     }
 }
-// A type destructor is translated to a data member of the class;
 void ivy::vardc::__t::reg_member  (ivy::tocppst::__t &st) const
 {
     if ((*this) . is_destructor)
@@ -34382,18 +28503,10 @@ void ivy::vardc::__t::reg_member  (ivy::tocppst::__t &st) const
         st . add_member (type_ident,(*this));
     }
 }
-// An variable declaration is not emitted if it is a destructor.
-__bool ivy::vardc::__t::emitted  (const ivy::tocppst::__t &st) const 
-// An variable declaration is not emitted if it is a destructor.
+__bool ivy::vardc::__t::emitted  (const ivy::tocppst::__t &st) const
 {
-    
-    // An variable declaration is not emitted if it is a destructor.
     __bool res;
-    
-    // An variable declaration is not emitted if it is a destructor.
     res = ! (*this) . is_destructor;
-    
-    // An variable declaration is not emitted if it is a destructor.
     return res;
 }
 void ivy::header::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &res) const
@@ -34407,45 +28520,24 @@ void ivy::header::__t::to_cpp_int  (ivy::tocppst::__t &st,cpp::header::__t &res)
 {
     res . filename = (*this) . filename;
 }
-// An interpret declararation determines the C++ superclass of the type.
 void ivy::interpdc::__t::reg_member  (ivy::tocppst::__t &st) const
 {
     st . cppclasses . set ((*this) . itype -> get_name(),(*this) . ctype);
 }
-// Interpret declarations are never emitted
-__bool ivy::interpdc::__t::emitted  (const ivy::tocppst::__t &st) const 
-// Interpret declarations are never emitted
+__bool ivy::interpdc::__t::emitted  (const ivy::tocppst::__t &st) const
 {
-    
-    // Interpret declarations are never emitted
     __bool res;
-    
-    // Interpret declarations are never emitted
     res = ivy::native_bool (false);
-    
-    // Interpret declarations are never emitted
     return res;
 }
-// An object declaration corresponds to a namespace in C++. However,
-// we emit namespace declarations for the object members, not here.
-// Here, we just record the object identifiers, so we know when they
-// clash with type identifiers.
 void ivy::objectdc::__t::reg_member  (ivy::tocppst::__t &st) const
 {
     st . objects . set ((*this) . name -> get_name(),ivy::native_bool (true));
 }
-// Object declarations are never emitted
-__bool ivy::objectdc::__t::emitted  (const ivy::tocppst::__t &st) const 
-// Object declarations are never emitted
+__bool ivy::objectdc::__t::emitted  (const ivy::tocppst::__t &st) const
 {
-    
-    // Object declarations are never emitted
     __bool res;
-    
-    // Object declarations are never emitted
     res = ivy::native_bool (false);
-    
-    // Object declarations are never emitted
     return res;
 }
 cpp::prog::__t ivy::prog::__t::to_cpp () const
@@ -34456,15 +28548,16 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         s = (*this);
         
         // workaround
+        
         ivy::tocppst::__t st;
         
         // Get the subtyping relation
+        
         st . subtype_rel = s . get_subtypes();
         
         // A pass to convert function defs to actions
-        vector__ivy__decl::domain::__t idx;
         
-        // A pass to convert function defs to actions
+        vector__ivy__decl::domain::__t idx;
         idx = s . decls . begin();
         while (idx < s . decls . end)
         {
@@ -34475,9 +28568,11 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         }
         
         // Get the global typing
+        
         st . globals = s . get_global_types (ivy::native_bool (true));
         
         // A pass to register all of the type members
+        
         idx = s . decls . begin();
         while (idx < s . decls . end)
         {
@@ -34486,6 +28581,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         }
         
         // A pass to emit the forward declarations of classes
+        
         st . forward = ivy::native_bool (true);
         idx = s . decls . begin();
         while (idx < s . decls . end)
@@ -34503,6 +28599,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         st . forward = ivy::native_bool (false);
         
         // A pass to rewrite actions with problematic signatures
+        
         idx = s . decls . begin();
         while (idx < s . decls . end)
         {
@@ -34513,6 +28610,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         }
         
         // A pass to record all of the C++ function prototypes
+        
         idx = s . decls . begin();
         while (idx < s . decls . end)
         {
@@ -34521,6 +28619,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         }
         
         // A pass to emit the C++ prototypes and class declarations
+        
         st . proto_only = ivy::native_bool (true);
         idx = s . decls . begin();
         while (idx < s . decls . end)
@@ -34535,6 +28634,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         }
         
         // A pass to emit the C++ function implementations
+        
         st . proto_only = ivy::native_bool (false);
         idx = s . decls . begin();
         while (idx < s . decls . end)
@@ -34552,6 +28652,7 @@ cpp::prog::__t ivy::prog::__t::to_cpp () const
         
         // Emit a main function by concatenating the init
         // declaration bodies.
+        
         cpp::funcdecl::__t main;
         main . ftype . base . _type = cpp::inttype (main . ann);
         main . ftype . base . name =
@@ -34602,29 +28703,31 @@ void ivy::prog::file_to_cpp  (const str::__t &name)
 // Read the program
 {
     ivy::prog::__t p;
-    
-    // Read the program
     p = ivy::prog::read_file (name);
     
     //	    var p := prog.dec(name);
     // Flattening pass
+    
     if (ivy::errors . end == vector__ivy__error::domain::__t (0)) {
         p . flat();
     }
     
     //	    call show_prog(p.enc);
     // Type inference pass
+    
     if (ivy::errors . end == vector__ivy__error::domain::__t (0)) {
         p . typeinfer();
     }
     
     // Translate to C++
+    
     cpp::prog::__t cpp_prog;
     if (ivy::errors . end == vector__ivy__error::domain::__t (0)) {
         cpp_prog = p . to_cpp();
     }
     
     // Pretty-print the C++
+    
     if (ivy::errors . end == vector__ivy__error::domain::__t (0))
     {
         str::__t cpp_name;
@@ -34668,6 +28771,7 @@ int main  (int argc,char ** argv)
     {
         
         //        str_to_verb(X) := verb.none;
+        
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::numeral)) = pos::__t (0);
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::string)) = pos::__t (0);
         ivy::verb_to_arity (ivy::verb::__t (ivy::verb::logvar)) = pos::__t (0);
@@ -34847,6 +28951,7 @@ int main  (int argc,char ** argv)
             {
                 
                 // colon
+                
                 if (idx > start) {
                     ivy::include_path . append (inc . segment (start,idx));
                 }
@@ -34905,8 +29010,6 @@ int main  (int argc,char ** argv)
                     (false),ivy::native_bool (true),ivy::native_bool (true),ivy::native_bool (true));
     }
     {
-        
-        //        str_to_verb(X) := verb.none;
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::numeral)) = pos::__t (0);
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::string)) = pos::__t (0);
         cpp::verb_to_arity (cpp::verb::__t (cpp::verb::logvar)) = pos::__t (0);
