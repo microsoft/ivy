@@ -476,7 +476,8 @@ object ivy = { ...
 
     object local_info = {
 	type this = struct {
-	    is_live : bool
+	    is_live : bool,
+	    is_ref : bool
 	}
     }
 
@@ -491,9 +492,10 @@ object ivy = { ...
             s.map := s.map.push;
         }                
 
-        action add_var(s:this,typing:expr) returns (s:this) = {
+        action add_var(s:this,typing:expr,is_ref:bool) returns (s:this) = {
             var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
 	    var li : local_info;
+	    li.is_ref := is_ref;
             s.map := s.map.set(v.get_name,li);
         }
 
@@ -512,7 +514,7 @@ object ivy = { ...
         action push_stmt(s:this,stm:stmt) returns (s:this) = {
             s.map := s.map.push;
             if stm isa varst {
-                s := s.add_var(stm.get_expr);
+                s := s.add_var(stm.get_expr,false);
             }
         }
 

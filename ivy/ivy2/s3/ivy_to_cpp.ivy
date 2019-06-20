@@ -896,7 +896,8 @@ object ivy = { ...
 	    if st.locals.mem(id) & ~seen(id) {
 		seen(id) := true;
 		var ann : annot;
-		if ~st.locals.value(id).is_live {
+		var li := st.locals.value(id);
+		if ~li.is_live & ~li.is_ref{
 		    st := kill_lvalue(symbol.make(id,ann),st,paths);
 		}
 	    }
@@ -1150,7 +1151,7 @@ object ivy = { ...
                 argt.is_const := parg.is_const;
                 argt.is_ref := parg.is_ref;
                 (argt._type,st) := fix_variant_type(arg.get_arg(1),st);
-                st.locals := st.locals.add_var(arg);
+                st.locals := st.locals.add_var(arg,parg.is_ref);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
 		if ~cprot & parg.is_copy {
 		    (st,argt.name) := temp_sym(st,s.ann);

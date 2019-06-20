@@ -8658,6 +8658,8 @@ namespace ivy
         {
             __bool is_live;
             
+            __bool is_ref;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -8668,19 +8670,19 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return is_live == other . is_live;
+                return is_live == other . is_live & is_ref == other . is_ref;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
             bool __is_zero () const {
-                return is_live . __is_zero();
+                return is_live . __is_zero() & is_ref . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return __bool::__hash() (x . is_live);
+                    return __bool::__hash() (x . is_live) + __bool::__hash() (x . is_ref);
                 }
             };
             
@@ -8992,7 +8994,7 @@ namespace ivy
             
             void push ();
             
-            void add_var  (const ivy::ptr< ivy::expr::__t > &typing);
+            void add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref);
             
             void push_vars  (const vector__ivy__expr::__t &typings);
             
@@ -21880,12 +21882,13 @@ void ivy::push_pop_locals::__t::pop ()
 void ivy::local_tracker::__t::push () {
     (*this) . map . push();
 }
-void ivy::local_tracker::__t::add_var  (const ivy::ptr< ivy::expr::__t > &typing)
+void ivy::local_tracker::__t::add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref)
 {
     ivy::ptr< ivy::expr::__t > v;
     v = typing -> is (ivy::verb::__t (ivy::verb::colon)) ?
         typing -> get_arg (vector__ivy__expr::domain::__t (0)) : typing;
     ivy::local_info::__t li;
+    li . is_ref = is_ref;
     (*this) . map . set (v -> get_name(),li);
 }
 void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
@@ -21908,8 +21911,9 @@ void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
 void ivy::local_tracker::__t::push_stmt  (const ivy::ptr< ivy::stmt::__t > &stm)
 {
     (*this) . map . push();
-    if (stm . isa< ivy::varst::__t >()) {
-        (*this) . add_var (stm -> get_expr());
+    if (stm . isa< ivy::varst::__t >())
+    {
+        (*this) . add_var (stm -> get_expr(),ivy::native_bool (false));
     }
 }
 void ivy::local_tracker::__t::pop () {
@@ -27768,7 +27772,9 @@ void ivy::kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,
         {
             seen (id) = ivy::native_bool (true);
             ivy::ptr< annot::__t > ann;
-            if (! st . locals . value (id) . is_live)
+            ivy::local_info::__t li;
+            li = st . locals . value (id);
+            if (! li . is_live & ! li . is_ref)
             {
                 ivy::kill_lvalue (ivy::symbol::make (id,ann),st,paths);
             }
@@ -28035,7 +28041,7 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
         argt . is_const = parg . is_const;
         argt . is_ref = parg . is_ref;
         ivy::fix_variant_type (arg -> get_arg (vector__ivy__expr::domain::__t (1)),st,argt . _type);
-        st . locals . add_var (arg);
+        st . locals . add_var (arg,parg . is_ref);
         arg -> get_arg (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,argt . name);
         if (! cprot & parg . is_copy)
         {
