@@ -841,7 +841,25 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace local_info
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace push_pop_locals
+    {
+        struct undo;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace push_pop_locals
     {
         namespace map_t
         {
@@ -854,7 +872,7 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace map_t
         {
@@ -867,7 +885,7 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace vec_t
         {
@@ -880,7 +898,7 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         struct __t;
         
@@ -8634,7 +8652,91 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace local_info
+    {
+        struct __t
+        {
+            __bool is_live;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return is_live == other . is_live;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return is_live . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return __bool::__hash() (x . is_live);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace push_pop_locals
+    {
+        struct undo
+        {
+            ivy::ptr< ivy::ident::__t > id;
+            
+            __bool present;
+            
+            ivy::local_info::__t value;
+            
+             undo () {}
+             undo  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const undo &other) const
+            {
+                return id == other . id & present == other . present & value == other . value;
+            }
+            ivy::native_bool operator !=  (const undo &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return id . __is_zero() & present . __is_zero() & value . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const undo &x) const
+                {
+                    return ivy::ptr< ivy::ident::__t >::__hash() (x . id) +
+                        __bool::__hash() (x . present) + ivy::local_info::__t::__hash() (x . value);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace push_pop_locals
     {
         namespace map_t
         {
@@ -8642,7 +8744,7 @@ namespace ivy
             {
                 __bool full;
                 
-                __bool val;
+                ivy::local_info::__t val;
                 
                  rec () {}
                  rec  (long long value) {}
@@ -8666,7 +8768,8 @@ namespace ivy
                 {
                     std::size_t operator ()  (const rec &x) const
                     {
-                        return __bool::__hash() (x . full) + __bool::__hash() (x . val);
+                        return __bool::__hash() (x . full) +
+                            ivy::local_info::__t::__hash() (x . val);
                     }
                 };
                 
@@ -8679,23 +8782,23 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace map_t
         {
             struct __t
             {
-                ivy::vector< ivy::push_pop_ident_set::map_t::rec,ivy::ptr< ivy::ident::__t > > map;
+                ivy::vector< ivy::push_pop_locals::map_t::rec,ivy::ptr< ivy::ident::__t > > map;
                 
-                void set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y);
+                void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::local_info::__t &y);
                 
-                void get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y) const;
+                void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::local_info::__t &y) const;
                 
                 __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
                 
                 void remove  (const ivy::ptr< ivy::ident::__t > &x);
                 
-                __bool value  (const ivy::ptr< ivy::ident::__t > &x) const;
+                ivy::local_info::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
                 
                  __t () {}
                  __t  (long long value) {}
@@ -8719,7 +8822,7 @@ namespace ivy
                     std::size_t operator ()  (const __t &x) const
                     {
                         return
-                            ivy::vector< ivy::push_pop_ident_set::map_t::rec,ivy::ptr< ivy::ident::__t > >::__hash()
+                            ivy::vector< ivy::push_pop_locals::map_t::rec,ivy::ptr< ivy::ident::__t > >::__hash()
                                 (x . map);
                     }
                 };
@@ -8733,11 +8836,11 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace map_t
         {
-            ivy::push_pop_ident_set::map_t::__t empty ();
+            ivy::push_pop_locals::map_t::__t empty ();
             
         }
         
@@ -8746,31 +8849,31 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace vec_t
         {
             struct __t
             {
-                ivy::vector< ivy::ptr< ivy::ident::__t >,pos::__t > value;
+                ivy::vector< ivy::push_pop_locals::undo,pos::__t > value;
                 
                 pos::__t end;
                 
                 pos::__t begin () const;
                 
-                void set  (const pos::__t &i,const ivy::ptr< ivy::ident::__t > &v);
+                void set  (const pos::__t &i,const ivy::push_pop_locals::undo &v);
                 
-                void append  (const ivy::ptr< ivy::ident::__t > &c);
+                void append  (const ivy::push_pop_locals::undo &c);
                 
-                void extend  (const ivy::push_pop_ident_set::vec_t::__t &x);
+                void extend  (const ivy::push_pop_locals::vec_t::__t &x);
                 
                 void resize  (const pos::__t &end);
                 
-                ivy::ptr< ivy::ident::__t > back () const;
+                ivy::push_pop_locals::undo back () const;
                 
                 void pop_back ();
                 
-                ivy::push_pop_ident_set::vec_t::__t segment  (const pos::__t &beg,const pos::__t &en)
+                ivy::push_pop_locals::vec_t::__t segment  (const pos::__t &beg,const pos::__t &en)
                     const;
                 
                 void reverse ();
@@ -8798,7 +8901,7 @@ namespace ivy
                     std::size_t operator ()  (const __t &x) const
                     {
                         return
-                            ivy::vector< ivy::ptr< ivy::ident::__t >,pos::__t >::__hash() (x . value)
+                            ivy::vector< ivy::push_pop_locals::undo,pos::__t >::__hash() (x . value)
                             + pos::__t::__hash() (x . end);
                     }
                 };
@@ -8812,11 +8915,11 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         namespace vec_t
         {
-            ivy::push_pop_ident_set::vec_t::__t empty ();
+            ivy::push_pop_locals::vec_t::__t empty ();
             
         }
         
@@ -8825,19 +8928,21 @@ namespace ivy
 }
 namespace ivy
 {
-    namespace push_pop_ident_set
+    namespace push_pop_locals
     {
         struct __t
         {
-            ivy::push_pop_ident_set::map_t::__t map;
+            ivy::push_pop_locals::map_t::__t map;
             
-            ivy::push_pop_ident_set::vec_t::__t del;
+            ivy::push_pop_locals::vec_t::__t del;
             
             vector__pos::__t stack;
             
-            void set  (const ivy::ptr< ivy::ident::__t > &id,const __bool &v);
+            void set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::local_info::__t &v);
             
             __bool mem  (const ivy::ptr< ivy::ident::__t > &id) const;
+            
+            ivy::local_info::__t value  (const ivy::ptr< ivy::ident::__t > &id) const;
             
             void push ();
             
@@ -8866,8 +8971,8 @@ namespace ivy
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return ivy::push_pop_ident_set::map_t::__t::__hash() (x . map) +
-                        ivy::push_pop_ident_set::vec_t::__t::__hash() (x . del) +
+                    return ivy::push_pop_locals::map_t::__t::__hash() (x . map) +
+                        ivy::push_pop_locals::vec_t::__t::__hash() (x . del) +
                         vector__pos::__t::__hash() (x . stack);
                 }
             };
@@ -8883,7 +8988,7 @@ namespace ivy
     {
         struct __t
         {
-            ivy::push_pop_ident_set::__t map;
+            ivy::push_pop_locals::__t map;
             
             void push ();
             
@@ -8896,6 +9001,10 @@ namespace ivy
             void pop ();
             
             __bool mem  (const ivy::ptr< ivy::ident::__t > &id) const;
+            
+            ivy::local_info::__t value  (const ivy::ptr< ivy::ident::__t > &id) const;
+            
+            void set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::local_info::__t &value);
             
              __t () {}
              __t  (long long value) {}
@@ -8918,7 +9027,7 @@ namespace ivy
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return ivy::push_pop_ident_set::__t::__hash() (x . map);
+                    return ivy::push_pop_locals::__t::__hash() (x . map);
                 }
             };
             
@@ -11788,6 +11897,8 @@ namespace cpp
             
             __bool is_ref;
             
+            __bool is_rvalue;
+            
             void encode  (pretty::__t &b,const priority::__t &prio) const;
             
              __t () {}
@@ -11801,7 +11912,7 @@ namespace cpp
             ivy::native_bool operator ==  (const __t &other) const
             {
                 return _type == other . _type & name == other . name & is_const == other . is_const
-                    & is_ref == other . is_ref;
+                    & is_ref == other . is_ref & is_rvalue == other . is_rvalue;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -11809,7 +11920,7 @@ namespace cpp
             bool __is_zero () const
             {
                 return _type . __is_zero() & name . __is_zero() & is_const . __is_zero() &
-                    is_ref . __is_zero();
+                    is_ref . __is_zero() & is_rvalue . __is_zero();
             }
             struct __hash
             {
@@ -11817,7 +11928,8 @@ namespace cpp
                 {
                     return ivy::ptr< cpp::expr::__t >::__hash() (x . _type) +
                         ivy::ptr< cpp::expr::__t >::__hash() (x . name) +
-                        __bool::__hash() (x . is_const) + __bool::__hash() (x . is_ref);
+                        __bool::__hash() (x . is_const) + __bool::__hash() (x . is_ref) +
+                        __bool::__hash() (x . is_rvalue);
                 }
             };
             
@@ -12471,6 +12583,8 @@ namespace cpp
             
             __bool is_virtual;
             
+            __bool is_default;
+            
             ivy::ptr< annot::__t > ann;
             
             void encode  (pretty::__t &b,const priority::__t &prio) const;
@@ -12488,8 +12602,8 @@ namespace cpp
             ivy::native_bool operator ==  (const __t &other) const
             {
                 return ftype == other . ftype & has_body == other . has_body & body == other . body
-                    & is_static == other . is_static & is_virtual == other . is_virtual & ann ==
-                    other . ann;
+                    & is_static == other . is_static & is_virtual == other . is_virtual & is_default
+                    == other . is_default & ann == other . ann;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -12497,7 +12611,8 @@ namespace cpp
             bool __is_zero () const
             {
                 return ftype . __is_zero() & has_body . __is_zero() & body . __is_zero() &
-                    is_static . __is_zero() & is_virtual . __is_zero() & ann . __is_zero();
+                    is_static . __is_zero() & is_virtual . __is_zero() & is_default . __is_zero() &
+                    ann . __is_zero();
             }
             struct __hash
             {
@@ -12507,6 +12622,7 @@ namespace cpp
                         __bool::__hash() (x . has_body) +
                         ivy::ptr< cpp::stmt::__t >::__hash() (x . body) +
                         __bool::__hash() (x . is_static) + __bool::__hash() (x . is_virtual) +
+                        __bool::__hash() (x . is_default) +
                         ivy::ptr< annot::__t >::__hash() (x . ann);
                 }
             };
@@ -13522,7 +13638,7 @@ namespace ivy
             vector__ivy__lvalue_count::__t dead;
             
             
-            // The set of local variables in scope
+            // Tracks the local variables in scope
             
             ivy::local_tracker::__t locals;
             
@@ -13853,6 +13969,13 @@ namespace ivy
     void unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t &st);
     
 }
+// A dead lvalue can be converted to an rvalue, which may allow the
+// C++ compiler to use a move rather than a copy.
+namespace ivy
+{
+    void make_rvalue_if_dead  (const ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &inp);
+    
+}
 // Translate an action call to C++. This is complicated, because we have
 // to apply the action prototype and deal with call-by-reference.
 //
@@ -13915,6 +14038,19 @@ namespace ivy
         vector__ivy__access_path::__t &paths);
     
 }
+// Here, we find all of the lvalues that are dead after evaluation
+// of an expression that references a given list of access paths.  The
+// paramer `es` lists the lvalues that are assigned after
+// evaluation (and thus are dead even if they are globals). We add
+// to this all of the locals that are referenced in the expression
+// and known to be dead because they are not subsequently referenced.
+//
+// For each dead lvalue, we store a count in `st.dead` of the
+// the number of path references in the expression that may alias with
+// the lvalue. When compiling the expression, this count allows us to determine when
+// the last possible reference that may alias with the dead lvalue as been reached.
+// At this point the lvalue may be passed by non-const reference or moved, since
+// its value is no longer needed.
 namespace ivy
 {
     void kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,const
@@ -13930,6 +14066,12 @@ namespace ivy
 {
     void fix_variant_arg  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< cpp::expr::__t > &rhs,const
         ivy::tocppst::__t &st);
+    
+}
+// Given a list of referenced paths, update the live locals.
+namespace ivy
+{
+    void update_live  (const vector__ivy__access_path::__t &paths,ivy::tocppst::__t &st);
     
 }
 // The full name of a C++ function depends on whether it is a member function.
@@ -14012,6 +14154,8 @@ namespace ivy
 // These are:
 //
 // (1) A default constructor
+// (1a) A default copy constructor
+// (1b) A default move constructor
 // (2) A constructor from (signed or unsigned) long long.
 // (3) A conversion to size_t
 // (4) A static predicate __is_seq
@@ -14037,6 +14181,24 @@ namespace ivy
 namespace ivy
 {
     cpp::funcdecl::__t make_upcast_method  (const cpp::structdecl::__t &t);
+    
+}
+// Add a default constructor to a class. The default constructor looks
+// like this:
+//
+//     name([const] name & [&]) = default;
+namespace ivy
+{
+    void add_default_cons  (cpp::structdecl::__t &s,const __bool &is_const,const __bool &is_rvalue);
+    
+}
+// Add a default assignment operator to a class. The default operator looks
+// like this:
+//
+//     name & operator = ([const] name & [&]) = default;
+namespace ivy
+{
+    void add_default_asgn  (cpp::structdecl::__t &s,const __bool &is_const,const __bool &is_rvalue);
     
 }
 // Numeric constructor does nothing (so that 0 gives default value):
@@ -21549,66 +21711,67 @@ void ivy::canon_app  (ivy::ptr< ivy::expr::__t > &s)
         }
     }
 }
-ivy::push_pop_ident_set::map_t::__t ivy::push_pop_ident_set::map_t::empty ()
+ivy::push_pop_locals::map_t::__t ivy::push_pop_locals::map_t::empty ()
 {
-    ivy::push_pop_ident_set::map_t::__t a;
+    ivy::push_pop_locals::map_t::__t a;
     {}
     return a;
 }
-void ivy::push_pop_ident_set::map_t::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const __bool &y)
+void ivy::push_pop_locals::map_t::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::local_info::__t
+    &y)
 {
-    ivy::push_pop_ident_set::map_t::rec z;
+    ivy::push_pop_locals::map_t::rec z;
     z . full = ivy::native_bool (true);
     z . val = y;
     (*this) . map (x) = z;
 }
-void ivy::push_pop_ident_set::map_t::__t::get  (const ivy::ptr< ivy::ident::__t > &x,__bool &y)
-    const {
-    ivy::push_pop_ident_set::map_t::rec z;
+void ivy::push_pop_locals::map_t::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::local_info::__t
+    &y) const {
+    ivy::push_pop_locals::map_t::rec z;
     z = (*this) . map (x);
     if (z . full) {
         y = z . val;
     }
 }
-__bool ivy::push_pop_ident_set::map_t::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
+__bool ivy::push_pop_locals::map_t::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
 {
     __bool res;
     res = (*this) . map (x) . full;
     return res;
 }
-void ivy::push_pop_ident_set::map_t::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
+void ivy::push_pop_locals::map_t::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
 {
-    ivy::push_pop_ident_set::map_t::rec z;
+    ivy::push_pop_locals::map_t::rec z;
     (*this) . map (x) = z;
 }
-__bool ivy::push_pop_ident_set::map_t::__t::value  (const ivy::ptr< ivy::ident::__t > &x) const
-{
-    __bool y;
+ivy::local_info::__t ivy::push_pop_locals::map_t::__t::value  (const ivy::ptr< ivy::ident::__t > &x)
+    const {
+    ivy::local_info::__t y;
     y = (*this) . map (x) . val;
     return y;
 }
-pos::__t ivy::push_pop_ident_set::vec_t::__t::begin () const
+pos::__t ivy::push_pop_locals::vec_t::__t::begin () const
 {
     pos::__t res;
     res = pos::__t (0);
     return res;
 }
-ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::empty ()
+ivy::push_pop_locals::vec_t::__t ivy::push_pop_locals::vec_t::empty ()
 {
-    ivy::push_pop_ident_set::vec_t::__t res;
+    ivy::push_pop_locals::vec_t::__t res;
     {}
     return res;
 }
-void ivy::push_pop_ident_set::vec_t::__t::set  (const pos::__t &i,const ivy::ptr< ivy::ident::__t >
-    &v) {
+void ivy::push_pop_locals::vec_t::__t::set  (const pos::__t &i,const ivy::push_pop_locals::undo &v)
+{
     (*this) . value (i) = v;
 }
-void ivy::push_pop_ident_set::vec_t::__t::append  (const ivy::ptr< ivy::ident::__t > &c)
+void ivy::push_pop_locals::vec_t::__t::append  (const ivy::push_pop_locals::undo &c)
 {
     (*this) . value ((*this) . end) = c;
     (*this) . end = (*this) . end . next();
 }
-void ivy::push_pop_ident_set::vec_t::__t::extend  (const ivy::push_pop_ident_set::vec_t::__t &x)
+void ivy::push_pop_locals::vec_t::__t::extend  (const ivy::push_pop_locals::vec_t::__t &x)
 {
     pos::__t idx;
     idx = x . begin();
@@ -21617,20 +21780,20 @@ void ivy::push_pop_ident_set::vec_t::__t::extend  (const ivy::push_pop_ident_set
         idx = idx . next();
     }
 }
-void ivy::push_pop_ident_set::vec_t::__t::resize  (const pos::__t &end)
+void ivy::push_pop_locals::vec_t::__t::resize  (const pos::__t &end)
 {
     ivy::resize ((*this) . value,end);
     (*this) . end = end;
 }
-ivy::ptr< ivy::ident::__t > ivy::push_pop_ident_set::vec_t::__t::back () const
+ivy::push_pop_locals::undo ivy::push_pop_locals::vec_t::__t::back () const
 {
-    ivy::ptr< ivy::ident::__t > y;
+    ivy::push_pop_locals::undo y;
     if ((*this) . end > pos::__t (0)) {
         y = (*this) . value ((*this) . end . prev());
     }
     return y;
 }
-void ivy::push_pop_ident_set::vec_t::__t::pop_back ()
+void ivy::push_pop_locals::vec_t::__t::pop_back ()
 {
     if ((*this) . end > pos::__t (0))
     {
@@ -21639,10 +21802,10 @@ void ivy::push_pop_ident_set::vec_t::__t::pop_back ()
         (*this) . resize (size);
     }
 }
-ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::__t::segment  (const pos::__t &beg,const
+ivy::push_pop_locals::vec_t::__t ivy::push_pop_locals::vec_t::__t::segment  (const pos::__t &beg,const
     pos::__t &en) const
 {
-    ivy::push_pop_ident_set::vec_t::__t res;
+    ivy::push_pop_locals::vec_t::__t res;
     {
         pos::__t idx;
         idx = beg;
@@ -21654,7 +21817,7 @@ ivy::push_pop_ident_set::vec_t::__t ivy::push_pop_ident_set::vec_t::__t::segment
     }
     return res;
 }
-void ivy::push_pop_ident_set::vec_t::__t::reverse ()
+void ivy::push_pop_locals::vec_t::__t::reverse ()
 {
     pos::__t idx;
     idx = (*this) . begin();
@@ -21662,7 +21825,7 @@ void ivy::push_pop_ident_set::vec_t::__t::reverse ()
     jdx = (*this) . end . prev();
     while (idx < jdx)
     {
-        ivy::ptr< ivy::ident::__t > tmp;
+        ivy::push_pop_locals::undo tmp;
         tmp = (*this) . value (idx);
         (*this) . value (idx) = (*this) . value (jdx);
         (*this) . value (jdx) = tmp;
@@ -21670,33 +21833,48 @@ void ivy::push_pop_ident_set::vec_t::__t::reverse ()
         idx = idx . next();
     }
 }
-void ivy::push_pop_ident_set::__t::set  (const ivy::ptr< ivy::ident::__t > &id,const __bool &v)
+void ivy::push_pop_locals::__t::set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::local_info::__t
+    &v)
 {
-    if (! (*this) . map . mem (id)) {
-        (*this) . del . append (id);
+    ivy::push_pop_locals::undo und;
+    und . id = id;
+    und . present = (*this) . map . mem (id);
+    if (und . present) {
+        und . value = (*this) . map . value (id);
     }
+    (*this) . del . append (und);
     (*this) . map . set (id,v);
 }
-__bool ivy::push_pop_ident_set::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) const
+__bool ivy::push_pop_locals::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) const
 {
     __bool res;
     res = (*this) . map . mem (id);
     return res;
 }
-void ivy::push_pop_ident_set::__t::push () {
+ivy::local_info::__t ivy::push_pop_locals::__t::value  (const ivy::ptr< ivy::ident::__t > &id) const
+{
+    ivy::local_info::__t res;
+    res = (*this) . map . value (id);
+    return res;
+}
+void ivy::push_pop_locals::__t::push () {
     (*this) . stack . append ((*this) . del . end);
 }
-void ivy::push_pop_ident_set::__t::pop ()
+void ivy::push_pop_locals::__t::pop ()
 {
     pos::__t begin;
     begin = (*this) . stack . back();
     (*this) . stack . pop_back();
     while ((*this) . del . end > begin)
     {
-        ivy::ptr< ivy::ident::__t > x;
+        ivy::push_pop_locals::undo x;
         x = (*this) . del . back();
+        if (x . present) {
+            (*this) . map . set (x . id,x . value);
+        } else {
+            (*this) . map . remove (x . id);
+        }
         (*this) . del . pop_back();
-        (*this) . map . remove (x);
     }
 }
 void ivy::local_tracker::__t::push () {
@@ -21707,7 +21885,8 @@ void ivy::local_tracker::__t::add_var  (const ivy::ptr< ivy::expr::__t > &typing
     ivy::ptr< ivy::expr::__t > v;
     v = typing -> is (ivy::verb::__t (ivy::verb::colon)) ?
         typing -> get_arg (vector__ivy__expr::domain::__t (0)) : typing;
-    (*this) . map . set (v -> get_name(),ivy::native_bool (true));
+    ivy::local_info::__t li;
+    (*this) . map . set (v -> get_name(),li);
 }
 void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
 {
@@ -21721,7 +21900,8 @@ void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
         ivy::ptr< ivy::expr::__t > v;
         v = typing -> is (ivy::verb::__t (ivy::verb::colon)) ?
             typing -> get_arg (vector__ivy__expr::domain::__t (0)) : typing;
-        (*this) . map . set (v -> get_name(),ivy::native_bool (true));
+        ivy::local_info::__t li;
+        (*this) . map . set (v -> get_name(),li);
         idx = idx . next();
     }
 }
@@ -21740,6 +21920,16 @@ __bool ivy::local_tracker::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) con
     __bool res;
     res = (*this) . map . mem (id);
     return res;
+}
+ivy::local_info::__t ivy::local_tracker::__t::value  (const ivy::ptr< ivy::ident::__t > &id) const
+{
+    ivy::local_info::__t res;
+    res = (*this) . map . value (id);
+    return res;
+}
+void ivy::local_tracker::__t::set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::local_info::__t
+    &value) {
+    (*this) . map . set (id,value);
 }
 void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st)
 {
@@ -25445,6 +25635,9 @@ void cpp::simpletype::__t::encode  (pretty::__t &b,const priority::__t &prio) co
     if ((*this) . is_ref) {
         b . extend (ivy::from_str< str::__t > ("&"));
     }
+    if ((*this) . is_rvalue) {
+        b . extend (ivy::from_str< str::__t > ("&"));
+    }
     (*this) . name -> encode (b,priority::__t (99));
 }
 void cpp::simpletype::parse  (pstate::__t &st,const priority::__t &prio,cpp::simpletype::__t &res)
@@ -25877,8 +26070,8 @@ void cpp::vardecl::__t::encode  (pretty::__t &b,const priority::__t &prio) const
         b . extend (ivy::from_str< str::__t > ("="));
         b . extend (ivy::from_str< str::__t > (" "));
         (*this) . initval -> encode (b,priority::__t (0));
-        b . extend (ivy::from_str< str::__t > (";"));
     }
+    b . extend (ivy::from_str< str::__t > (";"));
     b . unnest();
     b . newline();
 }
@@ -25920,7 +26113,15 @@ void cpp::funcdecl::__t::encode  (pretty::__t &b,const priority::__t &prio) cons
         b . unnest();
         b . extend (ivy::from_str< str::__t > (" "));
         (*this) . body -> encode (b,priority::__t (2));
-    } else {
+    } else
+    {
+        if ((*this) . is_default)
+        {
+            b . extend (ivy::from_str< str::__t > (" "));
+            b . extend (ivy::from_str< str::__t > ("="));
+            b . extend (ivy::from_str< str::__t > (" "));
+            b . extend (ivy::from_str< str::__t > ("default"));
+        }
         b . extend (ivy::from_str< str::__t > (";"));
         b . unnest();
         b . newline();
@@ -27168,6 +27369,15 @@ void ivy::unown_func_args  (const vector__ivy__expr::__t &args,ivy::tocppst::__t
         idx = idx . next();
     }
 }
+void ivy::make_rvalue_if_dead  (const ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &inp)
+{
+    if (ivy::is_dead (inp,st,pos::__t (1)))
+    {
+        inp =
+            cpp::app::make1 (cpp::symbol::makestr (ivy::from_str< str::__t > ("std::move"),inp ->
+                        get_ann()),inp,inp -> get_ann());
+    }
+}
 void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy__expr::__t &inputs,const
     ivy::ptr< annot::__t > &ann,ivy::tocppst::__t &st,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -27233,6 +27443,10 @@ void ivy::call_to_cpp  (const ivy::ptr< ivy::expr::__t > &func,const vector__ivy
                 }
                 if (parg . is_output) {
                     ret_vals . append (out);
+                }
+            } else {
+                if (parg . is_input & ! parg . is_ref) {
+                    ivy::make_rvalue_if_dead (st,inp);
                 }
             }
         }
@@ -27543,6 +27757,24 @@ void ivy::kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,
         ivy::kill_lvalue (es . value (idx),st,paths);
         idx = idx . next();
     }
+    ivy::vector< __bool,ivy::ptr< ivy::ident::__t > > seen;
+    vector__ivy__access_path::domain::__t jdx;
+    jdx = paths . begin();
+    while (jdx < paths . end)
+    {
+        ivy::ptr< ivy::ident::__t > id;
+        id = paths . value (jdx) . elems . value (vector__ivy__ident::domain::__t (0));
+        if (st . locals . mem (id) & ! seen (id))
+        {
+            seen (id) = ivy::native_bool (true);
+            ivy::ptr< annot::__t > ann;
+            if (! st . locals . value (id) . is_live)
+            {
+                ivy::kill_lvalue (ivy::symbol::make (id,ann),st,paths);
+            }
+        }
+        jdx = jdx . next();
+    }
 }
 void ivy::fix_variant_arg  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< cpp::expr::__t > &rhs,const
     ivy::tocppst::__t &st)
@@ -27561,6 +27793,24 @@ void ivy::fix_variant_arg  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< cpp::e
         }
     }
 }
+void ivy::update_live  (const vector__ivy__access_path::__t &paths,ivy::tocppst::__t &st)
+{
+    vector__ivy__access_path::domain::__t idx;
+    idx = paths . begin();
+    while (idx < paths . end)
+    {
+        ivy::ptr< ivy::ident::__t > id;
+        id = paths . value (idx) . elems . value (vector__ivy__ident::domain::__t (0));
+        if (st . locals . mem (id))
+        {
+            ivy::local_info::__t li;
+            li = st . locals . value (id);
+            li . is_live = ivy::native_bool (true);
+            st . locals . set (id,li);
+        }
+        idx = idx . next();
+    }
+}
 void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     vector__ivy__access_path::__t paths;
@@ -27571,20 +27821,24 @@ void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     st . outputs = ivy::comma::unfold_left ((*this) . lhs);
     ivy::kill_lvalues (st . outputs,st,paths);
     (*this) . rhs -> to_cpp (st,res . rhs);
-    if (res . rhs -> get_verb() != cpp::verb::__t (cpp::verb::empty)) {
+    if (res . rhs -> get_verb() != cpp::verb::__t (cpp::verb::empty))
+    {
+        ivy::make_rvalue_if_dead (st,res . rhs);
         st . add_stmt (res);
     }
     st . get_code ((*this) . ann,resd);
     st . outputs = vector__ivy__expr::empty();
     st . dead = vector__ivy__lvalue_count::empty();
+    ivy::lvalue_paths ((*this) . lhs,paths,ivy::native_bool (true));
+    ivy::update_live (paths,st);
 }
 void ivy::sequence::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     cpp::sequence::__t res;
     res . ann = (*this) . ann;
     st . locals . push_stmt ((*this) . lhs);
-    (*this) . lhs -> to_cpp (st,res . lhs);
     (*this) . rhs -> to_cpp (st,res . rhs);
+    (*this) . lhs -> to_cpp (st,res . lhs);
     st . locals . pop();
     resd = res;
 }
@@ -28028,6 +28282,35 @@ cpp::funcdecl::__t ivy::make_upcast_method  (const cpp::structdecl::__t &t)
     }
     return s;
 }
+void ivy::add_default_cons  (cpp::structdecl::__t &s,const __bool &is_const,const __bool &is_rvalue)
+{
+    cpp::simpletype::__t ty;
+    ty . _type = s . name;
+    ty . is_ref = ivy::native_bool (true);
+    ty . is_const = is_const;
+    ty . is_rvalue = is_rvalue;
+    cpp::funcdecl::__t ncons;
+    ncons . ftype . base . name = s . name;
+    ncons . ftype . args . append (ty);
+    ncons . is_default = ivy::native_bool (true);
+    s . members . append (ncons);
+}
+void ivy::add_default_asgn  (cpp::structdecl::__t &s,const __bool &is_const,const __bool &is_rvalue)
+{
+    cpp::simpletype::__t ty;
+    ty . _type = s . name;
+    ty . is_ref = ivy::native_bool (true);
+    ty . is_const = is_const;
+    ty . is_rvalue = is_rvalue;
+    cpp::funcdecl::__t ncons;
+    ncons . ftype . base . _type = s . name;
+    ncons . ftype . base . name =
+        cpp::symbol::makestr (ivy::from_str< str::__t > ("operator ="),s . ann);
+    ncons . ftype . base . is_ref = ivy::native_bool (true);
+    ncons . ftype . args . append (ty);
+    ncons . is_default = ivy::native_bool (true);
+    s . members . append (ncons);
+}
 void ivy::add_numeric_cons  (cpp::structdecl::__t &s)
 {
     cpp::funcdecl::__t ncons;
@@ -28221,6 +28504,10 @@ void ivy::add_hasher  (cpp::structdecl::__t &s)
 void ivy::add_standard_traits  (cpp::structdecl::__t &s)
 {
     s . members . append (ivy::make_cpp_cons (s));
+    ivy::add_default_cons (s,ivy::native_bool (true),ivy::native_bool (false));
+    ivy::add_default_cons (s,ivy::native_bool (false),ivy::native_bool (true));
+    ivy::add_default_asgn (s,ivy::native_bool (true),ivy::native_bool (false));
+    ivy::add_default_asgn (s,ivy::native_bool (false),ivy::native_bool (true));
     ivy::add_numeric_cons (s);
     ivy::add_sizet_conv (s);
     ivy::add_is_seq_pred (s);

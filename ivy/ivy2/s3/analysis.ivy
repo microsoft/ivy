@@ -416,9 +416,15 @@ object ivy = { ...
 
 module push_pop_map(domain,range) = {
 
-    instance map_t : hash_map(domain,range)
-    instance vec_t : array(pos,domain)        
+    type undo = struct {
+	id : ident,
+	present : bool,
+	value : range
+    }
 
+    instance map_t : hash_map(domain,range)
+    instance vec_t : array(pos,undo)
+    
     type this = struct {
         map : map_t,
         del : vec_t,
@@ -426,14 +432,22 @@ module push_pop_map(domain,range) = {
     }
 
     action set(s:this,id:domain,v:range) returns(s:this) = {
-        if ~s.map.mem(id) {
-            s.del := s.del.append(id);
-        };
+	var und : undo;
+	und.id := id;
+	und.present := s.map.mem(id);
+	if und.present {
+	    und.value := s.map.value(id);
+	}
+        s.del := s.del.append(und);
         s.map := s.map.set(id,v)
     }
 
     action mem(s:this, id:domain) returns (res:bool) = {
         res := s.map.mem(id)
+    }
+
+    action value(s:this, id:domain) returns (res:range) = {
+        res := s.map.value(id)
     }
 
     action push(s:this) returns(s:this) = {
@@ -445,8 +459,12 @@ module push_pop_map(domain,range) = {
         s.stack := s.stack.pop_back;
         while s.del.end > begin {
             var x := s.del.back;
+	    if x.present {
+		s.map := s.map.set(x.id,x.value);
+	    } else {
+		s.map := s.map.remove(x.id);
+	    }
             s.del := s.del.pop_back;
-            s.map := s.map.remove(x);
         }
     }
 }
@@ -456,11 +474,17 @@ object ivy = { ...
     # Local variable tracking
     # =======================
 
-    instance push_pop_ident_set : push_pop_map(ident,bool)
+    object local_info = {
+	type this = struct {
+	    is_live : bool
+	}
+    }
+
+    instance push_pop_locals : push_pop_map(ident,local_info)
 
     object local_tracker = {
         type this = struct {
-            map : push_pop_ident_set
+            map : push_pop_locals
         }
 
         action push(s:this) returns (s:this) = {
@@ -469,7 +493,8 @@ object ivy = { ...
 
         action add_var(s:this,typing:expr) returns (s:this) = {
             var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
-            s.map := s.map.set(v.get_name,true);
+	    var li : local_info;
+            s.map := s.map.set(v.get_name,li);
         }
 
         action push_vars(s:this,typings:vector[expr]) returns (s:this) = {
@@ -478,7 +503,8 @@ object ivy = { ...
             while idx < typings.end {
                 var typing := typings.value(idx);
                 var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
-                s.map := s.map.set(v.get_name,true);
+		var li : local_info;
+                s.map := s.map.set(v.get_name,li);
                 idx := idx.next
             }
         }
@@ -497,7 +523,16 @@ object ivy = { ...
         action mem(s:this,id:ident) returns (res:bool) = {
             res := s.map.mem(id);
         }
+
+	action value(s:this, id:ident) returns (res:local_info) = {
+            res := s.map.value(id);
+	}
+
+	action set(s:this,id:ident,value:local_info) returns (s:this) = {
+	    s.map := s.map.set(id,value);
+	}
     }
+
 
     # Mod/ref computation
     # ===================

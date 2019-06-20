@@ -152,7 +152,7 @@ object ivy = { ...
 
             dead : vector[lvalue_count],
 
-            # The set of local variables in scope
+            # Tracks the local variables in scope
 
             locals : local_tracker,
 
@@ -534,6 +534,15 @@ object ivy = { ...
         }
     }
         
+    # A dead lvalue can be converted to an rvalue, which may allow the
+    # C++ compiler to use a move rather than a copy.
+
+    action make_rvalue_if_dead(st:tocppst,inp:cpp.expr) returns (inp:cpp.expr) = {
+	if is_dead(inp,st,1) {
+	    inp := cpp.app.make1(cpp.symbol.makestr("std::move",inp.get_ann),inp,inp.get_ann);
+	}
+    }
+
     
     # Translate an action call to C++. This is complicated, because we have
     # to apply the action prototype and deal with call-by-reference.
@@ -615,7 +624,9 @@ object ivy = { ...
 		if parg.is_output {
 		    ret_vals := ret_vals.append(out);
 		}
-            };
+            } else if parg.is_input & ~parg.is_ref {
+		inp := make_rvalue_if_dead(st,inp);
+	    }
 	    if parg.is_input & parg.is_ref & ~parg.is_const & ~cpp.expr.eq(inp,out) {
                 st := st.add_stmt(cpp.asgn.make(out,inp,ann));
                 inp := out;
@@ -855,6 +866,20 @@ object ivy = { ...
         }
     }
 
+    # Here, we find all of the lvalues that are dead after evaluation
+    # of an expression that references a given list of access paths.  The
+    # paramer `es` lists the lvalues that are assigned after
+    # evaluation (and thus are dead even if they are globals). We add
+    # to this all of the locals that are referenced in the expression
+    # and known to be dead because they are not subsequently referenced.
+    #
+    # For each dead lvalue, we store a count in `st.dead` of the
+    # the number of path references in the expression that may alias with
+    # the lvalue. When compiling the expression, this count allows us to determine when
+    # the last possible reference that may alias with the dead lvalue as been reached.
+    # At this point the lvalue may be passed by non-const reference or moved, since
+    # its value is no longer needed.
+
     action kill_lvalues(es:vector[expr],st:tocppst,paths:vector[access_path])
         returns (st:tocppst) =
     {
@@ -863,6 +888,20 @@ object ivy = { ...
             st := kill_lvalue(es.value(idx),st,paths);
             idx := idx.next
         }
+
+	var seen : (ident -> bool);
+	var jdx := paths.begin;
+	while jdx < paths.end {
+	    var id := paths.value(jdx).elems.value(0);
+	    if st.locals.mem(id) & ~seen(id) {
+		seen(id) := true;
+		var ann : annot;
+		if ~st.locals.value(id).is_live {
+		    st := kill_lvalue(symbol.make(id,ann),st,paths);
+		}
+	    }
+	    jdx := jdx.next;
+	}
     }
 
     # If the "this" argument of a member function is assign to a
@@ -881,6 +920,21 @@ object ivy = { ...
 	}
     }
     
+    # Given a list of referenced paths, update the live locals.
+
+    action update_live(paths:vector[access_path],st:tocppst) returns (st:tocppst) = {
+	var idx := paths.begin;
+	while idx < paths.end {
+	    var id := paths.value(idx).elems.value(0);
+	    if st.locals.mem(id) {
+		var li := st.locals.value(id);
+		li.is_live := true;
+		st.locals := st.locals.set(id,li);
+	    }
+	    idx := idx.next;
+	}
+    }
+
     # Handling of assignments. For each lvalue on the lhs, we count
     # the number of possibly aliasing references on the rhs, and
     # record this information in `st.outputs`. We then translate the
@@ -902,21 +956,27 @@ object ivy = { ...
 	    (res.rhs,st) := s.rhs.to_cpp(st);
 	    if res.rhs.get_verb ~= cpp.verb.empty {
 #		res.rhs := fix_variant_arg(s.rhs,res.rhs,st);
+		res.rhs := make_rvalue_if_dead(st,res.rhs);
 		st := st.add_stmt(res);  # Don't generate () = ();
 	    };
 	    (st,resd) := st.get_code(s.ann);
             st.outputs := vector[expr].empty;
             st.dead := vector[lvalue_count].empty;
+	    paths := lvalue_paths(s.lhs,paths,true);
+	    st := update_live(paths,st);
         }
     }
+
+    # Notice here that for a sequence `s1;s2`, we compile `s2` first and then `s1`. This
+    # allows the compilation of `s1` to depend on whether locals are live in `s2`.
 
     object sequence = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
             var res : cpp.sequence;
             res.ann := s.ann;
             st.locals := st.locals.push_stmt(s.lhs);
-            (res.lhs,st) := s.lhs.to_cpp(st);
             (res.rhs,st) := s.rhs.to_cpp(st);
+            (res.lhs,st) := s.lhs.to_cpp(st);
             st.locals := st.locals.pop;
             resd := res;
         }
@@ -1291,6 +1351,8 @@ object ivy = { ...
     # These are:
     #
     # (1) A default constructor
+    # (1a) A default copy constructor
+    # (1b) A default move constructor
     # (2) A constructor from (signed or unsigned) long long.
     # (3) A conversion to size_t
     # (4) A static predicate __is_seq
@@ -1330,6 +1392,45 @@ object ivy = { ...
 	s.is_virtual := true;
 	s.ftype.is_const := true;
     }
+
+    # Add a default constructor to a class. The default constructor looks
+    # like this:
+    #
+    #     name([const] name & [&]) = default;
+
+    action add_default_cons(s:cpp.structdecl,is_const:bool,is_rvalue:bool) returns (s:cpp.structdecl) = {
+	var ty : cpp.simpletype;
+	ty._type := s.name;
+	ty.is_ref := true;
+	ty.is_const := is_const;
+	ty.is_rvalue := is_rvalue;
+	var ncons : cpp.funcdecl;
+        ncons.ftype.base.name := s.name;
+	ncons.ftype.args := ncons.ftype.args.append(ty);
+	ncons.is_default := true;
+        s.members := s.members.append(ncons);
+    }
+
+    # Add a default assignment operator to a class. The default operator looks
+    # like this:
+    #
+    #     name & operator = ([const] name & [&]) = default;
+
+    action add_default_asgn(s:cpp.structdecl,is_const:bool,is_rvalue:bool) returns (s:cpp.structdecl) = {
+	var ty : cpp.simpletype;
+	ty._type := s.name;
+	ty.is_ref := true;
+	ty.is_const := is_const;
+	ty.is_rvalue := is_rvalue;
+	var ncons : cpp.funcdecl;
+	ncons.ftype.base._type := s.name;
+        ncons.ftype.base.name := cpp.symbol.makestr("operator =",s.ann);
+	ncons.ftype.base.is_ref := true;
+	ncons.ftype.args := ncons.ftype.args.append(ty);
+	ncons.is_default := true;
+        s.members := s.members.append(ncons);
+    }
+
 
     # Numeric constructor does nothing (so that 0 gives default value):
     #     name(long long) {};
@@ -1502,6 +1603,10 @@ object ivy = { ...
     action add_standard_traits(s:cpp.structdecl) returns (s:cpp.structdecl) = {
 
         s.members := s.members.append(make_cpp_cons(s));
+	s := add_default_cons(s,true,false);
+	s := add_default_cons(s,false,true);
+	s := add_default_asgn(s,true,false);
+	s := add_default_asgn(s,false,true);
         s := add_numeric_cons(s);
         s := add_sizet_conv(s);
         s := add_is_seq_pred(s);

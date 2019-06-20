@@ -51,7 +51,8 @@ object cpp = {
             _type : expr,
             name : expr,
             is_const : bool,
-            is_ref : bool
+            is_ref : bool,
+	    is_rvalue : bool
         }
 
         instance tup : tuple(simpletype,"(",")",verb)
@@ -64,6 +65,9 @@ object cpp = {
             b := s._type.encode(b,0);
             b := b.extend(" ");
             if s.is_ref {
+                b := b.extend("&");
+            };
+            if s.is_rvalue {
                 b := b.extend("&");
             };
             b := s.name.encode(b,99);
@@ -312,8 +316,8 @@ object cpp = {
 		b := b.extend("=");
 		b := b.extend(" ");
 		b := s.initval.encode(b,0);
-		b := b.extend(";");
 	    }
+	    b := b.extend(";");
             b := b.unnest;
             b := b.newline;
         }
@@ -335,6 +339,7 @@ object cpp = {
             body : stmt,
             is_static : bool,
 	    is_virtual : bool,
+	    is_default : bool,
             ann : annot
         }
         action encode(s:this,b:pretty,prio:priority) returns (b:pretty) = {
@@ -355,6 +360,12 @@ object cpp = {
                 b := s.body.encode(b,2);
             }
             else {
+		if s.is_default {
+		    b := b.extend(" ");
+		    b := b.extend("=");
+		    b := b.extend(" ");
+		    b := b.extend("default");
+		}
                 b := b.extend(";");
                 b := b.unnest;
                 b := b.newline;
