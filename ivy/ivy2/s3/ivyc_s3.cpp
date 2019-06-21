@@ -8438,6 +8438,8 @@ namespace ivy
             
             ivy::ident_set::__t is_action;
             
+            ivy::vector< __bool,ivy::ptr< ivy::ident::__t > > is_destructor;
+            
             __bool curried;
             
              __t () {}
@@ -8450,15 +8452,16 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return type_of == other . type_of & is_action == other . is_action & curried ==
-                    other . curried;
+                return type_of == other . type_of & is_action == other . is_action & is_destructor
+                    == other . is_destructor & curried == other . curried;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
             bool __is_zero () const
             {
-                return type_of . __is_zero() & is_action . __is_zero() & curried . __is_zero();
+                return type_of . __is_zero() & is_action . __is_zero() & is_destructor . __is_zero()
+                    & curried . __is_zero();
             }
             struct __hash
             {
@@ -8466,7 +8469,8 @@ namespace ivy
                 {
                     return ivy::symeval::__t::__hash() (x . type_of) +
                         ivy::ident_set::__t::__hash() (x . is_action) +
-                        __bool::__hash() (x . curried);
+                        ivy::vector< __bool,ivy::ptr< ivy::ident::__t > >::__hash() (x .
+                            is_destructor) + __bool::__hash() (x . curried);
                 }
             };
             
@@ -9084,7 +9088,17 @@ namespace ivy
     }
     
 }
-// Get the root modset of an assignment, given its lhs
+// Get the root modset of an assignment, given its lhs. There are several cases:
+//
+// - `x:...`: `x` is a root
+// - `x:...,y:...`: both `x` and `y` are roots    
+// - `(x:...).(f:...)(...)`: `x` is a root (and `f` must be a destructor)
+// - `(f:...)(...)` where `f` is *not* a destructor: `f` is the root
+//
+// The following cases are not allowed on the lhs of an assignment:
+//
+// - `(f:...)(x:...,...)` where `f` is a destructor
+// - `(x:...).(f:...)(...)`: where `f` is not a destructor
 namespace ivy
 {
     void get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref::__t &st);
@@ -21344,10 +21358,14 @@ void ivy::vardc::__t::build_global_types  (ivy::global_types::__t &st) const
         thing = typing -> enc();
         ivy::ptr< ivy::expr::__t > ty;
         ty = typing -> get_arg (vector__ivy__expr::domain::__t (1));
-        if ((*this) . is_destructor & st . curried) {
+        ivy::ptr< ivy::ident::__t > id;
+        id = typing -> get_arg (vector__ivy__expr::domain::__t (0)) -> get_name();
+        if ((*this) . is_destructor & st . curried)
+        {
             ty = ty -> curry();
+            st . is_destructor (id) = ivy::native_bool (true);
         }
-        st . type_of . set (typing -> get_arg (vector__ivy__expr::domain::__t (0)) -> get_name(),ty);
+        st . type_of . set (id,ty);
     }
 }
 ivy::ptr< ivy::expr::__t > ivy::get_formal_type  (const vector__ivy__expr::__t &typings,const ivy::ptr< annot::__t >
@@ -21939,10 +21957,25 @@ void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref:
 {
     if (s . isa< ivy::app::__t >())
     {
-        ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (0)),st);
-        if (s -> is (ivy::verb::__t (ivy::verb::comma)))
+        if (s -> is (ivy::verb::__t (ivy::verb::dot)) | s -> is (ivy::verb::__t (ivy::verb::colon)))
         {
-            ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (1)),st);
+            ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (0)),st);
+        } else
+        {
+            if (s -> is (ivy::verb::__t (ivy::verb::comma)))
+            {
+                ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (0)),st);
+                ivy::get_lhs_roots (s -> get_arg (vector__ivy__expr::domain::__t (1)),st);
+            } else
+            {
+                ivy::ptr< ivy::expr::__t > func;
+                func = s -> get_func();
+                if (func -> is (ivy::verb::__t (ivy::verb::colon)))
+                {
+                    func = func -> get_arg (vector__ivy__expr::domain::__t (0));
+                }
+                ivy::get_lhs_roots (func,st);
+            }
         }
     } else
     {

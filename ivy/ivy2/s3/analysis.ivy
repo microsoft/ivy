@@ -57,6 +57,7 @@ object ivy = { ...
         type this = struct {
             type_of : symeval,
             is_action : ident_set,
+	    is_destructor : (ident->bool),
             curried : bool
         }
     }
@@ -119,10 +120,12 @@ object ivy = { ...
                 var typing := canon_typing(s.typing);
                 var thing := typing.enc;
 	        var ty := typing.get_arg(1);
+		var id := typing.get_arg(0).get_name;
 	        if s.is_destructor & st.curried {
 		    ty := ty.curry;
+		    st.is_destructor(id) := true;
 	        };
-	        st.type_of := st.type_of.set(typing.get_arg(0).get_name,ty);
+	        st.type_of := st.type_of.set(id,ty);
             }
         }
     }        
@@ -557,13 +560,32 @@ object ivy = { ...
 	}
     }
 
-    # Get the root modset of an assignment, given its lhs
+    # Get the root modset of an assignment, given its lhs. There are several cases:
+    #
+    # - `x:...`: `x` is a root
+    # - `x:...,y:...`: both `x` and `y` are roots    
+    # - `(x:...).(f:...)(...)`: `x` is a root (and `f` must be a destructor)
+    # - `(f:...)(...)` where `f` is *not* a destructor: `f` is the root
+    #
+    # The following cases are not allowed on the lhs of an assignment:
+    #
+    # - `(f:...)(x:...,...)` where `f` is a destructor
+    # - `(x:...).(f:...)(...)`: where `f` is not a destructor
+
 
     action get_lhs_roots(s:expr,st:root_mod_ref) returns (st:root_mod_ref) = {
 	if s isa app {
-	    st := get_lhs_roots(s.get_arg(0),st);
-	    if s.is(verb.comma) {
+	    if s.is(verb.dot) | s.is(verb.colon) {
+		st := get_lhs_roots(s.get_arg(0),st);
+	    } else if s.is(verb.comma) {
+		st := get_lhs_roots(s.get_arg(0),st);
 		st := get_lhs_roots(s.get_arg(1),st);
+	    } else {
+		var func := s.get_func;
+		if func.is(verb.colon) {
+		    func := func.get_arg(0);
+		}
+		st := get_lhs_roots(func,st);
 	    }
 	} else if s isa symbol {
 	    var id := s.get_name;
