@@ -204,26 +204,30 @@ object ivy = { ...
     } 
 
 
+    action add_def_id(id:ident,st:flatst,is_global:bool,is_object:bool,ann:annot) returns (st:flatst) = {
+        st.defs := st.defs.set(id,true);
+	if ~is_object {
+	    if st.non_objects.mem(id) {
+		call report_error(redefining.make(id,st.non_objects.value(id)),ann);
+	    }
+	}
+	if ~is_object {
+	    st.non_objects := st.non_objects.set(id,ann);
+	}
+	if is_global {
+            st.globals := st.globals.set(id,true);
+	}	    
+    }
+
     action add_def(s:expr,st:flatst,is_global:bool,is_object:bool) returns (st:flatst) = {
         st.defining := true;
 #        var id := s.get_name.flat(false,st);
 	var e : expr;
 	(e,st) := s.flat(st);
+        st.defining := false;
 	call check_syntax_symbol(e);
 	var id := e.get_name;
-        st.defining := false;
-        st.defs := st.defs.set(id,true);
-	if ~is_object {
-	    if st.non_objects.mem(id) {
-		call report_error(redefining.make(id,st.non_objects.value(id)),s.get_ann);
-	    }
-	}
-	if ~is_object {
-	    st.non_objects := st.non_objects.set(id,s.get_ann);
-	}
-	if is_global {
-            st.globals := st.globals.set(id,true);
-	}	    
+	st := add_def_id(id,st,is_global,is_object,s.get_ann);
     }
 
     action check_defined(name:ident,st:flatst,ann:annot) = {
@@ -630,7 +634,7 @@ object ivy = { ...
                 if lhs isa app {
                     lhs := lhs.get_func;
                 };
-		st.defs := st.defs.set(lhs.get_name.prefix(id),true);
+		st := add_def_id(lhs.get_name.prefix(id),st,false,false,lhs.get_ann);
                 idx := idx.next;
             }
         }

@@ -78,9 +78,122 @@ object ivy = { ...
         cnt : pos
     }
     
+    # A path tree is a map from access paths to vector[ident].
+    # It provides traversal from root to leaf.
+
+    object path_tree = {
+	object elem = {
+	    type this = struct {
+		present : bool,
+		children : vector[ident],
+		leaves : vector[ident]
+	    }
+	}
+	object undo_rec = {
+	    type this = struct {
+		children : vector[ident],
+		leaf : ident
+	    }
+	}
+	var v : vector[undo_rec]
+	type this = struct {
+	    value : (ident -> elem),
+	    undos : vector[undo_rec]
+	}
+
+	# Add an item to the list for a given path
+
+	action add(s:this, path:access_path, item:ident) returns(s:this)= {
+	    var und : undo_rec;
+	    var id := path.elems.value(0);
+	    var idx := path.elems.begin.next;
+	    while idx < path.elems.end {
+		var newid := path.elems.value(idx).prefix(id);
+		if ~s.value(newid).present {
+		    s.value(id).children := s.value(id).children.append(newid);
+		    s.value(newid).present := true;
+		    und.children := und.children.append(id);
+		}
+		id := newid;
+		idx := idx.next;
+	    }
+	    s.value(id).leaves := s.value(id).leaves.append(item);
+	    und.leaf := id;
+	    s.undos := vector[undo_rec].append(s.undos,und);
+	}
+
+	# Undo the last addition of an item
+
+	action undo(s:this) returns(s:this)= {
+	    var und := s.undos.back;
+	    var idx := und.children.begin;
+	    while idx < und.children.end {
+		var id := und.children.value(idx);
+		var cid := s.value(id).children.back;
+		s.value(id).children := s.value(id).children.pop_back;
+		s.value(cid).present := false;
+		idx := idx.next;
+	    }
+	    s.value(und.leaf).leaves := s.value(und.leaf).leaves.pop_back;
+	    s.undos := s.undos.pop_back;
+	}
+	
+	# Collect a list of all items for paths that may alias with the given path.
+
+	action collect(s:this, path:access_path) returns (res:vector[ident]) = {
+	    var id := path.elems.value(0);
+	    var idx := path.elems.begin.next;
+	    while idx < path.elems.end {
+		res := res.extend(s.value(id).leaves);
+		id := path.elems.value(idx).prefix(id);
+		idx := idx.next;
+	    }
+	    res := collect_rec(s,id,res);
+	}
+
+	action collect_rec(s:this, id:ident, res:vector[ident]) returns (res:vector[ident]) = {
+	    var elm := s.value(id);
+	    res := res.extend(elm.leaves);
+	    var idx := elm.children.begin;
+	    while idx < elm.children.end {
+		res := collect_rec(s,elm.children.value(idx),res);
+		idx := idx.next;
+	    }
+	}
+    }
+    
+    # This struct holds the state of the borrowing state machine for
+    # a given local variable. The meanings of the starte variables are:
+    #
+    # - lvalue: the lvalue that is borrowed by the local;
+    # - num_paths: the number of access paths occurring in lvalue
+    # - assigned: the local has been assigned
+    # - saw_ref: one of the access paths in lvalue may be referenced
+    # - saw_mod: one of the access paths in lvalue may be modified
+    # - cancel_const: the local cannot be a const ref
+    # - cancel_non_const: the local cannot be a non-const ref
+    #
+    # The state is updated as code in scope of the borrowing is compiled.
+    # 
+
+    object borrowing = {
+	type this = struct {
+	    lvalue : expr,
+	    num_paths : vector[access_path].domain,
+	    returned : bool,
+	    saw_ref : bool,
+	    saw_mod : bool,
+	    cancel_const : bool,
+	    cancel_non_const : bool,
+	    cond_nesting : pos
+	}
+    }
+
     instance ident_to_declvec : hash_map(ident,vector[decl])
     instance ident_to_cppclass : hash_map(ident,expr)
     instance ident_to_prototype : hash_map(ident,prototype)
+    instance ident_to_borrowing : push_pop_map(ident,borrowing)
+    instance cppident_to_cppexpr : push_pop_map(cpp.ident,cpp.expr)
     
     object tocppst = {
         type this = struct {
@@ -162,8 +275,31 @@ object ivy = { ...
 
 	    # True is compiling rhs of a dot operator
 
-	    dot_rhs : bool
+	    dot_rhs : bool,
 
+	    # Path tree giving path conflicts
+	    
+	    conflicts : path_tree,
+
+	    # States of each current borrowing
+
+	    borrowings : ident_to_borrowing,
+
+	    # Number of borrowins in above
+
+	    num_borrowings : pos,
+
+	    # Map from local variables to borrowed lvalues
+
+	    fix_borrow_map : cppident_to_cppexpr,
+
+	    # Depth of nesting of conditionals
+
+	    cond_nesting : pos,
+
+	    # Depth of nesting of loops
+
+	    loop_nesting : pos
         }
 
         action add_member(s:this,namesp:ident,member:decl) returns (s:this) = {
@@ -248,13 +384,19 @@ object ivy = { ...
     var dummy_vector_access_path : vector[access_path]
 
     # Get a list of all of the lvalue paths occurring in a C++
-    # expression.
+    # expression. The boolean parameters are:
+    #
+    # - ao : arguments only
+    # - ro : roots only
     
-    action lvalue_paths(s:expr,paths:vector[access_path],ao:bool)
+    action lvalue_paths(s:expr,paths:vector[access_path],ao:bool,ro:bool)
         returns (paths:vector[access_path]) =
     {
         if s.is(verb.colon) {
-            paths := lvalue_paths(s.get_arg(0),paths,ao)
+            paths := lvalue_paths(s.get_arg(0),paths,ao,ro)
+        } else if s.is_typed(verb.comma) {
+            paths := lvalue_paths(s.get_arg(0),paths,ao,ro);
+            paths := lvalue_paths(s.get_arg(1),paths,ao,ro)
         } else {
             if ~ao {
                 var path : access_path;
@@ -264,14 +406,14 @@ object ivy = { ...
                     paths := paths.append(path);
                 }
             };
-            if s isa app {
+            if ~ro & s isa app {
                 if s.is(verb.dot) {
-                    paths := lvalue_paths(s.get_arg(0),paths,true);
+                    paths := lvalue_paths(s.get_arg(0),paths,true,false);
                 } else {
                     var args := s.get_args;
                     var idx := args.begin;
                     while idx < args.end {
-                        paths := lvalue_paths(args.value(idx),paths,false);
+                        paths := lvalue_paths(args.value(idx),paths,false,false);
                         idx := idx.next;
                     }
                 }
@@ -813,9 +955,21 @@ object ivy = { ...
     }
 
     object skipst = { ...
-        instantiate generic_to_cpp(ivy.skipst,cpp.skipst,cpp.stmt)
-        action to_cpp_int(s:ivy.skipst,st:tocppst) returns (res:cpp.skipst,st:tocppst) = {
-        }
+#        instantiate generic_to_cpp(skipst,cpp.skipst,cpp.stmt)
+        action to_cpp(s:this,st:tocppst) returns (res:cpp.stmt,st:tocppst) = {
+            var t : cpp.skipst;
+            t.ann := s.ann;
+            res := t
+	}
+    }
+
+    object cpp.stmt = { ...
+        action fix_borrow(s:this,st:ivy.tocppst) returns (res:cpp.stmt,st:ivy.tocppst) = {
+	    res := s;
+	}
+        action setup_fix_borrow(s:this,st:ivy.tocppst) returns (st:ivy.tocppst,ok:bool) = {
+	    ok := false;
+	}
     }
 
     action upcast(lhsty:expr,rhs:expr,st:tocppst) returns (res:cpp.expr,st:tocppst) = {
@@ -879,6 +1033,10 @@ object ivy = { ...
     # the last possible reference that may alias with the dead lvalue as been reached.
     # At this point the lvalue may be passed by non-const reference or moved, since
     # its value is no longer needed.
+    #
+    # Note: any local that is referenced inside a loop but declared outside the
+    # loop is considered live (i.e., it may be referenced in the next loop iteration, and
+    # we do not keep track of this).
 
     action kill_lvalues(es:vector[expr],st:tocppst,paths:vector[access_path])
         returns (st:tocppst) =
@@ -897,7 +1055,7 @@ object ivy = { ...
 		seen(id) := true;
 		var ann : annot;
 		var li := st.locals.value(id);
-		if ~li.is_live & ~li.is_ref{
+		if ~li.is_live & ~li.is_ref & li.loop_nesting >= st.loop_nesting {
 		    st := kill_lvalue(symbol.make(id,ann),st,paths);
 		}
 	    }
@@ -948,7 +1106,7 @@ object ivy = { ...
     object asgn = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
             var paths : vector[access_path];
-            paths := lvalue_paths(s.rhs,paths,false);
+            paths := lvalue_paths(s.rhs,paths,false,false);
             var res : cpp.asgn;
             res.ann := s.ann;
             (res.lhs,st) := s.lhs.to_cpp(st);
@@ -963,9 +1121,209 @@ object ivy = { ...
 	    (st,resd) := st.get_code(s.ann);
             st.outputs := vector[expr].empty;
             st.dead := vector[lvalue_count].empty;
-	    paths := lvalue_paths(s.lhs,paths,true);
+	    paths := lvalue_paths(s.lhs,paths,true,false);
 	    st := update_live(paths,st);
+	    if st.num_borrowings > 0 {
+		var apaths : vector[access_path];
+		apaths := lvalue_paths(s.lhs,apaths,false,true);
+		st := update_borrowings(apaths,true,st);
+		st := check_borrowing_return(s,st);
+		st := update_borrowings(paths,false,st);
+	    }
         }
+    }
+
+    # When borrowing, we sometimes need to strip off "std::move", indicating
+    # that an expression should be treated as an lvalue.
+    
+    action strip_move(s:cpp.expr) returns (s:cpp.expr) = {
+	if s isa cpp.app {
+	    if s.get_func.get_name.to_str = "std::move" {
+		s := s.get_arg(0);
+	    }
+	}
+    }
+
+    # When fixing up borrows, if an assignment is a return of a
+    # borrowed value, we replace it with skip (i.e., since the lhs and
+    # rhs are the same address).
+
+    object cpp.asgn = {...
+        action fix_borrow(s:this,st:ivy.tocppst) returns (res:cpp.stmt,st:ivy.tocppst) = {
+	    res := s;
+	    var rhs := ivy.strip_move(s.rhs);
+	    if rhs isa symbol {
+		var id := rhs.get_name;
+		if st.fix_borrow_map.mem(id) {
+		    var lvalue := st.fix_borrow_map.value(id);
+		    if expr.eq(lvalue,s.lhs) {
+			res := cpp.skipst.make(s.ann);
+		    }
+		}
+	    }
+	}
+    }
+
+    # Set up to borrow an lvalue. A potential borrowing is an
+    # assignment of the form `x := y`, where `x` is a local and `y` is
+    # an lvalue, provided `x` is dead at then end of the current scope
+    # and no action calls occur in `y`. A const borrowing is allowed
+    # if no lvalue occurring in the term `y` is modified
+    # before the last occurrence of `x`. A non-const borrowing is
+    # allowed if no lvalue occurring in `y` is referenced before
+    # the `x` is returned. A return of `x` is an assignment
+    # `y := x`.
+    #
+    # To set up a potential borrowing, we add entry to `st.borrowings` for `local`.
+    # We also the item `x` in the conflict map to every access path in `y`. This
+    # allows us mark failed borrowings in subsequent code.
+    #
+    # Returns `ok=true` if a borrowing was set up.
+    #
+    # Note: a variable referenced in a loop but declared outside the loop is
+    # considered to be live outside the current scope, since it may be live
+    # at the beginning of the next iteration and we do not track this. It might actually
+    # be dead (i.e., if the first reference in the loop is always a full assignment)
+    # but in this case the programmer can be punished for not declaring the variable
+    # inside the loop. 
+
+    action setup_borrowing(s:stmt,st:tocppst) returns (st:tocppst,ok:bool,id:ident) = {
+	if s isa asgn {
+	    var x := s.get_lhs;
+	    if x.is(verb.colon) {
+		x := x.get_arg(0);
+	    }
+	    if x isa symbol {
+		id := x.get_name;
+		if st.locals.mem(id) & ~st.borrowings.mem(id) {
+		    var y := s.get_rhs;
+		    var path : access_path;
+		    path, var is_lvalue := lvalue_path(y,path);
+		    var li := st.locals.value(id);
+		    if is_lvalue & ~li.is_live & ~li.is_ref & li.loop_nesting >= st.loop_nesting {
+			if path.elems.value(0) ~= x.get_name & is_functional(y,st.globals) {
+			    st.borrowings := st.borrowings.push;
+			    st.num_borrowings := st.num_borrowings.next;
+			    var br : borrowing;
+			    br.lvalue := y;
+			    var paths : vector[access_path];
+			    paths := lvalue_paths(y,paths,false,false);
+			    br.num_paths := paths.end;
+			    br.cond_nesting := st.cond_nesting;
+			    st.borrowings := st.borrowings.set(id,br);
+			    var idx := paths.begin;
+			    while idx < paths.end {
+				st.conflicts := st.conflicts.add(paths.value(idx),id);
+				idx := idx.next;
+			    }
+			    ok := true;
+			}
+		    }
+		}
+	    }
+	}
+    }
+
+    # This undoes the effect of `setup_borrowing`, where `id` is the identifier returned
+    # by `setup_borrowing`.
+
+    action unsetup_borrowing(id:ident,st:tocppst) returns (st:tocppst) = {
+	var br := st.borrowings.value(id);
+	var idx := 0  : (vector[access_path].domain);
+	while idx < br.num_paths {
+	    st.conflicts := st.conflicts.undo;
+	    idx := idx.next;
+	}
+	st.borrowings := st.borrowings.pop;
+	st.num_borrowings := st.num_borrowings.prev;
+    }
+    
+    # Whenver we access paths, we update the state of any conflicting
+    # borrowings.  We note in the state of any conficting borrowings
+    # whether we've see a mod or a ref. Note, a mod is any modification of a conflicting
+    # path, while a ref is only a ref of the value of the path. Further, if a borrow variable is
+    # assigned, we note this in the borrowing state and cancel
+    # const reference. Any reference to the borrow variable after a modification
+    # of a conflicting path cancels all borrowing. Any reference to the value of
+    # the borrowed lvalue after the variable assigned cancels all borrowing.
+
+    action update_borrowings(paths:vector[access_path], is_mod:bool, st:tocppst) returns (st:tocppst) = {
+	var idx := paths.begin;
+	while idx < paths.end {
+	    var path := paths.value(idx);
+	    var ids := st.conflicts.collect(path);
+	    var jdx := ids.begin;
+	    while jdx < ids.end {
+		var id := ids.value(jdx);
+		if st.borrowings.mem(id) {
+		    var br := st.borrowings.value(id);
+		    var lpath : access_path;
+		    lpath, var ok := lvalue_path(br.lvalue,lpath);
+		    if path_may_alias(path,lpath) {
+			if br.returned {
+			    br.cancel_non_const := true;
+			}
+		    }
+		    if is_mod & br.saw_ref {
+			br.cancel_non_const := true;
+			br.cancel_const := true;
+		    }			
+		    st.borrowings.map := st.borrowings.map.set(id,br);
+		}
+		jdx := jdx.next;
+	    }
+	    var root := path.elems.value(0);
+	    if st.borrowings.mem(root) {
+		var br := st.borrowings.value(root);
+		if is_mod {
+		    br.cancel_const := true;
+		    if ~br.returned {
+			br.cancel_non_const := true;
+		    }
+		}
+		br.saw_ref := true;
+		st.borrowings.map := st.borrowings.map.set(root,br);
+	    }
+	    idx := idx.next;
+	}
+    }
+
+    # When we see an assignment `y := x`, we look to see if `x` is
+    # borrowing `y`. If so, we mark `x` unassigned. This means that
+    # `x` and `y` are now semantically equal again, so is is safe to
+    # reference 'y'. In this case, we return `ok = true`, meaning that
+    # the assignment should be skipped, as the lhs and rhs are the same
+    # lvalue.
+
+    action check_borrowing_return(s:asgn, st:tocppst) returns (st:tocppst) = {
+	if s.rhs.is(verb.colon) {
+	    var rhs := s.rhs.get_arg(0);
+	    if rhs isa symbol {
+		var id := rhs.get_name;
+		if st.borrowings.mem(id) {
+		    var br := st.borrowings.value(id);
+		    if expr.eq(br.lvalue,s.lhs) & st.cond_nesting = br.cond_nesting {
+			br.returned := true;
+		    }
+		    st.borrowings.map := st.borrowings.map.set(id,br);
+		}
+	    }
+	}
+    }
+    
+    # Turn a local assignment into a reference
+    
+    action make_local_ref(typing:expr,lhs:cpp.stmt,is_const:bool,st:tocppst) returns (res:cpp.stmt,st:tocppst) = {
+	var vst : cpp.varst;
+	(vst.vtype._type,st) := fix_variant_type(typing.get_arg(1),st);
+        vst.vtype.name := lhs.get_lhs;
+        vst.ann := lhs.get_ann;
+	vst.has_initval := true;
+	vst.initval := strip_move(lhs.get_rhs);
+	vst.vtype.is_const := is_const;
+	vst.vtype.is_borrow := true;
+	vst.vtype.is_ref := true;
+	res := vst;
     }
 
     # Notice here that for a sequence `s1;s2`, we compile `s2` first and then `s1`. This
@@ -975,11 +1333,36 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
             var res : cpp.sequence;
             res.ann := s.ann;
-            st.locals := st.locals.push_stmt(s.lhs);
+            st.locals := st.locals.push_stmt(s.lhs,st.loop_nesting);
+	    st, var ok, var bid := setup_borrowing(s.lhs,st);
             (res.rhs,st) := s.rhs.to_cpp(st);
+	    var br:borrowing;
+	    if ok {
+		br := st.borrowings.value(bid);
+		st := unsetup_borrowing(bid,st);
+	    }
             (res.lhs,st) := s.lhs.to_cpp(st);
             st.locals := st.locals.pop;
-            resd := res;
+	    if ok {
+		if ~br.cancel_const | ~br.cancel_non_const {
+		    res.lhs,st := make_local_ref(s.lhs.get_lhs,res.lhs,~br.cancel_const,st);
+		    resd := cpp.sequence.make(res,cpp.skipst.make(s.ann),s.ann);
+		} else {resd := res}
+	    } else {resd := res;}
+        }
+    }
+
+    object cpp.sequence = { ...
+	action fix_borrow(s:this,st:ivy.tocppst) returns (resd:cpp.stmt,st:ivy.tocppst) = {
+            var res : cpp.sequence;
+            res.ann := s.ann;
+            (res.lhs,st) := s.lhs.fix_borrow(st);
+	    st, var ok := s.lhs.setup_fix_borrow(st);
+            (res.rhs,st) := s.rhs.fix_borrow(st);
+	    if ok {
+		st.fix_borrow_map := st.fix_borrow_map.pop;
+	    }
+	    resd := res;
         }
     }
 
@@ -995,16 +1378,36 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
 	    var res : cpp.ifst;
 	    res.ann := s.ann;
+	    var paths : vector[access_path];
+	    paths := lvalue_paths(s.cond,paths,false,false);
+	    if st.num_borrowings > 0 {
+		st := update_borrowings(paths,false,st);
+	    }
             (res.cond,st) := s.cond.to_cpp(st);
             var code := st.code;  # side effects of cond evaluation
 	    st.code := vector[cpp.stmt].empty;
+	    st.cond_nesting := st.cond_nesting.next;
             (res.thenst,st) := s.thenst.to_cpp(st);
             (res.elsest,st) := s.elsest.to_cpp(st);
+	    st.cond_nesting := st.cond_nesting.prev;
 	    resd := res;
             st.code := code;  
 	    (st,resd) := st.wrap_stmt(resd,s.ann);
+	    st := update_live(paths,st);
         }
     }
+
+    object cpp.ifst = { ...
+	action fix_borrow(s:this,st:ivy.tocppst) returns (resd:cpp.stmt,st:ivy.tocppst) = {
+	    var res : cpp.ifst;
+	    res.ann := s.ann;
+	    res.cond := s.cond;
+            (res.thenst,st) := s.thenst.fix_borrow(st);
+            (res.elsest,st) := s.elsest.fix_borrow(st);
+	    resd := res
+
+	}
+    }	    
 
     # Translate "while" statement. We have to account for any side effects in
     # the condition evaluation. For example, suppose we have `while f(x) {s1}`
@@ -1021,10 +1424,19 @@ object ivy = { ...
         action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
 	    var res : cpp.whilest;
 	    res.ann := s.ann;
+	    var paths : vector[access_path];
+	    paths := lvalue_paths(s.cond,paths,false,false);
+	    if st.num_borrowings > 0 {
+		st := update_borrowings(paths,false,st);
+	    }
             (res.cond,st) := s.cond.to_cpp(st);
             var code := st.code;  # side effects of cond evaluation
 	    st.code := vector[cpp.stmt].empty;
+	    st.cond_nesting := st.cond_nesting.next;
+	    st.loop_nesting := st.loop_nesting.next;
             (res.body,st) := s.body.to_cpp(st);
+	    st.cond_nesting := st.cond_nesting.prev;
+	    st.loop_nesting := st.loop_nesting.prev;
 	    if code.end > 0 {
 		st.code := code;
 		var brkcond := cpp.not.make(res.cond,s.ann);
@@ -1037,17 +1449,41 @@ object ivy = { ...
 	    };
 	    resd := res;
 	    (st,resd) := st.wrap_stmt(resd,s.ann);
+	    st := update_live(paths,st);
         }
     }
+
+    object cpp.whilest = { ...
+	action fix_borrow(s:this,st:ivy.tocppst) returns (resd:cpp.stmt,st:ivy.tocppst) = {
+	    var res : cpp.whilest;
+	    res.ann := s.ann;
+	    res.cond := s.cond;
+            (res.body,st) := s.body.fix_borrow(st);
+	    resd := res
+	}
+    }	    
 
     object varst = { ...
-        instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
-        action to_cpp_int(s:varst,st:tocppst) returns (res:cpp.varst,st:tocppst) = {
+#        instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
+        action to_cpp(s:this,st:tocppst) returns (resd:cpp.stmt,st:tocppst) = {
+            var res : cpp.varst;
+            res.ann := s.ann;
             (res.vtype._type,st) := fix_variant_type(s.name.get_arg(1),st);
             (res.vtype.name,st) := s.name.get_arg(0).to_cpp(st);
+            resd := res;
         }
     }
-
+    
+    object cpp.varst = {
+        action setup_fix_borrow(s:this,st:ivy.tocppst) returns (st:ivy.tocppst,ok:bool) = {
+	    if s.vtype.is_borrow {
+		st.fix_borrow_map := st.fix_borrow_map.push;
+		st.fix_borrow_map := st.fix_borrow_map.set(s.vtype.name.get_name,s.initval);
+		ok := true;
+	    }
+	}
+    }
+    
     object decl = { ...
         action to_cpp(s:this,st:tocppst) returns (res:cpp.decl,st:tocppst)
         action reg_member(s:this,st:tocppst) returns (st:tocppst)
@@ -1151,7 +1587,7 @@ object ivy = { ...
                 argt.is_const := parg.is_const;
                 argt.is_ref := parg.is_ref;
                 (argt._type,st) := fix_variant_type(arg.get_arg(1),st);
-                st.locals := st.locals.add_var(arg,parg.is_ref);
+                st.locals := st.locals.add_var(arg,parg.is_ref,0);
                 (argt.name,st) := arg.get_arg(0).to_cpp(st);
 		if ~cprot & parg.is_copy {
 		    (st,argt.name) := temp_sym(st,s.ann);
@@ -1166,6 +1602,7 @@ object ivy = { ...
 		if s.has_body {
 		    var body :cpp.stmt;
 		    (body,st) := s.body.to_cpp(st);
+		    (body,st) := body.fix_borrow(st);
 		    res.body := body;
 		} else {
 		    res.body := cpp.skipst.make(s.ann);

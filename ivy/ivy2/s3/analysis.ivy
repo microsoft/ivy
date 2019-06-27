@@ -402,6 +402,25 @@ object ivy = { ...
         }
     }
 
+    # Returns true if the term `s` is functional, meaning it contains
+    # no action calls.
+
+    action is_functional(s:expr,gl:global_types) returns (res:bool) = {
+	if s.is(verb.colon) {
+	    res := is_functional(s.get_arg(0),gl);
+	} else if s isa app {
+	    var func, var args := get_app(s);
+	    res := is_functional(func,gl);
+	    var idx := args.begin;
+	    while res & idx < args.end {
+		res := is_functional(args.value(idx),gl);
+		idx := idx.next;
+	    }
+	} else if s isa symbol {
+	    res := ~gl.is_action.mem(s.get_name);
+	}
+    }
+
     # Canonize a function application. If it is in member style,
     # convert it to an ordinary function call.
 
@@ -420,7 +439,7 @@ object ivy = { ...
 module push_pop_map(domain,range) = {
 
     type undo = struct {
-	id : ident,
+	id : domain,
 	present : bool,
 	value : range
     }
@@ -480,7 +499,8 @@ object ivy = { ...
     object local_info = {
 	type this = struct {
 	    is_live : bool,
-	    is_ref : bool
+	    is_ref : bool,
+	    loop_nesting : pos
 	}
     }
 
@@ -495,10 +515,11 @@ object ivy = { ...
             s.map := s.map.push;
         }                
 
-        action add_var(s:this,typing:expr,is_ref:bool) returns (s:this) = {
+        action add_var(s:this,typing:expr,is_ref:bool,loop_nesting:pos) returns (s:this) = {
             var v := typing.get_arg(0) if typing.is(verb.colon) else typing;
 	    var li : local_info;
 	    li.is_ref := is_ref;
+	    li.loop_nesting := loop_nesting;
             s.map := s.map.set(v.get_name,li);
         }
 
@@ -514,10 +535,10 @@ object ivy = { ...
             }
         }
 
-        action push_stmt(s:this,stm:stmt) returns (s:this) = {
+        action push_stmt(s:this,stm:stmt,loop_nesting:pos) returns (s:this) = {
             s.map := s.map.push;
             if stm isa varst {
-                s := s.add_var(stm.get_expr,false);
+                s := s.add_var(stm.get_expr,false,loop_nesting);
             }
         }
 
@@ -600,7 +621,7 @@ object ivy = { ...
     action stmt.mod_roots(s:stmt, st:root_mod_ref) returns (st:root_mod_ref)
 
     action sequence.mod_roots(s:sequence, st:root_mod_ref) returns (st:root_mod_ref) = {
-	st.ignore := st.ignore.push_stmt(s.lhs);
+	st.ignore := st.ignore.push_stmt(s.lhs,0);
 	st := s.lhs.mod_roots(st);
 	st := s.rhs.mod_roots(st);
         st.ignore := st.ignore.pop;

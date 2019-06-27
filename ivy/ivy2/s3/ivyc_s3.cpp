@@ -1409,6 +1409,78 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace path_tree
+    {
+        namespace elem
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace path_tree
+    {
+        namespace undo_rec
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace vector__ivy__path_tree__undo_rec
+{
+    namespace domain
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace vector__ivy__path_tree__undo_rec
+{
+    struct __t;
+    
+}
+namespace ivy
+{
+    namespace path_tree
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace vector__ivy__access_path
+{
+    namespace domain
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace vector__ivy__access_path
+{
+    struct __t;
+    
+}
+namespace ivy
+{
+    namespace borrowing
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
     namespace ident_to_declvec
     {
         struct rec;
@@ -1455,6 +1527,120 @@ namespace ivy
 namespace ivy
 {
     namespace ident_to_prototype
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        struct undo;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace map_t
+        {
+            struct rec;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace map_t
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace vec_t
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        struct __t;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        struct undo;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace map_t
+        {
+            struct rec;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace map_t
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace vec_t
+        {
+            struct __t;
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
     {
         struct __t;
         
@@ -1482,20 +1668,6 @@ namespace ivy
         struct __t;
         
     }
-    
-}
-namespace vector__ivy__access_path
-{
-    namespace domain
-    {
-        struct __t;
-        
-    }
-    
-}
-namespace vector__ivy__access_path
-{
-    struct __t;
     
 }
 namespace pid
@@ -4299,9 +4471,10 @@ namespace ivy
             
             ivy::ptr< annot::__t > get_ann () const;
             
-            void to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const;
             
-            void to_cpp_int  (ivy::tocppst::__t &st,cpp::skipst::__t &res) const;
+            //        instantiate generic_to_cpp(skipst,cpp.skipst,cpp.stmt)
+            
+            void to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const;
             
              __t () {}
              __t  (long long value) {}
@@ -5351,9 +5524,10 @@ namespace ivy
             
             ivy::ptr< ivy::ident::__t > get_ident () const;
             
-            void to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const;
             
-            void to_cpp_int  (ivy::tocppst::__t &st,cpp::varst::__t &res) const;
+            //        instantiate generic_to_cpp(ivy.varst,cpp.varst,cpp.stmt)
+            
+            void to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const;
             
              __t () {}
              __t  (long long value) {}
@@ -8187,6 +8361,12 @@ namespace ivy
 }
 namespace ivy
 {
+    void add_def_id  (const ivy::ptr< ivy::ident::__t > &id,ivy::flatst::__t &st,const __bool &is_global,const
+        __bool &is_object,const ivy::ptr< annot::__t > &ann);
+    
+}
+namespace ivy
+{
     void add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
         __bool &is_object);
     
@@ -8647,6 +8827,13 @@ namespace ivy
         &args);
     
 }
+// Returns true if the term `s` is functional, meaning it contains
+// no action calls.
+namespace ivy
+{
+    __bool is_functional  (const ivy::ptr< ivy::expr::__t > &s,const ivy::global_types::__t &gl);
+    
+}
 // Canonize a function application. If it is in member style,
 // convert it to an ordinary function call.
 namespace ivy
@@ -8664,6 +8851,8 @@ namespace ivy
             
             __bool is_ref;
             
+            pos::__t loop_nesting;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -8674,19 +8863,22 @@ namespace ivy
             }
             ivy::native_bool operator ==  (const __t &other) const
             {
-                return is_live == other . is_live & is_ref == other . is_ref;
+                return is_live == other . is_live & is_ref == other . is_ref & loop_nesting == other
+                    . loop_nesting;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
             }
-            bool __is_zero () const {
-                return is_live . __is_zero() & is_ref . __is_zero();
+            bool __is_zero () const
+            {
+                return is_live . __is_zero() & is_ref . __is_zero() & loop_nesting . __is_zero();
             }
             struct __hash
             {
                 std::size_t operator ()  (const __t &x) const
                 {
-                    return __bool::__hash() (x . is_live) + __bool::__hash() (x . is_ref);
+                    return __bool::__hash() (x . is_live) + __bool::__hash() (x . is_ref) +
+                        pos::__t::__hash() (x . loop_nesting);
                 }
             };
             
@@ -8998,11 +9190,12 @@ namespace ivy
             
             void push ();
             
-            void add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref);
+            void add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref,const pos::__t
+                &loop_nesting);
             
             void push_vars  (const vector__ivy__expr::__t &typings);
             
-            void push_stmt  (const ivy::ptr< ivy::stmt::__t > &stm);
+            void push_stmt  (const ivy::ptr< ivy::stmt::__t > &stm,const pos::__t &loop_nesting);
             
             void pop ();
             
@@ -11229,6 +11422,10 @@ namespace cpp
             
             virtual ivy::ptr< annot::__t > get_ann () const;
             
+            virtual void fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const;
+            
+            virtual void setup_fix_borrow  (ivy::tocppst::__t &st,__bool &ok) const;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -11302,6 +11499,8 @@ namespace cpp
             
             ivy::ptr< annot::__t > get_ann () const;
             
+            void fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -11366,6 +11565,8 @@ namespace cpp
             void encode_int  (pretty::__t &b,const priority::__t &prio) const;
             
             ivy::ptr< annot::__t > get_ann () const;
+            
+            void fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const;
             
              __t () {}
              __t  (long long value) {}
@@ -11592,6 +11793,8 @@ namespace cpp
             
             ivy::ptr< annot::__t > get_ann () const;
             
+            void fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const;
+            
              __t () {}
              __t  (long long value) {}
              operator std::size_t () const {
@@ -11659,6 +11862,8 @@ namespace cpp
             void encode_int  (pretty::__t &b,const priority::__t &prio) const;
             
             ivy::ptr< annot::__t > get_ann () const;
+            
+            void fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const;
             
              __t () {}
              __t  (long long value) {}
@@ -11915,6 +12120,8 @@ namespace cpp
             
             __bool is_rvalue;
             
+            __bool is_borrow;
+            
             void encode  (pretty::__t &b,const priority::__t &prio) const;
             
              __t () {}
@@ -11928,7 +12135,8 @@ namespace cpp
             ivy::native_bool operator ==  (const __t &other) const
             {
                 return _type == other . _type & name == other . name & is_const == other . is_const
-                    & is_ref == other . is_ref & is_rvalue == other . is_rvalue;
+                    & is_ref == other . is_ref & is_rvalue == other . is_rvalue & is_borrow == other
+                    . is_borrow;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -11936,7 +12144,7 @@ namespace cpp
             bool __is_zero () const
             {
                 return _type . __is_zero() & name . __is_zero() & is_const . __is_zero() &
-                    is_ref . __is_zero() & is_rvalue . __is_zero();
+                    is_ref . __is_zero() & is_rvalue . __is_zero() & is_borrow . __is_zero();
             }
             struct __hash
             {
@@ -11945,7 +12153,7 @@ namespace cpp
                     return ivy::ptr< cpp::expr::__t >::__hash() (x . _type) +
                         ivy::ptr< cpp::expr::__t >::__hash() (x . name) +
                         __bool::__hash() (x . is_const) + __bool::__hash() (x . is_ref) +
-                        __bool::__hash() (x . is_rvalue);
+                        __bool::__hash() (x . is_rvalue) + __bool::__hash() (x . is_borrow);
                 }
             };
             
@@ -12156,6 +12364,8 @@ namespace cpp
             void encode  (pretty::__t &b,const priority::__t &prio) const;
             
             void encode_int  (pretty::__t &b,const priority::__t &prio) const;
+            
+            void setup_fix_borrow  (ivy::tocppst::__t &st,__bool &ok) const;
             
              __t () {}
              __t  (long long value) {}
@@ -13180,6 +13390,411 @@ namespace ivy
 }
 namespace ivy
 {
+    namespace path_tree
+    {
+        namespace elem
+        {
+            struct __t
+            {
+                __bool present;
+                
+                vector__ivy__ident::__t children;
+                
+                vector__ivy__ident::__t leaves;
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const
+                {
+                    return present == other . present & children == other . children & leaves ==
+                        other . leaves;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const
+                {
+                    return present . __is_zero() & children . __is_zero() & leaves . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return __bool::__hash() (x . present) +
+                            vector__ivy__ident::__t::__hash() (x . children) +
+                            vector__ivy__ident::__t::__hash() (x . leaves);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace path_tree
+    {
+        namespace undo_rec
+        {
+            struct __t
+            {
+                vector__ivy__ident::__t children;
+                
+                ivy::ptr< ivy::ident::__t > leaf;
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const
+                {
+                    return children == other . children & leaf == other . leaf;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return children . __is_zero() & leaf . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return vector__ivy__ident::__t::__hash() (x . children) +
+                            ivy::ptr< ivy::ident::__t >::__hash() (x . leaf);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace vector__ivy__path_tree__undo_rec
+{
+    namespace domain
+    {
+        struct __t : ivy::native_unsigned< size_t >
+        {
+            vector__ivy__path_tree__undo_rec::domain::__t next () const;
+            
+            vector__ivy__path_tree__undo_rec::domain::__t prev () const;
+            
+             __t () {}
+             __t  (long long value) : ivy::native_unsigned< size_t > (value) {}
+             __t  (const ivy::native_unsigned< size_t > &value) :
+                ivy::native_unsigned< size_t > (value) {}
+             operator ivy::native_unsigned< size_t > () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace vector__ivy__path_tree__undo_rec
+{
+    struct __t
+    {
+        ivy::vector< ivy::path_tree::undo_rec::__t,vector__ivy__path_tree__undo_rec::domain::__t >
+            value;
+        
+        vector__ivy__path_tree__undo_rec::domain::__t end;
+        
+        vector__ivy__path_tree__undo_rec::domain::__t begin () const;
+        
+        void set  (const vector__ivy__path_tree__undo_rec::domain::__t &i,const ivy::path_tree::undo_rec::__t
+            &v);
+        
+        void append  (const ivy::path_tree::undo_rec::__t &c);
+        
+        void extend  (const vector__ivy__path_tree__undo_rec::__t &x);
+        
+        void resize  (const vector__ivy__path_tree__undo_rec::domain::__t &end);
+        
+        ivy::path_tree::undo_rec::__t back () const;
+        
+        void pop_back ();
+        
+        vector__ivy__path_tree__undo_rec::__t segment  (const vector__ivy__path_tree__undo_rec::domain::__t
+            &beg,const vector__ivy__path_tree__undo_rec::domain::__t &en) const;
+        
+        void reverse ();
+        
+         __t () {}
+         __t  (long long value) {}
+         operator std::size_t () const {
+            return 0;
+        }
+        static bool __is_seq () {
+            return false;
+        }
+        ivy::native_bool operator ==  (const __t &other) const
+        {
+            return value == other . value & end == other . end;
+        }
+        ivy::native_bool operator !=  (const __t &other) const {
+            return ! ((*this) == other);
+        }
+        bool __is_zero () const {
+            return value . __is_zero() & end . __is_zero();
+        }
+        struct __hash
+        {
+            std::size_t operator ()  (const __t &x) const
+            {
+                return
+                    ivy::vector< ivy::path_tree::undo_rec::__t,vector__ivy__path_tree__undo_rec::domain::__t >::__hash()
+                        (x . value) +
+                    vector__ivy__path_tree__undo_rec::domain::__t::__hash() (x . end);
+            }
+        };
+        
+    };
+    
+}
+namespace vector__ivy__path_tree__undo_rec
+{
+    vector__ivy__path_tree__undo_rec::__t empty ();
+    
+}
+namespace ivy
+{
+    namespace path_tree
+    {
+        vector__ivy__path_tree__undo_rec::__t v;
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace path_tree
+    {
+        struct __t
+        {
+            ivy::vector< ivy::path_tree::elem::__t,ivy::ptr< ivy::ident::__t > > value;
+            
+            vector__ivy__path_tree__undo_rec::__t undos;
+            
+            
+            // Add an item to the list for a given path
+            
+            void add  (const ivy::access_path::__t &path,const ivy::ptr< ivy::ident::__t > &item);
+            
+            
+            // Undo the last addition of an item
+            
+            void undo ();
+            
+            
+            // Collect a list of all items for paths that may alias with the given path.
+            
+            vector__ivy__ident::__t collect  (const ivy::access_path::__t &path) const;
+            
+            void collect_rec  (const ivy::ptr< ivy::ident::__t > &id,vector__ivy__ident::__t &res)
+                const;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return value == other . value & undos == other . undos;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const {
+                return value . __is_zero() & undos . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return
+                        ivy::vector< ivy::path_tree::elem::__t,ivy::ptr< ivy::ident::__t > >::__hash()
+                            (x . value) +
+                        vector__ivy__path_tree__undo_rec::__t::__hash() (x . undos);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace vector__ivy__access_path
+{
+    namespace domain
+    {
+        struct __t : ivy::native_unsigned< size_t >
+        {
+            vector__ivy__access_path::domain::__t next () const;
+            
+            vector__ivy__access_path::domain::__t prev () const;
+            
+             __t () {}
+             __t  (long long value) : ivy::native_unsigned< size_t > (value) {}
+             __t  (const ivy::native_unsigned< size_t > &value) :
+                ivy::native_unsigned< size_t > (value) {}
+             operator ivy::native_unsigned< size_t > () const {
+                return (*this);
+            }
+        };
+        
+    }
+    
+}
+namespace vector__ivy__access_path
+{
+    struct __t
+    {
+        ivy::vector< ivy::access_path::__t,vector__ivy__access_path::domain::__t > value;
+        
+        vector__ivy__access_path::domain::__t end;
+        
+        vector__ivy__access_path::domain::__t begin () const;
+        
+        void set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t &v);
+        
+        void append  (const ivy::access_path::__t &c);
+        
+        void extend  (const vector__ivy__access_path::__t &x);
+        
+        void resize  (const vector__ivy__access_path::domain::__t &end);
+        
+        ivy::access_path::__t back () const;
+        
+        void pop_back ();
+        
+        vector__ivy__access_path::__t segment  (const vector__ivy__access_path::domain::__t &beg,const
+            vector__ivy__access_path::domain::__t &en) const;
+        
+        void reverse ();
+        
+         __t () {}
+         __t  (long long value) {}
+         operator std::size_t () const {
+            return 0;
+        }
+        static bool __is_seq () {
+            return false;
+        }
+        ivy::native_bool operator ==  (const __t &other) const
+        {
+            return value == other . value & end == other . end;
+        }
+        ivy::native_bool operator !=  (const __t &other) const {
+            return ! ((*this) == other);
+        }
+        bool __is_zero () const {
+            return value . __is_zero() & end . __is_zero();
+        }
+        struct __hash
+        {
+            std::size_t operator ()  (const __t &x) const
+            {
+                return
+                    ivy::vector< ivy::access_path::__t,vector__ivy__access_path::domain::__t >::__hash()
+                        (x . value) + vector__ivy__access_path::domain::__t::__hash() (x . end);
+            }
+        };
+        
+    };
+    
+}
+namespace vector__ivy__access_path
+{
+    vector__ivy__access_path::__t empty ();
+    
+}
+namespace ivy
+{
+    namespace borrowing
+    {
+        struct __t
+        {
+            ivy::ptr< ivy::expr::__t > lvalue;
+            
+            vector__ivy__access_path::domain::__t num_paths;
+            
+            __bool returned;
+            
+            __bool saw_ref;
+            
+            __bool saw_mod;
+            
+            __bool cancel_const;
+            
+            __bool cancel_non_const;
+            
+            pos::__t cond_nesting;
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return lvalue == other . lvalue & num_paths == other . num_paths & returned == other
+                    . returned & saw_ref == other . saw_ref & saw_mod == other . saw_mod &
+                    cancel_const == other . cancel_const & cancel_non_const == other .
+                    cancel_non_const & cond_nesting == other . cond_nesting;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return lvalue . __is_zero() & num_paths . __is_zero() & returned . __is_zero() &
+                    saw_ref . __is_zero() & saw_mod . __is_zero() & cancel_const . __is_zero() &
+                    cancel_non_const . __is_zero() & cond_nesting . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ptr< ivy::expr::__t >::__hash() (x . lvalue) +
+                        vector__ivy__access_path::domain::__t::__hash() (x . num_paths) +
+                        __bool::__hash() (x . returned) + __bool::__hash() (x . saw_ref) +
+                        __bool::__hash() (x . saw_mod) + __bool::__hash() (x . cancel_const) +
+                        __bool::__hash() (x . cancel_non_const) +
+                        pos::__t::__hash() (x . cond_nesting);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
     namespace ident_to_declvec
     {
         struct rec
@@ -13479,6 +14094,592 @@ namespace ivy
     }
     
 }
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        struct undo
+        {
+            ivy::ptr< ivy::ident::__t > id;
+            
+            __bool present;
+            
+            ivy::borrowing::__t value;
+            
+             undo () {}
+             undo  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const undo &other) const
+            {
+                return id == other . id & present == other . present & value == other . value;
+            }
+            ivy::native_bool operator !=  (const undo &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return id . __is_zero() & present . __is_zero() & value . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const undo &x) const
+                {
+                    return ivy::ptr< ivy::ident::__t >::__hash() (x . id) +
+                        __bool::__hash() (x . present) + ivy::borrowing::__t::__hash() (x . value);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace map_t
+        {
+            struct rec
+            {
+                __bool full;
+                
+                ivy::borrowing::__t val;
+                
+                 rec () {}
+                 rec  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const rec &other) const
+                {
+                    return full == other . full & val == other . val;
+                }
+                ivy::native_bool operator !=  (const rec &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return full . __is_zero() & val . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const rec &x) const
+                    {
+                        return __bool::__hash() (x . full) + ivy::borrowing::__t::__hash() (x . val);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace map_t
+        {
+            struct __t
+            {
+                ivy::vector< ivy::ident_to_borrowing::map_t::rec,ivy::ptr< ivy::ident::__t > > map;
+                
+                void set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::borrowing::__t &y);
+                
+                void get  (const ivy::ptr< ivy::ident::__t > &x,ivy::borrowing::__t &y) const;
+                
+                __bool mem  (const ivy::ptr< ivy::ident::__t > &x) const;
+                
+                void remove  (const ivy::ptr< ivy::ident::__t > &x);
+                
+                ivy::borrowing::__t value  (const ivy::ptr< ivy::ident::__t > &x) const;
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const {
+                    return map == other . map;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return map . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return
+                            ivy::vector< ivy::ident_to_borrowing::map_t::rec,ivy::ptr< ivy::ident::__t > >::__hash()
+                                (x . map);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace map_t
+        {
+            ivy::ident_to_borrowing::map_t::__t empty ();
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace vec_t
+        {
+            struct __t
+            {
+                ivy::vector< ivy::ident_to_borrowing::undo,pos::__t > value;
+                
+                pos::__t end;
+                
+                pos::__t begin () const;
+                
+                void set  (const pos::__t &i,const ivy::ident_to_borrowing::undo &v);
+                
+                void append  (const ivy::ident_to_borrowing::undo &c);
+                
+                void extend  (const ivy::ident_to_borrowing::vec_t::__t &x);
+                
+                void resize  (const pos::__t &end);
+                
+                ivy::ident_to_borrowing::undo back () const;
+                
+                void pop_back ();
+                
+                ivy::ident_to_borrowing::vec_t::__t segment  (const pos::__t &beg,const pos::__t &en)
+                    const;
+                
+                void reverse ();
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const
+                {
+                    return value == other . value & end == other . end;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return value . __is_zero() & end . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return
+                            ivy::vector< ivy::ident_to_borrowing::undo,pos::__t >::__hash() (x .
+                                value) + pos::__t::__hash() (x . end);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        namespace vec_t
+        {
+            ivy::ident_to_borrowing::vec_t::__t empty ();
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace ident_to_borrowing
+    {
+        struct __t
+        {
+            ivy::ident_to_borrowing::map_t::__t map;
+            
+            ivy::ident_to_borrowing::vec_t::__t del;
+            
+            vector__pos::__t stack;
+            
+            void set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::borrowing::__t &v);
+            
+            __bool mem  (const ivy::ptr< ivy::ident::__t > &id) const;
+            
+            ivy::borrowing::__t value  (const ivy::ptr< ivy::ident::__t > &id) const;
+            
+            void push ();
+            
+            void pop ();
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return map == other . map & del == other . del & stack == other . stack;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return map . __is_zero() & del . __is_zero() & stack . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::ident_to_borrowing::map_t::__t::__hash() (x . map) +
+                        ivy::ident_to_borrowing::vec_t::__t::__hash() (x . del) +
+                        vector__pos::__t::__hash() (x . stack);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        struct undo
+        {
+            ivy::ptr< cpp::ident::__t > id;
+            
+            __bool present;
+            
+            ivy::ptr< cpp::expr::__t > value;
+            
+             undo () {}
+             undo  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const undo &other) const
+            {
+                return id == other . id & present == other . present & value == other . value;
+            }
+            ivy::native_bool operator !=  (const undo &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return id . __is_zero() & present . __is_zero() & value . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const undo &x) const
+                {
+                    return ivy::ptr< cpp::ident::__t >::__hash() (x . id) +
+                        __bool::__hash() (x . present) +
+                        ivy::ptr< cpp::expr::__t >::__hash() (x . value);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace map_t
+        {
+            struct rec
+            {
+                __bool full;
+                
+                ivy::ptr< cpp::expr::__t > val;
+                
+                 rec () {}
+                 rec  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const rec &other) const
+                {
+                    return full == other . full & val == other . val;
+                }
+                ivy::native_bool operator !=  (const rec &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return full . __is_zero() & val . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const rec &x) const
+                    {
+                        return __bool::__hash() (x . full) +
+                            ivy::ptr< cpp::expr::__t >::__hash() (x . val);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace map_t
+        {
+            struct __t
+            {
+                ivy::vector< ivy::cppident_to_cppexpr::map_t::rec,ivy::ptr< cpp::ident::__t > > map;
+                
+                void set  (const ivy::ptr< cpp::ident::__t > &x,const ivy::ptr< cpp::expr::__t > &y);
+                
+                void get  (const ivy::ptr< cpp::ident::__t > &x,ivy::ptr< cpp::expr::__t > &y) const;
+                
+                __bool mem  (const ivy::ptr< cpp::ident::__t > &x) const;
+                
+                void remove  (const ivy::ptr< cpp::ident::__t > &x);
+                
+                ivy::ptr< cpp::expr::__t > value  (const ivy::ptr< cpp::ident::__t > &x) const;
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const {
+                    return map == other . map;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return map . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return
+                            ivy::vector< ivy::cppident_to_cppexpr::map_t::rec,ivy::ptr< cpp::ident::__t > >::__hash()
+                                (x . map);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace map_t
+        {
+            ivy::cppident_to_cppexpr::map_t::__t empty ();
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace vec_t
+        {
+            struct __t
+            {
+                ivy::vector< ivy::cppident_to_cppexpr::undo,pos::__t > value;
+                
+                pos::__t end;
+                
+                pos::__t begin () const;
+                
+                void set  (const pos::__t &i,const ivy::cppident_to_cppexpr::undo &v);
+                
+                void append  (const ivy::cppident_to_cppexpr::undo &c);
+                
+                void extend  (const ivy::cppident_to_cppexpr::vec_t::__t &x);
+                
+                void resize  (const pos::__t &end);
+                
+                ivy::cppident_to_cppexpr::undo back () const;
+                
+                void pop_back ();
+                
+                ivy::cppident_to_cppexpr::vec_t::__t segment  (const pos::__t &beg,const pos::__t &en)
+                    const;
+                
+                void reverse ();
+                
+                 __t () {}
+                 __t  (long long value) {}
+                 operator std::size_t () const {
+                    return 0;
+                }
+                static bool __is_seq () {
+                    return false;
+                }
+                ivy::native_bool operator ==  (const __t &other) const
+                {
+                    return value == other . value & end == other . end;
+                }
+                ivy::native_bool operator !=  (const __t &other) const {
+                    return ! ((*this) == other);
+                }
+                bool __is_zero () const {
+                    return value . __is_zero() & end . __is_zero();
+                }
+                struct __hash
+                {
+                    std::size_t operator ()  (const __t &x) const
+                    {
+                        return
+                            ivy::vector< ivy::cppident_to_cppexpr::undo,pos::__t >::__hash() (x .
+                                value) + pos::__t::__hash() (x . end);
+                    }
+                };
+                
+            };
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        namespace vec_t
+        {
+            ivy::cppident_to_cppexpr::vec_t::__t empty ();
+            
+        }
+        
+    }
+    
+}
+namespace ivy
+{
+    namespace cppident_to_cppexpr
+    {
+        struct __t
+        {
+            ivy::cppident_to_cppexpr::map_t::__t map;
+            
+            ivy::cppident_to_cppexpr::vec_t::__t del;
+            
+            vector__pos::__t stack;
+            
+            void set  (const ivy::ptr< cpp::ident::__t > &id,const ivy::ptr< cpp::expr::__t > &v);
+            
+            __bool mem  (const ivy::ptr< cpp::ident::__t > &id) const;
+            
+            ivy::ptr< cpp::expr::__t > value  (const ivy::ptr< cpp::ident::__t > &id) const;
+            
+            void push ();
+            
+            void pop ();
+            
+             __t () {}
+             __t  (long long value) {}
+             operator std::size_t () const {
+                return 0;
+            }
+            static bool __is_seq () {
+                return false;
+            }
+            ivy::native_bool operator ==  (const __t &other) const
+            {
+                return map == other . map & del == other . del & stack == other . stack;
+            }
+            ivy::native_bool operator !=  (const __t &other) const {
+                return ! ((*this) == other);
+            }
+            bool __is_zero () const
+            {
+                return map . __is_zero() & del . __is_zero() & stack . __is_zero();
+            }
+            struct __hash
+            {
+                std::size_t operator ()  (const __t &x) const
+                {
+                    return ivy::cppident_to_cppexpr::map_t::__t::__hash() (x . map) +
+                        ivy::cppident_to_cppexpr::vec_t::__t::__hash() (x . del) +
+                        vector__pos::__t::__hash() (x . stack);
+                }
+            };
+            
+        };
+        
+    }
+    
+}
 namespace vector__ivy__lvalue_count
 {
     namespace domain
@@ -13668,6 +14869,36 @@ namespace ivy
             
             __bool dot_rhs;
             
+            
+            // Path tree giving path conflicts
+            
+            ivy::path_tree::__t conflicts;
+            
+            
+            // States of each current borrowing
+            
+            ivy::ident_to_borrowing::__t borrowings;
+            
+            
+            // Number of borrowins in above
+            
+            pos::__t num_borrowings;
+            
+            
+            // Map from local variables to borrowed lvalues
+            
+            ivy::cppident_to_cppexpr::__t fix_borrow_map;
+            
+            
+            // Depth of nesting of conditionals
+            
+            pos::__t cond_nesting;
+            
+            
+            // Depth of nesting of loops
+            
+            pos::__t loop_nesting;
+            
             void add_member  (const ivy::ptr< ivy::ident::__t > &namesp,const ivy::ptr< ivy::decl::__t >
                 &member);
             
@@ -13702,7 +14933,10 @@ namespace ivy
                     native & forward == other . forward & outputs == other . outputs & code == other
                     . code & counter == other . counter & protos == other . protos & dead == other .
                     dead & locals == other . locals & constructors == other . constructors & dot_rhs
-                    == other . dot_rhs;
+                    == other . dot_rhs & conflicts == other . conflicts & borrowings == other .
+                    borrowings & num_borrowings == other . num_borrowings & fix_borrow_map == other
+                    . fix_borrow_map & cond_nesting == other . cond_nesting & loop_nesting == other
+                    . loop_nesting;
             }
             ivy::native_bool operator !=  (const __t &other) const {
                 return ! ((*this) == other);
@@ -13715,7 +14949,9 @@ namespace ivy
                     native . __is_zero() & forward . __is_zero() & outputs . __is_zero() &
                     code . __is_zero() & counter . __is_zero() & protos . __is_zero() &
                     dead . __is_zero() & locals . __is_zero() & constructors . __is_zero() &
-                    dot_rhs . __is_zero();
+                    dot_rhs . __is_zero() & conflicts . __is_zero() & borrowings . __is_zero() &
+                    num_borrowings . __is_zero() & fix_borrow_map . __is_zero() &
+                    cond_nesting . __is_zero() & loop_nesting . __is_zero();
             }
             struct __hash
             {
@@ -13737,7 +14973,13 @@ namespace ivy
                         vector__ivy__lvalue_count::__t::__hash() (x . dead) +
                         ivy::local_tracker::__t::__hash() (x . locals) +
                         ivy::ident_set::__t::__hash() (x . constructors) +
-                        __bool::__hash() (x . dot_rhs);
+                        __bool::__hash() (x . dot_rhs) +
+                        ivy::path_tree::__t::__hash() (x . conflicts) +
+                        ivy::ident_to_borrowing::__t::__hash() (x . borrowings) +
+                        pos::__t::__hash() (x . num_borrowings) +
+                        ivy::cppident_to_cppexpr::__t::__hash() (x . fix_borrow_map) +
+                        pos::__t::__hash() (x . cond_nesting) +
+                        pos::__t::__hash() (x . loop_nesting);
                 }
             };
             
@@ -13771,91 +15013,6 @@ namespace ivy
     void lvalue_path  (const ivy::ptr< ivy::expr::__t > &s,ivy::access_path::__t &path,__bool &ok);
     
 }
-namespace vector__ivy__access_path
-{
-    namespace domain
-    {
-        struct __t : ivy::native_unsigned< size_t >
-        {
-            vector__ivy__access_path::domain::__t next () const;
-            
-            vector__ivy__access_path::domain::__t prev () const;
-            
-             __t () {}
-             __t  (long long value) : ivy::native_unsigned< size_t > (value) {}
-             __t  (const ivy::native_unsigned< size_t > &value) :
-                ivy::native_unsigned< size_t > (value) {}
-             operator ivy::native_unsigned< size_t > () const {
-                return (*this);
-            }
-        };
-        
-    }
-    
-}
-namespace vector__ivy__access_path
-{
-    struct __t
-    {
-        ivy::vector< ivy::access_path::__t,vector__ivy__access_path::domain::__t > value;
-        
-        vector__ivy__access_path::domain::__t end;
-        
-        vector__ivy__access_path::domain::__t begin () const;
-        
-        void set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t &v);
-        
-        void append  (const ivy::access_path::__t &c);
-        
-        void extend  (const vector__ivy__access_path::__t &x);
-        
-        void resize  (const vector__ivy__access_path::domain::__t &end);
-        
-        ivy::access_path::__t back () const;
-        
-        void pop_back ();
-        
-        vector__ivy__access_path::__t segment  (const vector__ivy__access_path::domain::__t &beg,const
-            vector__ivy__access_path::domain::__t &en) const;
-        
-        void reverse ();
-        
-         __t () {}
-         __t  (long long value) {}
-         operator std::size_t () const {
-            return 0;
-        }
-        static bool __is_seq () {
-            return false;
-        }
-        ivy::native_bool operator ==  (const __t &other) const
-        {
-            return value == other . value & end == other . end;
-        }
-        ivy::native_bool operator !=  (const __t &other) const {
-            return ! ((*this) == other);
-        }
-        bool __is_zero () const {
-            return value . __is_zero() & end . __is_zero();
-        }
-        struct __hash
-        {
-            std::size_t operator ()  (const __t &x) const
-            {
-                return
-                    ivy::vector< ivy::access_path::__t,vector__ivy__access_path::domain::__t >::__hash()
-                        (x . value) + vector__ivy__access_path::domain::__t::__hash() (x . end);
-            }
-        };
-        
-    };
-    
-}
-namespace vector__ivy__access_path
-{
-    vector__ivy__access_path::__t empty ();
-    
-}
 // Workaround
 namespace ivy
 {
@@ -13863,11 +15020,14 @@ namespace ivy
     
 }
 // Get a list of all of the lvalue paths occurring in a C++
-// expression.
+// expression. The boolean parameters are:
+//
+// - ao : arguments only
+// - ro : roots only
 namespace ivy
 {
     void lvalue_paths  (const ivy::ptr< ivy::expr::__t > &s,vector__ivy__access_path::__t &paths,const
-        __bool &ao);
+        __bool &ao,const __bool &ro);
     
 }
 // This determines whether a C++ lvalue is dead in current context
@@ -14067,6 +15227,10 @@ namespace ivy
 // the last possible reference that may alias with the dead lvalue as been reached.
 // At this point the lvalue may be passed by non-const reference or moved, since
 // its value is no longer needed.
+//
+// Note: any local that is referenced inside a loop but declared outside the
+// loop is considered live (i.e., it may be referenced in the next loop iteration, and
+// we do not keep track of this).
 namespace ivy
 {
     void kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,const
@@ -14088,6 +15252,80 @@ namespace ivy
 namespace ivy
 {
     void update_live  (const vector__ivy__access_path::__t &paths,ivy::tocppst::__t &st);
+    
+}
+// When borrowing, we sometimes need to strip off "std::move", indicating
+// that an expression should be treated as an lvalue.
+namespace ivy
+{
+    void strip_move  (ivy::ptr< cpp::expr::__t > &s);
+    
+}
+// Set up to borrow an lvalue. A potential borrowing is an
+// assignment of the form `x := y`, where `x` is a local and `y` is
+// an lvalue, provided `x` is dead at then end of the current scope
+// and no action calls occur in `y`. A const borrowing is allowed
+// if no lvalue occurring in the term `y` is modified
+// before the last occurrence of `x`. A non-const borrowing is
+// allowed if no lvalue occurring in `y` is referenced before
+// the `x` is returned. A return of `x` is an assignment
+// `y := x`.
+//
+// To set up a potential borrowing, we add entry to `st.borrowings` for `local`.
+// We also the item `x` in the conflict map to every access path in `y`. This
+// allows us mark failed borrowings in subsequent code.
+//
+// Returns `ok=true` if a borrowing was set up.
+//
+// Note: a variable referenced in a loop but declared outside the loop is
+// considered to be live outside the current scope, since it may be live
+// at the beginning of the next iteration and we do not track this. It might actually
+// be dead (i.e., if the first reference in the loop is always a full assignment)
+// but in this case the programmer can be punished for not declaring the variable
+// inside the loop. 
+namespace ivy
+{
+    void setup_borrowing  (const ivy::ptr< ivy::stmt::__t > &s,ivy::tocppst::__t &st,__bool &ok,ivy::ptr< ivy::ident::__t >
+        &id);
+    
+}
+// This undoes the effect of `setup_borrowing`, where `id` is the identifier returned
+// by `setup_borrowing`.
+namespace ivy
+{
+    void unsetup_borrowing  (const ivy::ptr< ivy::ident::__t > &id,ivy::tocppst::__t &st);
+    
+}
+// Whenver we access paths, we update the state of any conflicting
+// borrowings.  We note in the state of any conficting borrowings
+// whether we've see a mod or a ref. Note, a mod is any modification of a conflicting
+// path, while a ref is only a ref of the value of the path. Further, if a borrow variable is
+// assigned, we note this in the borrowing state and cancel
+// const reference. Any reference to the borrow variable after a modification
+// of a conflicting path cancels all borrowing. Any reference to the value of
+// the borrowed lvalue after the variable assigned cancels all borrowing.
+namespace ivy
+{
+    void update_borrowings  (const vector__ivy__access_path::__t &paths,const __bool &is_mod,ivy::tocppst::__t
+        &st);
+    
+}
+// When we see an assignment `y := x`, we look to see if `x` is
+// borrowing `y`. If so, we mark `x` unassigned. This means that
+// `x` and `y` are now semantically equal again, so is is safe to
+// reference 'y'. In this case, we return `ok = true`, meaning that
+// the assignment should be skipped, as the lhs and rhs are the same
+// lvalue.
+namespace ivy
+{
+    void check_borrowing_return  (const ivy::asgn::__t &s,ivy::tocppst::__t &st);
+    
+}
+// Turn a local assignment into a reference
+namespace ivy
+{
+    void make_local_ref  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::stmt::__t >
+        &lhs,const __bool &is_const,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res);
     
 }
 // The full name of a C++ function depends on whether it is a member function.
@@ -14422,6 +15660,16 @@ namespace cmd
 namespace ivy
 {
     void show_expr  (const ivy::ptr< ivy::expr::__t > &e);
+    
+}
+namespace ivy
+{
+    void show_ident  (const ivy::ptr< ivy::ident::__t > &id);
+    
+}
+namespace cpp
+{
+    void show_expr  (const ivy::ptr< cpp::expr::__t > &e);
     
 }
 void usage ();
@@ -19393,8 +20641,8 @@ void ivy::type_clash::__t::encode  (pretty::__t &b) const
     b . extend (ivy::from_str< str::__t > (" "));
     b . extend (ivy::from_str< str::__t > ("when typing this expression:"));
     b . extend (ivy::from_str< str::__t > (" "));
-    b . newline();
     (*this) . e -> encode (b,priority::__t (0));
+    b . newline();
 }
 ivy::type_conversion::__t ivy::type_conversion::make  (const ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy::expr::__t >
     &t1,const ivy::ptr< ivy::expr::__t > &t2)
@@ -19420,6 +20668,7 @@ void ivy::type_conversion::__t::encode  (pretty::__t &b) const
     b . extend (ivy::from_str< str::__t > ("to type"));
     b . extend (ivy::from_str< str::__t > (" "));
     (*this) . t2 -> encode (b,priority::__t (0));
+    b . newline();
 }
 ivy::untyped::__t ivy::untyped::make  (const ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy::expr::__t >
     &t1) {
@@ -19434,8 +20683,8 @@ void ivy::untyped::__t::encode  (pretty::__t &b) const
 {
     b . extend (ivy::from_str< str::__t > ("Cannot infer the type of this term:"));
     b . extend (ivy::from_str< str::__t > (" "));
-    b . newline();
     (*this) . e -> encode (b,priority::__t (0));
+    b . newline();
     if ((*this) . t1 -> get_verb() != ivy::verb::__t (ivy::verb::empty))
     {
         b . extend (ivy::from_str< str::__t > (" "));
@@ -19443,6 +20692,7 @@ void ivy::untyped::__t::encode  (pretty::__t &b) const
         b . extend (ivy::from_str< str::__t > ("Incomplete type:"));
         b . extend (ivy::from_str< str::__t > (" "));
         (*this) . t1 -> encode (b,priority::__t (0));
+        b . newline();
     }
 }
 ivy::not_first_order::__t ivy::not_first_order::make  (const ivy::ptr< ivy::expr::__t > &e,const ivy::ptr< ivy::expr::__t >
@@ -19463,6 +20713,7 @@ void ivy::not_first_order::__t::encode  (pretty::__t &b) const
     b . extend (ivy::from_str< str::__t > ("Actual type:"));
     b . extend (ivy::from_str< str::__t > (" "));
     (*this) . t1 -> encode (b,priority::__t (0));
+    b . newline();
 }
 ivy::file_not_found::__t ivy::file_not_found::make  (const str::__t &n)
 {
@@ -20138,6 +21389,24 @@ ivy::ptr< ivy::ident::__t > ivy::dotident::__t::flat  (const __bool &rhs,const i
     res = ivy::dotident::make ((*this) . namesp -> flat (rhs,st),(*this) . member);
     return res;
 }
+void ivy::add_def_id  (const ivy::ptr< ivy::ident::__t > &id,ivy::flatst::__t &st,const __bool &is_global,const
+    __bool &is_object,const ivy::ptr< annot::__t > &ann)
+{
+    st . defs . set (id,ivy::native_bool (true));
+    if (! is_object)
+    {
+        if (st . non_objects . mem (id))
+        {
+            ivy::report_error (ivy::redefining::make (id,st . non_objects . value (id)),ann);
+        }
+    }
+    if (! is_object) {
+        st . non_objects . set (id,ann);
+    }
+    if (is_global) {
+        st . globals . set (id,ivy::native_bool (true));
+    }
+}
 void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,const __bool &is_global,const
     __bool &is_object)
 {
@@ -20147,24 +21416,11 @@ void ivy::add_def  (const ivy::ptr< ivy::expr::__t > &s,ivy::flatst::__t &st,con
     
     ivy::ptr< ivy::expr::__t > e;
     s -> flat (st,e);
+    st . defining = ivy::native_bool (false);
     ivy::check_syntax_symbol (e);
     ivy::ptr< ivy::ident::__t > id;
     id = e -> get_name();
-    st . defining = ivy::native_bool (false);
-    st . defs . set (id,ivy::native_bool (true));
-    if (! is_object)
-    {
-        if (st . non_objects . mem (id))
-        {
-            ivy::report_error (ivy::redefining::make (id,st . non_objects . value (id)),s -> get_ann());
-        }
-    }
-    if (! is_object) {
-        st . non_objects . set (id,s -> get_ann());
-    }
-    if (is_global) {
-        st . globals . set (id,ivy::native_bool (true));
-    }
+    ivy::add_def_id (id,st,is_global,is_object,s -> get_ann());
 }
 void ivy::check_defined  (const ivy::ptr< ivy::ident::__t > &name,const ivy::flatst::__t &st,const
     ivy::ptr< annot::__t > &ann)
@@ -20715,7 +21971,8 @@ void ivy::structspec::__t::defd  (ivy::flatst::__t &st,const ivy::ptr< ivy::iden
         if (lhs . isa< ivy::app::__t >()) {
             lhs = lhs -> get_func();
         }
-        st . defs . set (lhs -> get_name() -> prefix (id),ivy::native_bool (true));
+        ivy::add_def_id (lhs -> get_name() -> prefix (id),st,ivy::native_bool (false),ivy::native_bool
+                    (false),lhs -> get_ann());
         idx = idx . next();
     }
 }
@@ -21715,6 +22972,35 @@ void ivy::get_app  (const ivy::ptr< ivy::expr::__t > &s,ivy::ptr< ivy::expr::__t
         args . extend (s -> get_args());
     }
 }
+__bool ivy::is_functional  (const ivy::ptr< ivy::expr::__t > &s,const ivy::global_types::__t &gl)
+{
+    __bool res;
+    if (s -> is (ivy::verb::__t (ivy::verb::colon)))
+    {
+        res = ivy::is_functional (s -> get_arg (vector__ivy__expr::domain::__t (0)),gl);
+    } else
+    {
+        if (s . isa< ivy::app::__t >())
+        {
+            ivy::ptr< ivy::expr::__t > func;
+            vector__ivy__expr::__t args;
+            ivy::get_app (s,func,args);
+            res = ivy::is_functional (func,gl);
+            vector__ivy__expr::domain::__t idx;
+            idx = args . begin();
+            while (res & idx < args . end)
+            {
+                res = ivy::is_functional (args . value (idx),gl);
+                idx = idx . next();
+            }
+        } else {
+            if (s . isa< ivy::symbol::__t >()) {
+                res = ! gl . is_action . mem (s -> get_name());
+            }
+        }
+    }
+    return res;
+}
 void ivy::canon_app  (ivy::ptr< ivy::expr::__t > &s)
 {
     if (s -> is (ivy::verb::__t (ivy::verb::dot)))
@@ -21900,13 +23186,15 @@ void ivy::push_pop_locals::__t::pop ()
 void ivy::local_tracker::__t::push () {
     (*this) . map . push();
 }
-void ivy::local_tracker::__t::add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref)
+void ivy::local_tracker::__t::add_var  (const ivy::ptr< ivy::expr::__t > &typing,const __bool &is_ref,const
+    pos::__t &loop_nesting)
 {
     ivy::ptr< ivy::expr::__t > v;
     v = typing -> is (ivy::verb::__t (ivy::verb::colon)) ?
         typing -> get_arg (vector__ivy__expr::domain::__t (0)) : typing;
     ivy::local_info::__t li;
     li . is_ref = is_ref;
+    li . loop_nesting = loop_nesting;
     (*this) . map . set (v -> get_name(),li);
 }
 void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
@@ -21926,12 +23214,12 @@ void ivy::local_tracker::__t::push_vars  (const vector__ivy__expr::__t &typings)
         idx = idx . next();
     }
 }
-void ivy::local_tracker::__t::push_stmt  (const ivy::ptr< ivy::stmt::__t > &stm)
+void ivy::local_tracker::__t::push_stmt  (const ivy::ptr< ivy::stmt::__t > &stm,const pos::__t &loop_nesting)
 {
     (*this) . map . push();
     if (stm . isa< ivy::varst::__t >())
     {
-        (*this) . add_var (stm -> get_expr(),ivy::native_bool (false));
+        (*this) . add_var (stm -> get_expr(),ivy::native_bool (false),loop_nesting);
     }
 }
 void ivy::local_tracker::__t::pop () {
@@ -21992,7 +23280,7 @@ void ivy::get_lhs_roots  (const ivy::ptr< ivy::expr::__t > &s,ivy::root_mod_ref:
 void ivy::stmt::__t::mod_roots  (ivy::root_mod_ref::__t &st) const {}
 void ivy::sequence::__t::mod_roots  (ivy::root_mod_ref::__t &st) const
 {
-    st . ignore . push_stmt ((*this) . lhs);
+    st . ignore . push_stmt ((*this) . lhs,pos::__t (0));
     (*this) . lhs -> mod_roots (st);
     (*this) . rhs -> mod_roots (st);
     st . ignore . pop();
@@ -26689,6 +27977,278 @@ __bool ivy::path_may_alias  (const ivy::access_path::__t &v,const ivy::access_pa
     }
     return res;
 }
+vector__ivy__path_tree__undo_rec::domain::__t vector__ivy__path_tree__undo_rec::domain::__t::next ()
+    const
+{
+    vector__ivy__path_tree__undo_rec::domain::__t y;
+    y = (*this) + vector__ivy__path_tree__undo_rec::domain::__t (1);
+    return y;
+}
+vector__ivy__path_tree__undo_rec::domain::__t vector__ivy__path_tree__undo_rec::domain::__t::prev ()
+    const
+{
+    vector__ivy__path_tree__undo_rec::domain::__t y;
+    y = (*this) - vector__ivy__path_tree__undo_rec::domain::__t (1);
+    return y;
+}
+vector__ivy__path_tree__undo_rec::domain::__t vector__ivy__path_tree__undo_rec::__t::begin () const
+{
+    vector__ivy__path_tree__undo_rec::domain::__t res;
+    res = vector__ivy__path_tree__undo_rec::domain::__t (0);
+    return res;
+}
+vector__ivy__path_tree__undo_rec::__t vector__ivy__path_tree__undo_rec::empty ()
+{
+    vector__ivy__path_tree__undo_rec::__t res;
+    {}
+    return res;
+}
+void vector__ivy__path_tree__undo_rec::__t::set  (const vector__ivy__path_tree__undo_rec::domain::__t
+    &i,const ivy::path_tree::undo_rec::__t &v) {
+    (*this) . value (i) = v;
+}
+void vector__ivy__path_tree__undo_rec::__t::append  (const ivy::path_tree::undo_rec::__t &c)
+{
+    (*this) . value ((*this) . end) = c;
+    (*this) . end = (*this) . end . next();
+}
+void vector__ivy__path_tree__undo_rec::__t::extend  (const vector__ivy__path_tree__undo_rec::__t &x)
+{
+    vector__ivy__path_tree__undo_rec::domain::__t idx;
+    idx = x . begin();
+    while (idx < x . end) {
+        (*this) . append (x . value (idx));
+        idx = idx . next();
+    }
+}
+void vector__ivy__path_tree__undo_rec::__t::resize  (const vector__ivy__path_tree__undo_rec::domain::__t
+    &end) {
+    ivy::resize ((*this) . value,end);
+    (*this) . end = end;
+}
+ivy::path_tree::undo_rec::__t vector__ivy__path_tree__undo_rec::__t::back () const
+{
+    ivy::path_tree::undo_rec::__t y;
+    if ((*this) . end > vector__ivy__path_tree__undo_rec::domain::__t (0))
+    {
+        y = (*this) . value ((*this) . end . prev());
+    }
+    return y;
+}
+void vector__ivy__path_tree__undo_rec::__t::pop_back ()
+{
+    if ((*this) . end > vector__ivy__path_tree__undo_rec::domain::__t (0))
+    {
+        vector__ivy__path_tree__undo_rec::domain::__t size;
+        size = (*this) . end . prev();
+        (*this) . resize (size);
+    }
+}
+vector__ivy__path_tree__undo_rec::__t vector__ivy__path_tree__undo_rec::__t::segment  (const
+    vector__ivy__path_tree__undo_rec::domain::__t &beg,const vector__ivy__path_tree__undo_rec::domain::__t
+    &en) const
+{
+    vector__ivy__path_tree__undo_rec::__t res;
+    {
+        vector__ivy__path_tree__undo_rec::domain::__t idx;
+        idx = beg;
+        while (idx < en & idx < (*this) . end)
+        {
+            res . append ((*this) . value (idx));
+            idx = idx . next();
+        }
+    }
+    return res;
+}
+void vector__ivy__path_tree__undo_rec::__t::reverse ()
+{
+    vector__ivy__path_tree__undo_rec::domain::__t idx;
+    idx = (*this) . begin();
+    vector__ivy__path_tree__undo_rec::domain::__t jdx;
+    jdx = (*this) . end . prev();
+    while (idx < jdx)
+    {
+        ivy::path_tree::undo_rec::__t tmp;
+        tmp = (*this) . value (idx);
+        (*this) . value (idx) = (*this) . value (jdx);
+        (*this) . value (jdx) = tmp;
+        jdx = jdx . prev();
+        idx = idx . next();
+    }
+}
+void ivy::path_tree::__t::add  (const ivy::access_path::__t &path,const ivy::ptr< ivy::ident::__t >
+    &item)
+{
+    ivy::path_tree::undo_rec::__t und;
+    ivy::ptr< ivy::ident::__t > id;
+    id = path . elems . value (vector__ivy__ident::domain::__t (0));
+    vector__ivy__ident::domain::__t idx;
+    idx = path . elems . begin() . next();
+    while (idx < path . elems . end)
+    {
+        ivy::ptr< ivy::ident::__t > newid;
+        newid = path . elems . value (idx) -> prefix (id);
+        if (! (*this) . value (newid) . present)
+        {
+            (*this) . value (id) . children . append (newid);
+            (*this) . value (newid) . present = ivy::native_bool (true);
+            und . children . append (id);
+        }
+        id = newid;
+        idx = idx . next();
+    }
+    (*this) . value (id) . leaves . append (item);
+    und . leaf = id;
+    (*this) . undos . append (und);
+}
+void ivy::path_tree::__t::undo ()
+{
+    ivy::path_tree::undo_rec::__t und;
+    und = (*this) . undos . back();
+    vector__ivy__ident::domain::__t idx;
+    idx = und . children . begin();
+    while (idx < und . children . end)
+    {
+        ivy::ptr< ivy::ident::__t > id;
+        id = und . children . value (idx);
+        ivy::ptr< ivy::ident::__t > cid;
+        cid = (*this) . value (id) . children . back();
+        (*this) . value (id) . children . pop_back();
+        (*this) . value (cid) . present = ivy::native_bool (false);
+        idx = idx . next();
+    }
+    (*this) . value (und . leaf) . leaves . pop_back();
+    (*this) . undos . pop_back();
+}
+vector__ivy__ident::__t ivy::path_tree::__t::collect  (const ivy::access_path::__t &path) const
+{
+    vector__ivy__ident::__t res;
+    {
+        ivy::ptr< ivy::ident::__t > id;
+        id = path . elems . value (vector__ivy__ident::domain::__t (0));
+        vector__ivy__ident::domain::__t idx;
+        idx = path . elems . begin() . next();
+        while (idx < path . elems . end)
+        {
+            res . extend ((*this) . value (id) . leaves);
+            id = path . elems . value (idx) -> prefix (id);
+            idx = idx . next();
+        }
+        (*this) . collect_rec (id,res);
+    }
+    return res;
+}
+void ivy::path_tree::__t::collect_rec  (const ivy::ptr< ivy::ident::__t > &id,vector__ivy__ident::__t
+    &res) const
+{
+    ivy::path_tree::elem::__t elm;
+    elm = (*this) . value (id);
+    res . extend (elm . leaves);
+    vector__ivy__ident::domain::__t idx;
+    idx = elm . children . begin();
+    while (idx < elm . children . end)
+    {
+        (*this) . collect_rec (elm . children . value (idx),res);
+        idx = idx . next();
+    }
+}
+vector__ivy__access_path::domain::__t vector__ivy__access_path::domain::__t::next () const
+{
+    vector__ivy__access_path::domain::__t y;
+    y = (*this) + vector__ivy__access_path::domain::__t (1);
+    return y;
+}
+vector__ivy__access_path::domain::__t vector__ivy__access_path::domain::__t::prev () const
+{
+    vector__ivy__access_path::domain::__t y;
+    y = (*this) - vector__ivy__access_path::domain::__t (1);
+    return y;
+}
+vector__ivy__access_path::domain::__t vector__ivy__access_path::__t::begin () const
+{
+    vector__ivy__access_path::domain::__t res;
+    res = vector__ivy__access_path::domain::__t (0);
+    return res;
+}
+vector__ivy__access_path::__t vector__ivy__access_path::empty ()
+{
+    vector__ivy__access_path::__t res;
+    {}
+    return res;
+}
+void vector__ivy__access_path::__t::set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t
+    &v) {
+    (*this) . value (i) = v;
+}
+void vector__ivy__access_path::__t::append  (const ivy::access_path::__t &c)
+{
+    (*this) . value ((*this) . end) = c;
+    (*this) . end = (*this) . end . next();
+}
+void vector__ivy__access_path::__t::extend  (const vector__ivy__access_path::__t &x)
+{
+    vector__ivy__access_path::domain::__t idx;
+    idx = x . begin();
+    while (idx < x . end) {
+        (*this) . append (x . value (idx));
+        idx = idx . next();
+    }
+}
+void vector__ivy__access_path::__t::resize  (const vector__ivy__access_path::domain::__t &end)
+{
+    ivy::resize ((*this) . value,end);
+    (*this) . end = end;
+}
+ivy::access_path::__t vector__ivy__access_path::__t::back () const
+{
+    ivy::access_path::__t y;
+    if ((*this) . end > vector__ivy__access_path::domain::__t (0))
+    {
+        y = (*this) . value ((*this) . end . prev());
+    }
+    return y;
+}
+void vector__ivy__access_path::__t::pop_back ()
+{
+    if ((*this) . end > vector__ivy__access_path::domain::__t (0))
+    {
+        vector__ivy__access_path::domain::__t size;
+        size = (*this) . end . prev();
+        (*this) . resize (size);
+    }
+}
+vector__ivy__access_path::__t vector__ivy__access_path::__t::segment  (const
+    vector__ivy__access_path::domain::__t &beg,const vector__ivy__access_path::domain::__t &en)
+    const
+{
+    vector__ivy__access_path::__t res;
+    {
+        vector__ivy__access_path::domain::__t idx;
+        idx = beg;
+        while (idx < en & idx < (*this) . end)
+        {
+            res . append ((*this) . value (idx));
+            idx = idx . next();
+        }
+    }
+    return res;
+}
+void vector__ivy__access_path::__t::reverse ()
+{
+    vector__ivy__access_path::domain::__t idx;
+    idx = (*this) . begin();
+    vector__ivy__access_path::domain::__t jdx;
+    jdx = (*this) . end . prev();
+    while (idx < jdx)
+    {
+        ivy::access_path::__t tmp;
+        tmp = (*this) . value (idx);
+        (*this) . value (idx) = (*this) . value (jdx);
+        (*this) . value (jdx) = tmp;
+        jdx = jdx . prev();
+        idx = idx . next();
+    }
+}
 ivy::ident_to_declvec::__t ivy::ident_to_declvec::empty () {
     ivy::ident_to_declvec::__t a;
     {}
@@ -26804,6 +28364,340 @@ ivy::prototype::__t ivy::ident_to_prototype::__t::value  (const ivy::ptr< ivy::i
     ivy::prototype::__t y;
     y = (*this) . map (x) . val;
     return y;
+}
+ivy::ident_to_borrowing::map_t::__t ivy::ident_to_borrowing::map_t::empty ()
+{
+    ivy::ident_to_borrowing::map_t::__t a;
+    {}
+    return a;
+}
+void ivy::ident_to_borrowing::map_t::__t::set  (const ivy::ptr< ivy::ident::__t > &x,const ivy::borrowing::__t
+    &y)
+{
+    ivy::ident_to_borrowing::map_t::rec z;
+    z . full = ivy::native_bool (true);
+    z . val = y;
+    (*this) . map (x) = z;
+}
+void ivy::ident_to_borrowing::map_t::__t::get  (const ivy::ptr< ivy::ident::__t > &x,ivy::borrowing::__t
+    &y) const
+{
+    ivy::ident_to_borrowing::map_t::rec z;
+    z = (*this) . map (x);
+    if (z . full) {
+        y = z . val;
+    }
+}
+__bool ivy::ident_to_borrowing::map_t::__t::mem  (const ivy::ptr< ivy::ident::__t > &x) const
+{
+    __bool res;
+    res = (*this) . map (x) . full;
+    return res;
+}
+void ivy::ident_to_borrowing::map_t::__t::remove  (const ivy::ptr< ivy::ident::__t > &x)
+{
+    ivy::ident_to_borrowing::map_t::rec z;
+    (*this) . map (x) = z;
+}
+ivy::borrowing::__t ivy::ident_to_borrowing::map_t::__t::value  (const ivy::ptr< ivy::ident::__t > &x)
+    const {
+    ivy::borrowing::__t y;
+    y = (*this) . map (x) . val;
+    return y;
+}
+pos::__t ivy::ident_to_borrowing::vec_t::__t::begin () const
+{
+    pos::__t res;
+    res = pos::__t (0);
+    return res;
+}
+ivy::ident_to_borrowing::vec_t::__t ivy::ident_to_borrowing::vec_t::empty ()
+{
+    ivy::ident_to_borrowing::vec_t::__t res;
+    {}
+    return res;
+}
+void ivy::ident_to_borrowing::vec_t::__t::set  (const pos::__t &i,const ivy::ident_to_borrowing::undo
+    &v) {
+    (*this) . value (i) = v;
+}
+void ivy::ident_to_borrowing::vec_t::__t::append  (const ivy::ident_to_borrowing::undo &c)
+{
+    (*this) . value ((*this) . end) = c;
+    (*this) . end = (*this) . end . next();
+}
+void ivy::ident_to_borrowing::vec_t::__t::extend  (const ivy::ident_to_borrowing::vec_t::__t &x)
+{
+    pos::__t idx;
+    idx = x . begin();
+    while (idx < x . end) {
+        (*this) . append (x . value (idx));
+        idx = idx . next();
+    }
+}
+void ivy::ident_to_borrowing::vec_t::__t::resize  (const pos::__t &end)
+{
+    ivy::resize ((*this) . value,end);
+    (*this) . end = end;
+}
+ivy::ident_to_borrowing::undo ivy::ident_to_borrowing::vec_t::__t::back () const
+{
+    ivy::ident_to_borrowing::undo y;
+    if ((*this) . end > pos::__t (0)) {
+        y = (*this) . value ((*this) . end . prev());
+    }
+    return y;
+}
+void ivy::ident_to_borrowing::vec_t::__t::pop_back ()
+{
+    if ((*this) . end > pos::__t (0))
+    {
+        pos::__t size;
+        size = (*this) . end . prev();
+        (*this) . resize (size);
+    }
+}
+ivy::ident_to_borrowing::vec_t::__t ivy::ident_to_borrowing::vec_t::__t::segment  (const pos::__t &beg,const
+    pos::__t &en) const
+{
+    ivy::ident_to_borrowing::vec_t::__t res;
+    {
+        pos::__t idx;
+        idx = beg;
+        while (idx < en & idx < (*this) . end)
+        {
+            res . append ((*this) . value (idx));
+            idx = idx . next();
+        }
+    }
+    return res;
+}
+void ivy::ident_to_borrowing::vec_t::__t::reverse ()
+{
+    pos::__t idx;
+    idx = (*this) . begin();
+    pos::__t jdx;
+    jdx = (*this) . end . prev();
+    while (idx < jdx)
+    {
+        ivy::ident_to_borrowing::undo tmp;
+        tmp = (*this) . value (idx);
+        (*this) . value (idx) = (*this) . value (jdx);
+        (*this) . value (jdx) = tmp;
+        jdx = jdx . prev();
+        idx = idx . next();
+    }
+}
+void ivy::ident_to_borrowing::__t::set  (const ivy::ptr< ivy::ident::__t > &id,const ivy::borrowing::__t
+    &v)
+{
+    ivy::ident_to_borrowing::undo und;
+    und . id = id;
+    und . present = (*this) . map . mem (id);
+    if (und . present) {
+        und . value = (*this) . map . value (id);
+    }
+    (*this) . del . append (und);
+    (*this) . map . set (id,v);
+}
+__bool ivy::ident_to_borrowing::__t::mem  (const ivy::ptr< ivy::ident::__t > &id) const
+{
+    __bool res;
+    res = (*this) . map . mem (id);
+    return res;
+}
+ivy::borrowing::__t ivy::ident_to_borrowing::__t::value  (const ivy::ptr< ivy::ident::__t > &id)
+    const {
+    ivy::borrowing::__t res;
+    res = (*this) . map . value (id);
+    return res;
+}
+void ivy::ident_to_borrowing::__t::push () {
+    (*this) . stack . append ((*this) . del . end);
+}
+void ivy::ident_to_borrowing::__t::pop ()
+{
+    pos::__t begin;
+    begin = (*this) . stack . back();
+    (*this) . stack . pop_back();
+    while ((*this) . del . end > begin)
+    {
+        ivy::ident_to_borrowing::undo x;
+        x = (*this) . del . back();
+        if (x . present) {
+            (*this) . map . set (x . id,x . value);
+        } else {
+            (*this) . map . remove (x . id);
+        }
+        (*this) . del . pop_back();
+    }
+}
+ivy::cppident_to_cppexpr::map_t::__t ivy::cppident_to_cppexpr::map_t::empty ()
+{
+    ivy::cppident_to_cppexpr::map_t::__t a;
+    {}
+    return a;
+}
+void ivy::cppident_to_cppexpr::map_t::__t::set  (const ivy::ptr< cpp::ident::__t > &x,const ivy::ptr< cpp::expr::__t >
+    &y)
+{
+    ivy::cppident_to_cppexpr::map_t::rec z;
+    z . full = ivy::native_bool (true);
+    z . val = y;
+    (*this) . map (x) = z;
+}
+void ivy::cppident_to_cppexpr::map_t::__t::get  (const ivy::ptr< cpp::ident::__t > &x,ivy::ptr< cpp::expr::__t >
+    &y) const
+{
+    ivy::cppident_to_cppexpr::map_t::rec z;
+    z = (*this) . map (x);
+    if (z . full) {
+        y = z . val;
+    }
+}
+__bool ivy::cppident_to_cppexpr::map_t::__t::mem  (const ivy::ptr< cpp::ident::__t > &x) const
+{
+    __bool res;
+    res = (*this) . map (x) . full;
+    return res;
+}
+void ivy::cppident_to_cppexpr::map_t::__t::remove  (const ivy::ptr< cpp::ident::__t > &x)
+{
+    ivy::cppident_to_cppexpr::map_t::rec z;
+    (*this) . map (x) = z;
+}
+ivy::ptr< cpp::expr::__t > ivy::cppident_to_cppexpr::map_t::__t::value  (const ivy::ptr< cpp::ident::__t >
+    &x) const {
+    ivy::ptr< cpp::expr::__t > y;
+    y = (*this) . map (x) . val;
+    return y;
+}
+pos::__t ivy::cppident_to_cppexpr::vec_t::__t::begin () const
+{
+    pos::__t res;
+    res = pos::__t (0);
+    return res;
+}
+ivy::cppident_to_cppexpr::vec_t::__t ivy::cppident_to_cppexpr::vec_t::empty ()
+{
+    ivy::cppident_to_cppexpr::vec_t::__t res;
+    {}
+    return res;
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::set  (const pos::__t &i,const ivy::cppident_to_cppexpr::undo
+    &v) {
+    (*this) . value (i) = v;
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::append  (const ivy::cppident_to_cppexpr::undo &c)
+{
+    (*this) . value ((*this) . end) = c;
+    (*this) . end = (*this) . end . next();
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::extend  (const ivy::cppident_to_cppexpr::vec_t::__t &x)
+{
+    pos::__t idx;
+    idx = x . begin();
+    while (idx < x . end) {
+        (*this) . append (x . value (idx));
+        idx = idx . next();
+    }
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::resize  (const pos::__t &end)
+{
+    ivy::resize ((*this) . value,end);
+    (*this) . end = end;
+}
+ivy::cppident_to_cppexpr::undo ivy::cppident_to_cppexpr::vec_t::__t::back () const
+{
+    ivy::cppident_to_cppexpr::undo y;
+    if ((*this) . end > pos::__t (0)) {
+        y = (*this) . value ((*this) . end . prev());
+    }
+    return y;
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::pop_back ()
+{
+    if ((*this) . end > pos::__t (0))
+    {
+        pos::__t size;
+        size = (*this) . end . prev();
+        (*this) . resize (size);
+    }
+}
+ivy::cppident_to_cppexpr::vec_t::__t ivy::cppident_to_cppexpr::vec_t::__t::segment  (const pos::__t
+    &beg,const pos::__t &en) const
+{
+    ivy::cppident_to_cppexpr::vec_t::__t res;
+    {
+        pos::__t idx;
+        idx = beg;
+        while (idx < en & idx < (*this) . end)
+        {
+            res . append ((*this) . value (idx));
+            idx = idx . next();
+        }
+    }
+    return res;
+}
+void ivy::cppident_to_cppexpr::vec_t::__t::reverse ()
+{
+    pos::__t idx;
+    idx = (*this) . begin();
+    pos::__t jdx;
+    jdx = (*this) . end . prev();
+    while (idx < jdx)
+    {
+        ivy::cppident_to_cppexpr::undo tmp;
+        tmp = (*this) . value (idx);
+        (*this) . value (idx) = (*this) . value (jdx);
+        (*this) . value (jdx) = tmp;
+        jdx = jdx . prev();
+        idx = idx . next();
+    }
+}
+void ivy::cppident_to_cppexpr::__t::set  (const ivy::ptr< cpp::ident::__t > &id,const ivy::ptr< cpp::expr::__t >
+    &v)
+{
+    ivy::cppident_to_cppexpr::undo und;
+    und . id = id;
+    und . present = (*this) . map . mem (id);
+    if (und . present) {
+        und . value = (*this) . map . value (id);
+    }
+    (*this) . del . append (und);
+    (*this) . map . set (id,v);
+}
+__bool ivy::cppident_to_cppexpr::__t::mem  (const ivy::ptr< cpp::ident::__t > &id) const
+{
+    __bool res;
+    res = (*this) . map . mem (id);
+    return res;
+}
+ivy::ptr< cpp::expr::__t > ivy::cppident_to_cppexpr::__t::value  (const ivy::ptr< cpp::ident::__t >
+    &id) const {
+    ivy::ptr< cpp::expr::__t > res;
+    res = (*this) . map . value (id);
+    return res;
+}
+void ivy::cppident_to_cppexpr::__t::push () {
+    (*this) . stack . append ((*this) . del . end);
+}
+void ivy::cppident_to_cppexpr::__t::pop ()
+{
+    pos::__t begin;
+    begin = (*this) . stack . back();
+    (*this) . stack . pop_back();
+    while ((*this) . del . end > begin)
+    {
+        ivy::cppident_to_cppexpr::undo x;
+        x = (*this) . del . back();
+        if (x . present) {
+            (*this) . map . set (x . id,x . value);
+        } else {
+            (*this) . map . remove (x . id);
+        }
+        (*this) . del . pop_back();
+    }
 }
 vector__ivy__lvalue_count::domain::__t vector__ivy__lvalue_count::domain::__t::next () const
 {
@@ -26986,136 +28880,47 @@ void ivy::lvalue_path  (const ivy::ptr< ivy::expr::__t > &s,ivy::access_path::__
         }
     }
 }
-vector__ivy__access_path::domain::__t vector__ivy__access_path::domain::__t::next () const
-{
-    vector__ivy__access_path::domain::__t y;
-    y = (*this) + vector__ivy__access_path::domain::__t (1);
-    return y;
-}
-vector__ivy__access_path::domain::__t vector__ivy__access_path::domain::__t::prev () const
-{
-    vector__ivy__access_path::domain::__t y;
-    y = (*this) - vector__ivy__access_path::domain::__t (1);
-    return y;
-}
-vector__ivy__access_path::domain::__t vector__ivy__access_path::__t::begin () const
-{
-    vector__ivy__access_path::domain::__t res;
-    res = vector__ivy__access_path::domain::__t (0);
-    return res;
-}
-vector__ivy__access_path::__t vector__ivy__access_path::empty ()
-{
-    vector__ivy__access_path::__t res;
-    {}
-    return res;
-}
-void vector__ivy__access_path::__t::set  (const vector__ivy__access_path::domain::__t &i,const ivy::access_path::__t
-    &v) {
-    (*this) . value (i) = v;
-}
-void vector__ivy__access_path::__t::append  (const ivy::access_path::__t &c)
-{
-    (*this) . value ((*this) . end) = c;
-    (*this) . end = (*this) . end . next();
-}
-void vector__ivy__access_path::__t::extend  (const vector__ivy__access_path::__t &x)
-{
-    vector__ivy__access_path::domain::__t idx;
-    idx = x . begin();
-    while (idx < x . end) {
-        (*this) . append (x . value (idx));
-        idx = idx . next();
-    }
-}
-void vector__ivy__access_path::__t::resize  (const vector__ivy__access_path::domain::__t &end)
-{
-    ivy::resize ((*this) . value,end);
-    (*this) . end = end;
-}
-ivy::access_path::__t vector__ivy__access_path::__t::back () const
-{
-    ivy::access_path::__t y;
-    if ((*this) . end > vector__ivy__access_path::domain::__t (0))
-    {
-        y = (*this) . value ((*this) . end . prev());
-    }
-    return y;
-}
-void vector__ivy__access_path::__t::pop_back ()
-{
-    if ((*this) . end > vector__ivy__access_path::domain::__t (0))
-    {
-        vector__ivy__access_path::domain::__t size;
-        size = (*this) . end . prev();
-        (*this) . resize (size);
-    }
-}
-vector__ivy__access_path::__t vector__ivy__access_path::__t::segment  (const
-    vector__ivy__access_path::domain::__t &beg,const vector__ivy__access_path::domain::__t &en)
-    const
-{
-    vector__ivy__access_path::__t res;
-    {
-        vector__ivy__access_path::domain::__t idx;
-        idx = beg;
-        while (idx < en & idx < (*this) . end)
-        {
-            res . append ((*this) . value (idx));
-            idx = idx . next();
-        }
-    }
-    return res;
-}
-void vector__ivy__access_path::__t::reverse ()
-{
-    vector__ivy__access_path::domain::__t idx;
-    idx = (*this) . begin();
-    vector__ivy__access_path::domain::__t jdx;
-    jdx = (*this) . end . prev();
-    while (idx < jdx)
-    {
-        ivy::access_path::__t tmp;
-        tmp = (*this) . value (idx);
-        (*this) . value (idx) = (*this) . value (jdx);
-        (*this) . value (jdx) = tmp;
-        jdx = jdx . prev();
-        idx = idx . next();
-    }
-}
 void ivy::lvalue_paths  (const ivy::ptr< ivy::expr::__t > &s,vector__ivy__access_path::__t &paths,const
-    __bool &ao)
+    __bool &ao,const __bool &ro)
 {
     if (s -> is (ivy::verb::__t (ivy::verb::colon)))
     {
-        ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (0)),paths,ao);
+        ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (0)),paths,ao,ro);
     } else
     {
-        if (! ao)
+        if (s -> is_typed (ivy::verb::__t (ivy::verb::comma)))
         {
-            ivy::access_path::__t path;
-            __bool ok;
-            ivy::lvalue_path (s,path,ok);
-            if (ok) {
-                paths . append (path);
+            ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (0)),paths,ao,ro);
+            ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (1)),paths,ao,ro);
+        } else
+        {
+            if (! ao)
+            {
+                ivy::access_path::__t path;
+                __bool ok;
+                ivy::lvalue_path (s,path,ok);
+                if (ok) {
+                    paths . append (path);
+                }
             }
-        }
-        if (s . isa< ivy::app::__t >())
-        {
-            if (s -> is (ivy::verb::__t (ivy::verb::dot)))
+            if (! ro & s . isa< ivy::app::__t >())
             {
-                ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (0)),paths,ivy::native_bool
-                            (true));
-            } else
-            {
-                vector__ivy__expr::__t args;
-                args = s -> get_args();
-                vector__ivy__expr::domain::__t idx;
-                idx = args . begin();
-                while (idx < args . end)
+                if (s -> is (ivy::verb::__t (ivy::verb::dot)))
                 {
-                    ivy::lvalue_paths (args . value (idx),paths,ivy::native_bool (false));
-                    idx = idx . next();
+                    ivy::lvalue_paths (s -> get_arg (vector__ivy__expr::domain::__t (0)),paths,ivy::native_bool
+                                (true),ivy::native_bool (false));
+                } else
+                {
+                    vector__ivy__expr::__t args;
+                    args = s -> get_args();
+                    vector__ivy__expr::domain::__t idx;
+                    idx = args . begin();
+                    while (idx < args . end)
+                    {
+                        ivy::lvalue_paths (args . value (idx),paths,ivy::native_bool (false),ivy::native_bool
+                                    (false));
+                        idx = idx . next();
+                    }
                 }
             }
         }
@@ -27719,11 +29524,17 @@ void ivy::stmt::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
 void ivy::skipst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const
 {
     cpp::skipst::__t t;
-    (*this) . to_cpp_int (st,t);
     t . ann = (*this) . ann;
     res = t;
 }
-void ivy::skipst::__t::to_cpp_int  (ivy::tocppst::__t &st,cpp::skipst::__t &res) const {}
+void cpp::stmt::__t::fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const
+{
+    res = (*this) . __upcast();
+}
+void cpp::stmt::__t::setup_fix_borrow  (ivy::tocppst::__t &st,__bool &ok) const
+{
+    ok = ivy::native_bool (false);
+}
 void ivy::upcast  (const ivy::ptr< ivy::expr::__t > &lhsty,const ivy::ptr< ivy::expr::__t > &rhs,ivy::tocppst::__t
     &st,ivy::ptr< cpp::expr::__t > &res)
 {
@@ -27807,7 +29618,7 @@ void ivy::kill_lvalues  (const vector__ivy__expr::__t &es,ivy::tocppst::__t &st,
             ivy::ptr< annot::__t > ann;
             ivy::local_info::__t li;
             li = st . locals . value (id);
-            if (! li . is_live & ! li . is_ref)
+            if (! li . is_live & ! li . is_ref & li . loop_nesting >= st . loop_nesting)
             {
                 ivy::kill_lvalue (ivy::symbol::make (id,ann),st,paths);
             }
@@ -27853,7 +29664,7 @@ void ivy::update_live  (const vector__ivy__access_path::__t &paths,ivy::tocppst:
 void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     vector__ivy__access_path::__t paths;
-    ivy::lvalue_paths ((*this) . rhs,paths,ivy::native_bool (false));
+    ivy::lvalue_paths ((*this) . rhs,paths,ivy::native_bool (false),ivy::native_bool (false));
     cpp::asgn::__t res;
     res . ann = (*this) . ann;
     (*this) . lhs -> to_cpp (st,res . lhs);
@@ -27868,23 +29679,266 @@ void ivy::asgn::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     st . get_code ((*this) . ann,resd);
     st . outputs = vector__ivy__expr::empty();
     st . dead = vector__ivy__lvalue_count::empty();
-    ivy::lvalue_paths ((*this) . lhs,paths,ivy::native_bool (true));
+    ivy::lvalue_paths ((*this) . lhs,paths,ivy::native_bool (true),ivy::native_bool (false));
     ivy::update_live (paths,st);
+    if (st . num_borrowings > pos::__t (0))
+    {
+        vector__ivy__access_path::__t apaths;
+        ivy::lvalue_paths ((*this) . lhs,apaths,ivy::native_bool (false),ivy::native_bool (true));
+        ivy::update_borrowings (apaths,ivy::native_bool (true),st);
+        ivy::check_borrowing_return ((*this),st);
+        ivy::update_borrowings (paths,ivy::native_bool (false),st);
+    }
+}
+void ivy::strip_move  (ivy::ptr< cpp::expr::__t > &s)
+{
+    if (s . isa< cpp::app::__t >())
+    {
+        if (s -> get_func() -> get_name() -> to_str() == ivy::from_str< str::__t > ("std::move"))
+        {
+            s = s -> get_arg (vector__cpp__expr::domain::__t (0));
+        }
+    }
+}
+void cpp::asgn::__t::fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const
+{
+    res = (*this);
+    ivy::ptr< cpp::expr::__t > rhs;
+    {
+        rhs = (*this) . rhs;
+        ivy::strip_move (rhs);
+    }
+    if (rhs . isa< cpp::symbol::__t >())
+    {
+        ivy::ptr< cpp::ident::__t > id;
+        id = rhs -> get_name();
+        if (st . fix_borrow_map . mem (id))
+        {
+            ivy::ptr< cpp::expr::__t > lvalue;
+            lvalue = st . fix_borrow_map . value (id);
+            if (lvalue -> eq ((*this) . lhs)) {
+                res = cpp::skipst::make ((*this) . ann);
+            }
+        }
+    }
+}
+void ivy::setup_borrowing  (const ivy::ptr< ivy::stmt::__t > &s,ivy::tocppst::__t &st,__bool &ok,ivy::ptr< ivy::ident::__t >
+    &id)
+{
+    if (s . isa< ivy::asgn::__t >())
+    {
+        ivy::ptr< ivy::expr::__t > x;
+        x = s -> get_lhs();
+        if (x -> is (ivy::verb::__t (ivy::verb::colon)))
+        {
+            x = x -> get_arg (vector__ivy__expr::domain::__t (0));
+        }
+        if (x . isa< ivy::symbol::__t >())
+        {
+            id = x -> get_name();
+            if (st . locals . mem (id) & ! st . borrowings . mem (id))
+            {
+                ivy::ptr< ivy::expr::__t > y;
+                y = s -> get_rhs();
+                ivy::access_path::__t path;
+                __bool is_lvalue;
+                ivy::lvalue_path (y,path,is_lvalue);
+                ivy::local_info::__t li;
+                li = st . locals . value (id);
+                if (is_lvalue & ! li . is_live & ! li . is_ref & li . loop_nesting >= st .
+                loop_nesting)
+                {
+                    if (path . elems . value (vector__ivy__ident::domain::__t (0)) !=
+                    x -> get_name() & ivy::is_functional (y,st . globals))
+                    {
+                        st . borrowings . push();
+                        st . num_borrowings = st . num_borrowings . next();
+                        ivy::borrowing::__t br;
+                        br . lvalue = y;
+                        vector__ivy__access_path::__t paths;
+                        ivy::lvalue_paths (y,paths,ivy::native_bool (false),ivy::native_bool (false));
+                        br . num_paths = paths . end;
+                        br . cond_nesting = st . cond_nesting;
+                        st . borrowings . set (id,br);
+                        vector__ivy__access_path::domain::__t idx;
+                        idx = paths . begin();
+                        while (idx < paths . end)
+                        {
+                            st . conflicts . add (paths . value (idx),id);
+                            idx = idx . next();
+                        }
+                        ok = ivy::native_bool (true);
+                    }
+                }
+            }
+        }
+    }
+}
+void ivy::unsetup_borrowing  (const ivy::ptr< ivy::ident::__t > &id,ivy::tocppst::__t &st)
+{
+    ivy::borrowing::__t br;
+    br = st . borrowings . value (id);
+    vector__ivy__access_path::domain::__t idx;
+    idx = vector__ivy__access_path::domain::__t (0);
+    while (idx < br . num_paths) {
+        st . conflicts . undo();
+        idx = idx . next();
+    }
+    st . borrowings . pop();
+    st . num_borrowings = st . num_borrowings . prev();
+}
+void ivy::update_borrowings  (const vector__ivy__access_path::__t &paths,const __bool &is_mod,ivy::tocppst::__t
+    &st)
+{
+    vector__ivy__access_path::domain::__t idx;
+    idx = paths . begin();
+    while (idx < paths . end)
+    {
+        ivy::access_path::__t path;
+        path = paths . value (idx);
+        vector__ivy__ident::__t ids;
+        ids = st . conflicts . collect (path);
+        vector__ivy__ident::domain::__t jdx;
+        jdx = ids . begin();
+        while (jdx < ids . end)
+        {
+            ivy::ptr< ivy::ident::__t > id;
+            id = ids . value (jdx);
+            if (st . borrowings . mem (id))
+            {
+                ivy::borrowing::__t br;
+                br = st . borrowings . value (id);
+                ivy::access_path::__t lpath;
+                __bool ok;
+                ivy::lvalue_path (br . lvalue,lpath,ok);
+                if (ivy::path_may_alias (path,lpath))
+                {
+                    if (br . returned) {
+                        br . cancel_non_const = ivy::native_bool (true);
+                    }
+                }
+                if (is_mod & br . saw_ref)
+                {
+                    br . cancel_non_const = ivy::native_bool (true);
+                    br . cancel_const = ivy::native_bool (true);
+                }
+                st . borrowings . map . set (id,br);
+            }
+            jdx = jdx . next();
+        }
+        ivy::ptr< ivy::ident::__t > root;
+        root = path . elems . value (vector__ivy__ident::domain::__t (0));
+        if (st . borrowings . mem (root))
+        {
+            ivy::borrowing::__t br;
+            br = st . borrowings . value (root);
+            if (is_mod)
+            {
+                br . cancel_const = ivy::native_bool (true);
+                if (! br . returned) {
+                    br . cancel_non_const = ivy::native_bool (true);
+                }
+            }
+            br . saw_ref = ivy::native_bool (true);
+            st . borrowings . map . set (root,br);
+        }
+        idx = idx . next();
+    }
+}
+void ivy::check_borrowing_return  (const ivy::asgn::__t &s,ivy::tocppst::__t &st)
+{
+    if (s . rhs -> is (ivy::verb::__t (ivy::verb::colon)))
+    {
+        ivy::ptr< ivy::expr::__t > rhs;
+        rhs = s . rhs -> get_arg (vector__ivy__expr::domain::__t (0));
+        if (rhs . isa< ivy::symbol::__t >())
+        {
+            ivy::ptr< ivy::ident::__t > id;
+            id = rhs -> get_name();
+            if (st . borrowings . mem (id))
+            {
+                ivy::borrowing::__t br;
+                br = st . borrowings . value (id);
+                if (br . lvalue -> eq (s . lhs) & st . cond_nesting == br . cond_nesting)
+                {
+                    br . returned = ivy::native_bool (true);
+                }
+                st . borrowings . map . set (id,br);
+            }
+        }
+    }
+}
+void ivy::make_local_ref  (const ivy::ptr< ivy::expr::__t > &typing,const ivy::ptr< cpp::stmt::__t >
+    &lhs,const __bool &is_const,ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res)
+{
+    cpp::varst::__t vst;
+    ivy::fix_variant_type (typing -> get_arg (vector__ivy__expr::domain::__t (1)),st,vst . vtype .
+            _type);
+    vst . vtype . name = lhs -> get_lhs();
+    vst . ann = lhs -> get_ann();
+    vst . has_initval = ivy::native_bool (true);
+    {
+        vst . initval = lhs -> get_rhs();
+        ivy::strip_move (vst . initval);
+    }
+    vst . vtype . is_const = is_const;
+    vst . vtype . is_borrow = ivy::native_bool (true);
+    vst . vtype . is_ref = ivy::native_bool (true);
+    res = vst;
 }
 void ivy::sequence::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     cpp::sequence::__t res;
     res . ann = (*this) . ann;
-    st . locals . push_stmt ((*this) . lhs);
+    st . locals . push_stmt ((*this) . lhs,st . loop_nesting);
+    __bool ok;
+    ivy::ptr< ivy::ident::__t > bid;
+    ivy::setup_borrowing ((*this) . lhs,st,ok,bid);
     (*this) . rhs -> to_cpp (st,res . rhs);
+    ivy::borrowing::__t br;
+    if (ok) {
+        br = st . borrowings . value (bid);
+        ivy::unsetup_borrowing (bid,st);
+    }
     (*this) . lhs -> to_cpp (st,res . lhs);
     st . locals . pop();
+    if (ok)
+    {
+        if (! br . cancel_const | ! br . cancel_non_const)
+        {
+            ivy::make_local_ref ((*this) . lhs -> get_lhs(),res . lhs,! br . cancel_const,st,res .
+                    lhs);
+            resd = cpp::sequence::make (res,cpp::skipst::make ((*this) . ann),(*this) . ann);
+        } else {
+            resd = res;
+        }
+    } else {
+        resd = res;
+    }
+}
+void cpp::sequence::__t::fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
+{
+    cpp::sequence::__t res;
+    res . ann = (*this) . ann;
+    (*this) . lhs -> fix_borrow (st,res . lhs);
+    __bool ok;
+    (*this) . lhs -> setup_fix_borrow (st,ok);
+    (*this) . rhs -> fix_borrow (st,res . rhs);
+    if (ok) {
+        st . fix_borrow_map . pop();
+    }
     resd = res;
 }
 void ivy::ifst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     cpp::ifst::__t res;
     res . ann = (*this) . ann;
+    vector__ivy__access_path::__t paths;
+    ivy::lvalue_paths ((*this) . cond,paths,ivy::native_bool (false),ivy::native_bool (false));
+    if (st . num_borrowings > pos::__t (0))
+    {
+        ivy::update_borrowings (paths,ivy::native_bool (false),st);
+    }
     (*this) . cond -> to_cpp (st,res . cond);
     vector__cpp__stmt::__t code;
     code = st . code;
@@ -27892,18 +29946,38 @@ void ivy::ifst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &
     // side effects of cond evaluation
     
     st . code = vector__cpp__stmt::empty();
+    st . cond_nesting = st . cond_nesting . next();
     (*this) . thenst -> to_cpp (st,res . thenst);
     (*this) . elsest -> to_cpp (st,res . elsest);
+    st . cond_nesting = st . cond_nesting . prev();
     resd = res;
     st . code = code;
-    ivy::ptr< cpp::stmt::__t > __tmp22;
-    st . wrap_stmt (resd,(*this) . ann,__tmp22);
-    resd = __tmp22;
+    {
+        ivy::ptr< cpp::stmt::__t > __tmp22;
+        st . wrap_stmt (resd,(*this) . ann,__tmp22);
+        resd = __tmp22;
+    }
+    ivy::update_live (paths,st);
+}
+void cpp::ifst::__t::fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
+{
+    cpp::ifst::__t res;
+    res . ann = (*this) . ann;
+    res . cond = (*this) . cond;
+    (*this) . thenst -> fix_borrow (st,res . thenst);
+    (*this) . elsest -> fix_borrow (st,res . elsest);
+    resd = res;
 }
 void ivy::whilest::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
     cpp::whilest::__t res;
     res . ann = (*this) . ann;
+    vector__ivy__access_path::__t paths;
+    ivy::lvalue_paths ((*this) . cond,paths,ivy::native_bool (false),ivy::native_bool (false));
+    if (st . num_borrowings > pos::__t (0))
+    {
+        ivy::update_borrowings (paths,ivy::native_bool (false),st);
+    }
     (*this) . cond -> to_cpp (st,res . cond);
     vector__cpp__stmt::__t code;
     code = st . code;
@@ -27911,7 +29985,11 @@ void ivy::whilest::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t 
     // side effects of cond evaluation
     
     st . code = vector__cpp__stmt::empty();
+    st . cond_nesting = st . cond_nesting . next();
+    st . loop_nesting = st . loop_nesting . next();
     (*this) . body -> to_cpp (st,res . body);
+    st . cond_nesting = st . cond_nesting . prev();
+    st . loop_nesting = st . loop_nesting . prev();
     if (code . end > vector__cpp__stmt::domain::__t (0))
     {
         st . code = code;
@@ -27928,22 +30006,38 @@ void ivy::whilest::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t 
         st . wrap_stmt (res . body,(*this) . ann,res . body);
     }
     resd = res;
-    ivy::ptr< cpp::stmt::__t > __tmp23;
-    st . wrap_stmt (resd,(*this) . ann,__tmp23);
-    resd = __tmp23;
+    {
+        ivy::ptr< cpp::stmt::__t > __tmp23;
+        st . wrap_stmt (resd,(*this) . ann,__tmp23);
+        resd = __tmp23;
+    }
+    ivy::update_live (paths,st);
 }
-void ivy::varst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &res) const
+void cpp::whilest::__t::fix_borrow  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
-    cpp::varst::__t t;
-    (*this) . to_cpp_int (st,t);
-    t . ann = (*this) . ann;
-    res = t;
+    cpp::whilest::__t res;
+    res . ann = (*this) . ann;
+    res . cond = (*this) . cond;
+    (*this) . body -> fix_borrow (st,res . body);
+    resd = res;
 }
-void ivy::varst::__t::to_cpp_int  (ivy::tocppst::__t &st,cpp::varst::__t &res) const
+void ivy::varst::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::stmt::__t > &resd) const
 {
+    cpp::varst::__t res;
+    res . ann = (*this) . ann;
     ivy::fix_variant_type ((*this) . name -> get_arg (vector__ivy__expr::domain::__t (1)),st,res .
             vtype . _type);
     (*this) . name -> get_arg (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,res . vtype . name);
+    resd = res;
+}
+void cpp::varst::__t::setup_fix_borrow  (ivy::tocppst::__t &st,__bool &ok) const
+{
+    if ((*this) . vtype . is_borrow)
+    {
+        st . fix_borrow_map . push();
+        st . fix_borrow_map . set ((*this) . vtype . name -> get_name(),(*this) . initval);
+        ok = ivy::native_bool (true);
+    }
 }
 void ivy::decl::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > &res) const {}
 void ivy::decl::__t::reg_member  (ivy::tocppst::__t &st) const {}
@@ -28074,7 +30168,7 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
         argt . is_const = parg . is_const;
         argt . is_ref = parg . is_ref;
         ivy::fix_variant_type (arg -> get_arg (vector__ivy__expr::domain::__t (1)),st,argt . _type);
-        st . locals . add_var (arg,parg . is_ref);
+        st . locals . add_var (arg,parg . is_ref,pos::__t (0));
         arg -> get_arg (vector__ivy__expr::domain::__t (0)) -> to_cpp (st,argt . name);
         if (! cprot & parg . is_copy)
         {
@@ -28093,6 +30187,11 @@ void ivy::actdc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t > 
         {
             ivy::ptr< cpp::stmt::__t > body;
             (*this) . body -> to_cpp (st,body);
+            {
+                ivy::ptr< cpp::stmt::__t > __tmp25;
+                body -> fix_borrow (st,__tmp25);
+                body = __tmp25;
+            }
             res . body = body;
         } else {
             res . body = cpp::skipst::make ((*this) . ann);
@@ -28265,10 +30364,10 @@ void ivy::enum_to_cpp  (const ivy::ptr< cpp::expr::__t > &name,const ivy::ptr< i
         ivy::ptr< cpp::expr::__t > e;
         cnstrs . value (idx) -> to_cpp (st,e);
         {
-            ivy::ptr< cpp::expr::__t > __tmp25;
-            __tmp25 = e;
-            ivy::member_name (__tmp25);
-            ed . elems . append (__tmp25);
+            ivy::ptr< cpp::expr::__t > __tmp26;
+            __tmp26 = e;
+            ivy::member_name (__tmp26);
+            ed . elems . append (__tmp26);
         }
         idx = idx . next();
     }
@@ -28677,18 +30776,18 @@ void ivy::typedc::__t::to_cpp  (ivy::tocppst::__t &st,ivy::ptr< cpp::decl::__t >
         resd = res;
         if ((*this) . has_spec & (*this) . spec . isa< ivy::enumspec::__t >())
         {
-            ivy::ptr< cpp::decl::__t > __tmp26;
-            ivy::enum_to_cpp (res . name,(*this) . spec,resd,st,__tmp26);
-            resd = __tmp26;
+            ivy::ptr< cpp::decl::__t > __tmp27;
+            ivy::enum_to_cpp (res . name,(*this) . spec,resd,st,__tmp27);
+            resd = __tmp27;
         }
         {}
     } else {
         resd = res;
     }
-    ivy::ptr< ivy::ident::__t > __tmp27;
-    __tmp27 = (*this) . sort -> get_name();
-    ivy::fix_object_clash (__tmp27,st);
-    ivy::add_namespaces (resd,__tmp27);
+    ivy::ptr< ivy::ident::__t > __tmp28;
+    __tmp28 = (*this) . sort -> get_name();
+    ivy::fix_object_clash (__tmp28,st);
+    ivy::add_namespaces (resd,__tmp28);
 }
 void ivy::typedc::tocpp_show_str  (const str::__t &s) {}
 void ivy::typedc::__t::reg_member  (ivy::tocppst::__t &st) const
@@ -29085,6 +31184,12 @@ retcode::__t cmd::wait  (const pid::__t &s) {
     return res;
 }
 void ivy::show_expr  (const ivy::ptr< ivy::expr::__t > &e) {
+    stdio::writeln (e -> enc());
+}
+void ivy::show_ident  (const ivy::ptr< ivy::ident::__t > &id) {
+    stdio::writeln (id -> to_str());
+}
+void cpp::show_expr  (const ivy::ptr< cpp::expr::__t > &e) {
     stdio::writeln (e -> enc());
 }
 void usage () {

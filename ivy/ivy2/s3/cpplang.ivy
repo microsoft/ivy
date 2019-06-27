@@ -52,7 +52,8 @@ object cpp = {
             name : expr,
             is_const : bool,
             is_ref : bool,
-	    is_rvalue : bool
+	    is_rvalue : bool,
+	    is_borrow : bool
         }
 
         instance tup : tuple(simpletype,"(",")",verb)

@@ -57,8 +57,8 @@ object ivy = { ...
             b := b.extend(" ");
             b := b.extend("when typing this expression:");
             b := b.extend(" ");
-            b := b.newline;
             b := e.e.encode(b,0);
+            b := b.newline;
         }
     }
 
@@ -88,6 +88,7 @@ object ivy = { ...
             b := b.extend("to type");
             b := b.extend(" ");
             b := e.t2.encode(b,0);
+            b := b.newline;
         }
     }
 
@@ -107,14 +108,15 @@ object ivy = { ...
         action encode(e:this,b:pretty) returns (b:pretty) = {
             b := b.extend("Cannot infer the type of this term:");
             b := b.extend(" ");
-            b := b.newline;
             b := e.e.encode(b,0);
+            b := b.newline;
 	    if e.t1.get_verb ~= verb.empty {
 		b := b.extend(" ");
 		b := b.newline;
 		b := b.extend("Incomplete type:");
 		b := b.extend(" ");
 		b := e.t1.encode(b,0);
+                b := b.newline;
 	    }
         }
     }
@@ -139,6 +141,7 @@ object ivy = { ...
             b := b.extend("Actual type:");
             b := b.extend(" ");
             b := e.t1.encode(b,0);
+            b := b.newline;
         }
     }
 
