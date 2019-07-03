@@ -2002,6 +2002,7 @@ struct deser_err {
 struct ivy_ser {
     virtual void  set(long long) = 0;
     virtual void  set(bool) = 0;
+    virtual void  setn(long long inp, int len) = 0;
     virtual void  set(const std::string &) = 0;
     virtual void  open_list(int len) = 0;
     virtual void  close_list() = 0;
@@ -2051,6 +2052,7 @@ struct ivy_binary_ser : public ivy_ser {
 struct ivy_deser {
     virtual void  get(long long&) = 0;
     virtual void  get(std::string &) = 0;
+    virtual void  getn(long long &res, int bytes) = 0;
     virtual void  open_list() = 0;
     virtual void  close_list() = 0;
     virtual bool  open_list_elem() = 0;
@@ -2552,7 +2554,7 @@ class z3_thunk : public thunk<D,R> {
                 raise iu.IvyError(native,"duplicate encoding for sort {}".format(tag))
             encoded_sorts.add(tag)
             continue
-        if tag not in ["member","init","header","impl"]:
+        if tag not in ["member","init","header","impl","inline"]:
             raise iu.IvyError(native,"syntax error at token {}".format(tag))
         if tag == "member":
             emit_native(header,impl,native,classname)
@@ -2620,6 +2622,17 @@ class z3_thunk : public thunk<D,R> {
     __unlock();
 }
 """.replace('CLASSNAME',classname))
+
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "inline":
+            native_classname = classname
+            code = native_to_str(native)
+            native_classname = None
+            if code not in once_memo:
+                once_memo.add(code)
+                header.append(code)
+
 
     ivy_cpp.context.globals.code.extend(header)
     ivy_cpp.context.members.code = []
@@ -5167,6 +5180,8 @@ hash_h = """
   class "hash" should be made in this namespace.
 
   --*/
+
+#pragma once
 
 #ifndef HASH_H
 #define HASH_H
