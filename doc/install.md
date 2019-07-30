@@ -319,6 +319,12 @@ If you have put `c:/Python27/Scripts` in your `PATH`, you should now be able to 
 
     > ivy ui=cti doc/examples/client_server_example.ivy
 
+Or, if you only want to use Ivy on the command line, test it like this:
+
+    > ivy_check trace=true doc/examples/client_server_example_new.ivy
+    
+Ivy should print out a counterexample trace.
+
 <a name="macnotes"></a> Mac notes
 --------------------------------
 
@@ -339,6 +345,12 @@ Install [MacPorts](https://www.macports.org).
     $ sudo pip install tarjan
 
 ### Install Z3
+
+Download this file:
+
+    https://github.com/Z3Prover/z3/releases/download/z3-4.6.0/z3-4.6.0-x64-osx-10.11.6.zip
+    
+Unzip it in a suitable location and let python know about Z3:
 
     $ unzip z3-4.4.1-x64-osx-10.11.zip
     $ export PYTHONPATH=`pwd`/z3-4.4.1-x64-osx-10.11/bin:
