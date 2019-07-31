@@ -235,6 +235,12 @@ Run Ivy on an example, like this:
     $ cd doc/examples
     $ ivy client_server_example.ivy
 
+Or, if you only want to use Ivy on the command line, test it like this:
+
+    > ivy_check trace=true doc/examples/client_server_example_new.ivy
+    
+Ivy should print out a counterexample trace.
+
 ### Emacs mode
 
 An emacs major mode for Ivy is available in `lib/emacs/ivy-mode.el`. Put this file
