@@ -3,8 +3,8 @@ Mechanized specification of QUIC
 
 This directory contains work on a mechanized specification of the QUIC
 protocol in the Ivy language.  The currently targeted version is IETF
-draft 15, as described in
-[this document](https://tools.ietf.org/html/draft-ietf-quic-transport-15).
+draft 18, as described in
+[this document](https://tools.ietf.org/html/draft-ietf-quic-transport-18).
 
 The specification is written in a way that allows monitoring of
 packets on the wire, as well as modular testing of implementations.
@@ -110,6 +110,10 @@ Ubuntu system with version 14.04 or higher, do the following:
 
 On Ubuntu 18.04 you have to install from source. Get the source from
 the link above and follow the README. 
+
+Note: this is only useful if you want to monitor packets using
+tcpdump, as it helps elimiante background noise. It isn't needed for
+testing purposes.
 
 ### Picotls
 

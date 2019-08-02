@@ -84,12 +84,15 @@ include quic_transport_parameters
 # - For each aid C, function `trans_params(C)`
 #   gives the transport parameters declared by C.
 #
-# - The predicate `cid_dst_to_src_set(C)` indicates that the peer of
+# - The predicate `connected(C)` indicates that the peer of
 #   aid `C` has been determined.  This occurs conceptually when a
 #   server produces a server hello frame.
 #
-# - The function `cid_dst_to_src(C)` maps the aid `C` to its peer, if
+# - The function `connected(C)` maps the aid `C` to its peer, if
 #   the peer has been determined.
+#
+# - The function `nonce_cid(C)` maps the client aid `C` to the nonce
+#   cid it has chosen for its initial packet.
 #
 # - The predicate `is_client(C)` indicates that aid 'C' is taking
 #   the client role.
@@ -115,21 +118,22 @@ relation conn_seen(C:cid)
 relation conn_closed(C:cid)
 relation conn_draining(C:cid)
 relation draining_pkt_sent(C:cid)
-function last_pkt_num(C:cid,L:encryption_level) : pkt_num
-relation sent_pkt(C:cid,L:encryption_level,N:pkt_num)
-relation acked_pkt(C:cid,L:encryption_level,N:pkt_num)
-function max_acked(C:cid,L:encryption_level) : pkt_num
+function last_pkt_num(C:cid,L:quic_packet_type) : pkt_num
+relation sent_pkt(C:cid,L:quic_packet_type,N:pkt_num)
+relation acked_pkt(C:cid,L:quic_packet_type,N:pkt_num)
+function max_acked(C:cid,L:quic_packet_type) : pkt_num
 function ack_credit(C:cid) : pkt_num
 relation trans_params_set(C:cid)
 function trans_params(C:cid) : trans_params_struct
-relation cid_dst_to_src_set(C:cid)
-function cid_dst_to_src(C:cid) : cid
+relation connected(C:cid)
+function connected_to(C:cid) : cid
+function nonce_cid(C:cid) : cid
 relation is_client(C:cid)
 relation conn_requested(S:ip.endpoint,D:ip.endpoint,C:cid)
 function hi_non_probing(C:cid) : pkt_num
 relation hi_non_probing_endpoint(C:cid,E:ip.endpoint)
 function conn_total_data(C:cid) : stream_pos
-relation pkt_has_close(C:cid,L:encryption_level,N:pkt_num)
+relation pkt_has_close(C:cid,L:quic_packet_type,N:pkt_num)
 
 # TLS handshake protocol state
 # ----------------------------
@@ -175,13 +179,13 @@ relation pkt_has_close(C:cid,L:encryption_level,N:pkt_num)
 # - The predicate `established_handshake_keys(C)` holds if TLS has established
 #   its handshake keys at aid C.
 
-function crypto_data(C:cid,L:encryption_level) : stream_data
-relation crypto_data_present(C:cid,L:encryption_level,P:stream_pos)
-function crypto_data_end(C:cid,L:encryption_level) : stream_pos
-function crypto_length(C:cid,L:encryption_level) : stream_pos
-function crypto_pos(C:cid,L:encryption_level) : stream_pos
-function crypto_handler_pos(C:cid,L:encryption_level) : stream_pos
-function conn_enc_level(E:ip.endpoint,C:cid) : encryption_level
+function crypto_data(C:cid,L:quic_packet_type) : stream_data
+relation crypto_data_present(C:cid,L:quic_packet_type,P:stream_pos)
+function crypto_data_end(C:cid,L:quic_packet_type) : stream_pos
+function crypto_length(C:cid,L:quic_packet_type) : stream_pos
+function crypto_pos(C:cid,L:quic_packet_type) : stream_pos
+function crypto_handler_pos(C:cid,L:quic_packet_type) : stream_pos
+function conn_enc_level(E:ip.endpoint,C:cid) : quic_packet_type
 relation established_1rtt_keys(C:cid)
 relation established_handshake_keys(C:cid)
 
@@ -262,7 +266,7 @@ relation stream_reset(C:cid,S:stream_id)
 relation max_stream_set(C:cid,K:stream_kind)
 function max_stream(C:cid,K:stream_kind) : stream_id
 function queued_frames(C:cid) : frame.arr
-function queued_level(C:cid) : encryption_level
+function queued_level(C:cid) : quic_packet_type
 relation queued_hello(C:cid)
 relation queued_non_probing(C:cid)
 relation queued_non_ack(C:cid)
@@ -327,7 +331,7 @@ after init {
     queued_non_probing(C) := false;
     queued_non_ack(C) := false;
     queued_close(C) := false;
-    conn_enc_level(E,C) := encryption_level.initial;
+    conn_enc_level(E,C) := quic_packet_type.initial;
     established_1rtt_keys(C:cid) := false;
     established_handshake_keys(C:cid) := false;
     crypto_handler_pos(C,L) := 0;
@@ -432,7 +436,7 @@ after app_send_event {
 
 # Encryption level change
 
-action set_encryption_level(src:ip.endpoint, scid:cid, e:encryption_level)
+action set_encryption_level(src:ip.endpoint, scid:cid, e:quic_packet_type)
 
 after set_encryption_level {
     conn_enc_level(src,scid) := e;
@@ -463,8 +467,13 @@ after set_encryption_level {
 #   connection's initial transport parameters and is required.
 #
 
+# This is a ghost action representing a TLS send event.
+
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,
+                      pos:stream_pos,e:quic_packet_type)
+
 before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
-                      pos : stream_pos, e:encryption_level) {
+                      pos : stream_pos, e:quic_packet_type) {
     var jdx := data.begin;
     var end := pos + data.end;
     if end > crypto_data(scid,e).end {
@@ -506,11 +515,11 @@ before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data
 # This event corresponds to transfer of data from QUIC to the TLS
 # implementation. 
 
-action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo: stream_pos, hi : stream_pos)
+action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:quic_packet_type, lo: stream_pos, hi : stream_pos)
     
 around tls_recv_event {
 
-    require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
+    require connected(dcid) & connected_to(dcid) = scid;
     require lo < hi & lo = crypto_pos(dcid,e) & hi <= crypto_length(scid,e);
     #    require (data.end) + crypto_pos(pcid,0) <= crypto_length(pcid,0);
 #    require 0 <= N & N < data.end -> data.value(N) = crypto_data(pcid,0).value(N + crypto_pos(pcid,0));
@@ -528,13 +537,13 @@ around tls_recv_event {
 # encryption and decryption keys for a particular encryption level
 #
 
-action tls_keys_established_event(scid:cid, e:encryption_level)
+action tls_keys_established_event(scid:cid, e:quic_packet_type)
 
 after tls_keys_established_event {
     call show_tls_keys_established_event(scid,e);
-    if e = encryption_level.handshake {
+    if e = quic_packet_type.handshake {
         established_handshake_keys(scid) := true
-    } else if e = encryption_level.other {
+    } else if e = quic_packet_type.one_rtt {
         established_1rtt_keys(scid) := true
     }
 }
@@ -633,121 +642,83 @@ action client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet)
 #   never complete the path challenge of the new address. 
 
 
-
 around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     
-    var hdr_type_bits : type_bits := bvand(pkt.hdr_type,0x30);
-    # TEMPORARY
-    require ~pkt.hdr_long -> bvand(pkt.hdr_type,0x5c) = 0x40; # assume fixed bit is 1, R,K = 0
-    require pkt.hdr_long -> bvand(pkt.hdr_type,0x4c) = 0x40; # assume fixed bit is 1, R = 0
-    require ~pkt.hdr_long -> (pkt.dcid = 5 & pkt.scid = 0);
-    require pkt.hdr_long -> (pkt.dcid > 0 & pkt.scid > 0);
-    require pkt.hdr_token_length = pkt.hdr_token.end;
-    require pkt.hdr_token_length ~= 0 -> (pkt.hdr_long & hdr_type_bits = 0);
+    require pkt.token.end ~= 0 -> (pkt.ptype = quic_packet_type.initial);
 
-    # Allowed long header types (TEMPORARY)
+    # TEMPORARY: Do not allow zero_rtt packets
 
-    require pkt.hdr_long -> (hdr_type_bits = 0x20 | hdr_type_bits = 0);
+    require pkt.ptype ~= quic_packet_type.zero_rtt;
     
     # Extract the source and destination cid's and packet number from the packet.
 
     var dcid := pkt.dst_cid;
-    var scid := pkt.hdr_cid;
+    var scid := pkt.src_cid;
 
-    # On long headers, both cids are given. Record the correspondence.
-    # If the scid has been mapped, make sure it maps to the dcid.
-    # However, this requirement does not apply to initial client hello
-    # packets.
+    # The destination cid must represent an existing connection,
+    # except in the case of a client initial packet, when the
+    # destination cid may be the nonce cid chosen by the client for
+    # the given source cid. TODO: The standard says that on receiving
+    # the the server's cid, the clint must switch to it. However, we
+    # can't know when that server's cid has actually been received by
+    # the client. As an example, after the server sends its first
+    # initial packet, the client might still retransmit its initial
+    # packet using the nonce cid. In some cases, we can infer that the
+    # client has in fact seen the server's cid (for example, if it
+    # packet contains an ACK frame, or a CRYPTO frame that is
+    # reponsive to a server FRAME. This is trick to check, however,
+    # and the actual servers do not seem to check it.
 
-    if pkt.hdr_long {
-        require cid_dst_to_src_set(scid) ->
-              (cid_dst_to_src(scid) = dcid | (queued_hello(scid) & is_client(scid)))
+    require connected(dcid) |
+        pkt.ptype = quic_packet_type.initial
+        & is_client(scid)
+        & dcid = nonce_cid(scid);
+
+    # On long headers, both cids are given. If the destination cid is
+    # connected, it must be connected to the source cid (otherwise it
+    # must be a nonce generated by a client). 
+    # On short headers (meaning one_rtt) the scid is not given, so we
+    # use the recorded value.
+
+    if pkt.long {
+        require connected(dcid) -> connected_to(dcid) = scid;
     }
-
-    # On short headers, the scid is not given, so we use the recorded value
-
-    # TODO: this is not reliable for testing, since a short header might
-    # arrive before a corresping long header due to packet re-ordering. We
-    # need to handle this case. This is a general problem with the test setup:
-    # the specification applies to packets in the actual order of transmission,
-    # while the tester may receive them out-of-order. One fix for this would be
-    # to have the spec also allow re-ordering, but this might introduce some
-    # significant complexity.
-
     else {
-        require cid_dst_to_src_set(dcid);
-        scid := cid_dst_to_src(dcid)
+        scid := connected_to(dcid);
     };
 
-    var e := queued_level(scid);
+    # The packet type must match the encryption level of the queued
+    # frames at the source. 
 
-    # The header type depends on the encryption level
+    require pkt.ptype = queued_level(scid);
 
-    require e = encryption_level.initial -> pkt.hdr_long & hdr_type_bits = 0;
-    require e = encryption_level.handshake -> pkt.hdr_long & hdr_type_bits = 0x20;
-    require e = encryption_level.other -> ~pkt.hdr_long;
-    
-    var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
+    # TEMPORARY: prevent big packet number jumps (work around minquic bug)
+    require pkt.seq_num <= last_pkt_num(scid,pkt.ptype) + 0x15;
 
-    call show_pstats(scid,e,pnum);
+#    call show_pstats(scid,e,pkt.seq_num);
 
-    require ~sent_pkt(scid,e,pnum);  # [4]
+    require ~sent_pkt(scid,pkt.ptype,pkt.seq_num);  # [4]
+    sent_pkt(scid,pkt.ptype,pkt.seq_num) := true;  # [1]
 
     # The payload may not be empty
 
     require num_queued_frames(scid) > 0;  # [7]
 
-    # A packet is an initial packet iff it contains a client hello.
-
-    # TODO: what to say about this?
-    # assert pkt.hdr_type = 0x7f <-> queued_hello(scid);
-
-    # Record that the connection has been seen from this source, and
-    # the packet has been sent.
-
-    sent_pkt(scid,e,pnum) := true;  # [1]
-
-    # Record the packet number as latest seen
-
-    last_pkt_num(scid,e) := pnum;
-
-  
     # The payload must exactly match the queued frames.
 
     require pkt.payload = queued_frames(scid);
 
-    # var idx : frame.idx := 0;
-    # while idx < pkt.payload.end {
-    #     call pkt.payload.value(idx).handle(src,dst,dcid);
-    #     idx := idx + 1
-    # }
-
     # TEMPORARY: don't allow client migration during handshake
 
-    require conn_seen(scid) & pkt.hdr_long & is_client(scid) -> conn_requested(src,dst,scid);
+    require conn_seen(scid) & pkt.long & is_client(scid) -> conn_requested(src,dst,scid);
 
     # Packet must be sent to the endpoint from which the highest numbered
     # packet has been received.
 
     require conn_seen(dcid) -> hi_non_probing_endpoint(dcid,dst);  # [10]
 
-    # If this is a non-probing packet, update the highest non-probing
-    # packet number seen on from this aid.
-    # QUESTION: what if two differenht paths send the same packet number?
-    # QUESTION: how do you compare packet numbers with different encryption levels?
 
-    if queued_non_probing(scid) {
-        if e = encryption_level.other {
-            if pnum >= hi_non_probing(scid) {
-                hi_non_probing(scid) := pnum;
-                hi_non_probing_endpoint(scid,src) := true;
-            }
-        } else {
-            hi_non_probing_endpoint(scid,src) := true;
-        }
-    };
-
-    # TEMPORARY: do not apply ack-onlty rule to generated packets
+    # TEMPORARY: do not apply ack-only rule to generated packets
     # This can be removed when we have a frame queue per encryption level
 
     require ~_generating & ~queued_non_ack(scid) -> ack_credit(scid) > 0;  # [5]
@@ -767,30 +738,24 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     if conn_draining(scid) {
         require ~draining_pkt_sent(scid) & queued_close(scid);
     };
+
     ...
+
+    # Here, we have the updates to the packet protocol state.
 
     # TEMPORARY: The following are repeated because currently locals defined in
     # the "before" section cannot be accessed in the "after" section.
 
-    var hdr_type_bits : type_bits := bvand(pkt.hdr_type,0x30);
     var dcid := pkt.dst_cid;
-    var scid := pkt.hdr_cid;
-    if ~pkt.hdr_long {
-        scid := cid_dst_to_src(dcid)
-    };
+    var scid := pkt.src_cid if pkt.long else connected_to(dcid);
 
-    # TODO: in draft 15, application close is not allowed in an
-    # initial packet. This will change in draft 17 so that it is
-    # allowed, but not if the RTT-1 keys are available. 
+    # Record the packet number as latest seen
 
-    if pkt.hdr_long & hdr_type_bits = 0 {
-        require forall (I:frame.idx) 0 <= I & I < pkt.payload.end ->
-        ((pkt.payload.value(I) isa frame.ack)
-        | (pkt.payload.value(I) isa frame.crypto)
-        | (pkt.payload.value(I) isa frame.rst_stream)
-        | (pkt.payload.value(I) isa frame.connection_close));
-        # require ~conn_closed(src,scid);  # [6]
+    last_pkt_num(scid,pkt.ptype) := pkt.seq_num;
+ 
+    
 
+    if pkt.ptype = quic_packet_type.initial {
         # An initial packet with an unseen destination cid is a connection request.
         if ~conn_seen(dcid) {
             call client_initial_request(src,dst,pkt);
@@ -801,7 +766,9 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
     conn_seen(scid) := true;  # [1]
 
-    # An ack-only packet must be in response to a non-ack-only packet
+    # Update the ack credits. A non-ack packet sent to a destination
+    # increases the destination's ack creait. An ack packet decreases
+    # the sender's ack credit.
 
     if queued_non_ack(scid) {
 	ack_credit(dcid) := ack_credit(dcid) + 1;
@@ -809,12 +776,26 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 	ack_credit(scid) := ack_credit(scid) - 1;
     };
 
+    # If this is a non-probing packet, update the highest non-probing
+    # packet number seen on from this aid.
+    # QUESTION: what if two differenht paths send the same packet number?
+    # QUESTION: how do you compare packet numbers with different encryption levels?
+
+    if queued_non_probing(scid) {
+        if pkt.ptype = quic_packet_type.one_rtt {
+            if pkt.seq_num >= hi_non_probing(scid) {
+                hi_non_probing(scid) := pkt.seq_num;
+                hi_non_probing_endpoint(scid,src) := true;
+            }
+        } else {
+            hi_non_probing_endpoint(scid,src) := true;
+        }
+    };
+
     # If the packet contains a close frame, then set `pkt_has_close`
 
-    var e := queued_level(scid);
-    var pnum := decode_packet_number(src,scid,e,pkt.hdr_pkt_num);
     if queued_close(scid) {
-        pkt_has_close(scid,e,pnum) := true;
+        pkt_has_close(scid,pkt.ptype,pkt.seq_num) := true;
     };
 
     # If the sender is in the draining state, this is the draining packet.
@@ -878,7 +859,7 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 
 object frame = {
    ...
-    action handle(f:this,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) = {
+    action handle(f:this,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type) = {
 	require false; # this generic action should never be called
     }
 }
@@ -895,7 +876,7 @@ object frame = {
 # specifying packet events. By encoding history information in this way, we make
 # it easier for constraint solvers to construct tests.
 
-action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:encryption_level, probing:bool) = {
+action enqueue_frame(src:ip.endpoint, scid:cid, f:frame, e:quic_packet_type, probing:bool) = {
     queued_frames(scid) := queued_frames(scid).append(f);
     num_queued_frames(scid) := queued_frames(scid).end;
     queued_level(scid) := e;
@@ -947,12 +928,12 @@ object frame = {
     ...
     object ack = {
         ...
-        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.ack,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.handshake -> established_handshake_keys(scid);  # [4]
-            require e = encryption_level.other -> established_1rtt_keys(scid);  # [4]
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);  # [4]
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);  # [4]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             var idx : frame.ack.block.idx := 0;
             var last := f.largest_acked;
@@ -1038,11 +1019,11 @@ object frame = {
     ...
     object stream = {
         ...
-        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);  # [11]
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [11]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~conn_closed(scid);  # [8]
 
@@ -1190,7 +1171,7 @@ object frame = {
     ...
     object crypto = {
         ...
-        action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
@@ -1211,7 +1192,7 @@ object frame = {
                 idx := idx.next
             };
             call enqueue_frame(src,scid,f,e,false);
-            if e = encryption_level.handshake {
+            if e = quic_packet_type.handshake {
                 established_1rtt_keys(scid) := true;
             }
         }
@@ -1242,14 +1223,14 @@ object frame = {
 
 object frame = { ...
     object rst_stream = { ...
-        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.rst_stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);  # [6]
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [6]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~conn_closed(scid);  # [5]
-            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require connected(scid) & connected_to(scid) = dcid;
             require stream_length(dcid,f.id) <= f.final_offset;  # [1]
             require (stream_reset(dcid,f.id) | stream_finished(dcid,f.id)) -> stream_length(dcid,f.id) = f.final_offset;
             stream_reset(dcid,f.id) := true;  # [2]
@@ -1278,14 +1259,14 @@ object frame = { ...
 
 object frame = { ...
     object stop_sending = { ...
-        action handle(f:frame.stop_sending,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.stop_sending,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);  # [6]
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [6]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~conn_closed(scid);  # [5]
-            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require connected(scid) & connected_to(scid) = dcid;
             require stream_id_allowed(dcid,f.id);  # [4]
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1317,13 +1298,13 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_id = { ...
-        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.max_stream_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);  # [3]
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);  # [3]
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
-            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require connected(scid) & connected_to(scid) = dcid;
             require ~conn_closed(scid);  # [2]
 
             var kind := bidir;
@@ -1369,13 +1350,13 @@ object frame = { ...
 
 object frame = { ...
     object connection_close = { ...
-        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.connection_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle{
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other -> established_1rtt_keys(scid);
-            require e = encryption_level.handshake -> established_handshake_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
-            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require connected(scid) & connected_to(scid) = dcid;
             require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(scid) := true;
 	    ...
@@ -1408,14 +1389,14 @@ object frame = { ...
 
 object frame = { ...
     object application_close = { ...
-        action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.application_close,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle{
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e ~= encryption_level.initial;
-            require e = encryption_level.other -> established_1rtt_keys(scid);
-            require e = encryption_level.handshake -> established_handshake_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e ~= quic_packet_type.initial;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
+            require e = quic_packet_type.handshake -> established_handshake_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
-            require cid_dst_to_src_set(scid) & cid_dst_to_src(scid) = dcid;
+            require connected(scid) & connected_to(scid) = dcid;
             require f.reason_phrase_length = f.reason_phrase.end;
             conn_closed(scid) := true;
 	    ...
@@ -1438,10 +1419,10 @@ object frame = { ...
 
 object frame = { ...
     object max_stream_data = { ...
-        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.max_stream_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 #            require stream_seen(scid,f.id) | stream_seen(dcid,f.id);  # TEMPORARY -- should not be needed
 
@@ -1467,10 +1448,10 @@ object frame = { ...
 
 object frame = { ...
     object stream_blocked = { ...
-        action handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.stream_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1491,10 +1472,10 @@ object frame = { ...
 
 object frame = { ...
     object blocked = { ...
-        action handle(f:frame.blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1515,10 +1496,10 @@ object frame = { ...
 
 object frame = { ...
     object stream_id_blocked = { ...
-        action handle(f:frame.stream_id_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.stream_id_blocked,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 	    ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1540,10 +1521,10 @@ object frame = { ...
 
 object frame = { ...
     object max_data = { ...
-        action handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.max_data,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
 
             if ~max_data_set(scid) | f.pos > max_data_val(scid) {
@@ -1562,10 +1543,10 @@ object frame = { ...
 
 object frame = { ...
     object ping = { ...
-        action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.ping,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other -> established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt -> established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
             call enqueue_frame(src,scid,f,e,false);
@@ -1577,10 +1558,10 @@ object frame = { ...
 
 object frame = { ...
     object new_connection_id = { ...
-        action handle(f:frame.new_connection_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.new_connection_id,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             ...
             call enqueue_frame(src,scid,f,e,true);
@@ -1603,10 +1584,10 @@ object frame = { ...
 
 object frame = { ...
     object path_challenge = { ...
-        action handle(f:frame.path_challenge,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.path_challenge,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require f.data.end = 8;
             require ~path_challenge_pending(dcid,f.data);
@@ -1622,10 +1603,10 @@ object frame = { ...
 
 object frame = { ...
     object path_response = { ...
-        action handle(f:frame.path_response,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.path_response,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require f.data.end = 8;
             require path_challenge_pending(scid,f.data);
@@ -1641,10 +1622,10 @@ object frame = { ...
 
 object frame = { ...
     object new_token = { ...
-        action handle(f:frame.new_token,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level)
+        action handle(f:frame.new_token,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type)
 	around handle {
-            require cid_dst_to_src_set(dcid) & cid_dst_to_src(dcid) = scid;
-            require e = encryption_level.other & established_1rtt_keys(scid);
+            require connected(dcid) & connected_to(dcid) = scid;
+            require e = quic_packet_type.one_rtt & established_1rtt_keys(scid);
             require num_queued_frames(scid) > 0 -> e = queued_level(scid);
             require ~is_client(scid);
             ...
@@ -1653,78 +1634,6 @@ object frame = { ...
     }
 }
 
-# ### Packet number decoding
-
-# The packet number is decoded from the packet header fields as follows.
-
-# If the connection is new, the field `hdr_pkt_num` gives the
-# exact first packet number. Otherwise, it represents only a number
-# of low order bits. The high-order bits must be inferred from the
-# last packet number seen for this connection.
-
-# For short format packets. the number of low order bits present
-# in `hdr_pkt_num` depends on the `hdr_type` field of the packet,
-# according to this table:
-#
-#   | hdr_type | bits |
-#   |----------|------|
-#   | 0x1d     | 32   |
-#   | 0x1e     | 16   | 
-#   | 0x1f     |  8   |
-#
-# For long format packets, the number of bits is always 32.  The
-# decoded packet number is the nearest number to the last packet number seen
-# whose whose low-order bits agree with `hdr_pkt_num`. Note this is ambiguous
-# in the case that `hdr_pkt_num - last_pkt_num = 2^(n-1) mod 2^n` where `n`
-# is the number of bits, since `last_pkt_num + 2^(n-1)` and `last_pkt_num - 2^(n-1)`
-# both equal `hdr_pkt_num` modulo `2^n` and are equidistant from `last_pkt_num`.
-# This case is forbidden.
-#
-# Requirements
-#
-# - The sent packet number must be no greater than `la + max/2` where
-#   `la` is the greatest acknowledged packet number (or zero if there
-#   have been no acks) and `max` is a largest number that can be
-#   represented with the number of bits provided [1].
-#
-# Notes:
-#
-# - The IETF draft uses this langauge: "The sender MUST use a packet
-#   number size able to represent more than twice as large a range
-#   than the difference between the largest acknowledged packet and
-#   packet number being sent." The meaning of "more than twice as
-#   large a range" isn't clear, but here we take it to mean that
-#   `2 * (pnum - la) ` is representable. It is also not clear how the
-#   maximum packet number is computed if no acks have been received,
-#   but we assume here that `la` is zero in this case.
-#
-#   TODO: this seems inconsistent with the following statement: "The
-#   initial value for packet number MUST be selected randomly from a
-#   range between 0 and 2^32 - 1025 (inclusive)." Possibly there is no
-#   upper limit on the packet number if no acks have been received
-#   yet, but this seems questionable.
-
-action decode_packet_number(src:ip.endpoint,scid:cid,e:encryption_level,pnum:pkt_num) returns (pnum:pkt_num) = {
-
-    var la := max_acked(scid,e);
-
-    # This is the last number transmitted by the source on this connection.
-
-    var last := last_pkt_num(scid,e);
-
-    # TODO: for now, assume always 30-bit packet number format
-
-    if true {
-        var diff : pkt_num := bfe[0][29](pnum - last);
-        pnum := last + diff;
-        if diff >= 0x20000000 {
-            pnum := pnum - 0x40000000
-        };
-        # require pnum <= la + 0x7ffffffe;
-        # TEMPORARY: work around minquic bug
-        require pnum <= last + 0x15;
-    }
-}
 
 # TLS extensions are used in the client hello and server hello
 # messages to carry the QUIC transport parameters, via special TLS
@@ -1769,8 +1678,8 @@ action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs
 }
 
 action map_cids(dcid:cid,scid:cid) = {
-    cid_dst_to_src_set(dcid) := true;
-    cid_dst_to_src(dcid) := scid
+    connected(dcid) := true;
+    connected_to(dcid) := scid
 }
 
 # An open connection event occurs on server src when it recieves a connection
@@ -1787,7 +1696,7 @@ action open_connection(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
 
 around open_connection {
     require conn_requested(dst,src,dcid);  # [1] 
-    require ~cid_dst_to_src_set(dcid) & ~cid_dst_to_src_set(scid);  # [2]
+    require ~connected(dcid) & ~connected(scid);  # [2]
     ...
     call map_cids(scid,dcid);
     call map_cids(dcid,scid);
@@ -1883,12 +1792,12 @@ action client_transport_parameters_event(src:ip.endpoint,dst:ip.endpoint,scid:ci
 
 import client_transport_parameters_event
 
-action show_enc_level(e:encryption_level)
+action show_enc_level(e:quic_packet_type)
 
 import show_enc_level
 
 import action show_offset_length(offset:stream_pos,length:stream_pos)
 
-import action show_pstats(scid:cid,e:encryption_level,pnum:pkt_num)
+import action show_pstats(scid:cid,e:quic_packet_type,pnum:pkt_num)
 
-import action show_tls_keys_established_event(scid:cid, e:encryption_level)
+import action show_tls_keys_established_event(scid:cid, e:quic_packet_type)

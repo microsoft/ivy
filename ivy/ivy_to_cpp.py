@@ -881,6 +881,8 @@ def collect_used_definitions(pre,inpdefs,ssyms):
     
 
 def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
+    global delegate_enums_to
+    delegate_enums_to = classname
     udefs,usyms = collect_used_definitions(pre,inpdefs,ssyms)
     global is_derived
     for sym in usyms:
@@ -901,6 +903,7 @@ def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
         delegate_methods_to = 'obj.'
         code_line(code,code_eval(code,lhs) + ' = ' + code_eval(code,rhs))
         delegate_methods_to = ''
+    delegate_enums_to = ''
     
 def minimal_field_references(fmla,inputs):
     inpset = set(inputs)
@@ -3184,6 +3187,9 @@ def emit_constant(self,header,code):
         if self.sort in sort_to_cpptype: 
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
+    if isinstance(self,il.Symbol) and self in il.sig.constructors:
+        if delegate_enums_to:
+            code.append(delegate_enums_to+'::')
     code.append(varname(self.name))
     if self in is_derived:
         code.append('()')
@@ -3263,6 +3269,7 @@ def capture_emit(a,header,code,capture_args):
         a.emit(header,code)
 
 delegate_methods_to = ''
+delegate_enums_to = ''
 
 def emit_app(self,header,code,capture_args=None):
     # handle macros

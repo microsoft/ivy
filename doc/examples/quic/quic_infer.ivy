@@ -21,20 +21,22 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     # Stream frames on id 0 indicate that a `tls_send_event` has occurred.
     # TODO: ignore duplicate frames.
 
-    var scid := pkt.hdr_cid;
+    var scid := pkt.src_cid;
     var dcid := pkt.dst_cid;
 
     # On short headers, the scid is not given, so we use the recorded value
 
-    if ~pkt.hdr_long {
-        scid := cid_dst_to_src(dcid)
+    if ~pkt.long {
+        scid := connected_to(dcid)
     };
 
-    # the encryption level of frames has to be inferred from the packet header
+    # If this is an initial client request, we infer the nonce choice
 
-    var e := encryption_level.initial if (pkt.hdr_long & bvand(pkt.hdr_type,0x30) = 0x00)
-        else (encryption_level.handshake if (pkt.hdr_long & bvand(pkt.hdr_type,0x30) = 0x20)
-        else encryption_level.other);
+    if pkt.ptype = quic_packet_type.initial & ~conn_seen(dcid) {
+        nonce_cid(scid) := dcid;
+    };
+
+    var e := pkt.ptype;
     
     call set_encryption_level(src,scid,e);
 
@@ -43,7 +45,7 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
     call tls_keys_established_event(scid,e);
 
     # Infer an open_connection event.
-    if conn_requested(dst,src,dcid) & ~cid_dst_to_src_set(dcid) & ~cid_dst_to_src_set(scid) {
+    if conn_requested(dst,src,dcid) & ~connected(dcid) & ~connected(scid) {
         call open_connection(src,dst,scid,dcid);
     };
 

@@ -48,11 +48,6 @@ include file
 
 action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
-# This is a ghost action representing a TLS send event.
-
-action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,data:stream_data,
-                      pos:stream_pos,e:encryption_level) = {}
-
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
 # an array of UIC packets.
@@ -83,6 +78,7 @@ instance http_request_file : binary_input_file(stream_data,cid)
 
 after init {
     http_request := http_request_file.read;
+    nonce_cid(the_cid) := server_cid;
 }
 
 instance tls_extensions : vector(tls.extension)
@@ -135,10 +131,10 @@ action endpoint_id_addr(ep_id : endpoint_id) returns (ep:ip.endpoint) = {
 module quic_endpoint(ep_id) = {
     var ep : ip.endpoint
     var tls_id : botan.id
-    var enc_level : encryption_level
+    var enc_level : quic_packet_type
     after init {
 	ep := endpoint_id_addr(ep_id);
-        enc_level := encryption_level.initial;
+        enc_level := quic_packet_type.initial;
     }
 }
     
@@ -177,7 +173,7 @@ after init {
 # transmitted via a generated crypto frame event. 
 
 implement botan.lower.send(tls_id:botan.id,bytes:stream_data,lev:botan.lower.level) {
-    var e := encryption_level.initial if lev = 0 else (encryption_level.handshake if lev = 2 else encryption_level.other);
+    var e := quic_packet_type.initial if lev = 0 else (quic_packet_type.handshake if lev = 2 else quic_packet_type.zero_rtt);
     if tls_id = client.tls_id {
         call tls_send_event(client.ep, server.ep, the_cid, 0, bytes,
                             crypto_data_end(the_cid,client.enc_level),e);
@@ -191,17 +187,17 @@ implement botan.lower.send(tls_id:botan.id,bytes:stream_data,lev:botan.lower.lev
 }
 
 after tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
-                     pos:stream_pos, e:encryption_level) {
+                     pos:stream_pos, e:quic_packet_type) {
     call show_tls_send_event(src,dst,scid,dcid,data,pos,e);
 }
 
 
 implement botan.upper.keys_established(tls_id:botan.id,lev:botan.upper.level) {
-    var e := encryption_level.handshake if lev = 2 else encryption_level.other;
+    var e := quic_packet_type.handshake if lev = 2 else quic_packet_type.zero_rtt;
     if tls_id = client.tls_id {
         call tls_keys_established_event(the_cid,e);
-        if e = encryption_level.handshake | e = encryption_level.other {
-            client.enc_level := encryption_level.handshake
+        if e = quic_packet_type.handshake | e = quic_packet_type.zero_rtt {
+            client.enc_level := quic_packet_type.handshake
         }
     }
 }
@@ -227,13 +223,9 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
     if _generating {
         require src = client.ep | src = client_alt;
         require dst = server.ep;
-        require pkt.hdr_long -> pkt.dcid = 5 & pkt.scid = 5;
-        require pkt.hdr_token_length = 0 & pkt.hdr_token.end = 0; 
-        if pkt.hdr_long {
-            require ~cid_dst_to_src_set(pkt.hdr_cid) -> pkt.dst_cid = server_cid
-        }
+        require pkt.token.end = 0; 
     };
-    require pkt.hdr_long -> pkt.hdr_version = 0xff000012
+    require pkt.long -> pkt.pversion = 0xff000012
 }
 
 # Hook up to the remote server
@@ -242,9 +234,11 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 # based on the destination cid (which in principle is a random sequence
 # of bytes. Note, the "salt" is specified in QUIC-TLS version 15, and is
 # unchanged in version 16.
+#
+# TODO: this assumes the cid length is 8 bytes
 
 after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    var ikm := cid_to_bytes(pkt.dst_cid,pkt.dcid + 3 if pkt.dcid > 0 else 0);
+    var ikm := cid_to_bytes(pkt.dst_cid,8);
     var salt : stream_data := stream_data.empty;
 
     salt := salt.append(0xef);
@@ -303,10 +297,10 @@ action cid_to_bytes(c:cid,len:cid_length) returns(res:stream_data) = {
 # To estimate the sequence number of packets, we have to know the encryption level.
 # This action gets the encryption level from the packet header.
 
-action packet_encryption_level(h:prot.header_info) returns (e:encryption_level) = {
-    e := encryption_level.other if ~h.hdr_long
-            else (encryption_level.initial if h.hdr_type = 0x7f
-                  else encryption_level.handshake);
+action packet_encryption_level(h:prot.header_info) returns (e:quic_packet_type) = {
+    e := quic_packet_type.zero_rtt if ~h.hdr_long
+            else (quic_packet_type.initial if h.hdr_type = 0x7f
+                  else quic_packet_type.handshake);
 }
 
 # To get the reference packet number for a packet, we need to know the source connection
@@ -316,7 +310,7 @@ action packet_scid(h:prot.header_info) returns (scid:cid) = {
     if h.hdr_long {
         scid := h.scid;
     } else {
-        scid := cid_dst_to_src(h.dcid);
+        scid := connected_to(h.dcid);
     }
 }
 
@@ -374,6 +368,7 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
             call show_stream(res.data);
             if res.ok {
                 var pkt := pkt_serdes.from_bytes(res.data);
+                pkt.seq_num := prot.correct_pnum(rnum,pkt.seq_num,prot.get_pnum_len(res.data,0));
 	        call show_packet(src,dst,pkt);
 	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on server side
 	        call packet_event(src,dst,pkt);
@@ -397,12 +392,12 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
 #
 
 
-around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:encryption_level, lo : stream_pos, hi : stream_pos ) {
+around tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, e:quic_packet_type, lo : stream_pos, hi : stream_pos ) {
     require src = server.ep & dst = client.ep;
     require hi = crypto_length(scid,e);
-    require e = encryption_level.handshake -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.initial) = crypto_length(scid,encryption_level.initial);
-    require e = encryption_level.other -> crypto_pos(dcid,encryption_level.handshake) = crypto_length(scid,encryption_level.handshake);
+    require e = quic_packet_type.handshake -> crypto_pos(dcid,quic_packet_type.initial) = crypto_length(scid,quic_packet_type.initial);
+    require e = quic_packet_type.zero_rtt -> crypto_pos(dcid,quic_packet_type.initial) = crypto_length(scid,quic_packet_type.initial);
+    require e = quic_packet_type.zero_rtt -> crypto_pos(dcid,quic_packet_type.handshake) = crypto_length(scid,quic_packet_type.handshake);
     require dcid = the_cid;
     ...
     var tls_id := client.tls_id if dst = client.ep else server.tls_id;
@@ -441,11 +436,11 @@ action lo_byte_pos(x:stream_pos) returns (res:byte) = {
 # send all of the available stream data. We never allow the fin bt to be set, since
 # we don't really have good rules for this yet.
 
-before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
+before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type) {
     if _generating {
         require (src = client.ep | src = client_alt) & dst = server.ep; 
         require scid = the_cid;
-        require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
+        require connected(the_cid) & dcid = connected_to(the_cid);
         require f.len & f.off; # TODO: when can f.off be false? We make len true here, since len=false implies last fram of packet.
 #        require ~f.fin; # TEMPORARY
         require f.length > 0;
@@ -458,7 +453,7 @@ before frame.stream.handle(f:frame.stream,src:ip.endpoint,dst:ip.endpoint,scid:c
 
 # We have something similar for crypto frames
 
-before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:encryption_level) {
+before frame.crypto.handle(f:frame.crypto,src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,e:quic_packet_type) {
     if _generating {
         require src = client.ep & dst = server.ep; 
         require scid = the_cid;
@@ -584,7 +579,7 @@ around client_send_event {
     require s = current_stream;
     require (src = client.ep | src = client_alt);
     require dst = server.ep;
-    require cid_dst_to_src_set(the_cid) & dcid = cid_dst_to_src(the_cid);
+    require connected(the_cid) & dcid = connected_to(the_cid);
     require stream_length(dcid,s) = stream_app_data_end(dcid,s);
     require stream_length(dcid,s) < end & end <= http_request.end;
     require current_stream < 60;
@@ -644,7 +639,7 @@ attribute stream_pos.cardinality = 4
 #attribute ip.port.override = bv[1]
 
 action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data:stream_data,
-                           pos:stream_pos, e:encryption_level) = {}
+                           pos:stream_pos, e:quic_packet_type) = {}
 
 import show_tls_send_event
 
@@ -657,7 +652,7 @@ import show_packet
 action undecryptable_packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:stream_data)
 import undecryptable_packet_event
 
-import action show_level_offset_length(e:encryption_level,offset:stream_pos,length:stream_pos)
+import action show_level_offset_length(e:quic_packet_type,offset:stream_pos,length:stream_pos)
 
 import action clear_packet(rnum:pkt_num,pkt:stream_data)
 import action cipher_packet(pkt:stream_data)
