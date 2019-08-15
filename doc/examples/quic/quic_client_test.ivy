@@ -38,9 +38,6 @@ include file
 #   rather than using the dot notation.
 
 
-# The wire specification monitors this action (TODO: shouldn't be declared here).
-
-action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
 
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
@@ -354,7 +351,7 @@ implement net.recv(host:endpoint_id, s:net.socket, src:ip.endpoint, pkts:prot.ar
 	        call infer_tls_events(src,dst,pkt);   # infer any TLS events on client side
 	        call packet_event(src,dst,pkt);
                 if bvand(ppkt.value(0),0xf0) = 0xc0 & ~cid_dst_to_src_set(the_cid) {
-                    call open_connection(dst,src,the_cid,pkt.hdr_cid);  # [1]
+                    call app_server_open_event(dst,src,the_cid,pkt.hdr_cid);  # [1]
                 }
             }
             else {

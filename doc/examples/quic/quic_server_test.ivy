@@ -44,10 +44,6 @@ include file
 #   rather than using the dot notation.
 
 
-# The wire specification monitors this action.
-
-action packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {}
-
 # create an UDP network instance to communicate to server with
 # Note: because of packet coalescing, a single UDP datagram contains
 # an array of UIC packets.
@@ -237,8 +233,8 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 #
 # TODO: this assumes the cid length is 8 bytes
 
-after client_initial_request(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
-    var ikm := cid_to_bytes(pkt.dst_cid,8);
+after tls_client_initial_request(src:ip.endpoint,dst:ip.endpoint,nonce:cid) {
+    var ikm := cid_to_bytes(nonce,8);
     var salt : stream_data := stream_data.empty;
 
     salt := salt.append(0xef);

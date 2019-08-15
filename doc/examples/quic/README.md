@@ -1,16 +1,18 @@
-Mechanized specification of QUIC
---------------------------------
+Specification-based testing of QUIC
+-----------------------------------
 
-This directory contains work on a mechanized specification of the QUIC
-protocol in the Ivy language.  The currently targeted version is IETF
-draft 18, as described in
+This directory contains work on a formal specification of the QUIC
+protocol in the Ivy language. This specification can be used to test
+implementations of QUIC using compositional specification-based
+testing methods.  The currently targeted version is IETF draft 18, as
+described in
 [this document](https://tools.ietf.org/html/draft-ietf-quic-transport-18).
 
 The specification is written in a way that allows monitoring of
 packets on the wire, as well as modular testing of implementations.
 That is, from the specification we can produce an automated tester
-that takes one role in the protocol. The tester uses a technique
-called symbolic execution to randomly generate protocol traffic that
+that takes one role in the protocol. The tester uses symbolic execution
+and an SMT solver to randomly generate protocol traffic that
 complies with the specification. For example, if the tester is taking
 the client role, it generates packets that are legal for the client to
 send, and these are transmitted to the server being tested. The
@@ -27,7 +29,7 @@ not just for correct interopation. Ensuring compliance to the
 specification can be helpful for future protocol developers who have
 deal with compatibility with legacy implementations.
 
-In addition, the mechanized specification can be seen as
+In addition, the formal specification can be seen as
 documentation, since it gives an unambiguous interpretation of
 statements made in natural language in the IETF specification
 documents.
@@ -35,25 +37,39 @@ documents.
 A guide to the specification
 ============================
 
-The mechanized specification is given in terms of a set of protocol
-events or "actions" in the Ivy language. These events abstractly
-represent occurrences at various layers of the protocol stack, for
-example, the transmission of a QUIC packet from one endpoint to
-another, or the transfer of data to or from an application. To each of
-these events are attached *monitors*. The monitors assert requirements
-on the events that determine protocol compliance and also record
-history information by updating shared variables. This information
-makes it possible to specify legal sequences of events, and also to
-specify the required relationships between events occurring at
-different protocol layers.
+The specification is given in terms of a set of protocol events or
+"actions" in the Ivy language. These events abstractly represent
+occurrences at various layers of the protocol stack, for example, the
+transmission of a QUIC packet, or the transfer of data to or from an
+application. To each of these events are attached *monitors*. The
+monitors assert requirements on the events that determine protocol
+compliance and also record history information by updating shared
+variables. This information makes it possible to specify legal
+sequences of events, and also to specify the required relationships
+between events occurring at different protocol layers.
 
-A good place to start in reading the specification is the file
-`quic_connection.ivy`, which contains the monitors for the various
-protocol events and the declarations of all of the relevant state
-variables. These specifications use structured representions of data
-such as packets or frames rather than byte-level encodings. The
-corresponding data types are described in the file `quic_types.ivy`,
-`quic_frame.ivy` and `quic_packet.ivy`. 
+The protocol can be though of as composed of multiple layers. From top
+to bottom: Application, Security, Frame, Packet, Protection and
+Datagram (UDP).  The specification: is divided into files correspoding
+to these layers:
+
+- Application: quic_application.ivy
+- Security: quic_security.ivy
+- Frame: quic_frame.ivy
+- Packet: quic_packet.ivy
+- Protection: quic_protection.ivy
+
+At each layer, we define necessary data types, state variables, and
+actions. Each action has a specification in terms of a *before* clause
+(its guard or precondition) and an *after* (its state update). The
+exception is the protection layer which simply provides procedures for
+encrypting and decrypting packets.
+
+Some additional files:
+- Byte-level encoding of packets: quic_ser.ivy
+- Byte-level decoding of packets: quic_deser.ivy
+
+The packet encoding and decoding are currently implemented in C++.
 
 The Ivy language used to express the specification is described
 [here](http://microsoft.github.io/ivy/language.html). An example of
@@ -74,7 +90,7 @@ with quantitative time, meaning certain aspects of the QUIC
 specification relating to transmission rates and timeouts can't be
 stated. 
 
-The remainder of this document describes how to use the mechanized
+The remainder of this document describes how to use the 
 specification to test implementations.
 
 

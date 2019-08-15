@@ -44,9 +44,9 @@ action infer_tls_events(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) = {
 
     call tls_keys_established_event(scid,e);
 
-    # Infer an open_connection event.
+    # Infer an app_server_open_event.
     if conn_requested(dst,src,dcid) & ~connected(dcid) & ~connected(scid) {
-        call open_connection(src,dst,scid,dcid);
+        call app_server_open_event(src,dst,scid,dcid);
     };
 
     var idx := pkt.payload.begin;
