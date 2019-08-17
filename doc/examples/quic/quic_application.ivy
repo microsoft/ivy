@@ -1,4 +1,7 @@
 #lang ivy1.7
+
+include byte_stream
+
 #
 # The application protocol
 # ------------------------

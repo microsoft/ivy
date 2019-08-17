@@ -422,25 +422,18 @@ around packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
 # TLS extensions are used in the client hello and server hello
 # messages to carry the QUIC transport parameters, via special TLS
 # extension type `quic_transport_parameters`. This type is defined in
-# the reference `quic_transport_parameters`. Here we define the
-# protocol rules associated with `quic_transport_parameters`.
+# the reference `quic_transport_parameters`. Here we have procedures
+# that infer the transport parameters events from the TLS handshake
+# messages that transmit the parameters.
+#
+# TODO: This inference is not really needed. It should be possible
+# to obtain the parameters directly from the TLS API. We infer the
+# parameters here only for historical reasons. 
 #
 # The `handle_tls_handshake` rules apply to each `client_hello`,
 # `server_hello` or `encrypted extensions` message, in order of
 # occurrence in the crypto data.  The last parameter,
 # `is_client_hello`, is true for a `client_hello` message (see below).
-#
-# A server hello establishes the connection between the server and the
-# client cids [1]. We have to do it this way because there is no way
-# looking at just the QUIC packet header and frame types to
-# distinguish a client initial message from a server initial message.
-#
-# We also infer changes in encryption level from the handshake message
-# types. In particular, any non-hello message moves us from the initial
-# level to the handshake level. TODO: this might not be reliable if there
-# are changes to TLS. It would be better to get an explicit signal from
-# TLS that the level is changing. TODO: Does the QUIC-TLS specification
-# say explicitly when the encryption level should change?
 #
 
 action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs:tls.handshake) = {
@@ -459,11 +452,6 @@ action handle_tls_handshake(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid,hs
     }
 }
 
-
-# Requirements:
-#
-# 1. Transport parameters must be declared in the client hello
-#    and server hello message [1] and may be declared only once [2].
 #
 # The rules in `handle_client_transport_parameters` apply to each
 # `quic_transport_parameters` extension instance in order of
@@ -488,7 +476,6 @@ action handle_tls_extensions
 
         if some (tps:quic_transport_parameters) ext *> tps {
             call handle_client_transport_parameters(src,dst,scid,tps,is_client_hello);
-#            require ~trans_params_set(scid);  # [2]
             trans_params_set(scid) := true;
             
         };
