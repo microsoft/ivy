@@ -13,7 +13,7 @@ There are two ways to install ivy, in order of preference:
 
 1. [Install from source on Linux](#linuxnotes)
 2. [Install from source on Windows](#windowsnotes)
-3. [INstall from source on Mac](#macnotes)in a virtual environment with Vagrant](#vagrant)
+3. [Install from source on Mac](#macnotes)
 
 
 <a name="linuxnotes"></a> Installation from source on Linux
@@ -271,52 +271,57 @@ Ivy should print out a counterexample trace.
 
 3. Install Xserver
 
-- https://www.xquartz.org
+    - [https://www.xquartz.org](https://www.xquartz.org)
 
 4. Macports
 
-    sudo xcodebuild -license
-    https://www.macports.org/install.php (select matching macOS 10.12 or 10.13 depending on macOS running on machine)
-    macOS 10.3 Mojave (make sure you've installed all patches because various steps below were broken until about 7/15/2019 patch)
-    sudo easy_install pip (required on 10.13 Mojave and/or required by 8/1/2019)
-    a) sudo port install graphviz-gui
-    sudo port select --set python python27
-    sudo port select --set python2 python27
-    sudo pip install pygraphviz --install-option="--include-path=/opt/local/include" --install-option="--library-path=/opt/local/lib"
-    b) sudo port install Tix
-    c) sudo port install py27-ply
-    d) sudo port install py27-ipython
-    e) sudo port install py27-tkinter (added this step with 10.13 Mojave)
+        $ sudo xcodebuild -license
+
+   Install Macports from [https://www.macports.org/install.php](https://www.macports.org/install.php). Select
+   matching macOS 10.12 or 10.13 depending on macOS running on
+   machine.  On macOS 10.13 Mojave, make sure you've installed all
+   patches because various steps below were broken until about
+   7/15/2019 patch.
+
+        $ sudo easy_install pip (required on 10.13 Mojave and/or required by 8/1/2019)
+        $ sudo port install graphviz-gui
+        $ sudo port select --set python python27
+        $ sudo port select --set python2 python27
+        $ sudo pip install pygraphviz --install-option="--include-path=/opt/local/include" --install-option="--library-path=/opt/local/lib"
+        $ sudo port install Tix
+        $ sudo port install py27-ply
+        $ sudo port install py27-ipython
+        $ sudo port install py27-tkinter # for 10.13 Mojave
 
 5. Install Z3
 
-- Download and expand this archive: https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip
+    Download and expand this archive: [https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip](https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip)
 
-    $ pwd
-    /Users/username/Downloads/z3-4.6.0
+        $ pwd
+        /Users/username/Downloads/z3-4.6.0
 
-    python scripts/mk_make.py
-    cd build
-    make
-    sudo make install
-    sudo pip install z3-solver
+        python scripts/mk_make.py
+        cd build
+        make
+        sudo make install
+        sudo pip install z3-solver
 
 6. Install Ivy:
 
-- https://github.com/Microsoft/ivy
-  Select download zip in the “Clone or download” button and expand the archive.
+    [https://github.com/Microsoft/ivy](https://github.com/Microsoft/ivy).
+    Select download zip in the “Clone or download” button and expand the archive.
 
-    $ pwd
-    /Users/username/Downloads/ivy-master
-    $ sudo python setup.py install
-    export PATH=/opt/local/Library/Frameworks/Python.framework/Versions/2.7/bin:$PATH
+        $ pwd
+        /Users/username/Downloads/ivy-master
+        $ sudo python setup.py install
+        export PATH=/opt/local/Library/Frameworks/Python.framework/Versions/2.7/bin:$PATH
 
 7. running test
 
-    pwd
-    /Users/username/Downloads/ivy-master
-    cd doc/examples
-    ivy_check diagnose=true client_server_example.ivy
+        pwd
+        /Users/username/Downloads/ivy-master
+        cd doc/examples
+        ivy_check diagnose=true client_server_example.ivy
 
 
 <a name="vagrant"></a> Installing in a virtual environment with Vagrant
@@ -384,8 +389,6 @@ in a command window, first execute this command:
 
 ### Mac
 
-There currently is no binary distribution for Mac. Use instead the
-virtual machine approach or an installation from source, as described
-below.
+There currently is no binary distribution for Mac. 
 
  
