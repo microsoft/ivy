@@ -298,13 +298,12 @@ Ivy should print out a counterexample trace.
     Download and expand this archive: [https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip](https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip)
 
         $ pwd
-        /Users/username/Downloads/z3-4.6.0
+        /Users/username/Downloads/z3-z3-4.6.0
 
-        python scripts/mk_make.py
-        cd build
-        make
-        sudo make install
-        sudo pip install z3-solver
+        $ python scripts/mk_make.py --prefix=/opt/local/Library/Frameworks/Python.framework/Versions/2.7 --python --pypkgdir=/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages
+        $ cd build
+        $ make -j 4
+        $ sudo make install
 
 6. Install Ivy:
 
