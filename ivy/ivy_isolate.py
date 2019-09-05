@@ -223,13 +223,13 @@ def strip_sort(sort,strip_params):
         return ivy_logic.FunctionSort(*(dom+[sort.rng]))
     return sort.rng
 
-def strip_action(ast,strip_map,strip_binding,is_init=False):
+def strip_action(ast,strip_map,strip_binding,is_init=False,init_params=[]):
     if isinstance(ast,ia.CallAction):
         name = canon_act(ast.args[0].rep)
-        args = [strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args[0].args]
+        args = [strip_action(arg,strip_map,strip_binding,is_init,init_params) for arg in ast.args[0].args]
         strip_params = get_strip_params(name,ast.args[0].args,strip_map,strip_binding,ast)
         call = ast.args[0].clone(args[len(strip_params):])
-        return ast.clone([call]+[strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args[1:]])
+        return ast.clone([call]+[strip_action(arg,strip_map,strip_binding,is_init,init_params) for arg in ast.args[1:]])
     if isinstance(ast,ia.Action):
         for sym in ast.modifies():
             if sym.name in ivy_logic.sig.symbols:
@@ -237,14 +237,22 @@ def strip_action(ast,strip_map,strip_binding,is_init=False):
                 if len(lhs_params) != num_isolate_params:
                     if not (len(lhs_params) == 0 and len(strip_binding) == 0 and is_init):
                         raise iu.IvyError(ast,"assignment may be interfering")
+    if isinstance(ast,ia.AssignAction) and len(init_params) > 0:
+        lhs = ast.args[0]
+        xtra_bindings = zip(lhs.args[len(strip_binding):],init_params)
+        if any(not ivy_logic.is_variable(x) for x,y in xtra_bindings):
+            raise iu.IvyError(ast,"assignment may be interfering")
+        strip_binding = strip_binding.copy()
+        strip_binding.update(xtra_bindings)    
+#        print 'strip_binding = {}'.format([(str(x),str(y)) for x,y in strip_binding.iteritems()]) 
     if (ivy_logic.is_constant(ast) or ivy_logic.is_variable(ast)) and ast in strip_binding:
         sname = strip_binding[ast]
         if sname not in ivy_logic.sig.symbols:
             ivy_logic.add_symbol(sname,ast.sort)
             strip_added_symbols.append(ivy_logic.Symbol(sname,ast.sort))
         return ivy_logic.Symbol(sname,ast.sort)
-    args = [strip_action(arg,strip_map,strip_binding,is_init) for arg in ast.args]
-    if ivy_logic.is_app(ast):
+    args = [strip_action(arg,strip_map,strip_binding,is_init,init_params) for arg in ast.args]
+    if ivy_logic.is_app(ast) and ast not in im.module.sig.constructors:
         name = ast.rep.name
         strip_params = get_strip_params(name,ast.args,strip_map,strip_binding,ast)
         if strip_params:
@@ -352,13 +360,18 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
     new_actions = {}
     for name,action in mod.actions.iteritems():
         strip_params = strip_map_lookup(canon_act(name),strip_map,with_dot=False)
+        orig_name = name[4:] if name.startswith('ext:') else name
+        is_init=(orig_name in all_after_inits)
+        init_params = []
         if not(len(action.formal_params) >= len(strip_params)):
-            raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
+            if is_init:
+                init_params = strip_params[len(action.formal_params):]
+            else:
+                raise iu.IvyError(action,"cannot strip isolate parameters from {}".format(name))
         strip_binding = dict(zip(action.formal_params,strip_params))
 #        if isinstance(action,ia.NativeAction) and len(strip_params) != num_isolate_params:
 #            raise iu.IvyError(None,'foreign function {} may be interfering'.format(name))
-        orig_name = name[4:] if name.startswith('ext:') else name
-        new_action = strip_action(action,strip_map,strip_binding,is_init=(orig_name in all_after_inits))
+        new_action = strip_action(action,strip_map,strip_binding,is_init=is_init,init_params=init_params)
         new_action.formal_params = action.formal_params[len(strip_params):]
         new_action.formal_returns = action.formal_returns
         new_actions[name] = new_action
