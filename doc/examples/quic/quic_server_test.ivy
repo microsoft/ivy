@@ -4,6 +4,8 @@ include order
 include quic_connection
 include quic_infer
 include file
+include quic_shim
+include quic_locale
 
 # This is a simple tester for quic servers. The tester plays the role of a
 # single client, which may use multiple UDP ports.
@@ -469,10 +471,6 @@ attribute stream_pos.cardinality = 4
 
 import action show_tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid,
                                   data:stream_data, pos:stream_pos, e:quic_packet_type)
-
-import action show_packet(pkt:quic_packet)
-
-import action undecryptable_packet_event(pkt:stream_data)
 
 import action show_level_offset_length(e:quic_packet_type,offset:stream_pos,length:stream_pos)
 
