@@ -54,33 +54,7 @@ You need to have a C++ compiler installed. If you don't already have one, do thi
 
     sudo apt-get install g++
 
-#### Z3
 
-On Ubuntu Linux, download this file:
-
-    https://github.com/Z3Prover/z3/archive/z3-4.6.0.tar.gz
-    
-Don't get a later version because there are incompatible changes in
-Z3's API after this version. Now, if you don't mind doing a system-wide
-installation of Z3, do this:
-
-    cd ~
-    tar xzf Downloads/z3-4.6.0.tar.gz
-    cd z3-4.6.0
-    python scripts/mk_make.py --prefix=/usr/local --python --pypkgdir=/usr/local/lib/python2.7/site-packages
-    cd build
-    make -j 4
-    sudo make install
-    
-Note, the `-j 4` tells make to use four CPU's. You can use another number if you want.
-    
-Do this:
-
-    export LD_LIBRARY_PATH=/usr/local/lib:
-    
-and put the above command in `~/.bashrc` as well. Also, do this:
-
-    export PYTHONPATH=/usr/local/lib/python2.7/site-packages:$PYTHONPATH
     
 and put the above command in `~/.profile` as well.
 
@@ -134,11 +108,14 @@ This step is not necessary if using the IVy command line tools only.
 
 ### Install IVy
 
-
 Get the source like this:
 
-    $ git clone https://github.com/Microsoft/ivy.git
+    $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
     $ cd ivy
+
+Build the submodules like this (it takes a while):
+
+    $ python build_submodules.py
 
 Install into your local Python like this
 
@@ -147,13 +124,12 @@ Install into your local Python like this
 If you want to run from the source tree for development purposes, do
 this instead:
 
-    $ sudo python setup.py develop
+    $ export PYTHONPATH=~/lib/python2.7/site-packages:$PYTHONPATH
+    $ python setup.py develop --prefix=~
 
-If you don't want to do a system-wide install (and you aren't using a
-virtual environment) there are various ways to install in your home
-directory. For example:
-
-    $ python setup.py install --home=~
+This installs Ivy into your home directory, so you don't need sudo.
+Also put the first command in your .profile script, so Python will
+find Ivy in the future.
 
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
@@ -279,35 +255,39 @@ command line build tools for C++ installed. You can get them free of charge
         $ sudo port install py27-ply
         $ sudo port install py27-ipython
         $ sudo port install py27-tkinter # for 10.13 Mojave
+        $ sudo port install git
 
-5. Install Z3
+5. Install Ivy:
 
-    Download and expand this archive: [https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip](https://github.com/Z3Prover/z3/archive/z3-4.6.0.zip)
+    $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
+    $ cd ivy
 
-        $ pwd
-        /Users/username/Downloads/z3-z3-4.6.0
+    Build the submodules like this (it takes a while):
 
-        $ python scripts/mk_make.py --prefix=/opt/local/Library/Frameworks/Python.framework/Versions/2.7 --python --pypkgdir=/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages
-        $ cd build
-        $ make -j 4
-        $ sudo make install
+        $ python build_submodules.py
 
-6. Install Ivy:
+    Install into your local Python like this
 
-    [https://github.com/Microsoft/ivy](https://github.com/Microsoft/ivy).
-    Select download zip in the “Clone or download” button and expand the archive.
-
-        $ pwd
-        /Users/username/Downloads/ivy-master
         $ sudo python setup.py install
-        export PATH=/opt/local/Library/Frameworks/Python.framework/Versions/2.7/bin:$PATH
 
-7. running test
+    If you want to run from the source tree for development purposes, do
+    this instead:
 
-        pwd
-        /Users/username/Downloads/ivy-master
-        cd doc/examples
-        ivy_check diagnose=true client_server_example.ivy
+        $ export PYTHONPATH=~/lib/python2.7/site-packages:$PYTHONPATH
+        $ python setup.py develop --prefix=~
+
+    This installs Ivy into your home directory, so you don't need sudo.
+    Also put the first command in your .profile script, so Python will
+    find Ivy in the future.
+
+    See the [python documentation](https://docs.python.org/2/install/) for
+    general instructions on installing python packages.
+
+
+6. running test
+
+        $ cd doc/examples
+        $ ivy_check diagnose=true client_server_example.ivy
 
 
 <a name="vagrant"></a> Installing in a virtual environment with Vagrant
