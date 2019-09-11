@@ -388,12 +388,13 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
     # strip the signature
     new_symbols = {}
     for name,sym in ivy_logic.sig.symbols.iteritems():
-        strip_params = strip_map_lookup(name,strip_map)
-        if strip_params:
-            if not (len(sym.sort.dom) >= len(strip_params)):
-                raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
-            new_sort = strip_sort(sym.sort,strip_params)
-            sym =  ivy_logic.Symbol(name,new_sort)
+        if sym not in im.module.sig.constructors:
+            strip_params = strip_map_lookup(name,strip_map)
+            if strip_params:
+                if not (len(sym.sort.dom) >= len(strip_params)):
+                    raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
+                new_sort = strip_sort(sym.sort,strip_params)
+                sym =  ivy_logic.Symbol(name,new_sort)
         new_symbols[name] = sym
     ivy_logic.sig.symbols.clear()
     ivy_logic.sig.symbols.update(new_symbols)
