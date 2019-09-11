@@ -184,7 +184,7 @@ class IntBV(XBV):
         """ bits is the number of bits in the bit vector representation """
         add_once_global("""
     struct IntClass {
-        IntClass(){}
+        IntClass() : val(0) {}
         IntClass(long long val) : val(val) {}
         long long val;
         size_t __hash() const {return val;}
@@ -297,7 +297,7 @@ class VariantType(CppClass):
     def isa(self,variant_idx,expr):
         """ return a test indicating whether expr is of the variant
         type with index variant_idx """
-        return '(' + expr + ').tag == {}'.format(variant_idx)
+        return '((' + expr + ').tag == {})'.format(variant_idx)
 
     def downcast(self,variant_idx,expr):
         """ downcast an expression of this type to the given variant type.

@@ -22,6 +22,9 @@ class AST(object):
            res.lineno = self.lineno
        return res
 
+class NoneAST(AST):
+    pass
+
 class Symbol(AST):
     def __init__(self,rep,sort):
         assert isinstance(rep,str)
@@ -705,6 +708,18 @@ class IfTactic(AST):
     def __str__(self):
         return 'if ' + str(self.args[0]) + ' { ' + str(self.args[1]) + ' } else { ' + str(self.args[2]) + ' }'
 
+class PropertyTactic(AST):
+    def __init__(self,*args):
+        self.args = args
+    def __str__(self):
+        p = self.args[0]
+        n = self.args[1]
+        pr = self.args[2]
+        return (('temporal ' if p.temporal else '')
+                + 'property ' + str(p)
+                + ('' if isinstance(n,NoneAST) else ('named ' + str(n)))
+                + ('' if isinstance(pr,NoneAST) else ('proof ' + str(pr))))
+
 class ComposeTactics(AST):
     def __str__(self):
         return '; '.join(map(str,self.args))
@@ -766,6 +781,10 @@ class FreshConstantDecl(ConstantDecl):
 class DestructorDecl(ConstantDecl):
     def name(self):
         return 'destructor'
+
+class ConstructorDecl(ConstantDecl):
+    def name(self):
+        return 'constructor'
 
 class DerivedDecl(Decl):
     def name(self):

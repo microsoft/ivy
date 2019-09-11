@@ -413,7 +413,8 @@ def gather_referenced_symbols(expr,res,ignore=[]):
             res.add(sym)
             if sym in is_derived:
                 ldf = is_derived[sym]
-                gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
+                if ldf is not True:
+                    gather_referenced_symbols(ldf.formula.args[1],res,ldf.formula.args[0].args)
                 
 skip_z3 = False
 
@@ -439,8 +440,11 @@ def make_thunk(impl,vs,expr):
         declare_symbol(impl,sym,classname=the_classname)
     for fun in funs:
         ldf = is_derived[fun]
-        with ivy_ast.ASTContext(ldf):
-            emit_derived(None,impl,ldf.formula,the_classname,inline=True)
+        if ldf is True:
+            emit_constructor(None,impl,fun,the_classname,inline=True)
+        else:
+            with ivy_ast.ASTContext(ldf):
+                emit_derived(None,impl,ldf.formula,the_classname,inline=True)
     envnames = [varname(sym) for sym in env]
     open_scope(impl,line='{}({}) {} {}'.format(name,','.join(sym_decl(sym,classname=the_classname) for sym in env)
                                              ,':' if envnames else ''
@@ -877,6 +881,8 @@ def collect_used_definitions(pre,inpdefs,ssyms):
     
 
 def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
+    global delegate_enums_to
+    delegate_enums_to = classname
     udefs,usyms = collect_used_definitions(pre,inpdefs,ssyms)
     global is_derived
     for sym in usyms:
@@ -897,6 +903,7 @@ def emit_defined_inputs(pre,inpdefs,code,classname,ssyms,fsyms):
         delegate_methods_to = 'obj.'
         code_line(code,code_eval(code,lhs) + ' = ' + code_eval(code,rhs))
         delegate_methods_to = ''
+    delegate_enums_to = ''
     
 def minimal_field_references(fmla,inputs):
     inpset = set(inputs)
@@ -1053,7 +1060,16 @@ def emit_action_gen(header,impl,name,action,classname):
     for sym in to_decl:
         emit_decl(impl,sym)
     indent(impl)
-    impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')))
+    import platform
+    if platform.system() == 'Windows':
+        winfmla = slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','')
+        impl.append('std::string winfmla = "(assert ";\n');
+        for winline in winfmla.split('\n'):
+            impl.append('winfmla.append("{} ");\n'.format(winline))
+        impl.append('winfmla.append(")");\n')
+        impl.append('add(winfmla);\n')
+    else:
+        impl.append('add("(assert {})");\n'.format(slv.formula_to_z3(pre).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"')))
 #    impl.append('__ivy_modelfile << slvr << std::endl;\n')
     indent_level -= 1
     impl.append("}\n");
@@ -1131,6 +1147,19 @@ def emit_derived(header,impl,df,classname,inline=False):
     mp = dict(zip(vs,ps))
     rhs = ilu.substitute_ast(df.args[1],mp)
     action = ia.AssignAction(retval,rhs)
+    action.formal_params = ps
+    action.formal_returns = [retval]
+    emit_some_action(header,impl,name,action,classname,inline)
+
+def emit_constructor(header,impl,cons,classname,inline=False):
+    name = cons.name
+    sort = cons.sort.rng
+    retval = il.Symbol("ret:val",sort)
+    vs = [il.Variable('X{}'.format(idx),s) for idx,s in enumerate(cons.sort.dom)]
+    ps = [ilu.var_to_skolem('fml:',v) for v in vs]
+    destrs = im.module.sort_destructors[sort.name]
+    asgns = [ia.AssignAction(d(retval),p) for idx,(d,p) in enumerate(zip(destrs,ps))]
+    action = ia.Sequence(*asgns);
     action.formal_params = ps
     action.formal_returns = [retval]
     emit_some_action(header,impl,name,action,classname,inline)
@@ -1546,16 +1575,19 @@ def emit_hash_thunk_to_solver(header,dom,classname,ct_name,ch_name):
     open_scope(header,line='z3::expr operator()( gen &g, const  z3::expr &v, hash_thunk<D,R> &val)'.replace('D',ct_name).replace('H',ch_name))
     code_line(header,'z3::expr res = g.ctx.bool_val(true)')
     code_line(header,'z3::expr disj = g.ctx.bool_val(false)')
+    code_line(header,'z3::expr bg = dynamic_cast<z3_thunk<D,R> *>(val.fun)->to_z3(g,v)'.replace('D',ct_name))
     open_scope(header,line='for(typename hash_map<D,R>::iterator it=val.memo.begin(), en = val.memo.end(); it != en; it++)'.replace('D',ct_name).replace('H',ch_name))
 #    code_line(header,'if ((*val.fun)(it->first) == it->second) continue;')
+    code_line(header,'z3::expr asgn = __to_solver(g,v,it->second)')
+#    code_line(header,'if (eq(bg,asgn)) continue')
     if dom is not None:
         code_line(header,'z3::expr cond = '+' && '.join('__to_solver(g,v.arg('+str(n)+'),it->first.arg'+str(n)+')' for n in range(len(dom))))
     else:
         code_line(header,'z3::expr cond = __to_solver(g,v.arg(0),it->first)')
-    code_line(header,'res = res && implies(cond,__to_solver(g,v,it->second))')
+    code_line(header,'res = res && implies(cond,asgn)')
     code_line(header,'disj = disj || cond')
     close_scope(header)
-    code_line(header,'res = res && (disj || dynamic_cast<z3_thunk<D,R> *>(val.fun)->to_z3(g,v))'.replace('D',ct_name))
+    code_line(header,'res = res && (disj || bg)')
     code_line(header,'return res')
     close_scope(header)
     close_scope(header,semi=True)
@@ -1604,6 +1636,9 @@ def module_to_cpp_class(classname,basename):
     is_derived = dict()
     for ldf in im.module.definitions + im.module.native_definitions:
         is_derived[ldf.formula.defines()] = ldf
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            is_derived[cons] = True
     global cpptypes
     cpptypes = []
     global sort_to_cpptype
@@ -1637,6 +1672,10 @@ def module_to_cpp_class(classname,basename):
 #    im.module.actions = dict((name,act) for name,act in im.module.actions.iteritems() if name in ra)
 
     header = ivy_cpp.context.globals.code
+    import platform
+    if platform.system() == 'Windows':
+        header.append('#define WIN32_LEAN_AND_MEAN\n')
+        header.append("#include <windows.h>\n")
     header.append("#define _HAS_ITERATOR_DEBUGGING 0\n")
     if target.get() == "gen":
         header.append('extern void ivy_assert(bool,const char *);\n')
@@ -1690,7 +1729,7 @@ def module_to_cpp_class(classname,basename):
 """)
     header.append("""
 #ifdef _WIN32
-    std::vector<DWORD> thread_ids;\n
+    std::vector<HANDLE> thread_ids;\n
 #else
     std::vector<pthread_t> thread_ids;\n
 #endif
@@ -1777,11 +1816,11 @@ DWORD WINAPI ReaderThreadFunction( LPVOID lpParam )
 
 DWORD WINAPI TimerThreadFunction( LPVOID lpParam ) 
 {
-    timer *cr = (reader *) lpParam;
+    timer *cr = (timer *) lpParam;
     while (true) {
-        int ms = timer->ms_delay();
+        int ms = cr->ms_delay();
         Sleep(ms);
-        timer->timeout(ms);
+        cr->timeout(ms);
     }
     return 0;
 } 
@@ -1829,7 +1868,7 @@ void CLASSNAME::install_reader(reader *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_reader, r);
@@ -1860,7 +1899,7 @@ void CLASSNAME::install_timer(timer *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_timer, r);
@@ -1902,7 +1941,7 @@ void CLASSNAME::install_thread(reader *r) {
             std::cerr << "failed to create thread" << std::endl;
             exit(1);
         }
-        thread_ids.push_back(dummy);
+        thread_ids.push_back(h);
     #else
         pthread_t thread;
         int res = pthread_create(&thread, NULL, _thread_reader, r);
@@ -1966,6 +2005,7 @@ struct deser_err {
 struct ivy_ser {
     virtual void  set(long long) = 0;
     virtual void  set(bool) = 0;
+    virtual void  setn(long long inp, int len) = 0;
     virtual void  set(const std::string &) = 0;
     virtual void  open_list(int len) = 0;
     virtual void  close_list() = 0;
@@ -2015,6 +2055,7 @@ struct ivy_binary_ser : public ivy_ser {
 struct ivy_deser {
     virtual void  get(long long&) = 0;
     virtual void  get(std::string &) = 0;
+    virtual void  getn(long long &res, int bytes) = 0;
     virtual void  open_list() = 0;
     virtual void  close_list() = 0;
     virtual bool  open_list_elem() = 0;
@@ -2502,7 +2543,9 @@ class z3_thunk : public thunk<D,R> {
     for ldf in im.module.definitions + im.module.native_definitions:
         with ivy_ast.ASTContext(ldf):
             emit_derived(header,impl,ldf.formula,classname)
-
+    for sortname, conss in im.module.sort_constructors.iteritems():
+        for cons in conss:
+            emit_constructor(header,impl,cons,classname)
     for native in im.module.natives:
         tag = native_type(native)
         if tag.startswith('encode'):
@@ -2514,7 +2557,7 @@ class z3_thunk : public thunk<D,R> {
                 raise iu.IvyError(native,"duplicate encoding for sort {}".format(tag))
             encoded_sorts.add(tag)
             continue
-        if tag not in ["member","init","header","impl"]:
+        if tag not in ["member","init","header","impl","inline"]:
             raise iu.IvyError(native,"syntax error at token {}".format(tag))
         if tag == "member":
             emit_native(header,impl,native,classname)
@@ -2570,12 +2613,29 @@ class z3_thunk : public thunk<D,R> {
     impl.append("""CLASSNAME::~CLASSNAME(){
     __lock(); // otherwise, thread may die holding lock!
     for (unsigned i = 0; i < thread_ids.size(); i++){
+#ifdef _WIN32
+       // No idea how to cancel a thread on Windows. We just suspend it
+       // so it can't cause any harm as we destruct this object.
+       SuspendThread(thread_ids[i]);
+#else
         pthread_cancel(thread_ids[i]);
         pthread_join(thread_ids[i],NULL);
+#endif
     }
     __unlock();
 }
 """.replace('CLASSNAME',classname))
+
+    for native in im.module.natives:
+        tag = native_type(native)
+        if tag == "inline":
+            native_classname = classname
+            code = native_to_str(native)
+            native_classname = None
+            if code not in once_memo:
+                once_memo.add(code)
+                header.append(code)
+
 
     ivy_cpp.context.globals.code.extend(header)
     ivy_cpp.context.members.code = []
@@ -3127,6 +3187,9 @@ def emit_constant(self,header,code):
         if self.sort in sort_to_cpptype: 
             code.append(sort_to_cpptype[self.sort].literal(self.name))
             return
+    if isinstance(self,il.Symbol) and self in il.sig.constructors:
+        if delegate_enums_to:
+            code.append(delegate_enums_to+'::')
     code.append(varname(self.name))
     if self in is_derived:
         code.append('()')
@@ -3206,6 +3269,7 @@ def capture_emit(a,header,code,capture_args):
         a.emit(header,code)
 
 delegate_methods_to = ''
+delegate_enums_to = ''
 
 def emit_app(self,header,code,capture_args=None):
     # handle macros
@@ -4307,7 +4371,11 @@ def emit_repl_boilerplate3test(header,impl,classname):
 
 """)
     totalweight = 0.0
+    num_public_actions = 0
     for actname in sorted(im.module.public_actions):
+        if actname == 'ext:_finalize':
+            continue
+        num_public_actions += 1
         action = im.module.actions[actname]
         impl.append("        generators.push_back(new {}_gen);\n".format(varname(actname)))
         aname = (actname[4:] if actname.startswith('ext:') else actname) +'.weight'
@@ -4324,8 +4392,10 @@ def emit_repl_boilerplate3test(header,impl,classname):
         impl.append("        weights.push_back({});\n".format(aval))
         totalweight += aval
     impl.append("        double totalweight = {};\n".format(totalweight))
-    impl.append("        int num_gens = {};\n".format(len(im.module.public_actions)))
+    impl.append("        int num_gens = {};\n".format(num_public_actions))
             
+    final_code = 'ivy.__lock(); ivy.ext___finalize(); ivy.__unlock();' if 'ext:_finalize' in im.module.public_actions else ''
+    
     impl.append("""
 
 #ifdef _WIN32
@@ -4439,6 +4509,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
             }
         }            
     }
+    FINALIZE
 #ifdef _WIN32
                 Sleep(final_ms);  // HACK: wait for late responses
 #endif
@@ -4451,7 +4522,7 @@ def emit_repl_boilerplate3test(header,impl,classname):
     timers.clear();
 
 
-""".replace('classname',classname))
+""".replace('classname',classname).replace('FINALIZE',final_code))
 
 def emit_boilerplate1(header,impl,classname):
     header.append("""
@@ -4637,7 +4708,7 @@ public:
             return ctx.bv_val(value,range.bv_size());
         if (range.is_int())
             return ctx.int_val(value);
-        return enum_values.find(range)->second[value]();
+        return enum_values.find(range)->second[(int)value]();
     }
 
     z3::expr int_to_z3(const z3::sort &range, const std::string& value) {
@@ -5018,21 +5089,32 @@ def main_int(is_ivyc):
                     for x,y in im.module.attributes.iteritems():
                         p,c = iu.parent_child_name(x)
                         if c == 'libspec':
-                            libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(','))
+                            if platform.system() == 'Windows':
+                                libspec += ''.join(' {}'.format(ll) for ll in y.rep.strip('"').split(',') if ll.endswith('.lib'))
+                            else:
+                                libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(',') if not ll.endswith('.lib'))
                     if platform.system() == 'Windows':
                         if 'Z3DIR' in os.environ:
-                            z3incspec = '/I %Z3DIR%\\include'
-                            z3libspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                            incspec = '/I %Z3DIR%\\include'
+                            libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
                         else:
                             import z3
                             z3path = os.path.dirname(os.path.abspath(z3.__file__))
-                            z3incspec = '/I {}'.format(z3path)
-                            z3libspec = '/LIBPATH:{}'.format(z3path)
+                            incspec = '/I {}'.format(z3path)
+                            libpspec = '/LIBPATH:{}'.format(z3path)
+                        for lib in libs:
+                            _incdir = lib[1] if len(lib) >= 2 else []
+                            _libdir = lib[2] if len(lib) >= 3 else []
+                            _incdir = [_incdir] if isinstance(_incdir,str) else _incdir
+                            _libdir = [_libdir] if isinstance(_libdir,str) else _libdir
+                            incspec += ''.join(' /I {} '.format(d) for d in _incdir)
+                            libpspec += ''.join(' /LIBPATH:{} '.format(d) for d in _libdir)
                         vsdir = find_vs()
                         if opt_compiler.get() != 'g++':
-                            cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(vsdir,basename)
+                            cmd = '"{}\\VC\\vcvarsall.bat" amd64& cl /EHsc /Zi {}.cpp ws2_32.lib'.format(vsdir,basename)
                             if target.get() in ['gen','test']:
-                                cmd = '"{}\\VC\\vcvarsall.bat"& cl /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,z3incspec,basename,z3libspec)
+                                cmd = '"{}\\VC\\vcvarsall.bat" amd64& cl /MDd /EHsc /Zi {} {}.cpp ws2_32.lib libz3.lib /link {}'.format(vsdir,incspec,basename,libpspec)
+                            cmd += libspec
                         else:
                             cmd = "g++ {} -I %Z3DIR%/include -L %Z3DIR%/lib -L %Z3DIR%/bin -g -o {} {}.cpp -lws2_32".format(gpp11_spec,basename,basename)
                             if target.get() in ['gen','test']:
@@ -5105,6 +5187,8 @@ hash_h = """
   class "hash" should be made in this namespace.
 
   --*/
+
+#pragma once
 
 #ifndef HASH_H
 #define HASH_H

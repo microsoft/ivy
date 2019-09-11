@@ -1,6 +1,6 @@
 #lang ivy1.7
 
-include quic_server_test
+include quic_client_test
 
 export frame.max_stream_id.handle
 export frame.max_stream_data.handle
@@ -16,8 +16,8 @@ attribute frame.max_data.handle.weight = "0.02"
 # export frame.connection_close.handle
 # attribute frame.connection_close.handle.weight = "0.02"
 
-#export frame.application_close.handle
-#attribute frame.application_close.handle.weight = "0.02"
+export frame.application_close.handle
+attribute frame.application_close.handle.weight = "0.02"
 
 export frame.stop_sending.handle
 

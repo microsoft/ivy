@@ -28,9 +28,11 @@ module udp_impl(host,pkt,ser,des) = {
 
 <<< header
 
-    #include <netinet/udp.h>
     #include <list>
+    #ifndef _WIN32
+    #include <netinet/udp.h>
     #include <semaphore.h>
+    #endif
 
     class udp_listener;   // class of threads that listen for connections
     class udp_callbacks;  // class holding callbacks to ivy
@@ -260,7 +262,7 @@ object impl(me:host) = {
 #ifdef _WIN32
 		     { std::cerr << "sendto failed " << WSAGetLastError() << "\n"; exit(1); }
 #else
-		     { std::cerr << "sendto failed\n"; exit(1); }
+		     { perror("sendto failed"); exit(1); }
 #endif
 	>>>
     }

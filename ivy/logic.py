@@ -188,10 +188,16 @@ class Eq(recstruct('Eq', [], ['t1', 't2'])):
         return '({} == {})'.format(self.t1, self.t2)
 
 
-class Ite(recstruct('Ite', [], ['cond', 't_then', 't_else'])):
+# Ite expressions must be given a sort, as otherwise contructing trees of
+# Ite's is quadratic.
+
+
+class Ite(recstruct('Ite', ['sort'], ['cond', 't_then', 't_else'])):
     __slots__ = ()
+    def __init__(self, cond, t_then, t_else):
+        super(Ite, self).__init__(t_then.sort,cond,t_then,t_else)
     @classmethod
-    def _preprocess_(cls, cond, t_then, t_else):
+    def _preprocess_(cls, sort, cond, t_then, t_else):
         if cond.sort not in (Boolean, TopS):
             raise SortError("Ite condition must be Boolean: {}".format(body))
         elif isinstance(t_then.sort,TopSort) or isinstance(t_else.sort,TopSort):
@@ -201,10 +207,9 @@ class Ite(recstruct('Ite', [], ['cond', 't_then', 't_else'])):
         elif not first_order_sort(t_then.sort):
             pass # TODO: should we raise the following exception?
             #raise SortError("Cannot apply Ite to high order sorts: {}, {}".format(t_then, t_else))
-        return cond, t_then, t_else
+        return sort, cond, t_then, t_else
     def __str__(self):
         return 'Ite({}, {}, {})'.format(self.cond, self.t_then, self.t_else)
-    sort = property(lambda self: self.t_then.sort if self.t_then.sort != TopS else self.t_else.sort)
 
 
 class Not(recstruct('Not', [], ['body'])):

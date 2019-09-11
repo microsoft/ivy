@@ -10,13 +10,17 @@ include tls_picotls
 
 module tls_lower_intf(cid,bytes) = {
 
+    # Encryption level, ranges from 0-3. 
+    
+    type level
+
     # Transfers message data from connection to underlying transport
     
-    action send(c:cid,data:bytes)
+    action send(c:cid,data:bytes,lev:level)
     
     # Transfers message data from the underlying transport to connection
     
-    action recv(c:cid,data:bytes)
+    action recv(c:cid,data:bytes,lev:level)
     
 }
 
