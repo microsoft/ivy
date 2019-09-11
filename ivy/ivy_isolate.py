@@ -391,7 +391,7 @@ def strip_isolate(mod,isolate,impl_mixins,all_after_inits,extra_strip):
         strip_params = strip_map_lookup(name,strip_map)
         if strip_params:
             if not (len(sym.sort.dom) >= len(strip_params)):
-                raise iu.IvyError(None,"cannot strip isolate parameters from {}",name)
+                raise iu.IvyError(None,"cannot strip isolate parameters from {}".format(name))
             new_sort = strip_sort(sym.sort,strip_params)
             sym =  ivy_logic.Symbol(name,new_sort)
         new_symbols[name] = sym
