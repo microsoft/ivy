@@ -38,6 +38,7 @@ if not os.path.exists('ivy/lib'):
 
 do_cmd('cp include/*.h ivy/include')
 do_cmd('cp lib/*.so ivy/lib')
+do_cmd('cp lib/*.so ivy/z3')
 
 
 
