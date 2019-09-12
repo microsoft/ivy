@@ -3,10 +3,10 @@ layout: page
 title: Installing IVy
 ---
 
-There are two ways to install ivy, in order of preference:
+There are two ways to install ivy:
 
 1. [Install from source](#source)
-2. [Install from source in a virtual environment with Vagrant](#vagrant)
+2. [Install a binary release](#binary)
 
 <a name="source"></a> Installing from source
 --------------------------------------------
@@ -14,6 +14,12 @@ There are two ways to install ivy, in order of preference:
 1. [Install from source on Linux](#linuxnotes)
 2. [Install from source on Windows](#windowsnotes)
 3. [Install from source on Mac](#macnotes)
+
+
+<a name="source"></a> Installing a binary release
+--------------------------------------------
+
+1. [Install from source on Linux](#linuxbinary)
 
 
 <a name="linuxnotes"></a> Installation from source on Linux
@@ -38,44 +44,13 @@ do this:
 
     sudo apt-get install python-pip
 
-You can install IVy in a python virtual environment if you don't want
-to pollute your local python setup. If you want to use a virtual
-environment, do the following before following the remaining
-installation instructions:
-
-    $ pip install virtualenv
-    $ virtualenv ivy_env
-    $ cd ivy_env
-    $ . bin/activate
-
 #### GCC
 
 You need to have a C++ compiler installed. If you don't already have one, do this:
 
     sudo apt-get install g++
 
-
     
-and put the above command in `~/.profile` as well.
-
-Now test your installation like this:
-
-    $ python
-    >>> import z3
-
-If you don't get an error message, Z3 may be installed. If you do get
-an error message, it definitely isn't.
-
-If you don't want to do a system-wide installation, you can find some
-instructions
-[here](http://www.cs.utexas.edu/users/moore/acl2/manuals/current/manual/index-seo.php/SMT____Z3-INSTALLATION). If
-you follow these instructions, then also do this:
-
-    export Z3DIR=$HOME/usr
-    
-and put the above command in your .profile as well.
-
-
 #### Python packages
 
 Install the python packages `ply`, `pygraphviz` and `tarjan`. On Ubuntu, install them
@@ -85,15 +60,6 @@ like this:
     $ pip install tarjan
 
 To use the IVy command line tools only, there is no need to install `python-pygraphviz`.
-
-Make sure you get version 3.4 of python-ply as some later versions are broken.
-As an alternative, `pip` can install all the packages, but you need to make sure
-the dependencies on system packages are met:
-
-    $ sudo apt-get install graphviz graphviz-dev python-dev pkg-config
-    $ pip install ply pygraphviz tarjan
-
-This latter is the option if you are making a virtual environment.
 
 #### Tcl/Tk/Tix
 
@@ -105,6 +71,11 @@ this:
 
 This step is not necessary if using the IVy command line tools only.
 
+### Install git
+
+If `which git` doesn't show anything, install git:
+
+    $ sudo apt-get install git
 
 ### Install IVy
 
@@ -284,77 +255,38 @@ command line build tools for C++ installed. You can get them free of charge
     general instructions on installing python packages.
 
 
-6. running test
+6. running a test
 
         $ cd doc/examples
         $ ivy_check diagnose=true client_server_example.ivy
 
 
-<a name="vagrant"></a> Installing in a virtual environment with Vagrant
-------------------------------------------------
-
-IVy users and contributors may also deploy IVy within a container
-using [Vagrant](https://www.vagrantup.com/).
-
-### Windows
-
-On Windows, [Virtualbox](https://virtualbox.org) is currently the recommended container provider.
-
-1. Clone the `IVy` repository (e.g. `git clone https://github.com/Microsoft/ivy.git`).
-2. Download and install [Vagrant](https://www.vagrantup.com/).
-3. Download and install [Virtualbox](http://virtualbox.org).
-4. Type `vagrant plugin install vagrant-vbguest` to install the [`vagrant-vbguest`](https://github.com/dotless-de/vagrant-vbguest) plugin (optional but recommended).
-5. Download and install an X11 server for Windows (e.g. [Xming](http://www.straightrunning.com/XmingNotes/)).
-6. Type `vagrant up` [from an administrator console](https://github.com/mitchellh/vagrant/issues/3854) to prepare a new development environment. This is likely to take some time to complete the first time it is done, because [z3](https://github.com/Z3Prover/z3) must be compiled from its sources.
-7. Launch your X11 server and type `vagrant ssh` in a console window to get access to IVy from a shell within the container.
-
-### Linux
-
-On Linux, [Docker](https://docker.com) is also available as a container provider, and will yield better performance than the Virtualbox backend.
-
-1. Clone the `IVy` repository (e.g. `git clone https://github.com/Microsoft/ivy.git`).
-2. Install [Vagrant](https://www.vagrantup.com/).
-3. Install [Docker](https://docker.com).
-4. (Debian-based systems) Ensure your user is in the `docker` group.
-5. Type `vagrant up --provider=docker`.
-6. Type `vagrant ssh` to get access to IVy from a shell.
-
-Linux users also have the option of directly executing the provisioning scripts in the `scripts/setup` directory, bypassing any inconvenience a container might impose. The scripts are divided in such a way as to facilitate this. Those interested should take note, however, that the scripts have only been tested with Ubuntu and Debian Vagrant guest images so far.
-
-
-
 <a name="release"></a> Binary releases
 --------------------
 
-Some old binary releases of IVy are available 
-on [IVy's Github release page](https://github.com/Microsoft/ivy/releases). New binary releases are not being created however.
+Ivy is released as a Python package in the PyPI repository.
 
-### Linux
+### <a name="linuxbinary"> Install binary release on Linux
 
-On Debian-based linux ditributions such as Ubuntu, download and
-install the file `ms-ivy_X.X_YYYY.deb` where `X.X` is the IVy version and
-`YYYY` is the machine architecture. Use your system's package manager to
-install this package, or the following commands:
+    $ sudo apt-get install python python-pip g++ python-ply python-pygraphviz python-tk tix
+    $ sudo pip install ms-ivy
 
-    $ sudo dpkg -i ms-ivy_X.X_YYYY.deb
-    $ sudo apt-get install -f
+Note, if you omit `sudo` in the second command, Ivy will be installed into `~\.local\bin`.
+In this case, you should put this directory in your `PATH`. 
 
-The first command will report missing dependencies, which will be
-installed by the second command.
+This does not install the documentation and example files. You can get
+these from github like this (see the directory `ivy\doc`):
 
-### Windows
+    $ sudo apt-get install git
+    $ git clone https://github.com/Microsoft/ivy.git
 
-The Windows binary distribution is in the form of a zip
-archive. Download the file `ivy.X.Y-.Windows-z86.zip`, where `X.X` is
-the IVy version (this will work on both 32-bit and 64 bit Intel
-Windows). Use Windows Explorer to extract this archive in the
-directory `C:\`. This should give you a directory `C:\ivy`. To use IVy
-in a command window, first execute this command:
 
-    > C:\ivy\scripts\activate
+### <a name="windowsbinary"> Install binary release on Windows
 
-### Mac
+Windows binary distributions are not yet available.
 
-There currently is no binary distribution for Mac. 
+### <a name="macbinary"> Install binary release on Mac
+
+Mac binary distributions are not yet available.
 
  
