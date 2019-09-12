@@ -26,7 +26,7 @@ class Event(object):
     def subs(self):
         return ([ArgList(self.args)] if self.args else []) + self.children
     def match(self,ev,binding=None):
-        return ((ev.rep == '*' or ev.rep == self.rep)
+        return ((ev.rep == '*' or self.rep.startswith(ev.rep))
                 and all(a.match(b,binding) for a,b in zip(self.args,ev.args)))
     def __str__(self):
         res = self.text()
@@ -73,7 +73,6 @@ class Symbol(object):
             return True
         return False
     def map(self,fun):
-        iu.dbg('fun')
         return fun(self.name)
     
 class App(object):
@@ -209,7 +208,6 @@ class Anchor(object):
                 if not isinstance(res,DictValue) or field not in res:
                     raise iu.IvyError(None,'value has no field {}'.format(field))
                 res = res[field]
-            iu.dbg('res')
             return res
         return Symbol(s)
 
