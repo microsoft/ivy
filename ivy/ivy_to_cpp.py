@@ -1781,6 +1781,7 @@ def module_to_cpp_class(classname,basename):
 #include <string.h>
 #include <stdio.h>
 #include <string>
+#include <cstdint>
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
     impl.append("std::ofstream __ivy_out;\n")
@@ -4701,7 +4702,7 @@ public:
         return apply(decl_name,a);
     }
 
-    z3::expr int_to_z3(const z3::sort &range, __int64 value) {
+    z3::expr int_to_z3(const z3::sort &range, int64_t value) {
         if (range.is_bool())
             return ctx.bool_val((bool)value);
         if (range.is_bv())
