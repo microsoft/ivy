@@ -5126,7 +5126,7 @@ def main_int(is_ivyc):
                             if 'Z3DIR' in os.environ:
                                 paths = '-I $Z3DIR/include -L $Z3DIR/lib -Wl,-rpath=$Z3DIR/lib' 
                             else:
-                                _dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                                _dir = os.path.dirname(os.path.abspath(__file__))
                                 paths = '-I {} -L {} -Wl,-rpath={}'.format(os.path.join(_dir,'include'),os.path.join(_dir,'lib'),os.path.join(_dir,'lib'))
                         else:
                             paths = ''

@@ -31,6 +31,13 @@ do_cmd('make -j 4')
 
 do_cmd('make install')
 
+os.chdir(cwd)
+
+if not os.path.exists('ivy/lib'):
+    do_cmd('mkdir ivy/lib')
+
+do_cmd('cp include/*.h ivy/include')
+do_cmd('cp lib/*.so ivy/lib')
 
 
 
