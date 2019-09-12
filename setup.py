@@ -22,7 +22,7 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so']},
+      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','*.so']},
       install_requires=[
           'ply',
           'tarjan'
