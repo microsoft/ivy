@@ -102,75 +102,14 @@ file you are reading (relative to the root of the Ivy tree, it is
 `doc/examples/quic`).
 
 First, Ivy must be installed, as described
-[here](http://microsoft.github.io/ivy/install.html). It must be
-installed from source, using the git branch `quic18_client`. That
-is, to get ivy, do this:
-
-    $ cd
-    $ git clone https://github.com/Microsoft/ivy
-    $ git checkout quic18_client
-    
-After you have finished with the Ivy installation, do the following steps
-just one a given machine.
-
-
-### Virtual networking and packet capture
-
-Optionally, to monitor implementations of the protocol, it is useful
-to run them in a virtual network environment. For this we use the
-[CORE virtual networking environment](https://www.nrl.navy.mil/itd/ncs/products/core),
-the `tcpdump` command and the `pcap` library. To install these on an
-Ubuntu system with version 14.04 or higher, do the following:
-
-    sudo apt-get install core-network tcpdump libpcap-dev
-
-On Ubuntu 18.04 you have to install from source. Get the source from
-the link above and follow the README. 
-
-Note: this is only useful if you want to monitor packets using
-tcpdump, as it helps elimiante background noise. It isn't needed for
-testing purposes.
-
-### Picotls
-
-The testers make use of the `picotls` implementation of TLS. Install
-it according to the instructions
-[here](https://github.com/h2o/picotls). 
-
-Here are some rough instructions on Ubuntu (YMMV):
-
-    $ cd
-    $ sudo apt install libssl-dev pkg-config
-    $ export OPENSSL_INCLUDE_DIR=/usr/include/openssl
-    $ git clone https://github.com/h2o/picotls.git
-    $ cd picotls
-    $ git submodule init
-    $ git submodule update
-    $ cmake .
-    $ make
-
-Windows: Instructions for installing picotls on Windows are
-[here](https://github.com/h2o/picotls/blob/master/WindowsPort.md).
-OpenSSL binaries for Windows can be found
-[here](https://slproweb.com/products/Win32OpenSSL.html).
-These OpenSSL binaries are missing a file `include/ms/applink.c` that
-you will have to get from the OpenSSL source repository.
-You also need to copy the libcrypto DLL into "this directory":
-
-    copy c:\OpenSSL-Win64\bin\libcrypto-1_1-x64.dll
-
-Continuing with general instructions:  Then you need to tell the Ivy
-compiler where to find the `picotls` library and headers (unless you
-copy them to standard locations). Use this command, where
-`PICOTLS_DIR` is the directory in which `picotls` was built:
-
-    $ ivy_libs add picotls $PICOTLS_DIR .
-    
-Notice the dot in the above, which is essential.
+[here](http://microsoft.github.io/ivy/install.html).     
+After you have finished with the Ivy installation, do the following
+steps just one a given machine.
 
 ### Make a build and a temp directory
 
-If there's no directory `build` in "this directory", make one now:
+If there are no directories `build` and `test/temp` in "this
+directory", create them now:
 
     $ mkdir build
     $ mkdir test/temp
@@ -178,17 +117,6 @@ If there's no directory `build` in "this directory", make one now:
 ### Install some packages
 
     $ pip install pexpect
-
-### Build the Ivy packet monitor
-
-*Note: skip this step, as the packet monitor doesn't currently work.*
-
-To build the Ivy monitor, change to "this directory" and compile
-`quic_monitor.ivy` like this:
-
-    ivyc quic_monitor.ivy
-
-This should create a binary file `quic_monitor`. 
 
 ### Build the server tester
 
@@ -221,7 +149,7 @@ Run a server:
 
     ./picoquicdemo
     
-Run a client 
+Run a client:
 
     ./picoquicdemo localhost
     
@@ -286,89 +214,6 @@ To run the test client:
     out/Default/quick_client --host=127.0.0.1 --port=6121 --disable-certificate-verification https://www.example.org/ --quic-enable-version-99
 
 
-Virtual network startup
-=======================
-
-*Note: the packet monitor doesn't currently work because it needs a
-way to get the negotiated secrets from TLS. When it does again work,
-the following instructions can be used.*
-
-If you want to use virtual networking on linux to isolate QUIC, this
-step should be performed once, and then redone after each reboot of
-the machine (or after you shut down the virtual network
-configuration).
-
-Use the following command in "this directory" (the one containing this
-file) to set up a suitable virtual network on your system:
-
-    sudo ./vnet_setup.sh
-
-
-Running QUIC and capturing packets
-==================================
-
-*Note: the packet monitor doesn't currently work because it needs a
-way to get the negotiated secrets from TLS. When it does again work,
-the following instructions can be used.*
-
-If you haven't done the above virtual network startup step since the
-last reboot of your machine, do it now.
-
-We will use MinQUIC as an example, here, but the commands can be
-monitored to run different implementations (or mix implementations).
-
-Change to the directory containing MinQUIC:
-
-    cd $GOPATH/src/github.com/kenmcmil/minq
-
-Create three terminals, A, B and C.
-
-Terminal A: run a server in node `n0`:
-    
-    sudo vcmd -c /tmp/n0.ctl -- `which go` run `pwd`/bin/server/main.go --addr=10.0.0.1:4433 --server-name=10.0.0.1
-
-Terminal B: trace packets with `tcpdump`:
-
-    sudo tcpdump -s 0 -i veth0 -w mycap.pcap
-
-Terminal C: run a client in node `n1`:
-
-    sudo vcmd -c /tmp/n1.ctl -- `which go` run `pwd`/bin/client/main.go --addr=10.0.0.1:4433
-
-Text typed into terminal C should appear on terminal A. The connection
-will time out after five seconds of inactivity. When the client
-finishes, kill the `tcpdump` process in terminal B with SIGINT
-(control-C). You should now have a file `mycap.pcap` containing
-captured packets.
-
-To run the server with logging, do this:
-
-    MINQ_LOG='*' MINT_LOG='*' go run bin/server/main.go
-
-Running the Ivy monitor
-=======================
-
-*Note: the packet monitor doesn't currently work because it needs a
-way to get the negotiated secrets from TLS. When it does again work,
-the following instructions can be used.*
-
-To run the Ivy monitor, change to "this directory".  Copy your packet
-capture file `mycap.pcap` into "this directory" and then do:
-
-    ./quic_monitor mycap.pcap > log.iev
-
-The file `log.iev` should have lines like this:
-
-    < show_packet({protocol:udp,addr:0xa000002,port:0x869b},{protocol:udp,addr:0xa000001,port:0x1151},{hdr_long:0x1,hdr_type:0x7f,hdr_cid:0x7c74846907e4ce90,hdr_version:0xff000009,hdr_pkt_num:0x3dee3059,payload:[{frame.stream:{off:0x1,len:0x1,fin:0,id:0,offset:0,length:0x282,data:[0x16,0x3,0x3,...]}}]})
-
-These are decoded packets. Each line consists of a source endpoint, a
-destination endpoint and a packet. The structure of packets is
-described in [quic_packet.ivy](quic_packet.md).
-
-If the specification is violated by the packet trace, the file will
-end with an error message indicating the requirement that was
-violated.
-
 Run the server and client testers
 =================================
 
@@ -397,9 +242,10 @@ You may get output that looks something like this:
     FAIL
     error: 1 tests(s) failed
 
-You can see here the output directory that was created and the command that was run. In this case the
-test reported a failure. You can look at the given source code line to see where the failure was. Looking
-in the output directory, we have the following:
+You can see here the output directory that was created and the command
+that was run. In this case the test reported a failure. You can look
+at the given source code line to see where the failure was. Looking in
+the output directory, we have the following:
 
     $ ls temp/175
     quic_server_test_stream0.err  quic_server_test_stream0.iev  quic_server_test_stream0.out
@@ -512,4 +358,155 @@ TODO list
 - Retransmissions (seems to be only liveness properties)
 
 - Test the key phase bit
+
+Other possibly useful instructions
+----------------------------------
+
+### Virtual networking and packet capture
+
+Optionally, to monitor implementations of the protocol, it is useful
+to run them in a virtual network environment. For this we use the
+[CORE virtual networking environment](https://www.nrl.navy.mil/itd/ncs/products/core),
+the `tcpdump` command and the `pcap` library. To install these on an
+Ubuntu system with version 14.04 or higher, do the following:
+
+    sudo apt-get install core-network tcpdump libpcap-dev
+
+On Ubuntu 18.04 you have to install from source. Get the source from
+the link above and follow the README. 
+
+Note: this is only useful if you want to monitor packets using
+tcpdump, as it helps elimiante background noise. It isn't needed for
+testing purposes.
+
+### Picotls
+
+The testers make use of the `picotls` implementation of TLS. Install
+it according to the instructions
+[here](https://github.com/h2o/picotls). 
+
+Here are some rough instructions on Ubuntu (YMMV):
+
+    $ cd
+    $ sudo apt install libssl-dev pkg-config
+    $ export OPENSSL_INCLUDE_DIR=/usr/include/openssl
+    $ git clone https://github.com/h2o/picotls.git
+    $ cd picotls
+    $ git submodule init
+    $ git submodule update
+    $ cmake .
+    $ make
+
+Windows: Instructions for installing picotls on Windows are
+[here](https://github.com/h2o/picotls/blob/master/WindowsPort.md).
+OpenSSL binaries for Windows can be found
+[here](https://slproweb.com/products/Win32OpenSSL.html).
+These OpenSSL binaries are missing a file `include/ms/applink.c` that
+you will have to get from the OpenSSL source repository.
+You also need to copy the libcrypto DLL into "this directory":
+
+    copy c:\OpenSSL-Win64\bin\libcrypto-1_1-x64.dll
+
+Continuing with general instructions:  Then you need to tell the Ivy
+compiler where to find the `picotls` library and headers (unless you
+copy them to standard locations). Use this command, where
+`PICOTLS_DIR` is the directory in which `picotls` was built:
+
+    $ ivy_libs add picotls $PICOTLS_DIR .
+    
+Notice the dot in the above, which is essential.
+
+### Build the Ivy packet monitor
+
+*Note: skip this step, as the packet monitor doesn't currently work.*
+
+To build the Ivy monitor, change to "this directory" and compile
+`quic_monitor.ivy` like this:
+
+    ivyc quic_monitor.ivy
+
+This should create a binary file `quic_monitor`. 
+
+Virtual network startup
+=======================
+
+*Note: the packet monitor doesn't currently work because it needs a
+way to get the negotiated secrets from TLS. When it does again work,
+the following instructions can be used.*
+
+If you want to use virtual networking on linux to isolate QUIC, this
+step should be performed once, and then redone after each reboot of
+the machine (or after you shut down the virtual network
+configuration).
+
+Use the following command in "this directory" (the one containing this
+file) to set up a suitable virtual network on your system:
+
+    sudo ./vnet_setup.sh
+
+
+Running QUIC and capturing packets
+==================================
+
+*Note: the packet monitor doesn't currently work because it needs a
+way to get the negotiated secrets from TLS. When it does again work,
+the following instructions can be used.*
+
+If you haven't done the above virtual network startup step since the
+last reboot of your machine, do it now.
+
+We will use MinQUIC as an example, here, but the commands can be
+monitored to run different implementations (or mix implementations).
+
+Change to the directory containing MinQUIC:
+
+    cd $GOPATH/src/github.com/kenmcmil/minq
+
+Create three terminals, A, B and C.
+
+Terminal A: run a server in node `n0`:
+    
+    sudo vcmd -c /tmp/n0.ctl -- `which go` run `pwd`/bin/server/main.go --addr=10.0.0.1:4433 --server-name=10.0.0.1
+
+Terminal B: trace packets with `tcpdump`:
+
+    sudo tcpdump -s 0 -i veth0 -w mycap.pcap
+
+Terminal C: run a client in node `n1`:
+
+    sudo vcmd -c /tmp/n1.ctl -- `which go` run `pwd`/bin/client/main.go --addr=10.0.0.1:4433
+
+Text typed into terminal C should appear on terminal A. The connection
+will time out after five seconds of inactivity. When the client
+finishes, kill the `tcpdump` process in terminal B with SIGINT
+(control-C). You should now have a file `mycap.pcap` containing
+captured packets.
+
+To run the server with logging, do this:
+
+    MINQ_LOG='*' MINT_LOG='*' go run bin/server/main.go
+
+Running the Ivy monitor
+=======================
+
+*Note: the packet monitor doesn't currently work because it needs a
+way to get the negotiated secrets from TLS. When it does again work,
+the following instructions can be used.*
+
+To run the Ivy monitor, change to "this directory".  Copy your packet
+capture file `mycap.pcap` into "this directory" and then do:
+
+    ./quic_monitor mycap.pcap > log.iev
+
+The file `log.iev` should have lines like this:
+
+    < show_packet({protocol:udp,addr:0xa000002,port:0x869b},{protocol:udp,addr:0xa000001,port:0x1151},{hdr_long:0x1,hdr_type:0x7f,hdr_cid:0x7c74846907e4ce90,hdr_version:0xff000009,hdr_pkt_num:0x3dee3059,payload:[{frame.stream:{off:0x1,len:0x1,fin:0,id:0,offset:0,length:0x282,data:[0x16,0x3,0x3,...]}}]})
+
+These are decoded packets. Each line consists of a source endpoint, a
+destination endpoint and a packet. The structure of packets is
+described in [quic_packet.ivy](quic_packet.md).
+
+If the specification is violated by the packet trace, the file will
+end with an error message indicating the requirement that was
+violated.
 

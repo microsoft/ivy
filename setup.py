@@ -14,7 +14,7 @@ except:
   long_description = None
 
 setup(name='ms_ivy',
-      version='0.2',
+      version='0.3',
       description='IVy verification tool',
       long_description=long_description,
       url='https://github.com/microsoft/ivy',
@@ -22,7 +22,7 @@ setup(name='ms_ivy',
       author_email='nomail@example.com',
       license='MIT',
       packages=find_packages(),
-      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','z3/*.so']},
+      package_data={'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','lib/*.a','z3/*.so']},
       install_requires=[
           'ply',
           'tarjan'

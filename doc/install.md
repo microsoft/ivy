@@ -30,7 +30,7 @@ also work on other Debian-based distributions.
 
 ### Prerequisites
 
-    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix 
+    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix pkg-config
 
 ### Install IVy
 

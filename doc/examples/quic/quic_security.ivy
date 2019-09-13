@@ -1,0 +1,267 @@
+#lang ivy1.7
+
+include tls_protocol
+
+# The security protocol
+# ---------------------
+
+# The QUIC security uses a cryptographic handshake to establish
+# identities of the participants oin a connectino and to establish
+# shared secrets that can be used for session encryption.
+
+# Send event
+# ==========
+#
+# This event corresponds to transmission of data between from a TLS
+# endpoint to its peer on a given connection. In concept it occurs at
+# the moment when the implmentation of TLS passes data to QUIC to be
+# transmitted to the peer. This is a ghost event, since it is not
+# visible on the wire. However, it can easily be inferred by examining
+# the QUIC crypto frames.
+#
+# Parameters
+# ----------
+
+# - `src`: the soure endpoint
+# - `dst`: the destination endpoint
+# - `scid`: the source AID (the local process)
+# - `dcid`: the destination AID (the remote process)
+# - `data`: the handshake bytes transmitted
+# - `pos`: the offset in the crypto stream of the bytes
+# - `e`: the encryption level (same as the packet type)
+
+action tls_send_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,
+                      dcid:cid,data:stream_data,
+                      pos:stream_pos,e:quic_packet_type)
+
+#
+# Receive event
+# =============
+#
+# This event corresponds to transfer of received data from QUIC to the
+# TLS implementation.
+#
+# Parameters
+# ----------
+
+# - `src`: the soure endpoint
+# - `dst`: the destination endpoint
+# - `scid`: the source AID (the remote process)
+# - `dcid`: the destination AID (the local process)
+# - `lo`: the starting offset in the received bytes
+# - `hi`: the ending offset of the received bytes
+
+# Note: the bytes received are in the range `[lo,hi)`.
+
+action tls_recv_event(src:ip.endpoint, dst:ip.endpoint, scid:cid,
+                      dcid:cid, e:quic_packet_type, lo: stream_pos,
+                      hi : stream_pos)
+
+#
+# TLS keys established event
+# ==========================
+#
+# This event occurs when the TLS instance at a particular AID discovers the
+# encryption and decryption keys for a particular encryption level.
+#
+# Parameters
+# ----------
+
+# - `scid`: the source AID (the local process)
+# - `e`: the encryption level (same as the packet type)
+
+action tls_keys_established_event(scid:cid, e:quic_packet_type)
+
+
+#
+# Client initial request event
+# ============================
+#
+# This event occurs when a client transmits in initial request to open
+# a connection. This results in the creation of a TLS instance that
+# generates the initial handshake message.
+
+# - `src`: the soure endpoint
+# - `dst`: the destination endpoint
+# - `nonce`: the nonce CID selected by the client
+
+# Note: the nonce cid is used by TLS as the initial key material to
+# generate the encryption keys for initial packets.
+
+action tls_client_initial_request(src:ip.endpoint,dst:ip.endpoint,nonce:cid)
+
+# Security protocol state
+# -----------------------
+
+# - For aid C, `crypto_data(C,L)` represents the crypto handshake data
+#   transmitted by TLS from C in encyption level L. This data may or
+#   may not yet have been transmitted in any QUIC packet.
+#
+# - For aid C, the relation `crypto_data_presents(C,L)` represents the
+#   set of byte positions that are present in the crypto handshake
+#   data transmitted by TLS from C in encyption level L. A handshake
+#   data byte may not be present, even if bytes in higher positions
+#   are present (in other words, the handshake data may contain
+#   "holes"). This allows the handshake data bytes to be generated out
+#   of order, but processed in order.
+#
+# - For aid C, `crypto_data_end(C,L)` represents the length in bytes
+#   of the crypto handshake data transmitted by TLS from C in
+#   encyption level L. That is, it is the position of the highest
+#   present byte plus one, or zero if there are no present bytes.
+#
+# - For aid C, `crypto_length(C,L)` indicates the length of the crypto
+#   handshake data transmitted in QUIC frames from C at encyption
+#   level L. The length is the least stream position greater than the
+#   position of all bytes transmitted. Note this may be less than the
+#   length of the crypto data, but may not be greater.
+#
+# - For aid C, `crypto_pos(C,L)` represents the read position of the
+#   crypto data transmitted by C in encyption level L. This is the
+#   number of bytes in the stream that have been read by TLS at the
+#   peer.
+#
+# - For aid C, `crypto_handler_pos(C,L)` represents the position in the
+#   crypto handshake data sent by C of any partial message at end, or
+#   if there is no partial message, the end position.
+#
+# - For each aid C, `conn_enc_level` represents the current encryption
+#   level of TLS at C.
+#
+# - The predicate `established_1rtt_keys(C)` holds if TLS has established
+#   its 1rrt keys at aid C.
+#
+# - The predicate `established_handshake_keys(C)` holds if TLS has established
+#   its handshake keys at aid C.
+
+function crypto_data(C:cid,L:quic_packet_type) : stream_data
+relation crypto_data_present(C:cid,L:quic_packet_type,P:stream_pos)
+function crypto_data_end(C:cid,L:quic_packet_type) : stream_pos
+function crypto_length(C:cid,L:quic_packet_type) : stream_pos
+function crypto_pos(C:cid,L:quic_packet_type) : stream_pos
+function crypto_handler_pos(C:cid,L:quic_packet_type) : stream_pos
+function conn_enc_level(E:ip.endpoint,C:cid) : quic_packet_type
+relation established_1rtt_keys(C:cid)
+relation established_handshake_keys(C:cid)
+
+
+after init {
+    crypto_handler_pos(C,L) := 0;
+    conn_enc_level(E,C) := quic_packet_type.initial;
+    established_1rtt_keys(C:cid) := false;
+    established_handshake_keys(C:cid) := false;
+}
+
+# Event specifications
+# ====================
+#
+# Send event
+# ----------
+#
+# Requirements
+#
+# - The connection must be open [3].
+# - The data must consist of a sequence of whole TLS records [1]
+#
+# Effects
+#
+# - The TLS data is appended to the crypto data [4].
+#
+# - The effect of each transmitted TLS record on the QUIC connection
+#   state is defined by `handle_tls_handshake`, below [2]. A TLS
+#   extension to client and server hello messages carries the
+#   connection's initial transport parameters and is required.
+#
+#
+# TODO: TLS extension events are inferred here by parsing the TLS messages
+# as they are sent. The extensions should probably be obtained instead from the TLS
+# API. Also, here we are parsing the TLS message stream into individual messages,
+# That should also probably happen somewhere else. 
+
+before tls_send_event(src:ip.endpoint, dst:ip.endpoint, scid:cid, dcid:cid, data : stream_data,
+                      pos : stream_pos, e:quic_packet_type) {
+    var jdx := data.begin;
+    var end := pos + data.end;
+    if end > crypto_data(scid,e).end {
+        crypto_data(scid,e) := crypto_data(scid,e).resize(end,0);
+    };
+    while jdx < data.end {
+        var cpos := pos+jdx;
+        var byte := data.value(jdx);
+        require crypto_data_present(scid,e,cpos) -> crypto_data(scid,e).value(cpos) = byte;
+        crypto_data_end(scid,e) := end;
+	crypto_data(scid,e) := crypto_data(scid,e).set(cpos,byte);  # [4]
+        crypto_data_present(scid,e,cpos) := true;
+	jdx := jdx.next
+    };
+    crypto_data_end(scid,e) := crypto_data(scid,e).end;
+    var max_present : stream_pos := 0;
+    while max_present < crypto_data_end(scid,e) & crypto_data_present(scid,e,max_present) {
+        max_present := max_present.next
+    };
+    # require conn_open(src,dcid);  # [3]
+    var avail := crypto_data(scid,e).segment(crypto_handler_pos(scid,e),max_present);
+    var res := tls.handshake_parser.deserialize(avail,0);
+    var hs := res.value;
+    call tls.handshake_data_event(src,dst,avail.segment(0,res.pos));
+    crypto_handler_pos(scid,e) := crypto_handler_pos(scid,e) + res.pos;
+    var idx := hs.begin;
+    while idx < hs.end {
+        var h := hs.value(idx);
+        call tls.handshake_event(src,dst,h);
+        call handle_tls_handshake(src,dst,scid,dcid,h);  #[2]
+        idx := idx.next
+    };
+}
+
+# Receive event
+# ----------
+#
+# Requirements
+#
+# - The source and destination AID's must be connected [1]
+# - The data must start at the current crypto position and
+#   end before the current end of the crypto stream. [2]
+#
+# Effects
+#
+# - The crypto position is is updated to the end of the received data.  [3]
+
+around tls_recv_event {
+
+    require connected(dcid) & connected_to(dcid) = scid;  # [1]
+    require lo < hi & lo = crypto_pos(dcid,e) & hi <= crypto_length(scid,e);  # [2]
+    ...
+    
+    crypto_pos(dcid,e) := hi;  # [3]
+}
+
+
+# TLS keys established event
+# --------------------------
+#
+# Requirements
+#
+# (None)
+#
+# Effects
+#
+# - The fact that the keys are established is recorded.
+
+
+after tls_keys_established_event {
+#    call show_tls_keys_established_event(scid,e);
+    if e = quic_packet_type.handshake {
+        established_handshake_keys(scid) := true
+    } else if e = quic_packet_type.one_rtt {
+        established_1rtt_keys(scid) := true
+    }
+}
+
+# Encryption level change
+
+action set_encryption_level(src:ip.endpoint, scid:cid, e:quic_packet_type)
+
+after set_encryption_level {
+    conn_enc_level(src,scid) := e;
+}
