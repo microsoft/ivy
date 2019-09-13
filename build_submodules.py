@@ -41,4 +41,16 @@ do_cmd('cp lib/*.so ivy/lib')
 do_cmd('cp lib/*.so ivy/z3')
 
 
+if not os.path.exists('submodules/picoquic'):
+    print "submodules/picoquic not found. try 'git submodule update; git submodule update'"
+    exit(1)
+
+os.chdir('submodules/picoquic')
+
+do_cmd('git submodule init')
+do_cmd('git submodule update')
+do_cmd('cmake .')
+do_cmd('make')
+do_cmd('cp -a include/*.h include/picotls ../../ivy/include/')
+do_cmd('cp -a *.a ../../ivy/lib/')
 

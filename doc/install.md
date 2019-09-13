@@ -25,57 +25,12 @@ There are two ways to install ivy:
 <a name="linuxnotes"></a> Installation from source on Linux
 ===========================================================
 
-This describes the steps need to install IVy from the Github
-repository on Linux. The specific commands given apply to Ubuntu Linux version
-18.04. 
+This describes the steps need to install IVy on Ubuntu 18.04. This may
+also work on other Debian-based distributions.
 
 ### Prerequisites
 
-#### Python 2.7
-
-Get it from [here](https://www.python.org/downloads) or as part of
-your Linux distribution. On Ubuntu, do this:
-
-    sudo apt-get install python
-
-You should make sure to get the `pip` utility.  This is standard on
-python versions from 2.7.9. If `which pip` doesn't produce any result,
-do this:
-
-    sudo apt-get install python-pip
-
-#### GCC
-
-You need to have a C++ compiler installed. If you don't already have one, do this:
-
-    sudo apt-get install g++
-
-    
-#### Python packages
-
-Install the python packages `ply`, `pygraphviz` and `tarjan`. On Ubuntu, install them
-like this:
-
-    $ sudo apt-get install python-ply python-pygraphviz
-    $ pip install tarjan
-
-To use the IVy command line tools only, there is no need to install `python-pygraphviz`.
-
-#### Tcl/Tk/Tix
-
-To use the Tk-based user interface, you need to install the python
-package tk, and the tix widget set. On Ubuntu, install them like
-this:
-
-    $ sudo apt-get install python-tk tix
-
-This step is not necessary if using the IVy command line tools only.
-
-### Install git
-
-If `which git` doesn't show anything, install git:
-
-    $ sudo apt-get install git
+    $ sudo apt-get install python python-pip g++ cmake python-ply python-pygraphviz git python-tk tix 
 
 ### Install IVy
 
@@ -88,7 +43,7 @@ Build the submodules like this (it takes a while):
 
     $ python build_submodules.py
 
-Install into your local Python like this
+Install into your local Python like this:
 
     $ sudo python setup.py install
 
