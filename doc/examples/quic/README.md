@@ -145,6 +145,12 @@ Source code and build instructions:
 
     https://github.com/private-octopus/picoquic
     
+To get draft 18 of the QUIC standard, use this commit
+before updating submodules:
+
+    git checkout 95dd82f
+    
+
 Run a server:
 
     ./picoquicdemo
