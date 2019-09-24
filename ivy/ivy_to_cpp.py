@@ -1781,7 +1781,10 @@ def module_to_cpp_class(classname,basename):
 #include <string.h>
 #include <stdio.h>
 #include <string>
+#if __cplusplus < 201103L
+#else
 #include <cstdint>
+#endif
 """)
     impl.append("typedef {} ivy_class;\n".format(classname))
     impl.append("std::ofstream __ivy_out;\n")
