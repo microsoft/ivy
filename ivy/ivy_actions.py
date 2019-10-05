@@ -192,6 +192,7 @@ class Action(AST):
         to_hide = []
         if hasattr(self,'formal_params'):
             to_hide += self.formal_params
+            iu.dbg('self.formal_params')
         if hasattr(self,'formal_returns'):
             to_hide += self.formal_returns
         if to_hide:
@@ -737,9 +738,10 @@ class EnvAction(ChoiceAction):
             cond = bool_const('___branch:' + str(self.unique_id))
             ite = IfAction(cond,self.args[0],self.args[1])
             return ite.update(domain,pvars)
-        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses()
+        result = [], false_clauses(annot=EmptyAnnotation()), false_clauses(annot=EmptyAnnotation())
         for a in self.args:
             foo = a.update(domain, pvars)
+            iu.dbg('foo')
             result = join_action(result, foo, domain.relations)
         return result
     def __str__(self):
@@ -1119,7 +1121,7 @@ class CallAction(Action):
                 raise IvyError(self,"value for output parameter {} has wrong sort".format(x))
         input_asgns = [AssignAction(x,y) for x,y in zip(formal_params,actual_params)]
         output_asgns = [AssignAction(y,x) for x,y in zip(formal_returns,actual_returns)]
-        res = Sequence(*(input_asgns+[BindOldsAction(v)]+output_asgns))
+        res = Sequence(Sequence(*input_asgns),BindOldsAction(v),Sequence(*output_asgns))
         res = res.int_update(domain,pvars)
 #        print "call update: {}".format(res)
         res = hide(formal_params+formal_returns,res)
@@ -1357,9 +1359,25 @@ def unite_annot(annot):
 class AnnotationError(Exception):
     pass
 
+# There is no return action in Ivy. This is just a marker
+# for the final state of an action in a counterexample.
+
+class ReturnAction(object):
+    def int_update(self,domain,pvars):
+        return ([], true_clauses(EmptyAnnotation()), false_clauses(EmptyAnnotation()))
+    def __str__(self):
+        return 'return'
+
+
+class IgnoreAction(object):
+    pass
+
 def match_annotation(action,annot,handler):
     def recur(action,annot,env,pos=None):
-
+        print "action = {}".format(action)
+        print "annot = {}".format(annot)
+        print "env = {}".format(["{}:{}".format(x,y) for x,y in env.iteritems()])
+        print "pos = {}".format(pos)
         def show_me():
             print 'lineno: {} annot: {} pos: {}'.format(action.lineno if hasattr(action,'lineno') else None,annot,pos)
 
@@ -1418,21 +1436,32 @@ def match_annotation(action,annot,handler):
                         recur(code,annot.elseb,env)
                 return
             if isinstance(action,ChoiceAction):
+                if isinstance(action,EnvAction):
+                    print "started EnvAction"
+                    handler.handle(action,env)
                 assert isinstance(annot,IteAnnotation)
                 annots = unite_annot(annot)
                 assert len(annots) == len(action.args)
                 for act,(cond,ann) in reversed(zip(action.args,annots)):
                     if handler.eval(cond):
-                        recur(act,ann,env)
+                        recur(act,ann,env,None)
+                        print "finished EnvAction"
                         return
                 assert False,'problem in match_annotation'
             if isinstance(action,CallAction):
+                print "started CallAction"
                 handler.handle(action,env)
                 callee = ivy_module.module.actions[action.args[0].rep]
-                seq = Sequence(*([Sequence() for x in callee.formal_params]
-                                 + [callee] 
-                                 + [Sequence() for x in callee.formal_returns]))
-                recur(seq,annot,env)
+                seq = Sequence(IgnoreAction(),callee,ReturnAction())
+                recur(seq,annot,env,None)
+                print "finished CallAction"
+                return
+            if isinstance(action,ReturnAction):
+                print "returning"
+                handler.do_return(action,env)
+                return
+            if isinstance(action,IgnoreAction):
+                print "ignoring"
                 return
             if isinstance(action,LocalAction):
                 recur(action.args[-1],annot,env)
@@ -1451,3 +1480,18 @@ def match_annotation(action,annot,handler):
             raise AnnotationError()
     recur(action,annot,dict())
     
+def env_action(actname):
+    actnames = sorted(ivy_module.module.public_actions) if actname is None else [actname] 
+    racts = []
+    for a in actnames:
+        act = ivy_module.module.actions[a]
+        ract = Sequence(ivy_module.module.actions[a],ReturnAction())
+        if hasattr(act,'formal_params'):
+            ract.formal_params = act.formal_params
+        if hasattr(act,'formal_returns'):
+            ract.formal_returns = act.formal_returns
+        racts.append(ract)
+    action = EnvAction(*racts)
+    action.label = 'env' if actname is None else actname
+    return action
+

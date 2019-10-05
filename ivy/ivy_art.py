@@ -188,8 +188,9 @@ class AnalysisGraph(object):
         if prestate == None:
             prestate = self.states[len(self.states)-1]
         poststate = self.post_state(op,prestate,abstractor)
-        label = label if label else repr(op)
-        self.add(poststate,action_app(label,prestate))
+        expr = action_app(op if label is None else label,prestate) 
+#        label = label if label else repr(op)
+        self.add(poststate,expr)
 #        print "post state %s: %s" % (poststate.id,poststate.clauses)
         return poststate
 
@@ -390,6 +391,9 @@ class AnalysisGraph(object):
 
     def decompose_state(self,state):
         if hasattr(state,'expr') and state.expr != None:
+            if hasattr(state.expr,'subgraph'):
+                print "got subgraph"
+                return state.expr.subgraph
             other_art = AnalysisGraph(self.domain)
             with AC(other_art):
                 res = decompose_action_app(state,state.expr)

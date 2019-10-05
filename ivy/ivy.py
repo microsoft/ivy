@@ -8,6 +8,8 @@ import ivy_module
 from tk_ui import ui_main_loop
 
 def main():
+    import signal
+    signal.signal(signal.SIGINT,signal.SIG_DFL)
     with ivy_module.Module():
         ui_main_loop(ivy_init())
 

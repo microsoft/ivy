@@ -8,6 +8,7 @@ import logic_util as lu
 import ivy_utils as iu
 import ivy_graph_ui
 import ivy_actions as ia
+import ivy_trace
 
 from concept import (get_initial_concept_domain,
                      get_diagram_concept_domain,
@@ -46,7 +47,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
     def start(self):
         ivy_ui.AnalysisGraphUI.start(self)
-        self.node(0).clauses = ilu.false_clauses() # just to make CG empty initially
+#        self.node(0).clauses = ilu.false_clauses() # just to make CG empty initially
         self.transitive_relations = []
         self.transitive_relation_concepts = []
         self.relations_to_minimize = Thing('relations to minimize')
@@ -54,8 +55,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         self.view_state(self.node(0))
         with self.ui_parent.run_context():
             self.autodetect_transitive()
-        self.have_cti = False
-        
+        self.have_cti = hasattr(self.g,'is_cti')
+        if self.have_cti:
+            self.current_conjecture = self.g.is_cti
 
 
     def CGUI(self):
@@ -113,10 +115,15 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
             pre = State()
             pre.clauses = and_clauses(*self.conjectures)
+            pre.clauses.annot = ia.EmptyAnnotation()
 
-            action = im.module.actions['ext']
+            if 'ext' in im.module.actions:
+                action = im.module.actions['ext']
+                action.label = 'ext'
+            else:
+                action = ia.env_action(None)
             with EvalContext(check=False): # don't check safety
-                post = ag.execute(action, pre, None, 'ext')
+                post = ag.execute(action, pre)
             post.clauses = ilu.true_clauses()
 
             to_test =  [None] + list(self.conjectures)  # None = check safety
@@ -166,7 +173,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
                 if conj == None:
                     res = ag.check_bounded_safety(post, _get_model_clauses)
                 else:
-                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
+                    clauses.annot = ia.EmptyAnnotation()
+                    res = ivy_trace.check_final_cond(ag,post,clauses,rels_to_min,True)
+#                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
 
                 if res is not None:
                     self.current_conjecture = conj

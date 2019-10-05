@@ -20,6 +20,7 @@ import ivy_transrel as itr
 import ivy_solver as islv
 import ivy_fragment as ifc
 import ivy_proof
+import ivy_trace
 
 import sys
 from collections import defaultdict
@@ -62,9 +63,12 @@ def show_counterexample(ag,state,bmc_res):
     for state,value in zip(other_art.states[-len(path):],path):
         state.value = value
         state.universe = universe
+    gui_art(other_art)
 
+def gui_art(other_art):
     import tk_ui as ui
-    iu.set_parameters({'mode':'induction'})
+#    iu.set_parameters({'mode':'induction'})
+    iu.set_parameters({'ui':'cti'})
     gui = ui.new_ui()
     agui = gui.add(other_art)
     gui.tk.update_idletasks() # so that dialog is on top of main window
@@ -273,6 +277,9 @@ class MatchHandler(object):
 
             print '{}{}'.format(action.lineno,action)
 
+    def do_return(self,action,env):
+        pass
+
     def end(self):
         for sym in self.vocab:
             if not itr.is_new(sym) and not self.is_skolem(sym):
@@ -292,16 +299,17 @@ def check_fcs_in_state(mod,ag,post,fcs):
 #    iu.dbg('history.actions')
     gmc = lambda cls, final_cond: itr.small_model_clauses(cls,final_cond,shrink=diagnose.get())
     axioms = im.module.background_theory()
-    if opt_trace.get():
+    if opt_trace.get() or diagnose.get():
         clauses = history.post
         clauses = lut.and_clauses(clauses,axioms)
         ffcs = filter_fcs(fcs)
         model = itr.small_model_clauses(clauses,ffcs,shrink=True)
         if model is not None:
 #            iu.dbg('history.actions')
-            mclauses = lut.and_clauses(*([clauses] + [c.cond() for c in ffcs if c.failed]))
+            failed = [c for c in ffcs if c.failed]
+            mclauses = lut.and_clauses(*([clauses] + [c.cond() for c in failed]))
             vocab = lut.used_symbols_clauses(mclauses)
-            handler = MatchHandler(mclauses,model,vocab)
+            handler = MatchHandler(mclauses,model,vocab) if opt_trace.get() else ivy_trace.Trace(mclauses,model,vocab)
             assert all(x is not None for x in history.actions)
             # work around a bug in ivy_interp
             actions = [im.module.actions[a] if isinstance(a,str) else a for a in history.actions]
@@ -309,6 +317,11 @@ def check_fcs_in_state(mod,ag,post,fcs):
             action = act.Sequence(*actions)
             act.match_annotation(action,clauses.annot,handler)
             handler.end()
+            ff = failed[0]
+            handler.is_cti = (lut.formula_to_clauses(ff.lf.formula) if isinstance(ff,ConjChecker)
+                              else None)
+            if not opt_trace.get():
+                gui_art(handler)
             exit(0)
     else:
         res = history.satisfy(axioms,gmc,filter_fcs(fcs))
@@ -449,14 +462,15 @@ def summarize_isolate(mod):
     if checked_actions and mod.labeled_conjs:
         print "\n    The following set of external actions must preserve the invariant:"
         for actname in sorted(checked_actions):
-            action = mod.actions[actname]
+            action = act.env_action(actname)
             print "        {}{}".format(pretty_lineno(action),actname)
             if check:
                 ag = ivy_art.AnalysisGraph()
                 pre = itp.State()
                 pre.clauses = get_conjs(mod)
                 with itp.EvalContext(check=False): # don't check safety
-                    post = ag.execute(action, pre, None, actname)
+#                    post = ag.execute(action, pre, None, actname)
+                    post = ag.execute(action, pre)
                 check_conjs_in_state(mod,ag,post,indent=12)
             else:
                 print ''
