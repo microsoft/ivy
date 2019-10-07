@@ -114,10 +114,10 @@ isolate abstract_protocol = {
     }
         
     private {
-        invariant ~(node.pid(N) < node.pid(P) & sent(node.pid(N),N))
-        invariant ~(node.pid(P) < node.pid(Q) & N:node < P & P < Q & sent(node.pid(P),N))
-        invariant ~(node.pid(N) < node.pid(P) & N < P & P < Q & sent(node.pid(N),Q))
-        invariant ~(node.pid(Q) < node.pid(N) & N < P & P < Q & sent(node.pid(Q),P))
+#        invariant ~(node.pid(N) < node.pid(P) & sent(node.pid(N),N))
+#        invariant ~(node.pid(P) < node.pid(Q) & N:node < P & P < Q & sent(node.pid(P),N))
+#        invariant ~(node.pid(N) < node.pid(P) & N < P & P < Q & sent(node.pid(N),Q))
+#        invariant ~(node.pid(Q) < node.pid(N) & N < P & P < Q & sent(node.pid(Q),P))
     }
 } with node, id
 

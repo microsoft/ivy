@@ -130,6 +130,10 @@ class Trace(art.AnalysisGraph):
             
     def end(self):
         sym_pairs = []
+        if self.sub is not None: # return from any unfinished calls, due to assertion failure
+            self.sub.end()
+            self.returned = self.sub
+            self.sub = None
         for sym in self.vocab:
             if not itr.is_new(sym) and not self.is_skolem(sym):
                 sym_pairs.append((sym,sym))

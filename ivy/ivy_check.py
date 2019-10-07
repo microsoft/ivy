@@ -527,11 +527,12 @@ def summarize_isolate(mod):
                     for root in checked_actions:
                         if root in roots:
                            tried.add((root,sub.lineno))
+                           action = act.env_action(root)
                            ag = ivy_art.AnalysisGraph()
                            pre = itp.State()
                            pre.clauses = get_conjs(mod)
                            with itp.EvalContext(check=False):
-                               post = ag.execute_action(root,prestate=pre)
+                               post = ag.execute(action,prestate=pre)
                            fail = itp.State(expr = itp.fail_expr(post.expr))
                            if not check_safety_in_state(mod,ag,fail,report_pass=False):
                                some_failed = True
