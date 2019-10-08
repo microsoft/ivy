@@ -1,7 +1,7 @@
 import ivy_ui
 import ivy_logic as il
 import logic as lg
-from ivy_interp import State,EvalContext,reverse,decompose_action_app
+from ivy_interp import State,EvalContext,reverse,decompose_action_app, universe_constraint
 import ivy_module as im
 import ivy_logic_utils as ilu
 import logic_util as lu
@@ -101,6 +101,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         if self.transitive_relations:
             self.current_concept_graph.update()
 
+
     def check_inductiveness(self, button=None):
         import ivy_transrel
         from ivy_solver import get_small_model
@@ -111,20 +112,7 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         
         with self.ui_parent.run_context():
 
-            ag = self.new_ag()
-
-            pre = State()
-            pre.clauses = and_clauses(*self.conjectures)
-            pre.clauses.annot = ia.EmptyAnnotation()
-
-            if 'ext' in im.module.actions:
-                action = im.module.actions['ext']
-                action.label = 'ext'
-            else:
-                action = ia.env_action(None)
-            with EvalContext(check=False): # don't check safety
-                post = ag.execute(action, pre)
-            post.clauses = ilu.true_clauses()
+            ag,succeed,fail = ivy_trace.make_check_art(precond=self.conjectures)
 
             to_test =  [None] + list(self.conjectures)  # None = check safety
 
@@ -153,43 +141,31 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 
                 if conj == None: # check safety
                     clauses = ilu.true_clauses()
-                    rels_to_min = [il.sig.symbols[x] for x in self.relations_to_minimize.value.split()]
+                    post = fail
                 else:
                     clauses = dual_clauses(conj, witness)
-                    history = ag.get_history(post)
-                    rels_to_min = []
-                    for x in self.relations_to_minimize.value.split():
-                        relation = il.sig.symbols[x]
-                        relation = history.maps[0].get(relation, relation)
-                        rels_to_min.append(relation)
+                    post = succeed
+                history = ag.get_history(post)
+                rels_to_min = []
+                for x in self.relations_to_minimize.value.split():
+                    relation = il.sig.symbols[x]
+                    relation = history.maps[0].get(relation, relation)
+                    rels_to_min.append(relation)
                         
-                _get_model_clauses = lambda clauses, final_cond=False: get_small_model(
-                    clauses,
-                    sorted(il.sig.sorts.values()),
-                    rels_to_min,
-                    final_cond = final_cond
-                )
-
-                if conj == None:
-                    res = ag.check_bounded_safety(post, _get_model_clauses)
-                else:
-                    clauses.annot = ia.EmptyAnnotation()
-                    res = ivy_trace.check_final_cond(ag,post,clauses,rels_to_min,True)
+                clauses.annot = ia.EmptyAnnotation()
+                res = ivy_trace.check_final_cond(ag,post,clauses,rels_to_min,True)
 #                    res = ag.bmc(post, clauses, None, None, _get_model_clauses)
 
                 if res is not None:
                     self.current_conjecture = conj
                     assert len(res.states) == 2
-    #                self.set_states(res.states[0], res.states[1])
-    #                self.cti = self.ui_parent.add(res)
-
                     self.g = res
                     self.rebuild()
                     self.view_state(self.g.states[0], reset=True)
                     self.show_used_relations(clauses)
                     #self.post_graph.selected = self.get_relevant_elements(self.post_state[2], clauses)
                     if conj == None:
-                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can decompose\nthe failing action to observe the failing execution. ')
+                        self.ui_parent.ok_dialog('An assertion failed. A failing state is displayed. You can step into\nthe failing action to observe the failing execution. ')
                     else:
                         self.ui_parent.text_dialog('The following conjecture is not relatively inductive:',
                                                    str(il.drop_universals(conj.to_formula())),on_cancel=None)
@@ -237,6 +213,8 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
         post = ilu.dual_clauses(conj) if conj != None else ilu.true_clauses()
         pre = self.g.states[0].clauses
         axioms = im.module.background_theory()
+        uc = universe_constraint(self.g.states[0])
+        axioms = ilu.and_clauses(axioms,uc)
 #        rev = ilu.and_clauses(reverse_image(post,axioms,self.g.states[1].update), axioms)
         rev = reverse_image(post,axioms,self.g.states[1].update)
         clauses = ilu.and_clauses(ilu.and_clauses(pre,rev),axioms)
@@ -417,7 +395,7 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
 
         with self.ui_parent.run_context():
 
-            step_action = im.module.actions['ext']
+            step_action = ia.env_action(None)
 
             n_steps = bound
             self.current_bound = bound
@@ -466,7 +444,7 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
                                                command = cmd,
                                                command_label = 'View')
                     return True
-                post = ag.execute(step_action, None, None, 'ext')
+                post = ag.execute(step_action)
 
 #            self.ui_parent.text_dialog('BMC with bound {} did not find a counter-example to:'.format(n_steps),
 #                                       str(conj.to_formula()),
@@ -487,18 +465,16 @@ class ConceptGraphUI(ivy_graph_ui.GraphWidget):
             return
 
         with self.ui_parent.run_context():
-            step_action = im.module.actions['ext']
+            step_action = ia.env_action(None)
 
             n_steps = self.current_bound
 
             ag = self.parent.new_ag()
             with ag.context as ac:
-                post = ac.new_state(ag.init_cond)
-            if 'initialize' in im.module.actions:
-                init_action = im.module.actions['initialize']
-                post = ag.execute(init_action, None, None, 'initialize')
+                ag.add_initial_state(ag.init_cond)
+                post = ag.states[0]
             for n in range(n_steps):
-                post = ag.execute(step_action, None, None, 'ext')
+                post = ag.execute(step_action)
             axioms = im.module.background_theory()
             post_clauses = and_clauses(post.clauses, axioms)
 

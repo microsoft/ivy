@@ -285,8 +285,10 @@ class MatchHandler(object):
             if not itr.is_new(sym) and not self.is_skolem(sym):
                 self.show_sym(sym,sym)
             
+    def fail(self):
+        pass
 
-
+                
 def filter_fcs(fcs):
     global check_lineno
     if check_lineno is None:

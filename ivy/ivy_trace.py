@@ -31,12 +31,10 @@ from collections import defaultdict
 class Trace(art.AnalysisGraph):
     def __init__(self,clauses,model,vocab,top_level=True):
         art.AnalysisGraph.__init__(self)
-        iu.dbg('clauses')
         self.clauses = clauses
         self.model = model
         self.vocab = vocab
         mod_clauses = islv.clauses_model_to_clauses(clauses,model=model,numerals=True)
-        iu.dbg('mod_clauses')
         self.eqs = defaultdict(list)
         for fmla in mod_clauses.fmlas:
             if lg.is_eq(fmla):
@@ -104,13 +102,10 @@ class Trace(art.AnalysisGraph):
 
     def handle(self,action,env):
 #        iu.dbg('env')
-        print "handling action: {}".format(action)
         if self.sub is not None:
-            print "handling action in subgraph"
             self.sub.handle(action,env)
         elif isinstance(self.last_action,(act.CallAction,act.EnvAction)) and self.returned is None:
             self.sub = Trace(self.clauses,self.model,self.vocab,False)
-            print "setting self.sub = {}".format(self.sub)
             self.sub.handle(action,env)
         else:
             self.new_state(env)
@@ -119,15 +114,14 @@ class Trace(art.AnalysisGraph):
     def do_return(self,action,env):
         if self.sub is not None:
             if self.sub.sub is not None:
-                print "handling return in subgraph"
                 self.sub.do_return(action,env)
-                print "self.sub.sub = {}".format(self.sub.sub)
             else:
-                print "returned from subgraph, env = {}".format(["{}:{}".format(x,y) for x,y in env.iteritems()])
                 self.returned = self.sub
                 self.sub = None
                 self.returned.new_state(env)
             
+    def fail(self):
+        self.last_action = itp.fail_action(self.last_action)
     def end(self):
         sym_pairs = []
         if self.sub is not None: # return from any unfinished calls, due to assertion failure
@@ -140,11 +134,28 @@ class Trace(art.AnalysisGraph):
         self.new_state_pairs(sym_pairs,{})
 
 
+def make_check_art(act_name=None,precond=[]):
+    action = act.env_action(act_name)
+
+    ag = art.AnalysisGraph()
+    
+    pre = itp.State()
+    pre.clauses = lut.and_clauses(*precond)
+    pre.clauses.annot = act.EmptyAnnotation()
+    
+    with itp.EvalContext(check=False): # don't check safety
+        post = ag.execute(action, pre)
+        post.clauses = lut.true_clauses()
+
+    fail = itp.State(expr = itp.fail_expr(post.expr))
+
+    return ag,post,fail
+
+        
 def check_final_cond(ag,post,final_cond,rels_to_min=[],shrink=False,handler_class=None):
     history = ag.get_history(post)
     axioms = im.module.background_theory()
     clauses = history.post
-    iu.dbg('clauses.annot')
     clauses = lut.and_clauses(clauses,axioms)
     model = slv.get_small_model(clauses,lg.uninterpreted_sorts(),rels_to_min,final_cond=final_cond,shrink=shrink)
     if model is not None:

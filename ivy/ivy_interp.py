@@ -634,3 +634,8 @@ def get_state_assertions(state):
 
 def top_alpha(state):
     state.clauses = true_clauses()
+
+def universe_constraint(state):
+    if hasattr(state,'universe'):
+        return Clauses([Or(*[Equals(Variable('X',s),v) for v in state.universe[s]]) for s in state.universe])
+    return true_clauses()

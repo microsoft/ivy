@@ -392,7 +392,6 @@ class AnalysisGraph(object):
     def decompose_state(self,state):
         if hasattr(state,'expr') and state.expr != None:
             if hasattr(state.expr,'subgraph'):
-                print "got subgraph"
                 return state.expr.subgraph
             other_art = AnalysisGraph(self.domain)
             with AC(other_art):
