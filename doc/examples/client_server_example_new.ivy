@@ -28,3 +28,8 @@ invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
 export connect
 export disconnect
 
+# Add this to prove the invariant
+
+#private {
+#    invariant ~(link(X,Y) & semaphore(Y))
+#}

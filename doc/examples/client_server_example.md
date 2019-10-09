@@ -3,31 +3,35 @@ layout: page
 title: Invariants
 ---
 
-The most basic technique for proving correctness in IVy is to
-construct an inductive invariant. IVy makes this easier by providing
-tools to visualize the failures of inductive proofs and suggest
-possible refinements to the proof.
+In this tutorial, we'll learn how to make an abstract model of a
+simple protocol and prove a property of it using an *inductive
+invariant*. This is usually the first step in designing and
+implementing a protocol in Ivy. 
 
-An *safety invariant* is a formula or a set of formulas that has the
-following properties:
+An invariant of a system is a formula about the system's state that is
+always true.  Invariants are the simplest class of properties that we
+specify about systems. An *inductive* invariant is a formula or a set
+of formulas that has the following key properties:
 
 - *initiation*: It is true in all initial states of the program.
-
-- *safety*: If it is true in a program state, then no exported action
-can cause an assertion failure starting in that state.
 
 - *consecution*: If it is true in a state, then after executing any
 exported action, the formula remains true.
 
-In this example, we will use IVy's CTI method. CTI stands for
-"counter-example to induction". If one of the above conditions fails,
-IVy tries to construct a *simple* example of the failure. We can
-attempt to correct the proof by *generalizing* from this
-counter-example.
+Every inductive invariant is an invariant, but not every invariant is
+inductive. An inductive invariant is relatively easy to prove,
+since we only have to verify the iniation and consecution property, a task which
+Ivy can usually perform automatically. Usually, though, the invariant properties we
+really want to prove are not inductive and we therefore require some cleverness
+to *strengthen* the desired invariant to make it inductive.
+
+As we will see, IVy makes this step easier by providing tools to
+visualize the failures of inductive proofs and suggest possible
+refinements to the proof.
 
 # An abstract protocol model
 
-The following is a very abstract model of a protocol that establishes
+The following Ivy program is a very abstract model of a protocol that establishes
 connections between clients and servers. Each server has a semaphore
 that is used to guarantee that at any time at most one client can be
 connected to the server.
@@ -60,37 +64,240 @@ connected to the server.
     export connect
     export disconnect
 
-This program declares two types `client` and `server`. The state of
-the protocol model consists of two relations. The relation `link`
-tells us which clients are connected to which servers, while
-`semaphore` tells us which servers have their semaphore "up".
+This program declares two *types* `client` and `server`. At this
+point, we don't know anything about these types except that there is
+at least one value of each type. The types `client` and `server` can
+be though of as represent abstract identifiers of clients and servers,
+respectively.
+
+
+The *state* of the protocol model consists of two *relations*. The
+relation `link` tells us which clients are connected to which servers,
+while `semaphore` tells us which servers have their semaphore "up".
+
+The program contains a block code after the keywords `after
+init`. This code is executed just once when the protocol starts. It
+initializes the state so that all the semaphore are "up" (that is, for
+every server `W`. `semaphore(W)` is set to true) and there are no
+links (that is, for every client `X` and server `Y`, `link(X,Y)` is
+set to false). These statements are simultaneous assignments that
+update the given relations for many values of their parameters at
+once. The state of the protocol model consists of two relations. The
+relation `link` tells us which clients are connected to which servers,
+while `semaphore` tells us which servers have their semaphore "up".
+You can recognize a simultaneous assignment by the fact that the
+parameters of the relations are placeholders (or wildcards)
+represented by capital letters.
 
 The program exports two actions to the environment: `connect` and
 `disconnect`. The `connect` actions creates a link from client `x` to
-server `y`, putting the server's semaphore down. Notice that `connect`
-requries that the server's semaphore be initially up. The `disconnect`
-action removes a link and puts the semaphore up. It requires that the
-link be initially established. The two `export`
+server `y`, putting the server's semaphore down. Each action has a
+*precondition*, indicated by the `require` keyword. To call an action,
+the environment is required to satisfy its precondition. Notice that
+`connect` requires that the server's semaphore be initially up. The
+`disconnect` action removes a link and puts the semaphore up. It
+requires that the link be initially established. The two `export`
 declarations at the end tell us that the environment may call
 `connect` and `disconnect` in arbitrary sequence, though it must obey
 the stated requirements.
 
+It is important to keep in mind that this Ivy program is an abstract
+model of a protocol, and not the protocol's actual implementation. The
+abstract actions just describe the possible high-level state transitions that
+the protocol can make.  It doesn't tell us how these transitions
+actually come about.
+
 ## Safety and invariant conjectures
 
-A program is *safe* if the environment cannot call it in any way that
-causes an assertion to be false. There are various way to use
-assertions to specify desired safety properties of a program. A simple
-one is to add an *invariant*. This is a formula that must hold true between calls
-to the program's actions.  In the client/server example above, we might specify that no
-two distinct clients can be connected to a single server using the
-following assertion:
+Now we will give our abstract model a proeprty that it must satisfy.
+A simple one is to add an *invariant*. This is a formula that must
+hold true between calls by the environment to the program's actions
+(though it might be untrue temporarily while the actions are
+executing). In the client/server example above, we might specify that
+no two distinct clients can be connected to a single server at the same time.
+We can express this property using the
+following invariant assertion:
 
     invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
 
-The invariant assertion is implicitly universally quantified over
-(distinct) clients `X` and `Z` and server `Y`.
+Once again the capital letters act as wildcards. The invariant
+assertion implicitly holds true for all clients `X` and `Z` and all
+servers `Y`. Another way to say this is that the placeholders `X`, `Y`
+and `Z` are implicitly *universally quantified*. 
 
-# Discovering a safety invariant
+# Proving the invariant
+
+As mentioned above, to prove an invariant, we check that is initially true,
+and that every action of the program preserves it. Ivy can do this automatically.
+To make the check, we use this command:
+
+    $ ivy_check client_server_example.ivy
+    
+[Note: the source files for the examples in this tutorial can be found in the
+subdirectory `doc/examples` if the Ivy source tree]. Ivy attempts the check and produces
+this somewhat discouraging output (with uninteresting parts omitted):
+
+    ...
+    
+    Initialization must establish the invariant
+        client_server_example_new1.ivy: line 30: invar2 ... PASS
+    
+    ...
+
+    The following set of external actions must preserve the invariant:
+        ext:connect
+            client_server_example_new1.ivy: line 30: invar2 ... FAIL
+        ext:disconnect
+            client_server_example_new1.ivy: line 30: invar2 ... PASS
+
+    ...
+
+    error: failed checks: 1
+
+This means that our proposed invariant may be true, but it isn't
+inductive. In particular the `connect` action doesn't preserve the
+invariant.  We should take heart, however, because Ivy can give us
+some feedback that explains what went wrong in the form of a
+*counterexample*.  A counterexample in this case is an execution of
+the `connect` action that starts in a state in which the invariant is
+true and ends in a state in which it is false.
+
+We can get a graphical view of the counterexample by running the check again with the
+option `diagnose=true`, like this:
+
+    $ ivy_check diagnose=true client_server_example.ivy
+
+Ivy pops up a window that looks like this:
+
+<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
+
+In the left pane of this window is a diagram in which each oval
+represents a state of the protocol and each arrow represents the
+execution of an action. There are two states, labeled 0 and 1. From
+state 0 to state 1 there is an arrow labeled with the action
+`connect`. We know something has gone wrong in the execution of `connect`. 
+
+In the left pane, we see a graphical representation of
+state 0. Currently, all we see is that there are two clients (in other
+words, two values of type `client`) and there is one server. To learn
+more about the state, we can use the checkboxes on the right to enable
+the display of relations in this state. For example, if we check the
+box in the `+` column next to the relation `link(X,Y)`, we'll see an
+arrow from client `X` to server `Y` when the relation `link(X,Y)` is
+true. In this case, we see:
+
+<p><img src="images/client_server_new2.png" alt="IVy screenshot" /></p>
+
+Here, we see that just one client is connected to the server, which means our
+invariant property is true. When we check that an invariant is inductive, the counterexample
+always starts in a state in which the invariant holds. If we check the box in the `+` column next to `sempahore(X)`, we can begin to see a problem:
+
+<p><img src="images/client_server_new3.png" alt="IVy screenshot" /></p>
+
+Ivy is telling us that the value of `semaphore` at our server is
+true. We had in mind, however, that the semaphore should be "down"
+(i.e., false) whenever a client is connected to the server. We
+therefore suspect that this state of the system is not possible (that
+is, it is not *reachable* from the initial state). This usually means
+that we need to add another formula to our invariant to rule out
+something bad about this state.
+
+To see the consequence of the semaphore being up, we can move to state
+one by clicking on it. Here's what we see:
+
+<p><img src="images/client_server_new4.png" alt="IVy screenshot" /></p>
+
+Now both clients are linked to the same server, violating our
+invariant property. A counterexample to induction always ends in this
+way. To see more detail about how we got there, we can left-click on
+the action `connect` and choose `Step in`. This will show us the
+detailed sequence of actions that got to the bad state:
+
+<p><img src="images/client_server_new5.png" alt="IVy screenshot" /></p>
+
+Here, we are viewing state 0 (the state that occurs just at entry to
+the `connect` action). We have checked a few boxes to display
+information about this state. We can see here the values of the formal
+parameters `x` and `y` that were provided by the environment when
+calling `connect`. In particular, the environment chose the value 1
+for `x`, meaning that clent `1` should be connected to server 0 (the
+only server in this case). The counterexample steps through three additional
+states, first testing the precondition of `connect` (which is true, since the semaphoore is up),
+then establishing a link from `x` to `y`, then putting the semaphore down.
+
+At this point we understand the reason that the invariant is not inductive.
+The failure was caused by the fact that a client `X` was connected to a server `Y`
+and the semaphore at this server was up. This *bad pattern* caused the failure, 
+and we conjecture that it can never actually occur. For this reason, we will *strengthen*
+our invariant with a condition that rules out the bad pattern. It is very important to
+understand that we do not want to rule out *everything* about the counterexample that is unrealistic -- only those aspects that actually *cause* the failure. 
+
+We can write our new invariant condition like this:
+
+    private {
+        invariant ~(link(X,Y) & semaphore(Y))
+    }
+    
+We put the new invariant property in a `private` section, just to
+indicate that this invariant is not of interest to any user of the
+protocol model. It is only introduced as part of the proof of the
+original invariant. Now when we check the program, we get this:
+
+    ...
+
+    Initialization must establish the invariant
+        client_server_example_new.ivy: line 26: invar2 ... PASS
+        client_server_example_new.ivy: line 34: invar3 ... PASS
+
+    Any assertions in initializers must be checked ... PASS
+
+    The following set of external actions must preserve the invariant:
+        ext:connect
+            client_server_example_new.ivy: line 26: invar2 ... PASS
+            client_server_example_new.ivy: line 34: invar3 ... PASS
+        ext:disconnect
+            client_server_example_new.ivy: line 26: invar2 ... PASS
+            client_server_example_new.ivy: line 34: invar3 ... PASS
+
+    ...
+    OK
+    
+The OK at the end tells us that our invariants taken together are now
+inductive. This means we can be confident that the invariants always
+hold. We have applied a general strategy of checking induction,
+examining the counterexample, finding a bad pattern and ruling it out
+by adding an invariant. This process is something of an art and can be
+confusing.  For example, it sometimes happens that a condition we
+thought was a bad pattern is actually reachable. In this case, we have
+to backtrack and perhaps rule out a more specific
+pattern. Fortunately, Ivy proveds some tools to help us make these
+choices.
+
+# Discovering a safety invariant with help from Ivy
+
+Ivy has some techniques built in to help us identify bad patterns.
+Let's to back to the counterexample we found to inductiveness of our
+proposed invariant:
+
+<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
+
+We can ask Ivy to try to *generalize* from the counterexample, by finding
+some specific aspects of the state 0 that are sufficient to cause our proposed
+invariant to fail at state 1. To do this we choose `Diagram` from the `Invariant` menu.
+This produces the following display:
+
+<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
+
+Ivy has drawn a diagram of a possible "bad pattern" it has identified
+in the state.  THe pattern includes both clients and the server, which
+are highlighted in the diagram.  In addition, it includes the link
+from client 1 to the server, and the fact that the semaphore is true
+at the server. These facts are listed below the diagram under the head
+"Constraints". Ivy has determined that these conditions are sufficient to
+cause the invariant to fail. 
+
+We agree that this is a bad pattern, so we ask Ivy to rule it out by adding a
+
 
 The invariant we sepficied above is true, but, as we will see, it
 isn't a safety invariant because it doesn't satisfy the consecution
