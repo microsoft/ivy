@@ -19,11 +19,12 @@ of formulas that has the following key properties:
 exported action, the formula remains true.
 
 Every inductive invariant is an invariant, but not every invariant is
-inductive. An inductive invariant is relatively easy to prove,
-since we only have to verify the iniation and consecution property, a task which
-Ivy can usually perform automatically. Usually, though, the invariant properties we
-really want to prove are not inductive and we therefore require some cleverness
-to *strengthen* the desired invariant to make it inductive.
+inductive. An inductive invariant is relatively easy to prove, since
+we only have to verify the iniation and consecution property, a task
+which Ivy can usually perform automatically. Usually, though, the
+invariant properties we really want to prove are not inductive and we
+therefore require some cleverness to *strengthen* the desired
+invariant to make it inductive.
 
 As we will see, IVy makes this step easier by providing tools to
 visualize the failures of inductive proofs and suggest possible
@@ -31,10 +32,11 @@ refinements to the proof.
 
 # An abstract protocol model
 
-The following Ivy program is a very abstract model of a protocol that establishes
-connections between clients and servers. Each server has a semaphore
-that is used to guarantee that at any time at most one client can be
-connected to the server.
+The following Ivy program is a very abstract model of a semaphore
+protocol.  We have a collection of clients and a collection of
+servers. Each server has a semaphore which can be held by at most one
+client at a time.
+
 
     #lang ivy1.7
 
@@ -67,13 +69,14 @@ connected to the server.
 This program declares two *types* `client` and `server`. At this
 point, we don't know anything about these types except that there is
 at least one value of each type. The types `client` and `server` can
-be though of as represent abstract identifiers of clients and servers,
-respectively.
-
+be though of as representing abstract identifiers of clients and servers,
+respectively (when we implement this protocol, we might replace these
+abstract identifiers by network addresses).
 
 The *state* of the protocol model consists of two *relations*. The
-relation `link` tells us which clients are connected to which servers,
-while `semaphore` tells us which servers have their semaphore "up".
+relation `link` tells us which clients are are holding the semaphores
+of which servers, while `semaphore` tells us which servers have their
+semaphore "up".
 
 The program contains a block code after the keywords `after
 init`. This code is executed just once when the protocol starts. It
@@ -105,7 +108,10 @@ It is important to keep in mind that this Ivy program is an abstract
 model of a protocol, and not the protocol's actual implementation. The
 abstract actions just describe the possible high-level state transitions that
 the protocol can make.  It doesn't tell us how these transitions
-actually come about.
+actually come about. In an implementation, the abstract `connect` action might
+be achieved by the client sending a request message to the server and the
+server issuing a reply.
+
 
 ## Safety and invariant conjectures
 
