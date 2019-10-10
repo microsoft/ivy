@@ -232,14 +232,17 @@ and we conjecture that it can never actually occur. For this reason, we will *st
 our invariant with a condition that rules out the bad pattern. It is very important to
 understand that we do not want to rule out *everything* about the counterexample that is unrealistic -- only those aspects that actually *cause* the failure. 
 
-We can write our new invariant condition like this:
+To rule out the bad pattern, we add this new conjectured invariant to our Ivy program:
 
     private {
         invariant ~(link(X,Y) & semaphore(Y))
     }
     
-We put the new invariant property in a `private` section, just to
-indicate that this invariant is not of interest to any user of the
+This says that there is *no* client `X` and server `Y` such that `X`
+is linked to `Y` and the semaphore at `Y` is up. Notice again that the
+capital letters `X` and `Y` are universally quantified placeholders.
+We put the new invariant property in a `private` section just to
+indicate that this invariant is not of interest to users of the
 protocol model. It is only introduced as part of the proof of the
 original invariant. Now when we check the program, we get this:
 
@@ -264,114 +267,26 @@ original invariant. Now when we check the program, we get this:
     
 The OK at the end tells us that our invariants taken together are now
 inductive. This means we can be confident that the invariants always
-hold. We have applied a general strategy of checking induction,
-examining the counterexample, finding a bad pattern and ruling it out
-by adding an invariant. This process is something of an art and can be
-confusing.  For example, it sometimes happens that a condition we
-thought was a bad pattern is actually reachable. In this case, we have
-to backtrack and perhaps rule out a more specific
-pattern. Fortunately, Ivy proveds some tools to help us make these
-choices.
+hold. 
 
-# Discovering a safety invariant with help from Ivy
-
-Ivy has some techniques built in to help us identify bad patterns.
-Let's to back to the counterexample we found to inductiveness of our
-proposed invariant:
-
-<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
-
-We can ask Ivy to try to *generalize* from the counterexample, by finding
-some specific aspects of the state 0 that are sufficient to cause our proposed
-invariant to fail at state 1. To do this we choose `Diagram` from the `Invariant` menu.
-This produces the following display:
-
-<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
-
-Ivy has drawn a diagram of a possible "bad pattern" it has identified
-in the state.  THe pattern includes both clients and the server, which
-are highlighted in the diagram.  In addition, it includes the link
-from client 1 to the server, and the fact that the semaphore is true
-at the server. These facts are listed below the diagram under the head
-"Constraints". Ivy has determined that these conditions are sufficient to
-cause the invariant to fail. 
-
-We agree that this is a bad pattern, so we ask Ivy to rule it out by adding a
-
-
-The invariant we sepficied above is true, but, as we will see, it
-isn't a safety invariant because it doesn't satisfy the consecution
-property.  To try to construct a safety invariant for this program, we
-run IVy in its CTI mode. Download the file
-[client_server_example.ivy](client_server_example.ivy) or just copy
-the above IVy text (both parts) into a file
-`client_server_example.ivy`. Then use this command to start IVy:
-
-    $ ivy ui=cti client_server_example.ivy
-
-This produces the following rather uninformative display:
-
-<p><img src="images/client_server1.png" alt="Testing IVy screenshot" /></p>
-
-Let's ask IVy to check our invariant. We select the `Check induction`
-operation, like this:
-
-<p><img src="images/client_server2.png" alt="Testing IVy screenshot" /></p>
-
-Here's what IVy says:
-
-<p><img src="images/client_server8.png" alt="Testing IVy screenshot" /></p>
-
-It is telling us that our conjectured invariant fails the consecution test.
-When we click OK, we see the counter-example to induction:
-
-<p><img src="images/client_server9.png" alt="Testing IVy screenshot" /></p>
-
-On the left-hand side of the display, we see a transition of the
-program from a state labeled `0` to a state labeled `1`. The action
-labeling the transition arrow can tell us something about how we get
-from state `0` to state `1` (and in particular, how our invariant
-fails). For the moment, though, let's concentrate on the
-right-hand side. Here, we see a representation of state `0`, the one just
-before the invariant is violated. It shows one server (arbitrarily numbered `0`)
-and two clients (numbered `0` and `1`).  
-
-IVy has already displayed the `link` relation, since it occurs in our conjectured
-invariant. The red arrows show the link relationships between the clients and the
-server (notice that on the right, the relation `link(X,Y)` is in red). If you click on the
-bubble numbered `1` on the left, you'll see the next state, occurring after a connect. 
-In this state, both clients are connected to the server, which violates our invariant.
-
-In state zero, however, what we can see is not unexpected. There is
-just one client connected to the server, which is what we expect
-from the protocol. To find out what's wrong with this state, we need
-to reveal more information. 
-The check-boxes on the right allow us to
-display further information about the state.
-Checking the box to view the `semaphore`
-relation, we observe the following:
-
-<p><img src="images/client_server10.png" alt="Testing IVy screenshot" /></p>
-
-Notice that the `server` node is now labeled with `semaphore`, meaning
-that `semaphore` is true for this node (if it were false, the label would
-be `~semaphore`. This is clearly the problem. When a client is connected,
-the semaphore should be down. We will conjecture that in fact
-this 'bad pattern' never occurs. To do this we select the `Gather` option
-from the `Conjecture` menu. When then see the following:
+Another way to create a conjectured invariant from a bad pattern is to
+have Ivy to gather the displayed facts and generalize them. Once we
+have the bad pattern displayed, as above, we use the 'Gather' command
+in the `Conjecture` menu. This gives us the following:
 
 <p><img src="images/client_server11.png" alt="Testing IVy screenshot" /></p>
 
-IVy has collect three facts about the displayed state, shown under the
+IVy has collected three facts about the displayed state, shown under the
 heading 'Constraints'. These facts are a logical representation of the
 bad pattern we observed graphically: there are two distinct nodes,
 one of which is connected to the server and the server's semaphore is up.
 
 Also notice that the nodes and the arcs in the graph have been highlighted
-to indicate that they are all used in the listed facts.
+to indicate that they are all used in the listed facts. We can click on facts
+in th list to toggle them off and on. This allows us to adjust the bad pattern.
 
-Since we think that this particular pattern should never occur, we will
-generalize it to produce new conjectured invariant about the program
+Since we think that the displayed facts form a bad pattern, we can *generalize* them
+to produce a new conjectured invariant about the program
 state. Choosing the `Strengthen` option from the `Conjecture` menu, we
 see:
 
@@ -381,18 +296,24 @@ IVy is suggesting to add this fact to the list of conjectured invariants:
 
     ~(C:client ~= D & link(C,S) & semaphore(S))
 
-This says that we cannot have two distinct clients, where one of them
-is linked to the server and the semaphore is up. We click OK, adding this formula to our list of
-conjectured invariants. 
+Ivy has simply replaced the fixed client and sever identifiers in the
+gathered facts with universally quantified placeholders `C`, `D` and
+`S`.  This formula says that we cannot have two distinct clients,
+where one of them is linked to the server and the semaphore is up. We
+click OK, adding this formula to our list of conjectured invariants.
 
 We can now try checking inductiveness again with our new conjecture.
+We do this with the `Check induction` command in the `Invariant` menu.
 We see the following:
 
 <p><img src="images/client_server13.png" alt="Testing IVy screenshot" /></p>
 
-We now have a proof that our program is safe. Of course, we want to
-save that proof so we can use it again later. We select `Save invariant` from
-the `File` menu and enter a file name:
+If the induction check had failed, we sould see a new counterexample
+to induction that we would have to rule out.  However, since it was
+successful, we now have a proof that our desired invariant holds. Of
+course, we want to save our new inductive invariant so that we can use it again
+later. We select `Save invariant` from the `File` menu and enter a
+file name:
 
 <p><img src="images/client_server14.png" alt="Testing IVy screenshot" /></p>
 
@@ -400,38 +321,72 @@ Here is the content of the file:
 
     # new conjectures
 
-    conjecture ~(C:client ~= D & link(C,S) & semaphore(S))
+    invariant ~(C:client ~= D & link(C,S) & semaphore(S))
 
-If we add this text to the input file and run IVy again, IVy will use
-these conjectures and immediately observe that they are inductive.
-
-# Generalization tools
+This new invariant can be pasted into our program. Notice it is
+slightly different from the invariant we selected previously. That
+is, the bad pattern includes a second client `D` that is needed to
+violate the desired property of mutual exclusion. I turns out this
+doesn't matter. This weaker invariant is still strong enough to prove
+the property. 
 
 Let's consider the process we just used to arrive at an inductive
 invariant. We took the following steps:
 
 - Find a simple counterexample to induction
 
-- Identify relevant facts about the counter-example
+- Identify relevant facts about the counter-example (the bad pattern)
 
-- Generalize to form a universally quantified conjecture
+- Generalize to form a universally quantified invariant conjecture
 
 The first and last steps were done automatically by IVy. However, we
 performed the second step manually, by select which relations to
 display. 
 
-There are several ways in which we can get some automated help with
-this task. Let's go back to the counterexample in which one client is
-connected, but the semaphore is up:
+This process is something of an art and can be
+confusing.  For example, it sometimes happens that a condition we
+thought was a bad pattern is actually reachable. In this case, we have
+to backtrack and perhaps rule out a more specific
+pattern. Fortunately, Ivy provides some tools to help us make these
+choices.
 
-<p><img src="images/client_server11.png" alt="Testing IVy screenshot" /></p>
+# Generalization tools
 
-This pattern actually contains an irrelevant fact. That is, our bad
-pattern requires that there are two distinct nodes, `0` and `1`. In
-fact, we do need two nodes to have a safety violation (that is, to
-have two nodes connected to one server). Notice, though, that if we drop
-this fact from the pattern, we still have a pattern that we can rule out,
-that is, `semaphore(0)` and `link(0,0)`. 
+Ivy has some techniques built in to help us identify bad patterns.
+Let's to back to the counterexample we found to inductiveness of our
+proposed invariant:
+
+<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
+
+We can ask Ivy to try to generalize from the counterexample, by finding
+a ba pattern in state 0 that is sufficient to cause our proposed
+invariant to fail at state 1. To do this we choose `Diagram` from the `Invariant` menu.
+This produces the following display:
+
+<p><img src="images/client_server_new1.png" alt="IVy screenshot" /></p>
+
+Ivy has drawn a diagram of a possible bad pattern it has identified
+in the state.  The pattern includes the two clients and the server
+from our counterexample, which are highlighted in the diagram.  In
+addition, it includes the link from client 1 to the server, and the
+fact that the semaphore is true at the server. These facts are listed
+below the diagram under the heading 'Constraints'. Ivy has determined
+that these conditions are sufficient to cause the invariant to
+fail. 
+
+Since we agree that this is a bad pattern, we can use the `Strengthen`
+option from the `Conjecture` menu, as above, to produce a conjectured
+invariant the rules it out. In this simple case, the strenghening of
+the invariant has been done fully automatically.
+
+However, as we noted above, this bad pattern contains in irrelevant
+fact, and we might want to drop it to get a stronger conjecture that
+rules out more cases. That is, our bad pattern requires that there are
+two distinct nodes, `0` and `1`. In fact, we do need two nodes to have
+a safety violation (that is, to have two nodes connected to one
+server). Notice, though, that if we drop this fact from the pattern,
+we still have a pattern that we can rule out, that is, `semaphore(0)`
+and `link(0,0)`.
 
 To check this idea, we remove the irrelevant fact from the pattern by clicking on it.
 The unwanted fact becomes gray:
@@ -454,7 +409,7 @@ it.  That is, we ruled out a larger class of states, so in effect we
 made a *stronger* conjecture. 
 
 IVy can often discover automatically that a bad pattern can be
-generalized.  One way to do this is to use *bounded
+simplified.  One way to do this is to use *bounded
 reachability*. After `Gather`, Instead of manually eliminating the
 unwanted facts, we can select `Minimize` from the `Conjecture`
 menu. IVy ask for the number of steps to check. Somewhat arbitrarily,
