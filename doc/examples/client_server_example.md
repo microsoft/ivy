@@ -20,7 +20,7 @@ exported action, the formula remains true.
 
 Every inductive invariant is an invariant, but not every invariant is
 inductive. An inductive invariant is relatively easy to prove, since
-we only have to verify the iniation and consecution property, a task
+we only have to verify the initiation and consecution properties, a task
 which Ivy can usually perform automatically. Usually, though, the
 invariant properties we really want to prove are not inductive and we
 therefore require some cleverness to *strengthen* the desired
