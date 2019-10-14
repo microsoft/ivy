@@ -21,6 +21,7 @@ module quic_protection(tls_id,tls) = {
         dcid : cid,                        # destination cid
         scid : cid,                        # source cid (for long format only)
         payload_length : stream_pos,       # payload lenght (for long format only)
+        payload_length_pos : stream_pos,   # position in packet of length field, if present
         pkt_num_pos : stream_pos           # position in packet of sequence number
     }
     
@@ -68,7 +69,7 @@ module quic_protection(tls_id,tls) = {
         var new_seq := get_pnum(pnum,0,pnum_len);
         new_seq := correct_pnum(seq,new_seq,pnum_len);
         pyld := tls.encrypt_aead(c,level,pyld,new_seq,auth);
-        call show_aead(level,pyld,new_seq,auth);
+#        call show_aead(level,pyld,new_seq,auth);
 
         # Computing the sample position is a bit tricky. First we
         # assume the length of the pnum is 4, which means the offset
@@ -131,8 +132,9 @@ module quic_protection(tls_id,tls) = {
                 # fix up the length field to account for removal of checksum
                 if h.hdr_long {
                     var new_len := to_var_int_16(h.payload_length-16);
-                    hdr := hdr.set(pnum_pos-2,new_len.value(0));
-                    hdr := hdr.set(pnum_pos-1,new_len.value(1));
+                    hdr := hdr.resize(h.payload_length_pos,0);
+                    hdr := hdr.extend(new_len);
+                    hdr := hdr.extend(pnum);
                 };
                 res.data := hdr.extend(res.data);
             }
@@ -180,10 +182,12 @@ module quic_protection(tls_id,tls) = {
             };
             var len := get_var_int_len(pkt,pos);
             h.payload_length := get_var_int(pkt,pos,len);
+            h.payload_length_pos := pos;
             h.pkt_num_pos := pos + len;
         }
         else {
             h.dcid := bytes_to_cid(pkt.segment(1,9));
+            h.payload_length_pos := 9;
             h.pkt_num_pos := 9;
         }
     }

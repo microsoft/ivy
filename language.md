@@ -45,7 +45,7 @@ Another unusual aspect of the IVy language is that it is *synchronous*. This mea
 
 - All actions occur in reaction to input from the environment, and
 - all actions are *isolated*, that is, they appear to occur
-instantantaneously, with no interruption.
+instantaneously, with no interruption.
 
 This aspect of IVy's semantics greatly simplifies reasoning about
 concurrent and distributed systems.
@@ -251,9 +251,9 @@ then we would write:
 
     x := y + next
 
-The lack of paretheses introduces no ambiguity, since the action
+The lack of parentheses introduces no ambiguity, since the action
 `next` is not a value and cannot itself be passed as an argument to
-the function `+`. An advantage of this convetion is that we don't have
+the function `+`. An advantage of this convention is that we don't have
 to remember whether `next` is an action or a variable, and we can
 easily replace a variable by an action without modifying all references
 to the variable.
@@ -532,7 +532,7 @@ program's environment. IVy makes the synchronous hypothesis: when the
 environment calls an action, it waits for the action to complete
 before issuing another call. Put another way, IVy actions appear to
 execute in zero time. At first blush, it might seem that this
-eliminates the possiblity of concurrency. In fact, the synchronous
+eliminates the possibility of concurrency. In fact, the synchronous
 hypothesis is intended to make the implementation of concurrent and
 distributed systems simpler. The key idea is that only the
 *appearance* of synchronicity is required. In practice actions can

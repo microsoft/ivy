@@ -14,7 +14,6 @@ object quic_ser = {}
 
     class `quic_ser` : public ivy_binary_ser {
         enum {quic_s_init,
-              quic_s_type,
               quic_s_version,
 	      quic_s_dcil,
 	      quic_s_scil,
@@ -71,13 +70,8 @@ object quic_ser = {}
             switch (state) {
             case quic_s_init:
             {
-                long_format = res & 1;
-                state = quic_s_type;
-            }
-            break;
-            case quic_s_type:
-            {
-                hdr_type = res;
+                long_format = res != 3;
+                hdr_type = (long_format ? ((res & 3) << 4) : 0) | 0x43 ;
 		setn(hdr_type | (long_format ? 0x80 : 0), 1);
                 state = quic_s_version;
             }
@@ -87,17 +81,8 @@ object quic_ser = {}
                 if (long_format)
                     setn(res,4);
                 state = quic_s_dcil;
-            }
-            break;
-            case quic_s_dcil:
-            {
-                dcil = res;
-                state = quic_s_scil;
-            }
-            break;
-            case quic_s_scil:
-            {
-                scil = res;
+                dcil = 5;
+                scil = long_format ? 5 : 0;
                 if (long_format) {
                     setn(((dcil & 0xf) << 4) | (scil & 0xf),1);
                 }
@@ -114,15 +99,6 @@ object quic_ser = {}
             {
 		setn(res,(scil ? (scil+3) : 0));
                 state = quic_s_retry_token_length;
-            }
-            break;
-            case quic_s_payload_length:
-            {
-                payload_length_pos = this->res.size();
-                if (long_format) {
-                    setn(res,2);  // will fill in correct value later
-                }
-                state = quic_s_pkt_num;
             }
             break;
             case quic_s_pkt_num:
@@ -280,14 +256,6 @@ object quic_ser = {}
                 state = quic_reset_final_offset;
             }
             break;
-            case quic_s_retry_token_length:
-            {
-                if (long_format & ((hdr_type & 0x30) == 0x00))
-                    set_var_int(res);
-                data_remaining = res;
-                state = quic_s_retry_token;
-            }
-            break;
             default:
             throw deser_err();
             }
@@ -400,6 +368,12 @@ object quic_ser = {}
                 set_var_int(ack_blocks_expected - 1); // block count doesn't include first
                 ack_block_count = 0;
                 state = quic_ack_gap;
+            } else if (state == quic_s_retry_token_length) {
+                if (long_format & ((hdr_type & 0x30) == 0x00)) {
+                    set_var_int(len);
+                    data_remaining = len;
+                }
+                state = quic_s_retry_token;
             }
         }
         void close_list() {
@@ -417,7 +391,11 @@ object quic_ser = {}
                 }
             }
             else if (state == quic_s_retry_token) {
-                state = quic_s_payload_length;
+                payload_length_pos = this->res.size();
+                if (long_format) {
+                    setn(0,2);  // will fill in correct value later
+                }
+                state = quic_s_pkt_num;
             }
         }
         void close_list_elem() {}

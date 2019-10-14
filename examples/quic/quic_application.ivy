@@ -1,0 +1,160 @@
+#lang ivy1.7
+
+include byte_stream
+include quic_stream
+
+#
+# The application protocol
+# ------------------------
+#
+# The QUIC application layer transfers authenticated, secure, reliable ordered
+# streams between clients and servers.
+#
+#
+# Server open event
+# =================
+#
+# An open connection event occurs at a server when it recieves a connection
+# request from a client and opens a connection. Normally when this event occurs,
+# the server will create or attach a daemon to serve request from the client.
+#
+# Parameters
+# ----------
+#
+# - `src`: the endpoint of the server
+# - `dst`: the endpoint of the client
+# - `dcid`: the client's cid for this connection
+# - `scid`: the cid selected by the server for this connection
+#
+
+action app_server_open_event(src:ip.endpoint,dst:ip.endpoint,scid:cid,dcid:cid)
+
+#
+# Send event
+# ==========
+#
+# This event corresponds to transfer of application data to QUIC to
+# be transmitted. The data is copied into the sent stream at the given position.
+# This allows the sending application to provide data out of order. 
+#
+# Parameters
+# ----------
+#
+# - `src`: the source endpoint
+# - `dst`: the destination endpoint
+# - `dcid` : the destination AID
+# - `s` : the stream id
+# - `data` : the data bytes transmitted
+# - `pos` : the offset in the stream of the data bytes
+# - `close` : true if the client is closing the stream
+
+action app_send_event(src:ip.endpoint, dst:ip.endpoint, dcid:cid,
+                      s : stream_id, data : stream_data,
+                      pos : stream_pos, close : bool)
+
+
+
+# Specification state
+# ===================
+#
+# - For aid C,and stream id S, `stream_app_data(C,S)`
+#   represents the stream data transmitted by the application to endpoint E
+#   on stread id S of cid C. This data may or may not have been transmitted in
+#   any QUIC packet.
+#
+# - For aid C,and stream id S, `stream_app_end(C,S)` represents the
+#   length of stream data transmitted by the application to endpoint E
+#   on stread id S of cid C.
+#
+# - For each aid C,and stream id S, `stream_app_pos(C,S)`
+#   represents the read position of the stream data transmitted by the application
+#   on stream id S to C. This is the number of bytes in the stream that have
+#   been read by the application.
+#
+# - For each aid C,and stream id S, `stream_app_data_finished(C,S)` indicates
+#   the data transmitted to C on S is finished.
+
+function stream_app_data(C:cid,S:stream_id) : stream_data
+function stream_app_data_end(C:cid,S:stream_id) : stream_pos
+function stream_app_pos(C:cid,S:stream_id) : stream_pos
+function stream_app_data_finished(C:cid,S:stream_id) : bool
+
+after init {
+    stream_app_pos(C,S) := 0;
+    stream_app_data_finished(C,S) := false;
+}
+
+
+# Event specifications
+# ====================
+#
+# Open connection event
+# ---------------------
+#
+# Requirements:
+#
+# - A connection must have been requested by the client [1].
+# - The two cids must not be previously associated to any peer [2]. 
+# - Gives one ack credit to the server for the initial packet
+
+around app_server_open_event {
+    require conn_requested(dst,src,dcid);  # [1] 
+    require ~connected(dcid) & ~connected(scid);  # [2]
+    ...
+    call map_cids(scid,dcid);
+    call map_cids(dcid,scid);
+    ack_credit(scid) := ack_credit(scid) + 1;
+}
+
+action map_cids(dcid:cid,scid:cid) = {
+    connected(dcid) := true;
+    connected_to(dcid) := scid
+}
+
+
+
+# Send event
+# ----------
+#
+# Requirements
+#
+# - If the data overwites existing data in the stream, then it must
+#   agree with that data [2]. 
+#
+# - Writing non-empty data to a closed stream is not allowed [4].
+#
+# Effects
+#
+# - The data bytes are copied at position `pos` into `stream_app_data(C,S)` where `C` is
+#   the cid and `S` is the stream id.
+#
+# - The stream data length is updated to reflect the new data [1].
+#
+# - If `close` is true, the stream is marked as finished [3]. 
+#
+
+after app_send_event {
+    var send_end := pos + data.end;
+    require ~(send_end > stream_app_data_end(dcid,s) & stream_app_data_finished(dcid,s));  # [4]
+    var end := stream_app_data(dcid,s).end;
+    if end < send_end {
+        end := send_end
+    };
+    stream_app_data(dcid,s) := stream_app_data(dcid,s).resize(end,0);  # [1]
+    var idx := data.begin;
+    while idx < data.end {
+        var val := stream_app_data(dcid,s).value(pos + idx);
+
+        # TODO: using zero as a "null" value is not correct here.
+        # We need a data structure to capture the known intervals!
+
+        require val ~= 0 ->  data.value(idx) = val;  # [2]
+	stream_app_data(dcid,s) := stream_app_data(dcid,s).set(pos+idx,data.value(idx));
+	idx := idx.next
+    };
+    stream_app_data_end(dcid,s) := end;  # [1]
+    if close {
+        stream_app_data_finished(dcid,s) := true;  # [3]
+    }
+}
+
