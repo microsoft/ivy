@@ -681,6 +681,9 @@ def mine_interpreted_constants(model,vocab):
             sort_values[sort].update(collect_model_values(sort,model,s))
     return dict((x,map(term_to_z3,list(y))) for x,y in sort_values.iteritems())
     
+def enumerated_range(sort):
+    res = [z3_constants[x] for x in sort.defines()]
+    return res
 
 class HerbrandModel(object):
     def __init__(self,solver,model,vocab):
@@ -731,7 +734,8 @@ class HerbrandModel(object):
         vs = list(variables_ast(fmla))
         s = self.solver
         m = self.model
-        ranges = [self.constants[x.sort] for x in vs]
+        ranges = [enumerated_range(x.sort) if isinstance(x.sort,ivy_logic.EnumeratedSort) else
+                  self.constants[x.sort] for x in vs]
         z3_fmla = literal_to_z3(fmla)
 #        print "z3_fmla = {}".format(z3_fmla)
         z3_vs = [term_to_z3(v) for v in vs]

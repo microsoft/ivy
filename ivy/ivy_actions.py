@@ -1469,18 +1469,18 @@ def match_annotation(action,annot,handler):
             raise AnnotationError()
     recur(action,annot,dict())
     
-def env_action(actname):
+def env_action(actname,label='env'):
     actnames = sorted(ivy_module.module.public_actions) if actname is None else [actname] 
     racts = []
     for a in actnames:
-        act = ivy_module.module.actions[a]
-        ract = Sequence(ivy_module.module.actions[a],ReturnAction())
+        act = ivy_module.module.actions[a] if isinstance(a,str) else actname
+        ract = Sequence(act,ReturnAction())
         if hasattr(act,'formal_params'):
             ract.formal_params = act.formal_params
         if hasattr(act,'formal_returns'):
             ract.formal_returns = act.formal_returns
         racts.append(ract)
     action = EnvAction(*racts)
-    action.label = 'env' if actname is None else actname
+    action.label = label if not isinstance(actname,str) else actname
     return action
 

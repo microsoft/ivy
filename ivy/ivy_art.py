@@ -105,6 +105,7 @@ class AnalysisGraph(object):
         s = self.domain.new_state(ic)
         if self.domain.initializers:
             action = ivy_actions.Sequence(*[a for n,a in self.domain.initializers])
+            action = ivy_actions.env_action(action,'init')
             s = action_app(action,s)
             with AC(self,no_add=True):
                 with EvalContext(check=False):

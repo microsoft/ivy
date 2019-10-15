@@ -156,7 +156,9 @@ class Checker(object):
     def __init__(self,conj,report_pass=True,invert=True):
         self.fc = lut.formula_to_clauses(conj)
         if invert:
-            self.fc = lut.dual_clauses(self.fc)
+            def witness(v):
+                return lg.Symbol('@' + v.name, v.sort)
+            self.fc = lut.dual_clauses(self.fc,witness)
         self.report_pass = report_pass
         self.failed = False
     def cond(self):
