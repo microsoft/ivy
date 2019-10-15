@@ -279,9 +279,9 @@ class AnalysisGraphUI(ivy_ui.AnalysisGraphUI):
 def _write_conj(f,lab,fmla):
     fmla = il.drop_universals(fmla)
     if lab:
-        f.write("conjecture [{}] {}\n".format(lab,str(fmla)))
+        f.write("invariant [{}] {}\n".format(lab,str(fmla)))
     else:
-        f.write("conjecture {}\n".format(str(fmla)))
+        f.write("invariant {}\n".format(str(fmla)))
 
 class ConceptGraphUI(ivy_graph_ui.GraphWidget):
     def menus(self):
