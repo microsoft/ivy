@@ -1,4 +1,4 @@
-#lang ivy1.5
+#lang ivy1.7
 
 type client
 type server
@@ -6,29 +6,30 @@ type server
 relation link(X:client, Y:server)
 relation semaphore(X:server)
 
-init semaphore(W) & ~link(X,Y)
+after init {
+    semaphore(W) := true;
+    link(X,Y) := false
+}
 
 action connect(x:client,y:server) = {
-  assume semaphore(y);
+  require semaphore(y);
   link(x,y) := true;
   semaphore(y) := false
 }
 
 action disconnect(x:client,y:server) = {
-  assume link(x,y);
+  require link(x,y);
   link(x,y) := false;
   semaphore(y) := true
 }
 
-action test = {
-  assert ~(X ~= Z & link(X,Y) & link(Z,Y))
-}
+invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
 
 export connect
 export disconnect
-export test
 
-# concept c1(X,Y,Z) = (link(X,Z) * ~X = Y * link(Y,Z))
+# Add this to prove the invariant
 
-#conjecture (X = Z | ~link(X,Y) | ~link(Z,Y))
-#conjecture link(X,Y) -> ~semaphore(Y)
+#private {
+#    invariant ~(link(X,Y) & semaphore(Y))
+#}

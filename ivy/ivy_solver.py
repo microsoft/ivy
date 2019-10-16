@@ -1026,9 +1026,9 @@ def model_if_none(clauses1,implied,model):
 
 def decide(s,atoms=None):
 #    print "solving{"
-    f = open("ivy.smt2","w")
-    f.write(s.to_smt2())
-    f.close()
+#    f = open("ivy.smt2","w")
+#    f.write(s.to_smt2())
+#    f.close()
     res = s.check() if atoms == None else s.check(atoms)
     if res == z3.unknown:
         print s.to_smt2()
