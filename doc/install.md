@@ -153,6 +153,9 @@ command line build tools for C++ installed. You can get them free of charge
 <a name="macnotes"></a> Installation from source on MacOS High Sierra and Mojave
 ================================================================================
 
+These instructions have been tested for macOS 10.12 Sierra up to macOS
+10.15 Catalina.
+
 1. Install Xcode from App Store
 2. Install Xcode command line tools
 
@@ -167,12 +170,12 @@ command line build tools for C++ installed. You can get them free of charge
         $ sudo xcodebuild -license
 
    Install Macports from [https://www.macports.org/install.php](https://www.macports.org/install.php). Select
-   matching macOS 10.12 or 10.13 depending on macOS running on
+   the version matching The macOS matching the macOS version running on your
    machine.  On macOS 10.13 Mojave, make sure you've installed all
    patches because various steps below were broken until about
    7/15/2019 patch.
 
-        $ sudo easy_install pip (required on 10.13 Mojave and/or required by 8/1/2019)
+        $ sudo easy_install pip  # required on 10.13 Mojave and/or required by 8/1/2019)
         $ sudo port install graphviz-gui
         $ sudo port select --set python python27
         $ sudo port select --set python2 python27
