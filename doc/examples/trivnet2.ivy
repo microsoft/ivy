@@ -1,4 +1,4 @@
-#lang ivy1.5
+#lang ivy1.7
 type packet
 
 object intf = {
@@ -6,12 +6,10 @@ object intf = {
     action recv(x:packet)
 }
 
-
-object spec = {
+specification {
     relation sent(X:packet)
-
     after init {
-	sent(X) := false
+        sent(X) := false
     }
 
     before intf.send {
@@ -19,16 +17,19 @@ object spec = {
     }
 
     before intf.recv {
-	assert sent(x)
+	require sent(x)
     }
 }
 
+implementation {
 
-object protocol = {
     individual full : bool
     individual contents : packet
-    init ~full
-
+    
+    after init {
+        full := false;
+    }
+    
     implement intf.send {
 	full := true;
 	contents := x
@@ -44,7 +45,7 @@ object protocol = {
 
 import intf.recv
 export intf.send
-export protocol.async
+export async
 
 #interpret packet -> bv[16]
 
