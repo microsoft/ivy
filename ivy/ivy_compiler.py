@@ -1553,7 +1553,7 @@ def check_definitions(mod):
                         raise IvyError(side_effects[s],'immutable symbol assigned. \n{} info: symbol is used in axiom here'.format(lf.lineno))
 
         for lf in mod.definitions:
-            s = lf.formula.lhs()
+            s = lf.formula.lhs().rep
             if s in side_effects:
                 raise IvyError(side_effects[s],'immutable symbol assigned. \n{} Symbol is defined here'.format(lf.lineno))
                 
