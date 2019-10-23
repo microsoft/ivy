@@ -1,0 +1,78 @@
+#lang ivy1.7
+
+object nat = {
+    type this
+    
+    relation even(N:nat), odd(N:nat)
+
+    axiom even(0) & (even(N) -> odd(N+1))
+    axiom odd(1) & (odd(N) -> even(N+1))
+}
+
+isolate evens = {
+
+    action step
+    action put(n:nat)
+
+    specification {
+        before put {
+            require n.even
+        }
+    }
+
+    implementation {
+
+        var number : nat
+        after init {
+            number := 0
+        }
+
+        implement step {
+            call odds.put(number + 1)
+        }
+
+        implement put(n:nat) {
+            number := n;
+        }
+
+        invariant number.even
+    }
+}
+with odds,nat
+
+isolate odds = {
+
+    action step
+    action put(n:nat)
+
+    specification {
+        before put {
+            require n.odd
+        }
+    }
+
+    implementation {
+
+        var number : nat
+        after init {
+            number := 1
+        }
+
+        implement step {
+            call evens.put(number + 1)
+        }
+
+        implement put {
+            number := n;
+        }
+
+        invariant number.odd
+
+    }
+}
+with evens,nat
+
+
+export evens.step
+export odds.step
+
