@@ -175,6 +175,7 @@ object frame = {
 
         variant this of frame = struct {
             seq_num                : cid_seq,     # the sequence number of the new cid
+            retire_prior_to        : cid_seq,     # retire seq nums prior to this
             length                 : cid_length,  # the length of the new cid in bytes
             scid                   : cid,         # the new cid
             token                  : reset_token  # the stateless reset token

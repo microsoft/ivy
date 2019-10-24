@@ -22,7 +22,7 @@ else:
 scdir = os.environ.get('QUIC_IMPL_DIR',os.environ.get('HOME','') + '/projects')
     
 servers = [
-    ['picoquic',[scdir+'/picoquic','./picoquicdemo']],
+    ['picoquic',[scdir+'/picoquic','./picoquicdemo -L -l -']],
     ['quant',['..',scdir + '/quant/Debug/bin/server -d . -c leaf_cert.pem -k leaf_cert.key -p 4443 -t 3600']],
     ['winquic',['..','true']],
 ]

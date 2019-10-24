@@ -208,7 +208,7 @@ after init {
 #
 
 action make_transport_parameters returns (tp:quic_transport_parameters) = {
-    tp.initial_version := 0xff000012;
+#    tp.initial_version := 0xff000017;
     var imsdbl : initial_max_stream_data_bidi_local;
     imsdbl.stream_pos_32 := max_stream_data;
     var imd : initial_max_data;
@@ -237,7 +237,7 @@ before packet_event(src:ip.endpoint,dst:ip.endpoint,pkt:quic_packet) {
         require dst = server.ep;
         require pkt.token.end = 0; 
     };
-    require pkt.long -> pkt.pversion = 0xff000012
+    require pkt.long -> pkt.pversion = 0xff000017
 }
 
 # The protocol specification describes all the events occurring the

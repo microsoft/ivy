@@ -55,6 +55,7 @@ object quic_deser = {}
               quic_max_stream_data_id,
               quic_new_connection_id_length,
               quic_new_connection_id_seq_num,
+              quic_new_connection_id_retire_prior_to,
               quic_new_connection_id_scid,
               quic_new_connection_id_token,
               quic_path_challenge_data,
@@ -92,27 +93,32 @@ object quic_deser = {}
                     ivy_binary_deser::getn(res,4);
                 else
                     res = 0;
-                if (long_format) {
-                    long long cil;
-                    getn(cil,1);
-                    scil = cil & 0xf;
-                    dcil = (cil & 0xf0) >> 4;
-                } else {
-                    dcil = 5;
-                    scil = 0; // TODO: how to determine the cid length?
-                }
                 state = quic_s_dcid;
             }
             break;
             case quic_s_dcid:
             {
-		getn(res,(dcil ? (dcil+3) : 0));
+                if (long_format) {
+                    long long cil;
+                    getn(cil,1);
+                    dcil = cil;
+                } else {
+                    dcil = 8;
+                }
+		getn(res,(dcil));
                 state = quic_s_scid;
             }
             break;
             case quic_s_scid:
             {
-		getn(res,(scil ? (scil+3) : 0));
+                if (long_format) {
+                    long long cil;
+                    getn(cil,1);
+                    scil = cil;
+                } else {
+                    scil = 0;
+                }
+		getn(res,(scil));
                 long long len;
                 if (long_format & ((hdr_type & 0x30) == 0x00))
                     get_var_int(len);
@@ -234,7 +240,7 @@ object quic_deser = {}
             break;
             case quic_reset_err_code:
             {
-                getn(res,2);
+                get_var_int(res);
                 state = quic_reset_final_offset;
             }
             break;
@@ -251,12 +257,12 @@ object quic_deser = {}
             break;
             case quic_stop_sending_err_code:
             {
-                getn(res,2);
+                get_var_int(res);
             }
             break;
             case quic_connection_close_err_code:
             {
-                getn(res,2);
+                get_var_int(res);
                 state = quic_connection_close_frame_type;
             }
             break;
@@ -275,7 +281,7 @@ object quic_deser = {}
             break;
             case quic_application_close_err_code:
             {
-                getn(res,2);
+                get_var_int(res);
                 state = quic_connection_close_reason_length;
             }
             break;
@@ -293,6 +299,12 @@ object quic_deser = {}
             }
             break;
             case quic_new_connection_id_seq_num:
+            {
+                get_var_int(res);
+                state = quic_new_connection_id_retire_prior_to;
+            }
+            break;
+            case quic_new_connection_id_retire_prior_to:
             {
                 get_var_int(res);
                 state = quic_new_connection_id_length;

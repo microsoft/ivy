@@ -167,14 +167,11 @@ module quic_protection(tls_id,tls) = {
         h.hdr_long := bvand(0x80,pkt.value(0)) ~= 0;
         h.hdr_type := bfe[0][6](pkt.value(0));
         if h.hdr_long {
-            var lens := pkt.value(5);
-            var dcil : stream_pos := bfe[4][7](lens);
-            var scil : stream_pos := bfe[0][3](lens);
-            dcil := dcil + 3 if dcil ~= 0 else 0;
-            scil := scil + 3 if scil ~= 0 else 0;
+            var dcil : stream_pos := bfe[0][7](pkt.value(5));
             h.dcid := bytes_to_cid(pkt.segment(6,6+dcil));
-            h.scid := bytes_to_cid(pkt.segment(6+dcil,6+dcil+scil));
-            var pos := 6 + dcil + scil;
+            var scil : stream_pos := bfe[0][7](pkt.value(6+dcil));
+            h.scid := bytes_to_cid(pkt.segment(7+dcil,7+dcil+scil));
+            var pos := 7 + dcil + scil;
             if bvand(h.hdr_type,0x30) = 0x00 {
                 var len := get_var_int_len(pkt,pos);
                 var retry_token_len := get_var_int(pkt,pos,len);
@@ -368,12 +365,9 @@ object quic_prot_deser = {}
             if (level != 1)
                 return;
             if (peek(pos) & 0x80) { // a long packet
-                unsigned lens = peek(pos+5);
-                unsigned dcil = (lens >> 4) & 0xf;
-                unsigned scil = lens & 0xf;
-                dcil = (dcil != 0) ? dcil + 3 : 0;
-                scil = (scil != 0) ? scil + 3 : 0;
-                unsigned pnum_pos = pos + 6 + dcil + scil;
+                unsigned dcil = peek(pos+5);
+                unsigned scil = peek(pos+6+dcil);
+                unsigned pnum_pos = pos + 7 + dcil + scil;
                 if ((peek(pos) &0x30) == 0x00) { // initial packets have tokens
                     unsigned len = get_var_int_len(pnum_pos);
                     unsigned retry_token_len = get_var_int(pnum_pos,len);
