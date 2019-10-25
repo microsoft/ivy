@@ -1,9 +1,9 @@
 ---
 layout: page
-title: The IVy language
+title: The Ivy language
 ---
 
-IVy's language is designed to let you to specify and implement systems
+Ivy's language is designed to let you to specify and implement systems
 in a way that is both convenient and conducive to automated
 verification. Technically, this means that important verification
 problems like invariant checking and bounded model checking fall
@@ -11,7 +11,7 @@ within a [decidable fragment][df] of first-order logic.
 
 [df]: decidiability.html
 
-For this reason, the IVy language has certain unusual features. IVy
+For this reason, the Ivy language has certain unusual features. Ivy
 divides the world into three categories of things:
 
 - Data values,
@@ -32,42 +32,42 @@ as arguments. That is, data and functions are "first class" values. On
 the other hand, procedures cannot be stored in variables or passed as
 arguments.
 
-A particularly unusual aspect of the IVy language is that there are
+A particularly unusual aspect of the Ivy language is that there are
 *no references*. Two distinct variables are never "aliases" for the
 same underlying "object". Modifying variable `a` never has an effect
-on the value of variable `b`. IVy's philosophy is that references are a
+on the value of variable `b`. Ivy's philosophy is that references are a
 low-level optimization that should be used by compilers to avoid
 copying, but should never appear in high-level programs. The absense
 of aliases enormously simplifies the analysis, testing and
 verification of programs.
 
-Another unusual aspect of the IVy language is that it is *synchronous*. This means that:
+Another unusual aspect of the Ivy language is that it is *synchronous*. This means that:
 
 - All actions occur in reaction to input from the environment, and
 - all actions are *isolated*, that is, they appear to occur
 instantaneously, with no interruption.
 
-This aspect of IVy's semantics greatly simplifies reasoning about
+This aspect of Ivy's semantics greatly simplifies reasoning about
 concurrent and distributed systems.
 
-We will now consider the basic elements of an IVy program.
+We will now consider the basic elements of an Ivy program.
 
 ## The language specifier
 
-Every IVy file begins with a line like the following:
+Every Ivy file begins with a line like the following:
 
     #lang ivy1.7
 
-This tells IVy what version of the language we are using. This is
+This tells Ivy what version of the language we are using. This is
 important because in successive version of the language, certain
 features may be changed or deprecated. Providing the language version
-allows old programs to keep working. They current version of the IVy
+allows old programs to keep working. They current version of the Ivy
 language is 1.7. Changes between versions of the language are listed
 at the end of this document.
 
 ## State and actions
 
-An IVy program describes *objects* that have state and
+An Ivy program describes *objects* that have state and
 provide *actions* that operate on state. State variables may hold
 either plain old data or mathematical relations and functions (much as
 in the [Alloy][al] language, but with important differences that we
@@ -91,7 +91,7 @@ how values of type `node` are represented. At this point, we say that
 that `link` is a set of pairs (*X*,*Y*) where *X* and *Y*
 are nodes.
 
-In IVy, as in [Prolog][pl], identifiers beginning with capital letters
+In Ivy, as in [Prolog][pl], identifiers beginning with capital letters
 are logical variables, or place-holders. These are not to be confused
 with program variables, which hold the program state.  The colons
 introduce type annotations. In the above declaration, the variables
@@ -125,7 +125,7 @@ A variable that holds just a node value can be declared like this:
 The type `node` declared above is an *uninterpreted* type. This means
 it can be any set with at least one element. Often it is useful to
 define a type *in extension*, that is, by enumerating its elements
-explicitly. An example of an enumerated type in IVy would be:
+explicitly. An example of an enumerated type in Ivy would be:
 
     type color = {red,green,blue}
 
@@ -134,7 +134,7 @@ individuals `red`, `green` and `blue` as its elements.
 
 ### Actions
 
-An *action* is IVy's notion of a procedure that mutates the values of
+An *action* is Ivy's notion of a procedure that mutates the values of
 state variables. For example, here is a declaration of an action that
 adds a link between two nodes:
 
@@ -142,12 +142,12 @@ adds a link between two nodes:
         link(x,y) := true
     }
 
-The action `connect` is defined in terms of one of IVy's primitive
+The action `connect` is defined in terms of one of Ivy's primitive
 actions: an assignment. An assignment modifies the value of a
 variable.  In this case, the single pair (*x*,*y*) is added to the
 relation `link` (or put another way, the value of the expression
 `link(x,y)` is set to true, without otherwise modifying
-`link`). Because there is no aliasing in IVy,  the values of all other
+`link`). Because there is no aliasing in Ivy,  the values of all other
 variables remain unchanged by the assignment.
 
 We can use place-holders to make larger modifications to a relation. For
@@ -195,7 +195,7 @@ links *x* to *y*:
         link(x,y) := true
     }
 
-The semicolon is a sequential composition operator in IVy, not a
+The semicolon is a sequential composition operator in Ivy, not a
 statement terminator. However, an extra semicolon is allowed before an
 ending brace `}` to make editing sequences of statements easier. In
 this case, we could have written the sequence of two assignments
@@ -212,7 +212,7 @@ We could also have written `connect_unique` by *calling* `clear` and `connect`:
         call connect(a,b)
     }
     
-IVy uses the
+Ivy uses the
 [call-by-value][cbv] convention. That is, when we call `clear(a)` a
 local variable *x* is created during the execution of `clear` and
 assigned the value *a*. This means that, as in the [C programming
@@ -237,7 +237,15 @@ is equivalent to
     x := y + temp
 
 If there is more than one call within an expression, the calls are
-executed in left-to-right order.
+executed in left-to-right order. Calls inside conditional operators
+occur whether or not the condition is true. For example, the statement:
+
+    x := sqrt(y) if c else z
+    
+is equivalent to:
+
+    call temp := sqrt(y);
+    x := temp if c else z
 
 Parentheses are not used when calling an action with no parameters. 
 For example, if we have:
@@ -258,9 +266,10 @@ to remember whether `next` is an action or a variable, and we can
 easily replace a variable by an action without modifying all references
 to the variable.
 
+
 ### Conditionals
 
-Conditionals in IVy are much as in any procedural programming
+Conditionals in Ivy are much as in any procedural programming
 language. For example, the following code clears the incoming links to
 node *y* if *y* is in the failed set:
 
@@ -320,7 +329,7 @@ efficiently compiled and is easier for Ivy to reason about (see the
 
 ### Loops
 
-Loops are discouraged in IVy. Often, the effect of a loop can be
+Loops are discouraged in Ivy. Often, the effect of a loop can be
 described using an assignment or an `if some` conditional. 
 
 For example, instead of something like this:
@@ -375,7 +384,7 @@ the expression is less than `0`.
 
 ## Non-deterministic choice
 
-The asterisk "*" can be used to represent non-deterministic choice in IVy in
+The asterisk "*" can be used to represent non-deterministic choice in Ivy in
 two situations. First, on the right-hand side of an assignment:
 
     x := *
@@ -401,11 +410,12 @@ On entry to an action the values of return parameters are non-deterministically 
 
 ## Expressions
 
-Expressions in IVy are terms or formulas in [first-order logic][fol] with
-equality. IVy provides the following built-in operators: `~` (not),
-`&` (and), `|` (or), `->` (implies), `<->` (iff) and `=`
-(equality). The equality operator binds most strongly, followed by
-not, and, iff, implies.
+Expressions in Ivy are terms or formulas in [first-order logic][fol] with
+equality. Ivy provides the following built-in operators: `~` (not),
+`&` (and), `|` (or), `->` (implies), `<->` (iff) `=`
+(equality). There is also a built-in conditional operator `X if C else Y` that returns
+`X` if the Boolean condition `C` is true and `Y` otherwise. The if/else operator binds most strongly, followed by
+equality, not, and, iff, implies.
 
 [fol]: https://en.wikipedia.org/wiki/First-order_logic
 
@@ -489,7 +499,7 @@ assumption above to
 ## Initialization
 
 Normally, we expect a system to start in some well-defined state, or
-at least for some specified conditions to hold initially. In IVy, we use an
+at least for some specified conditions to hold initially. In Ivy, we use an
 `after init` declaration for this purpose. For example:
 
     after init {
@@ -525,12 +535,12 @@ or, if the type of `y` can be inferred, just this:
     var y := x
 
 
-## Modelling interleaving concurrency in IVy
+## Modelling interleaving concurrency in Ivy
 
-Actions in an IVy program execute only in response to calls from the
-program's environment. IVy makes the synchronous hypothesis: when the
+Actions in an Ivy program execute only in response to calls from the
+program's environment. Ivy makes the synchronous hypothesis: when the
 environment calls an action, it waits for the action to complete
-before issuing another call. Put another way, IVy actions appear to
+before issuing another call. Put another way, Ivy actions appear to
 execute in zero time. At first blush, it might seem that this
 eliminates the possibility of concurrency. In fact, the synchronous
 hypothesis is intended to make the implementation of concurrent and
@@ -546,10 +556,10 @@ abstract level using *interleaving* concurrency. In an interleaving
 model, processes take turns executing actions in isolation (that is,
 in apparently zero time) in a non-deterministic order. 
 
-An IVy program exports a set of actions to its environment. Each of
+An Ivy program exports a set of actions to its environment. Each of
 these actions can be used to model a single isolated step of a
 process.  Since the environment is allowed to call these actions in an
-arbitrary order, the IVy program can be used to model arbitrary
+arbitrary order, the Ivy program can be used to model arbitrary
 interleaving of process actions.
 
 
@@ -604,7 +614,7 @@ declarations at the end tell us that the environment may call
 `connect` and `disconnect` in arbitrary sequence, though it must obey
 the stated requirements.
 
-## Safety and invariant conjectures
+## Safety and invariants
 
 A program is *safe* if it cannot fail, so long as in the past all
 requirements of the environment have been satisfied (that is, it is safe if 
@@ -623,27 +633,22 @@ connected to a single server using the following test action:
     export test
 
 The assertion is implicitly universally quantified over (distinct)
-clients `X` and `Z` and server `Y`. To help IVy to prove that this
+clients `X` and `Z` and server `Y`. To help Ivy to prove that this
 assertion always holds, we can suggest facts that might be useful in
 constructing an inductive invariant. For example:
 
-    conjecture X = Z | ~link(X,Y) | ~link(Z,Y)
-    conjecture link(X,Y) -> ~semaphore(Y)
+    invariant X = Z | ~link(X,Y) | ~link(Z,Y)
+    invariant link(X,Y) -> ~semaphore(Y)
 
 Here, we state that no two clients are connected to the same server
 (which is just the property we want to prove) and additionally that
 when a client is connected to a server, its semaphore is down. These
 facts are *inductive* in the sense that they are initially true, and
 each of our three actions preserves them. Moreover, they are
-sufficient to guarantee that our test assertion is true. Thus, IVy can
-use these conjectures to prove safety of the program.
+sufficient to guarantee that our test assertion is true. Thus, Ivy can
+use these invariants to prove safety of the program.
 
-We can also specify an invariant of the program that *must* hold, like
-this:
-
-    invariant ~(X ~= Z & link(X,Y) & link(Z,Y))
-
-This invariant is asserted to hold at all times after initialization
+An invariant is asserted to hold at all times after initialization
 when an exported action is *not* executing. In particular, the
 invariant is not guaranteed to hold when the program calls back to the
 environment (see `import` below) or when it calls one of its own
@@ -652,7 +657,7 @@ actions.
 
 ## Axioms and background theories
 
-The built-in types and operators provided by IVy are fairly
+The built-in types and operators provided by Ivy are fairly
 impoverished. We have only uninterpreted types, the Boolean type
 `bool`, enumerated types and the basic operators of first-order
 logic. This is by design. By introducing richer data types, or
@@ -663,7 +668,7 @@ a model, we should make sure that the power of the integers is really
 needed. It may be, for example, that all we require is a totally
 ordered set.
 
-IVy allows us to introduce background theories in the form of logical
+Ivy allows us to introduce background theories in the form of logical
 axioms. This in turn allows us to avoid using unnecessarily powerful
 theories. As an example, consider defining an ordering relation over 
 our node ID's:
@@ -671,7 +676,7 @@ our node ID's:
     relation (I:id < J:id)
 
 This is an example of an *infix* symbol. The symbol `<` is no
-different than other relational symbols, except that IVy pre-defines
+different than other relational symbols, except that Ivy pre-defines
 it as having infix syntax. 
 
 We can ensure that `<` is a total order by writing axioms:
@@ -688,12 +693,12 @@ cases, the free variables are universally quantified.
 
 Of course, axioms are assumptions and assumptions are dangerous.  We
 want to make sure that our axioms are consistent, that is, that they
-have at least one [model](https://en.wikipedia.org/wiki/Logic_model). The IVy tool can be helpful in
+have at least one [model](https://en.wikipedia.org/wiki/Logic_model). The Ivy tool can be helpful in
 determining this.
 
 ### Overloaded operators.
 
-In IVy the equality operator is *overloaded* in the sense that it
+In Ivy the equality operator is *overloaded* in the sense that it
 applies to any pair of arguments so long as they are of the same
 type. One way to think of this is that there is really a distinct
 equality operator pre-declared for each type, but that we use `=` as a
@@ -702,7 +707,7 @@ such overloaded operators to avoid, for example, having to invent a
 new "less than" symbol for every ordered type, or adding type
 annotations to operators. 
 
-IVy provides for this in a limited way. Certain symbols, such as `<`,
+Ivy provides for this in a limited way. Certain symbols, such as `<`,
 `+` and `0` are always overloaded. This allows use the same symbol
 with different type signatures disambiguate these uses based on type
 inference.
@@ -720,14 +725,14 @@ type `foo`, then in the expression `x+1`, the numeral `1` is inferred
 to have type `foo`.
 
 Numerals are special symbols in the sense that they do not have to be
-explicitly declared. However, IVy gives them no special
-interpretation. IVy does not even assume that distinct numerals have
+explicitly declared. However, Ivy gives them no special
+interpretation. Ivy does not even assume that distinct numerals have
 distinct values. This means that `0 = 2` is not necessarily false.  In
 fact, this equation might be true in a type representing the integers
 mod 2.
 
 Section [Interpretations] describes how to give concrete
-interpretations to IVy types, so that symbols like `+` and `0` have
+interpretations to Ivy types, so that symbols like `+` and `0` have
 specific meanings.
 
 ### Quoted symbols
@@ -739,7 +744,7 @@ their type is inferred from context.
 
 ## Modules
 
-A *module* in IVy is a group of declarations that can be instantiated.
+A *module* in Ivy is a group of declarations that can be instantiated.
 In this way it is similar to a template class in an object-oriented
 programming language. Besides defining classes of objects, modules can be
 used to capture a re-usable theory, or structure a modular proof.
@@ -777,8 +782,8 @@ counter value `val`. We can create an instance of the module like this:
 This creates an *object* `c` with members `c.val`, `c.up`, `c.down`
 and `c.is_zero`. 
 
-Any IVy declaration can be contained in a module. This includes
-axioms, conjectures, instances and modules. As an example, here is a
+Any Ivy declaration can be contained in a module. This includes
+axioms, invariants, instances and modules. As an example, here is a
 module representing a theory of partial orders:
 
     module po(t,lt) = {
@@ -838,6 +843,49 @@ This creates a single object `foo` with members `foo.bit` and
 `foo.flip`, exactly as if we had created a module and instantiated it
 once.
 
+### This
+
+The special symbol `this` refers to the innermost surrounding object
+or module. For example:
+
+    object foo = {
+        relation bit
+        after init {
+            this.bit := false
+        }
+    }
+    
+Here `this.bit` refers to `foo.bit`. In the outermost scope `this`
+refers to the root object, which contains the entire program.
+
+### Type objects
+
+A type may have the same name as an object. This makes it possible
+to define types with *traits*. For example:
+
+    object num = {
+        type this
+        function next(N:this) : this
+        function plus(X:this,Y:this) : this
+    }
+    
+This declares a type `num` and also a function `num.next` from type
+`num` to type `num` and am  function `plus` that takes two arguments of type `num`
+and returns a `num`. The function `num.next` can be applied using
+a special syntax. That is, if `x` is of type `num`, then the expression
+`x.next` is a shorthand for `num.next(x)`. Similarly, `x.plus(y)` is a shorthand
+for `num.next(x,y)`. Actions can similary be traits of types. For example:
+
+    object num = {
+        type this
+        action plus(x:this,y:this) returns (z:this) = {
+            z := x + y;
+        }
+    }
+    
+In this case, `x.plus(y)` is a shorthand for the action call `num.plus(x,y)`. 
+
+
 ### Parameterized objects
 
 An array of instances of the same module can be created like this:
@@ -890,7 +938,7 @@ Notice that the object parameter is given as a logical constant rather
 than a place-holder. This constant can be referred to in the body of the
 object.
 
-Types in IVy are never parameterized. For example, if we write:
+Types in Ivy are never parameterized. For example, if we write:
 
     object foo(self:t) = {
         type t
@@ -908,7 +956,7 @@ re-use specifications, to construct modular proofs and to refine
 specifications into implementations.
 
 
-The IVy language supports these goals using *monitors*. A monitor is
+The Ivy language supports these goals using *monitors*. A monitor is
 an ordinary object, except that its actions are synchronized with the
 actions of other objects. For example, suppose that in the
 client/server example above, we want to specify that callers to
@@ -1027,7 +1075,7 @@ cannot be true.
 
 ## Action implementations
 
-It is often usefult to separate the declaration of an action from its
+It is often useful to separate the declaration of an action from its
 implementation. We can declare an action like this:
 
     action incr(x:t) returns(y:t)
@@ -1041,7 +1089,7 @@ and then give its implementation separately like this:
 
 ## Assume/guarantee reasoning
 
-IVy doesn't require us to prove all at once that a program is safe.
+Ivy doesn't require us to prove all at once that a program is safe.
 Instead, we can break the proof down into smaller proofs using the
 *assume/guarantee* approach. 
 
@@ -1049,7 +1097,7 @@ For example, suppose we have the following program with two objects:
 
     #lang ivy1.7
 
-    object nat {
+    object nat = {
         type this
 
         relation even(N:nat), odd(N:nat)
@@ -1071,6 +1119,8 @@ For example, suppose we have the following program with two objects:
         action put(n:nat) = {
             number := n;
         }
+
+        invariant number.even
     }
 
     object odds = {
@@ -1086,6 +1136,9 @@ For example, suppose we have the following program with two objects:
         action put(n:nat) = {
             number := n;
         }
+
+        invariant number.odd
+
     }
 
     export evens.step
@@ -1093,8 +1146,11 @@ For example, suppose we have the following program with two objects:
 
 Each object stores a number when its `put` action is called and sends this number plus one to the
 other object when its `step` action is called by the environment. We want to
-prove that `even.put` only receives even numbers, while `odd.put` only receives
-odd numbers. Here is the `evens` object with separate specification and implementation:
+prove the invariants that `evens.number` remains even, and `odds.number` remains odd. 
+Moreover, we would like to prove this by reasoning about `evens` and `odds` in isolation.
+To do this, we use an assume/guarantee specification.
+
+Here is the `evens` object with separate specification and implementation:
 
     isolate evens = {
 
@@ -1111,16 +1167,18 @@ odd numbers. Here is the `evens` object with separate specification and implemen
 
             var number : nat
             after init {
-                nat := 0
+                number := 0
             }
 
-            implement step = {
+            implement step {
                 call odds.put(number + 1)
             }
 
-            implement put(n:nat) = {
+            implement put(n:nat) {
                 number := n;
             }
+
+            invariant number.even
         }
     }
     with odds,nat
@@ -1157,16 +1215,20 @@ The isolate for `odds` is similar:
                 number := 1
             }
 
-            action step = {
+            implement step {
                 call evens.put(number + 1)
             }
 
-            action put(n:nat) = {
+            implement put {
                 number := n;
             }
+
+            invariant number.odd
+
         }
     }
     with evens,nat
+
 
 Effectively, this breaks the proof that the two assertions always hold
 into two parts. In the first part, we assume the object `evens` gets
@@ -1200,7 +1262,7 @@ When we verifiy isolate `evens`, the result is as if we had actually entered the
     object evens = {
         var number : nat
         after init {
-            nat := 0
+            number := 0
         }
 
         action step = {
@@ -1211,6 +1273,8 @@ When we verifiy isolate `evens`, the result is as if we had actually entered the
             require even(nat)
             number := n;
         }
+
+        invariant number.even
     }
 
     object odds = {
@@ -1224,7 +1288,7 @@ When we verifiy isolate `evens`, the result is as if we had actually entered the
     export evens.put
 
 Notice the implementation of `odds.put` has been eliminated, and what
-remains is just the assertion that the input value is odd (IVy
+remains is just the assertion that the input value is odd (Ivy
 verifies that the eliminated side effect of `odds.put` is in fact
 invisible to `evens`). The assertion that inputs to `evens` are even
 has in effect become an assumption. We can prove this isolate is safe
@@ -1249,7 +1313,7 @@ The other isolate, `odds`, looks like this:
     object odds = {
         var number : nat
         after init {
-            nat = 1
+            number = 1
         }
 
         action step = {
@@ -1260,6 +1324,8 @@ The other isolate, `odds`, looks like this:
             require odd(nat)
             number := n;
         }
+
+        invariant number.odd
     }
 
     export odds.step
@@ -1270,12 +1336,10 @@ If both of these isolates are safe, then we know that neither
 assertion is the first to fail, so the original program is safe.
 
 The general rule is that a `require` assertion is a guarantee for the
-caller and and assumption for the callee, while an `ensure` action is
-a guarantee for the callee and an assumption for the caller. When we
+calling isolate and and assumption for the called isolate, while an `ensure` action is
+a guarantee for the called isolate and an assumption for the callinf isolate. When we
 verify an isolate, we check only those assertions that are gurantees
 for actions in the isolate.
-
-
 
 
 
@@ -1367,9 +1431,9 @@ However, definitions have several advantages. Primarily, they are safer,
 since definitions are guaranteed to be consistent. In addition they can be
 computed. If we use an axiom, the only way that Ivy can compile the
 function `square` is to compile a table of squares. On the other hand,
-IVy can compile the definition of `square` into a procedure. 
+Ivy can compile the definition of `square` into a procedure. 
 
-IVy doesn't (currently) allow recursive definitions. So, for example,
+Ivy doesn't (currently) allow recursive definitions. So, for example,
 this is not allowed:
 
     definition factorial(X) = X * factorial(X-1) if X > 0 else 1
@@ -1389,7 +1453,7 @@ with explicit quantifiers, we have:
     axiom forall X. (rng(X) <-> exists Y. f(Y) = X)
 
 This formula has an alternation of quantifiers that might result in
-verification conditions that IVy can't decide (see the
+verification conditions that Ivy can't decide (see the
 [decidability](decidability.html) discussion). Suppose though, that we only need
 to know the truth value of `rng` for some specific arguments. We can instead
 write the definition like this:
@@ -1408,7 +1472,7 @@ Ivy will instantiate the definition like this:
     axiom rng(y) <-> exists Y. f(Y) = y
 
 In fact, all instances of the macro will be alternation-free, since
-IVy guarantees to instantiate the macro using only ground terms for
+Ivy guarantees to instantiate the macro using only ground terms for
 the constant arguments.  A macro can have both variables and constants
 as arguments. For example, consider this definition:
 
@@ -1459,9 +1523,9 @@ which is alternation-free.
 
 ## Interpreted types and theories
 
-The normal way of using IVy is to declare uninterpreted types and to
+The normal way of using Ivy is to declare uninterpreted types and to
 give the necessary axioms over those types to prove desired properties
-of a system. However, it is also possible in IVy to associate types
+of a system. However, it is also possible in Ivy to associate types
 with sorts that are interpreted in the underlying theorem prover. 
 
 For example:
@@ -1470,7 +1534,7 @@ For example:
 
     interpret idx -> int
 
-This says that IVy type `idx` should be interpreted using sort `int`
+This says that Ivy type `idx` should be interpreted using sort `int`
 of the theorem prover. This does not mean that `idx` is equated with
 the integers. If we also interpret type `num` with `int`, we still
 cannot compare values of type `idx` and type `num`. In effect, these
@@ -1483,7 +1547,7 @@ type. So, for example, `+` is interpreted as addition and `<` as
 'less than' in the theory of integers. Numerals are given their normal
 interpretations in the theory, so `0:idx = 1:idx` would be false.
 
-Concrete sorts that are currently available for interpreting IVy types
+Concrete sorts that are currently available for interpreting Ivy types
 are:
 
 - int: the integers
@@ -1492,7 +1556,7 @@ are:
 - bv[*N*]: bit vectors of length *N*, where *N* > 0
 
 An arbitrary function or relation symbol can be interpreted. This is useful
-for symbols of the theory that have no pre-defined overloaded symbol in IVy.
+for symbols of the theory that have no pre-defined overloaded symbol in Ivy.
 For example:
 
     type t
@@ -1523,8 +1587,37 @@ line. If it is compiled to a class in C++, parameters are supplied as
 arguments to the constructor. In either case, the order of parameters
 is the same as their order of declaration in the program.
 
+## Imported actions
 
-## Changes between IVy language versions
+An imported action is an action whose implementation is provided by
+the environment. For example:
+
+    action callback(x:nat) returns (y:nat)
+    import callback
+    
+or simply:
+
+    import action callback(x:nat) returns (y:nat)
+
+Like any action, the imported action may be given preconditions and
+postconditions.  For example:
+
+    before callback {
+        require x > 0;
+    }
+    
+    after callback {
+        ensure y = x - 1;
+    }
+    
+The `require` in this case is guarantee for the program and an
+assumption for the environment. Similarly, the `ensure` is an
+assumption for the program and a guarantee for the environment.  The
+environment is assumed to be non-interfering, that is, Ivy assumes
+that the call to `callback` has no visible side effect on the program.
+An imported action may not be implemented by the program.
+
+## Changes between Ivy language versions
 
 ### New in version 1.2
 

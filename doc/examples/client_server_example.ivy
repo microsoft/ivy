@@ -30,6 +30,6 @@ export disconnect
 
 # Add this to prove the invariant
 
-#private {
-#    invariant ~(link(X,Y) & semaphore(Y))
-#}
+private {
+    invariant ~(link(X,Y) & semaphore(Y))
+}

@@ -570,7 +570,7 @@ class HavocAction(Action):
             clauses = And(*([Or(Not(Atom(new_n,vs)),Atom(n,vs),eq) for eq in eqs] +
                             [Or(Atom(new_n,vs),Not(Atom(n,vs)),eq) for eq in eqs]))
         elif is_individual_ast(lhs.rep):
-            clauses = And(*[Or(eq_atom(type(lhs)(new_n,vs),type(lhs)(n,vs)),eq) for eq in eqs])
+            clauses = And(*[Or(eq_atom(type(lhs)(new_n,*vs),type(lhs)(n,*vs)),eq) for eq in eqs])
         else: # TODO: ???
             clauses = And()
         clauses = formula_to_clauses(clauses)
