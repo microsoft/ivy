@@ -1,0 +1,19 @@
+#lang ivy1.7
+
+type t
+
+var v : t
+interpret t -> nat
+
+action a = {
+    while some x:t. x < v {
+	assert v > 0;
+	assert x < v;
+	v := v - 1;
+    };
+    assert v = 0;
+}
+
+export a
+
+	

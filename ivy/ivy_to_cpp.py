@@ -3934,9 +3934,27 @@ ia.IfAction.emit = emit_if
 def emit_while(self,header):
     global indent_level
     code = []
-    open_scope(header,line='while('+code_eval(header,self.args[0])+')')
-    self.args[1].emit(header)
-    close_scope(header)
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_start(header,self.args[0].params())
+
+    cond = code_eval(code,self.args[0])
+    if len(code) == 0:
+        open_scope(header,line='while('+cond+')')
+        self.args[1].emit(header)
+        close_scope(header)
+    else:
+        open_scope(header,line='while(true)')
+        header.extend(code);
+        open_scope(header,line='if('+cond+')')
+        self.args[1].emit(header)
+        close_scope(header)
+        open_scope(header,line='else')
+        code_line(header,'break')
+        close_scope(header)
+        close_scope(header)
+    if isinstance(self.args[0],ivy_ast.Some):
+        local_end(header)
+        
 
 
 ia.WhileAction.emit = emit_while

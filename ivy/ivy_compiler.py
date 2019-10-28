@@ -605,6 +605,10 @@ def compile_if_action(self):
 IfAction.cmpl = compile_if_action
 
 def compile_while_action(self):
+        if isinstance(self.args[0],ivy_ast.Some):
+            res = compile_if_action(self.clone(self.args[:2]))
+            invars = map(sortify_with_inference,self.args[2:])
+            return res.clone(res.args+invars)
         ctx = ExprContext(lineno = self.lineno)
         with ctx:
             cond = sortify_with_inference(self.args[0])

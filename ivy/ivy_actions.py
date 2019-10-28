@@ -876,9 +876,12 @@ class WhileAction(Action):
                 asserts +
                 havocs +
                 assumes +
-                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
-                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(Or())]))),
-                AssumeAction(Not(self.args[0]))]))
+                [IfAction(self.args[0],Sequence(*(entry_asserts+
+                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(Or())])),
+                          Sequence())]))
+#                [ChoiceAction(Sequence(),Sequence(*([AssumeAction(self.args[0])]+entry_asserts+
+#                                                     [self.args[1]]+exit_asserts+asserts+[AssumeAction(Or())]))),
+#                AssumeAction(Not(self.args[0]))]))
         if decreases is not None:
             res = LocalAction(aux,res)
         return res
@@ -925,7 +928,7 @@ class WhileAction(Action):
         if cardsort > 100:
             assert False
             raise IvyError(self,'cowardly refusing to unroll loop over {} {} times'.format(idx_sort,cardsort))
-        res = AssumeAction(Not(self.args[0]))
+        res = Or() # AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
             res = IfAction(self.args[0],Sequence(body or self.args[1],res))
         if hasattr(self,'formal_params'):

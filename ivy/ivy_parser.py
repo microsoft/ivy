@@ -2037,9 +2037,9 @@ else:
         'decreases : '
         p[0] = []
 
-    def p_action_while_fmla_invariants_decreases_lcb_action_rcb(p):
-        'action : WHILE fmla invariants decreases sequence'
-        p[0] = WhileAction(*([check_non_temporal(p[2]), p[5]] + p[3] + p[4]))
+    def p_action_while_somefmla_invariants_decreases_lcb_action_rcb(p):
+        'action : WHILE somefmla invariants decreases sequence'
+        p[0] = WhileAction(*([check_non_temporal(p[2]), fix_if_part(p[2],p[5])] + p[3] + p[4]))
         p[0].lineno = get_lineno(p,1)
 
 def p_action_if_times_lcb_action_rcb_else_LCB_action_RCB(p):
