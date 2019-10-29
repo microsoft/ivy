@@ -222,11 +222,14 @@ def enumeratedsort(es):
 #    print "enum {} : {}".format(res,type(res))
     return res
 
+def symbol_to_z3(s):
+    return z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())    
+
 ivy_logic.UninterpretedSort.to_z3 = uninterpretedsort
 ivy_logic.FunctionSort.to_z3 = functionsort
 ivy_logic.EnumeratedSort.to_z3 = enumeratedsort
 ivy_logic.BooleanSort.to_z3 = lambda self: z3.BoolSort()
-ivy_logic.Symbol.to_z3 = lambda s: z3.Const(s.name, s.sort.to_z3()) if s.sort.dom == [] else z3.Function(s.name,s.sort.to_z3())
+ivy_logic.Symbol.to_z3 = symbol_to_z3
 
 
 def lookup_native(thing,table,kind):
@@ -349,7 +352,7 @@ def term_to_z3(term):
             res = z3.Const(sksym,sig)
             z3_constants[sksym] = res
             return res
-        res = z3_constants.get(term.rep)
+        res = z3_constants.get(str(term.rep))
         if res is None:
 #            if isinstance(term.rep,str):
 #                print "{} : {}".format(term,term.rep)
@@ -1074,6 +1077,7 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
 
     s = z3.Solver()
     the_fmla = clauses_to_z3(clauses)
+#    iu.dbg('the_fmla')
     s.add(the_fmla)
     
     # res = decide(s)
@@ -1102,7 +1106,9 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
                     foo = fc.cond()
                     if opt_show_vcs.get():
                         print '\nassert: {}'.format(foo)
-                    s.add(clauses_to_z3(foo))
+                    the_fmla = clauses_to_z3(foo)
+#                    iu.dbg('the_fmla')
+                    s.add(the_fmla)
                     res = decide(s)
                     if res != z3.unsat:
                         if fc.sat():

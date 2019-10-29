@@ -94,6 +94,11 @@ checks = [
       ['indexset','OK'],
       ]
      ],
+    ['../examples/ivy',
+     [
+      ['flash3','OK'],
+     ]
+    ],
 ]
 
 tests = [
