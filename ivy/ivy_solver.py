@@ -29,7 +29,7 @@ import sys
 z3_to_ast_array = z3._to_ast_array if '_to_ast_array' in z3.__dict__ else z3.z3._to_ast_array
 z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to_expr_ref
 
-use_z3_enums = False
+use_z3_enums = True
 
 def set_seed(seed):
     print 'setting seed to {}'.format(seed)
@@ -333,7 +333,7 @@ def term_to_z3(term):
     if not term.args:
         if isinstance(term,ivy_logic.Variable):
             sorted = hasattr(term,'sort')
-            sksym = term.rep + ':' + str(term.sort) if sorted else term.rep
+            sksym = term.rep + ':' + term.sort.name if sorted else term.rep
             res = z3_constants.get(sksym)
             if res is not None: return res
 #            print str(term.sort)
@@ -1073,7 +1073,8 @@ def get_small_model(clauses, sorts_to_minimize, relations_to_minimize, final_con
             print
 
     s = z3.Solver()
-    s.add(clauses_to_z3(clauses))
+    the_fmla = clauses_to_z3(clauses)
+    s.add(the_fmla)
     
     # res = decide(s)
     # if res == z3.unsat:
@@ -1445,16 +1446,21 @@ def encode_term(t,n,sort):
             print "{} : {} : {}".format(sort,sort.defines(),t.rep)
             exit(1)
         return binenc(m,n)
+    elif isinstance(t,ivy_logic.Variable):
+            sksym = t.rep + ':' + t.sort.name
+            res = [z3.Const(sksym + ':' + str(n-1-i),z3.BoolSort()) for i in range(n)]
+            iu.dbg('res')
+            return res
     else:
 #        return [atom_to_z3(ivy_logic.Atom(t.rep + ':' + str(n-1-i),t.args))
 #                for i in range(n)]
         args = [term_to_z3(arg) for arg in t.args]
-#        print "encode_term t={}".format(t)
+        print "encode_term t={}".format(t)
         sig = ivy_logic.RelationSort(t.rep.sort.dom).to_z3()
 
         res = [apply_z3_func(z3_function(t.rep.name + ':' + str(n-1-i),sig),args)
                for i in range(n)]
-#        print "encode_term res={}".format(res)
+        print "encode_term res={}".format(res)
         return res
 
 def encode_equality(*terms):
