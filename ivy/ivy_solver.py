@@ -29,7 +29,8 @@ import sys
 z3_to_ast_array = z3._to_ast_array if '_to_ast_array' in z3.__dict__ else z3.z3._to_ast_array
 z3_to_expr_ref = z3._to_expr_ref if '_to_expr_ref' in z3.__dict__ else z3.z3._to_expr_ref
 
-use_z3_enums = True
+use_z3_enums = False
+use_bv_enums = True
 
 def set_seed(seed):
     print 'setting seed to {}'.format(seed)
@@ -1472,11 +1473,14 @@ def encode_term(t,n,sort):
 def encode_equality(*terms):
     sort = terms[0].sort
     n = len(sort.defines())
-    bits = ceillog2(n)
-    eterms = [encode_term(t,bits,sort) for t in terms]
-    eqs = z3.And([x == y for x,y in zip(*eterms)])
-    alt = z3.And([gebin(e,n-1) for e in eterms])
-    res =  z3.Or(eqs,alt)
+    if use_bv_enums:
+        res = z3.Or(terms[0] == terms[1], z3.And([e >= n - 1 for e in terms]))
+    else:
+        bits = ceillog2(n)
+        eterms = [encode_term(t,bits,sort) for t in terms]
+        eqs = z3.And([x == y for x,y in zip(*eterms)])
+        alt = z3.And([gebin(e,n-1) for e in eterms])
+        res =  z3.Or(eqs,alt)
 #    print "encode_equality terms={},{}".format(terms[0],terms[1])
 #    print "encode_equality res={}".format(res)
     return res
