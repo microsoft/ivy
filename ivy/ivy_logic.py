@@ -1097,7 +1097,7 @@ def is_ite(ast):
     return isinstance(ast,lg.Ite)
 
 def is_enumerated(term):
-    return is_app(term) and isinstance(term.get_sort(),EnumeratedSort)
+    return (is_app(term) or is_variable(term)) and isinstance(term.get_sort(),EnumeratedSort)
 
 def is_individual(term):
     assert hasattr(term,'sort'),term

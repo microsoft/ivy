@@ -217,9 +217,16 @@ def functionsort(fs):
     return [s.to_z3() for s in fs.dom] + [fs.rng.to_z3()]
 
 def enumeratedsort(es):
-    res,consts = z3.EnumSort(es.name,es.extension)
-    for c in consts:
-        z3_constants[str(c)] = c
+    if not use_z3_enums:
+        n = len(es.defines())
+        width = ceillog2(n)
+        res = z3.BitVecSort(width)
+        for idx,c in enumerate(es.defines()):
+            z3_constants[c] = z3.BitVecVal(idx,res)
+    else:
+        res,consts = z3.EnumSort(es.name,es.extension)
+        for c in consts:
+            z3_constants[str(c)] = c
 #    print "enum {} : {}".format(res,type(res))
     return res
 
@@ -331,43 +338,48 @@ def numeral_to_z3(num):
 def enumerated_to_numeral(term):
     raise iu.IvyError(None,'Cannot interpret enumerated type "{}" as a native sort (not yet supported)'.format(term.sort.name))
 
-def term_to_z3(term):
-    if ivy_logic.is_boolean(term):
-        return formula_to_z3_int(term)
-    if not term.args:
-        if isinstance(term,ivy_logic.Variable):
-            sorted = hasattr(term,'sort')
-            sksym = term.rep + ':' + term.sort.name if sorted else term.rep
-            res = z3_constants.get(sksym)
-            if res is not None: return res
+def var_to_z3(term):
+    sorted = hasattr(term,'sort')
+    sksym = term.rep + ':' + term.sort.name if sorted else term.rep
+    res = z3_constants.get(sksym)
+    if res is not None: return res
 #            print str(term.sort)
-            sig = lookup_native(term.sort,sorts,"sort") if sorted else S
-            if sig == None:
-                sig = term.sort.to_z3()
+    sig = lookup_native(term.sort,sorts,"sort") if sorted else S
+    if sig == None:
+        sig = term.sort.to_z3()
 #            if sorted:
 #                print type(term.sort)
 #                print term.sort
 #            print type(sksym)
 #            print sksym
 #            print sig
-            res = z3.Const(sksym,sig)
-            z3_constants[sksym] = res
-            return res
-        res = z3_constants.get(str(term.rep))
-        if res is None:
-#            if isinstance(term.rep,str):
-#                print "{} : {}".format(term,term.rep)
-            if term.is_numeral():
-                res = numeral_to_z3(term.rep)
-            elif ivy_logic.is_enumerated(term) and ivy_logic.is_interpreted_sort(term.sort):
-                res = enumerated_to_numeral(term)
-            else:
-                iso = term.rep.sort
-                # TODO: this is dangerous
-                sig = iso.to_z3() if iso is not None else S
-#                print "term: {}, iso : {}, sig = {}".format(term,iso,sig)
-                res = z3.Const(solver_name(term.rep),sig)
-            z3_constants[term.rep] = res
+    res = z3.Const(sksym,sig)
+    z3_constants[sksym] = res
+    return res
+
+
+def term_to_z3(term):
+    if ivy_logic.is_boolean(term):
+        return formula_to_z3_int(term)
+    if not term.args:
+        if isinstance(term,ivy_logic.Variable):
+            res = var_to_z3(term)
+        else:
+            res = z3_constants.get(str(term.rep))
+            if res is None:
+    #            if isinstance(term.rep,str):
+    #                print "{} : {}".format(term,term.rep)
+                if term.is_numeral():
+                    res = numeral_to_z3(term.rep)
+                elif ivy_logic.is_enumerated(term) and ivy_logic.is_interpreted_sort(term.sort):
+                    res = enumerated_to_numeral(term)
+                else:
+                    iso = term.rep.sort
+                    # TODO: this is dangerous
+                    sig = iso.to_z3() if iso is not None else S
+    #                print "term: {}, iso : {}, sig = {}".format(term,iso,sig)
+                    res = z3.Const(solver_name(term.rep),sig)
+                z3_constants[term.rep] = res
     elif isinstance(term,ivy_logic.Ite):
         return z3.If(formula_to_z3_int(term.args[0]),term_to_z3(term.args[1]),term_to_z3(term.args[2]))
     else:
@@ -385,6 +397,12 @@ def term_to_z3(term):
             z3_functions[term.rep] = fun
         args = [term_to_z3(arg) for arg in term.args]
         res = apply_z3_func(fun,args)
+    if use_bv_enums and not use_z3_enums and ivy_logic.is_enumerated(term):
+        n = len(term.sort.defines())
+        bits = ceillog2(n)
+        max = z3.BitVecVal(bits,n-1)
+        res = z3.If(z3.UGE(res,max),max,res)
+#        iu.dbg('res')
     return res
 
 def lt_pred(sort):
@@ -456,7 +474,7 @@ def clause_to_z3(clause):
     if len(variables) == 0:
         return z3_formula
     else:
-        z3_variables = [term_to_z3(v) for v in variables]
+        z3_variables = [var_to_z3(v) for v in variables]
         return forall(variables, z3_variables, z3_formula)
 
 def conj_to_z3(cl):
@@ -503,7 +521,7 @@ def formula_to_z3_int(fmla):
         z3_body = my_eq(args[0],args[1])
         return z3_body
         assert all(ivy_logic.is_variable(v) for v in fmla.args[0].args)
-        z3_vs = [term_to_z3(v) for v in fmla.args[0].args]
+        z3_vs = [var_to_z3(v) for v in fmla.args[0].args]
         return z3.ForAll(z3_vs, z3_body)
     if isinstance(fmla,ivy_logic.Iff):
         return my_eq(args[0],args[1])
@@ -514,7 +532,7 @@ def formula_to_z3_int(fmla):
     if ivy_logic.is_quantifier(fmla):
         variables = ivy_logic.quantifier_vars(fmla)
         q = forall if ivy_logic.is_forall(fmla) else exists
-        res =  q(variables, [term_to_z3(v) for v in variables], args[0])
+        res =  q(variables, [var_to_z3(v) for v in variables], args[0])
 #        print "res = {}".format(res)
         return res
     if ivy_logic.is_individual(fmla):
@@ -528,7 +546,7 @@ def formula_to_z3_closed(fmla):
     if len(variables) == 0:
         return z3_formula
     else:
-        z3_variables = [term_to_z3(v) for v in variables]
+        z3_variables = [var_to_z3(v) for v in variables]
         if isinstance(fmla,ivy_logic.Definition):
             return z3.ForAll(z3_variables, z3_formula)
         return forall(variables, z3_variables, z3_formula)
@@ -710,7 +728,7 @@ class HerbrandModel(object):
         vs = [ivy_logic.Variable(s,sort) for s in ["X","Y"]]
         order = ivy_logic.Symbol("<",ivy_logic.RelationSort([sort,sort]))
         order_atom = atom_to_z3(order(*vs))
-        z3_vs = map(term_to_z3,vs)
+        z3_vs = map(var_to_z3,vs)
 #        print "order_atom: {}".format(order_atom)
         try:
             fun = z3.Function
@@ -742,7 +760,7 @@ class HerbrandModel(object):
                   self.constants[x.sort] for x in vs]
         z3_fmla = literal_to_z3(fmla)
 #        print "z3_fmla = {}".format(z3_fmla)
-        z3_vs = [term_to_z3(v) for v in vs]
+        z3_vs = [var_to_z3(v) for v in vs]
         insts = []
         for tup in itertools.product(*ranges):
             interp = zip(z3_vs,tup)
@@ -777,6 +795,13 @@ def constant_from_z3(sort,c):
         return ivy_logic.And()
     if z3.is_false(c):
         return ivy_logic.Or()
+    if isinstance(sort,ivy_logic.EnumeratedSort) and not use_z3_enums and use_bv_enums:
+        idx = c.as_long()
+#        iu.dbg('idx')
+        rng = sort.defines()
+#        iu.dbg('rng')
+        name = rng[idx] if idx < len(rng) else rng[-1]
+        return ivy_logic.Symbol(name,sort)
     return ivy_logic.Constant(ivy_logic.Symbol(repr(c),sort))
 
 def get_model_constant(m,t):
@@ -1383,11 +1408,11 @@ def relation_model_to_clauses(h,r,n):
 
 def get_lit_facts(h,lit,res):
     vs,rows = h.check(lit)
-##    print "rows = {}".format(rows)
+    print "rows = {}".format(rows)
     for r in rows:
-##        print "r = {}".format(r)
+        print "r = {}".format(r)
         subst = dict(zip([v.rep for v in vs],r))
-##        print "subst = {}".format(subst)
+        print "subst = {}".format(subst)
         res += [substitute_lit(lit,subst)]
 
 def function_model_to_clauses(h,f):
@@ -1456,7 +1481,7 @@ def encode_term(t,n,sort):
     elif isinstance(t,ivy_logic.Variable):
             sksym = t.rep + ':' + t.sort.name
             res = [z3.Const(sksym + ':' + str(n-1-i),z3.BoolSort()) for i in range(n)]
-            iu.dbg('res')
+#            iu.dbg('res')
             return res
     else:
 #        return [atom_to_z3(ivy_logic.Atom(t.rep + ':' + str(n-1-i),t.args))
@@ -1471,11 +1496,12 @@ def encode_term(t,n,sort):
         return res
 
 def encode_equality(*terms):
-    sort = terms[0].sort
-    n = len(sort.defines())
     if use_bv_enums:
-        res = z3.Or(terms[0] == terms[1], z3.And([e >= n - 1 for e in terms]))
+        eterms = [term_to_z3(t) for t in terms]
+        res = my_eq(eterms[0],eterms[1])
     else:
+        sort = terms[0].sort
+        n = len(sort.defines())
         bits = ceillog2(n)
         eterms = [encode_term(t,bits,sort) for t in terms]
         eqs = z3.And([x == y for x,y in zip(*eterms)])

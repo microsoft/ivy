@@ -15,6 +15,9 @@ else:
 checks = [
     ['.',
       [
+          ['bv_enums1','error: failed checks: 1'],
+          ['bv_enums2','error: failed checks: 1'],
+          ['bv_enums3','error: failed checks: 1'],
           ['whileexists1','OK'],
           ['whilesome1','OK'],
           ['whilesome2','OK'],
