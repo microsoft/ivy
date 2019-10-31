@@ -44,6 +44,8 @@ checks = [
           ['frag19','OK'],
           ['oddeven','complete=fo','OK'],
           ['oddeven2','complete=fo','OK'],
+          ['oddeven3','OK'],
+          ['oddeven4','OK'],
           ['learning_switch1','trace=true','learning_switch1.ivy: line 37:'],
       ]
     ],

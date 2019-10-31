@@ -1,0 +1,78 @@
+#lang ivy1.7
+
+object num = {
+    type this
+    
+    interpret this -> nat
+
+    function even(X:this) = (X / 2 * 2 = X)
+    function odd(X:this) = ~even(X)
+}
+
+isolate evens = {
+
+    action step
+    action put(n:num)
+
+    specification {
+        before put {
+            require n.even
+        }
+    }
+
+    implementation {
+
+        var number : num
+        after init {
+            number := 0
+        }
+
+        implement step {
+            call odds.put(number + 1)
+        }
+
+        implement put(n:num) {
+            number := n;
+        }
+
+        invariant number.even
+    }
+}
+with odds,num
+
+isolate odds = {
+
+    action step
+    action put(n:num)
+
+    specification {
+        before put {
+            require n.odd
+        }
+    }
+
+    implementation {
+
+        var number : num
+        after init {
+            number := 1
+        }
+
+        implement step {
+            call evens.put(number + 1)
+        }
+
+        implement put {
+            number := n;
+        }
+
+        invariant number.odd
+
+    }
+}
+with evens,num
+
+
+export evens.step
+export odds.step
+
