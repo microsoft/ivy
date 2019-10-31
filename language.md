@@ -1087,262 +1087,6 @@ and then give its implementation separately like this:
     }
 
 
-## Assume/guarantee reasoning
-
-Ivy doesn't require us to prove all at once that a program is safe.
-Instead, we can break the proof down into smaller proofs using the
-*assume/guarantee* approach. 
-
-For example, suppose we have the following program with two objects:
-
-    #lang ivy1.7
-
-    object nat = {
-        type this
-
-        relation even(N:nat), odd(N:nat)
-
-        axiom even(0) & (even(N) -> odd(N+1))
-        axiom odd(1) & (odd(N) -> even(N+1))
-    }
-
-    object evens = {
-        var number : nat
-        after init {
-            number := 0
-        }
-
-        action step = {
-            call odds.put(number + 1)
-        }
-
-        action put(n:nat) = {
-            number := n;
-        }
-
-        invariant number.even
-    }
-
-    object odds = {
-        var number : nat
-        after init {
-            number := 1
-        }
-
-        action step = {
-            call evens.put(number + 1)
-        }
-
-        action put(n:nat) = {
-            number := n;
-        }
-
-        invariant number.odd
-
-    }
-
-    export evens.step
-    export odds.step
-
-Each object stores a number when its `put` action is called and sends this number plus one to the
-other object when its `step` action is called by the environment. We want to
-prove the invariants that `evens.number` remains even, and `odds.number` remains odd. 
-Moreover, we would like to prove this by reasoning about `evens` and `odds` in isolation.
-To do this, we use an assume/guarantee specification.
-
-Here is the `evens` object with separate specification and implementation:
-
-    isolate evens = {
-
-        action step
-        action put(n:nat)
-
-        specification {
-            before put {
-                require n.even
-            }
-        }
-
-        implementation {
-
-            var number : nat
-            after init {
-                number := 0
-            }
-
-            implement step {
-                call odds.put(number + 1)
-            }
-
-            implement put(n:nat) {
-                number := n;
-            }
-
-            invariant number.even
-        }
-    }
-    with odds,nat
-
-An *isolate* is a special kind of object that acts as a unit of
-verification.  It generally has three parts. It starts with a
-declaration of the *interface* of the object. This usually consists of
-types, functions and actions that are provided by the object. The next
-section is the *specification*. This usually consists of variables,
-properties and monitors that are *visible* outside the
-isolate. Finally, we have the *implementation*.  It usually consists
-of variables, function definitions and action implementations that are
-*hidden*. An isolate may depend on the visible parts of other objects.
-This is declares using the keyword `with`. In this case `evens`
-depends on `odds` and `nat`.
-
-The isolate for `odds` is similar:
-
-    isolate odds = {
-
-        action step
-        action put(n:nat)
-
-        specification {
-            before put {
-                require n.odd
-            }
-        }
-
-        implementation {
-
-            var number : nat
-            after init {
-                number := 1
-            }
-
-            implement step {
-                call evens.put(number + 1)
-            }
-
-            implement put {
-                number := n;
-            }
-
-            invariant number.odd
-
-        }
-    }
-    with evens,nat
-
-
-Effectively, this breaks the proof that the two assertions always hold
-into two parts. In the first part, we assume the object `evens` gets
-correct inputs and prove that it always sends correct outputs to
-`odds`. In the second part, we assume the object `odds` gets correct
-inputs and prove that it always sends correct outputs to `evens`.
-
-This argument seems circular on the surface. It isn't, though, because
-when we prove one of the assertion holds, we are only assuming that
-the other assertion has always held *in the past*. So what we're
-really proving is that neither of the two objects is the first to
-break the rules, and so the rules always hold.
-
-In the first isolate, we prove the assertion that `evens`
-guarantees. We do this using the visible part of `odds`, but we forget
-about the hidden state of the `odds` object (in particular, the
-variable `odss.number`). To model the call to `evens.put` in the
-hidden part of `odds`, Ivy exports `evens.put` to the environment.
-The `requires` statement in the specification `even.put` thus becomes a
-guarantee of the environment. That is, each isolate only guarantees those assertions for
-which it receives the blame. The rest are assumed.
-
-When we verifiy isolate `evens`, the result is as if we had actually entered the following program:
-
-    #lang ivy1.7
-
-    object nat {
-        ...
-    }
-
-    object evens = {
-        var number : nat
-        after init {
-            number := 0
-        }
-
-        action step = {
-            call odds.put(number + 1)
-        }
-
-        action put(n:nat) = {
-            require even(nat)
-            number := n;
-        }
-
-        invariant number.even
-    }
-
-    object odds = {
-
-        action put(n:nat) = {
-            require odd(nat)
-        }
-    }
-
-    export evens.step
-    export evens.put
-
-Notice the implementation of `odds.put` has been eliminated, and what
-remains is just the assertion that the input value is odd (Ivy
-verifies that the eliminated side effect of `odds.put` is in fact
-invisible to `evens`). The assertion that inputs to `evens` are even
-has in effect become an assumption. We can prove this isolate is safe
-by showing that `even.number` is invariantly even, which means that
-`odds.put` is always called with an odd number.
-
-The other isolate, `odds`, looks like this:
-
-    #lang ivy1.7
-
-    object nat {
-        ...
-    }
-
-    object evens = {
-
-        action put(n:nat) = {
-            require even(nat)
-        }
-    }
-
-    object odds = {
-        var number : nat
-        after init {
-            number = 1
-        }
-
-        action step = {
-            call evens.put(number + 1)
-        }
-
-        action put(n:nat) = {
-            require odd(nat)
-            number := n;
-        }
-
-        invariant number.odd
-    }
-
-    export odds.step
-    export odds.put
-
-
-If both of these isolates are safe, then we know that neither
-assertion is the first to fail, so the original program is safe.
-
-The general rule is that a `require` assertion is a guarantee for the
-calling isolate and and assumption for the called isolate, while an `ensure` action is
-a guarantee for the called isolate and an assumption for the callinf isolate. When we
-verify an isolate, we check only those assertions that are gurantees
-for actions in the isolate.
-
-
-
 ## Initializers
 
 As noted above, an initializer is a special action that is executed
@@ -1551,9 +1295,13 @@ Concrete sorts that are currently available for interpreting Ivy types
 are:
 
 - int: the integers
+- nat: the non-negative integers
 - {*X*..*Y*}: the subrange of integers from *X* to *Y* inclusive
 - {*a*,*b*,*c*}: an enumerated type
 - bv[*N*]: bit vectors of length *N*, where *N* > 0
+
+Arithmetic on `nat` is saturating. That is, any operation that would yield
+a neagtive number instead gives zero. 
 
 An arbitrary function or relation symbol can be interpreted. This is useful
 for symbols of the theory that have no pre-defined overloaded symbol in Ivy.
@@ -1616,6 +1364,266 @@ assumption for the program and a guarantee for the environment.  The
 environment is assumed to be non-interfering, that is, Ivy assumes
 that the call to `callback` has no visible side effect on the program.
 An imported action may not be implemented by the program.
+
+## Assume/guarantee reasoning
+
+Ivy doesn't require us to prove all at once that a program is safe.
+Instead, we can break the proof down into smaller proofs using the
+*assume/guarantee* approach. 
+
+For example, suppose we have the following program with two objects:
+
+    #lang ivy1.7
+
+    object num = {
+        type this
+
+        interpret this -> nat
+
+        function even(X:this) = (X / 2 * 2 = X)
+        function odd(X:this) = ~even(X)
+    }
+
+    object evens = {
+        var number : num
+        after init {
+            number := 0
+        }
+
+        action step = {
+            call odds.put(number + 1)
+        }
+
+        action put(n:num) = {
+            number := n;
+        }
+
+        invariant number.even
+
+    }
+
+    object odds = {
+        var number : num
+        after init {
+            number := 1
+        }
+
+        action step = {
+            call evens.put(number + 1)
+        }
+
+        action put(n:num) = {
+            number := n;
+        }
+
+        invariant number.odd
+
+    }
+
+    export evens.step
+    export odds.step
+
+Each object stores a natural number when its `put` action is called
+and sends this number plus one to the other object when its `step`
+action is called by the environment. We want to prove the invariants
+that `evens.number` remains even, and `odds.number` remains odd.
+Moreover, we would like to prove these invariants by reasoning about
+`evens` and `odds` in isolation.  To do this, we use an
+assume/guarantee specification.
+
+
+Here is the `evens` object with separate specification and implementation:
+
+    isolate evens = {
+
+        action step
+        action put(n:num)
+
+        specification {
+            before put {
+                require n.even
+            }
+        }
+
+        implementation {
+
+            var number : num
+            after init {
+                number := 0
+            }
+
+            implement step {
+                call odds.put(number + 1)
+            }
+
+            implement put(n:num) {
+                number := n;
+            }
+
+            invariant number.even
+        }
+    }
+    with odds,num
+
+An *isolate* is a special kind of object that acts as a unit of
+verification.  It generally has three parts. It starts with a
+declaration of the *interface* of the object. This usually consists of
+types, functions and actions that are provided by the object. The next
+section is the *specification*. This usually consists of variables,
+properties and monitors that are *visible* outside the
+isolate. Finally, we have the *implementation*.  It usually consists
+of variables, function definitions and action implementations that are
+*hidden*. An isolate may depend on the visible parts of other objects.
+This is declares using the keyword `with`. In this case `evens`
+depends on `odds` and `nat`.
+
+The isolate for `odds` is similar:
+
+    isolate odds = {
+
+        action step
+        action put(n:num)
+
+        specification {
+            before put {
+                require n.odd
+            }
+        }
+
+        implementation {
+
+            var number : num
+            after init {
+                number := 1
+            }
+
+            implement step {
+                call evens.put(number + 1)
+            }
+
+            implement put {
+                number := n;
+            }
+
+            invariant number.odd
+
+        }
+    }
+    with evens,num
+
+
+Effectively, this breaks the proof that the two assertions always hold
+into two parts. In the first part, we assume the object `evens` gets
+correct inputs and prove that it always sends correct outputs to
+`odds`. In the second part, we assume the object `odds` gets correct
+inputs and prove that it always sends correct outputs to `evens`.
+
+This argument seems circular on the surface. It isn't, though, because
+when we prove one of the assertion holds, we are only assuming that
+the other assertion has always held *in the past*. So what we're
+really proving is that neither of the two objects is the first to
+break the rules, and so the rules always hold.
+
+In the first isolate, we prove the assertion that `evens`
+guarantees. We do this using the visible part of `odds`, but we forget
+about the hidden state of the `odds` object (in particular, the
+variable `odss.number`). To model the call to `evens.put` in the
+hidden part of `odds`, Ivy exports `evens.put` to the environment.
+The `requires` statement in the specification `even.put` thus becomes a
+guarantee of the environment. That is, each isolate only guarantees those assertions for
+which it receives the blame. The rest are assumed.
+
+When we verifiy isolate `evens`, the result is as if we had actually entered the following program:
+
+    #lang ivy1.7
+
+    object nat {
+        ...
+    }
+
+    object evens = {
+        var number : nat
+        after init {
+            number := 0
+        }
+
+        action step = {
+            call odds.put(number + 1)
+        }
+
+        action put(n:nat) = {
+            require even(nat)
+            number := n;
+        }
+
+        invariant number.even
+    }
+
+    object odds = {
+
+        action put(n:nat) = {
+            require odd(nat)
+        }
+    }
+
+    export evens.step
+    export evens.put
+
+Notice the implementation of `odds.put` has been eliminated, and what
+remains is just the assertion that the input value is odd (Ivy
+verifies that the eliminated side effect of `odds.put` is in fact
+invisible to `evens`). The assertion that inputs to `evens` are even
+has in effect become an assumption. We can prove this isolate is safe
+by showing that `even.number` is invariantly even, which means that
+`odds.put` is always called with an odd number.
+
+The other isolate, `odds`, looks like this:
+
+    #lang ivy1.7
+
+    object nat {
+        ...
+    }
+
+    object evens = {
+
+        action put(n:nat) = {
+            require even(nat)
+        }
+    }
+
+    object odds = {
+        var number : nat
+        after init {
+            number = 1
+        }
+
+        action step = {
+            call evens.put(number + 1)
+        }
+
+        action put(n:nat) = {
+            require odd(nat)
+            number := n;
+        }
+
+        invariant number.odd
+    }
+
+    export odds.step
+    export odds.put
+
+
+If both of these isolates are safe, then we know that neither
+assertion is the first to fail, so the original program is safe.
+
+The general rule is that a `require` assertion is a guarantee for the
+calling isolate and and assumption for the called isolate, while an `ensure` action is
+a guarantee for the called isolate and an assumption for the callinf isolate. When we
+verify an isolate, we check only those assertions that are gurantees
+for actions in the isolate.
+
+
 
 ## Changes between Ivy language versions
 
