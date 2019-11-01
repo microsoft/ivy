@@ -400,9 +400,8 @@ def term_to_z3(term):
     if use_bv_enums and not use_z3_enums and ivy_logic.is_enumerated(term):
         n = len(term.sort.defines())
         bits = ceillog2(n)
-        max = z3.BitVecVal(bits,n-1)
+        max = z3.BitVecVal(n-1,z3.BitVecSort(bits))
         res = z3.If(z3.UGE(res,max),max,res)
-#        iu.dbg('res')
     return res
 
 def lt_pred(sort):
@@ -1408,11 +1407,11 @@ def relation_model_to_clauses(h,r,n):
 
 def get_lit_facts(h,lit,res):
     vs,rows = h.check(lit)
-    print "rows = {}".format(rows)
+#    print "rows = {}".format(rows)
     for r in rows:
-        print "r = {}".format(r)
+#        print "r = {}".format(r)
         subst = dict(zip([v.rep for v in vs],r))
-        print "subst = {}".format(subst)
+#        print "subst = {}".format(subst)
         res += [substitute_lit(lit,subst)]
 
 def function_model_to_clauses(h,f):
