@@ -1529,6 +1529,8 @@ def check_definitions(mod):
     def checkdef(sym,lf):
         if sym in defs:
             raise IvyError(lf,'redefinition of {}\n{} from here'.format(sym,defs[sym].lineno))
+        if slv.solver_name(sym) == None:
+            raise IvyError(lf,'definition of interpreted symbol {}'.format(sym))
         defs[sym] = lf
     for ldf in mod.definitions:
         checkdef(ldf.formula.defines(),ldf)
