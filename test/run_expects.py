@@ -15,6 +15,7 @@ else:
 checks = [
     ['.',
       [
+          ['interpdef1','interpdef1.ivy: line 5: error: definition of interpreted symbol <'],
           ['whileexists1','OK'],
           ['whilesome1','OK'],
           ['whilesome2','OK'],
