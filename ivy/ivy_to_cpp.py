@@ -402,7 +402,7 @@ thunk_counter = 0
 
 def expr_to_z3(expr):
     fmla = '(assert ' + slv.formula_to_z3(expr).sexpr().replace('|!1','!1|').replace('\\|','').replace('\n',' "\n"') + ')'
-    return 'z3::expr(g.ctx,Z3_parse_smtlib2_string(ctx, "{}", sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]))'.format(fmla)
+    return 'z3::mk_and(z3::expr_vector(g.ctx,Z3_parse_smtlib2_string(ctx, "{}", sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0])))'.format(fmla)
 
 
 
@@ -4906,7 +4906,7 @@ public:
     }
 
     void add(const std::string &z3inp) {
-        z3::expr fmla(ctx,Z3_parse_smtlib2_string(ctx, z3inp.c_str(), sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0]));
+        z3::expr fmla = z3::mk_and(z3::expr_vector(ctx,Z3_parse_smtlib2_string(ctx, z3inp.c_str(), sort_names.size(), &sort_names[0], &sorts[0], decl_names.size(), &decl_names[0], &decls[0])));
         ctx.check_error();
 
         slvr.add(fmla);

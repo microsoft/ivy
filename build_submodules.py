@@ -29,6 +29,8 @@ os.chdir('build')
 
 do_cmd('make -j 4')
 
+do_cmd('rm -f {}/z3/lib/libz3.so'.format(ivydir))
+
 do_cmd('make install')
 
 os.chdir(cwd)
