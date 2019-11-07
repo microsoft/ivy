@@ -456,6 +456,9 @@ class EnumeratedSort(Sort):
         return '{' + ','.join(self.extension) + '}'
     def defines(self):
         return self.extension
+    @property
+    def rep(self):
+        return self
         
 
 

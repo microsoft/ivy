@@ -1651,6 +1651,24 @@ def p_top_interpret_symbol_arrow_lcb_symbol_dots_symbol_rcb(p):
     thing.lineno = get_lineno(p,4)
     p[0].declare(thing)
 
+def p_moresymbols(p):
+    'moresymbols : '
+    p[0] = []
+    
+def p_moresymbols_more_symbols_comma_symbol(p):
+    'moresymbols : moresymbols COMMA SYMBOL'
+    p[0] = p[1]
+    p[0].append(p[3])
+
+def p_top_interpret_symbol_arrow_lcb_symbol_moresymbols_rcb(p):
+    'top : top INTERPRET oper ARROW LCB SYMBOL moresymbols RCB'
+    p[0] = p[1]
+    imp = Implies(p[3],EnumeratedSort(*[Atom(n) for n in ([p[6]]+p[7])]))
+    imp.lineno = get_lineno(p,4)
+    thing = InterpretDecl(addlabel(mk_lf(imp),'interp'))
+    thing.lineno = get_lineno(p,4)
+    p[0].declare(thing)
+
 def parse_nativequote(p,n):
     string = p[n][3:-3] # drop the quotation marks
     fields = string.split('`')

@@ -1174,6 +1174,18 @@ class IvyDomainSetup(IvyDeclInterp):
 #            interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}:{}".format(i,lhs) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             interp[lhs] = ivy_logic.EnumeratedSort(lhs,["{}".format(i) for i in range(int(rhs.lo),int(rhs.hi)+1)])
             return
+        if isinstance(rhs,ivy_ast.EnumeratedSort):
+            if lhs not in self.domain.sig.sorts:
+                iu.dbg('type(lhs)')
+                raise IvyError(thing,"{} is not a type".format(lhs))
+            sort = ivy_logic.EnumeratedSort(lhs,[x.rep for x in rhs.args])
+            interp[lhs] = sort
+            for c in sort.defines(): # register the type's constructors
+                sym = Symbol(c,self.domain.sig.sorts[lhs])
+                self.domain.functions[sym] = 0
+                self.domain.sig.symbols[c] = sym
+                self.domain.sig.constructors.add(sym)
+            return
         for x,y,z in zip([sig.sorts,sig.symbols],
                          [slv.is_solver_sort,slv.is_solver_op],
                          ['sort','symbol']):
