@@ -54,8 +54,10 @@ this instead:
     $ python setup.py develop --prefix=~
 
 This installs Ivy into your home directory, so you don't need sudo.
-Also put the first command in your .profile script, so Python will
-find Ivy in the future.
+In fact, be careful *not* to use sudo when installing in your home
+directory, as the files will be owned by root. Also put the first
+command in your .profile script, so Python will find Ivy in the
+future.
 
 See the [python documentation](https://docs.python.org/2/install/) for
 general instructions on installing python packages.
@@ -159,7 +161,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
 1. Install Xcode from App Store
 2. Install Xcode command line tools
 
-    xcode-select --install
+        xcode-select --install
 
 3. Install Xserver
 
@@ -188,8 +190,8 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
 
 5. Install Ivy:
 
-    $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
-    $ cd ivy
+        $ git clone --recurse-submodules https://github.com/Microsoft/ivy.git
+        $ cd ivy
 
     Build the submodules like this (it takes a while):
 
