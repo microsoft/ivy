@@ -95,26 +95,14 @@ suggestions that may get you through it.
 Install Python 2.7.11 in the normal way. Before installing packages, you may also
 need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
 
-### Installing Z3
-
-Install Z3 using the instructions [here](https://github.com/Z3Prover/z3/wiki/Using-Z3Py-on-Windows).
-We will assume that you havce installed Z3 in `c:\z3`. If not, modify the instructions below accordingly.
-Make sure to follow the instructions on setting the environmenet variables `PATH` and `PYTHONPATH`.
-In addition, set environment variable `Z3DIR` to `c:\z3`.
-
-If things are installed correctly, the following should produce no errors:
-
-    > python
-    >>> import z3
-
 ### Installing Graphviz
 
 You only need graphviz to use the Ivy GUI. For normal verification and
 testing tasks, you don't need this.  Get `graphviz-2.38` from
-[graphviz.org](http://graphviz.org). This site is often down, so you
-may have to be patient. Versions downloaded from alternative sites may
-be broken.  Install into some directory without spaces in the name,
-for example `c:/Graphviz`.
+[graphviz.org](http://graphviz.org). Install into some directory
+without spaces in the name, for example `c:/Graphviz2.38`. Make sure that
+`c:/Graphviz2.38/bin` is in your `PATH`.
+
 
 ### Using scripts
 
@@ -124,6 +112,10 @@ by default. Try installing the `tarjan` and `ply` packages like this:
 
     > pip install tarjan
     > pip install ply
+
+### Install git
+
+Install git from [here](https://git-scm.com/download/win).
 
 ### Installing Ivy
 
