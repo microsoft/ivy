@@ -187,6 +187,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
         $ sudo port install py27-ipython
         $ sudo port install py27-tkinter # for 10.13 Mojave
         $ sudo port install git
+        $ sudo port install cmake
 
 5. Install Ivy:
 
