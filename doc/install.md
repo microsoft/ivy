@@ -94,6 +94,8 @@ suggestions that may get you through it.
 
 Install Python 2.7.11 in the normal way. Before installing packages, you may also
 need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
+Make sure to install 64-bit Python. Install Python in `c:/Python27` and put
+`c:/Python27` in your PATH.
 
 ### Installing Graphviz
 
@@ -115,15 +117,31 @@ by default. Try installing the `tarjan` and `ply` packages like this:
 
 ### Install git
 
-Install git from [here](https://git-scm.com/download/win).
+Install git from [here](https://gitforwindows.org). If you install it
+in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
+
+### Install OPENSSL
+
+OpenSSL binaries for Windows can be found
+[here](https://slproweb.com/products/Win32OpenSSL.html).  You need the
+full 64-bit version. Be sure to install in the default directory
+`c:\OpenSSL-Win64`. These OpenSSL binaries are missing a file
+`include/ms/applink.c` that you will have to get from the OpenSSL
+source repository.  You also need to copy the libcrypto DLL into "this
+directory":
+
+    copy c:\OpenSSL-Win64\libcrypto-1_1-x64.dll c:\OpenSSL-Win64\bin
 
 ### Installing Ivy
 
-Now you can now try to install Ivy, like this:
+Now you can now try to install Ivy. Open a Visual Studio 64-bit command window, and do this:
 
     > cd c:\
     > git clone https://github.com/Microsoft/ivy.git
     > cd ivy
+    > git submodule init
+    > git submodule update
+    > python build_submodules
     > python setup.py develop
 
 Using the `develop` command instead of `install` is helpful, since you
