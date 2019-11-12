@@ -90,14 +90,34 @@ somewhere in your emacs load path and add the following code to your
 Installing on from source on Windows can be a bit challenging, but here are a few
 suggestions that may get you through it.
 
-### Installing Python and Python packages
+### Security exceptions
 
-Install Python 2.7.11 in the normal way. Before installing packages, you may also
-need to install the [Visual C++ compiler for Python](http://aka.ms/vcpython27).
-Make sure to install 64-bit Python. Install Python in `c:/Python27` and put
-`c:/Python27` in your PATH.
+If you want to compile programs or testers in Ivy, you may need to
+install a security exception to prevent the antivirus software from
+scanning your programs each time they are run (which makes startup of
+programs very slow). This is a generic problem with compiling binary
+code on Windows. If you are using Windows 10 and your antivirus is
+Windows defender, exceptions are found under Start > Settings > Update
+& Security > Windows Security > Virus & Threat Protection > Virus &
+Threat Protection Settings > Manage Settings. Add an exception for the
+directory in which you plan to do development. This should cover all
+subdirecties as well. If you just want to do verification without
+compiling, this step is not necessary.
 
-### Installing Graphviz
+### Visual studio
+
+Install Visual Studio 2019. You may be able to get away with other
+versions of the Visual Studio compiler tools, but only Visual Studio
+2019 is documented here.  Some free tools that might be helpful are
+available [here](https://visualstudio.microsoft.com/downloads/).
+
+### Python and Python packages
+
+Install Python 2.7.11 in the normal way. Make sure to install 64-bit
+Python. Install Python in `c:/Python27` and put `c:/Python27` in your
+PATH.
+
+### Graphviz
 
 You only need graphviz to use the Ivy GUI. For normal verification and
 testing tasks, you don't need this.  Get `graphviz-2.38` from
@@ -126,11 +146,15 @@ OpenSSL binaries for Windows can be found
 [here](https://slproweb.com/products/Win32OpenSSL.html).  You need the
 full 64-bit version. Be sure to install in the default directory
 `c:\OpenSSL-Win64`. These OpenSSL binaries are missing a file
-`include/ms/applink.c` that you will have to get from the OpenSSL
-source repository.  You also need to copy the libcrypto DLL into "this
-directory":
+`include/ms/applink.c`. Do this:
 
-    copy c:\OpenSSL-Win64\libcrypto-1_1-x64.dll c:\OpenSSL-Win64\bin
+    > mkdir c:\OpenSSL-Win64\include\ms
+    > copy c:\OpenSSL-Win64\include\openssl\applink.c c:\OpenSSL-Win64\include\ms
+
+You also need to copy the libcrypto DLL into someplace the system will
+find it:
+
+    > copy c:\OpenSSL-Win64\libcrypto-1_1-x64.dll c:\Windows\SysWOW64\
 
 ### Installing Ivy
 
@@ -153,14 +177,8 @@ or pull a new version.  If you have put `c:/Python27/Scripts` in your
 
 Or, if you only want to use Ivy on the command line, test it like this:
 
-    > ivy_check trace=true doc/examples/client_server_example_new.ivy
+    > ivy_check trace=true doc/examples/client_server_example.ivy
     
-Ivy should print out a counterexample trace.
-
-To be able to compile Ivy programs or Ivy testers, you also need to
-have some verison of Visual Studio installed. At a minimum you need the
-command line build tools for C++ installed. You can get them free of charge
-[here](https://visualstudio.microsoft.com/downloads/). 
 
 <a name="macnotes"></a> Installation from source on MacOS High Sierra and Mojave
 ================================================================================
