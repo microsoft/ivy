@@ -928,7 +928,7 @@ class WhileAction(Action):
         if cardsort > 100:
             assert False
             raise IvyError(self,'cowardly refusing to unroll loop over {} {} times'.format(idx_sort,cardsort))
-        res = Or() # AssumeAction(Not(self.args[0]))
+        res = IfAction(self.args[0],AssumeAction(Or())) # AssumeAction(Not(self.args[0]))
         for idx in range(cardsort):
             res = IfAction(self.args[0],Sequence(body or self.args[1],res))
         if hasattr(self,'formal_params'):
