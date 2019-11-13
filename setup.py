@@ -25,7 +25,7 @@ setup(name='ms_ivy',
       packages=find_packages(),
       package_data=({'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.dll','lib/*.lib','z3/*.dll']}
                     if platform.system() == 'Windows' else
-                    {'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','lib/*.a','z3/*.so']})
+                    {'ivy':['include/*/*.ivy','include/*/*.h','include/*.h','lib/*.so','lib/*.a','z3/*.so']}),
       install_requires=[
           'ply',
           'tarjan'

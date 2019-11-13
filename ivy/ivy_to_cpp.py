@@ -5055,6 +5055,13 @@ def main_int(is_ivyc):
                 with iu.ErrorPrinter():
 
                     import os
+
+                    def do_cmd(cmd):
+                        print cmd
+                        status = os.system(cmd)
+                        if status:
+                            exit(1)
+    
                     if isolate:
                         if len(isolates) > 1:
                             print "Compiling isolate {}...".format(isolate)
@@ -5119,14 +5126,21 @@ def main_int(is_ivyc):
                             else:
                                 libspec += ''.join(' -l' + ll for ll in y.rep.strip('"').split(',') if not ll.endswith('.lib'))
                     if platform.system() == 'Windows':
-                        if 'Z3DIR' in os.environ:
-                            incspec = '/I %Z3DIR%\\include'
-                            libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
-                        else:
-                            import z3
-                            z3path = os.path.dirname(os.path.abspath(z3.__file__))
-                            incspec = '/I {}'.format(z3path)
-                            libpspec = '/LIBPATH:{}'.format(z3path)
+                        # if 'Z3DIR' in os.environ:
+                        #     incspec = '/I %Z3DIR%\\include'
+                        #     libpspec = '/LIBPATH:%Z3DIR%\\lib /LIBPATH:%Z3DIR%\\bin'
+                        # else:
+                        #     import z3
+                        #     z3path = os.path.dirname(os.path.abspath(z3.__file__))
+                        #     incspec = '/I {}'.format(z3path)
+                        #     libpspec = '/LIBPATH:{}'.format(z3path)
+                        _dir = os.path.dirname(os.path.abspath(__file__))
+                        incspec = '/I {}'.format(os.path.join(_dir,'include'))
+                        libpspec = '/LIBPATH:{}'.format(os.path.join(_dir,'lib'))
+                        if not os.path.exists('libz3.dll'):
+                            print 'Copying libz3.dll to current directory.'
+                            print 'If the binary {}.exe is moved to another directory, this file must also be moved.'.format(basename)
+                            do_cmd('copy {} libz3.dll'.format(os.path.join(_dir,'lib','libz3.dll')))
                         for lib in libs:
                             _incdir = lib[1] if len(lib) >= 2 else []
                             _libdir = lib[2] if len(lib) >= 3 else []

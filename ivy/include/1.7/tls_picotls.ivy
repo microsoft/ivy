@@ -33,7 +33,7 @@ module tls_gnutls(cid,index,bytes,extens,exten_ser,lower,upper) = {
 
     extern "C" {
     #ifdef _WIN32
-    #include "../picotlsvs/picotls/wincompat.h"
+    #include "picotls/wincompat.h"
     #endif
     #include "picotls.h"
     #include "picotls/openssl.h"

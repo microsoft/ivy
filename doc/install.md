@@ -156,6 +156,13 @@ find it:
 
     > copy c:\OpenSSL-Win64\libcrypto-1_1-x64.dll c:\Windows\SysWOW64\
 
+### Windows SDK
+
+Install Windows SDK version 10.0.14393.0 from
+[here](https://developer.microsoft.com/en-us/windows/downloads/sdk-archive). Note,
+this version number may change. You'll get an error mesage when
+compiling if it does. 
+
 ### Installing Ivy
 
 Now you can now try to install Ivy. Open a Visual Studio 64-bit command window, and do this:
