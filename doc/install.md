@@ -84,11 +84,11 @@ somewhere in your emacs load path and add the following code to your
     (add-to-list 'auto-mode-alist '("\\.ivy\\'" . ivy-mode))
     (autoload 'ivy-mode  "ivy-mode.el" "Major mode for editing Ivy code" t nil)
 
-<a name="windowsnotes"></a> Windows installation from source
-============================================================
-
 Installing on from source on Windows can be a bit challenging, but here are a few
 suggestions that may get you through it.
+
+<a name="windowsdeps"></a> Windows prerequisites
+=================================================
 
 ### Security exceptions
 
@@ -117,17 +117,6 @@ Install Python 2.7.11 in the normal way. Make sure to install 64-bit
 Python. Install Python in `c:/Python27` and put `c:/Python27` in your
 PATH.
 
-### Graphviz
-
-You only need graphviz to use the Ivy GUI. For normal verification and
-testing tasks, you don't need this.  Get `graphviz-2.38` from
-[graphviz.org](http://graphviz.org). Install into some directory
-without spaces in the name, for example `c:/Graphviz2.38`. Make sure that
-`c:/Graphviz2.38/bin` is in your `PATH`.
-
-
-### Using scripts
-
 The `pip` package installation utility is found in `c:/Python27/Scripts`. You should put
 this directory in your `PATH`, since the IVY command line scripts will also be installed there
 by default. Try installing the `tarjan` and `ply` packages like this:
@@ -135,12 +124,15 @@ by default. Try installing the `tarjan` and `ply` packages like this:
     > pip install tarjan
     > pip install ply
 
-### Install git
+### Graphviz
 
-Install git from [here](https://gitforwindows.org). If you install it
-in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
+You only need graphviz to use the Ivy GUI. For command line verification and
+testing tasks, you don't need this.  Get `graphviz-2.38` from
+[graphviz.org](http://graphviz.org). Install into some directory
+without spaces in the name, for example `c:/Graphviz2.38`. Make sure that
+`c:/Graphviz2.38/bin` is in your `PATH`.
 
-### Install OPENSSL
+### OPENSSL
 
 OpenSSL binaries for Windows can be found
 [here](https://slproweb.com/products/Win32OpenSSL.html).  You need the
@@ -159,13 +151,25 @@ find it:
 ### Windows SDK
 
 Install Windows SDK version 10.0.14393.0 from
-[here](https://developer.microsoft.com/en-us/windows/downloads/sdk-archive). Note,
-this version number may change. You'll get an error mesage when
-compiling if it does. 
+[here](https://developer.microsoft.com/en-us/windows/downloads/sdk-archive). You
+have to get exactly this version, even if you have a newer
+version. The windows build tool is very fussy about this. Note, this
+version number may change. You'll get an error mesage when compiling
+if it does. Install the version that it asks for.
+
+<a name="windowsnotes"></a> Windows installation from source
+============================================================
 
 ### Installing Ivy
 
-Now you can now try to install Ivy. Open a Visual Studio 64-bit command window, and do this:
+First, install the [Windows prerequisites](#windowsdeps).
+
+### Install git
+
+Install git from [here](https://gitforwindows.org). If you install it
+in `c:/Git`, then put `c:\Git\cmd` in your `PATH`.
+
+### Install Ivy
 
     > cd c:\
     > git clone https://github.com/Microsoft/ivy.git
@@ -257,7 +261,7 @@ These instructions have been tested for macOS 10.12 Sierra up to macOS
         $ ivy_check diagnose=true client_server_example.ivy
 
 
-<a name="release"></a> Binary releases
+<a name="binary"></a> Binary releases
 --------------------
 
 Ivy is released as a Python package in the PyPI repository.
@@ -279,7 +283,15 @@ these from github like this (see the directory `ivy\doc`):
 
 ### <a name="windowsbinary"> Install binary release on Windows
 
-Windows binary distributions are not yet available.
+First, install the [Windows prerequisites](#windowsdeps).
+
+Then install the Ivy binaries:
+
+    > pip install ms-ivy
+
+This does not install the documentation and example files. You can get
+these from the source repository. See [Windows installation from
+source](#windowsnotes).
 
 ### <a name="macbinary"> Install binary release on Mac
 
